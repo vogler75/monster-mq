@@ -5,20 +5,64 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.shareddata.AsyncMap
-import io.vertx.core.shareddata.SharedData
 
 import java.time.Instant
+import java.util.logging.Logger
 
-class Storage: AbstractVerticle() {
-    private var topicTree: AsyncMap<String, String>? = null
-    private var retainedMessages: AsyncMap<String, Buffer>? = null
+class Distributor: AbstractVerticle() {
+    private val logger = Logger.getLogger(this.javaClass.simpleName)
+
+    private var globalWildcardSubscriptions: AsyncMap<String, String>? = null
+    private var globalRetainedMessages: AsyncMap<String, Buffer>? = null
+
+    data class TopicNode (
+        val children: MutableMap<String, TopicNode> = mutableMapOf()
+    )
+
+    class TopicTree {
+        private val root = TopicNode()
+
+        fun addTopicName(topicName: String) {
+            val xs = topicName.split("/")
+            if (xs.isEmpty()) return
+            else addTopicNode(root, xs.first(), xs.drop(1))
+        }
+
+        fun printTree() = printTreeNode(root)
+
+        private fun printTreeNode(node: TopicNode, level: Int = 0) {
+            node.children.forEach {
+                println(" ".repeat(level) + " "+it.key)
+                printTreeNode(it.value, level + 1)
+            }
+        }
+
+        private fun addTopicNode(node: TopicNode, topic: String, rest: List<String>) {
+            val next = node.children.getOrPut(topic) { TopicNode() }
+            if (rest.isNotEmpty()) addTopicNode(next, rest.first(), rest.drop(1))
+        }
+    }
+
+    private val topicTree = TopicTree()
 
     override fun start(startPromise: Promise<Void>) {
-        val f1 = getMap<String, String>("TopicTree").onComplete {
-            topicTree = it.result()
+        val f1 = getMap<String, String>("WildcardSubscriptions").onComplete {
+            globalWildcardSubscriptions = it.result()
         }
+
         val f2 = getMap<String, Buffer>("RetainedMessages").onComplete {
-            retainedMessages = it.result()
+            globalRetainedMessages = it.result()
+        }
+
+        vertx.eventBus().consumer(Const.DIST_SUBSCRIBE_REQUEST) {
+            logger.info("Subscribe request [${it.body()}]")
+            val topicName = it.body()
+            val address = Const.getTopicBusAddr(topicName)
+            if (Const.isWildCardTopic(topicName)) {
+                topicTree.addTopicName(topicName)
+                topicTree.printTree()
+            }
+            it.reply(address)
         }
 
         Future.all(f1, f2).onComplete {
@@ -50,9 +94,9 @@ class Storage: AbstractVerticle() {
         }
         return promise.future()
     }
-    
+
     fun testMap() {
-        topicTree?.apply {
+        globalWildcardSubscriptions?.apply {
             // Get data from the shared map
             get("key") { getResult ->
                 if (getResult.succeeded()) {

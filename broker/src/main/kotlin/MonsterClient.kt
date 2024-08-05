@@ -3,21 +3,22 @@ package at.rocworks
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
-import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.MessageConsumer
 import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
+import io.vertx.mqtt.messages.impl.MqttPublishMessageImpl
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.logging.Level
 import java.util.logging.Logger
 
 class MonsterClient: AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private var endpoint: MqttEndpoint? = null
-    private val subscriptions = mutableMapOf<String, MessageConsumer<Buffer>>()
-    private val messageQueue = ArrayBlockingQueue<Pair<String, Buffer>>(10000) // TODO: configurable
+    private val subscriptions = mutableMapOf<String, MessageConsumer<MqttPublishMessageImpl>>()
+    private val messageQueue = ArrayBlockingQueue<MqttPublishMessageImpl>(10000) // TODO: configurable
 
     @Volatile private var pauseClient: Boolean = false
 
@@ -50,6 +51,10 @@ class MonsterClient: AbstractVerticle() {
         }
     }
 
+    init {
+        logger.level = Level.ALL
+    }
+
     fun startEndpoint(endpoint: MqttEndpoint) {
         logger.info("Client [${endpoint.clientIdentifier()}] request to connect, clean session = ${endpoint.isCleanSession}")
         this.endpoint = endpoint
@@ -63,7 +68,7 @@ class MonsterClient: AbstractVerticle() {
         if (this.pauseClient) {
             logger.info("Send queue size ${messageQueue.size}")
             messageQueue.forEach {
-                endpoint.publish(it.first, it.second, MqttQoS.AT_LEAST_ONCE, false, false)
+                endpoint.publish(it.topicName(), it.payload(), it.qosLevel(), it.isDup, it.isRetain)
             }
             messageQueue.clear()
             this.pauseClient = false
@@ -90,28 +95,43 @@ class MonsterClient: AbstractVerticle() {
         messageQueue.clear()
     }
 
-    private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
-        subscribe.topicSubscriptions().forEach {
-            logger.info("Subscription for [${it.topicName()}] with QoS ${it.qualityOfService()}")
-        }
 
+    private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
         // Acknowledge the subscriptions
         endpoint?.subscribeAcknowledge(subscribe.messageId(), subscribe.topicSubscriptions().map { it.qualityOfService() })
 
+        // Subscribe
         subscribe.topicSubscriptions().forEach { subscription ->
-            val address = subscription.topicName()
-            if (!subscriptions.contains(address)) {
-                val consumer = vertx.eventBus().consumer<Buffer>(address) { message ->
-                    val payload = message.body()
-                    if (!this.pauseClient) {
-                        this.endpoint?.publish(address, payload, MqttQoS.AT_LEAST_ONCE, false, false)
-                        logger.info("Delivered message to [${endpoint?.clientIdentifier()}] topic [$address]")
-                    } else {
-                        logger.info("Queued message for [${endpoint?.clientIdentifier()}] topic [$address]")
-                        messageQueue.add(address to payload)
+            logger.info("Subscription for [${subscription.topicName()}] with QoS ${subscription.qualityOfService()}")
+            if (!subscriptions.contains(subscription.topicName())) {
+                vertx.eventBus().request(Const.DIST_SUBSCRIBE_REQUEST, subscription.topicName()) {
+                    val address = it.result().body()
+                    logger.fine("Subscribe to bus address [$address]")
+                    val consumer = vertx.eventBus().consumer<MqttPublishMessageImpl>(address) { message ->
+                        sendMessageToClient(message.body())
                     }
+                    subscriptions[address] = consumer
                 }
-                subscriptions[address] = consumer
+            }
+        }
+    }
+
+    private fun sendMessageToClient(message: MqttPublishMessageImpl) {
+        if (!this.pauseClient) {
+            this.endpoint?.publish(
+                message.topicName(),
+                message.payload(),
+                message.qosLevel(),
+                message.isDup,
+                message.isRetain
+            )
+            logger.finest { "Delivered message to [${endpoint?.clientIdentifier()}] topic [${message.topicName()}]" }
+        } else {
+            try {
+                messageQueue.add(message)
+                logger.finest { "Queued message for [${endpoint?.clientIdentifier()}] topic [${message.topicName()}]" }
+            } catch (e: IllegalStateException) {
+                logger.warning(e.message)
             }
         }
     }
@@ -124,13 +144,11 @@ class MonsterClient: AbstractVerticle() {
     }
 
     private fun publishHandler(message: MqttPublishMessage) {
-        logger.info("Received message [${message.topicName()}] with QoS ${message.qosLevel()}")
+        logger.finest { "Received message [${message.topicName()}] with QoS ${message.qosLevel()}" }
 
         // Publish the message to the Vert.x event bus
-        val address: String = message.topicName()
-        val payload: Buffer = message.payload()
-        vertx.eventBus().publish(address, payload)
-
+        val address: String = Const.getTopicBusAddr(message.topicName())
+        vertx.eventBus().publish(address, message)
         endpoint?.apply {
             // Handle QoS levels
             if (message.qosLevel() == MqttQoS.AT_LEAST_ONCE) {

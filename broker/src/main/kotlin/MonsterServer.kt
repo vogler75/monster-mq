@@ -9,10 +9,11 @@ import io.vertx.mqtt.MqttServerOptions
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
+import java.util.logging.Level
 import java.util.logging.LogManager
 import java.util.logging.Logger
 
-class Monster(private val port: Int, ssl: Boolean) : AbstractVerticle() {
+class MonsterServer(private val port: Int, ssl: Boolean) : AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private val options = MqttServerOptions().apply {
@@ -42,24 +43,21 @@ class Monster(private val port: Int, ssl: Boolean) : AbstractVerticle() {
     }
 
     override fun start() {
-        val topicHandler = Storage()
-        vertx.deployVerticle(topicHandler).onComplete {
-            logger.info("Storage initialization finished.")
-            val mqttServer: MqttServer = MqttServer.create(vertx, options)
-            mqttServer.exceptionHandler {
-                it.printStackTrace()
-            }
+        logger.info("Storage initialization finished.")
+        val mqttServer: MqttServer = MqttServer.create(vertx, options)
+        mqttServer.exceptionHandler {
+            it.printStackTrace()
+        }
 
-            mqttServer.endpointHandler { endpoint ->
-                MonsterClient.endpointHandler(vertx, endpoint)
-            }
+        mqttServer.endpointHandler { endpoint ->
+            MonsterClient.endpointHandler(vertx, endpoint)
+        }
 
-            mqttServer.listen(port) { ar ->
-                if (ar.succeeded()) {
-                    logger.info("MQTT Server is listening on port ${ar.result().actualPort()}")
-                } else {
-                    logger.severe("Error starting MQTT Server: ${ar.cause().message}")
-                }
+        mqttServer.listen(port) { ar ->
+            if (ar.succeeded()) {
+                logger.info("MQTT Server is listening on port ${ar.result().actualPort()}")
+            } else {
+                logger.severe("Error starting MQTT Server: ${ar.cause().message}")
             }
         }
     }
