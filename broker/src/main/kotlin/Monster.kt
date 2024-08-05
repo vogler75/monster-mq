@@ -2,8 +2,10 @@ package at.rocworks
 
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.net.JksOptions
+
 import io.vertx.mqtt.MqttServer
 import io.vertx.mqtt.MqttServerOptions
+
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
@@ -20,38 +22,44 @@ class Monster(private val port: Int, ssl: Boolean) : AbstractVerticle() {
             .setPassword("password")
     }
 
-    init {
-        initLogging()
-    }
-
-    private fun initLogging() {
-        try {
-            println("Loading logging.properties...")
-            val initialFile = File("logging.properties")
-            val targetStream: InputStream = FileInputStream(initialFile)
-            LogManager.getLogManager().readConfiguration(targetStream)
-        } catch (e: Exception) {
+    companion object {
+        fun initLogging() {
             try {
-                println("Using default logging.properties...")
-                val stream = this::class.java.classLoader.getResourceAsStream("logging.properties")
-                LogManager.getLogManager().readConfiguration(stream)
+                println("Loading logging.properties...")
+                val initialFile = File("logging.properties")
+                val targetStream: InputStream = FileInputStream(initialFile)
+                LogManager.getLogManager().readConfiguration(targetStream)
             } catch (e: Exception) {
-                println("Unable to read default logging.properties!")
+                try {
+                    println("Using default logging.properties...")
+                    val stream = this::class.java.classLoader.getResourceAsStream("logging.properties")
+                    LogManager.getLogManager().readConfiguration(stream)
+                } catch (e: Exception) {
+                    println("Unable to read default logging.properties!")
+                }
             }
         }
     }
 
     override fun start() {
-        val mqttServer: MqttServer = MqttServer.create(vertx, options)
-        mqttServer.exceptionHandler {
-            it.printStackTrace()
-        }
-        mqttServer.endpointHandler { endpoint -> MonsterClient.endpointHandler(vertx, endpoint) }
-        mqttServer.listen(port) { ar ->
-            if (ar.succeeded()) {
-                logger.info("MQTT Server is listening on port ${ar.result().actualPort()}")
-            } else {
-                logger.severe("Error starting MQTT Server: ${ar.cause().message}")
+        val topicHandler = Storage()
+        vertx.deployVerticle(topicHandler).onComplete {
+            logger.info("Storage initialization finished.")
+            val mqttServer: MqttServer = MqttServer.create(vertx, options)
+            mqttServer.exceptionHandler {
+                it.printStackTrace()
+            }
+
+            mqttServer.endpointHandler { endpoint ->
+                MonsterClient.endpointHandler(vertx, endpoint)
+            }
+
+            mqttServer.listen(port) { ar ->
+                if (ar.succeeded()) {
+                    logger.info("MQTT Server is listening on port ${ar.result().actualPort()}")
+                } else {
+                    logger.severe("Error starting MQTT Server: ${ar.cause().message}")
+                }
             }
         }
     }
