@@ -9,63 +9,59 @@ import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.logging.Logger
 
 class MonsterClient: AbstractVerticle() {
+    private val logger = Logger.getLogger(this.javaClass.simpleName)
+
     private var endpoint: MqttEndpoint? = null
     private val subscriptions = mutableMapOf<String, MessageConsumer<Buffer>>()
+    private val messageQueue = ArrayBlockingQueue<Pair<String, Buffer>>(10000) // TODO: configurable
+
     @Volatile private var pauseClient: Boolean = false
-    private val messageQueue = mutableListOf<Pair<String, Buffer>>()
 
     companion object {
+        private val logger = Logger.getLogger(this.javaClass.simpleName)
         private val clients: HashMap<String, MonsterClient> = hashMapOf()
 
         fun endpointHandler(vertx: Vertx, endpoint: MqttEndpoint) {
             val client : MonsterClient? = clients[endpoint.clientIdentifier()]
             if (client != null) {
-                println("Existing client ${endpoint.clientIdentifier()}")
+                logger.info("Existing client [${endpoint.clientIdentifier()}]")
                 if (endpoint.isCleanSession) client.cleanSession()
                 client.startEndpoint(endpoint)
             } else {
-                println("New client ${endpoint.clientIdentifier()}")
+                logger.info("New client [${endpoint.clientIdentifier()}]")
                 val client = MonsterClient()
                 vertx.deployVerticle(client)
                 clients[endpoint.clientIdentifier()] = client
                 client.startEndpoint(endpoint)
             }
-            vertx.setTimer(100) { println("Verticles: " + vertx.deploymentIDs()) }
         }
 
         fun removeEndpoint(vertx: Vertx, endpoint: MqttEndpoint) {
-            println("Remove client ${endpoint.clientIdentifier()}")
+            logger.info("Remove client [${endpoint.clientIdentifier()}]")
             val client : MonsterClient? = clients[endpoint.clientIdentifier()]
             if (client != null) {
                 clients.remove(endpoint.clientIdentifier())
                 vertx.undeploy(client.deploymentID())
             }
-            vertx.setTimer(100) { println("Verticles: " + vertx.deploymentIDs()) }
         }
     }
 
-    override fun start() {
-        super.start()
-    }
-
-    override fun stop() {
-        super.stop()
-    }
-
     fun startEndpoint(endpoint: MqttEndpoint) {
-        println("MQTT client [${endpoint.clientIdentifier()}] request to connect, clean session = ${endpoint.isCleanSession}")
+        logger.info("Client [${endpoint.clientIdentifier()}] request to connect, clean session = ${endpoint.isCleanSession}")
         this.endpoint = endpoint
         endpoint.subscribeHandler(::subscribeHandler)
         endpoint.unsubscribeHandler(::unsubscribeHandler)
         endpoint.publishHandler(::publishHandler)
         endpoint.publishReleaseHandler(::publishReleaseHandler)
-        endpoint.disconnectHandler { closeHandler() }
-        endpoint.closeHandler { closeHandler() }
+        endpoint.disconnectHandler { closeHandler(1) }
+        endpoint.closeHandler { closeHandler(2) }
         endpoint.accept(endpoint.isCleanSession)
         if (this.pauseClient) {
-            println("Send queue ${messageQueue.size}")
+            logger.info("Send queue size ${messageQueue.size}")
             messageQueue.forEach {
                 endpoint.publish(it.first, it.second, MqttQoS.AT_LEAST_ONCE, false, false)
             }
@@ -76,13 +72,13 @@ class MonsterClient: AbstractVerticle() {
 
     private fun stopEndpoint() {
         endpoint?.let { endpoint ->
-            println("Stop client ${endpoint.clientIdentifier()} ")
+            logger.info("Stop client [${endpoint.clientIdentifier()}]")
             if (endpoint.isCleanSession) {
-                println("Undeploy client ${endpoint.clientIdentifier()}")
+                logger.info("Undeploy client [${endpoint.clientIdentifier()}]")
                 cleanSession()
                 removeEndpoint(vertx, endpoint)
             } else {
-                println("Pause client ${endpoint.clientIdentifier()}")
+                logger.info("Pause client [${endpoint.clientIdentifier()}]")
                 pauseClient = true
             }
         }
@@ -96,7 +92,7 @@ class MonsterClient: AbstractVerticle() {
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
         subscribe.topicSubscriptions().forEach {
-            println("Subscription for ${it.topicName()} with QoS ${it.qualityOfService()}")
+            logger.info("Subscription for [${it.topicName()}] with QoS ${it.qualityOfService()}")
         }
 
         // Acknowledge the subscriptions
@@ -109,9 +105,9 @@ class MonsterClient: AbstractVerticle() {
                     val payload = message.body()
                     if (!this.pauseClient) {
                         this.endpoint?.publish(address, payload, MqttQoS.AT_LEAST_ONCE, false, false)
-                        println("Delivered message from event bus to ${endpoint?.clientIdentifier()} topic $address: $payload")
+                        logger.info("Delivered message to [${endpoint?.clientIdentifier()}] topic [$address]")
                     } else {
-                        println("Message from event bus must be queued, client ${endpoint?.clientIdentifier()} paused.")
+                        logger.info("Queued message for [${endpoint?.clientIdentifier()}] topic [$address]")
                         messageQueue.add(address to payload)
                     }
                 }
@@ -128,7 +124,7 @@ class MonsterClient: AbstractVerticle() {
     }
 
     private fun publishHandler(message: MqttPublishMessage) {
-        println("Received message on topic ${message.topicName()} with payload ${message.payload()} and QoS ${message.qosLevel()}")
+        logger.info("Received message [${message.topicName()}] with QoS ${message.qosLevel()}")
 
         // Publish the message to the Vert.x event bus
         val address: String = message.topicName()
@@ -149,8 +145,8 @@ class MonsterClient: AbstractVerticle() {
         endpoint?.publishComplete(messageId)
     }
 
-    private fun closeHandler() {
-        println("Close received ${endpoint?.clientIdentifier()}.")
+    private fun closeHandler(handler: Int) {
+        logger.info("Close received [${endpoint?.clientIdentifier()}] [$handler].")
         stopEndpoint()
     }
 }
