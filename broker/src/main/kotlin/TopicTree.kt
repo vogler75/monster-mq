@@ -66,7 +66,7 @@ class TopicTree {
 
     private fun printTreeNode(root: String, node: TopicNode, level: Int = -1): List<String> {
         val text = mutableListOf<String>()
-        if (level > -1) text.add("  ".repeat(level)+"- [$root] Clients ["+node.clients.joinToString(" | ")+"]")
+        if (level > -1) text.add("  ".repeat(level)+"- [${root.padEnd(40-level*2)}] Clients "+node.clients.joinToString {"[$it]"})
         node.children.forEach {
             text.addAll(printTreeNode(it.key, it.value, level + 1))
         }
