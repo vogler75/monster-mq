@@ -1,7 +1,7 @@
 package at.rocworks
 
 object Const {
-    const val DIST_SUBSCRIBE_REQUEST = "DIST"
+    const val DIST_SUBSCRIBE_REQUEST = "DIST/SUBSCRIBE"
 
     private const val TOPIC_NAMESPACE = "TOPIC"
 

@@ -17,6 +17,7 @@ class MonsterClient: AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private var endpoint: MqttEndpoint? = null
+
     private val subscriptions = mutableMapOf<String, MessageConsumer<MqttPublishMessageImpl>>()
     private val messageQueue = ArrayBlockingQueue<MqttPublishMessageImpl>(10000) // TODO: configurable
 
@@ -27,12 +28,11 @@ class MonsterClient: AbstractVerticle() {
         private val clients: HashMap<String, MonsterClient> = hashMapOf()
 
         fun endpointHandler(vertx: Vertx, endpoint: MqttEndpoint) {
-            val client : MonsterClient? = clients[endpoint.clientIdentifier()]
-            if (client != null) {
+            clients[endpoint.clientIdentifier()]?.let { client ->
                 logger.info("Existing client [${endpoint.clientIdentifier()}]")
                 if (endpoint.isCleanSession) client.cleanSession()
                 client.startEndpoint(endpoint)
-            } else {
+            } ?: run {
                 logger.info("New client [${endpoint.clientIdentifier()}]")
                 val client = MonsterClient()
                 vertx.deployVerticle(client)
@@ -95,7 +95,6 @@ class MonsterClient: AbstractVerticle() {
         messageQueue.clear()
     }
 
-
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
         // Acknowledge the subscriptions
         endpoint?.subscribeAcknowledge(subscribe.messageId(), subscribe.topicSubscriptions().map { it.qualityOfService() })
@@ -107,7 +106,7 @@ class MonsterClient: AbstractVerticle() {
                 vertx.eventBus().request(Const.DIST_SUBSCRIBE_REQUEST, subscription.topicName()) {
                     val address = it.result().body()
                     logger.fine("Subscribe to bus address [$address]")
-                    val consumer = vertx.eventBus().consumer<MqttPublishMessageImpl>(address) { message ->
+                    val consumer = vertx.eventBus().consumer(address) { message ->
                         sendMessageToClient(message.body())
                     }
                     subscriptions[address] = consumer

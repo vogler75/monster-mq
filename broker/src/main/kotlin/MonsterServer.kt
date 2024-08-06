@@ -9,7 +9,6 @@ import io.vertx.mqtt.MqttServerOptions
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
-import java.util.logging.Level
 import java.util.logging.LogManager
 import java.util.logging.Logger
 
