@@ -60,17 +60,16 @@ class TopicTree {
         return if (xs.isNotEmpty()) findTopicNode(root, xs.first(), xs.drop(1)) else listOf()
     }
 
-    fun printTree() {
-        println("-".repeat(80))
-        printTreeNode("", root)
-        println("-".repeat(80))
+    override fun toString(): String {
+        return "TopicTree dump: \n" + printTreeNode("", root).joinToString("\n")
     }
 
-    private fun printTreeNode(root: String, node: TopicNode, level: Int = 0) {
-        println("|".repeat(level)+"- Root: $root")
-        println("|".repeat(level)+"- Clients: "+node.clients.joinToString("|"))
+    private fun printTreeNode(root: String, node: TopicNode, level: Int = -1): List<String> {
+        val text = mutableListOf<String>()
+        if (level > -1) text.add("  ".repeat(level)+"- [$root] Clients ["+node.clients.joinToString(" | ")+"]")
         node.children.forEach {
-            printTreeNode(it.key, it.value, level + 1)
+            text.addAll(printTreeNode(it.key, it.value, level + 1))
         }
+        return text
     }
 }

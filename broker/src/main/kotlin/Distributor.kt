@@ -11,6 +11,7 @@ import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.impl.MqttPublishMessageImpl
 
 import java.time.Instant
+import java.util.logging.Level
 import java.util.logging.Logger
 
 class Distributor: AbstractVerticle() {
@@ -20,7 +21,7 @@ class Distributor: AbstractVerticle() {
         const val COMMAND_KEY = "C"
         const val COMMAND_SUBSCRIBE = "S"
         const val COMMAND_UNSUBSCRIBE = "U"
-        const val COMMAND_CLEAN = "C"
+        const val COMMAND_CLEANSESSION = "C"
     }
 
     private var globalWildcardSubscriptions: AsyncMap<String, String>? = null
@@ -32,6 +33,9 @@ class Distributor: AbstractVerticle() {
     private fun getDistBusAddr() = Const.getDistBusAddr(this.deploymentID())
     private fun getTopicBusAddr() = Const.getTopicBusAddr(this.deploymentID())
 
+    init {
+        logger.level = Level.FINE
+    }
 
     override fun start(startPromise: Promise<Void>) {
         val f1 = getMap<String, String>("WildcardSubscriptions").onComplete {
@@ -65,6 +69,7 @@ class Distributor: AbstractVerticle() {
                 val clientId = it.body().getString(Const.CLIENT_KEY)
                 subscriptionsFlat.getOrPut(topicName) { hashSetOf() }.add(clientId)
                 subscriptionsTree.add(topicName, clientId)
+                logger.fine(subscriptionsTree.toString())
                 it.reply(true)
             }
 
@@ -73,10 +78,11 @@ class Distributor: AbstractVerticle() {
                 val clientId = it.body().getString(Const.CLIENT_KEY)
                 subscriptionsFlat[topicName]?.remove(clientId)
                 subscriptionsTree.del(topicName, clientId)
+                logger.fine(subscriptionsTree.toString())
                 it.reply(true)
             }
 
-            COMMAND_CLEAN -> {
+            COMMAND_CLEANSESSION -> {
                 val clientId = it.body().getString(Const.CLIENT_KEY)
                 subscriptionsFlat.forEach {
                     if (it.value.remove(clientId)) {
@@ -121,7 +127,7 @@ class Distributor: AbstractVerticle() {
         result: (Boolean)->Unit
     ) {
         val request = JsonObject()
-            .put(COMMAND_KEY, COMMAND_CLEAN)
+            .put(COMMAND_KEY, COMMAND_CLEANSESSION)
             .put(Const.CLIENT_KEY, client.deploymentID())
         vertx.eventBus().request(getDistBusAddr(), request) {
             result(it.result().body())

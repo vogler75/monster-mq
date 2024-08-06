@@ -136,6 +136,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
 
     private fun unsubscribeHandler(unsubscribe: MqttUnsubscribeMessage) {
         unsubscribe.topics().forEach { topicName ->
+            logger.info("Unsubscribe for [${topicName}]}")
             server.distributor.unsubscribeRequest(this, topicName) { }
         }
     }
