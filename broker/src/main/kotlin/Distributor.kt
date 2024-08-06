@@ -4,7 +4,11 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.eventbus.Message
+import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.AsyncMap
+import io.vertx.mqtt.messages.MqttPublishMessage
+import io.vertx.mqtt.messages.impl.MqttPublishMessageImpl
 
 import java.time.Instant
 import java.util.logging.Logger
@@ -12,8 +16,20 @@ import java.util.logging.Logger
 class Distributor: AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
+    companion object {
+        const val COMMAND_KEY = "C"
+        const val COMMAND_SUBSCRIBE = "S"
+        const val COMMAND_UNSUBSCRIBE = "U"
+        const val COMMAND_CLEAN = "C"
+    }
+
     private var globalWildcardSubscriptions: AsyncMap<String, String>? = null
     private var globalRetainedMessages: AsyncMap<String, Buffer>? = null
+
+    private val subscriptions = mutableMapOf<String, MutableSet<String>>() // topic to clients
+
+    fun getDistBusAddr() = Const.getDistBusAddr(this.deploymentID())
+    fun getTopicBusAddr() = Const.getTopicBusAddr(this.deploymentID())
 
     data class TopicNode (
         val children: MutableMap<String, TopicNode> = mutableMapOf()
@@ -54,20 +70,99 @@ class Distributor: AbstractVerticle() {
             globalRetainedMessages = it.result()
         }
 
-        vertx.eventBus().consumer(Const.DIST_SUBSCRIBE_REQUEST) {
-            logger.info("Subscribe request [${it.body()}]")
-            val topicName = it.body()
-            val address = Const.getTopicBusAddr(topicName)
-            if (Const.isWildCardTopic(topicName)) {
-                topicTree.addTopicName(topicName)
-                topicTree.printTree()
-            }
-            it.reply(address)
+        vertx.eventBus().consumer<JsonObject>(getDistBusAddr()) {
+            logger.info("Received request [${it.body()}]")
+            requestHandler(it)
+        }
+
+        vertx.eventBus().consumer<MqttPublishMessageImpl>(getTopicBusAddr()) {
+            logger.info("Received message [${it.body().topicName()}]")
+            distributeMessage(it.body())
         }
 
         Future.all(f1, f2).onComplete {
             startPromise.complete()
         }
+    }
+
+    private fun distributeMessage(message: MqttPublishMessage) {
+        subscriptions[message.topicName()]?.forEach { clientId ->
+            vertx.eventBus().publish(Const.getClientBusAddr(clientId), message)
+        }
+    }
+
+    private fun requestHandler(it: Message<JsonObject>) {
+        val command = it.body().getString(COMMAND_KEY)
+        when (command) {
+            COMMAND_SUBSCRIBE -> {
+                val topicName = it.body().getString(Const.TOPIC_KEY)
+                val clientId = it.body().getString(Const.CLIENT_KEY)
+                subscriptions.getOrPut(topicName) { hashSetOf() }.add(clientId)
+                if (Const.isWildCardTopic(topicName)) {
+                    topicTree.addTopicName(topicName)
+                    topicTree.printTree()
+                }
+                it.reply(true)
+            }
+
+            COMMAND_UNSUBSCRIBE -> {
+                val topicName = it.body().getString(Const.TOPIC_KEY)
+                val clientId = it.body().getString(Const.CLIENT_KEY)
+                val xs = subscriptions[topicName] ?: hashSetOf()
+                xs.remove(clientId)
+                it.reply(true)
+            }
+
+            COMMAND_CLEAN -> {
+                val clientId = it.body().getString(Const.CLIENT_KEY)
+                subscriptions.forEach { it.value.remove(clientId) }
+                it.reply(true)
+            }
+        }
+    }
+
+    fun subscribeRequest(
+        client: MonsterClient,
+        topicName: String,
+        result: (Boolean)->Unit
+    ) {
+        val request = JsonObject()
+            .put(COMMAND_KEY, COMMAND_SUBSCRIBE)
+            .put(Const.TOPIC_KEY, topicName)
+            .put(Const.CLIENT_KEY, client.deploymentID())
+        vertx.eventBus().request(getDistBusAddr(), request) {
+            result(it.result().body())
+        }
+    }
+
+    fun unsubscribeRequest(
+        client: MonsterClient,
+        topicName: String,
+        result: (Boolean)->Unit
+    ) {
+        val request = JsonObject()
+            .put(COMMAND_KEY, COMMAND_UNSUBSCRIBE)
+            .put(Const.TOPIC_KEY, topicName)
+            .put(Const.CLIENT_KEY, client.deploymentID())
+        vertx.eventBus().request(getDistBusAddr(), request) {
+            result(it.result().body())
+        }
+    }
+
+    fun cleanSessionRequest(
+        client: MonsterClient,
+        result: (Boolean)->Unit
+    ) {
+        val request = JsonObject()
+            .put(COMMAND_KEY, COMMAND_CLEAN)
+            .put(Const.CLIENT_KEY, client.deploymentID())
+        vertx.eventBus().request(getDistBusAddr(), request) {
+            result(it.result().body())
+        }
+    }
+
+    fun publishMessage(message: MqttPublishMessage) {
+        vertx.eventBus().publish(getTopicBusAddr(), message)
     }
 
     private fun <K,V> getMap(name: String): Future<AsyncMap<K, V>> {

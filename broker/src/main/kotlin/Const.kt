@@ -1,10 +1,16 @@
 package at.rocworks
 
 object Const {
-    const val DIST_SUBSCRIBE_REQUEST = "DIST/SUBSCRIBE"
+    private const val DIST_NAMESPACE = "D"
+    private const val TOPIC_NAMESPACE = "T"
+    private const val CLIENT_NAMESPACE = "C"
 
-    private const val TOPIC_NAMESPACE = "TOPIC"
+    const val TOPIC_KEY = "Topic"
+    const val CLIENT_KEY = "Client"
 
-    fun getTopicBusAddr(topicName: String) = "$TOPIC_NAMESPACE/$topicName"
+    fun getTopicBusAddr(deploymentID: String) = "$TOPIC_NAMESPACE/${deploymentID}"
+    fun getDistBusAddr(deploymentID: String) = "$DIST_NAMESPACE/${deploymentID}"
+    fun getClientBusAddr(deploymentID: String) = "$CLIENT_NAMESPACE/${deploymentID}"
+
     fun isWildCardTopic(topicName: String): Boolean = topicName.contains('+') || topicName.contains('#')
 }

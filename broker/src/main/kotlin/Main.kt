@@ -19,10 +19,9 @@ fun main(args: Array<String>) {
 
     fun start(vertx: Vertx) {
         vertx.eventBus().registerDefaultCodec(MqttPublishMessageImpl::class.java, MqttPublishMessageCodec())
-        Future.all((1..1).map {
-            vertx.deployVerticle(Distributor())
-        }).onComplete {
-            vertx.deployVerticle(MonsterServer(port, ssl))
+        val distributor = Distributor()
+        vertx.deployVerticle(distributor).onComplete {
+            vertx.deployVerticle(MonsterServer(port, ssl, distributor))
         }
     }
 

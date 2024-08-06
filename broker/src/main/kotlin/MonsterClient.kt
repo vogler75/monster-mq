@@ -13,28 +13,29 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.logging.Level
 import java.util.logging.Logger
 
-class MonsterClient: AbstractVerticle() {
+class MonsterClient(val server: MonsterServer): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private var endpoint: MqttEndpoint? = null
 
-    private val subscriptions = mutableMapOf<String, MessageConsumer<MqttPublishMessageImpl>>()
     private val messageQueue = ArrayBlockingQueue<MqttPublishMessageImpl>(10000) // TODO: configurable
 
     @Volatile private var pauseClient: Boolean = false
+
+    fun getClientBusAddr() = Const.getClientBusAddr(this.deploymentID())
 
     companion object {
         private val logger = Logger.getLogger(this.javaClass.simpleName)
         private val clients: HashMap<String, MonsterClient> = hashMapOf()
 
-        fun endpointHandler(vertx: Vertx, endpoint: MqttEndpoint) {
+        fun endpointHandler(vertx: Vertx, endpoint: MqttEndpoint, server: MonsterServer) {
             clients[endpoint.clientIdentifier()]?.let { client ->
                 logger.info("Existing client [${endpoint.clientIdentifier()}]")
                 if (endpoint.isCleanSession) client.cleanSession()
                 client.startEndpoint(endpoint)
             } ?: run {
                 logger.info("New client [${endpoint.clientIdentifier()}]")
-                val client = MonsterClient()
+                val client = MonsterClient(server)
                 vertx.deployVerticle(client)
                 clients[endpoint.clientIdentifier()] = client
                 client.startEndpoint(endpoint)
@@ -65,6 +66,11 @@ class MonsterClient: AbstractVerticle() {
         endpoint.disconnectHandler { closeHandler(1) }
         endpoint.closeHandler { closeHandler(2) }
         endpoint.accept(endpoint.isCleanSession)
+
+        vertx.eventBus().consumer<MqttPublishMessageImpl>(getClientBusAddr()) {
+            consumeMessage(it.body())
+        }
+
         if (this.pauseClient) {
             logger.info("Send queue size ${messageQueue.size}")
             messageQueue.forEach {
@@ -90,8 +96,7 @@ class MonsterClient: AbstractVerticle() {
     }
 
     fun cleanSession() {
-        subscriptions.forEach { it.value.unregister() }
-        subscriptions.clear()
+        server.distributor.cleanSessionRequest(this) {}
         messageQueue.clear()
     }
 
@@ -102,20 +107,11 @@ class MonsterClient: AbstractVerticle() {
         // Subscribe
         subscribe.topicSubscriptions().forEach { subscription ->
             logger.info("Subscription for [${subscription.topicName()}] with QoS ${subscription.qualityOfService()}")
-            if (!subscriptions.contains(subscription.topicName())) {
-                vertx.eventBus().request(Const.DIST_SUBSCRIBE_REQUEST, subscription.topicName()) {
-                    val address = it.result().body()
-                    logger.fine("Subscribe to bus address [$address]")
-                    val consumer = vertx.eventBus().consumer(address) { message ->
-                        sendMessageToClient(message.body())
-                    }
-                    subscriptions[address] = consumer
-                }
-            }
+            server.distributor.subscribeRequest(this, subscription.topicName()) { }
         }
     }
 
-    private fun sendMessageToClient(message: MqttPublishMessageImpl) {
+    private fun consumeMessage(message: MqttPublishMessageImpl) {
         if (!this.pauseClient) {
             this.endpoint?.publish(
                 message.topicName(),
@@ -136,18 +132,16 @@ class MonsterClient: AbstractVerticle() {
     }
 
     private fun unsubscribeHandler(unsubscribe: MqttUnsubscribeMessage) {
-        unsubscribe.topics().forEach { address ->
-            subscriptions[address]?.unregister()
-            subscriptions.remove(address)
+        unsubscribe.topics().forEach { topicName ->
+            server.distributor.unsubscribeRequest(this, topicName) { }
         }
     }
 
     private fun publishHandler(message: MqttPublishMessage) {
         logger.finest { "Received message [${message.topicName()}] with QoS ${message.qosLevel()}" }
 
-        // Publish the message to the Vert.x event bus
-        val address: String = Const.getTopicBusAddr(message.topicName())
-        vertx.eventBus().publish(address, message)
+        server.distributor.publishMessage(message)
+
         endpoint?.apply {
             // Handle QoS levels
             if (message.qosLevel() == MqttQoS.AT_LEAST_ONCE) {
