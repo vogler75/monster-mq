@@ -3,7 +3,6 @@ package at.rocworks
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
-import io.vertx.core.eventbus.MessageConsumer
 import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
@@ -13,7 +12,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.logging.Level
 import java.util.logging.Logger
 
-class MonsterClient(val server: MonsterServer): AbstractVerticle() {
+class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private var endpoint: MqttEndpoint? = null
@@ -21,8 +20,9 @@ class MonsterClient(val server: MonsterServer): AbstractVerticle() {
     private val messageQueue = ArrayBlockingQueue<MqttPublishMessageImpl>(10000) // TODO: configurable
 
     @Volatile private var pauseClient: Boolean = false
+    private var connected = false
 
-    fun getClientBusAddr() = Const.getClientBusAddr(this.deploymentID())
+    private fun getClientBusAddr() = Const.getClientBusAddr(this.deploymentID())
 
     companion object {
         private val logger = Logger.getLogger(this.javaClass.simpleName)
@@ -53,7 +53,7 @@ class MonsterClient(val server: MonsterServer): AbstractVerticle() {
     }
 
     init {
-        logger.level = Level.ALL
+        logger.level = Level.INFO
     }
 
     fun startEndpoint(endpoint: MqttEndpoint) {
@@ -63,9 +63,10 @@ class MonsterClient(val server: MonsterServer): AbstractVerticle() {
         endpoint.unsubscribeHandler(::unsubscribeHandler)
         endpoint.publishHandler(::publishHandler)
         endpoint.publishReleaseHandler(::publishReleaseHandler)
-        endpoint.disconnectHandler { closeHandler(1) }
-        endpoint.closeHandler { closeHandler(2) }
+        endpoint.disconnectHandler { disconnectHandler() }
+        endpoint.closeHandler { closeHandler() }
         endpoint.accept(endpoint.isCleanSession)
+        connected = true
 
         vertx.eventBus().consumer<MqttPublishMessageImpl>(getClientBusAddr()) {
             consumeMessage(it.body())
@@ -82,6 +83,8 @@ class MonsterClient(val server: MonsterServer): AbstractVerticle() {
     }
 
     private fun stopEndpoint() {
+        if (!connected) return
+        else connected = false
         endpoint?.let { endpoint ->
             logger.info("Stop client [${endpoint.clientIdentifier()}]")
             if (endpoint.isCleanSession) {
@@ -156,8 +159,13 @@ class MonsterClient(val server: MonsterServer): AbstractVerticle() {
         endpoint?.publishComplete(messageId)
     }
 
-    private fun closeHandler(handler: Int) {
-        logger.info("Close received [${endpoint?.clientIdentifier()}] [$handler].")
+    private fun disconnectHandler() {
+        logger.info("Disconnect received [${endpoint?.clientIdentifier()}]")
+        stopEndpoint()
+    }
+
+    private fun closeHandler() {
+        logger.info("Close received [${endpoint?.clientIdentifier()}]")
         stopEndpoint()
     }
 }

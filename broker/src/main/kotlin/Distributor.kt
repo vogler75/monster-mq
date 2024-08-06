@@ -26,40 +26,12 @@ class Distributor: AbstractVerticle() {
     private var globalWildcardSubscriptions: AsyncMap<String, String>? = null
     private var globalRetainedMessages: AsyncMap<String, Buffer>? = null
 
-    private val subscriptions = mutableMapOf<String, MutableSet<String>>() // topic to clients
+    private val subscriptionsFlat = mutableMapOf<String, MutableSet<String>>() // topic to clientIds
+    private val subscriptionsTree = TopicTree()
 
-    fun getDistBusAddr() = Const.getDistBusAddr(this.deploymentID())
-    fun getTopicBusAddr() = Const.getTopicBusAddr(this.deploymentID())
+    private fun getDistBusAddr() = Const.getDistBusAddr(this.deploymentID())
+    private fun getTopicBusAddr() = Const.getTopicBusAddr(this.deploymentID())
 
-    data class TopicNode (
-        val children: MutableMap<String, TopicNode> = mutableMapOf()
-    )
-
-    class TopicTree {
-        private val root = TopicNode()
-
-        fun addTopicName(topicName: String) {
-            val xs = topicName.split("/")
-            if (xs.isEmpty()) return
-            else addTopicNode(root, xs.first(), xs.drop(1))
-        }
-
-        fun printTree() = printTreeNode(root)
-
-        private fun printTreeNode(node: TopicNode, level: Int = 0) {
-            node.children.forEach {
-                println(" ".repeat(level) + " "+it.key)
-                printTreeNode(it.value, level + 1)
-            }
-        }
-
-        private fun addTopicNode(node: TopicNode, topic: String, rest: List<String>) {
-            val next = node.children.getOrPut(topic) { TopicNode() }
-            if (rest.isNotEmpty()) addTopicNode(next, rest.first(), rest.drop(1))
-        }
-    }
-
-    private val topicTree = TopicTree()
 
     override fun start(startPromise: Promise<Void>) {
         val f1 = getMap<String, String>("WildcardSubscriptions").onComplete {
@@ -71,23 +43,17 @@ class Distributor: AbstractVerticle() {
         }
 
         vertx.eventBus().consumer<JsonObject>(getDistBusAddr()) {
-            logger.info("Received request [${it.body()}]")
+            logger.finest { "Received request [${it.body()}]" }
             requestHandler(it)
         }
 
         vertx.eventBus().consumer<MqttPublishMessageImpl>(getTopicBusAddr()) {
-            logger.info("Received message [${it.body().topicName()}]")
+            logger.finest { "Received message [${it.body().topicName()}]" }
             distributeMessage(it.body())
         }
 
         Future.all(f1, f2).onComplete {
             startPromise.complete()
-        }
-    }
-
-    private fun distributeMessage(message: MqttPublishMessage) {
-        subscriptions[message.topicName()]?.forEach { clientId ->
-            vertx.eventBus().publish(Const.getClientBusAddr(clientId), message)
         }
     }
 
@@ -97,25 +63,26 @@ class Distributor: AbstractVerticle() {
             COMMAND_SUBSCRIBE -> {
                 val topicName = it.body().getString(Const.TOPIC_KEY)
                 val clientId = it.body().getString(Const.CLIENT_KEY)
-                subscriptions.getOrPut(topicName) { hashSetOf() }.add(clientId)
-                if (Const.isWildCardTopic(topicName)) {
-                    topicTree.addTopicName(topicName)
-                    topicTree.printTree()
-                }
+                subscriptionsFlat.getOrPut(topicName) { hashSetOf() }.add(clientId)
+                subscriptionsTree.add(topicName, clientId)
                 it.reply(true)
             }
 
             COMMAND_UNSUBSCRIBE -> {
                 val topicName = it.body().getString(Const.TOPIC_KEY)
                 val clientId = it.body().getString(Const.CLIENT_KEY)
-                val xs = subscriptions[topicName] ?: hashSetOf()
-                xs.remove(clientId)
+                subscriptionsFlat[topicName]?.remove(clientId)
+                subscriptionsTree.del(topicName, clientId)
                 it.reply(true)
             }
 
             COMMAND_CLEAN -> {
                 val clientId = it.body().getString(Const.CLIENT_KEY)
-                subscriptions.forEach { it.value.remove(clientId) }
+                subscriptionsFlat.forEach {
+                    if (it.value.remove(clientId)) {
+                        subscriptionsTree.del(it.key, clientId)
+                    }
+                }
                 it.reply(true)
             }
         }
@@ -163,6 +130,15 @@ class Distributor: AbstractVerticle() {
 
     fun publishMessage(message: MqttPublishMessage) {
         vertx.eventBus().publish(getTopicBusAddr(), message)
+    }
+
+    private fun distributeMessage(message: MqttPublishMessage) {
+        //subscriptionsFlat[message.topicName()]?.forEach { clientId ->
+        //    vertx.eventBus().publish(Const.getClientBusAddr(clientId), message)
+        //}
+        subscriptionsTree.find(message.topicName()).forEach {
+            vertx.eventBus().publish(Const.getClientBusAddr(it), message)
+        }
     }
 
     private fun <K,V> getMap(name: String): Future<AsyncMap<K, V>> {
