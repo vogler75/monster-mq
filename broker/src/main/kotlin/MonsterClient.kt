@@ -25,7 +25,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private fun getClientBusAddr() = Const.getClientBusAddr(this.deploymentID())
 
     companion object {
-        private val logger = Logger.getLogger(this.javaClass.simpleName)
+        private val logger = Logger.getLogger(this::class.simpleName)
         private val clients: HashMap<String, MonsterClient> = hashMapOf()
 
         fun endpointHandler(vertx: Vertx, endpoint: MqttEndpoint, server: MonsterServer) {
@@ -44,8 +44,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
 
         fun removeEndpoint(vertx: Vertx, endpoint: MqttEndpoint) {
             logger.info("Remove client [${endpoint.clientIdentifier()}]")
-            val client : MonsterClient? = clients[endpoint.clientIdentifier()]
-            if (client != null) {
+            clients[endpoint.clientIdentifier()]?.let { client ->
                 clients.remove(endpoint.clientIdentifier())
                 vertx.undeploy(client.deploymentID())
             }
