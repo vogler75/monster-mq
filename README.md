@@ -1,7 +1,7 @@
 # Monster MQ
 
 TODO General  
-- Messages are sent multiple times if the client has multiple matching wildcard subscriptions. 
+- Messages are sent multiple times if the client has multiple matching wildcard subscriptions. Same problem for retained messages. Subscribe should only subscribe if there is not yet another subscription which covers the new subscription.
 
 
 TODO Clustering  

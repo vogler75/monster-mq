@@ -89,8 +89,8 @@ class Distributor: AbstractVerticle() {
         val clientId = it.body().getString(Const.CLIENT_KEY)
         subscriptionsFlat.getOrPut(topicName) { hashSetOf() }.add(clientId)
         subscriptionsTree.add(topicName, clientId)
-        logger.fine(subscriptionsTree.toString())
         sendRetainedMessages(topicName, clientId)
+        logger.fine(subscriptionsTree.toString())
         it.reply(true)
     }
 
