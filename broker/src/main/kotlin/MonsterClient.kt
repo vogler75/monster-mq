@@ -183,7 +183,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
                     false,
                     will.isWillRetain,
                     will.willTopic,
-                    Const.bufferToByteBuf(will.willMessage),
+                    Const.toByteBuf(will.willMessage),
                     MqttProperties()
                 )
                 server.distributor.publishMessage(message)

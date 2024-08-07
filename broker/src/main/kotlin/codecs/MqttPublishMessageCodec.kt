@@ -1,7 +1,6 @@
 package at.rocworks.codecs
 
 import at.rocworks.Const
-import io.netty.buffer.Unpooled
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.MessageCodec
@@ -43,7 +42,7 @@ class MqttPublishMessageCodec : MessageCodec<MqttPublishMessageImpl, MqttPublish
             isDup,
             isRetain,
             topicName,
-            Const.bufferToByteBuf(payload)
+            Const.toByteBuf(payload)
         ) as MqttPublishMessageImpl
     }
 

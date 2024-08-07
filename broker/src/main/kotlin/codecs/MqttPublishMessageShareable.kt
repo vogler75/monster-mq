@@ -23,8 +23,7 @@ class MqttPublishMessageShareable(message: MqttPublishMessage): Serializable {
             isDup,
             isRetain,
             topicName,
-            Const.bytesToByteBuf(payload),
+            Const.toByteBuf(payload),
             MqttProperties()
         )
-
 }

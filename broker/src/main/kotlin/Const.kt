@@ -18,8 +18,8 @@ object Const {
 
     fun isWildCardTopic(topicName: String): Boolean = topicName.contains('+') || topicName.contains('#')
 
-    fun bufferToByteBuf(buffer: Buffer): ByteBuf = Unpooled.wrappedBuffer(buffer.bytes)
-    fun bytesToByteBuf(bytes: ByteArray): ByteBuf = Unpooled.wrappedBuffer(bytes)
+    fun toByteBuf(buffer: Buffer): ByteBuf = Unpooled.wrappedBuffer(buffer.bytes)
+    fun toByteBuf(bytes: ByteArray): ByteBuf = Unpooled.wrappedBuffer(bytes)
 
     fun topicMatches(wildcardTopic: String, topic: String): Boolean {
         val wildcardLevels = wildcardTopic.split("/")
