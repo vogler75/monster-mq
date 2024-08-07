@@ -8,7 +8,7 @@ object Const {
     const val TOPIC_KEY = "Topic"
     const val CLIENT_KEY = "Client"
 
-    fun getTopicBusAddr(deploymentID: String) = "$TOPIC_NAMESPACE/${deploymentID}"
+    fun getTopicBusAddr(deploymentID: String) = "$TOPIC_NAMESPACE" // /${deploymentID}"
     fun getDistBusAddr(deploymentID: String) = "$DIST_NAMESPACE/${deploymentID}"
     fun getClientBusAddr(deploymentID: String) = "$CLIENT_NAMESPACE/${deploymentID}"
 

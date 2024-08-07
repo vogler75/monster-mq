@@ -22,7 +22,11 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     @Volatile private var pauseClient: Boolean = false
     private var connected = false
 
-    private fun getClientBusAddr() = Const.getClientBusAddr(this.deploymentID())
+    private lateinit var clientBusAddr: String
+
+    init {
+        logger.level = Level.INFO
+    }
 
     companion object {
         private val logger = Logger.getLogger(this::class.simpleName)
@@ -36,23 +40,25 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
             } ?: run {
                 logger.info("New client [${endpoint.clientIdentifier()}]")
                 val client = MonsterClient(server)
-                vertx.deployVerticle(client)
-                clients[endpoint.clientIdentifier()] = client
-                client.startEndpoint(endpoint)
+                vertx.deployVerticle(client).onComplete {
+                    clients[endpoint.clientIdentifier()] = client
+                    client.startEndpoint(endpoint)
+                }
             }
         }
 
         fun removeEndpoint(vertx: Vertx, endpoint: MqttEndpoint) {
             logger.info("Remove client [${endpoint.clientIdentifier()}]")
             clients[endpoint.clientIdentifier()]?.let { client ->
-                clients.remove(endpoint.clientIdentifier())
-                vertx.undeploy(client.deploymentID())
+                vertx.undeploy(client.deploymentID()).onComplete {
+                    clients.remove(endpoint.clientIdentifier())
+                }
             }
         }
     }
 
-    init {
-        logger.level = Level.INFO
+    override fun start() {
+        clientBusAddr = Const.getClientBusAddr(this.deploymentID())
     }
 
     fun startEndpoint(endpoint: MqttEndpoint) {
@@ -67,7 +73,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         endpoint.accept(endpoint.isCleanSession)
         connected = true
 
-        vertx.eventBus().consumer<MqttPublishMessageImpl>(getClientBusAddr()) {
+        vertx.eventBus().consumer(clientBusAddr) {
             consumeMessage(it.body())
         }
 
@@ -113,6 +119,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         }
     }
 
+    private var queueAddError: Boolean = false
     private fun consumeMessage(message: MqttPublishMessageImpl) {
         if (!this.pauseClient) {
             this.endpoint?.publish(
@@ -126,9 +133,13 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         } else {
             try {
                 messageQueue.add(message)
+                if (queueAddError) queueAddError = false
                 logger.finest { "Queued message for [${endpoint?.clientIdentifier()}] topic [${message.topicName()}]" }
             } catch (e: IllegalStateException) {
-                logger.warning(e.message)
+                if (!queueAddError) {
+                    queueAddError = true
+                    logger.warning("Error adding message to queue: [${e.message}]")
+                }
             }
         }
     }

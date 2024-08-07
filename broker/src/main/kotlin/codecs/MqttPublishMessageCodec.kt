@@ -14,7 +14,9 @@ class MqttPublishMessageCodec : MessageCodec<MqttPublishMessageImpl, MqttPublish
         buffer.appendByte(s.qosLevel().value().toByte())
         buffer.appendByte(if (s.isDup) 1 else 0)
         buffer.appendByte(if (s.isRetain) 1 else 0)
-        buffer.appendString(s.topicName())
+        val topicName = s.topicName().toByteArray(Charsets.UTF_8)
+        buffer.appendInt(topicName.size)
+        buffer.appendBytes(topicName)
         buffer.appendBuffer(s.payload())
     }
 
@@ -28,8 +30,10 @@ class MqttPublishMessageCodec : MessageCodec<MqttPublishMessageImpl, MqttPublish
         position += 1
         val isRetain = buffer.getByte(position) == 1.toByte()
         position += 1
-        val topicName = buffer.getString(position, buffer.length())
-        position += buffer.length() - position
+        val topicNameLen = buffer.getInt(position)
+        position += 4
+        val topicName = buffer.getString(position, position + topicNameLen)
+        position += topicNameLen
         val payload = buffer.slice(position, buffer.length())
 
         return MqttPublishMessage.create(messageId, MqttQoS.valueOf(qos), isDup, isRetain, topicName, Unpooled.wrappedBuffer(payload.bytes)) as MqttPublishMessageImpl

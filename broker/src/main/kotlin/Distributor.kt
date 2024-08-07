@@ -30,14 +30,17 @@ class Distributor: AbstractVerticle() {
     private val subscriptionsFlat = mutableMapOf<String, MutableSet<String>>() // topic to clientIds
     private val subscriptionsTree = TopicTree()
 
-    private fun getDistBusAddr() = Const.getDistBusAddr(this.deploymentID())
-    private fun getTopicBusAddr() = Const.getTopicBusAddr(this.deploymentID())
+    private lateinit var distBusAddr: String
+    private lateinit var topicBusAddr: String
 
     init {
-        logger.level = Level.FINE
+        logger.level = Level.INFO
     }
 
     override fun start(startPromise: Promise<Void>) {
+        distBusAddr = Const.getDistBusAddr(this.deploymentID())
+        topicBusAddr = Const.getTopicBusAddr(this.deploymentID())
+
         val f1 = getMap<String, String>("WildcardSubscriptions").onComplete {
             globalWildcardSubscriptions = it.result()
         }
@@ -46,12 +49,12 @@ class Distributor: AbstractVerticle() {
             globalRetainedMessages = it.result()
         }
 
-        vertx.eventBus().consumer<JsonObject>(getDistBusAddr()) {
+        vertx.eventBus().consumer<JsonObject>(distBusAddr) {
             logger.finest { "Received request [${it.body()}]" }
             requestHandler(it)
         }
 
-        vertx.eventBus().consumer<MqttPublishMessageImpl>(getTopicBusAddr()) {
+        vertx.eventBus().consumer<MqttPublishMessageImpl>(topicBusAddr) {
             logger.finest { "Received message [${it.body().topicName()}]" }
             distributeMessage(it.body())
         }
@@ -103,7 +106,7 @@ class Distributor: AbstractVerticle() {
             .put(COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
             .put(Const.CLIENT_KEY, client.deploymentID())
-        vertx.eventBus().request(getDistBusAddr(), request) {
+        vertx.eventBus().request(distBusAddr, request) {
             result(it.result().body())
         }
     }
@@ -117,7 +120,7 @@ class Distributor: AbstractVerticle() {
             .put(COMMAND_KEY, COMMAND_UNSUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
             .put(Const.CLIENT_KEY, client.deploymentID())
-        vertx.eventBus().request(getDistBusAddr(), request) {
+        vertx.eventBus().request(distBusAddr, request) {
             result(it.result().body())
         }
     }
@@ -129,19 +132,16 @@ class Distributor: AbstractVerticle() {
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_CLEANSESSION)
             .put(Const.CLIENT_KEY, client.deploymentID())
-        vertx.eventBus().request(getDistBusAddr(), request) {
+        vertx.eventBus().request(distBusAddr, request) {
             result(it.result().body())
         }
     }
 
     fun publishMessage(message: MqttPublishMessage) {
-        vertx.eventBus().publish(getTopicBusAddr(), message)
+        vertx.eventBus().publish(topicBusAddr, message)
     }
 
     private fun distributeMessage(message: MqttPublishMessage) {
-        //subscriptionsFlat[message.topicName()]?.forEach { clientId ->
-        //    vertx.eventBus().publish(Const.getClientBusAddr(clientId), message)
-        //}
         subscriptionsTree.find(message.topicName()).forEach {
             vertx.eventBus().publish(Const.getClientBusAddr(it), message)
         }
