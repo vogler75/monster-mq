@@ -19,8 +19,9 @@ fun main(args: Array<String>) {
     fun start(vertx: Vertx) {
         vertx.eventBus().registerDefaultCodec(MqttPublishMessageImpl::class.java, MqttPublishMessageCodec())
         val distributor = Distributor()
-        vertx.deployVerticle(distributor).onComplete {
-            vertx.deployVerticle(MonsterServer(port, ssl, distributor))
+        vertx.deployVerticle(distributor).onComplete{
+            if (it.succeeded()) vertx.deployVerticle(MonsterServer(port, ssl, distributor))
+            else println("Error in deploying distributor: ${it.cause()}")
         }
     }
 

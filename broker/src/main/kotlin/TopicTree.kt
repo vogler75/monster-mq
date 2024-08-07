@@ -44,7 +44,7 @@ class TopicTree {
         if (xs.isNotEmpty()) delTopicNode(root, xs.first(), xs.drop(1))
     }
 
-    fun find(topicName: String): List<String> {
+    fun findClients(topicName: String): List<String> {
         fun findTopicNode(node: TopicNode, first: String, rest: List<String>): List<String> {
             return node.children.flatMap { child ->
                 when (child.key) {

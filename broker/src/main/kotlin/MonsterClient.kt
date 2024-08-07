@@ -161,7 +161,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private fun publishHandler(message: MqttPublishMessage) {
         logger.finest { "Client [${clientId()}] Received message [${message.topicName()}] with QoS ${message.qosLevel()}" }
 
-        server.distributor.publishMessage(message)
+        server.distributor.publishMessage(message as MqttPublishMessageImpl)
 
         endpoint?.apply {
             // Handle QoS levels
