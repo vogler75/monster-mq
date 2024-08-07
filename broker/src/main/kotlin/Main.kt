@@ -7,7 +7,6 @@ import io.vertx.mqtt.messages.impl.MqttPublishMessageImpl
 import io.vertx.spi.cluster.hazelcast.ConfigUtil
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 
-
 fun main(args: Array<String>) {
     MonsterServer.initLogging()
 

@@ -1,9 +1,13 @@
 package at.rocworks
 
+import io.netty.buffer.ByteBuf
+import io.netty.buffer.Unpooled
+import io.netty.handler.codec.mqtt.MqttProperties
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
 import io.vertx.mqtt.MqttEndpoint
+import io.vertx.mqtt.MqttWill
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
@@ -16,11 +20,12 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private var endpoint: MqttEndpoint? = null
+    private var endpointConnected = false
 
     private val messageQueue = ArrayBlockingQueue<MqttPublishMessageImpl>(10000) // TODO: configurable
 
-    @Volatile private var pauseClient: Boolean = false
-    private var connected = false
+    @Volatile
+    private var pauseClient: Boolean = false
 
     private lateinit var clientBusAddr: String
 
@@ -64,6 +69,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     fun startEndpoint(endpoint: MqttEndpoint) {
         logger.info("Client [${endpoint.clientIdentifier()}] request to connect, clean session = ${endpoint.isCleanSession}")
         this.endpoint = endpoint
+        endpoint.exceptionHandler(::exceptionHandler)
         endpoint.subscribeHandler(::subscribeHandler)
         endpoint.unsubscribeHandler(::unsubscribeHandler)
         endpoint.publishHandler(::publishHandler)
@@ -71,7 +77,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         endpoint.disconnectHandler { disconnectHandler() }
         endpoint.closeHandler { closeHandler() }
         endpoint.accept(endpoint.isCleanSession)
-        connected = true
+        endpointConnected = true
 
         vertx.eventBus().consumer(clientBusAddr) {
             consumeMessage(it.body())
@@ -88,8 +94,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     }
 
     private fun stopEndpoint() {
-        if (!connected) return
-        else connected = false
+        endpointConnected = false
         endpoint?.let { endpoint ->
             logger.info("Stop client [${endpoint.clientIdentifier()}]")
             if (endpoint.isCleanSession) {
@@ -103,9 +108,13 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         }
     }
 
-    fun cleanSession() {
+    private fun cleanSession() {
         server.distributor.cleanSessionRequest(this) {}
         messageQueue.clear()
+    }
+
+    private fun exceptionHandler(throwable: Throwable) {
+        logger.severe("Exception from client [${endpoint?.clientIdentifier()}]: ${throwable.message}")
     }
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
@@ -166,17 +175,38 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         }
     }
 
+    private fun sendLastWill() {
+        logger.info("Sending Last-Will message for client [${endpoint?.clientIdentifier()}]")
+        endpoint?.will()?.let { will ->
+            if (will.isWillFlag) {
+                val message = MqttPublishMessageImpl(
+                    0,
+                    MqttQoS.valueOf(will.willQos),
+                    false,
+                    will.isWillRetain,
+                    will.willTopic,
+                    Const.bufferToByteBuf(will.willMessage),
+                    MqttProperties()
+                )
+                server.distributor.publishMessage(message)
+            }
+        }
+    }
+
     private fun publishReleaseHandler(messageId: Int) {
         endpoint?.publishComplete(messageId)
     }
 
     private fun disconnectHandler() {
         logger.info("Disconnect received [${endpoint?.clientIdentifier()}]")
-        stopEndpoint()
+        if (endpointConnected) stopEndpoint()
     }
 
     private fun closeHandler() {
         logger.info("Close received [${endpoint?.clientIdentifier()}]")
-        stopEndpoint()
+        if (endpointConnected) { // if there was no disconnect before
+            sendLastWill()
+            stopEndpoint()
+        }
     }
 }

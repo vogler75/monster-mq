@@ -1,5 +1,6 @@
 package at.rocworks.codecs
 
+import at.rocworks.Const
 import io.netty.buffer.Unpooled
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.buffer.Buffer
@@ -36,7 +37,14 @@ class MqttPublishMessageCodec : MessageCodec<MqttPublishMessageImpl, MqttPublish
         position += topicNameLen
         val payload = buffer.slice(position, buffer.length())
 
-        return MqttPublishMessage.create(messageId, MqttQoS.valueOf(qos), isDup, isRetain, topicName, Unpooled.wrappedBuffer(payload.bytes)) as MqttPublishMessageImpl
+        return MqttPublishMessage.create(
+            messageId,
+            MqttQoS.valueOf(qos),
+            isDup,
+            isRetain, 
+            topicName,
+            Const.bufferToByteBuf(payload)
+        ) as MqttPublishMessageImpl
     }
 
     override fun transform(s: MqttPublishMessageImpl): MqttPublishMessageImpl {
