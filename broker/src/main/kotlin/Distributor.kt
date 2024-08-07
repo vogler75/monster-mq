@@ -165,7 +165,7 @@ class Distributor: AbstractVerticle() {
     }
 
     private fun distributeMessage(message: MqttMessage) {
-        subscriptionsTree.findClients(message.topicName).forEach {
+        subscriptionsTree.findClients(message.topicName).toSet().forEach {
             vertx.eventBus().publish(Const.getClientBusAddr(it), message)
         }
     }
