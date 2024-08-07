@@ -41,7 +41,7 @@ class MqttPublishMessageCodec : MessageCodec<MqttPublishMessageImpl, MqttPublish
             messageId,
             MqttQoS.valueOf(qos),
             isDup,
-            isRetain, 
+            isRetain,
             topicName,
             Const.bufferToByteBuf(payload)
         ) as MqttPublishMessageImpl

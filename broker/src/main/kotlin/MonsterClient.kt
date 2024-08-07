@@ -1,13 +1,10 @@
 package at.rocworks
 
-import io.netty.buffer.ByteBuf
-import io.netty.buffer.Unpooled
 import io.netty.handler.codec.mqtt.MqttProperties
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
 import io.vertx.mqtt.MqttEndpoint
-import io.vertx.mqtt.MqttWill
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
@@ -20,7 +17,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private var endpoint: MqttEndpoint? = null
-    private var endpointConnected = false
+    private var connected = false
 
     private val messageQueue = ArrayBlockingQueue<MqttPublishMessageImpl>(10000) // TODO: configurable
 
@@ -77,7 +74,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         endpoint.disconnectHandler { disconnectHandler() }
         endpoint.closeHandler { closeHandler() }
         endpoint.accept(endpoint.isCleanSession)
-        endpointConnected = true
+        connected = true
 
         vertx.eventBus().consumer(clientBusAddr) {
             consumeMessage(it.body())
@@ -94,7 +91,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     }
 
     private fun stopEndpoint() {
-        endpointConnected = false
+        connected = false
         endpoint?.let { endpoint ->
             logger.info("Stop client [${endpoint.clientIdentifier()}]")
             if (endpoint.isCleanSession) {
@@ -199,12 +196,12 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
 
     private fun disconnectHandler() {
         logger.info("Disconnect received [${endpoint?.clientIdentifier()}]")
-        if (endpointConnected) stopEndpoint()
+        if (connected) stopEndpoint()
     }
 
     private fun closeHandler() {
         logger.info("Close received [${endpoint?.clientIdentifier()}]")
-        if (endpointConnected) { // if there was no disconnect before
+        if (connected) { // if there was no disconnect before
             sendLastWill()
             stopEndpoint()
         }
