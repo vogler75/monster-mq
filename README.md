@@ -1,7 +1,7 @@
 # Monster MQ
 
 TODO General  
-- Retained Messages  
+- Messages are sent multiple times if the client has multiple matching wildcard subscriptions. 
 
 
 TODO Clustering  

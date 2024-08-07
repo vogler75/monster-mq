@@ -42,7 +42,7 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
             qos,
             isDup,
             isRetain,
-        ) 
+        )
     }
 
     override fun transform(s: MqttMessage): MqttMessage {

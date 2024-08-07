@@ -157,8 +157,10 @@ class Distributor: AbstractVerticle() {
     fun publishMessage(message: MqttMessage) {
         vertx.eventBus().publish(topicBusAddr, message)
         if (message.isRetain) retainedMessages?.apply {
-            logger.info("Save retained message")
-            put(message.topicName, message)
+            logger.finest { "Save retained message for [${message.topicName}]" }
+            put(message.topicName, message).onComplete {
+                logger.finest { "Save retained message for [${message.topicName}] completed [${it.succeeded()}]" }
+            }
         }
     }
 
