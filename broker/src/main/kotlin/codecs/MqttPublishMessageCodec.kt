@@ -7,20 +7,20 @@ import io.vertx.core.eventbus.MessageCodec
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.impl.MqttPublishMessageImpl
 
-class MqttPublishMessageCodec : MessageCodec<MqttPublishMessageImpl, MqttPublishMessageImpl> {
-    override fun encodeToWire(buffer: Buffer, s: MqttPublishMessageImpl) {
+class MqttPublishMessageCodec : MessageCodec<MqttPublishMessageShareable, MqttPublishMessageShareable> {
+    override fun encodeToWire(buffer: Buffer, s: MqttPublishMessageShareable) {
         // Serialize MqttPublishMessage fields to the buffer
-        buffer.appendInt(s.messageId())
-        buffer.appendByte(s.qosLevel().value().toByte())
+        buffer.appendInt(s.messageId)
+        buffer.appendByte(s.qosLevel.toByte())
         buffer.appendByte(if (s.isDup) 1 else 0)
         buffer.appendByte(if (s.isRetain) 1 else 0)
-        val topicName = s.topicName().toByteArray(Charsets.UTF_8)
+        val topicName = s.topicName.toByteArray(Charsets.UTF_8)
         buffer.appendInt(topicName.size)
         buffer.appendBytes(topicName)
-        buffer.appendBuffer(s.payload())
+        buffer.appendBuffer(Buffer.buffer(s.payload))
     }
 
-    override fun decodeFromWire(pos: Int, buffer: Buffer): MqttPublishMessageImpl {
+    override fun decodeFromWire(pos: Int, buffer: Buffer): MqttPublishMessageShareable {
         var position = pos
         val messageId = buffer.getInt(position)
         position += 4
@@ -43,10 +43,10 @@ class MqttPublishMessageCodec : MessageCodec<MqttPublishMessageImpl, MqttPublish
             isRetain,
             topicName,
             Const.toByteBuf(payload)
-        ) as MqttPublishMessageImpl
+        ) as MqttPublishMessageShareable
     }
 
-    override fun transform(s: MqttPublishMessageImpl): MqttPublishMessageImpl {
+    override fun transform(s: MqttPublishMessageShareable): MqttPublishMessageShareable {
         // Return the original message (no transformation needed)
         return s
     }

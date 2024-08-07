@@ -1,17 +1,12 @@
 package at.rocworks
 
 import at.rocworks.codecs.MqttPublishMessageShareable
-import io.netty.handler.codec.mqtt.MqttProperties
-import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
-import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.AsyncMap
-import io.vertx.mqtt.messages.MqttPublishMessage
-import io.vertx.mqtt.messages.impl.MqttPublishMessageImpl
 
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -52,9 +47,15 @@ class Distributor: AbstractVerticle() {
             requestHandler(it)
         }
 
-        vertx.eventBus().consumer<MqttPublishMessageImpl>(topicBusAddr) {
-            logger.finest { "Received message [${it.body().topicName()}]" }
-            distributeMessage(it.body())
+        vertx.eventBus().consumer<Any>(topicBusAddr) { message ->
+            message.body().let { payload ->
+                if (payload is MqttPublishMessageShareable) {
+                    logger.finest { "Received message [${payload.topicName}]" }
+                    distributeMessage(payload)
+                } else {
+                    logger.warning("Received unexpected message of type [${payload::class.simpleName}]")
+                }
+            }
         }
 
         Future.all(listOf(map1)).onComplete {
@@ -97,9 +98,9 @@ class Distributor: AbstractVerticle() {
         retainedMessages?.apply {
             keys().onComplete { topics ->
                 topics.result().filter { Const.topicMatches(topicName, it) }.forEach { topic ->
-                    get(topic).onComplete { result ->
-                        val message = result.result().message()
-                        logger.finest { "Publish retained message [${message.topicName()}] to [${clientId}]" }
+                    get(topic).onComplete { value ->
+                        val message = value.result()
+                        logger.finest { "Publish retained message [${message.topicName}] to [${clientId}]" }
                         vertx.eventBus().publish(Const.getClientBusAddr(clientId), message)
                     }
                 }
@@ -153,16 +154,16 @@ class Distributor: AbstractVerticle() {
 
     //----------------------------------------------------------------------------------------------------
 
-    fun publishMessage(message: MqttPublishMessageImpl) {
+    fun publishMessage(message: MqttPublishMessageShareable) {
         vertx.eventBus().publish(topicBusAddr, message)
         if (message.isRetain) retainedMessages?.apply {
             logger.info("Save retained message")
-            put(message.topicName(), MqttPublishMessageShareable(message))
+            put(message.topicName, message)
         }
     }
 
-    private fun distributeMessage(message: MqttPublishMessageImpl) {
-        subscriptionsTree.findClients(message.topicName()).forEach {
+    private fun distributeMessage(message: MqttPublishMessageShareable) {
+        subscriptionsTree.findClients(message.topicName).forEach {
             vertx.eventBus().publish(Const.getClientBusAddr(it), message)
         }
     }

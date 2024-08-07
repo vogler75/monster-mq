@@ -1,5 +1,6 @@
 package at.rocworks
 import at.rocworks.codecs.MqttPublishMessageCodec
+import at.rocworks.codecs.MqttPublishMessageShareable
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Vertx
@@ -17,7 +18,7 @@ fun main(args: Array<String>) {
     println("Cluster: $cluster Port: $port SSL: $ssl")
 
     fun start(vertx: Vertx) {
-        vertx.eventBus().registerDefaultCodec(MqttPublishMessageImpl::class.java, MqttPublishMessageCodec())
+        vertx.eventBus().registerDefaultCodec(MqttPublishMessageShareable::class.java, MqttPublishMessageCodec())
         val distributor = Distributor()
         vertx.deployVerticle(distributor).onComplete{
             if (it.succeeded()) vertx.deployVerticle(MonsterServer(port, ssl, distributor))
