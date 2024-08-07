@@ -5,7 +5,9 @@ TODO General
 
 
 TODO Clustering  
-- Store Last-Will message in a ClusterWideMap and send it for all clients of a Distributer-Node if the node dies.  
+- Store Last-Will message in a ClusterWideMap and send it for all clients of a distributer node if the node dies.  
+
+- Replica for distributer, if a distributor node dies, a replica should take over. Subscriptions of non-clean-session clients must continue to collect data. 
 
 
 TODO Security  
