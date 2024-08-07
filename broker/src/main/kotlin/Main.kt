@@ -1,10 +1,8 @@
 package at.rocworks
-import at.rocworks.codecs.MqttPublishMessageCodec
-import at.rocworks.codecs.MqttPublishMessageShareable
+import at.rocworks.codecs.MqttMessageCodec
+import at.rocworks.codecs.MqttMessage
 import io.vertx.core.AsyncResult
-import io.vertx.core.Future
 import io.vertx.core.Vertx
-import io.vertx.mqtt.messages.impl.MqttPublishMessageImpl
 import io.vertx.spi.cluster.hazelcast.ConfigUtil
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 
@@ -18,7 +16,7 @@ fun main(args: Array<String>) {
     println("Cluster: $cluster Port: $port SSL: $ssl")
 
     fun start(vertx: Vertx) {
-        vertx.eventBus().registerDefaultCodec(MqttPublishMessageShareable::class.java, MqttPublishMessageCodec())
+        vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         val distributor = Distributor()
         vertx.deployVerticle(distributor).onComplete{
             if (it.succeeded()) vertx.deployVerticle(MonsterServer(port, ssl, distributor))

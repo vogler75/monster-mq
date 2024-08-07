@@ -1,16 +1,13 @@
 package at.rocworks
 
-import at.rocworks.codecs.MqttPublishMessageShareable
-import io.netty.handler.codec.mqtt.MqttProperties
+import at.rocworks.codecs.MqttMessage
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
-import io.vertx.core.buffer.Buffer
 import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
-import io.vertx.mqtt.messages.impl.MqttPublishMessageImpl
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -21,7 +18,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private var endpoint: MqttEndpoint? = null
     private var connected = false
 
-    private val messageQueue = ArrayBlockingQueue<MqttPublishMessageShareable>(10000) // TODO: configurable
+    private val messageQueue = ArrayBlockingQueue<MqttMessage>(10000) // TODO: configurable
 
     @Volatile
     private var pauseClient: Boolean = false
@@ -127,7 +124,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     }
 
     private var queueAddError: Boolean = false
-    private fun consumeMessage(message: MqttPublishMessageShareable) {
+    private fun consumeMessage(message: MqttMessage) {
         if (!this.pauseClient) {
             endpoint?.let(message::publish)
             logger.finest { "Client [${clientId()}] Delivered message to [${clientId()}] topic [${message.topicName}]" }
@@ -155,7 +152,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private fun publishHandler(message: MqttPublishMessage) {
         logger.finest { "Client [${clientId()}] Received message [${message.topicName()}] with QoS ${message.qosLevel()}" }
 
-        server.distributor.publishMessage(MqttPublishMessageShareable(message))
+        server.distributor.publishMessage(MqttMessage(message))
 
         endpoint?.apply {
             // Handle QoS levels
@@ -171,7 +168,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         logger.info("Client [${clientId()}] Sending Last-Will message.")
         endpoint?.will()?.let { will ->
             if (will.isWillFlag) {
-                server.distributor.publishMessage(MqttPublishMessageShareable(will))
+                server.distributor.publishMessage(MqttMessage(will))
             }
         }
     }

@@ -11,7 +11,7 @@ import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.impl.MqttPublishMessageImpl
 import java.io.Serializable
 
-class MqttPublishMessageShareable(
+class MqttMessage(
     val messageId: Int,
     val topicName: String,
     val payload: ByteArray,

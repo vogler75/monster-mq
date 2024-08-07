@@ -1,6 +1,6 @@
 package at.rocworks
 
-import at.rocworks.codecs.MqttPublishMessageShareable
+import at.rocworks.codecs.MqttMessage
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -21,7 +21,7 @@ class Distributor: AbstractVerticle() {
         const val COMMAND_CLEANSESSION = "C"
     }
 
-    private var retainedMessages: AsyncMap<String, MqttPublishMessageShareable>? = null // topic to message
+    private var retainedMessages: AsyncMap<String, MqttMessage>? = null // topic to message
 
     private val subscriptionsFlat = mutableMapOf<String, MutableSet<String>>() // topic to clientIds
     private val subscriptionsTree = TopicTree()
@@ -37,7 +37,7 @@ class Distributor: AbstractVerticle() {
         distBusAddr = Const.getDistBusAddr(this.deploymentID())
         topicBusAddr = Const.getTopicBusAddr(this.deploymentID())
 
-        val map1 = getMap<String, MqttPublishMessageShareable>("RetainedMessages").onComplete {
+        val map1 = getMap<String, MqttMessage>("RetainedMessages").onComplete {
             logger.info("Retained message store: "+it.succeeded())
             retainedMessages = it.result()
         }
@@ -49,7 +49,7 @@ class Distributor: AbstractVerticle() {
 
         vertx.eventBus().consumer<Any>(topicBusAddr) { message ->
             message.body().let { payload ->
-                if (payload is MqttPublishMessageShareable) {
+                if (payload is MqttMessage) {
                     logger.finest { "Received message [${payload.topicName}]" }
                     distributeMessage(payload)
                 } else {
@@ -154,7 +154,7 @@ class Distributor: AbstractVerticle() {
 
     //----------------------------------------------------------------------------------------------------
 
-    fun publishMessage(message: MqttPublishMessageShareable) {
+    fun publishMessage(message: MqttMessage) {
         vertx.eventBus().publish(topicBusAddr, message)
         if (message.isRetain) retainedMessages?.apply {
             logger.info("Save retained message")
@@ -162,7 +162,7 @@ class Distributor: AbstractVerticle() {
         }
     }
 
-    private fun distributeMessage(message: MqttPublishMessageShareable) {
+    private fun distributeMessage(message: MqttMessage) {
         subscriptionsTree.findClients(message.topicName).forEach {
             vertx.eventBus().publish(Const.getClientBusAddr(it), message)
         }
