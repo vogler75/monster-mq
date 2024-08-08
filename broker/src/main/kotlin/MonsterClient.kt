@@ -16,15 +16,16 @@ import java.util.logging.Logger
 class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
-    //private var endpoint: MqttEndpoint? = null
+    @Volatile
     private var connected = false
-
-    private val messageQueue = ArrayBlockingQueue<MqttMessage>(10000) // TODO: configurable
 
     @Volatile
     private var pauseClient: Boolean = false
 
-    private var consumer: MessageConsumer<MqttMessage>? = null
+    @Volatile
+    private var endpoint: MqttEndpoint? = null
+
+    private val messageQueue = ArrayBlockingQueue<MqttMessage>(10000) // TODO: configurable
 
     init {
         logger.level = Level.INFO
@@ -63,9 +64,16 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         }
     }
 
+    override fun start() {
+        vertx.eventBus().consumer(Const.getClientBusAddr(getClientId())) {
+            consumeMessage(it.body())
+        }
+    }
+
     fun startEndpoint(endpoint: MqttEndpoint) {
         logger.info("Client [${endpoint.clientIdentifier()}] request to connect, clean session = ${endpoint.isCleanSession}")
-        //this.endpoint = endpoint
+        this.endpoint = endpoint
+
         endpoint.exceptionHandler { exceptionHandler(endpoint, it) }
         endpoint.subscribeHandler { subscribeHandler(endpoint, it) }
         endpoint.unsubscribeHandler { unsubscribeHandler(endpoint, it) }
@@ -74,13 +82,6 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         endpoint.disconnectHandler { disconnectHandler(endpoint) }
         endpoint.closeHandler { closeHandler(endpoint) }
         endpoint.accept(endpoint.isCleanSession)
-        connected = true
-
-        if (consumer == null) {
-            consumer = vertx.eventBus().consumer(Const.getClientBusAddr(getClientId())) {
-                consumeMessage(endpoint, it.body())
-            }
-        }
 
         if (this.pauseClient) {
             logger.info("Send queue size ${messageQueue.size}")
@@ -88,13 +89,14 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
             messageQueue.clear()
             this.pauseClient = false
         }
+
+        this.connected = true
     }
 
     private fun stopEndpoint(endpoint: MqttEndpoint) {
-        connected = false
+        this.connected = false
         if (endpoint.isCleanSession) {
             logger.info("Client [${endpoint.clientIdentifier()}] undeploy.")
-            consumer?.unregister()
             cleanSession()
             removeEndpoint(vertx, endpoint)
         } else {
@@ -124,19 +126,20 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     }
 
     private var queueAddError: Boolean = false
-    private fun consumeMessage(endpoint: MqttEndpoint, message: MqttMessage) {
-        if (!this.pauseClient) {
+    private fun consumeMessage(message: MqttMessage) {
+        val endpoint = this.endpoint
+        if (!this.pauseClient && endpoint != null) {
             endpoint.let(message::publish)
             logger.finest { "Client [${endpoint.clientIdentifier()}] Delivered message for topic [${message.topicName}]" }
         } else {
             try {
                 messageQueue.add(message)
                 if (queueAddError) queueAddError = false
-                logger.finest { "Client [${endpoint.clientIdentifier()}] Queued message for topic [${message.topicName}]" }
+                logger.finest { "Client [${endpoint?.clientIdentifier()}] Queued message for topic [${message.topicName}]" }
             } catch (e: IllegalStateException) {
                 if (!queueAddError) {
                     queueAddError = true
-                    logger.warning("Client [${endpoint.clientIdentifier()}] Error adding message to queue: [${e.message}]")
+                    logger.warning("Client [${endpoint?.clientIdentifier()}] Error adding message to queue: [${e.message}]")
                 }
             }
         }
