@@ -23,7 +23,7 @@ class Distributor: AbstractVerticle() {
 
     private var retainedMessages: AsyncMap<String, MqttMessage>? = null // topic to message
 
-    private val subscriptionsFlat = mutableMapOf<String, MutableSet<String>>() // topic to clientIds
+    private val clientSubscriptions = mutableMapOf<String, MutableSet<String>>() // clientId to topics
     private val subscriptionsTree = TopicTree()
 
     private lateinit var distBusAddr: String
@@ -87,7 +87,7 @@ class Distributor: AbstractVerticle() {
     private fun subscribeCommand(it: Message<JsonObject>) {
         val topicName = it.body().getString(Const.TOPIC_KEY)
         val clientId = it.body().getString(Const.CLIENT_KEY)
-        subscriptionsFlat.getOrPut(topicName) { hashSetOf() }.add(clientId)
+        clientSubscriptions.getOrPut(clientId) { hashSetOf() }.add(topicName)
         subscriptionsTree.add(topicName, clientId)
         sendRetainedMessages(topicName, clientId)
         logger.fine(subscriptionsTree.toString())
@@ -124,7 +124,7 @@ class Distributor: AbstractVerticle() {
     private fun unsubscribeCommand(command: Message<JsonObject>) {
         val topicName = command.body().getString(Const.TOPIC_KEY)
         val clientId = command.body().getString(Const.CLIENT_KEY)
-        subscriptionsFlat[topicName]?.remove(clientId)
+        clientSubscriptions[clientId]?.remove(topicName)
         subscriptionsTree.del(topicName, clientId)
         logger.fine(subscriptionsTree.toString())
         command.reply(true)
@@ -144,10 +144,8 @@ class Distributor: AbstractVerticle() {
 
     private fun cleanSessionCommand(command: Message<JsonObject>) {
         val clientId = command.body().getString(Const.CLIENT_KEY)
-        subscriptionsFlat.forEach {
-            if (it.value.remove(clientId)) {
-                subscriptionsTree.del(it.key, clientId)
-            }
+        clientSubscriptions.remove(clientId)?.forEach { topic ->
+            subscriptionsTree.del(topic, clientId)
         }
         command.reply(true)
     }
