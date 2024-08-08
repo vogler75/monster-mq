@@ -1,14 +1,11 @@
 package at.rocworks
 
-data class TopicNode (
-    val children: MutableMap<String, TopicNode> = mutableMapOf(),
-    val clients: MutableSet<String> = mutableSetOf()
-)
+import com.hazelcast.client.Client
 
 class TopicTree {
     private val root = TopicNode()
 
-    fun add(topicName: String, client: String) {
+    fun add(topicName: TopicName, client: ClientId) {
         fun addTopicNode(node: TopicNode, first: String, rest: List<String>) {
             val child = node.children.getOrPut(first) { TopicNode() }
             if (rest.isEmpty()) {
@@ -17,11 +14,11 @@ class TopicTree {
                 addTopicNode(child, rest.first(), rest.drop(1))
             }
         }
-        val xs = topicName.split("/")
+        val xs = topicName.getLevels()
         if (xs.isNotEmpty()) addTopicNode(root, xs.first(), xs.drop(1))
     }
 
-    fun del(topicName: String, client: String) {
+    fun del(topicName: TopicName, client: ClientId) {
         fun delTopicNode(node: TopicNode, first: String, rest: List<String>) {
             fun deleteIfEmpty(child: TopicNode) {
                 if (child.clients.isEmpty() && child.children.isEmpty()) {
@@ -40,12 +37,12 @@ class TopicTree {
                 }
             }
         }
-        val xs = topicName.split("/")
+        val xs = topicName.getLevels()
         if (xs.isNotEmpty()) delTopicNode(root, xs.first(), xs.drop(1))
     }
 
-    fun findClients(topicName: String): List<String> {
-        fun findTopicNode(node: TopicNode, first: String, rest: List<String>): List<String> {
+    fun findClients(topicName: TopicName): List<ClientId> {
+        fun findTopicNode(node: TopicNode, first: String, rest: List<String>): List<ClientId> {
             return node.children.flatMap { child ->
                 when (child.key) {
                     "#" -> child.value.clients.toList()
@@ -56,7 +53,7 @@ class TopicTree {
                 }
             }
         }
-        val xs = topicName.split("/")
+        val xs = topicName.getLevels()
         return if (xs.isNotEmpty()) findTopicNode(root, xs.first(), xs.drop(1)) else listOf()
     }
 

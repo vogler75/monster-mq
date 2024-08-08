@@ -1,14 +1,11 @@
 package at.rocworks.codecs
 
-import at.rocworks.Const
-import io.netty.handler.codec.mqtt.MqttProperties
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.Future
 import io.vertx.core.buffer.Buffer
 import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.MqttWill
 import io.vertx.mqtt.messages.MqttPublishMessage
-import io.vertx.mqtt.messages.impl.MqttPublishMessageImpl
 import java.io.Serializable
 
 class MqttMessage(
@@ -43,15 +40,4 @@ class MqttMessage(
     private fun getQoS(): MqttQoS = MqttQoS.valueOf(qosLevel)
 
     fun publish(endpoint: MqttEndpoint): Future<Int> = endpoint.publish(topicName, getPayloadAsBuffer(), getQoS(), isDup, isRetain)
-
-    fun message() =
-        MqttPublishMessageImpl(
-            messageId,
-            MqttQoS.valueOf(qosLevel),
-            isDup,
-            isRetain,
-            topicName,
-            Const.toByteBuf(payload),
-            MqttProperties()
-        )
 }

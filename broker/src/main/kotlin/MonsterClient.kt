@@ -4,6 +4,7 @@ import at.rocworks.codecs.MqttMessage
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
+import io.vertx.core.eventbus.MessageConsumer
 import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
@@ -15,7 +16,7 @@ import java.util.logging.Logger
 class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
-    private var endpoint: MqttEndpoint? = null
+    //private var endpoint: MqttEndpoint? = null
     private var connected = false
 
     private val messageQueue = ArrayBlockingQueue<MqttMessage>(10000) // TODO: configurable
@@ -23,20 +24,21 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     @Volatile
     private var pauseClient: Boolean = false
 
-    private lateinit var clientBusAddr: String
+    private var consumer: MessageConsumer<MqttMessage>? = null
 
     init {
         logger.level = Level.INFO
     }
-    
-    fun clientId() = endpoint?.clientIdentifier() ?: ""
+
+    fun getClientId() = ClientId(deploymentID())
 
     companion object {
         private val logger = Logger.getLogger(this::class.simpleName)
         private val clients: HashMap<String, MonsterClient> = hashMapOf()
 
         fun endpointHandler(vertx: Vertx, endpoint: MqttEndpoint, server: MonsterServer) {
-            clients[endpoint.clientIdentifier()]?.let { client ->
+            val clientId = endpoint.clientIdentifier()
+            clients[clientId]?.let { client ->
                 logger.info("Existing client [${endpoint.clientIdentifier()}]")
                 if (endpoint.isCleanSession) client.cleanSession()
                 client.startEndpoint(endpoint)
@@ -44,41 +46,40 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
                 logger.info("New client [${endpoint.clientIdentifier()}]")
                 val client = MonsterClient(server)
                 vertx.deployVerticle(client).onComplete {
-                    clients[endpoint.clientIdentifier()] = client
+                    clients[clientId] = client
                     client.startEndpoint(endpoint)
                 }
             }
         }
 
         fun removeEndpoint(vertx: Vertx, endpoint: MqttEndpoint) {
+            val clientId = endpoint.clientIdentifier()
             logger.info("Remove client [${endpoint.clientIdentifier()}]")
-            clients[endpoint.clientIdentifier()]?.let { client ->
+            clients[clientId]?.let { client ->
                 vertx.undeploy(client.deploymentID()).onComplete {
-                    clients.remove(endpoint.clientIdentifier())
+                    clients.remove(clientId)
                 }
             }
         }
     }
 
-    override fun start() {
-        clientBusAddr = Const.getClientBusAddr(this.deploymentID())
-    }
-
     fun startEndpoint(endpoint: MqttEndpoint) {
         logger.info("Client [${endpoint.clientIdentifier()}] request to connect, clean session = ${endpoint.isCleanSession}")
-        this.endpoint = endpoint
-        endpoint.exceptionHandler(::exceptionHandler)
-        endpoint.subscribeHandler(::subscribeHandler)
-        endpoint.unsubscribeHandler(::unsubscribeHandler)
-        endpoint.publishHandler(::publishHandler)
-        endpoint.publishReleaseHandler(::publishReleaseHandler)
-        endpoint.disconnectHandler { disconnectHandler() }
-        endpoint.closeHandler { closeHandler() }
+        //this.endpoint = endpoint
+        endpoint.exceptionHandler { exceptionHandler(endpoint, it) }
+        endpoint.subscribeHandler { subscribeHandler(endpoint, it) }
+        endpoint.unsubscribeHandler { unsubscribeHandler(endpoint, it) }
+        endpoint.publishHandler { publishHandler(endpoint, it) }
+        endpoint.publishReleaseHandler { publishReleaseHandler(endpoint, it) }
+        endpoint.disconnectHandler { disconnectHandler(endpoint) }
+        endpoint.closeHandler { closeHandler(endpoint) }
         endpoint.accept(endpoint.isCleanSession)
         connected = true
 
-        vertx.eventBus().consumer(clientBusAddr) {
-            consumeMessage(it.body())
+        if (consumer == null) {
+            consumer = vertx.eventBus().consumer(Const.getClientBusAddr(getClientId())) {
+                consumeMessage(endpoint, it.body())
+            }
         }
 
         if (this.pauseClient) {
@@ -89,17 +90,16 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         }
     }
 
-    private fun stopEndpoint() {
+    private fun stopEndpoint(endpoint: MqttEndpoint) {
         connected = false
-        endpoint?.let { endpoint ->
-            if (endpoint.isCleanSession) {
-                logger.info("Client [${clientId()}] undeploy.")
-                cleanSession()
-                removeEndpoint(vertx, endpoint)
-            } else {
-                logger.info("Client [${clientId()}] paused.")
-                pauseClient = true
-            }
+        if (endpoint.isCleanSession) {
+            logger.info("Client [${endpoint.clientIdentifier()}] undeploy.")
+            consumer?.unregister()
+            cleanSession()
+            removeEndpoint(vertx, endpoint)
+        } else {
+            logger.info("Client [${endpoint.clientIdentifier()}] paused.")
+            pauseClient = true
         }
     }
 
@@ -108,54 +108,54 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         messageQueue.clear()
     }
 
-    private fun exceptionHandler(throwable: Throwable) {
-        logger.severe("Client [${clientId()}] Exception: ${throwable.message}")
+    private fun exceptionHandler(endpoint: MqttEndpoint, throwable: Throwable) {
+        logger.severe("Client [${endpoint.clientIdentifier()}] Exception: ${throwable.message}")
     }
 
-    private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
+    private fun subscribeHandler(endpoint: MqttEndpoint, subscribe: MqttSubscribeMessage) {
         // Acknowledge the subscriptions
-        endpoint?.subscribeAcknowledge(subscribe.messageId(), subscribe.topicSubscriptions().map { it.qualityOfService() })
+        endpoint.subscribeAcknowledge(subscribe.messageId(), subscribe.topicSubscriptions().map { it.qualityOfService() })
 
         // Subscribe
         subscribe.topicSubscriptions().forEach { subscription ->
-            logger.info("Client [${clientId()}] Subscription for [${subscription.topicName()}] with QoS ${subscription.qualityOfService()}")
-            server.distributor.subscribeRequest(this, subscription.topicName()) { }
+            logger.info("Client [${endpoint.clientIdentifier()}] Subscription for [${subscription.topicName()}] with QoS ${subscription.qualityOfService()}")
+            server.distributor.subscribeRequest(this, TopicName(subscription.topicName())) { }
         }
     }
 
     private var queueAddError: Boolean = false
-    private fun consumeMessage(message: MqttMessage) {
+    private fun consumeMessage(endpoint: MqttEndpoint, message: MqttMessage) {
         if (!this.pauseClient) {
-            endpoint?.let(message::publish)
-            logger.finest { "Client [${clientId()}] Delivered message to [${clientId()}] topic [${message.topicName}]" }
+            endpoint.let(message::publish)
+            logger.finest { "Client [${endpoint.clientIdentifier()}] Delivered message for topic [${message.topicName}]" }
         } else {
             try {
                 messageQueue.add(message)
                 if (queueAddError) queueAddError = false
-                logger.finest { "Client [${clientId()}] Queued message for topic [${message.topicName}]" }
+                logger.finest { "Client [${endpoint.clientIdentifier()}] Queued message for topic [${message.topicName}]" }
             } catch (e: IllegalStateException) {
                 if (!queueAddError) {
                     queueAddError = true
-                    logger.warning("Client [${clientId()}] Error adding message to queue: [${e.message}]")
+                    logger.warning("Client [${endpoint.clientIdentifier()}] Error adding message to queue: [${e.message}]")
                 }
             }
         }
     }
 
-    private fun unsubscribeHandler(unsubscribe: MqttUnsubscribeMessage) {
+    private fun unsubscribeHandler(endpoint: MqttEndpoint, unsubscribe: MqttUnsubscribeMessage) {
         unsubscribe.topics().forEach { topicName ->
-            logger.info("Client [${clientId()}] Unsubscribe for [${topicName}]}")
-            server.distributor.unsubscribeRequest(this, topicName) { }
+            logger.info("Client [${endpoint.clientIdentifier()}] Unsubscribe for [${topicName}]}")
+            server.distributor.unsubscribeRequest(this, TopicName(topicName)) { }
         }
-        endpoint?.unsubscribeAcknowledge(unsubscribe.messageId())
+        endpoint.unsubscribeAcknowledge(unsubscribe.messageId())
     }
 
-    private fun publishHandler(message: MqttPublishMessage) {
-        logger.finest { "Client [${clientId()}] Received message [${message.topicName()}] with QoS ${message.qosLevel()}" }
+    private fun publishHandler(endpoint: MqttEndpoint, message: MqttPublishMessage) {
+        logger.finest { "Client [${endpoint.clientIdentifier()}] Received message [${message.topicName()}] with QoS ${message.qosLevel()}" }
 
         server.distributor.publishMessage(MqttMessage(message))
 
-        endpoint?.apply {
+        endpoint.apply {
             // Handle QoS levels
             if (message.qosLevel() == MqttQoS.AT_LEAST_ONCE) {
                 publishAcknowledge(message.messageId())
@@ -165,29 +165,29 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         }
     }
 
-    private fun sendLastWill() {
-        logger.info("Client [${clientId()}] Sending Last-Will message.")
-        endpoint?.will()?.let { will ->
+    private fun sendLastWill(endpoint: MqttEndpoint) {
+        logger.info("Client [${endpoint.clientIdentifier()}] Sending Last-Will message.")
+        endpoint.will()?.let { will ->
             if (will.isWillFlag) {
                 server.distributor.publishMessage(MqttMessage(will))
             }
         }
     }
 
-    private fun publishReleaseHandler(messageId: Int) {
-        endpoint?.publishComplete(messageId)
+    private fun publishReleaseHandler(endpoint: MqttEndpoint, messageId: Int) {
+        endpoint.publishComplete(messageId)
     }
 
-    private fun disconnectHandler() {
-        logger.info("Client [${clientId()}] disconnect received.")
-        if (connected) stopEndpoint()
+    private fun disconnectHandler(endpoint: MqttEndpoint) {
+        logger.info("Client [${endpoint.clientIdentifier()}] disconnect received.")
+        if (connected) stopEndpoint(endpoint)
     }
 
-    private fun closeHandler() {
-        logger.info("Client [${clientId()}] close received.")
+    private fun closeHandler(endpoint: MqttEndpoint) {
+        logger.info("Client [${endpoint.clientIdentifier()}] close received.")
         if (connected) { // if there was no disconnect before
-            sendLastWill()
-            stopEndpoint()
+            sendLastWill(endpoint)
+            stopEndpoint(endpoint)
         }
     }
 }
