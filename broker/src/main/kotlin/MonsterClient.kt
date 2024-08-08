@@ -39,11 +39,11 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, server: MonsterServer) {
             val clientId = endpoint.clientIdentifier()
             clients[clientId]?.let { client ->
-                logger.info("Client [${endpoint.clientIdentifier()}] Existing session.")
+                logger.info("Client [${endpoint.clientIdentifier()}] Redeploy existing session.")
                 if (endpoint.isCleanSession) client.cleanSession()
                 client.startEndpoint(endpoint)
             } ?: run {
-                logger.info("Client [${endpoint.clientIdentifier()}] New session.")
+                logger.info("Client [${endpoint.clientIdentifier()}] Deploy a new session.")
                 val client = MonsterClient(server)
                 vertx.deployVerticle(client).onComplete {
                     clients[clientId] = client
@@ -70,7 +70,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     }
 
     fun startEndpoint(endpoint: MqttEndpoint) {
-        logger.info("Client [${endpoint.clientIdentifier()}] Request to connect, clean session [${endpoint.isCleanSession}]")
+        logger.info("Client [${endpoint.clientIdentifier()}] Request to connect, clean session is [${endpoint.isCleanSession}]")
         endpoint.exceptionHandler { exceptionHandler(endpoint, it) }
         endpoint.subscribeHandler { subscribeHandler(endpoint, it) }
         endpoint.unsubscribeHandler { unsubscribeHandler(endpoint, it) }
@@ -92,11 +92,11 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         this.connected = false
 
         if (endpoint.isCleanSession) {
-            logger.info("Client [${endpoint.clientIdentifier()}] undeploy.")
+            logger.info("Client [${endpoint.clientIdentifier()}] Undeploy client, it is a clean session.")
             cleanSession()
             undeployEndpoint(vertx, endpoint)
         } else {
-            logger.info("Client [${endpoint.clientIdentifier()}] paused.")
+            logger.info("Client [${endpoint.clientIdentifier()}] Pause client, it is not a clean session.")
         }
     }
 
