@@ -1,6 +1,6 @@
 # Monster MQ
 
-MonsterMQ Broker is a MQTT message broker built on the Vert.x framework and leverages Vert.x clustering capabilities to ensure seamless distributed operations.  
+MonsterMQ is a MQTT message broker built on the Vert.x framework and leverages Vert.x clustering capabilities to ensure seamless distributed operations.  
 
 Upcoming Enhancements:
 
