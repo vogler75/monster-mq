@@ -53,7 +53,7 @@ class MonsterServer(
         }
 
         mqttServer.endpointHandler { endpoint ->
-            MonsterClient.endpointHandler(vertx, endpoint, this)
+            MonsterClient.deployEndpoint(vertx, endpoint, this)
         }
 
         mqttServer.listen(port) { ar ->
