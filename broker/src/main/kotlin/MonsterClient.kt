@@ -27,7 +27,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private val messageQueue = ArrayBlockingQueue<MqttMessage>(10000) // TODO: configurable
 
     init {
-        logger.level = Level.ALL
+        logger.level = Level.INFO
     }
 
     fun getClientId() = ClientId(deploymentID())

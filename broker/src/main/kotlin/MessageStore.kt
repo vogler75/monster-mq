@@ -37,9 +37,13 @@ class MessageStore(val name: String): AbstractVerticle() {
     }
 
     fun sendMessages(topicName: TopicName, clientId: ClientId) { // TODO: must be optimized
+        logger.finer("Send messages [$topicName] to client [$clientId]")
         messages?.apply {
             keys().onComplete { topics ->
-                topics.result().filter { it.matchesToWildcard(topicName) }.forEach { topic ->
+                logger.finer("Got [${topics.result()?.size}] topics.")
+                val filtered = topics.result().filter { it.matchesToWildcard(topicName) }
+                logger.finer("Filtered [${filtered.size}] topics.")
+                filtered.forEach { topic ->
                     get(topic).onComplete { value ->
                         val message = value.result()
                         logger.finest { "Publish message [${message.topicName}] to [${clientId}]" }
