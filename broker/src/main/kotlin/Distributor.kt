@@ -85,14 +85,20 @@ class Distributor: AbstractVerticle() {
         }
     }
 
-    private fun subscribeCommand(it: Message<JsonObject>) {
-        val topicName = TopicName(it.body().getString(Const.TOPIC_KEY))
-        val clientId = ClientId(it.body().getString(Const.CLIENT_KEY))
-        clientSubscriptions.getOrPut(clientId) { hashSetOf() }.add(topicName)
-        subscriptionsTree.add(topicName, clientId)
-        retainedMessages.sendMessages(topicName, clientId)
+    private fun subscribeCommand(command: Message<JsonObject>) {
+        val topicName = TopicName(command.body().getString(Const.TOPIC_KEY))
+        val clientId = ClientId(command.body().getString(Const.CLIENT_KEY))
+
+        //retainedMessages.sendMessages(topicName, clientId)
+        retainedMessages.findMatching(topicName) { message ->
+            logger.finer { "Publish retained message [${message.topicName}]" }
+            vertx.eventBus().publish(Const.getClientBusAddr(clientId), message)
+        }.onComplete {
+            clientSubscriptions.getOrPut(clientId) { hashSetOf() }.add(topicName)
+            subscriptionsTree.add(topicName, clientId)
+            command.reply(true)
+        }
         logger.fine(subscriptionsTree.toString())
-        it.reply(true)
     }
 
     //----------------------------------------------------------------------------------------------------
@@ -147,7 +153,7 @@ class Distributor: AbstractVerticle() {
     }
 
     private fun distributeMessage(message: MqttMessage) {
-        subscriptionsTree.findClients(TopicName(message.topicName)).toSet().forEach {
+        subscriptionsTree.findClientsOfTopicName(TopicName(message.topicName)).toSet().forEach {
             vertx.eventBus().publish(Const.getClientBusAddr(it), message)
         }
     }

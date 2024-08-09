@@ -9,6 +9,8 @@ class TopicName(val identifier: String): Serializable {
 
     fun getLevels() = identifier.split("/")
 
+    fun addLevel(level: String) = TopicName("$identifier/$level")
+
     fun matchesToWildcard(wildcardTopicName: TopicName): Boolean {
         val wildcardLevels = wildcardTopicName.getLevels()
         val topicLevels = getLevels()

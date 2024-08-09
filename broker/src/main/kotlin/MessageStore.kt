@@ -8,10 +8,11 @@ import io.vertx.core.shareddata.AsyncMap
 import java.util.logging.Level
 import java.util.logging.Logger
 
-class MessageStore(val name: String): AbstractVerticle() {
+class MessageStore(private val name: String): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private var messages: AsyncMap<TopicName, MqttMessage>? = null // topic to message
+    private val tree = TopicTree()
 
     init {
         logger.level = Level.INFO
@@ -31,12 +32,13 @@ class MessageStore(val name: String): AbstractVerticle() {
     fun saveMessage(topicName: TopicName, message: MqttMessage) {
         messages?.apply {
             put(topicName, message).onComplete {
+                tree.add(topicName)
                 logger.finest { "Saved message for [$topicName] completed [${it.succeeded()}]" }
             }
         }
     }
 
-    fun sendMessages(topicName: TopicName, clientId: ClientId) { // TODO: must be optimized
+    private fun sendMessages_OLD(topicName: TopicName, clientId: ClientId) { // TODO: must be optimized
         logger.finer("Send messages [$topicName] to client [$clientId]")
         messages?.apply {
             keys().onComplete { topics ->
@@ -52,6 +54,21 @@ class MessageStore(val name: String): AbstractVerticle() {
                 }
             }
         }
+    }
+
+    fun findMatching(topicName: TopicName, callback: (message: MqttMessage)->Unit): Future<Unit> {
+        val promise = Promise.promise<Unit>()
+        messages?.let { messages ->
+            val topics = tree.findMatchingTopicNames(topicName)
+            Future.all(topics.map { topic ->
+                messages.get(topic).onSuccess(callback)
+            }).onComplete {
+                promise.complete()
+            }
+        } ?: run {
+            promise.fail("No message store initialized!")
+        }
+        return promise.future()
     }
 
     private fun <K,V> getMap(name: String): Future<AsyncMap<K, V>> {
