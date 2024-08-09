@@ -11,8 +11,8 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
         // Serialize MqttPublishMessage fields to the buffer
         buffer.appendInt(s.messageId)
         buffer.appendByte(s.qosLevel.toByte())
-        buffer.appendByte(if (s.isDup) 1 else 0)
-        buffer.appendByte(if (s.isRetain) 1 else 0)
+        buffer.appendByte(if (s.isDup) 1 else 0.toByte())
+        buffer.appendByte(if (s.isRetain) 1 else 0.toByte())
         val topicName = s.topicName.toByteArray(Charsets.UTF_8)
         buffer.appendInt(topicName.size)
         buffer.appendBytes(topicName)
@@ -25,9 +25,9 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
         position += 4
         val qos = buffer.getByte(position).toInt()
         position += 1
-        val isDup = buffer.getByte(position) == 1.toByte()
+        val isDup = (buffer.getByte(position)) == 1.toByte()
         position += 1
-        val isRetain = buffer.getByte(position) == 1.toByte()
+        val isRetain = (buffer.getByte(position)) == 1.toByte()
         position += 1
         val topicNameLen = buffer.getInt(position)
         position += 4
@@ -40,8 +40,8 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
             topicName,
             payload.bytes,
             qos,
-            isDup,
             isRetain,
+            isDup,
         )
     }
 

@@ -19,24 +19,28 @@ class MessageStore(private val name: String): AbstractVerticle() {
     }
 
     override fun start(startPromise: Promise<Void>) {
-        getMap<TopicName, MqttMessage>(name).onComplete {
-            logger.info("Get message store [$name] [${it.succeeded()}]")
-            if (it.succeeded()) {
-                messages = it.result()
-                startPromise.complete()
-            }
-            else startPromise.fail(it.cause())
-        }
+        getMap<TopicName, MqttMessage>(name).onSuccess { messages ->
+            logger.info("Indexing message store [$name].")
+            this.messages = messages
+            messages.keys()
+                .onSuccess { keys ->
+                    keys.forEach(tree::add)
+                    logger.info("Indexing message store [$name] finished.")
+                    startPromise.complete()
+                }
+                .onFailure(startPromise::fail)
+        }.onFailure(startPromise::fail)
     }
 
     fun saveMessage(topicName: TopicName, message: MqttMessage) {
         messages?.apply {
             put(topicName, message).onComplete {
-                tree.add(topicName)
                 logger.finest { "Saved message for [$topicName] completed [${it.succeeded()}]" }
             }
         }
     }
+
+    fun addTopicToIndex(topicName: TopicName) = tree.add(topicName)
 
     private fun sendMessages_OLD(topicName: TopicName, clientId: ClientId) { // TODO: must be optimized
         logger.finer("Send messages [$topicName] to client [$clientId]")

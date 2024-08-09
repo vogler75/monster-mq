@@ -30,7 +30,7 @@ class Distributor: AbstractVerticle() {
     private lateinit var topicBusAddr: String
 
     init {
-        logger.level = Level.INFO
+        logger.level = Level.ALL
     }
 
     override fun start(startPromise: Promise<Void>) {
@@ -51,7 +51,7 @@ class Distributor: AbstractVerticle() {
         vertx.eventBus().consumer<Any>(topicBusAddr) { message ->
             message.body().let { payload ->
                 if (payload is MqttMessage) {
-                    logger.finest { "Received message [${payload.topicName}]" }
+                    logger.finest { "Received message [${payload.topicName}] retained [${payload.isRetain}]" }
                     distributeMessage(payload)
                 } else {
                     logger.warning("Received unexpected message of type [${payload::class.simpleName}]")
@@ -148,12 +148,19 @@ class Distributor: AbstractVerticle() {
 
     fun publishMessage(message: MqttMessage) {
         vertx.eventBus().publish(topicBusAddr, message)
-        if (message.isRetain)
+        if (message.isRetain) {
+            logger.finer("Save retained topic [${message.topicName}]")
             retainedMessages.saveMessage(TopicName(message.topicName), message)
+        }
     }
 
     private fun distributeMessage(message: MqttMessage) {
-        subscriptionsTree.findClientsOfTopicName(TopicName(message.topicName)).toSet().forEach {
+        val topicName = TopicName(message.topicName)
+        if (message.isRetain) {
+            logger.finer("Index retained topic [${message.topicName}]")
+            retainedMessages.addTopicToIndex(topicName)
+        }
+        subscriptionsTree.findClientsOfTopicName(topicName).toSet().forEach {
             vertx.eventBus().publish(Const.getClientBusAddr(it), message)
         }
     }
