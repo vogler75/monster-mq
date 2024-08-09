@@ -7,6 +7,7 @@ import io.vertx.core.Promise
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.AsyncMap
+import java.util.concurrent.Callable
 
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -30,7 +31,7 @@ class Distributor: AbstractVerticle() {
     private lateinit var topicBusAddr: String
 
     init {
-        logger.level = Level.ALL
+        logger.level = Level.INFO
     }
 
     override fun start(startPromise: Promise<Void>) {
@@ -89,11 +90,11 @@ class Distributor: AbstractVerticle() {
         val topicName = TopicName(command.body().getString(Const.TOPIC_KEY))
         val clientId = ClientId(command.body().getString(Const.CLIENT_KEY))
 
-        //retainedMessages.sendMessages(topicName, clientId)
         retainedMessages.findMatching(topicName) { message ->
             logger.finer { "Publish retained message [${message.topicName}]" }
             vertx.eventBus().publish(Const.getClientBusAddr(clientId), message)
         }.onComplete {
+            logger.info("Retained messages published.")
             clientSubscriptions.getOrPut(clientId) { hashSetOf() }.add(topicName)
             subscriptionsTree.add(topicName, clientId)
             command.reply(true)

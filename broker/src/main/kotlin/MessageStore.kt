@@ -5,6 +5,7 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.shareddata.AsyncMap
+import java.util.concurrent.Callable
 import java.util.logging.Level
 import java.util.logging.Logger
 
@@ -62,16 +63,18 @@ class MessageStore(private val name: String): AbstractVerticle() {
 
     fun findMatching(topicName: TopicName, callback: (message: MqttMessage)->Unit): Future<Unit> {
         val promise = Promise.promise<Unit>()
-        messages?.let { messages ->
-            val topics = tree.findMatchingTopicNames(topicName)
-            Future.all(topics.map { topic ->
-                messages.get(topic).onSuccess(callback)
-            }).onComplete {
-                promise.complete()
+        vertx.executeBlocking(Callable {
+            messages?.let { messages ->
+                val topics = tree.findMatchingTopicNames(topicName)
+                Future.all(topics.map { topic ->
+                    messages.get(topic).onSuccess(callback)
+                }).onComplete {
+                    promise.complete()
+                }
+            } ?: run {
+                promise.fail("No message store initialized!")
             }
-        } ?: run {
-            promise.fail("No message store initialized!")
-        }
+        })
         return promise.future()
     }
 
