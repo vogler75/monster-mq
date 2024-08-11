@@ -15,9 +15,6 @@ import java.util.logging.Logger
 class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
-    //@Volatile
-    //private var connected = false
-
     @Volatile
     private var endpoint: MqttEndpoint? = null
 
@@ -31,6 +28,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     }
 
     fun getClientId() = ClientId(deploymentID())
+    fun getDistributorId() = server.distributor.deploymentID()
 
     companion object {
         private val logger = Logger.getLogger(this::class.simpleName)

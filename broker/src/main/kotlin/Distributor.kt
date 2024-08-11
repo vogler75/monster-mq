@@ -35,7 +35,7 @@ class Distributor: AbstractVerticle() {
     }
 
     override fun start(startPromise: Promise<Void>) {
-        distBusAddr = Const.getDistBusAddr(this.deploymentID())
+        distBusAddr = Const.getDistBusAddr()
         topicBusAddr = Const.getTopicBusAddr(this.deploymentID())
 
         vertx.deployVerticle(retainedMessages).onSuccess {
@@ -59,6 +59,14 @@ class Distributor: AbstractVerticle() {
                 }
             }
         }
+
+        vertx.eventBus().consumer<Any>(Const.getRetainedTopicBusAddr()) { message ->
+            message.body().let { payload ->
+                if (payload is MqttMessage) {
+                    retainedMessage(payload)
+                }
+            }
+        }
     }
 
     override fun stop() {
@@ -79,27 +87,32 @@ class Distributor: AbstractVerticle() {
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName.identifier)
-            .put(Const.CLIENT_KEY, client.deploymentID())
-        vertx.eventBus().request(distBusAddr, request) {
-            if (it.succeeded()) result(it.result().body())
-            else logger.severe("Subscribe request failed: ${it.cause()}")
-        }
+            .put(Const.CLIENT_KEY, client.getClientId().identifier)
+            .put(Const.BROKER_KEY, client.getDistributorId())
+        vertx.eventBus().publish(distBusAddr, request)
     }
 
     private fun subscribeCommand(command: Message<JsonObject>) {
         val topicName = TopicName(command.body().getString(Const.TOPIC_KEY))
         val clientId = ClientId(command.body().getString(Const.CLIENT_KEY))
+        val distributorId = command.body().getString(Const.BROKER_KEY)
 
-        retainedMessages.findMatching(topicName) { message ->
-            logger.finer { "Publish retained message [${message.topicName}]" }
-            vertx.eventBus().publish(Const.getClientBusAddr(clientId), message)
-        }.onComplete {
-            logger.info("Retained messages published.")
-            clientSubscriptions.getOrPut(clientId) { hashSetOf() }.add(topicName)
+        fun subscribe() {
             subscriptionsTree.add(topicName, clientId)
+            clientSubscriptions.getOrPut(clientId) { hashSetOf() }.add(topicName)
+            logger.fine { subscriptionsTree.toString() }
             command.reply(true)
         }
-        logger.fine(subscriptionsTree.toString())
+
+        if (distributorId == deploymentID()) {
+            retainedMessages.findMatching(topicName) { message ->
+                logger.finer { "Publish retained message [${message.topicName}]" }
+                vertx.eventBus().publish(Const.getClientBusAddr(clientId), message)
+            }.onComplete {
+                logger.info("Retained messages published.")
+                subscribe()
+            }
+        } else subscribe()
     }
 
     //----------------------------------------------------------------------------------------------------
@@ -152,19 +165,22 @@ class Distributor: AbstractVerticle() {
         if (message.isRetain) {
             logger.finer("Save retained topic [${message.topicName}]")
             retainedMessages.saveMessage(TopicName(message.topicName), message)
+            vertx.eventBus().publish(Const.getRetainedTopicBusAddr(), message)
         }
     }
 
     private fun distributeMessage(message: MqttMessage) {
         val topicName = TopicName(message.topicName)
-        if (message.isRetain) {
-            logger.finer("Index retained topic [${message.topicName}]")
-            retainedMessages.addTopicToIndex(topicName)
-        }
         subscriptionsTree.findClientsOfTopicName(topicName).toSet().forEach {
             vertx.eventBus().publish(Const.getClientBusAddr(it), message)
         }
     }
+
+    private fun retainedMessage(message: MqttMessage) { // TODO: it is enought to send the topic name only
+        logger.finer("Index retained topic [${message.topicName}]")
+        retainedMessages.addTopicToIndex(TopicName(message.topicName))
+    }
+
 
     //----------------------------------------------------------------------------------------------------
 
