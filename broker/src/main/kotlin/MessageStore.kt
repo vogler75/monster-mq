@@ -43,31 +43,17 @@ class MessageStore(private val name: String): AbstractVerticle() {
 
     fun addTopicToIndex(topicName: TopicName) = tree.add(topicName)
 
-    private fun sendMessages_OLD(topicName: TopicName, clientId: ClientId) { // TODO: must be optimized
-        logger.finer("Send messages [$topicName] to client [$clientId]")
-        messages?.apply {
-            keys().onComplete { topics ->
-                logger.finer("Got [${topics.result()?.size}] topics.")
-                val filtered = topics.result().filter { it.matchesToWildcard(topicName) }
-                logger.finer("Filtered [${filtered.size}] topics.")
-                filtered.forEach { topic ->
-                    get(topic).onComplete { value ->
-                        val message = value.result()
-                        logger.finest { "Publish message [${message.topicName}] to [${clientId}]" }
-                        vertx.eventBus().publish(Const.getClientBusAddr(clientId), message)
-                    }
-                }
-            }
-        }
-    }
-
     fun findMatching(topicName: TopicName, callback: (message: MqttMessage)->Unit): Future<Unit> {
         val promise = Promise.promise<Unit>()
         vertx.executeBlocking(Callable {
             messages?.let { messages ->
                 val topics = tree.findMatchingTopicNames(topicName)
                 Future.all(topics.map { topic ->
-                    messages.get(topic).onSuccess(callback)
+                    logger.finest { "Found matching topic [$topic] for [$topicName]" }
+                    messages.get(topic).onSuccess { message ->
+                        if (message!=null) callback(message)
+                        else logger.finest { "Stored message for [$topic] is null!" } // it could be a node inside the tree index where we haven't stored a value
+                    }
                 }).onComplete {
                     promise.complete()
                 }
