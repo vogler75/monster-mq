@@ -163,7 +163,7 @@ class Distributor: AbstractVerticle() {
     fun publishMessage(message: MqttMessage) {
         vertx.eventBus().publish(topicBusAddr, message)
         if (message.isRetain) {
-            logger.finer("Save retained topic [${message.topicName}]")
+            logger.finer { "Save retained topic [${message.topicName}]" }
             retainedMessages.saveMessage(TopicName(message.topicName), message)
             vertx.eventBus().publish(Const.getRetainedTopicBusAddr(), message)
         }
