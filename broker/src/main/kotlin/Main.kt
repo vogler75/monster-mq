@@ -3,6 +3,12 @@ import at.rocworks.codecs.MqttMessageCodec
 import at.rocworks.codecs.MqttMessage
 import io.vertx.core.AsyncResult
 import io.vertx.core.Vertx
+//import io.vertx.spi.cluster.ignite.IgniteClusterManager
+
+//import io.vertx.ext.cluster.infinispan.InfinispanClusterManager
+
+//import io.vertx.spi.cluster.zookeeper.ZookeeperClusterManager
+
 import io.vertx.spi.cluster.hazelcast.ConfigUtil
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 
@@ -27,9 +33,18 @@ fun main(args: Array<String>) {
     val builder = Vertx.builder()
     if (!cluster) start(builder.build())
     else {
+
         val hazelcastConfig = ConfigUtil.loadConfig()
         hazelcastConfig.setClusterName("MonsterMQ")
-        builder.withClusterManager(HazelcastClusterManager(hazelcastConfig))
+        val clusterManager = HazelcastClusterManager(hazelcastConfig)
+
+        //val clusterManager = InfinispanClusterManager()
+
+        //val clusterManager = ZookeeperClusterManager()
+
+        //val clusterManager = IgniteClusterManager();
+
+        builder.withClusterManager(clusterManager)
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
             if (res.succeeded() && res.result() != null) {
                 start(res.result()!!)

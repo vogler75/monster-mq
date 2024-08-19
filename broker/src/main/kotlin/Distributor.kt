@@ -176,7 +176,7 @@ class Distributor: AbstractVerticle() {
         }
     }
 
-    private fun retainedMessage(message: MqttMessage) { // TODO: it is enought to send the topic name only
+    private fun retainedMessage(message: MqttMessage) { // TODO: it is enough to send the topic name only
         logger.finer("Index retained topic [${message.topicName}]")
         retainedMessages.addTopicToIndex(TopicName(message.topicName))
     }
