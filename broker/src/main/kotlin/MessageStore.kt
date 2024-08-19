@@ -13,7 +13,7 @@ class MessageStore(private val name: String): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private var messages: AsyncMap<TopicName, MqttMessage>? = null // topic to message
-    private val tree = TopicTree()
+    private val index = TopicTree()
 
     init {
         logger.level = Level.INFO
@@ -25,7 +25,7 @@ class MessageStore(private val name: String): AbstractVerticle() {
             this.messages = messages
             messages.keys()
                 .onSuccess { keys ->
-                    keys.forEach(tree::add)
+                    keys.forEach(index::add)
                     logger.info("Indexing message store [$name] finished.")
                     startPromise.complete()
                 }
@@ -41,13 +41,13 @@ class MessageStore(private val name: String): AbstractVerticle() {
         }
     }
 
-    fun addTopicToIndex(topicName: TopicName) = tree.add(topicName)
+    fun addTopicToIndex(topicName: TopicName) = index.add(topicName)
 
     fun findMatching(topicName: TopicName, callback: (message: MqttMessage)->Unit): Future<Unit> {
         val promise = Promise.promise<Unit>()
         vertx.executeBlocking(Callable {
             messages?.let { messages ->
-                val topics = tree.findMatchingTopicNames(topicName)
+                val topics = index.findMatchingTopicNames(topicName)
                 Future.all(topics.map { topic ->
                     logger.finest { "Found matching topic [$topic] for [$topicName]" }
                     messages.get(topic).onSuccess { message ->

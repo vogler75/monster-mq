@@ -28,7 +28,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     }
 
     fun getClientId() = ClientId(deploymentID())
-    fun getDistributorId() = server.distributor.deploymentID()
+    fun getDistributorId(): String = server.distributor.deploymentID()
 
     companion object {
         private val logger = Logger.getLogger(this::class.simpleName)
@@ -62,7 +62,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     }
 
     override fun start() {
-        vertx.eventBus().consumer(Const.getClientBusAddr(getClientId())) {
+        vertx.eventBus().consumer(Const.getClientAddress(getClientId())) {
             consumeMessage(it.body())
         }
     }

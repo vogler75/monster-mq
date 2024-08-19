@@ -7,7 +7,6 @@ import io.vertx.core.Promise
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.AsyncMap
-import java.util.concurrent.Callable
 
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -27,43 +26,43 @@ class Distributor: AbstractVerticle() {
     private val clientSubscriptions = mutableMapOf<ClientId, MutableSet<TopicName>>() // clientId to topics
     private val subscriptionsTree = TopicTree()
 
-    private lateinit var distBusAddr: String
-    private lateinit var topicBusAddr: String
-
     init {
         logger.level = Level.INFO
     }
 
-    override fun start(startPromise: Promise<Void>) {
-        distBusAddr = Const.getDistBusAddr()
-        topicBusAddr = Const.getTopicBusAddr(this.deploymentID())
+    private fun getDistributorNamespace() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}"
 
+    override fun start(startPromise: Promise<Void>) {
         vertx.deployVerticle(retainedMessages).onSuccess {
             startPromise.complete()
         }.onFailure {
             startPromise.fail(it)
         }
 
-        vertx.eventBus().consumer<JsonObject>(distBusAddr) {
+        vertx.eventBus().consumer<JsonObject>(Const.GLOBAL_DISTRIBUTOR_NAMESPACE) {
             logger.finest { "Received request [${it.body()}]" }
-            requestHandler(it)
+            when (it.body().getString(COMMAND_KEY)) {
+                COMMAND_SUBSCRIBE -> subscribeCommand(it)
+                COMMAND_UNSUBSCRIBE -> unsubscribeCommand(it)
+                COMMAND_CLEANSESSION -> cleanSessionCommand(it)
+            }
         }
 
-        vertx.eventBus().consumer<Any>(topicBusAddr) { message ->
+        vertx.eventBus().consumer<Any>(getDistributorNamespace()) { message ->
             message.body().let { payload ->
                 if (payload is MqttMessage) {
                     logger.finest { "Received message [${payload.topicName}] retained [${payload.isRetain}]" }
-                    distributeMessage(payload)
+                    distributeMessageToClients(payload)
                 } else {
                     logger.warning("Received unexpected message of type [${payload::class.simpleName}]")
                 }
             }
         }
 
-        vertx.eventBus().consumer<Any>(Const.getRetainedTopicBusAddr()) { message ->
+        vertx.eventBus().consumer<Any>(Const.GLOBAL_RETAINED_NAMESPACE) { message ->
             message.body().let { payload ->
                 if (payload is MqttMessage) {
-                    retainedMessage(payload)
+                    receivedRetainedMessage(payload)
                 }
             }
         }
@@ -71,14 +70,6 @@ class Distributor: AbstractVerticle() {
 
     override fun stop() {
         vertx.undeploy(retainedMessages.deploymentID())
-    }
-
-    private fun requestHandler(it: Message<JsonObject>) {
-        when (it.body().getString(COMMAND_KEY)) {
-            COMMAND_SUBSCRIBE -> subscribeCommand(it)
-            COMMAND_UNSUBSCRIBE -> unsubscribeCommand(it)
-            COMMAND_CLEANSESSION -> cleanSessionCommand(it)
-        }
     }
 
     //----------------------------------------------------------------------------------------------------
@@ -89,7 +80,7 @@ class Distributor: AbstractVerticle() {
             .put(Const.TOPIC_KEY, topicName.identifier)
             .put(Const.CLIENT_KEY, client.getClientId().identifier)
             .put(Const.BROKER_KEY, client.getDistributorId())
-        vertx.eventBus().publish(distBusAddr, request)
+        vertx.eventBus().publish(Const.GLOBAL_DISTRIBUTOR_NAMESPACE, request)
     }
 
     private fun subscribeCommand(command: Message<JsonObject>) {
@@ -107,7 +98,7 @@ class Distributor: AbstractVerticle() {
         if (distributorId == deploymentID()) {
             retainedMessages.findMatching(topicName) { message ->
                 logger.finer { "Publish retained message [${message.topicName}]" }
-                vertx.eventBus().publish(Const.getClientBusAddr(clientId), message)
+                vertx.eventBus().publish(Const.getClientAddress(clientId), message)
             }.onComplete {
                 logger.info("Retained messages published.")
                 subscribe()
@@ -122,7 +113,7 @@ class Distributor: AbstractVerticle() {
             .put(COMMAND_KEY, COMMAND_UNSUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName.identifier)
             .put(Const.CLIENT_KEY, client.deploymentID())
-        vertx.eventBus().request(distBusAddr, request) {
+        vertx.eventBus().request(getDistributorNamespace(), request) {
             if (it.succeeded()) result(it.result().body())
             else logger.severe("Unsubscribe request failed: ${it.cause()}")
         }
@@ -144,7 +135,7 @@ class Distributor: AbstractVerticle() {
             .put(COMMAND_KEY, COMMAND_CLEANSESSION)
             .put(Const.CLIENT_KEY, client.getClientId().identifier)
 
-        vertx.eventBus().request(distBusAddr, request) {
+        vertx.eventBus().request(getDistributorNamespace(), request) {
             if (it.succeeded()) result(it.result().body())
             else logger.severe("Clean session request failed: ${it.cause()}")
         }
@@ -161,22 +152,22 @@ class Distributor: AbstractVerticle() {
     //----------------------------------------------------------------------------------------------------
 
     fun publishMessage(message: MqttMessage) {
-        vertx.eventBus().publish(topicBusAddr, message)
+        vertx.eventBus().publish(getDistributorNamespace(), message)
         if (message.isRetain) {
             logger.finer { "Save retained topic [${message.topicName}]" }
             retainedMessages.saveMessage(TopicName(message.topicName), message)
-            vertx.eventBus().publish(Const.getRetainedTopicBusAddr(), message)
+            vertx.eventBus().publish(Const.GLOBAL_RETAINED_NAMESPACE, message)
         }
     }
 
-    private fun distributeMessage(message: MqttMessage) {
+    private fun distributeMessageToClients(message: MqttMessage) {
         val topicName = TopicName(message.topicName)
         subscriptionsTree.findClientsOfTopicName(topicName).toSet().forEach {
-            vertx.eventBus().publish(Const.getClientBusAddr(it), message)
+            vertx.eventBus().publish(Const.getClientAddress(it), message)
         }
     }
 
-    private fun retainedMessage(message: MqttMessage) { // TODO: it is enough to send the topic name only
+    private fun receivedRetainedMessage(message: MqttMessage) { // TODO: it is enough to send the topic name only
         logger.finer("Index retained topic [${message.topicName}]")
         retainedMessages.addTopicToIndex(TopicName(message.topicName))
     }
