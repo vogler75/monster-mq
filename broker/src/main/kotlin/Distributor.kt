@@ -31,7 +31,7 @@ class Distributor(
     }
 
     init {
-        logger.level = Level.ALL
+        logger.level = Level.INFO
     }
 
     private fun getDistributorCommandAddress() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}/C"

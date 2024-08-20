@@ -89,7 +89,8 @@ while message_counter < 1_000_000_000:
             last_counter = 0
             last_time = current_time
 
-        time.sleep(0.5)
+        #time.sleep(0.035)  # 2000 v/s
+        time.sleep(0.014)  # 4000 v/s
 
 print("Done.")
 time.sleep(1)

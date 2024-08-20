@@ -5,11 +5,11 @@ import time
 import paho.mqtt.client as mqtt
 import uuid
 
-AMOUNT_CLIENTS = 1000
-AMOUNT_NRS = 10
+AMOUNT_CLIENTS = 10
+AMOUNT_NRS = AMOUNT_CLIENTS
 
 # MQTT settings
-MQTT_BROKER = "192.168.1.31"
+MQTT_BROKER = "192.168.1.30"
 MQTT_PORT = 1883
 MQTT_TOPIC = "monitor/subscriber"
 
@@ -17,7 +17,8 @@ MQTT_TOPIC = "monitor/subscriber"
 base_command = [sys.executable, "test-subscriber.py"]
 
 # Loop to start the program n times
-hosts = ["192.168.1.31", "192.168.1.32", "192.168.1.33"]  # , "192.168.1.34"]
+hosts = ["192.168.1.3"]
+# hosts = ["192.168.1.31", "192.168.1.32", "192.168.1.33"] # , "192.168.1.34"]
 hosts_idx = 0
 nrs = [str(i) for i in range(1, AMOUNT_NRS+1)]
 
