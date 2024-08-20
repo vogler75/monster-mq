@@ -11,7 +11,7 @@ import io.vertx.core.shareddata.AsyncMap
 import java.util.logging.Level
 import java.util.logging.Logger
 
-class Distributor: AbstractVerticle() {
+class Distributor(private val retainedMessages: MessageStore): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     companion object {
@@ -20,8 +20,6 @@ class Distributor: AbstractVerticle() {
         const val COMMAND_UNSUBSCRIBE = "U"
         const val COMMAND_CLEANSESSION = "C"
     }
-
-    private var retainedMessages = MessageStore("RetainedMessages")
 
     private val clientSubscriptions = mutableMapOf<ClientId, MutableSet<TopicName>>() // clientId to topics
     private val subscriptionsTree = TopicTree()
@@ -32,13 +30,7 @@ class Distributor: AbstractVerticle() {
 
     private fun getDistributorNamespace() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}"
 
-    override fun start(startPromise: Promise<Void>) {
-        vertx.deployVerticle(retainedMessages).onSuccess {
-            startPromise.complete()
-        }.onFailure {
-            startPromise.fail(it)
-        }
-
+    override fun start() {
         vertx.eventBus().consumer<JsonObject>(Const.GLOBAL_DISTRIBUTOR_NAMESPACE) {
             logger.finest { "Received request [${it.body()}]" }
             when (it.body().getString(COMMAND_KEY)) {

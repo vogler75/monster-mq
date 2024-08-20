@@ -1,16 +1,17 @@
 package at.rocworks
+
 import at.rocworks.codecs.MqttMessageCodec
 import at.rocworks.codecs.MqttMessage
 import io.vertx.core.AsyncResult
 import io.vertx.core.Vertx
-//import io.vertx.spi.cluster.ignite.IgniteClusterManager
-
-//import io.vertx.ext.cluster.infinispan.InfinispanClusterManager
 
 //import io.vertx.spi.cluster.zookeeper.ZookeeperClusterManager
-
+//import io.vertx.ext.cluster.infinispan.InfinispanClusterManager
+//import io.vertx.spi.cluster.ignite.IgniteClusterManager
 import io.vertx.spi.cluster.hazelcast.ConfigUtil
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
+
+import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
     MonsterServer.initLogging()
@@ -23,25 +24,31 @@ fun main(args: Array<String>) {
 
     fun start(vertx: Vertx) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
-        val distributor = Distributor()
-        vertx.deployVerticle(distributor).onComplete{
-            if (it.succeeded()) vertx.deployVerticle(MonsterServer(port, ssl, distributor))
-            else println("Error in deploying distributor: ${it.cause()}")
+
+        val retainedMessages = MessageStore("RetainedMessages")
+        vertx.deployVerticle(retainedMessages).onSuccess {
+            val distributor = Distributor(retainedMessages)
+            vertx.deployVerticle(distributor).onSuccess {
+                vertx.deployVerticle(MonsterServer(port, ssl, distributor))
+            }.onFailure {
+                println("Error in deploying distributor: ${it.message}")
+                exitProcess(-1)
+            }
+        }.onFailure {
+            println("Error in deploying message store: ${it.message}")
+            exitProcess(-1)
         }
     }
 
     val builder = Vertx.builder()
     if (!cluster) start(builder.build())
     else {
-
         val hazelcastConfig = ConfigUtil.loadConfig()
         hazelcastConfig.setClusterName("MonsterMQ")
         val clusterManager = HazelcastClusterManager(hazelcastConfig)
 
-        //val clusterManager = InfinispanClusterManager()
-
         //val clusterManager = ZookeeperClusterManager()
-
+        //val clusterManager = InfinispanClusterManager()
         //val clusterManager = IgniteClusterManager();
 
         builder.withClusterManager(clusterManager)

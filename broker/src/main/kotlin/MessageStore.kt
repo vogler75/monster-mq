@@ -33,11 +33,13 @@ class MessageStore(private val name: String): AbstractVerticle() {
         }.onFailure(startPromise::fail)
     }
 
-    fun saveMessage(topicName: TopicName, message: MqttMessage) {
-        messages?.apply {
-            put(topicName, message).onComplete {
+    fun saveMessage(topicName: TopicName, message: MqttMessage): Future<Void> {
+        messages?.let { messages ->
+            return messages.put(topicName, message).onComplete {
                 logger.finest { "Saved message for [$topicName] completed [${it.succeeded()}]" }
             }
+        } ?: run {
+            return Future.failedFuture("Message store is null!")
         }
     }
 
