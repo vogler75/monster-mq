@@ -44,7 +44,7 @@ class SubscriptionTable: AbstractVerticle() {
                             topics.result().forEach { index.add(it, MqttClientId(client)) }
                         }
                     }).onComplete {
-                        logger.info("Indexing message store [$name] finished.")
+                        logger.info("Indexing subscription table [$name] finished.")
                         startPromise.complete()
                     }
                }
