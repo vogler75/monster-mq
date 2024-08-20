@@ -61,12 +61,12 @@ class Distributor(private val retainedMessages: MessageStore): AbstractVerticle(
     }
 
     override fun stop() {
-        
+
     }
 
     //----------------------------------------------------------------------------------------------------
 
-    fun subscribeRequest(client: MonsterClient, topicName: TopicName, result: (Boolean)->Unit) {
+    fun subscribeRequest(client: MonsterClient, topicName: TopicName) {
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName.identifier)

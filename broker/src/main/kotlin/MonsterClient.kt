@@ -108,13 +108,17 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     }
 
     private fun subscribeHandler(endpoint: MqttEndpoint, subscribe: MqttSubscribeMessage) {
+        val xs = subscribe.topicSubscriptions().map {
+            it.qualityOfService() // TODO: check access control lists
+        }
+
         // Acknowledge the subscriptions
-        endpoint.subscribeAcknowledge(subscribe.messageId(), subscribe.topicSubscriptions().map { it.qualityOfService() })
+        endpoint.subscribeAcknowledge(subscribe.messageId(), xs)
 
         // Subscribe
         subscribe.topicSubscriptions().forEach { subscription ->
             logger.info("Client [${endpoint.clientIdentifier()}] Subscription for [${subscription.topicName()}] with QoS ${subscription.qualityOfService()}")
-            server.distributor.subscribeRequest(this, TopicName(subscription.topicName())) { }
+            server.distributor.subscribeRequest(this, TopicName(subscription.topicName()))
         }
     }
 
