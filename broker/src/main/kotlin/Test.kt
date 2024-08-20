@@ -4,7 +4,7 @@ import at.rocworks.data.MqttTopicName
 import at.rocworks.data.TopicTree
 
 fun main(args: Array<String>) {
-    val tree = TopicTree()
+    val tree = TopicTree<Void>()
 
     val topics = listOf(
         "a/a/a",

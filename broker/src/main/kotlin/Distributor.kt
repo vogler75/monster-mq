@@ -26,7 +26,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
     }
 
     private val clientSubscriptions = mutableMapOf<MqttClientId, MutableSet<MqttTopicName>>() // clientId to topics
-    private val subscriptionsTree = TopicTree()
+    private val subscriptionsTree = TopicTree<MqttClientId>()
 
     init {
         logger.level = Level.ALL
@@ -150,7 +150,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
 
     private fun distributeMessageToClients(message: MqttMessage) {
         val topicName = MqttTopicName(message.topicName)
-        subscriptionsTree.findClientsOfTopicName(topicName).toSet().forEach {
+        subscriptionsTree.findDataOfTopicName(topicName).toSet().forEach {
             MqttClient.sendMessageToClient(vertx, it, message)
         }
     }

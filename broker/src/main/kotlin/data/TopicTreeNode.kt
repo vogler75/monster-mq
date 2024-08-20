@@ -1,6 +1,6 @@
 package at.rocworks.data
 
-data class TopicTreeNode (
-    val children: MutableMap<String, TopicTreeNode> = mutableMapOf(), // Level to Node
-    val clients: MutableSet<MqttClientId> = mutableSetOf()
+data class TopicTreeNode<T> (
+    val children: MutableMap<String, TopicTreeNode<T>> = mutableMapOf(), // Level to Node
+    val dataset: MutableSet<T> = mutableSetOf()
 )
