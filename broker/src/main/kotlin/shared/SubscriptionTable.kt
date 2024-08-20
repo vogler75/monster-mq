@@ -83,8 +83,8 @@ class SubscriptionTable: AbstractVerticle() {
     }
 
     fun removeClient(clientId: MqttClientId) {
-        subscriptions?.remove(clientId.identifier)?.onSuccess { topics ->
-            topics.forEach { topic ->
+        subscriptions?.remove(clientId.identifier)?.onSuccess { topics: MutableSet<MqttTopicName>? ->
+            topics?.forEach { topic ->
                 vertx.eventBus().publish(delAddress, MqttSubscription(clientId, topic))
             }
         }
