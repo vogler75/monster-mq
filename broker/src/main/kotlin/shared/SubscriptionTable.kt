@@ -1,4 +1,96 @@
 package at.rocworks.shared
 
-class SubscriptionTable {
+import at.rocworks.Const
+import at.rocworks.data.MqttClientId
+import at.rocworks.data.MqttSubscription
+import at.rocworks.data.MqttTopicName
+import at.rocworks.data.TopicTree
+import io.vertx.core.AbstractVerticle
+import io.vertx.core.Future
+import io.vertx.core.Promise
+import io.vertx.core.shareddata.AsyncMap
+import java.util.logging.Level
+import java.util.logging.Logger
+
+class SubscriptionTable: AbstractVerticle() {
+    private val logger = Logger.getLogger(this.javaClass.simpleName)
+    private val name = "Subscriptions"
+    private val index = TopicTree<MqttClientId>()
+    private var subscriptions: AsyncMap<MqttClientId, MutableSet<MqttTopicName>>? = null
+
+    init {
+        logger.level = Level.INFO
+    }
+
+    private val addAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE +"/A"
+    private val delAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE +"/D"
+
+    override fun start(startPromise: Promise<Void>) {
+        vertx.eventBus().consumer<MqttSubscription>(addAddress) {
+            index.add(it.body().topicName, it.body().clientId)
+        }
+
+        vertx.eventBus().consumer<MqttSubscription>(delAddress) {
+            index.del(it.body().topicName, it.body().clientId)
+        }
+
+        Const.getMap<MqttClientId, MutableSet<MqttTopicName>>(vertx, name).onSuccess { subscriptions ->
+            logger.info("Indexing subscription table [$name].")
+            this.subscriptions = subscriptions
+            subscriptions.keys()
+                .onSuccess { clients ->
+                    Future.all(clients.map { client ->
+                        subscriptions.get(client).onComplete { topics ->
+                            println("$client => ${topics.result().size}")
+                            //topics.result().forEach { index.add(it, client) }
+                        }
+                    }).onComplete {
+                        logger.info("Indexing message store [$name] finished.")
+                        startPromise.complete()
+                    }
+               }
+                .onFailure {
+                    logger.severe("Error in getting keys of [$name] [${it.message}]")
+                    startPromise.fail(it)
+                }
+        }.onFailure {
+            logger.severe("Error in getting map [$name] [${it.message}]")
+            startPromise.fail(it)
+        }
+    }
+
+    fun addSubscription(subscription: MqttSubscription) {
+        vertx.eventBus().publish(addAddress, subscription)
+        subscriptions?.let { subscriptions ->
+            subscriptions.get(subscription.clientId).onComplete { client ->
+                client.result()?.add(subscription.topicName) ?: run {
+                    subscriptions.put(subscription.clientId, hashSetOf(subscription.topicName))
+                }
+            }.onFailure {
+               logger.severe(it.message)
+            }
+        }
+    }
+
+    fun removeSubscription(subscription: MqttSubscription) {
+        vertx.eventBus().publish(delAddress, subscription)
+        subscriptions?.let { subscriptions ->
+            subscriptions.get(subscription.clientId).onComplete { client ->
+                client.result()?.remove(subscription.topicName)
+            }.onFailure {
+                logger.severe(it.message)
+            }
+        }
+    }
+
+    fun removeClient(clientId: MqttClientId) {
+        subscriptions?.remove(clientId)?.onSuccess { topics ->
+            topics.forEach { topic ->
+                vertx.eventBus().publish(delAddress, MqttSubscription(clientId, topic))
+            }
+        }
+    }
+
+    fun findClients(topicName: MqttTopicName) = index.findDataOfTopicName(topicName).toSet()
+
 }

@@ -16,14 +16,14 @@ class RetainedMessages(): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val name = "Retained"
     private val index = TopicTree<Void>()
-    private var messages: AsyncMap<MqttTopicName, MqttMessage>? = null // topic to message
+    private var messages: AsyncMap<MqttTopicName, MqttMessage>? = null
 
     init {
         logger.level = Level.INFO
     }
 
-    private val addAddress = Const.GLOBAL_RETAINED_NAMESPACE +"/A"
-    private val delAddress = Const.GLOBAL_RETAINED_NAMESPACE +"/D"
+    private val addAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/A"
+    private val delAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/D"
 
     override fun start(startPromise: Promise<Void>) {
         vertx.eventBus().consumer<MqttTopicName>(addAddress) {
@@ -34,7 +34,7 @@ class RetainedMessages(): AbstractVerticle() {
             index.del(it.body())
         }
 
-        getMap<MqttTopicName, MqttMessage>(name).onSuccess { messages ->
+        Const.getMap<MqttTopicName, MqttMessage>(vertx, name).onSuccess { messages ->
             logger.info("Indexing message store [$name].")
             this.messages = messages
             messages.keys()
@@ -77,8 +77,8 @@ class RetainedMessages(): AbstractVerticle() {
         return promise.future()
     }
 
-    fun findMatching(topicName: MqttTopicName, callback: (message: MqttMessage)->Unit): Future<Unit> {
-        val promise = Promise.promise<Unit>()
+    fun findMatching(topicName: MqttTopicName, callback: (message: MqttMessage)->Unit): Future<Int> {
+        val promise = Promise.promise<Int>()
         vertx.executeBlocking(Callable {
             messages?.let { messages ->
                 val topics = index.findMatchingTopicNames(topicName)
@@ -89,37 +89,12 @@ class RetainedMessages(): AbstractVerticle() {
                         else logger.finest { "Stored message for [$topic] is null!" } // it could be a node inside the tree index where we haven't stored a value
                     }
                 }).onComplete {
-                    promise.complete()
+                    promise.complete(topics.size)
                 }
             } ?: run {
                 promise.fail("No message store initialized!")
             }
         })
-        return promise.future()
-    }
-
-    private fun <K,V> getMap(name: String): Future<AsyncMap<K, V>> {
-        val promise = Promise.promise<AsyncMap<K, V>>()
-        val sharedData = vertx.sharedData()
-        if (vertx.isClustered) {
-            sharedData.getClusterWideMap<K, V>("TopicMap") { it ->
-                if (it.succeeded()) {
-                    promise.complete(it.result())
-                } else {
-                    println("Failed to access the shared map [$name]: ${it.cause()}")
-                    promise.fail(it.cause())
-                }
-            }
-        } else {
-            sharedData.getAsyncMap<K, V>("TopicMap") {
-                if (it.succeeded()) {
-                    promise.complete(it.result())
-                } else {
-                    println("Failed to access the shared map [$name]: ${it.cause()}")
-                    promise.fail(it.cause())
-                }
-            }
-        }
         return promise.future()
     }
 }

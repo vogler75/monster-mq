@@ -1,10 +1,8 @@
 package at.rocworks
 
-import at.rocworks.data.MqttMessageCodec
-import at.rocworks.data.MqttMessage
-import at.rocworks.data.MqttTopicName
-import at.rocworks.data.MqttTopicNameCodec
+import at.rocworks.data.*
 import at.rocworks.shared.RetainedMessages
+import at.rocworks.shared.SubscriptionTable
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Vertx
@@ -31,12 +29,15 @@ fun main(args: Array<String>) {
     fun start(vertx: Vertx) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttTopicName::class.java, MqttTopicNameCodec())
+        vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
+        val subscriptionTable = SubscriptionTable()
         val retainedMessages = RetainedMessages()
-        val distributor = Distributor(retainedMessages)
+        val distributor = Distributor(subscriptionTable, retainedMessages)
         val server = MqttServer(port, ssl, distributor)
 
         Future.succeededFuture<String>()
+            .compose { vertx.deployVerticle(subscriptionTable) }
             .compose { vertx.deployVerticle(retainedMessages) }
             .compose { vertx.deployVerticle(distributor) }
             .compose { vertx.deployVerticle(server) }

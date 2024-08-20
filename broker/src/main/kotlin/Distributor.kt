@@ -2,20 +2,25 @@ package at.rocworks
 
 import at.rocworks.data.MqttClientId
 import at.rocworks.data.MqttMessage
+import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttTopicName
-import at.rocworks.data.TopicTree
 import at.rocworks.shared.RetainedMessages
+import at.rocworks.shared.SubscriptionTable
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.eventbus.Message
+import io.vertx.core.json.Json
 import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.AsyncMap
 
 import java.util.logging.Level
 import java.util.logging.Logger
 
-class Distributor(private val retainedMessages: RetainedMessages): AbstractVerticle() {
+class Distributor(
+    private val subscriptionTable: SubscriptionTable,
+    private val retainedMessages: RetainedMessages
+): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     companion object {
@@ -25,33 +30,29 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
         const val COMMAND_CLEANSESSION = "C"
     }
 
-    private val clientSubscriptions = mutableMapOf<MqttClientId, MutableSet<MqttTopicName>>() // clientId to topics
-    private val subscriptionsTree = TopicTree<MqttClientId>()
-
     init {
         logger.level = Level.ALL
     }
 
-    private fun getDistributorNamespace() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}"
+    private fun getDistributorCommandAddress() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}/C"
+    private fun getDistributorMessageAddress() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}/M"
 
     override fun start() {
-        vertx.eventBus().consumer<JsonObject>(Const.GLOBAL_DISTRIBUTOR_NAMESPACE) {
-            logger.finest { "Received request [${it.body()}]" }
-            when (it.body().getString(COMMAND_KEY)) {
-                COMMAND_SUBSCRIBE -> subscribeCommand(it)
-                COMMAND_UNSUBSCRIBE -> unsubscribeCommand(it)
-                COMMAND_CLEANSESSION -> cleanSessionCommand(it)
+        vertx.eventBus().consumer<JsonObject>(getDistributorCommandAddress()) { message ->
+            message.body()?.let { payload ->
+                logger.finest { "Received request [${payload}]" }
+                when (payload.getString(COMMAND_KEY)) {
+                    COMMAND_SUBSCRIBE -> subscribeCommand(message)
+                    COMMAND_UNSUBSCRIBE -> unsubscribeCommand(message)
+                    COMMAND_CLEANSESSION -> cleanSessionCommand(message)
+                }
             }
         }
 
-        vertx.eventBus().consumer<Any>(getDistributorNamespace()) { message ->
-            message.body().let { payload ->
-                if (payload is MqttMessage) {
-                    logger.finest { "Received message [${payload.topicName}] retained [${payload.isRetain}]" }
-                    distributeMessageToClients(payload)
-                } else {
-                    logger.warning("Received unexpected message of type [${payload::class.simpleName}]")
-                }
+        vertx.eventBus().consumer<MqttMessage>(getDistributorMessageAddress()) { message ->
+            message.body()?.let { payload ->
+                logger.finest { "Received message [${payload.topicName}] retained [${payload.isRetain}]" }
+                distributeMessageToClients(payload)
             }
         }
     }
@@ -67,31 +68,21 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
             .put(COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName.identifier)
             .put(Const.CLIENT_KEY, client.getClientId().identifier)
-            .put(Const.BROKER_KEY, client.getDistributorId())
-        vertx.eventBus().publish(Const.GLOBAL_DISTRIBUTOR_NAMESPACE, request)
+        vertx.eventBus().publish(getDistributorCommandAddress(), request)
     }
 
     private fun subscribeCommand(command: Message<JsonObject>) {
-        val topicName = MqttTopicName(command.body().getString(Const.TOPIC_KEY))
         val clientId = MqttClientId(command.body().getString(Const.CLIENT_KEY))
-        val distributorId = command.body().getString(Const.BROKER_KEY)
+        val topicName = MqttTopicName(command.body().getString(Const.TOPIC_KEY))
 
-        fun subscribe() {
-            subscriptionsTree.add(topicName, clientId)
-            clientSubscriptions.getOrPut(clientId) { hashSetOf() }.add(topicName)
-            logger.fine { subscriptionsTree.toString() }
-            command.reply(true)
+        retainedMessages.findMatching(topicName) { message ->
+            logger.finer { "Publish retained message [${message.topicName}]" }
+            MqttClient.sendMessageToClient(vertx, clientId, message)
+        }.onComplete {
+            logger.info("Retained messages published [${it.result()}].")
+            subscriptionTable.addSubscription(MqttSubscription(clientId, topicName))
         }
 
-        if (distributorId == deploymentID()) {
-            retainedMessages.findMatching(topicName) { message ->
-                logger.finer { "Publish retained message [${message.topicName}]" }
-                MqttClient.sendMessageToClient(vertx, clientId, message)
-            }.onComplete {
-                logger.info("Retained messages published.")
-                subscribe()
-            }
-        } else subscribe()
     }
 
     //----------------------------------------------------------------------------------------------------
@@ -101,19 +92,16 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
             .put(COMMAND_KEY, COMMAND_UNSUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName.identifier)
             .put(Const.CLIENT_KEY, client.deploymentID())
-        vertx.eventBus().request(getDistributorNamespace(), request) {
+        vertx.eventBus().request(getDistributorCommandAddress(), request) {
             if (it.succeeded()) result(it.result().body())
             else logger.severe("Unsubscribe request failed: ${it.cause()}")
         }
     }
 
     private fun unsubscribeCommand(command: Message<JsonObject>) {
-        val topicName = MqttTopicName(command.body().getString(Const.TOPIC_KEY))
         val clientId = MqttClientId(command.body().getString(Const.CLIENT_KEY))
-        clientSubscriptions[clientId]?.remove(topicName)
-        subscriptionsTree.del(topicName, clientId)
-        logger.fine(subscriptionsTree.toString())
-        command.reply(true)
+        val topicName = MqttTopicName(command.body().getString(Const.TOPIC_KEY))
+        subscriptionTable.removeSubscription(MqttSubscription(clientId, topicName))
     }
 
     //----------------------------------------------------------------------------------------------------
@@ -123,7 +111,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
             .put(COMMAND_KEY, COMMAND_CLEANSESSION)
             .put(Const.CLIENT_KEY, client.getClientId().identifier)
 
-        vertx.eventBus().request(Const.GLOBAL_DISTRIBUTOR_NAMESPACE, request) {
+        vertx.eventBus().request(getDistributorCommandAddress(), request) {
             if (it.succeeded()) result(it.result().body())
             else logger.severe("Clean session request failed: ${it.cause()}")
         }
@@ -131,16 +119,13 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
 
     private fun cleanSessionCommand(command: Message<JsonObject>) {
         val clientId = MqttClientId(command.body().getString(Const.CLIENT_KEY))
-        clientSubscriptions.remove(clientId)?.forEach { topic ->
-            subscriptionsTree.del(topic, clientId)
-        }
-        command.reply(true)
+        subscriptionTable.removeClient(clientId)
     }
 
     //----------------------------------------------------------------------------------------------------
 
     fun publishMessage(message: MqttMessage) {
-        vertx.eventBus().publish(getDistributorNamespace(), message)
+        vertx.eventBus().publish(getDistributorMessageAddress(), message)
         if (message.isRetain) {
             logger.finer { "Save retained topic [${message.topicName}]" }
             val topicName = MqttTopicName(message.topicName)
@@ -150,7 +135,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
 
     private fun distributeMessageToClients(message: MqttMessage) {
         val topicName = MqttTopicName(message.topicName)
-        subscriptionsTree.findDataOfTopicName(topicName).toSet().forEach {
+        subscriptionTable.findClients(topicName).forEach {
             MqttClient.sendMessageToClient(vertx, it, message)
         }
     }

@@ -5,7 +5,6 @@ import io.vertx.core.eventbus.MessageCodec
 
 class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
     override fun encodeToWire(buffer: Buffer, s: MqttMessage) {
-        // Serialize MqttPublishMessage fields to the buffer
         buffer.appendInt(s.messageId)
         buffer.appendByte(s.qosLevel.toByte())
         buffer.appendByte(if (s.isDup) 1 else 0.toByte())

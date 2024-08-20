@@ -5,7 +5,6 @@ import io.vertx.core.eventbus.MessageCodec
 
 class MqttTopicNameCodec : MessageCodec<MqttTopicName, MqttTopicName> {
     override fun encodeToWire(buffer: Buffer, s: MqttTopicName) {
-        // Serialize MqttPublishMessage fields to the buffer
         val topicName = s.identifier.toByteArray(Charsets.UTF_8)
         buffer.appendInt(topicName.size)
         buffer.appendBytes(topicName)
