@@ -61,7 +61,7 @@ class Distributor(private val retainedMessages: MessageStore): AbstractVerticle(
     }
 
     override fun stop() {
-        vertx.undeploy(retainedMessages.deploymentID())
+        
     }
 
     //----------------------------------------------------------------------------------------------------
