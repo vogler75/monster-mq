@@ -1,6 +1,7 @@
 package at.rocworks
 
 import at.rocworks.codecs.MqttMessage
+import at.rocworks.codecs.MqttTopicName
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -12,15 +13,15 @@ import java.util.logging.Logger
 class MessageStore(private val name: String): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
-    private var messages: AsyncMap<TopicName, MqttMessage>? = null // topic to message
     private val index = TopicTree()
+    private var messages: AsyncMap<MqttTopicName, MqttMessage>? = null // topic to message
 
     init {
         logger.level = Level.INFO
     }
 
     override fun start(startPromise: Promise<Void>) {
-        getMap<TopicName, MqttMessage>(name).onSuccess { messages ->
+        getMap<MqttTopicName, MqttMessage>(name).onSuccess { messages ->
             logger.info("Indexing message store [$name].")
             this.messages = messages
             messages.keys()
@@ -33,7 +34,7 @@ class MessageStore(private val name: String): AbstractVerticle() {
         }.onFailure(startPromise::fail)
     }
 
-    fun saveMessage(topicName: TopicName, message: MqttMessage): Future<Void> {
+    fun saveMessage(topicName: MqttTopicName, message: MqttMessage): Future<Void> {
         messages?.let { messages ->
             return messages.put(topicName, message).onComplete {
                 logger.finest { "Saved message for [$topicName] completed [${it.succeeded()}]" }
@@ -43,9 +44,9 @@ class MessageStore(private val name: String): AbstractVerticle() {
         }
     }
 
-    fun addTopicToIndex(topicName: TopicName) = index.add(topicName)
+    fun addTopicToIndex(topicName: MqttTopicName) = index.add(topicName)
 
-    fun findMatching(topicName: TopicName, callback: (message: MqttMessage)->Unit): Future<Unit> {
+    fun findMatching(topicName: MqttTopicName, callback: (message: MqttMessage)->Unit): Future<Unit> {
         val promise = Promise.promise<Unit>()
         vertx.executeBlocking(Callable {
             messages?.let { messages ->

@@ -2,6 +2,8 @@ package at.rocworks
 
 import at.rocworks.codecs.MqttMessageCodec
 import at.rocworks.codecs.MqttMessage
+import at.rocworks.codecs.MqttTopicName
+import at.rocworks.codecs.MqttTopicNameCodec
 import io.vertx.core.AsyncResult
 import io.vertx.core.Vertx
 
@@ -24,6 +26,7 @@ fun main(args: Array<String>) {
 
     fun start(vertx: Vertx) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
+        vertx.eventBus().registerDefaultCodec(MqttTopicName::class.java, MqttTopicNameCodec())
 
         val retainedMessages = MessageStore("RetainedMessages")
         vertx.deployVerticle(retainedMessages).onSuccess {

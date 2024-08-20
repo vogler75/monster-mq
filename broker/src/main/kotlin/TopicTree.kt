@@ -1,10 +1,12 @@
 package at.rocworks
 
+import at.rocworks.codecs.MqttTopicName
+
 class TopicTree {
     private val root = TopicNode()
 
-    fun add(topicName: TopicName) = add(topicName, null)
-    fun add(topicName: TopicName, client: ClientId?) {
+    fun add(topicName: MqttTopicName) = add(topicName, null)
+    fun add(topicName: MqttTopicName, client: ClientId?) {
         fun addTopicNode(node: TopicNode, first: String, rest: List<String>) {
             val child = node.children.getOrPut(first) { TopicNode() }
             if (rest.isEmpty()) {
@@ -17,8 +19,8 @@ class TopicTree {
         if (xs.isNotEmpty()) addTopicNode(root, xs.first(), xs.drop(1))
     }
 
-    fun del(topicName: TopicName) = del(topicName, null)
-    fun del(topicName: TopicName, client: ClientId?) {
+    fun del(topicName: MqttTopicName) = del(topicName, null)
+    fun del(topicName: MqttTopicName, client: ClientId?) {
         fun delTopicNode(node: TopicNode, first: String, rest: List<String>) {
             fun deleteIfEmpty(child: TopicNode) {
                 if (child.clients.isEmpty() && child.children.isEmpty()) {
@@ -44,7 +46,7 @@ class TopicTree {
     /*
     The given topicName will be matched with potential wildcard topics of the tree (tree contains wildcard topics)
      */
-    fun findClientsOfTopicName(topicName: TopicName): List<ClientId> {
+    fun findClientsOfTopicName(topicName: MqttTopicName): List<ClientId> {
         fun find(node: TopicNode, current: String, rest: List<String>): List<ClientId> {
             return node.children.flatMap { child ->
                 when (child.key) {
@@ -63,16 +65,16 @@ class TopicTree {
     /*
     The given topicName can contain wildcards and this will be matched with the tree topics without wildcards
      */
-    fun findMatchingTopicNames(topicName: TopicName): List<TopicName> {
-        fun find(node: TopicNode, current: String, rest: List<String>, topic: TopicName?): List<TopicName> {
+    fun findMatchingTopicNames(topicName: MqttTopicName): List<MqttTopicName> {
+        fun find(node: TopicNode, current: String, rest: List<String>, topic: MqttTopicName?): List<MqttTopicName> {
             return if (node.children.isEmpty() && rest.isEmpty()) // is leaf
                 if (topic==null) listOf() else listOf(topic)
             else
                 node.children.flatMap { child ->
                     when (current) {
-                        "#" -> find(child.value,"#", listOf(), topic?.addLevel(child.key) ?: TopicName(child.key), )
-                        "+", child.key -> if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), topic?.addLevel(child.key) ?: TopicName(child.key))
-                               else listOf(topic?.addLevel(child.key) ?: TopicName(child.key))
+                        "#" -> find(child.value,"#", listOf(), topic?.addLevel(child.key) ?: MqttTopicName(child.key), )
+                        "+", child.key -> if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), topic?.addLevel(child.key) ?: MqttTopicName(child.key))
+                               else listOf(topic?.addLevel(child.key) ?: MqttTopicName(child.key))
                         else -> listOf()
                     }
                 }

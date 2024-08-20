@@ -1,10 +1,7 @@
 package at.rocworks.codecs
 
-import at.rocworks.Const
-import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.MessageCodec
-import io.vertx.mqtt.messages.MqttPublishMessage
 
 class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
     override fun encodeToWire(buffer: Buffer, s: MqttMessage) {
@@ -51,7 +48,7 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
     }
 
     override fun name(): String {
-        return "MqttPublishMessageCodec"
+        return this.javaClass.simpleName
     }
 
     override fun systemCodecID(): Byte {

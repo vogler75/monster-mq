@@ -1,6 +1,7 @@
 package at.rocworks
 
 import at.rocworks.codecs.MqttMessage
+import at.rocworks.codecs.MqttTopicName
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
@@ -118,7 +119,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         // Subscribe
         subscribe.topicSubscriptions().forEach { subscription ->
             logger.info("Client [${endpoint.clientIdentifier()}] Subscription for [${subscription.topicName()}] with QoS ${subscription.qualityOfService()}")
-            server.distributor.subscribeRequest(this, TopicName(subscription.topicName()))
+            server.distributor.subscribeRequest(this, MqttTopicName(subscription.topicName()))
         }
     }
 
@@ -146,7 +147,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private fun unsubscribeHandler(endpoint: MqttEndpoint, unsubscribe: MqttUnsubscribeMessage) {
         unsubscribe.topics().forEach { topicName ->
             logger.info("Client [${endpoint.clientIdentifier()}] Unsubscribe for [${topicName}]}")
-            server.distributor.unsubscribeRequest(this, TopicName(topicName)) { }
+            server.distributor.unsubscribeRequest(this, MqttTopicName(topicName)) { }
         }
         endpoint.unsubscribeAcknowledge(unsubscribe.messageId())
     }

@@ -1,17 +1,17 @@
-package at.rocworks
+package at.rocworks.codecs
 
 import java.io.Serializable
 
-data class TopicName(val identifier: String): Serializable {
+data class MqttTopicName(val identifier: String): Serializable {
     override fun toString() = identifier
 
     fun isWildCardTopic(): Boolean = identifier.contains('+') || identifier.contains('#')
 
     fun getLevels() = identifier.split("/")
 
-    fun addLevel(level: String) = TopicName("$identifier/$level")
+    fun addLevel(level: String) = MqttTopicName("$identifier/$level")
 
-    fun matchesToWildcard(wildcardTopicName: TopicName): Boolean {
+    fun matchesToWildcard(wildcardTopicName: MqttTopicName): Boolean {
         val wildcardLevels = wildcardTopicName.getLevels()
         val topicLevels = getLevels()
 
