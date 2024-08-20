@@ -19,7 +19,7 @@ class RetainedMessages(): AbstractVerticle() {
     private var messages: AsyncMap<String, MqttMessage>? = null // key as MqttTopicName does not work
 
     init {
-        logger.level = Level.ALL
+        logger.level = Level.INFO
     }
 
     private val addAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/A"
