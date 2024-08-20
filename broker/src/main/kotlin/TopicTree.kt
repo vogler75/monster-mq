@@ -1,12 +1,13 @@
 package at.rocworks
 
+import at.rocworks.codecs.MqttClientId
 import at.rocworks.codecs.MqttTopicName
 
 class TopicTree {
     private val root = TopicTreeNode()
 
     fun add(topicName: MqttTopicName) = add(topicName, null)
-    fun add(topicName: MqttTopicName, client: ClientId?) {
+    fun add(topicName: MqttTopicName, client: MqttClientId?) {
         fun addTopicNode(node: TopicTreeNode, first: String, rest: List<String>) {
             val child = node.children.getOrPut(first) { TopicTreeNode() }
             if (rest.isEmpty()) {
@@ -20,7 +21,7 @@ class TopicTree {
     }
 
     fun del(topicName: MqttTopicName) = del(topicName, null)
-    fun del(topicName: MqttTopicName, client: ClientId?) {
+    fun del(topicName: MqttTopicName, client: MqttClientId?) {
         fun delTopicNode(node: TopicTreeNode, first: String, rest: List<String>) {
             fun deleteIfEmpty(child: TopicTreeNode) {
                 if (child.clients.isEmpty() && child.children.isEmpty()) {
@@ -46,8 +47,8 @@ class TopicTree {
     /*
     The given topicName will be matched with potential wildcard topics of the tree (tree contains wildcard topics)
      */
-    fun findClientsOfTopicName(topicName: MqttTopicName): List<ClientId> {
-        fun find(node: TopicTreeNode, current: String, rest: List<String>): List<ClientId> {
+    fun findClientsOfTopicName(topicName: MqttTopicName): List<MqttClientId> {
+        fun find(node: TopicTreeNode, current: String, rest: List<String>): List<MqttClientId> {
             return node.children.flatMap { child ->
                 when (child.key) {
                     "#" -> child.value.clients.toList()

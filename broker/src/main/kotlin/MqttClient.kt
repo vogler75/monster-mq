@@ -1,5 +1,6 @@
 package at.rocworks
 
+import at.rocworks.codecs.MqttClientId
 import at.rocworks.codecs.MqttMessage
 import at.rocworks.codecs.MqttTopicName
 import io.netty.handler.codec.mqtt.MqttQoS
@@ -13,7 +14,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.logging.Level
 import java.util.logging.Logger
 
-class MonsterClient(private val distributor: Distributor): AbstractVerticle() {
+class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     @Volatile
@@ -28,12 +29,12 @@ class MonsterClient(private val distributor: Distributor): AbstractVerticle() {
         logger.level = Level.INFO
     }
 
-    fun getClientId() = ClientId(deploymentID())
+    fun getClientId() = MqttClientId(deploymentID())
     fun getDistributorId(): String = distributor.deploymentID()
 
     companion object {
         private val logger = Logger.getLogger(this::class.simpleName)
-        private val clients: HashMap<String, MonsterClient> = hashMapOf()
+        private val clients: HashMap<String, MqttClient> = hashMapOf()
 
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, distributor: Distributor) {
             val clientId = endpoint.clientIdentifier()
@@ -43,7 +44,7 @@ class MonsterClient(private val distributor: Distributor): AbstractVerticle() {
                 client.startEndpoint(endpoint)
             } ?: run {
                 logger.info("Client [${endpoint.clientIdentifier()}] Deploy a new session.")
-                val client = MonsterClient(distributor)
+                val client = MqttClient(distributor)
                 vertx.deployVerticle(client).onComplete {
                     clients[clientId] = client
                     client.startEndpoint(endpoint)
@@ -61,9 +62,9 @@ class MonsterClient(private val distributor: Distributor): AbstractVerticle() {
             }
         }
 
-        fun getClientAddress(clientId: ClientId) = "${Const.CLIENT_NAMESPACE}/${clientId.identifier}"
+        fun getClientAddress(clientId: MqttClientId) = "${Const.CLIENT_NAMESPACE}/${clientId.identifier}"
 
-        fun sendMessageToClient(vertx: Vertx, clientId: ClientId, message: MqttMessage) {
+        fun sendMessageToClient(vertx: Vertx, clientId: MqttClientId, message: MqttMessage) {
             vertx.eventBus().publish(getClientAddress(clientId), message)
         }
     }

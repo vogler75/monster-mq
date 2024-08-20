@@ -13,7 +13,7 @@ import java.io.InputStream
 import java.util.logging.LogManager
 import java.util.logging.Logger
 
-class MonsterServer(
+class MqttServer(
     private val port: Int,
     private val ssl: Boolean,
     private val distributor: Distributor
@@ -54,7 +54,7 @@ class MonsterServer(
         }
 
         mqttServer.endpointHandler { endpoint ->
-            MonsterClient.deployEndpoint(vertx, endpoint, distributor)
+            MqttClient.deployEndpoint(vertx, endpoint, distributor)
         }
 
         mqttServer.listen(port) { ar ->

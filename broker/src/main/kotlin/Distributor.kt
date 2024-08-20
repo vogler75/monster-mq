@@ -1,5 +1,6 @@
 package at.rocworks
 
+import at.rocworks.codecs.MqttClientId
 import at.rocworks.codecs.MqttMessage
 import at.rocworks.codecs.MqttTopicName
 import io.vertx.core.AbstractVerticle
@@ -22,7 +23,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
         const val COMMAND_CLEANSESSION = "C"
     }
 
-    private val clientSubscriptions = mutableMapOf<ClientId, MutableSet<MqttTopicName>>() // clientId to topics
+    private val clientSubscriptions = mutableMapOf<MqttClientId, MutableSet<MqttTopicName>>() // clientId to topics
     private val subscriptionsTree = TopicTree()
 
     init {
@@ -59,7 +60,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
 
     //----------------------------------------------------------------------------------------------------
 
-    fun subscribeRequest(client: MonsterClient, topicName: MqttTopicName) {
+    fun subscribeRequest(client: MqttClient, topicName: MqttTopicName) {
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName.identifier)
@@ -70,7 +71,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
 
     private fun subscribeCommand(command: Message<JsonObject>) {
         val topicName = MqttTopicName(command.body().getString(Const.TOPIC_KEY))
-        val clientId = ClientId(command.body().getString(Const.CLIENT_KEY))
+        val clientId = MqttClientId(command.body().getString(Const.CLIENT_KEY))
         val distributorId = command.body().getString(Const.BROKER_KEY)
 
         fun subscribe() {
@@ -83,7 +84,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
         if (distributorId == deploymentID()) {
             retainedMessages.findMatching(topicName) { message ->
                 logger.finer { "Publish retained message [${message.topicName}]" }
-                MonsterClient.sendMessageToClient(vertx, clientId, message)
+                MqttClient.sendMessageToClient(vertx, clientId, message)
             }.onComplete {
                 logger.info("Retained messages published.")
                 subscribe()
@@ -93,7 +94,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
 
     //----------------------------------------------------------------------------------------------------
 
-    fun unsubscribeRequest(client: MonsterClient, topicName: MqttTopicName, result: (Boolean)->Unit) {
+    fun unsubscribeRequest(client: MqttClient, topicName: MqttTopicName, result: (Boolean)->Unit) {
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_UNSUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName.identifier)
@@ -106,7 +107,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
 
     private fun unsubscribeCommand(command: Message<JsonObject>) {
         val topicName = MqttTopicName(command.body().getString(Const.TOPIC_KEY))
-        val clientId = ClientId(command.body().getString(Const.CLIENT_KEY))
+        val clientId = MqttClientId(command.body().getString(Const.CLIENT_KEY))
         clientSubscriptions[clientId]?.remove(topicName)
         subscriptionsTree.del(topicName, clientId)
         logger.fine(subscriptionsTree.toString())
@@ -115,7 +116,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
 
     //----------------------------------------------------------------------------------------------------
 
-    fun cleanSessionRequest(client: MonsterClient, result: (Boolean)->Unit) {
+    fun cleanSessionRequest(client: MqttClient, result: (Boolean)->Unit) {
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_CLEANSESSION)
             .put(Const.CLIENT_KEY, client.getClientId().identifier)
@@ -127,7 +128,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
     }
 
     private fun cleanSessionCommand(command: Message<JsonObject>) {
-        val clientId = ClientId(command.body().getString(Const.CLIENT_KEY))
+        val clientId = MqttClientId(command.body().getString(Const.CLIENT_KEY))
         clientSubscriptions.remove(clientId)?.forEach { topic ->
             subscriptionsTree.del(topic, clientId)
         }
@@ -148,7 +149,7 @@ class Distributor(private val retainedMessages: RetainedMessages): AbstractVerti
     private fun distributeMessageToClients(message: MqttMessage) {
         val topicName = MqttTopicName(message.topicName)
         subscriptionsTree.findClientsOfTopicName(topicName).toSet().forEach {
-            MonsterClient.sendMessageToClient(vertx, it, message)
+            MqttClient.sendMessageToClient(vertx, it, message)
         }
     }
 

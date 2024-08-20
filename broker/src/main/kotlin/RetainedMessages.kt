@@ -10,9 +10,9 @@ import java.util.concurrent.Callable
 import java.util.logging.Level
 import java.util.logging.Logger
 
-class RetainedMessages(private val name: String): AbstractVerticle() {
+class RetainedMessages(): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
-
+    private val name = "Retained"
     private val index = TopicTree()
     private var messages: AsyncMap<MqttTopicName, MqttMessage>? = null // topic to message
 

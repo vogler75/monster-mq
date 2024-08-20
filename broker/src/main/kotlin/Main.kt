@@ -18,7 +18,7 @@ import java.util.logging.Logger
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
-    MonsterServer.initLogging()
+    MqttServer.initLogging()
     val logger = Logger.getLogger("Main")
 
     val cluster = args.find { it == "-cluster" } != null
@@ -31,9 +31,9 @@ fun main(args: Array<String>) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttTopicName::class.java, MqttTopicNameCodec())
 
-        val retainedMessages = RetainedMessages("RetainedMessages")
+        val retainedMessages = RetainedMessages()
         val distributor = Distributor(retainedMessages)
-        val server = MonsterServer(port, ssl, distributor)
+        val server = MqttServer(port, ssl, distributor)
 
         Future.succeededFuture<String>()
             .compose { vertx.deployVerticle(retainedMessages) }
