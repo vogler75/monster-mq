@@ -16,7 +16,7 @@ class SubscriptionTable: AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val name = "Subscriptions"
     private val index = TopicTree<MqttClientId>()
-    private var subscriptions: AsyncMap<MqttClientId, MutableSet<MqttTopicName>>? = null
+    private var subscriptions: AsyncMap<String, MutableSet<MqttTopicName>>? = null // key as MqttClientId does not work
 
     init {
         logger.level = Level.INFO
@@ -34,14 +34,14 @@ class SubscriptionTable: AbstractVerticle() {
             index.del(it.body().topicName, it.body().clientId)
         }
 
-        Const.getMap<MqttClientId, MutableSet<MqttTopicName>>(vertx, name).onSuccess { subscriptions ->
+        Const.getMap<String, MutableSet<MqttTopicName>>(vertx, name).onSuccess { subscriptions ->
             logger.info("Indexing subscription table [$name].")
             this.subscriptions = subscriptions
             subscriptions.keys()
                 .onSuccess { clients ->
                     Future.all(clients.map { client ->
                         subscriptions.get(client).onComplete { topics ->
-                            topics.result().forEach { index.add(it, client) }
+                            topics.result().forEach { index.add(it, MqttClientId(client)) }
                         }
                     }).onComplete {
                         logger.info("Indexing message store [$name] finished.")
@@ -61,9 +61,9 @@ class SubscriptionTable: AbstractVerticle() {
     fun addSubscription(subscription: MqttSubscription) {
         vertx.eventBus().publish(addAddress, subscription)
         subscriptions?.let { subscriptions ->
-            subscriptions.get(subscription.clientId).onComplete { client ->
+            subscriptions.get(subscription.clientId.identifier).onComplete { client ->
                 client.result()?.add(subscription.topicName) ?: run {
-                    subscriptions.put(subscription.clientId, hashSetOf(subscription.topicName))
+                    subscriptions.put(subscription.clientId.identifier, hashSetOf(subscription.topicName))
                 }
             }.onFailure {
                logger.severe(it.message)
@@ -74,7 +74,7 @@ class SubscriptionTable: AbstractVerticle() {
     fun removeSubscription(subscription: MqttSubscription) {
         vertx.eventBus().publish(delAddress, subscription)
         subscriptions?.let { subscriptions ->
-            subscriptions.get(subscription.clientId).onComplete { client ->
+            subscriptions.get(subscription.clientId.identifier).onComplete { client ->
                 client.result()?.remove(subscription.topicName)
             }.onFailure {
                 logger.severe(it.message)
@@ -83,7 +83,7 @@ class SubscriptionTable: AbstractVerticle() {
     }
 
     fun removeClient(clientId: MqttClientId) {
-        subscriptions?.remove(clientId)?.onSuccess { topics ->
+        subscriptions?.remove(clientId.identifier)?.onSuccess { topics ->
             topics.forEach { topic ->
                 vertx.eventBus().publish(delAddress, MqttSubscription(clientId, topic))
             }

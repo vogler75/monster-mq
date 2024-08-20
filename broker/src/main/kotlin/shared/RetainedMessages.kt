@@ -16,7 +16,7 @@ class RetainedMessages(): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val name = "Retained"
     private val index = TopicTree<Void>()
-    private var messages: AsyncMap<MqttTopicName, MqttMessage>? = null
+    private var messages: AsyncMap<String, MqttMessage>? = null // key as MqttTopicName does not work
 
     init {
         logger.level = Level.ALL
@@ -34,12 +34,12 @@ class RetainedMessages(): AbstractVerticle() {
             index.del(it.body())
         }
 
-        Const.getMap<MqttTopicName, MqttMessage>(vertx, name).onSuccess { messages ->
+        Const.getMap<String, MqttMessage>(vertx, name).onSuccess { messages ->
             logger.info("Indexing message store [$name].")
             this.messages = messages
             messages.keys()
                 .onSuccess { keys ->
-                    keys.forEach(index::add)
+                    keys.forEach { index.add(MqttTopicName(it)) }
                     logger.info("Indexing message store [$name] finished.")
                     startPromise.complete()
                 }
@@ -57,14 +57,14 @@ class RetainedMessages(): AbstractVerticle() {
         val promise = Promise.promise<Void>()
         messages?.let { messages ->
             if (message.payload.isEmpty()) {
-                messages.remove(topicName).onComplete {
+                messages.remove(topicName.identifier).onComplete {
                     vertx.eventBus().publish(delAddress, topicName)
                     logger.finest { "Removed retained message for [$topicName] completed [${it.succeeded()}]" }
                     promise.complete()
                 }.onFailure(promise::fail)
             }
             else {
-                messages.put(topicName, message).onComplete {
+                messages.put(topicName.identifier, message).onComplete {
                     vertx.eventBus().publish(addAddress, topicName)
                     logger.finest { "Saved retained message for [$topicName] completed [${it.succeeded()}]" }
                     promise.complete()
@@ -83,7 +83,7 @@ class RetainedMessages(): AbstractVerticle() {
                 val topics = index.findMatchingTopicNames(topicName)
                 Future.all(topics.map { topic ->
                     logger.finest { "Found matching topic [$topic] for [$topicName]" }
-                    messages.get(topic).onSuccess { message ->
+                    messages.get(topic.identifier).onSuccess { message ->
                         if (message!=null) callback(message)
                         else logger.finest { "Stored message for [$topic] is null!" } // it could be a node inside the tree index where we haven't stored a value
                     }
