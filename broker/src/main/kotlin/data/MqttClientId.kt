@@ -1,4 +1,4 @@
-package at.rocworks.codecs
+package at.rocworks.data
 
 import java.io.Serializable
 

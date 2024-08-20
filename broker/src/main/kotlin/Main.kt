@@ -1,9 +1,10 @@
 package at.rocworks
 
-import at.rocworks.codecs.MqttMessageCodec
-import at.rocworks.codecs.MqttMessage
-import at.rocworks.codecs.MqttTopicName
-import at.rocworks.codecs.MqttTopicNameCodec
+import at.rocworks.data.MqttMessageCodec
+import at.rocworks.data.MqttMessage
+import at.rocworks.data.MqttTopicName
+import at.rocworks.data.MqttTopicNameCodec
+import at.rocworks.shared.RetainedMessages
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Vertx

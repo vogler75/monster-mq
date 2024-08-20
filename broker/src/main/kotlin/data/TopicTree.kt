@@ -1,7 +1,4 @@
-package at.rocworks
-
-import at.rocworks.codecs.MqttClientId
-import at.rocworks.codecs.MqttTopicName
+package at.rocworks.data
 
 class TopicTree {
     private val root = TopicTreeNode()

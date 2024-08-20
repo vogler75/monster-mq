@@ -1,8 +1,8 @@
 package at.rocworks
 
-import at.rocworks.codecs.MqttClientId
-import at.rocworks.codecs.MqttMessage
-import at.rocworks.codecs.MqttTopicName
+import at.rocworks.data.MqttClientId
+import at.rocworks.data.MqttMessage
+import at.rocworks.data.MqttTopicName
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx

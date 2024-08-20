@@ -1,4 +1,4 @@
-package at.rocworks.codecs
+package at.rocworks.data
 
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.MessageCodec

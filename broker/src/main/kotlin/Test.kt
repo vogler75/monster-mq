@@ -1,6 +1,7 @@
 package at.rocworks
 
-import at.rocworks.codecs.MqttTopicName
+import at.rocworks.data.MqttTopicName
+import at.rocworks.data.TopicTree
 
 fun main(args: Array<String>) {
     val tree = TopicTree()

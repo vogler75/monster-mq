@@ -1,4 +1,4 @@
-package at.rocworks.codecs
+package at.rocworks.data
 
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.Future

@@ -1,7 +1,9 @@
-package at.rocworks
+package at.rocworks.shared
 
-import at.rocworks.codecs.MqttMessage
-import at.rocworks.codecs.MqttTopicName
+import at.rocworks.Const
+import at.rocworks.data.TopicTree
+import at.rocworks.data.MqttMessage
+import at.rocworks.data.MqttTopicName
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -20,8 +22,8 @@ class RetainedMessages(): AbstractVerticle() {
         logger.level = Level.INFO
     }
 
-    private val addAddress = Const.GLOBAL_RETAINED_NAMESPACE+"/A"
-    private val delAddress = Const.GLOBAL_RETAINED_NAMESPACE+"/D"
+    private val addAddress = Const.GLOBAL_RETAINED_NAMESPACE +"/A"
+    private val delAddress = Const.GLOBAL_RETAINED_NAMESPACE +"/D"
 
     override fun start(startPromise: Promise<Void>) {
         vertx.eventBus().consumer<MqttTopicName>(addAddress) {

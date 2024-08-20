@@ -1,8 +1,10 @@
 package at.rocworks
 
-import at.rocworks.codecs.MqttClientId
-import at.rocworks.codecs.MqttMessage
-import at.rocworks.codecs.MqttTopicName
+import at.rocworks.data.MqttClientId
+import at.rocworks.data.MqttMessage
+import at.rocworks.data.MqttTopicName
+import at.rocworks.data.TopicTree
+import at.rocworks.shared.RetainedMessages
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
