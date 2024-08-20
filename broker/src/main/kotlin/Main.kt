@@ -5,6 +5,7 @@ import at.rocworks.codecs.MqttMessage
 import at.rocworks.codecs.MqttTopicName
 import at.rocworks.codecs.MqttTopicNameCodec
 import io.vertx.core.AsyncResult
+import io.vertx.core.Future
 import io.vertx.core.Vertx
 
 //import io.vertx.spi.cluster.zookeeper.ZookeeperClusterManager
@@ -12,35 +13,36 @@ import io.vertx.core.Vertx
 //import io.vertx.spi.cluster.ignite.IgniteClusterManager
 import io.vertx.spi.cluster.hazelcast.ConfigUtil
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
+import java.util.logging.Logger
 
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
     MonsterServer.initLogging()
+    val logger = Logger.getLogger("Main")
 
     val cluster = args.find { it == "-cluster" } != null
     val port = args.indexOf("-port").let { args.getOrNull(it+1) }?.toIntOrNull() ?: 1883
     val ssl = args.indexOf("-ssl") != -1
 
-    println("Cluster: $cluster Port: $port SSL: $ssl")
+    logger.info("Cluster: $cluster Port: $port SSL: $ssl")
 
     fun start(vertx: Vertx) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttTopicName::class.java, MqttTopicNameCodec())
 
-        val retainedMessages = MessageStore("RetainedMessages")
-        vertx.deployVerticle(retainedMessages).onSuccess {
-            val distributor = Distributor(retainedMessages)
-            vertx.deployVerticle(distributor).onSuccess {
-                vertx.deployVerticle(MonsterServer(port, ssl, distributor))
-            }.onFailure {
-                println("Error in deploying distributor: ${it.message}")
+        val retainedMessages = RetainedMessages("RetainedMessages")
+        val distributor = Distributor(retainedMessages)
+        val server = MonsterServer(port, ssl, distributor)
+
+        Future.succeededFuture<String>()
+            .compose { vertx.deployVerticle(retainedMessages) }
+            .compose { vertx.deployVerticle(distributor) }
+            .compose { vertx.deployVerticle(server) }
+            .onFailure {
+                logger.severe("Startup error: ${it.message}")
                 exitProcess(-1)
             }
-        }.onFailure {
-            println("Error in deploying message store: ${it.message}")
-            exitProcess(-1)
-        }
     }
 
     val builder = Vertx.builder()
@@ -59,7 +61,7 @@ fun main(args: Array<String>) {
             if (res.succeeded() && res.result() != null) {
                 start(res.result()!!)
             } else {
-                println("Vertx building failed: ${res.cause()}")
+                logger.severe("Vertx building failed: ${res.cause()}")
             }
         }
     }

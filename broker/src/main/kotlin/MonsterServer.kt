@@ -1,6 +1,7 @@
 package at.rocworks
 
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.Promise
 import io.vertx.core.net.JksOptions
 
 import io.vertx.mqtt.MqttServer
@@ -14,8 +15,8 @@ import java.util.logging.Logger
 
 class MonsterServer(
     private val port: Int,
-    ssl: Boolean,
-    val distributor: Distributor
+    private val ssl: Boolean,
+    private val distributor: Distributor
 ) : AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
@@ -45,22 +46,24 @@ class MonsterServer(
         }
     }
 
-    override fun start() {
-        logger.info("Storage initialization finished.")
+    override fun start(startPromise: Promise<Void>) {
         val mqttServer: MqttServer = MqttServer.create(vertx, options)
+
         mqttServer.exceptionHandler {
             it.printStackTrace()
         }
 
         mqttServer.endpointHandler { endpoint ->
-            MonsterClient.deployEndpoint(vertx, endpoint, this)
+            MonsterClient.deployEndpoint(vertx, endpoint, distributor)
         }
 
         mqttServer.listen(port) { ar ->
             if (ar.succeeded()) {
                 logger.info("MQTT Server is listening on port ${ar.result().actualPort()}")
+                startPromise.complete()
             } else {
                 logger.severe("Error starting MQTT Server: ${ar.cause().message}")
+                startPromise.fail(ar.cause())
             }
         }
     }

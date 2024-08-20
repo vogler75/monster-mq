@@ -13,7 +13,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.logging.Level
 import java.util.logging.Logger
 
-class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
+class MonsterClient(private val distributor: Distributor): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     @Volatile
@@ -29,13 +29,13 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     }
 
     fun getClientId() = ClientId(deploymentID())
-    fun getDistributorId(): String = server.distributor.deploymentID()
+    fun getDistributorId(): String = distributor.deploymentID()
 
     companion object {
         private val logger = Logger.getLogger(this::class.simpleName)
         private val clients: HashMap<String, MonsterClient> = hashMapOf()
 
-        fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, server: MonsterServer) {
+        fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, distributor: Distributor) {
             val clientId = endpoint.clientIdentifier()
             clients[clientId]?.let { client ->
                 logger.info("Client [${endpoint.clientIdentifier()}] Redeploy existing session.")
@@ -43,7 +43,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
                 client.startEndpoint(endpoint)
             } ?: run {
                 logger.info("Client [${endpoint.clientIdentifier()}] Deploy a new session.")
-                val client = MonsterClient(server)
+                val client = MonsterClient(distributor)
                 vertx.deployVerticle(client).onComplete {
                     clients[clientId] = client
                     client.startEndpoint(endpoint)
@@ -60,10 +60,16 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
                 }
             }
         }
+
+        fun getClientAddress(clientId: ClientId) = "${Const.CLIENT_NAMESPACE}/${clientId.identifier}"
+
+        fun sendMessageToClient(vertx: Vertx, clientId: ClientId, message: MqttMessage) {
+            vertx.eventBus().publish(getClientAddress(clientId), message)
+        }
     }
 
     override fun start() {
-        vertx.eventBus().consumer(Const.getClientAddress(getClientId())) {
+        vertx.eventBus().consumer(getClientAddress(getClientId())) {
             consumeMessage(it.body())
         }
     }
@@ -100,7 +106,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     }
 
     private fun cleanSession() {
-        server.distributor.cleanSessionRequest(this) {}
+        distributor.cleanSessionRequest(this) {}
         messageQueue.clear()
     }
 
@@ -119,7 +125,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         // Subscribe
         subscribe.topicSubscriptions().forEach { subscription ->
             logger.info("Client [${endpoint.clientIdentifier()}] Subscription for [${subscription.topicName()}] with QoS ${subscription.qualityOfService()}")
-            server.distributor.subscribeRequest(this, MqttTopicName(subscription.topicName()))
+            distributor.subscribeRequest(this, MqttTopicName(subscription.topicName()))
         }
     }
 
@@ -147,7 +153,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private fun unsubscribeHandler(endpoint: MqttEndpoint, unsubscribe: MqttUnsubscribeMessage) {
         unsubscribe.topics().forEach { topicName ->
             logger.info("Client [${endpoint.clientIdentifier()}] Unsubscribe for [${topicName}]}")
-            server.distributor.unsubscribeRequest(this, MqttTopicName(topicName)) { }
+            distributor.unsubscribeRequest(this, MqttTopicName(topicName)) { }
         }
         endpoint.unsubscribeAcknowledge(unsubscribe.messageId())
     }
@@ -155,7 +161,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
     private fun publishHandler(endpoint: MqttEndpoint, message: MqttPublishMessage) {
         logger.finest { "Client [${endpoint.clientIdentifier()}] Received message [${message.topicName()}] with QoS ${message.qosLevel()}" }
 
-        server.distributor.publishMessage(MqttMessage(message))
+        distributor.publishMessage(MqttMessage(message))
 
         endpoint.apply {
             // Handle QoS levels
@@ -171,7 +177,7 @@ class MonsterClient(private val server: MonsterServer): AbstractVerticle() {
         logger.info("Client [${endpoint.clientIdentifier()}] Sending Last-Will message.")
         endpoint.will()?.let { will ->
             if (will.isWillFlag) {
-                server.distributor.publishMessage(MqttMessage(will))
+                distributor.publishMessage(MqttMessage(will))
             }
         }
     }

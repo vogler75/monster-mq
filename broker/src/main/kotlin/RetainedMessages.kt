@@ -10,7 +10,7 @@ import java.util.concurrent.Callable
 import java.util.logging.Level
 import java.util.logging.Logger
 
-class MessageStore(private val name: String): AbstractVerticle() {
+class RetainedMessages(private val name: String): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private val index = TopicTree()
@@ -20,7 +20,18 @@ class MessageStore(private val name: String): AbstractVerticle() {
         logger.level = Level.INFO
     }
 
+    private val addAddress = Const.GLOBAL_RETAINED_NAMESPACE+"/A"
+    private val delAddress = Const.GLOBAL_RETAINED_NAMESPACE+"/D"
+
     override fun start(startPromise: Promise<Void>) {
+        vertx.eventBus().consumer<MqttTopicName>(addAddress) {
+            index.add(it.body())
+        }
+
+        vertx.eventBus().consumer<MqttTopicName>(delAddress) {
+            index.del(it.body())
+        }
+
         getMap<MqttTopicName, MqttMessage>(name).onSuccess { messages ->
             logger.info("Indexing message store [$name].")
             this.messages = messages
@@ -30,21 +41,39 @@ class MessageStore(private val name: String): AbstractVerticle() {
                     logger.info("Indexing message store [$name] finished.")
                     startPromise.complete()
                 }
-                .onFailure(startPromise::fail)
-        }.onFailure(startPromise::fail)
-    }
-
-    fun saveMessage(topicName: MqttTopicName, message: MqttMessage): Future<Void> {
-        messages?.let { messages ->
-            return messages.put(topicName, message).onComplete {
-                logger.finest { "Saved message for [$topicName] completed [${it.succeeded()}]" }
-            }
-        } ?: run {
-            return Future.failedFuture("Message store is null!")
+                .onFailure {
+                    logger.severe("Error in getting keys of [$name] [${it.message}]")
+                    startPromise.fail(it)
+                }
+        }.onFailure {
+            logger.severe("Error in getting map [$name] [${it.message}]")
+            startPromise.fail(it)
         }
     }
 
-    fun addTopicToIndex(topicName: MqttTopicName) = index.add(topicName)
+    fun saveMessage(topicName: MqttTopicName, message: MqttMessage): Future<Void> {
+        val promise = Promise.promise<Void>()
+        messages?.let { messages ->
+            if (message.payload.isEmpty()) {
+                messages.remove(topicName).onComplete {
+                    vertx.eventBus().publish(delAddress, topicName)
+                    logger.finest { "Removed retained message for [$topicName] completed [${it.succeeded()}]" }
+                    promise.complete()
+                }.onFailure(promise::fail)
+            }
+            else {
+                messages.put(topicName, message).onComplete {
+                    vertx.eventBus().publish(addAddress, topicName)
+                    logger.finest { "Saved retained message for [$topicName] completed [${it.succeeded()}]" }
+                    promise.complete()
+
+                }.onFailure(promise::fail)
+            }
+        } ?: run {
+            promise.fail("Message store is null!")
+        }
+        return promise.future()
+    }
 
     fun findMatching(topicName: MqttTopicName, callback: (message: MqttMessage)->Unit): Future<Unit> {
         val promise = Promise.promise<Unit>()

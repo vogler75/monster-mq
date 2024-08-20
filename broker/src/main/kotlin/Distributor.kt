@@ -12,7 +12,7 @@ import io.vertx.core.shareddata.AsyncMap
 import java.util.logging.Level
 import java.util.logging.Logger
 
-class Distributor(private val retainedMessages: MessageStore): AbstractVerticle() {
+class Distributor(private val retainedMessages: RetainedMessages): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     companion object {
@@ -51,14 +51,6 @@ class Distributor(private val retainedMessages: MessageStore): AbstractVerticle(
                 }
             }
         }
-
-        vertx.eventBus().consumer<Any>(Const.GLOBAL_RETAINED_NAMESPACE) { message ->
-            message.body().let { payload ->
-                if (payload is MqttTopicName) {
-                    receivedRetainedMessage(payload)
-                }
-            }
-        }
     }
 
     override fun stop() {
@@ -91,7 +83,7 @@ class Distributor(private val retainedMessages: MessageStore): AbstractVerticle(
         if (distributorId == deploymentID()) {
             retainedMessages.findMatching(topicName) { message ->
                 logger.finer { "Publish retained message [${message.topicName}]" }
-                vertx.eventBus().publish(Const.getClientAddress(clientId), message)
+                MonsterClient.sendMessageToClient(vertx, clientId, message)
             }.onComplete {
                 logger.info("Retained messages published.")
                 subscribe()
@@ -150,22 +142,15 @@ class Distributor(private val retainedMessages: MessageStore): AbstractVerticle(
             logger.finer { "Save retained topic [${message.topicName}]" }
             val topicName = MqttTopicName(message.topicName)
             retainedMessages.saveMessage(topicName, message)
-            vertx.eventBus().publish(Const.GLOBAL_RETAINED_NAMESPACE, topicName)
         }
     }
 
     private fun distributeMessageToClients(message: MqttMessage) {
         val topicName = MqttTopicName(message.topicName)
         subscriptionsTree.findClientsOfTopicName(topicName).toSet().forEach {
-            vertx.eventBus().publish(Const.getClientAddress(it), message)
+            MonsterClient.sendMessageToClient(vertx, it, message)
         }
     }
-
-    private fun receivedRetainedMessage(topicName: MqttTopicName) {
-        logger.finer { "Index retained topic [${topicName}]" }
-        retainedMessages.addTopicToIndex(topicName)
-    }
-
 
     //----------------------------------------------------------------------------------------------------
 
