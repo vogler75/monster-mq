@@ -2,7 +2,7 @@ package at.rocworks
 
 import java.io.Serializable
 
-class TopicName(val identifier: String): Serializable {
+data class TopicName(val identifier: String): Serializable {
     override fun toString() = identifier
 
     fun isWildCardTopic(): Boolean = identifier.contains('+') || identifier.contains('#')
