@@ -107,7 +107,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     }
 
     private fun cleanSession() {
-        distributor.cleanSessionRequest(this) {}
+        distributor.cleanSessionRequest(this)
         messageQueue.clear()
     }
 
@@ -154,7 +154,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     private fun unsubscribeHandler(endpoint: MqttEndpoint, unsubscribe: MqttUnsubscribeMessage) {
         unsubscribe.topics().forEach { topicName ->
             logger.info("Client [${endpoint.clientIdentifier()}] Unsubscribe for [${topicName}]}")
-            distributor.unsubscribeRequest(this, MqttTopicName(topicName)) { }
+            distributor.unsubscribeRequest(this, MqttTopicName(topicName))
         }
         endpoint.unsubscribeAcknowledge(unsubscribe.messageId())
     }

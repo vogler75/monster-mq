@@ -31,7 +31,7 @@ class Distributor(
     }
 
     init {
-        logger.level = Level.INFO
+        logger.level = Level.ALL
     }
 
     private fun getDistributorCommandAddress() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}/C"
@@ -68,7 +68,9 @@ class Distributor(
             .put(COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName.identifier)
             .put(Const.CLIENT_KEY, client.getClientId().identifier)
-        vertx.eventBus().publish(getDistributorCommandAddress(), request)
+        vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
+            if (!it.succeeded())  logger.severe("Unsubscribe request failed: ${it.cause()}")
+        }
     }
 
     private fun subscribeCommand(command: Message<JsonObject>) {
@@ -81,20 +83,20 @@ class Distributor(
         }.onComplete {
             logger.info("Retained messages published [${it.result()}].")
             subscriptionTable.addSubscription(MqttSubscription(clientId, topicName))
+            command.reply(true)
         }
 
     }
 
     //----------------------------------------------------------------------------------------------------
 
-    fun unsubscribeRequest(client: MqttClient, topicName: MqttTopicName, result: (Boolean)->Unit) {
+    fun unsubscribeRequest(client: MqttClient, topicName: MqttTopicName) {
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_UNSUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName.identifier)
             .put(Const.CLIENT_KEY, client.deploymentID())
-        vertx.eventBus().request(getDistributorCommandAddress(), request) {
-            if (it.succeeded()) result(it.result().body())
-            else logger.severe("Unsubscribe request failed: ${it.cause()}")
+        vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
+            if (!it.succeeded()) logger.severe("Unsubscribe request failed: ${it.cause()}")
         }
     }
 
@@ -102,24 +104,25 @@ class Distributor(
         val clientId = MqttClientId(command.body().getString(Const.CLIENT_KEY))
         val topicName = MqttTopicName(command.body().getString(Const.TOPIC_KEY))
         subscriptionTable.removeSubscription(MqttSubscription(clientId, topicName))
+        command.reply(true)
     }
 
     //----------------------------------------------------------------------------------------------------
 
-    fun cleanSessionRequest(client: MqttClient, result: (Boolean)->Unit) {
+    fun cleanSessionRequest(client: MqttClient) {
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_CLEANSESSION)
             .put(Const.CLIENT_KEY, client.getClientId().identifier)
 
-        vertx.eventBus().request(getDistributorCommandAddress(), request) {
-            if (it.succeeded()) result(it.result().body())
-            else logger.severe("Clean session request failed: ${it.cause()}")
+        vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
+            if (!it.succeeded()) logger.severe("Clean session request failed: ${it.cause()}")
         }
     }
 
     private fun cleanSessionCommand(command: Message<JsonObject>) {
         val clientId = MqttClientId(command.body().getString(Const.CLIENT_KEY))
         subscriptionTable.removeClient(clientId)
+        command.reply(true)
     }
 
     //----------------------------------------------------------------------------------------------------

@@ -41,8 +41,7 @@ class SubscriptionTable: AbstractVerticle() {
                 .onSuccess { clients ->
                     Future.all(clients.map { client ->
                         subscriptions.get(client).onComplete { topics ->
-                            println("$client => ${topics.result().size}")
-                            //topics.result().forEach { index.add(it, client) }
+                            topics.result().forEach { index.add(it, client) }
                         }
                     }).onComplete {
                         logger.info("Indexing message store [$name] finished.")

@@ -5,11 +5,11 @@ import java.io.Serializable
 class MqttTopicName(val identifier: String): Serializable {
     override fun toString() = identifier
 
-    fun isWildCardTopic(): Boolean = identifier.contains('+') || identifier.contains('#')
-
     fun getLevels() = identifier.split("/")
 
     fun addLevel(level: String) = MqttTopicName("$identifier/$level")
+
+    fun isWildCardTopic(): Boolean = identifier.contains('+') || identifier.contains('#')
 
     fun matchesToWildcard(wildcardTopicName: MqttTopicName): Boolean {
         val wildcardLevels = wildcardTopicName.getLevels()

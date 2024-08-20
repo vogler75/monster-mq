@@ -76,7 +76,7 @@ while message_counter < 1_000_000_000:
     #print(topic)
     message_counter = message_counter + 1
     last_counter = last_counter + 1
-    retain = False
+    retain = True
     #retain = True if message_counter % 100 == 0 else False
     #retain = True if topic_nr3 == 99 else False
     client.publish(topic, str(message_counter), qos=QOS, retain=retain).wait_for_publish()

@@ -19,7 +19,7 @@ class RetainedMessages(): AbstractVerticle() {
     private var messages: AsyncMap<MqttTopicName, MqttMessage>? = null
 
     init {
-        logger.level = Level.INFO
+        logger.level = Level.ALL
     }
 
     private val addAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/A"
@@ -68,7 +68,6 @@ class RetainedMessages(): AbstractVerticle() {
                     vertx.eventBus().publish(addAddress, topicName)
                     logger.finest { "Saved retained message for [$topicName] completed [${it.succeeded()}]" }
                     promise.complete()
-
                 }.onFailure(promise::fail)
             }
         } ?: run {
