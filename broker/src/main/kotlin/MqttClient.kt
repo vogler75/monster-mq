@@ -117,7 +117,6 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     }
 
     private fun pingHandler(endpoint: MqttEndpoint) {
-        logger.info("Ping from [${endpoint.clientIdentifier()}]")
     }
 
     private fun subscribeHandler(endpoint: MqttEndpoint, subscribe: MqttSubscribeMessage) {
