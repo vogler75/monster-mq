@@ -24,6 +24,8 @@ class RetainedMessages(): AbstractVerticle() {
 
     private val addAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/A"
     private val delAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/D"
+    private val saveAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/S"
+
 
     override fun start(startPromise: Promise<Void>) {
         vertx.eventBus().consumer<MqttTopicName>(addAddress) {
@@ -32,6 +34,10 @@ class RetainedMessages(): AbstractVerticle() {
 
         vertx.eventBus().consumer<MqttTopicName>(delAddress) {
             index.del(it.body())
+        }
+
+        vertx.eventBus().consumer<MqttMessage>(saveAddress) {
+            saveMessageExecute(it.body())
         }
 
         Const.getMap<String, MqttMessage>(vertx, name).onSuccess { messages ->
@@ -53,9 +59,14 @@ class RetainedMessages(): AbstractVerticle() {
         }
     }
 
-    fun saveMessage(topicName: MqttTopicName, message: MqttMessage): Future<Void> {
+    fun saveMessageRequest(message: MqttMessage) {
+        vertx.eventBus().request<MqttMessage>(saveAddress, message)
+    }
+
+    private fun saveMessageExecute(message: MqttMessage): Future<Void> {
         val promise = Promise.promise<Void>()
         messages?.let { messages ->
+            val topicName = MqttTopicName(message.topicName)
             if (message.payload.isEmpty()) {
                 messages.remove(topicName.identifier).onComplete {
                     vertx.eventBus().publish(delAddress, topicName)

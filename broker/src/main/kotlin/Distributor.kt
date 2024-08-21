@@ -10,7 +10,6 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.eventbus.Message
-import io.vertx.core.json.Json
 import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.AsyncMap
 
@@ -52,7 +51,7 @@ class Distributor(
         vertx.eventBus().consumer<MqttMessage>(getDistributorMessageAddress()) { message ->
             message.body()?.let { payload ->
                 logger.finest { "Received message [${payload.topicName}] retained [${payload.isRetain}]" }
-                distributeMessageToClients(payload)
+                distributeMessage(payload)
             }
         }
     }
@@ -129,44 +128,16 @@ class Distributor(
 
     fun publishMessage(message: MqttMessage) {
         vertx.eventBus().publish(getDistributorMessageAddress(), message)
-        if (message.isRetain) {
-            logger.finer { "Save retained topic [${message.topicName}]" }
-            val topicName = MqttTopicName(message.topicName)
-            retainedMessages.saveMessage(topicName, message)
-        }
     }
 
-    private fun distributeMessageToClients(message: MqttMessage) {
+    private fun distributeMessage(message: MqttMessage) {
         val topicName = MqttTopicName(message.topicName)
         subscriptionTable.findClients(topicName).forEach {
             MqttClient.sendMessageToClient(vertx, it, message)
         }
-    }
-
-    //----------------------------------------------------------------------------------------------------
-
-    private fun <K,V> getMap(name: String): Future<AsyncMap<K, V>> {
-        val promise = Promise.promise<AsyncMap<K, V>>()
-        val sharedData = vertx.sharedData()
-        if (vertx.isClustered) {
-            sharedData.getClusterWideMap<K, V>("TopicMap") { it ->
-                if (it.succeeded()) {
-                    promise.complete(it.result())
-                } else {
-                    println("Failed to access the shared map [$name]: ${it.cause()}")
-                    promise.fail(it.cause())
-                }
-            }
-        } else {
-            sharedData.getAsyncMap<K, V>("TopicMap") {
-                if (it.succeeded()) {
-                    promise.complete(it.result())
-                } else {
-                    println("Failed to access the shared map [$name]: ${it.cause()}")
-                    promise.fail(it.cause())
-                }
-            }
+        if (message.isRetain) {
+            logger.finer { "Save retained topic [${message.topicName}]" }
+            retainedMessages.saveMessageRequest(message)
         }
-        return promise.future()
     }
 }
