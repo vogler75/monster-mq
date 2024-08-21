@@ -92,7 +92,7 @@ while message_counter < 1_000_000_000:
         #time.sleep(0.08)  # 1000v/s
         #time.sleep(0.035)  # 2000 v/s
         #time.sleep(0.022)  # 3000 v/s
-        time.sleep(0.014)  # 4000 v/s
+        time.sleep(0.013)  # 4000 v/s
 
 print("Done.")
 time.sleep(1)
