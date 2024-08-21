@@ -136,7 +136,6 @@ class Distributor(
             MqttClient.sendMessageToClient(vertx, it, message)
         }
         if (message.isRetain) {
-            logger.finer { "Save retained topic [${message.topicName}]" }
             retainedMessages.saveMessage(message)
         }
     }

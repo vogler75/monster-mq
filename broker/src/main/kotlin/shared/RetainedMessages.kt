@@ -64,6 +64,7 @@ class RetainedMessages(): AbstractVerticle() {
     //}
 
     fun saveMessage(message: MqttMessage): Future<Void> {
+        logger.finer { "Save retained topic [${message.topicName}]" }
         val promise = Promise.promise<Void>()
         messages?.let { messages ->
             val topicName = MqttTopicName(message.topicName)
