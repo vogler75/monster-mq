@@ -7,15 +7,12 @@ import io.vertx.core.net.JksOptions
 import io.vertx.mqtt.MqttServer
 import io.vertx.mqtt.MqttServerOptions
 
-import java.io.File
-import java.io.FileInputStream
-import java.io.InputStream
-import java.util.logging.LogManager
 import java.util.logging.Logger
 
 class MqttServer(
     private val port: Int,
     private val ssl: Boolean,
+    private val ws: Boolean,
     private val distributor: Distributor
 ) : AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
@@ -25,6 +22,7 @@ class MqttServer(
         keyStoreOptions = JksOptions()
             .setPath("server-keystore.jks")
             .setPassword("password")
+        isUseWebSocket = ws
     }
 
     override fun start(startPromise: Promise<Void>) {
@@ -35,12 +33,13 @@ class MqttServer(
         }
 
         mqttServer.endpointHandler { endpoint ->
+            logger.info("MQTT Client on server [${deploymentID()}]")
             MqttClient.deployEndpoint(vertx, endpoint, distributor)
         }
 
         mqttServer.listen(port) { ar ->
             if (ar.succeeded()) {
-                logger.info("MQTT Server is listening on port ${ar.result().actualPort()}")
+                logger.info("MQTT Server is listening on port ${ar.result().actualPort()} ${deploymentID()}")
                 startPromise.complete()
             } else {
                 logger.severe("Error starting MQTT Server: ${ar.cause().message}")

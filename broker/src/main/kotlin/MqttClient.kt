@@ -78,6 +78,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     fun startEndpoint(endpoint: MqttEndpoint) {
         logger.info("Client [${endpoint.clientIdentifier()}] Request to connect, clean session is [${endpoint.isCleanSession}]")
         endpoint.exceptionHandler { exceptionHandler(endpoint, it) }
+        endpoint.pingHandler { pingHandler(endpoint) }
         endpoint.subscribeHandler { subscribeHandler(endpoint, it) }
         endpoint.unsubscribeHandler { unsubscribeHandler(endpoint, it) }
         endpoint.publishHandler { publishHandler(endpoint, it) }
@@ -113,6 +114,10 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
 
     private fun exceptionHandler(endpoint: MqttEndpoint, throwable: Throwable) {
         logger.severe("Client [${endpoint.clientIdentifier()}] Exception: ${throwable.message}")
+    }
+
+    private fun pingHandler(endpoint: MqttEndpoint) {
+        logger.info("Ping from [${endpoint.clientIdentifier()}]")
     }
 
     private fun subscribeHandler(endpoint: MqttEndpoint, subscribe: MqttSubscribeMessage) {
