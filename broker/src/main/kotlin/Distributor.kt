@@ -137,7 +137,7 @@ class Distributor(
         }
         if (message.isRetain) {
             logger.finer { "Save retained topic [${message.topicName}]" }
-            retainedMessages.saveMessageRequest(message)
+            retainedMessages.saveMessage(message)
         }
     }
 }
