@@ -12,12 +12,17 @@ import io.vertx.core.Vertx
 //import io.vertx.spi.cluster.ignite.IgniteClusterManager
 import io.vertx.spi.cluster.hazelcast.ConfigUtil
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
+import java.io.File
+import java.io.FileInputStream
+import java.io.InputStream
+import java.util.logging.LogManager
 import java.util.logging.Logger
 
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
-    MqttServer.initLogging()
+    Utils.initLogging()
+    
     val logger = Logger.getLogger("Main")
 
     val cluster = args.find { it == "-cluster" } != null

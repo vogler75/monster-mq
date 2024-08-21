@@ -27,25 +27,6 @@ class MqttServer(
             .setPassword("password")
     }
 
-    companion object {
-        fun initLogging() {
-            try {
-                println("Loading logging.properties...")
-                val initialFile = File("logging.properties")
-                val targetStream: InputStream = FileInputStream(initialFile)
-                LogManager.getLogManager().readConfiguration(targetStream)
-            } catch (e: Exception) {
-                try {
-                    println("Using default logging.properties...")
-                    val stream = this::class.java.classLoader.getResourceAsStream("logging.properties")
-                    LogManager.getLogManager().readConfiguration(stream)
-                } catch (e: Exception) {
-                    println("Unable to read default logging.properties!")
-                }
-            }
-        }
-    }
-
     override fun start(startPromise: Promise<Void>) {
         val mqttServer: MqttServer = MqttServer.create(vertx, options)
 

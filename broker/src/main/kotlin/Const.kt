@@ -4,6 +4,10 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.Vertx
 import io.vertx.core.shareddata.AsyncMap
+import java.io.File
+import java.io.FileInputStream
+import java.io.InputStream
+import java.util.logging.LogManager
 
 object Const {
     const val GLOBAL_DISTRIBUTOR_NAMESPACE = "D"
