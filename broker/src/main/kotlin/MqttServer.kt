@@ -39,7 +39,7 @@ class MqttServer(
 
         mqttServer.listen(port) { ar ->
             if (ar.succeeded()) {
-                logger.info("MQTT Server is listening on port ${ar.result().actualPort()} ${deploymentID()}")
+                logger.info("MQTT Server is listening on port [${ar.result().actualPort()}] SSL [$ssl] WS [$ws] [${deploymentID()}]")
                 startPromise.complete()
             } else {
                 logger.severe("Error starting MQTT Server: ${ar.cause().message}")

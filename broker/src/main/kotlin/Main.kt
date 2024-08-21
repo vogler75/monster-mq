@@ -24,6 +24,7 @@ fun main(args: Array<String>) {
     val cluster = args.find { it == "-cluster" } != null
     val port = args.indexOf("-port").let { args.getOrNull(it+1) }?.toIntOrNull() ?: 1883
     val ssl = args.indexOf("-ssl") != -1
+    val tcp = args.indexOf("-tcp") != -1
     val ws = args.indexOf("-ws") != -1
 
     logger.info("Cluster: $cluster Port: $port SSL: $ssl Websockets: $ws")
@@ -35,8 +36,12 @@ fun main(args: Array<String>) {
 
         val subscriptionTable = SubscriptionTable()
         val retainedMessages = RetainedMessages()
+
         val distributor = Distributor(subscriptionTable, retainedMessages)
-        val servers = List(5) { MqttServer(port, ssl, ws, distributor) }
+        val servers = listOfNotNull(
+            if (tcp) MqttServer(port, ssl, false, distributor) else null,
+            if (ws) MqttServer(port, ssl, true, distributor) else null,
+        )
 
         Future.succeededFuture<String>()
             .compose { vertx.deployVerticle(subscriptionTable) }
