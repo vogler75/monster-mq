@@ -12,7 +12,7 @@ args = parser.parse_args()
 
 # MQTT settings
 TOPIC = "test/"+str(args.nr)+"/#"
-CLIENT_ID = 'mqtt_client_4_'+str(uuid.uuid4())
+CLIENT_ID = 'subscriber_'+str(uuid.uuid4())
 
 
 # Callback when the client connects to the broker
@@ -35,8 +35,8 @@ def on_message(client, userdata, msg):
     #print(f"Received `{msg.payload.decode()}` from `{msg.topic}` topic")
     global message_counter, last_message, last_time, last_counter
     this_message = msg.payload.decode()
-    #if int(last_message)+1 != int(this_message):
-    #    print(f"Got wrong number {last_message} vs {this_message}")
+    if int(last_message)+1 != int(this_message):
+        print(f"Got wrong number {last_message} vs {this_message}")
     message_counter = message_counter + 1
     last_counter = last_counter + 1
     last_message = this_message
