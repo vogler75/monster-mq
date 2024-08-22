@@ -8,7 +8,6 @@ import at.rocworks.data.*
 import at.rocworks.shared.RetainedMessages
 import at.rocworks.shared.SubscriptionTable
 import io.vertx.core.AsyncResult
-import io.vertx.core.DeploymentOptions
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.spi.cluster.hazelcast.ConfigUtil
@@ -21,13 +20,14 @@ fun main(args: Array<String>) {
 
     val logger = Logger.getLogger("Main")
 
-    val cluster = args.find { it == "-cluster" } != null
-    val port = args.indexOf("-port").let { args.getOrNull(it+1) }?.toIntOrNull() ?: 1883
-    val ssl = args.indexOf("-ssl") != -1
-    val tcp = args.indexOf("-tcp") != -1
-    val ws = args.indexOf("-ws") != -1
+    val useCluster = args.find { it == "-cluster" } != null
+    val usePort = args.indexOf("-port").let { args.getOrNull(it+1) }?.toIntOrNull() ?: 1883
+    val useSsl = args.indexOf("-ssl") != -1
+    val useTcp = args.indexOf("-tcp") != -1
+    val useWs = args.indexOf("-ws") != -1
+    val useKafka = args.indexOf("-kafka").let { args.getOrNull(it+1) } ?: ""
 
-    logger.info("Cluster: $cluster Port: $port SSL: $ssl Websockets: $ws")
+    logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs")
 
     fun start(vertx: Vertx) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
@@ -37,10 +37,10 @@ fun main(args: Array<String>) {
         val subscriptionTable = SubscriptionTable()
         val retainedMessages = RetainedMessages()
 
-        val distributor = Distributor(subscriptionTable, retainedMessages)
+        val distributor = Distributor(subscriptionTable, retainedMessages, useKafka.isNotEmpty(), useKafka)
         val servers = listOfNotNull(
-            if (tcp) MqttServer(port, ssl, false, distributor) else null,
-            if (ws) MqttServer(port, ssl, true, distributor) else null,
+            if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
+            if (useWs) MqttServer(usePort, useSsl, true, distributor) else null,
         )
 
         Future.succeededFuture<String>()
@@ -58,7 +58,7 @@ fun main(args: Array<String>) {
     }
 
     val builder = Vertx.builder()
-    if (!cluster) start(builder.build())
+    if (!useCluster) start(builder.build())
     else {
         val hazelcastConfig = ConfigUtil.loadConfig()
         hazelcastConfig.setClusterName("MonsterMQ")
