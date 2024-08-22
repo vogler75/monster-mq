@@ -39,10 +39,6 @@ class Distributor(
     private var kafkaProducer: KafkaProducer<String, ByteArray>? = null
     private var kafkaConsumer: KafkaConsumer<String, ByteArray>? = null
 
-    val publishMessageFunction : (MqttMessage) -> Unit = if (useKafkaAsMessageBus) ::publishMessageKafkaBus else ::publishMessageEventBus
-
-    fun publishMessage(message: MqttMessage) = publishMessageFunction(message)
-
     override fun start() {
         vertx.eventBus().consumer<JsonObject>(getDistributorCommandAddress()) { message ->
             message.body()?.let { payload ->
@@ -165,6 +161,13 @@ class Distributor(
 
     //----------------------------------------------------------------------------------------------------
 
+    val publishMessageToBus : (MqttMessage) -> Unit = if (useKafkaAsMessageBus) ::publishMessageKafkaBus else ::publishMessageEventBus
+
+    fun publishMessage(message: MqttMessage) {
+        publishMessageToBus(message)
+        if (message.isRetain) retainedMessages.saveMessage(message)
+    }
+
     private fun publishMessageEventBus(message: MqttMessage) {
         vertx.eventBus().publish(getDistributorMessageAddress(), message)
     }
@@ -181,9 +184,6 @@ class Distributor(
         val topicName = MqttTopicName(message.topicName)
         subscriptionTable.findClients(topicName).forEach {
             MqttClient.sendMessageToClient(vertx, it, message)
-        }
-        if (message.isRetain) {
-            retainedMessages.saveMessage(message)
         }
     }
 }
