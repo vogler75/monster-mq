@@ -76,7 +76,8 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     }
 
     fun startEndpoint(endpoint: MqttEndpoint) {
-        logger.info("Client [${endpoint.clientIdentifier()}] Request to connect. Clean session [${endpoint.isCleanSession}] protocol [${endpoint.protocolName()}]")
+        logger.info("Client [${endpoint.clientIdentifier()}] Request to connect. Clean session [${endpoint.isCleanSession}] protocol [${endpoint.protocolVersion()}]")
+        // protocolVersion: 3=MQTTv31, 4=MQTTv311, 5=MQTTv5
         endpoint.exceptionHandler { exceptionHandler(endpoint, it) }
         endpoint.pingHandler { pingHandler(endpoint) }
         endpoint.subscribeHandler { subscribeHandler(endpoint, it) }
@@ -85,6 +86,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         endpoint.publishReleaseHandler { publishReleaseHandler(endpoint, it) }
         endpoint.disconnectHandler { disconnectHandler(endpoint) }
         endpoint.closeHandler { closeHandler(endpoint) }
+
         endpoint.accept(endpoint.isCleanSession)
 
         logger.info("Client [${endpoint.clientIdentifier()}] Queued messages: ${messageQueue.size}")
