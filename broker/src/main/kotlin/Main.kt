@@ -21,13 +21,13 @@ fun main(args: Array<String>) {
     val logger = Logger.getLogger("Main")
 
     val useCluster = args.find { it == "-cluster" } != null
-    val usePort = args.indexOf("-port").let { args.getOrNull(it+1) }?.toIntOrNull() ?: 1883
+    val usePort = args.indexOf("-port").let { if (it != -1) args.getOrNull(it+1)?.toIntOrNull()?:1883 else 1883 }
     val useSsl = args.indexOf("-ssl") != -1
-    val useTcp = args.indexOf("-tcp") != -1
     val useWs = args.indexOf("-ws") != -1
-    val useKafka = args.indexOf("-kafka").let { args.getOrNull(it+1) } ?: ""
+    val useTcp = args.indexOf("-tcp") != -1 || !useWs
+    val useKafka = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
 
-    logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs")
+    logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs Kafka: $useKafka")
 
     fun start(vertx: Vertx) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
@@ -37,7 +37,7 @@ fun main(args: Array<String>) {
         val subscriptionTable = SubscriptionTable()
         val retainedMessages = RetainedMessages()
 
-        val distributor = Distributor(subscriptionTable, retainedMessages, useKafka.isNotEmpty(), useKafka)
+        val distributor = Distributor(subscriptionTable, retainedMessages, useKafka.isNotBlank(), useKafka)
         val servers = listOfNotNull(
             if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
             if (useWs) MqttServer(usePort, useSsl, true, distributor) else null,

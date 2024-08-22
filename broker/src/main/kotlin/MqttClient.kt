@@ -76,7 +76,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     }
 
     fun startEndpoint(endpoint: MqttEndpoint) {
-        logger.info("Client [${endpoint.clientIdentifier()}] Request to connect, clean session is [${endpoint.isCleanSession}]")
+        logger.info("Client [${endpoint.clientIdentifier()}] Request to connect. Clean session [${endpoint.isCleanSession}] protocol [${endpoint.protocolName()}]")
         endpoint.exceptionHandler { exceptionHandler(endpoint, it) }
         endpoint.pingHandler { pingHandler(endpoint) }
         endpoint.subscribeHandler { subscribeHandler(endpoint, it) }
