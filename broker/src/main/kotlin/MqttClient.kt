@@ -165,9 +165,6 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
 
     private fun publishHandler(endpoint: MqttEndpoint, message: MqttPublishMessage) {
         logger.finest { "Client [${endpoint.clientIdentifier()}] Received message [${message.topicName()}] with QoS ${message.qosLevel()}" }
-
-        distributor.publishMessage(MqttMessage(message))
-
         endpoint.apply {
             // Handle QoS levels
             if (message.qosLevel() == MqttQoS.AT_LEAST_ONCE) {
@@ -176,6 +173,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
                 publishReceived(message.messageId())
             }
         }
+        distributor.publishMessage(MqttMessage(message))
     }
 
     private fun sendLastWill(endpoint: MqttEndpoint) {
