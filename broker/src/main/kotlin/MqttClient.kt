@@ -3,6 +3,8 @@ package at.rocworks
 import at.rocworks.data.MqttClientId
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttTopicName
+import io.netty.handler.codec.mqtt.MqttConnectReturnCode
+import io.netty.handler.codec.mqtt.MqttProperties
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
@@ -10,6 +12,7 @@ import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
+import io.vertx.mqtt.messages.codes.MqttDisconnectReasonCode
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -78,23 +81,30 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     fun startEndpoint(endpoint: MqttEndpoint) {
         logger.info("Client [${endpoint.clientIdentifier()}] Request to connect. Clean session [${endpoint.isCleanSession}] protocol [${endpoint.protocolVersion()}]")
         // protocolVersion: 3=MQTTv31, 4=MQTTv311, 5=MQTTv5
-        endpoint.exceptionHandler { exceptionHandler(endpoint, it) }
-        endpoint.pingHandler { pingHandler(endpoint) }
-        endpoint.subscribeHandler { subscribeHandler(endpoint, it) }
-        endpoint.unsubscribeHandler { unsubscribeHandler(endpoint, it) }
-        endpoint.publishHandler { publishHandler(endpoint, it) }
-        endpoint.publishReleaseHandler { publishReleaseHandler(endpoint, it) }
-        endpoint.disconnectHandler { disconnectHandler(endpoint) }
-        endpoint.closeHandler { closeHandler(endpoint) }
+        if (endpoint.protocolVersion()==5) {
+            logger.warning("Client [${endpoint.clientIdentifier()}] Protocol version 5 not yet supported. Closing session.")
+            endpoint.reject(MqttConnectReturnCode.CONNECTION_REFUSED_PROTOCOL_ERROR)
+            endpoint.close()
+            undeployEndpoint(vertx, endpoint)
+        } else {
+            endpoint.exceptionHandler { exceptionHandler(endpoint, it) }
+            endpoint.pingHandler { pingHandler(endpoint) }
+            endpoint.subscribeHandler { subscribeHandler(endpoint, it) }
+            endpoint.unsubscribeHandler { unsubscribeHandler(endpoint, it) }
+            endpoint.publishHandler { publishHandler(endpoint, it) }
+            endpoint.publishReleaseHandler { publishReleaseHandler(endpoint, it) }
+            endpoint.disconnectHandler { disconnectHandler(endpoint) }
+            endpoint.closeHandler { closeHandler(endpoint) }
 
-        endpoint.accept(endpoint.isCleanSession)
+            endpoint.accept(endpoint.isCleanSession) // TODO: check if we have an existing session
 
-        logger.info("Client [${endpoint.clientIdentifier()}] Queued messages: ${messageQueue.size}")
-        messageQueue.forEach { it.publish(endpoint) }
-        messageQueue.clear()
+            logger.info("Client [${endpoint.clientIdentifier()}] Queued messages: ${messageQueue.size}")
+            messageQueue.forEach { it.publish(endpoint) }
+            messageQueue.clear()
 
-        this.endpoint = endpoint
-        this.connected = true
+            this.endpoint = endpoint
+            this.connected = true
+        }
     }
 
     private fun stopEndpoint(endpoint: MqttEndpoint) {
