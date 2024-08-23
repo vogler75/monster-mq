@@ -29,7 +29,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     private val messageQueue = ArrayBlockingQueue<MqttMessage>(10000) // TODO: configurable
 
     init {
-        logger.level = Level.INFO
+        logger.level = Const.DEBUG_LEVEL
     }
 
     fun getClientId() = MqttClientId(deploymentID())

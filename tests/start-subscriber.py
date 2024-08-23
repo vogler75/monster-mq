@@ -9,7 +9,7 @@ AMOUNT_CLIENTS = 10
 AMOUNT_NRS = AMOUNT_CLIENTS
 
 # MQTT settings
-MQTT_BROKER = "192.168.1.30"
+MQTT_BROKER = "scada"
 MQTT_PORT = 1883
 MQTT_TOPIC = "monitor/subscriber"
 
@@ -17,8 +17,10 @@ MQTT_TOPIC = "monitor/subscriber"
 base_command = [sys.executable, "test-subscriber.py"]
 
 # Loop to start the program n times
-hosts = ["192.168.1.3"]
-# hosts = ["192.168.1.31", "192.168.1.32", "192.168.1.33"] # , "192.168.1.34"]
+hosts = [["192.168.1.30", 1884]]
+#hosts = [["192.168.1.31", 1883], ["192.168.1.32", 1883], ["192.168.1.33", 1883]]
+#hosts = [["192.168.1.30", 1883], ["192.168.1.30", 1884], ["192.168.1.30", 1885]]
+
 hosts_idx = 0
 nrs = [str(i) for i in range(1, AMOUNT_NRS+1)]
 
@@ -52,8 +54,10 @@ nrs_idx = 0
 processes = []
 threads = []
 for i in range(AMOUNT_CLIENTS):
+    #time.sleep(0.100)
+
     # Start the program in the background
-    command = base_command + ["--host", hosts[hosts_idx], "--nr", nrs[nrs_idx]]
+    command = base_command + ["--host", hosts[hosts_idx][0], "--port", str(hosts[hosts_idx][1]), "--nr", nrs[nrs_idx]]
 
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
     processes.append(process)

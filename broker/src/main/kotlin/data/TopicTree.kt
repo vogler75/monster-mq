@@ -1,10 +1,18 @@
 package at.rocworks.data
 
-class TopicTree<T> {
+import io.vertx.core.impl.ConcurrentHashSet
+import java.util.concurrent.ConcurrentHashMap
+
+class TopicTree<T> : ITopicTree<T> {
+    data class TopicTreeNode<T> (
+        val children: ConcurrentHashMap<String, TopicTreeNode<T>> = ConcurrentHashMap(), // Level to Node
+        val dataset: ConcurrentHashSet<T> = ConcurrentHashSet()
+    )
+
     private val root = TopicTreeNode<T>()
 
-    fun add(topicName: MqttTopicName) = add(topicName, null)
-    fun add(topicName: MqttTopicName, data: T?) {
+    override fun add(topicName: MqttTopicName) = add(topicName, null)
+    override fun add(topicName: MqttTopicName, data: T?) {
         fun addTopicNode(node: TopicTreeNode<T>, first: String, rest: List<String>) {
             val child = node.children.getOrPut(first) { TopicTreeNode() }
             if (rest.isEmpty()) {
@@ -17,8 +25,8 @@ class TopicTree<T> {
         if (xs.isNotEmpty()) addTopicNode(root, xs.first(), xs.drop(1))
     }
 
-    fun del(topicName: MqttTopicName) = del(topicName, null)
-    fun del(topicName: MqttTopicName, data: T?) {
+    override fun del(topicName: MqttTopicName) = del(topicName, null)
+    override fun del(topicName: MqttTopicName, data: T?) {
         fun delTopicNode(node: TopicTreeNode<T>, first: String, rest: List<String>) {
             fun deleteIfEmpty(child: TopicTreeNode<T>) {
                 if (child.dataset.isEmpty() && child.children.isEmpty()) {
@@ -44,7 +52,7 @@ class TopicTree<T> {
     /*
     The given topicName will be matched with potential wildcard topics of the tree (tree contains wildcard topics)
      */
-    fun findDataOfTopicName(topicName: MqttTopicName): List<T> {
+    override fun findDataOfTopicName(topicName: MqttTopicName): List<T> {
         fun find(node: TopicTreeNode<T>, current: String, rest: List<String>): List<T> {
             return node.children.flatMap { child ->
                 when (child.key) {
@@ -63,7 +71,7 @@ class TopicTree<T> {
     /*
     The given topicName can contain wildcards and this will be matched with the tree topics without wildcards
      */
-    fun findMatchingTopicNames(topicName: MqttTopicName): List<MqttTopicName> {
+    override fun findMatchingTopicNames(topicName: MqttTopicName): List<MqttTopicName> {
         fun find(node: TopicTreeNode<T>, current: String, rest: List<String>, topic: MqttTopicName?): List<MqttTopicName> {
             return if (node.children.isEmpty() && rest.isEmpty()) // is leaf
                 if (topic==null) listOf() else listOf(topic)

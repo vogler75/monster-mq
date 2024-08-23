@@ -2,7 +2,11 @@ package at.rocworks
 
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
+import io.vertx.core.Future
+import io.vertx.core.Promise
+import io.vertx.core.Vertx
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.shareddata.AsyncMap
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
@@ -27,5 +31,30 @@ object Utils {
                 println("Unable to read default logging.properties!")
             }
         }
+    }
+
+    fun <K,V> getMap(vertx: Vertx, name: String): Future<AsyncMap<K, V>> {
+        val promise = Promise.promise<AsyncMap<K, V>>()
+        val sharedData = vertx.sharedData()
+        if (vertx.isClustered) {
+            sharedData.getClusterWideMap<K, V>(name) {
+                if (it.succeeded()) {
+                    promise.complete(it.result())
+                } else {
+                    println("Failed to access the shared map [$name]: ${it.cause()}")
+                    promise.fail(it.cause())
+                }
+            }
+        } else {
+            sharedData.getAsyncMap<K, V>(name) {
+                if (it.succeeded()) {
+                    promise.complete(it.result())
+                } else {
+                    println("Failed to access the shared map [$name]: ${it.cause()}")
+                    promise.fail(it.cause())
+                }
+            }
+        }
+        return promise.future()
     }
 }

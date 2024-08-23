@@ -7,6 +7,7 @@ import io.vertx.core.shareddata.AsyncMap
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
+import java.util.logging.Level
 import java.util.logging.LogManager
 
 object Const {
@@ -18,30 +19,6 @@ object Const {
 
     const val TOPIC_KEY = "Topic"
     const val CLIENT_KEY = "Client"
-    const val BROKER_KEY = "Broker"
 
-    fun <K,V> getMap(vertx: Vertx, name: String): Future<AsyncMap<K, V>> {
-        val promise = Promise.promise<AsyncMap<K, V>>()
-        val sharedData = vertx.sharedData()
-        if (vertx.isClustered) {
-            sharedData.getClusterWideMap<K, V>(name) {
-                if (it.succeeded()) {
-                    promise.complete(it.result())
-                } else {
-                    println("Failed to access the shared map [$name]: ${it.cause()}")
-                    promise.fail(it.cause())
-                }
-            }
-        } else {
-            sharedData.getAsyncMap<K, V>(name) {
-                if (it.succeeded()) {
-                    promise.complete(it.result())
-                } else {
-                    println("Failed to access the shared map [$name]: ${it.cause()}")
-                    promise.fail(it.cause())
-                }
-            }
-        }
-        return promise.future()
-    }
+    val DEBUG_LEVEL = Level.INFO
 }

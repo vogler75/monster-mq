@@ -14,6 +14,17 @@ args = parser.parse_args()
 
 print(f"Port: {args.port} Nr: {args.nr}")
 
+# Performance
+#DELAY_PROCESSING = 1  # 100 v/s
+#DELAY_PROCESSING = 0.19  # 500 v/s
+#DELAY_PROCESSING = 0.095  # 1000 v/s
+#DELAY_PROCESSING = 0.035  # 2000 v/s
+DELAY_PROCESSING = 0.022  # 3000 v/s
+#DELAY_PROCESSING = 0.020  # 4000 v/s
+#DELAY_PROCESSING = 0.005  # 8000 v/s
+
+RETAINED_MESSAGES = False
+
 # MQTT settings
 TOPIC = "test/"+str(args.nr)
 CLIENT_ID = 'publisher_'+str(uuid.uuid4())
@@ -21,15 +32,11 @@ QOS = 0
 
 start_time = time.time()
 
-g_connected = False
-
 
 # Callback when the client connects to the broker
 def on_connect(client, userdata, flags, rc):
-    global g_connected
     if rc == 0:
         print("Connected successfully")
-        g_connected = True
     else:
         print(f"Connection failed with code {rc}")
 
@@ -52,7 +59,7 @@ client.connect(args.host, args.port, 60)
 # Start the network loop
 client.loop_start()
 
-while not g_connected:
+while not client.is_connected():
     time.sleep(1)
 
 print("Start..")
@@ -62,7 +69,7 @@ last_counter = 0
 topic_nr1 = 0
 topic_nr2 = 0
 topic_nr3 = 0
-while message_counter < 1_000_000_000:
+while message_counter < 1_000_000:
     topic_nr3 = topic_nr3 + 1
     if topic_nr3 == 100:
         topic_nr3 = 0
@@ -76,7 +83,7 @@ while message_counter < 1_000_000_000:
     #print(topic)
     message_counter = message_counter + 1
     last_counter = last_counter + 1
-    retain = True
+    retain = RETAINED_MESSAGES
     #retain = True if message_counter % 100 == 0 else False
     #retain = True if topic_nr3 == 99 else False
     client.publish(topic, str(message_counter), qos=QOS, retain=retain).wait_for_publish()
@@ -89,10 +96,7 @@ while message_counter < 1_000_000_000:
             last_counter = 0
             last_time = current_time
 
-        #time.sleep(0.08)  # 1000v/s
-        #time.sleep(0.035)  # 2000 v/s
-        #time.sleep(0.022)  # 3000 v/s
-        time.sleep(0.013)  # 4000 v/s
+        time.sleep(DELAY_PROCESSING)
 
 print("Done.")
 time.sleep(1)

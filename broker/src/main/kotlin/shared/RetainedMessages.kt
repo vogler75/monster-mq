@@ -1,6 +1,7 @@
 package at.rocworks.shared
 
 import at.rocworks.Const
+import at.rocworks.Utils
 import at.rocworks.data.TopicTree
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttTopicName
@@ -19,7 +20,7 @@ class RetainedMessages(): AbstractVerticle() {
     private var messages: AsyncMap<String, MqttMessage>? = null // key as MqttTopicName does not work
 
     init {
-        logger.level = Level.INFO
+        logger.level = Const.DEBUG_LEVEL
     }
 
     private val addAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/A"
@@ -40,7 +41,7 @@ class RetainedMessages(): AbstractVerticle() {
         //    saveMessageExecute(it.body())
         //}
 
-        Const.getMap<String, MqttMessage>(vertx, name).onSuccess { messages ->
+        Utils.getMap<String, MqttMessage>(vertx, name).onSuccess { messages ->
             logger.info("Indexing message store [$name].")
             this.messages = messages
             messages.keys()

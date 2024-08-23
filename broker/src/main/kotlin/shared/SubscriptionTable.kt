@@ -1,6 +1,7 @@
 package at.rocworks.shared
 
 import at.rocworks.Const
+import at.rocworks.Utils
 import at.rocworks.data.MqttClientId
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttTopicName
@@ -19,7 +20,7 @@ class SubscriptionTable: AbstractVerticle() {
     private var subscriptions: AsyncMap<String, MutableSet<MqttTopicName>>? = null // key as MqttClientId does not work
 
     init {
-        logger.level = Level.INFO
+        logger.level = Const.DEBUG_LEVEL
     }
 
     private val addAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE +"/A"
@@ -34,7 +35,7 @@ class SubscriptionTable: AbstractVerticle() {
             index.del(it.body().topicName, it.body().clientId)
         }
 
-        Const.getMap<String, MutableSet<MqttTopicName>>(vertx, name).onSuccess { subscriptions ->
+        Utils.getMap<String, MutableSet<MqttTopicName>>(vertx, name).onSuccess { subscriptions ->
             logger.info("Indexing subscription table [$name].")
             this.subscriptions = subscriptions
             subscriptions.keys()

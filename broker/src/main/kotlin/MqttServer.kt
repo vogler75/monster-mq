@@ -25,6 +25,10 @@ class MqttServer(
         isUseWebSocket = ws
     }
 
+    init {
+        logger.level = Const.DEBUG_LEVEL
+    }
+
     override fun start(startPromise: Promise<Void>) {
         val mqttServer: MqttServer = MqttServer.create(vertx, options)
 
