@@ -10,6 +10,7 @@ import at.rocworks.shared.SubscriptionTable
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Vertx
+import io.vertx.core.VertxBuilder
 import io.vertx.spi.cluster.hazelcast.ConfigUtil
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import java.util.logging.Logger
@@ -29,7 +30,27 @@ fun main(args: Array<String>) {
 
     logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs Kafka: $useKafka")
 
-    fun start(vertx: Vertx) {
+    fun clusterSetup(builder: VertxBuilder, then: (vertx: Vertx)->Unit) {
+        val hazelcastConfig = ConfigUtil.loadConfig()
+        hazelcastConfig.setClusterName("MonsterMQ")
+        val clusterManager = HazelcastClusterManager(hazelcastConfig)
+
+        //val clusterManager = ZookeeperClusterManager()
+        //val clusterManager = InfinispanClusterManager()
+        //val clusterManager = IgniteClusterManager();
+
+        builder.withClusterManager(clusterManager)
+        builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
+            if (res.succeeded() && res.result() != null) {
+                then(res.result()!!)
+            } else {
+                logger.severe("Vertx building failed: ${res.cause()}")
+            }
+        }
+    }
+
+
+    fun startMonster(vertx: Vertx) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttTopicName::class.java, MqttTopicNameCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
@@ -58,24 +79,7 @@ fun main(args: Array<String>) {
     }
 
     val builder = Vertx.builder()
-    if (!useCluster) start(builder.build())
-    else {
-        val hazelcastConfig = ConfigUtil.loadConfig()
-        hazelcastConfig.setClusterName("MonsterMQ")
-        val clusterManager = HazelcastClusterManager(hazelcastConfig)
-
-        //val clusterManager = ZookeeperClusterManager()
-        //val clusterManager = InfinispanClusterManager()
-        //val clusterManager = IgniteClusterManager();
-
-        builder.withClusterManager(clusterManager)
-        builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
-            if (res.succeeded() && res.result() != null) {
-                start(res.result()!!)
-            } else {
-                logger.severe("Vertx building failed: ${res.cause()}")
-            }
-        }
-    }
+    if (!useCluster) startMonster(builder.build())
+    else clusterSetup(builder, ::startMonster)
 }
 
