@@ -8,8 +8,7 @@ import javax.cache.Caching
 import javax.cache.configuration.MutableConfiguration
 import javax.cache.spi.CachingProvider
 
-class TopicTreeCache : ITopicTree {
-    private val cacheName = UUID.randomUUID().toString()
+class TopicTreeCache(cacheName: String) : ITopicTree {
     private val cachingProvider: CachingProvider = Caching.getCachingProvider()
     private val cacheManager: CacheManager = cachingProvider.cacheManager
 
