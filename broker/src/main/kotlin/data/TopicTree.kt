@@ -3,18 +3,18 @@ package at.rocworks.data
 import io.vertx.core.impl.ConcurrentHashSet
 import java.util.concurrent.ConcurrentHashMap
 
-class TopicTree<T> : ITopicTree<T> {
-    data class TopicTreeNode<T> (
-        val children: ConcurrentHashMap<String, TopicTreeNode<T>> = ConcurrentHashMap(), // Level to Node
-        val dataset: ConcurrentHashSet<T> = ConcurrentHashSet()
+class TopicTree : ITopicTree {
+    data class Node (
+        val children: ConcurrentHashMap<String, Node> = ConcurrentHashMap(), // Level to Node
+        val dataset: ConcurrentHashSet<String> = ConcurrentHashSet()
     )
 
-    private val root = TopicTreeNode<T>()
+    private val root = Node()
 
     override fun add(topicName: MqttTopicName) = add(topicName, null)
-    override fun add(topicName: MqttTopicName, data: T?) {
-        fun addTopicNode(node: TopicTreeNode<T>, first: String, rest: List<String>) {
-            val child = node.children.getOrPut(first) { TopicTreeNode() }
+    override fun add(topicName: MqttTopicName, data: String?) {
+        fun addTopicNode(node: Node, first: String, rest: List<String>) {
+            val child = node.children.getOrPut(first) { Node() }
             if (rest.isEmpty()) {
                 data?.let { child.dataset.add(it) }
             } else {
@@ -26,9 +26,9 @@ class TopicTree<T> : ITopicTree<T> {
     }
 
     override fun del(topicName: MqttTopicName) = del(topicName, null)
-    override fun del(topicName: MqttTopicName, data: T?) {
-        fun delTopicNode(node: TopicTreeNode<T>, first: String, rest: List<String>) {
-            fun deleteIfEmpty(child: TopicTreeNode<T>) {
+    override fun del(topicName: MqttTopicName, data: String?) {
+        fun delTopicNode(node: Node, first: String, rest: List<String>) {
+            fun deleteIfEmpty(child: Node) {
                 if (child.dataset.isEmpty() && child.children.isEmpty()) {
                     node.children.remove(first)
                 }
@@ -52,8 +52,8 @@ class TopicTree<T> : ITopicTree<T> {
     /*
     The given topicName will be matched with potential wildcard topics of the tree (tree contains wildcard topics)
      */
-    override fun findDataOfTopicName(topicName: MqttTopicName): List<T> {
-        fun find(node: TopicTreeNode<T>, current: String, rest: List<String>): List<T> {
+    override fun findDataOfTopicName(topicName: MqttTopicName): List<String> {
+        fun find(node: Node, current: String, rest: List<String>): List<String> {
             return node.children.flatMap { child ->
                 when (child.key) {
                     "#" -> child.value.dataset.toList()
@@ -72,7 +72,7 @@ class TopicTree<T> : ITopicTree<T> {
     The given topicName can contain wildcards and this will be matched with the tree topics without wildcards
      */
     override fun findMatchingTopicNames(topicName: MqttTopicName): List<MqttTopicName> {
-        fun find(node: TopicTreeNode<T>, current: String, rest: List<String>, topic: MqttTopicName?): List<MqttTopicName> {
+        fun find(node: Node, current: String, rest: List<String>, topic: MqttTopicName?): List<MqttTopicName> {
             return if (node.children.isEmpty() && rest.isEmpty()) // is leaf
                 if (topic==null) listOf() else listOf(topic)
             else
@@ -93,9 +93,9 @@ class TopicTree<T> : ITopicTree<T> {
         return "TopicTree dump: \n" + printTreeNode("", root).joinToString("\n")
     }
 
-    private fun printTreeNode(root: String, node: TopicTreeNode<T>, level: Int = -1): List<String> {
+    private fun printTreeNode(root: String, node: Node, level: Int = -1): List<String> {
         val text = mutableListOf<String>()
-        if (level > -1) text.add("  ".repeat(level)+"- [${root.padEnd(40-level*2)}] Clients "+node.dataset.joinToString {"[$it]"})
+        if (level > -1) text.add("  ".repeat(level)+"- [${root.padEnd(40-level*2)}] Dataset: "+node.dataset.joinToString {"[$it]"})
         node.children.forEach {
             text.addAll(printTreeNode(it.key, it.value, level + 1))
         }

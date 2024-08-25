@@ -1,10 +1,10 @@
 package at.rocworks
 
 import at.rocworks.data.MqttTopicName
-import at.rocworks.data.TopicTree
+import at.rocworks.data.TopicTreeCache
 
 fun main(args: Array<String>) {
-    val tree = TopicTree<Void>()
+    val tree = TopicTreeCache()
 
     val topics = listOf(
         "a/a/a",

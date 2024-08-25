@@ -183,7 +183,7 @@ class Distributor(
     private fun consumeMessage(message: MqttMessage) {
         val topicName = MqttTopicName(message.topicName)
         subscriptionTable.findClients(topicName).forEach {
-            MqttClient.sendMessageToClient(vertx, it, message)
+            MqttClient.sendMessageToClient(vertx, MqttClientId(it), message)
         }
     }
 }

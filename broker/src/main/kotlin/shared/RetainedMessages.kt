@@ -16,7 +16,7 @@ import java.util.logging.Logger
 class RetainedMessages(): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val name = "Retained"
-    private val index = TopicTree<Void>()
+    private val index = TopicTree()
     private var messages: AsyncMap<String, MqttMessage>? = null // key as MqttTopicName does not work
 
     init {

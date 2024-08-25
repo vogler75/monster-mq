@@ -32,7 +32,7 @@ fun main(args: Array<String>) {
 
     fun clusterSetup(builder: VertxBuilder, then: (vertx: Vertx)->Unit) {
         val hazelcastConfig = ConfigUtil.loadConfig()
-        hazelcastConfig.setClusterName("MonsterMQ")
+        //hazelcastConfig.setClusterName("MonsterMQ")
         val clusterManager = HazelcastClusterManager(hazelcastConfig)
 
         //val clusterManager = ZookeeperClusterManager()

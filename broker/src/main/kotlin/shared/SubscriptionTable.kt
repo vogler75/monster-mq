@@ -16,7 +16,7 @@ import java.util.logging.Logger
 class SubscriptionTable: AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val name = "Subscriptions"
-    private val index = TopicTree<MqttClientId>()
+    private val index = TopicTree()
     private var subscriptions: AsyncMap<String, MutableSet<MqttTopicName>>? = null // key as MqttClientId does not work
 
     init {
@@ -28,11 +28,11 @@ class SubscriptionTable: AbstractVerticle() {
 
     override fun start(startPromise: Promise<Void>) {
         vertx.eventBus().consumer<MqttSubscription>(addAddress) {
-            index.add(it.body().topicName, it.body().clientId)
+            index.add(it.body().topicName, it.body().clientId.identifier)
         }
 
         vertx.eventBus().consumer<MqttSubscription>(delAddress) {
-            index.del(it.body().topicName, it.body().clientId)
+            index.del(it.body().topicName, it.body().clientId.identifier)
         }
 
         Utils.getMap<String, MutableSet<MqttTopicName>>(vertx, name).onSuccess { subscriptions ->
@@ -42,7 +42,7 @@ class SubscriptionTable: AbstractVerticle() {
                 .onSuccess { clients ->
                     Future.all(clients.map { client ->
                         subscriptions.get(client).onComplete { topics ->
-                            topics.result().forEach { index.add(it, MqttClientId(client)) }
+                            topics.result().forEach { index.add(it, client) }
                         }
                     }).onComplete {
                         logger.info("Indexing subscription table [$name] finished.")
