@@ -103,7 +103,7 @@ class Distributor(
             .put(Const.TOPIC_KEY, topicName.identifier)
             .put(Const.CLIENT_KEY, client.getClientId().identifier)
         vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
-            if (!it.succeeded())  logger.severe("Unsubscribe request failed: ${it.cause()}")
+            if (!it.succeeded())  logger.severe("Subscribe request failed: ${it.cause()}")
         }
     }
 
@@ -112,7 +112,7 @@ class Distributor(
         val topicName = MqttTopicName(command.body().getString(Const.TOPIC_KEY))
 
         retainedMessages.findMatching(topicName) { message ->
-            logger.finer { "Publish retained message [${message.topicName}]" }
+            logger.finest { "Publish retained message [${message.topicName}]" }
             MqttClient.sendMessageToClient(vertx, clientId, message)
         }.onComplete {
             logger.info("Retained messages published [${it.result()}].")

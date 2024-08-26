@@ -1,7 +1,8 @@
 package at.rocworks.data
 
-import at.rocworks.data.TopicTree.Node
+import at.rocworks.Const
 import java.util.*
+import java.util.logging.Logger
 import javax.cache.Cache
 import javax.cache.CacheManager
 import javax.cache.Caching
@@ -9,8 +10,10 @@ import javax.cache.configuration.MutableConfiguration
 import javax.cache.spi.CachingProvider
 
 class TopicTreeCache(cacheName: String) : ITopicTree {
+    private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val cachingProvider: CachingProvider = Caching.getCachingProvider()
     private val cacheManager: CacheManager = cachingProvider.cacheManager
+    private val rootNodeId = "0"
 
     data class Node (
         val children: HashMap<String, String> = hashMapOf(), // Level to Node(UUID key in cache)
@@ -22,14 +25,10 @@ class TopicTreeCache(cacheName: String) : ITopicTree {
         .setStatisticsEnabled(true)  // Enable statistics
 
     private val cache: Cache<String, Node> = cacheManager.createCache(cacheName, cacheConfig)
-    private var root: Node? = null
 
     init {
-        root = cache.get("root")
-        if (root == null) {
-            root = Node()
-            cache.put("root", root)
-        }
+        logger.level = Const.DEBUG_LEVEL
+        cache.get(rootNodeId) ?: run { cache.put(rootNodeId, Node()) }
     }
 
     private fun newNode(): String {
@@ -56,7 +55,7 @@ class TopicTreeCache(cacheName: String) : ITopicTree {
             }
         }
         val xs = topicName.getLevels()
-        if (xs.isNotEmpty()) addTopicNode("root", root!!, xs.first(), xs.drop(1))
+        if (xs.isNotEmpty()) addTopicNode(rootNodeId, cache.get(rootNodeId), xs.first(), xs.drop(1))
     }
 
     override fun del(topicName: MqttTopicName) = del(topicName, null)
@@ -85,7 +84,7 @@ class TopicTreeCache(cacheName: String) : ITopicTree {
             }
         }
         val xs = topicName.getLevels()
-        if (xs.isNotEmpty()) delTopicNode("root", root!!, xs.first(), xs.drop(1))    }
+        if (xs.isNotEmpty()) delTopicNode(rootNodeId, cache.get(rootNodeId), xs.first(), xs.drop(1))    }
 
     override fun findDataOfTopicName(topicName: MqttTopicName): List<String> {
         fun find(node: Node, current: String, rest: List<String>): List<String> {
@@ -101,7 +100,7 @@ class TopicTreeCache(cacheName: String) : ITopicTree {
             }
         }
         val xs = topicName.getLevels()
-        return if (xs.isNotEmpty()) find(root!!, xs.first(), xs.drop(1)) else listOf()
+        return if (xs.isNotEmpty()) find(cache.get(rootNodeId), xs.first(), xs.drop(1)) else listOf()
     }
 
     override fun findMatchingTopicNames(topicName: MqttTopicName): List<MqttTopicName> {
@@ -119,12 +118,17 @@ class TopicTreeCache(cacheName: String) : ITopicTree {
                     }
                 }
         }
+        val startTime = System.currentTimeMillis()
         val xs = topicName.getLevels()
-        return if (xs.isNotEmpty()) find(root!!, xs.first(), xs.drop(1), null) else listOf()
+        val ret = if (xs.isNotEmpty()) find(cache.get(rootNodeId), xs.first(), xs.drop(1), null) else listOf()
+        val endTime = System.currentTimeMillis()
+        val elapsedTime = endTime - startTime
+        logger.fine { "Found ${ret.size} matching topics in [$elapsedTime]ms."}
+        return ret
     }
 
     override fun toString(): String {
-        return "TopicTree dump: \n" + printTreeNode("", root!!).joinToString("\n")
+        return "TopicTree dump: \n" + printTreeNode("", cache.get(rootNodeId)).joinToString("\n")
     }
 
     private fun printTreeNode(root: String, node: Node, level: Int = -1): List<String> {

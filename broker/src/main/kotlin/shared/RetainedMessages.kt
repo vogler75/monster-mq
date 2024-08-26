@@ -2,9 +2,9 @@ package at.rocworks.shared
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.TopicTree
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttTopicName
+import at.rocworks.data.TopicTreeCache
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -16,37 +16,24 @@ import java.util.logging.Logger
 class RetainedMessages(): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val name = "Retained"
-    private val index = TopicTree()
+    private val index = TopicTreeCache(name)
     private var messages: AsyncMap<String, MqttMessage>? = null // key as MqttTopicName does not work
 
     init {
         logger.level = Const.DEBUG_LEVEL
     }
 
-    private val addAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/A"
-    private val delAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/D"
+    //private val addAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/A"
+    //private val delAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/D"
     //private val saveAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/S"
 
-
     override fun start(startPromise: Promise<Void>) {
-        vertx.eventBus().consumer<MqttTopicName>(addAddress) {
-            index.add(it.body())
-        }
-
-        vertx.eventBus().consumer<MqttTopicName>(delAddress) {
-            index.del(it.body())
-        }
-
-        //vertx.eventBus().consumer<MqttMessage>(saveAddress) {
-        //    saveMessageExecute(it.body())
-        //}
-
         Utils.getMap<String, MqttMessage>(vertx, name).onSuccess { messages ->
             logger.info("Indexing message store [$name].")
             this.messages = messages
             messages.keys()
                 .onSuccess { keys ->
-                    keys.forEach { index.add(MqttTopicName(it)) }
+                    //keys.forEach { index.add(MqttTopicName(it)) }
                     logger.info("Indexing message store [$name] finished.")
                     startPromise.complete()
                 }
@@ -71,14 +58,14 @@ class RetainedMessages(): AbstractVerticle() {
             val topicName = MqttTopicName(message.topicName)
             if (message.payload.isEmpty()) {
                 messages.remove(topicName.identifier).onComplete {
-                    vertx.eventBus().publish(delAddress, topicName)
+                    index.add(topicName)
                     logger.finest { "Removed retained message for [$topicName] completed [${it.succeeded()}]" }
                     promise.complete()
                 }.onFailure(promise::fail)
             }
             else {
                 messages.put(topicName.identifier, message).onComplete {
-                    vertx.eventBus().publish(addAddress, topicName)
+                    index.add(topicName)
                     logger.finest { "Saved retained message for [$topicName] completed [${it.succeeded()}]" }
                     promise.complete()
                 }.onFailure(promise::fail)
@@ -94,6 +81,7 @@ class RetainedMessages(): AbstractVerticle() {
         vertx.executeBlocking(Callable {
             messages?.let { messages ->
                 val topics = index.findMatchingTopicNames(topicName)
+                logger.fine { "Found [${topics.size}] matching retained messages for [$topicName]." }
                 Future.all(topics.map { topic ->
                     logger.finest { "Found matching topic [$topic] for [$topicName]" }
                     messages.get(topic.identifier).onSuccess { message ->

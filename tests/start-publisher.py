@@ -5,7 +5,7 @@ import time
 import paho.mqtt.client as mqtt
 import uuid
 
-AMOUNT_CLIENTS = 10
+AMOUNT_CLIENTS = 1
 AMOUNT_NRS = AMOUNT_CLIENTS
 
 # MQTT settings
@@ -17,8 +17,8 @@ MQTT_TOPIC = "monitor/publisher"
 base_command = [sys.executable, "test-publisher.py"]
 
 # Loop to start the program n times
-hosts = [["192.168.1.30", 1883]]
-#hosts = [["192.168.1.31", 1883], ["192.168.1.32", 1883], ["192.168.1.33", 1883]]
+#hosts = [["192.168.1.30", 1883]]
+hosts = [["192.168.1.31", 1883]] #, ["192.168.1.32", 1883], ["192.168.1.33", 1883]]
 #hosts = [["192.168.1.30", 1883], ["192.168.1.30", 1884]] #, ["192.168.1.30", 1885]]
 
 hosts_idx = 0

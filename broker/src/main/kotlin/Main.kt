@@ -13,6 +13,7 @@ import io.vertx.core.Vertx
 import io.vertx.core.VertxBuilder
 import io.vertx.spi.cluster.hazelcast.ConfigUtil
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
+import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
 
@@ -27,6 +28,7 @@ fun main(args: Array<String>) {
     val useWs = args.indexOf("-ws") != -1
     val useTcp = args.indexOf("-tcp") != -1 || !useWs
     val useKafka = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
+    args.indexOf("-log").let { if (it != -1) Const.DEBUG_LEVEL = Level.parse(args[it+1]) }
 
     logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs Kafka: $useKafka")
 
