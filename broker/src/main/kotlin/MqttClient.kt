@@ -126,6 +126,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
 
     private fun exceptionHandler(endpoint: MqttEndpoint, throwable: Throwable) {
         logger.severe("Client [${endpoint.clientIdentifier()}] Exception: ${throwable.message}")
+        closeConnection(endpoint)
     }
 
     private fun pingHandler(endpoint: MqttEndpoint) {
@@ -208,6 +209,10 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
 
     private fun closeHandler(endpoint: MqttEndpoint) {
         logger.info("Client [${endpoint.clientIdentifier()}] Close received.")
+        closeConnection(endpoint)
+    }
+
+    private fun closeConnection(endpoint: MqttEndpoint) {
         if (this.connected) { // if there was no disconnect before
             sendLastWill(endpoint)
             stopEndpoint(endpoint)
