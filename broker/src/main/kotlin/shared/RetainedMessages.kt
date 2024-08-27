@@ -20,10 +20,12 @@ class RetainedMessages(
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val queues: List<ArrayBlockingQueue<MqttMessage>>
 
+    private val maxRetainedMessagesSentToClient = 100_000 // TODO: configurable or timed
+
     init {
         logger.level = Const.DEBUG_LEVEL
         val queuesCount = 1 // TODO: configurable
-        queues = List(queuesCount) { ArrayBlockingQueue<MqttMessage>(10000) }
+        queues = List(queuesCount) { ArrayBlockingQueue<MqttMessage>(100_000) } // TODO: configurable
     }
 
     override fun start() {
@@ -70,9 +72,13 @@ class RetainedMessages(
                 index.findMatchingTopicNames(topicName) { topic ->
                     logger.finest { "Found matching topic [$topic] for [$topicName]" }
                     val message = store.get(topic.identifier)
-                    if (message != null) callback(message)
-                    else logger.finest { "Stored message for [$topic] is null!" } // it could be a node inside the tree index where we haven't stored a value
-                    if (++counter>=10000) { // TODO: configurable or timed
+                    if (message != null) {
+                        counter++
+                        callback(message)
+                    } else { // it could be a node inside the tree index where we haven't stored a value
+                        logger.finest { "Stored message for [$topic] is null!" }
+                    }
+                    if (counter>=maxRetainedMessagesSentToClient) {
                         logger.warning("Maximum retained messages sent.")
                         false
                     } else true

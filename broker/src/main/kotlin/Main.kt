@@ -26,7 +26,7 @@ fun main(args: Array<String>) {
     val useSsl = args.indexOf("-ssl") != -1
     val useWs = args.indexOf("-ws") != -1
     val useTcp = args.indexOf("-tcp") != -1 || !useWs
-    val useKafka = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
+    val kafkaServers = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
 
     args.indexOf("-log").let {
         if (it != -1) {
@@ -36,7 +36,7 @@ fun main(args: Array<String>) {
         }
     }
 
-    logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs Kafka: $useKafka")
+    logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs Kafka: $kafkaServers")
 
     fun startMonster(vertx: Vertx, retainedIndex: TopicTree, retainedStore: MutableMap<String, MqttMessage>) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
@@ -46,12 +46,9 @@ fun main(args: Array<String>) {
         val subscriptionTable = SubscriptionTable()
         val retainedMessages = RetainedMessages(retainedIndex, retainedStore)
 
-        val distributor = Distributor(
-            subscriptionTable,
-            retainedMessages,
-            useKafka.isNotBlank(),
-            useKafka
-        )
+        val distributor = if (kafkaServers.isNotBlank()) DistributorKafka(subscriptionTable, retainedMessages, kafkaServers)
+        else DistributorVertx(subscriptionTable, retainedMessages)
+
         val servers = listOfNotNull(
             if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
             if (useWs) MqttServer(usePort, useSsl, true, distributor) else null,
