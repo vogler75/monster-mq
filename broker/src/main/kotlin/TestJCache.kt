@@ -1,18 +1,9 @@
 package at.rocworks
 import at.rocworks.data.MqttTopicName
-import at.rocworks.data.TopicTree
-import at.rocworks.data.TopicTreeCache
-import com.hazelcast.config.Config
-import com.hazelcast.config.MapConfig
-import com.hazelcast.config.MaxSizePolicy
-import com.hazelcast.core.Hazelcast
+import at.rocworks.data.TopicTreeHazelcast
 import com.hazelcast.core.HazelcastInstance
-import com.hazelcast.core.ICacheManager
 import com.hazelcast.map.IMap
-import io.vertx.core.AsyncResult
 import io.vertx.core.Vertx
-import io.vertx.core.VertxBuilder
-import io.vertx.core.VertxOptions
 import io.vertx.spi.cluster.hazelcast.ConfigUtil
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import javax.cache.Cache
@@ -78,7 +69,7 @@ private fun test1() {
 }
 
 private fun test2(hazelcastInstance: HazelcastInstance) {
-    val tree = TopicTreeCache(hazelcastInstance,"test")
+    val tree = TopicTreeHazelcast(hazelcastInstance,"test")
     val topics = listOf(
         "a/a/a",
         "a/a/b",

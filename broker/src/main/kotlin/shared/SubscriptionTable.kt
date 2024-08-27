@@ -5,18 +5,17 @@ import at.rocworks.Utils
 import at.rocworks.data.MqttClientId
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttTopicName
-import at.rocworks.data.TopicTree
+import at.rocworks.data.TopicTreeLocal
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.shareddata.AsyncMap
-import java.util.logging.Level
 import java.util.logging.Logger
 
 class SubscriptionTable: AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val name = "Subscriptions"
-    private val index = TopicTree()
+    private val index = TopicTreeLocal()
     private var subscriptions: AsyncMap<String, MutableSet<MqttTopicName>>? = null // key as MqttClientId does not work
 
     init {

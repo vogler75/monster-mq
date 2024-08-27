@@ -2,8 +2,11 @@ package at.rocworks.data
 
 import io.vertx.core.impl.ConcurrentHashSet
 import java.util.concurrent.ConcurrentHashMap
+import java.util.logging.Logger
 
-class TopicTree : ITopicTree {
+class TopicTreeLocal : TopicTree {
+    private val logger = Logger.getLogger(this.javaClass.simpleName)
+
     data class Node (
         val children: ConcurrentHashMap<String, Node> = ConcurrentHashMap(), // Level to Node
         val dataset: ConcurrentHashSet<String> = ConcurrentHashSet()
@@ -49,9 +52,6 @@ class TopicTree : ITopicTree {
         if (xs.isNotEmpty()) delTopicNode(root, xs.first(), xs.drop(1))
     }
 
-    /*
-    The given topicName will be matched with potential wildcard topics of the tree (tree contains wildcard topics)
-     */
     override fun findDataOfTopicName(topicName: MqttTopicName): List<String> {
         fun find(node: Node, current: String, rest: List<String>): List<String> {
             return node.children.flatMap { child ->
@@ -68,9 +68,6 @@ class TopicTree : ITopicTree {
         return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1)) else listOf()
     }
 
-    /*
-    The given topicName can contain wildcards and this will be matched with the tree topics without wildcards
-     */
     override fun findMatchingTopicNames(topicName: MqttTopicName): List<MqttTopicName> {
         fun find(node: Node, current: String, rest: List<String>, topic: MqttTopicName?): List<MqttTopicName> {
             return if (node.children.isEmpty() && rest.isEmpty()) // is leaf
@@ -87,6 +84,34 @@ class TopicTree : ITopicTree {
         }
         val xs = topicName.getLevels()
         return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1), null) else listOf()
+    }
+
+    override fun findMatchingTopicNames(topicName: MqttTopicName, callback: (MqttTopicName)->Boolean) {
+        fun find(node: Node, current: String, rest: List<String>, topic: MqttTopicName?): Boolean {
+            logger.finest { "Find Node [$node] Current [$current] Rest [${rest.joinToString(",")}] Topic: [$topic]"}
+            if (node.children.isEmpty() && rest.isEmpty()) { // is leaf
+                if (topic != null) return callback(topic)
+            } else {
+                node.children.forEach { child ->
+                    val check = topic?.addLevel(child.key) ?: MqttTopicName(child.key)
+                    logger.finest { "  Check [$check] Child [$child]" }
+                    when (current) {
+                        "#" -> if (!find(child.value, "#", listOf(), check)) return false
+                        "+", child.key -> {
+                            if (rest.isNotEmpty()) if (!find(child.value, rest.first(), rest.drop(1), check)) return false
+                            else return callback(check)
+                        }
+                    }
+                }
+            }
+            return true
+        }
+        val startTime = System.currentTimeMillis()
+        val xs = topicName.getLevels()
+        if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1), null)
+        val endTime = System.currentTimeMillis()
+        val elapsedTime = endTime - startTime
+        logger.fine { "Found matching topics in [$elapsedTime]ms." }
     }
 
     override fun toString(): String {

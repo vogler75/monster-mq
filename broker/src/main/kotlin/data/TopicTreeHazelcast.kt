@@ -8,7 +8,7 @@ import java.util.logging.Logger
 
 import kotlin.system.exitProcess
 
-class TopicTreeCache(hazelcast: HazelcastInstance, cacheName: String) : ITopicTree {
+class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : TopicTree {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     //private val cachingProvider: CachingProvider = Caching.getCachingProvider()
     //private val cacheManager: CacheManager = cachingProvider.cacheManager
@@ -132,7 +132,33 @@ class TopicTreeCache(hazelcast: HazelcastInstance, cacheName: String) : ITopicTr
         return if (xs.isNotEmpty()) find(cache.get(rootNodeId)!!, xs.first(), xs.drop(1)) else listOf()
     }
 
-    fun findMatchingTopicNames(topicName: MqttTopicName, callback: (MqttTopicName)->Boolean) {
+    override fun findMatchingTopicNames(topicName: MqttTopicName): List<MqttTopicName> {
+        fun find(node:Node, current: String, rest: List<String>, topic: MqttTopicName?): List<MqttTopicName> {
+            return if (node.children.isEmpty() && rest.isEmpty()) // is leaf
+                if (topic==null) listOf() else listOf(topic)
+            else
+                node.children.flatMap { entry ->
+                    cache[entry.value]?.let { child ->
+                        val check = topic?.addLevel(entry.key) ?: MqttTopicName(entry.key)
+                        when (current) {
+                            "#" -> find(child,"#", listOf(), check )
+                            "+", entry.key -> if (rest.isNotEmpty()) find(child, rest.first(), rest.drop(1), check)
+                            else listOf(check)
+                            else -> listOf()
+                        }
+                    } ?: listOf()
+                }
+        }
+        val startTime = System.currentTimeMillis()
+        val xs = topicName.getLevels()
+        val ret = if (xs.isNotEmpty()) find(cache.get(rootNodeId)!!, xs.first(), xs.drop(1), null) else listOf()
+        val endTime = System.currentTimeMillis()
+        val elapsedTime = endTime - startTime
+        logger.fine { "Found ${ret.size} matching topics in [$elapsedTime]ms."}
+        return ret
+    }
+
+    override fun findMatchingTopicNames(topicName: MqttTopicName, callback: (MqttTopicName)->Boolean) {
         fun find(node:Node, current: String, rest: List<String>, topic: MqttTopicName?): Boolean {
             logger.finest { "Find Node [$node] Current [$current] Rest [${rest.joinToString(",")}] Topic: [$topic]"}
             if (node.children.isEmpty() && rest.isEmpty()) { // is leaf
@@ -164,31 +190,6 @@ class TopicTreeCache(hazelcast: HazelcastInstance, cacheName: String) : ITopicTr
         val elapsedTime = endTime - startTime
         logger.fine { "Found matching topics in [$elapsedTime]ms." }
 
-    }
-    override fun findMatchingTopicNames(topicName: MqttTopicName): List<MqttTopicName> {
-        fun find(node:Node, current: String, rest: List<String>, topic: MqttTopicName?): List<MqttTopicName> {
-            return if (node.children.isEmpty() && rest.isEmpty()) // is leaf
-                if (topic==null) listOf() else listOf(topic)
-            else
-                node.children.flatMap { entry ->
-                    cache[entry.value]?.let { child ->
-                        val check = topic?.addLevel(entry.key) ?: MqttTopicName(entry.key)
-                        when (current) {
-                            "#" -> find(child,"#", listOf(), check )
-                            "+", entry.key -> if (rest.isNotEmpty()) find(child, rest.first(), rest.drop(1), check)
-                            else listOf(check)
-                            else -> listOf()
-                        }
-                    } ?: listOf()
-                }
-        }
-        val startTime = System.currentTimeMillis()
-        val xs = topicName.getLevels()
-        val ret = if (xs.isNotEmpty()) find(cache.get(rootNodeId)!!, xs.first(), xs.drop(1), null) else listOf()
-        val endTime = System.currentTimeMillis()
-        val elapsedTime = endTime - startTime
-        logger.fine { "Found ${ret.size} matching topics in [$elapsedTime]ms."}
-        return ret
     }
 
     override fun toString(): String {

@@ -8,7 +8,6 @@ import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import at.rocworks.data.*
 import at.rocworks.shared.RetainedMessages
 import at.rocworks.shared.SubscriptionTable
-import com.hazelcast.core.HazelcastInstance
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Vertx
@@ -28,6 +27,7 @@ fun main(args: Array<String>) {
     val useWs = args.indexOf("-ws") != -1
     val useTcp = args.indexOf("-tcp") != -1 || !useWs
     val useKafka = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
+
     args.indexOf("-log").let {
         if (it != -1) {
             val level = Level.parse(args[it + 1])
@@ -38,35 +38,20 @@ fun main(args: Array<String>) {
 
     logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs Kafka: $useKafka")
 
-    fun clusterSetup(builder: VertxBuilder, then: (vertx: Vertx, hazelcastInstance: HazelcastInstance)->Unit) {
-        //val hazelcastConfig = ConfigUtil.loadConfig()
-        //hazelcastConfig.setClusterName("MonsterMQ")
-        val clusterManager = HazelcastClusterManager()
-
-        //val clusterManager = ZookeeperClusterManager()
-        //val clusterManager = InfinispanClusterManager()
-        //val clusterManager = IgniteClusterManager();
-
-        builder.withClusterManager(clusterManager)
-        builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
-            if (res.succeeded() && res.result() != null) {
-                then(res.result()!!, clusterManager.hazelcastInstance)
-            } else {
-                logger.severe("Vertx building failed: ${res.cause()}")
-            }
-        }
-    }
-
-
-    fun startMonster(vertx: Vertx, hazelcastInstance: HazelcastInstance?) {
+    fun startMonster(vertx: Vertx, retainedIndex: TopicTree, retainedStore: MutableMap<String, MqttMessage>) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttTopicName::class.java, MqttTopicNameCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
         val subscriptionTable = SubscriptionTable()
-        val retainedMessages = RetainedMessages(hazelcastInstance!!)
+        val retainedMessages = RetainedMessages(retainedIndex, retainedStore)
 
-        val distributor = Distributor(subscriptionTable, retainedMessages, useKafka.isNotBlank(), useKafka)
+        val distributor = Distributor(
+            subscriptionTable,
+            retainedMessages,
+            useKafka.isNotBlank(),
+            useKafka
+        )
         val servers = listOfNotNull(
             if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
             if (useWs) MqttServer(usePort, useSsl, true, distributor) else null,
@@ -86,8 +71,37 @@ fun main(args: Array<String>) {
             }
     }
 
+    fun localSetup(builder: VertxBuilder) {
+        val retainedIndex = TopicTreeLocal()
+        val retainedStore = mutableMapOf<String, MqttMessage>()
+        startMonster(builder.build(), retainedIndex, retainedStore)
+    }
+
+    fun clusterSetup(builder: VertxBuilder) {
+        //val hazelcastConfig = ConfigUtil.loadConfig()
+        //hazelcastConfig.setClusterName("MonsterMQ")
+        val clusterManager = HazelcastClusterManager()
+
+        //val clusterManager = ZookeeperClusterManager()
+        //val clusterManager = InfinispanClusterManager()
+        //val clusterManager = IgniteClusterManager();
+
+        builder.withClusterManager(clusterManager)
+        builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
+            if (res.succeeded() && res.result() != null) {
+                val vertx = res.result()!!
+                val hz = clusterManager.hazelcastInstance
+                val index = TopicTreeHazelcast(hz, "Retained-Index")
+                val store: MutableMap<String, MqttMessage> = hz.getMap("Retained-Store")
+                startMonster(vertx, index, store)
+            } else {
+                logger.severe("Vertx building failed: ${res.cause()}")
+            }
+        }
+    }
+
     val builder = Vertx.builder()
-    if (!useCluster) startMonster(builder.build(), null)
-    else clusterSetup(builder, ::startMonster)
+    if (useCluster) clusterSetup(builder)
+    else localSetup(builder)
 }
 
