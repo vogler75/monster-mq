@@ -16,7 +16,7 @@ class SubscriptionTable: AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val name = "Subscriptions"
     private val index = TopicTreeLocal()
-    private var subscriptions: AsyncMap<String, MutableSet<MqttTopicName>>? = null // key as MqttClientId does not work
+    private var table: AsyncMap<String, MutableSet<MqttTopicName>>? = null // key as MqttClientId does not work
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -36,7 +36,7 @@ class SubscriptionTable: AbstractVerticle() {
 
         Utils.getMap<String, MutableSet<MqttTopicName>>(vertx, name).onSuccess { subscriptions ->
             logger.info("Indexing subscription table [$name].")
-            this.subscriptions = subscriptions
+            this.table = subscriptions
             subscriptions.keys()
                 .onSuccess { clients ->
                     Future.all(clients.map { client ->
@@ -60,7 +60,7 @@ class SubscriptionTable: AbstractVerticle() {
 
     fun addSubscription(subscription: MqttSubscription) {
         vertx.eventBus().publish(addAddress, subscription)
-        subscriptions?.let { subscriptions ->
+        table?.let { subscriptions ->
             subscriptions.get(subscription.clientId.identifier).onComplete { client ->
                 client.result()?.add(subscription.topicName) ?: run {
                     subscriptions.put(subscription.clientId.identifier, hashSetOf(subscription.topicName))
@@ -73,7 +73,7 @@ class SubscriptionTable: AbstractVerticle() {
 
     fun removeSubscription(subscription: MqttSubscription) {
         vertx.eventBus().publish(delAddress, subscription)
-        subscriptions?.let { subscriptions ->
+        table?.let { subscriptions ->
             subscriptions.get(subscription.clientId.identifier).onComplete { client ->
                 client.result()?.remove(subscription.topicName)
             }.onFailure {
@@ -83,7 +83,7 @@ class SubscriptionTable: AbstractVerticle() {
     }
 
     fun removeClient(clientId: MqttClientId) {
-        subscriptions?.remove(clientId.identifier)?.onSuccess { topics: MutableSet<MqttTopicName>? ->
+        table?.remove(clientId.identifier)?.onSuccess { topics: MutableSet<MqttTopicName>? ->
             topics?.forEach { topic ->
                 vertx.eventBus().publish(delAddress, MqttSubscription(clientId, topic))
             }
