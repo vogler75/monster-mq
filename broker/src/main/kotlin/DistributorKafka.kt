@@ -11,10 +11,13 @@ import io.vertx.kafka.client.producer.KafkaProducer
 import io.vertx.kafka.client.producer.KafkaProducerRecord
 
 class DistributorKafka(
-    private val subscriptionTable: SubscriptionTable,
-    private val retainedMessages: RetainedMessages,
-    private val kafkaBootstrapServers: String
+    subscriptionTable: SubscriptionTable,
+    retainedMessages: RetainedMessages,
+    private val bootstrapServers: String,
+    private val topicName: String
 ): Distributor(subscriptionTable, retainedMessages) {
+
+    private val kafkaGroupId = "Monster"
 
     private var kafkaProducer: KafkaProducer<String, ByteArray>? = null
     private var kafkaConsumer: KafkaConsumer<String, ByteArray>? = null
@@ -23,7 +26,7 @@ class DistributorKafka(
         super.start(startPromise)
 
         val configProducer: MutableMap<String, String> = HashMap()
-        configProducer["bootstrap.servers"] = kafkaBootstrapServers
+        configProducer["bootstrap.servers"] = bootstrapServers
         configProducer["key.serializer"] = "org.apache.kafka.common.serialization.StringSerializer"
         configProducer["value.serializer"] = "org.apache.kafka.common.serialization.ByteArraySerializer"
         configProducer["acks"] = "1"
@@ -31,10 +34,10 @@ class DistributorKafka(
         kafkaProducer = KafkaProducer.create(vertx, configProducer)
 
         val configConsumer: MutableMap<String, String> = HashMap()
-        configConsumer["bootstrap.servers"] = kafkaBootstrapServers
+        configConsumer["bootstrap.servers"] = bootstrapServers
         configConsumer["key.deserializer"] = "org.apache.kafka.common.serialization.StringDeserializer"
         configConsumer["value.deserializer"] = "org.apache.kafka.common.serialization.ByteArrayDeserializer"
-        configConsumer["group.id"] = "monster"
+        configConsumer["group.id"] = kafkaGroupId
         configConsumer["auto.offset.reset"] = "earliest"
         configConsumer["enable.auto.commit"] = "true"
 
@@ -45,7 +48,7 @@ class DistributorKafka(
                 consumer.handler { record ->
                     consumeMessageFromBus(codec.decodeFromWire(0, Buffer.buffer(record.value())))
                 }
-                consumer.subscribe("monster")
+                consumer.subscribe(topicName)
             }
         } catch (e: Exception) {
             e.printStackTrace()

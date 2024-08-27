@@ -26,7 +26,8 @@ fun main(args: Array<String>) {
     val useSsl = args.indexOf("-ssl") != -1
     val useWs = args.indexOf("-ws") != -1
     val useTcp = args.indexOf("-tcp") != -1 || !useWs
-    val kafkaServers = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
+    val kafkaServers = args.indexOf("-kafkaServers").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
+    val kafkaTopic = args.indexOf("-kafkaTopic").let { if (it != -1) args.getOrNull(it+1)?:"" else "monster" }
 
     args.indexOf("-log").let {
         if (it != -1) {
@@ -46,7 +47,8 @@ fun main(args: Array<String>) {
         val subscriptionTable = SubscriptionTable()
         val retainedMessages = RetainedMessages(retainedIndex, retainedStore)
 
-        val distributor = if (kafkaServers.isNotBlank()) DistributorKafka(subscriptionTable, retainedMessages, kafkaServers)
+        val distributor = if (kafkaServers.isNotBlank())
+            DistributorKafka(subscriptionTable, retainedMessages, kafkaServers, kafkaTopic)
         else DistributorVertx(subscriptionTable, retainedMessages)
 
         val servers = listOfNotNull(

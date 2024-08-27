@@ -7,8 +7,8 @@ import io.vertx.core.Promise
 import java.util.logging.Logger
 
 class DistributorVertx(
-    private val subscriptionTable: SubscriptionTable,
-    private val retainedMessages: RetainedMessages
+    subscriptionTable: SubscriptionTable,
+    retainedMessages: RetainedMessages
 ): Distributor(subscriptionTable, retainedMessages) {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
