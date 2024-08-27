@@ -15,15 +15,15 @@ args = parser.parse_args()
 print(f"Port: {args.port} Nr: {args.nr}")
 
 # Performance
-#DELAY_PROCESSING = 1  # 100 v/s
+DELAY_PROCESSING = 1  # 100 v/s
 #DELAY_PROCESSING = 0.19  # 500 v/s
 #DELAY_PROCESSING = 0.095  # 1000 v/s
-#DELAY_PROCESSING = 0.035  # 2000 v/s
-#DELAY_PROCESSING = 0.022  # 3000 v/s
-DELAY_PROCESSING = 0.020  # 4000 v/s
-#DELAY_PROCESSING = 0.005  # 8000 v/s
+#DELAY_PROCESSING = 0.041  # 2000 v/s
+#DELAY_PROCESSING = 0.026  # 3000 v/s
+#DELAY_PROCESSING = 0.018  # 4000 v/s
+#DELAY_PROCESSING = 0.003  # 10000 v/s
 
-RETAINED_MESSAGES = True
+RETAINED_MESSAGES = False
 
 # MQTT settings
 TOPIC = "test/"+str(args.nr)
