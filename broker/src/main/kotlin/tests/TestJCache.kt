@@ -1,4 +1,4 @@
-package at.rocworks
+package at.rocworks.tests
 import at.rocworks.data.MqttTopicName
 import at.rocworks.data.TopicTreeHazelcast
 import com.hazelcast.core.HazelcastInstance
@@ -108,7 +108,8 @@ private fun test3() {
         cache.put(nr.toString(), Node(
             children = hashMapOf("nr" to nr.toString()),
             dataset = mutableSetOf("1", "2", "3")
-        ))
+        )
+        )
         if (cache.get(nr.toString())==null) {
             println("Error! $nr not found directly after put!")
             exitProcess(-1)
@@ -136,7 +137,8 @@ private fun test4(hazelcastInstance: HazelcastInstance) {
         cache.put(nr.toString(), Node(
             children = hashMapOf("nr" to nr.toString()),
             dataset = mutableSetOf("1", "2", "3")
-        ))
+        )
+        )
         if (cache.get(nr.toString())==null) {
             println("Error! $nr not found directly after put!")
             exitProcess(-1)

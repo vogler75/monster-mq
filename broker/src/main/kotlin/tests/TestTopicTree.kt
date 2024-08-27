@@ -1,4 +1,4 @@
-package at.rocworks
+package at.rocworks.tests
 
 import at.rocworks.data.MqttTopicName
 import at.rocworks.data.TopicTreeLocal
