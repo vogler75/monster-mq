@@ -26,8 +26,8 @@ fun main(args: Array<String>) {
     val useSsl = args.indexOf("-ssl") != -1
     val useWs = args.indexOf("-ws") != -1
     val useTcp = args.indexOf("-tcp") != -1 || !useWs
-    val kafkaServers = args.indexOf("-kafkaServers").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
-    val kafkaTopic = args.indexOf("-kafkaTopic").let { if (it != -1) args.getOrNull(it+1)?:"" else "monster" }
+    val kafkaServers = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
+    val kafkaTopic = args.indexOf("-topic").let { if (it != -1) args.getOrNull(it+1)?:"" else "monster" }
 
     args.indexOf("-log").let {
         if (it != -1) {
