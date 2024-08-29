@@ -90,7 +90,8 @@ fun main(args: Array<String>) {
             if (res.succeeded() && res.result() != null) {
                 val vertx = res.result()!!
                 val hz = clusterManager.hazelcastInstance
-                val index = TopicTreeHazelcast(hz, "Retained-Index")
+                //val index = TopicTreeHazelcast(hz, "Retained-Index")
+                val index = TopicTreeLocal()
                 val store: MutableMap<String, MqttMessage> = hz.getMap("Retained-Store")
                 startMonster(vertx, index, store)
             } else {

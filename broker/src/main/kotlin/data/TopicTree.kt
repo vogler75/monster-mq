@@ -3,6 +3,11 @@ package at.rocworks.data
 interface TopicTree {
     fun add(topicName: MqttTopicName)
     fun add(topicName: MqttTopicName, data: String?)
+
+    fun addAll(topicNames: List<MqttTopicName>) {
+        topicNames.forEach(::add)
+    }
+
     fun del(topicName: MqttTopicName)
     fun del(topicName: MqttTopicName, data: String?)
 

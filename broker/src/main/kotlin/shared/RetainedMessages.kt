@@ -4,6 +4,7 @@ import at.rocworks.Const
 import at.rocworks.data.TopicTree
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttTopicName
+import com.sun.jmx.remote.internal.ArrayQueue
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -38,16 +39,42 @@ class RetainedMessages(
             if (queue.size > 0)
                 logger.info("Retained message queue [$nr] size [${queue.size}]")
         }
+
+        /*
+         var point: DataPoint? = pollWait()
+            while (point != null) {
+                if (point.value.sourceTime.epochSecond > 0) {
+                    outputBlock.add(point)
+                    handler(point)
+                }
+                point = if (outputBlock.size < writeParameterBlockSize) pollNoWait() else null
+            }
+         */
+        val addBlock = arrayListOf<MqttMessage>()
+        val delBlock = arrayListOf<MqttMessage>()
+
+        fun addMessage(message: MqttMessage) {
+            if (message.payload.isEmpty())
+                delBlock.add(message)
+            else
+                addBlock.add(message)
+        }
+
         while (true) {
             queue.poll(100, TimeUnit.MILLISECONDS)?.let { message ->
-                val topicName = MqttTopicName(message.topicName)
-                if (message.payload.isEmpty()) {
+                addMessage(message)
+                while (queue.poll()?.let(::addMessage) != null && addBlock.size < 1000 && delBlock.size < 1000) {
+                    // nothing to do here
+                }
+
+                delBlock.forEach { // there is no delAll
+                    val topicName = MqttTopicName(it.topicName)
                     index.del(topicName)
                     store.remove(topicName.identifier)
-                } else {
-                    index.add(topicName)
-                    store.put(topicName.identifier, message)
                 }
+
+                index.addAll(addBlock.map { it.topicName }.distinct().map { MqttTopicName(it) })
+                store.putAll(addBlock.map { Pair(it.topicName, it) })
             }
         }
     }
