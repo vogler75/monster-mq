@@ -11,16 +11,21 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MqttSubscriber {
 
     public static void main(String[] args) {
-        System.out.println(args.length);
-        int startNr = 1;
-        if (args.length > 0) startNr = Integer.parseInt(args[0]);
-        for (int i=0; i<Config.SUBSCRIBER_COUNT; i++) {
-            int nr=startNr+i;
-            new Thread(() -> test(nr)).start();
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            System.out.println(args.length);
+            int startNr = 1;
+            if (args.length > 0) startNr = Integer.parseInt(args[0]);
+            for (int i = 0; i < Config.SUBSCRIBER_COUNT; i++) {
+                int nr = startNr + i;
+                executor.submit(() -> test(nr));
+                //new Thread(() -> test(nr)).start();
+            }
         }
     }
 
@@ -53,7 +58,8 @@ public class MqttSubscriber {
             statClient.connect();
 
             // Create an MQTT client instance
-            MqttClient client = new MqttClient(Config.testBroker, testClientId, new MemoryPersistence());
+            var broker = Config.subscriberBroker[nr % Config.publisherBroker.length];
+            MqttClient client = new MqttClient(broker, testClientId, new MemoryPersistence());
 
             // Define the MQTT connection options
             MqttConnectOptions options = new MqttConnectOptions();
@@ -117,7 +123,7 @@ public class MqttSubscriber {
                 int messages = messageCounter - lastCounter;
 
                 double throughput = (double) messages / diff.getSeconds();
-                var statisticsMessage = "Messages " + messageCounter + " / " + lastCounter + " / " + throughput + " / " + diff.getSeconds();
+                var statisticsMessage = "Messages " + messageCounter + " / " + messages + " / " + throughput + " / " + diff.getSeconds();
                 //System.out.println(statisticsMessage);
 
                 lastCounter = messageCounter;

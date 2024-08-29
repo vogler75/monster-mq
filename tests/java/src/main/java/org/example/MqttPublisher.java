@@ -10,25 +10,32 @@ import java.util.UUID;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MqttPublisher {
 
     public static void main(String[] args) {
-        int startNr = 1;
-        if (args.length > 0) startNr = Integer.parseInt(args[0]);
-        for (int i=0; i<Config.PUBLISHER_COUNT; i++) {
-            int nr=startNr+i;
-            new Thread(() -> test(nr)).start();
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+
+            int startNr = 1;
+            if (args.length > 0) startNr = Integer.parseInt(args[0]);
+            for (int i = 0; i < Config.PUBLISHER_COUNT; i++) {
+                int nr = startNr + i;
+                executor.submit(() -> test(nr));
+                //new Thread(() -> test(nr)).start();
+            }
         }
     }
 
     public static void test(int nr) {
+        System.out.println("Nr: "+nr);
         String testClientId = "publisher_" + UUID.randomUUID();
         String statClientId = "statistics_" + UUID.randomUUID(); // Second client for statistics
 
         try {
-            // Create the first MQTT client instance
-            MqttClient testClient = new MqttClient(Config.testBroker, testClientId, new MemoryPersistence());
+            var broker = Config.publisherBroker[nr % Config.publisherBroker.length];
+            MqttClient testClient = new MqttClient(broker, testClientId, new MemoryPersistence());
 
             // Define callback for the first client
             testClient.setCallback(new MqttCallback() {
@@ -84,13 +91,13 @@ public class MqttPublisher {
 
             while (messageCounter < 1_000_000) {
                 topicNr3++;
-                if (topicNr3 == 100) {
+                if (topicNr3 == Config.TOPIC_LEVEL_DEPTH) {
                     topicNr3 = 0;
                     topicNr2++;
-                    if (topicNr2 == 100) {
+                    if (topicNr2 == Config.TOPIC_LEVEL_DEPTH) {
                         topicNr2 = 0;
                         topicNr1++;
-                        if (topicNr1 == 100) {
+                        if (topicNr1 == Config.TOPIC_LEVEL_DEPTH) {
                             topicNr1 = 0;
                         }
                     }
