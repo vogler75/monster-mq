@@ -1,13 +1,14 @@
 package at.rocworks.shared
 
 import at.rocworks.Const
-import at.rocworks.data.TopicTree
-import at.rocworks.data.MqttMessage
-import at.rocworks.data.MqttTopicName
-import com.sun.jmx.remote.internal.ArrayQueue
+import at.rocworks.data.*
+import com.hazelcast.map.IMap
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.json.JsonArray
+import java.time.Duration
+import java.time.Instant
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
@@ -23,14 +24,40 @@ class RetainedMessages(
 
     private val maxRetainedMessagesSentToClient = 0 // 100_000 // TODO: configurable or timed
 
+    private val addAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/A"
+    private val delAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/D"
+
     init {
         logger.level = Const.DEBUG_LEVEL
         val queuesCount = 1 // TODO: configurable
         queues = List(queuesCount) { ArrayBlockingQueue<MqttMessage>(100_000) } // TODO: configurable
     }
 
-    override fun start() {
-        queues.forEachIndexed { index, queue -> writerThread(index, queue) }
+    override fun start(startPromise: Promise<Void>) {
+        vertx.executeBlocking(Callable {
+            logger.info("Index type [${index.getType()}]")
+            if (index.getType() == TopicTreeType.LOCAL) {
+                vertx.eventBus().consumer<JsonArray>(addAddress) {
+                    index.addAll(it.body().map {
+                        MqttTopicName(it.toString())
+                    })
+                }
+
+                vertx.eventBus().consumer<JsonArray>(delAddress) {
+                    index.delAll(it.body().map {
+                        MqttTopicName(it.toString())
+                    })
+                }
+
+                logger.info("Indexing retained message store...")
+                store.keys.forEach { index.add(MqttTopicName(it)) }
+                logger.info("Indexing retained message store finished.")
+            }
+
+            queues.forEachIndexed { index, queue -> writerThread(index, queue) }
+
+            startPromise.complete()
+        })
     }
 
     private fun writerThread(nr: Int, queue: ArrayBlockingQueue<MqttMessage>) = thread(start = true) {
@@ -40,16 +67,6 @@ class RetainedMessages(
                 logger.info("Retained message queue [$nr] size [${queue.size}]")
         }
 
-        /*
-         var point: DataPoint? = pollWait()
-            while (point != null) {
-                if (point.value.sourceTime.epochSecond > 0) {
-                    outputBlock.add(point)
-                    handler(point)
-                }
-                point = if (outputBlock.size < writeParameterBlockSize) pollNoWait() else null
-            }
-         */
         val addBlock = arrayListOf<MqttMessage>()
         val delBlock = arrayListOf<MqttMessage>()
 
@@ -63,18 +80,39 @@ class RetainedMessages(
         while (true) {
             queue.poll(100, TimeUnit.MILLISECONDS)?.let { message ->
                 addMessage(message)
-                while (queue.poll()?.let(::addMessage) != null && addBlock.size < 1000 && delBlock.size < 1000) {
+                while (queue.poll()?.let(::addMessage) != null
+                    && addBlock.size < 1000
+                    && delBlock.size < 1000) {
                     // nothing to do here
                 }
 
-                delBlock.forEach { // there is no delAll
-                    val topicName = MqttTopicName(it.topicName)
-                    index.del(topicName)
-                    store.remove(topicName.identifier)
+                if (delBlock.size > 0) {
+                    val topics = delBlock.map { it.topicName }.distinct().map { MqttTopicName(it) }
+                    when (index.getType()) {
+                        TopicTreeType.LOCAL -> vertx.eventBus().publish(delAddress, JsonArray(topics.map { it.identifier }))
+                        TopicTreeType.DISTRIBUTED -> index.delAll(topics)
+                    }
+                    topics.forEach { store.remove(it.identifier) } // there is no delAll
+                    delBlock.clear()
                 }
 
-                index.addAll(addBlock.map { it.topicName }.distinct().map { MqttTopicName(it) })
-                store.putAll(addBlock.map { Pair(it.topicName, it) })
+                if (addBlock.size > 0) {
+                    val startTime = Instant.now()
+
+                    val topics = addBlock.map { it.topicName }.distinct().map { MqttTopicName(it) }
+                    when (index.getType()) {
+                        TopicTreeType.LOCAL -> vertx.eventBus().publish(addAddress, JsonArray(topics.map { it.identifier }))
+                        TopicTreeType.DISTRIBUTED -> index.addAll(topics)
+                    }
+                    val duration1 = Duration.between(startTime, Instant.now()).toMillis()
+
+                    if (store is IMap) store.putAllAsync(addBlock.associateBy { it.topicName })
+                    else store.putAll(addBlock.map { Pair(it.topicName, it) }) // needs 450ms for 1000 entries
+
+                    val duration2 = Duration.between(startTime, Instant.now()).toMillis()
+                    logger.finest { "Write block of size [${addBlock.size}] to map took [$duration1] [$duration2]" }
+                    addBlock.clear()
+                }
             }
         }
     }
@@ -85,7 +123,7 @@ class RetainedMessages(
         try {
             queues[queueIdx].add(message)
         } catch (e: IllegalStateException) {
-
+            // TODO: Alert
         }
         if (queues.size > 1 && ++queueIdx==queues.size) queueIdx=0
         return Future.succeededFuture()
@@ -105,7 +143,7 @@ class RetainedMessages(
                     } else { // it could be a node inside the tree index where we haven't stored a value
                         logger.finest { "Stored message for [$topic] is null!" }
                     }
-                    if (maxRetainedMessagesSentToClient>0 && counter>=maxRetainedMessagesSentToClient) {
+                    if (maxRetainedMessagesSentToClient > 0 && counter >= maxRetainedMessagesSentToClient) {
                         logger.warning("Maximum retained messages sent.")
                         false
                     } else true

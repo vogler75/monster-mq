@@ -12,6 +12,7 @@ import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.VertxBuilder
+import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
@@ -89,10 +90,15 @@ fun main(args: Array<String>) {
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
             if (res.succeeded() && res.result() != null) {
                 val vertx = res.result()!!
+
                 val hz = clusterManager.hazelcastInstance
+
                 //val index = TopicTreeHazelcast(hz, "Retained-Index")
-                val index = TopicTreeLocal()
                 val store: MutableMap<String, MqttMessage> = hz.getMap("Retained-Store")
+                val x = hz.getMap<String, MqttMessage>("Retained-Store")
+
+                val index = TopicTreeLocal()
+                //val store = ConcurrentHashMap<String, MqttMessage>()
                 startMonster(vertx, index, store)
             } else {
                 logger.severe("Vertx building failed: ${res.cause()}")

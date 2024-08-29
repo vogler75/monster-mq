@@ -14,6 +14,8 @@ class TopicTreeLocal : TopicTree {
 
     private val root = Node()
 
+    override fun getType(): TopicTreeType = TopicTreeType.LOCAL
+
     override fun add(topicName: MqttTopicName) = add(topicName, null)
     override fun add(topicName: MqttTopicName, data: String?) {
         fun addTopicNode(node: Node, first: String, rest: List<String>) {

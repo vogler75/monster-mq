@@ -31,6 +31,8 @@ class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : Topi
         cache[rootNodeId] ?: run { cache.put(rootNodeId, Node()) }
     }
 
+    override fun getType(): TopicTreeType = TopicTreeType.DISTRIBUTED
+
     private fun newNode(): String {
         val id = UUID.randomUUID().toString()
         val node = Node()
