@@ -11,16 +11,16 @@ AMOUNT_NRS = AMOUNT_CLIENTS
 # MQTT settings
 MQTT_BROKER = "scada"
 MQTT_PORT = 1883
-MQTT_TOPIC = "monitor/publisher"
+MQTT_TOPIC = "monitor/subscriber"
 
 # The command to run your Python program (replace 'your_program.py' with your actual script)
-base_command = [sys.executable, "test-publisher.py"]
+base_command = [sys.executable, "test-subscriber.py"]
 
 # Loop to start the program n times
 #hosts = [["localhost", 1883]]
-hosts = [["192.168.1.30", 1883]]
+hosts = [["192.168.1.3", 1883]]
 #hosts = [["192.168.1.31", 1883], ["192.168.1.32", 1883], ["192.168.1.33", 1883]]
-#hosts = [["192.168.1.30", 1883], ["192.168.1.30", 1884]] #, ["192.168.1.30", 1885]]
+#hosts = [["192.168.1.30", 1883], ["192.168.1.30", 1884], ["192.168.1.30", 1885]]
 
 hosts_idx = 0
 nrs = [str(i) for i in range(1, AMOUNT_NRS+1)]

@@ -1,0 +1,1 @@
+start java -classpath C:\Users\andre\Workspace\monster-mq\tests_java\tests\target\classes;C:\Users\andre\.m2\repository\org\eclipse\paho\org.eclipse.paho.client.mqttv3\1.2.5\org.eclipse.paho.client.mqttv3-1.2.5.jar org.example.MqttSubscriber %*

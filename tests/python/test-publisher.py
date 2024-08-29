@@ -15,13 +15,16 @@ args = parser.parse_args()
 print(f"Port: {args.port} Nr: {args.nr}")
 
 # Performance
-DELAY_PROCESSING = 1  # 100 v/s
+#DELAY_PROCESSING = 1  # 100 v/s
 #DELAY_PROCESSING = 0.19  # 500 v/s
-#DELAY_PROCESSING = 0.095  # 1000 v/s
+DELAY_PROCESSING = 0.095  # 1000 v/s
 #DELAY_PROCESSING = 0.041  # 2000 v/s
 #DELAY_PROCESSING = 0.026  # 3000 v/s
 #DELAY_PROCESSING = 0.018  # 4000 v/s
+#DELAY_PROCESSING = 0.009  # 7000 v/s
+#DELAY_PROCESSING = 0.005 # 9000 v/s
 #DELAY_PROCESSING = 0.003  # 10000 v/s
+#DELAY_PROCESSING = 0
 
 RETAINED_MESSAGES = False
 
