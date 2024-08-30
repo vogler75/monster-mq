@@ -9,6 +9,7 @@ import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
 import io.vertx.mqtt.MqttEndpoint
+import io.vertx.mqtt.messages.MqttPubAckMessage
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
@@ -33,7 +34,6 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     }
 
     fun getClientId() = MqttClientId(deploymentID())
-    fun getDistributorId(): String = distributor.deploymentID()
 
     companion object {
         private val logger = Logger.getLogger(this::class.simpleName)
@@ -91,8 +91,14 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
             endpoint.pingHandler { pingHandler(endpoint) }
             endpoint.subscribeHandler { subscribeHandler(endpoint, it) }
             endpoint.unsubscribeHandler { unsubscribeHandler(endpoint, it) }
+
             endpoint.publishHandler { publishHandler(endpoint, it) }
             endpoint.publishReleaseHandler { publishReleaseHandler(endpoint, it) }
+
+            endpoint.publishAcknowledgeHandler { publishAcknowledgeHandler(endpoint, it) }
+            endpoint.publishReceivedHandler { publishedReceivedHandler(endpoint, it) }
+            endpoint.publishCompletionHandler { publishCompletionHandler(endpoint, it) }
+
             endpoint.disconnectHandler { disconnectHandler(endpoint) }
             endpoint.closeHandler { closeHandler(endpoint) }
 
@@ -134,7 +140,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
 
     private fun subscribeHandler(endpoint: MqttEndpoint, subscribe: MqttSubscribeMessage) {
         val xs = subscribe.topicSubscriptions().map {
-            it.qualityOfService() // TODO: check access control lists
+            it.qualityOfService()
         }
 
         // Acknowledge the subscriptions
@@ -152,12 +158,12 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         this.endpoint?.let { endpoint ->
             if (this.connected) {
                 message.publish(endpoint)
-                logger.finest { "Client [${endpoint.clientIdentifier()}] Delivered message for topic [${message.topicName}]" }
+                logger.finest { "Client [${endpoint.clientIdentifier()}] Delivered message [${message.messageId}] for topic [${message.topicName}]" }
             } else {
                 try {
                     messageQueue.add(message)
                     if (queueAddError) queueAddError = false
-                    logger.finest { "Client [${endpoint.clientIdentifier()}] Queued message for topic [${message.topicName}]" }
+                    logger.finest { "Client [${endpoint.clientIdentifier()}] Queued message [${message.messageId}] for topic [${message.topicName}]" }
                 } catch (e: IllegalStateException) {
                     if (!queueAddError) {
                         queueAddError = true
@@ -176,17 +182,41 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         endpoint.unsubscribeAcknowledge(unsubscribe.messageId())
     }
 
+    // Receiving messages from client (publish)
+
     private fun publishHandler(endpoint: MqttEndpoint, message: MqttPublishMessage) {
-        logger.finest { "Client [${endpoint.clientIdentifier()}] Received message [${message.topicName()}] with QoS ${message.qosLevel()}" }
+        logger.finest { "Client [${endpoint.clientIdentifier()}] Published message [${message.messageId()}] for [${message.topicName()}] with QoS ${message.qosLevel()}" }
         endpoint.apply {
             // Handle QoS levels
-            if (message.qosLevel() == MqttQoS.AT_LEAST_ONCE) {
+            if (message.qosLevel() == MqttQoS.AT_LEAST_ONCE) { // Level 1
+                logger.finest { "Client [${endpoint.clientIdentifier()}] Sending acknowledge for id [${message.messageId()}]" }
                 publishAcknowledge(message.messageId())
-            } else if (message.qosLevel() == MqttQoS.EXACTLY_ONCE) {
+            } else if (message.qosLevel() == MqttQoS.EXACTLY_ONCE) { // Level 2
+                logger.finest { "Client [${endpoint.clientIdentifier()}] Sending received for id [${message.messageId()}]" }
                 publishReceived(message.messageId())
             }
         }
         distributor.publishMessage(MqttMessage(message))
+    }
+
+    private fun publishReleaseHandler(endpoint: MqttEndpoint, id: Int) {
+        logger.finest { "Client [${endpoint.clientIdentifier()}] Got publish release id [$id]"}
+        endpoint.publishComplete(id) // Publish QoS 2
+    }
+
+    // Sending messages to client (subscribe)
+
+    private fun publishAcknowledgeHandler(endpoint: MqttEndpoint, id: Int) {
+        logger.finest { "Client [${endpoint.clientIdentifier()}] Got sending acknowledge id [$id]" }
+    }
+
+    private fun publishedReceivedHandler(endpoint: MqttEndpoint, id: Int) {
+        logger.finest { "Client [${endpoint.clientIdentifier()}] Got sending received id [$id], now sending release to client." }
+        endpoint.publishRelease(id)
+    }
+
+    private fun publishCompletionHandler(endpoint: MqttEndpoint, id: Int) {
+        logger.finest { "Client [${endpoint.clientIdentifier()}] Got sending complete id [$id]" }
     }
 
     private fun sendLastWill(endpoint: MqttEndpoint) {
@@ -196,10 +226,6 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
                 distributor.publishMessage(MqttMessage(will))
             }
         }
-    }
-
-    private fun publishReleaseHandler(endpoint: MqttEndpoint, messageId: Int) {
-        endpoint.publishComplete(messageId)
     }
 
     private fun disconnectHandler(endpoint: MqttEndpoint) {
