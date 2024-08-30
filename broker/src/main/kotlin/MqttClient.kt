@@ -4,18 +4,14 @@ import at.rocworks.data.MqttClientId
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttTopicName
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
-import io.netty.handler.codec.mqtt.MqttProperties
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
 import io.vertx.mqtt.MqttEndpoint
-import io.vertx.mqtt.messages.MqttPubAckMessage
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
-import io.vertx.mqtt.messages.codes.MqttDisconnectReasonCode
 import java.util.concurrent.ArrayBlockingQueue
-import java.util.logging.Level
 import java.util.logging.Logger
 
 class MqttClient(private val distributor: Distributor): AbstractVerticle() {
@@ -28,6 +24,11 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     private var connected: Boolean = false
 
     private val messageQueue = ArrayBlockingQueue<MqttMessage>(10000) // TODO: configurable
+
+    private var messageQueueError: Boolean = false
+
+    @Volatile
+    private var lastMessageId: Int = 0
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -105,7 +106,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
             endpoint.accept(endpoint.isCleanSession) // TODO: check if we have an existing session
 
             logger.info("Client [${endpoint.clientIdentifier()}] Queued messages: ${messageQueue.size}")
-            messageQueue.forEach { it.publish(endpoint) }
+            messageQueue.forEach { it.publish(endpoint, ++lastMessageId) }
             messageQueue.clear()
 
             this.endpoint = endpoint
@@ -153,20 +154,19 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         }
     }
 
-    private var queueAddError: Boolean = false
     private fun consumeMessage(message: MqttMessage) {
         this.endpoint?.let { endpoint ->
             if (this.connected) {
-                message.publish(endpoint)
+                message.publish(endpoint, ++lastMessageId)
                 logger.finest { "Client [${endpoint.clientIdentifier()}] Delivered message [${message.messageId}] for topic [${message.topicName}]" }
             } else {
                 try {
                     messageQueue.add(message)
-                    if (queueAddError) queueAddError = false
+                    if (messageQueueError) messageQueueError = false
                     logger.finest { "Client [${endpoint.clientIdentifier()}] Queued message [${message.messageId}] for topic [${message.topicName}]" }
                 } catch (e: IllegalStateException) {
-                    if (!queueAddError) {
-                        queueAddError = true
+                    if (!messageQueueError) {
+                        messageQueueError = true
                         logger.warning("Client [${endpoint.clientIdentifier()}] Error adding message to queue: [${e.message}]")
                     }
                 }
