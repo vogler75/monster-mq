@@ -90,20 +90,25 @@ public class MqttPublisher {
             int topicNr1 = 0, topicNr2 = 0, topicNr3 = 0;
 
             while (messageCounter < 1_000_000) {
-                topicNr3++;
-                if (topicNr3 == Config.TOPIC_LEVEL_DEPTH) {
-                    topicNr3 = 0;
-                    topicNr2++;
-                    if (topicNr2 == Config.TOPIC_LEVEL_DEPTH) {
-                        topicNr2 = 0;
-                        topicNr1++;
-                        if (topicNr1 == Config.TOPIC_LEVEL_DEPTH) {
-                            topicNr1 = 0;
+                String topic;
+                if (Config.TOPIC_LEVEL_DEPTH>0) {
+                    topicNr3++;
+                    if (topicNr3 == Config.TOPIC_LEVEL_DEPTH) {
+                        topicNr3 = 0;
+                        topicNr2++;
+                        if (topicNr2 == Config.TOPIC_LEVEL_DEPTH) {
+                            topicNr2 = 0;
+                            topicNr1++;
+                            if (topicNr1 == Config.TOPIC_LEVEL_DEPTH) {
+                                topicNr1 = 0;
+                            }
                         }
                     }
+                    topic = Config.topicPrefix + "/" + nr + "/" + topicNr1 + "/" + topicNr2 + "/" + topicNr3;
+                } else {
+                    topic = Config.topicPrefix + "/" + nr + "/value";
                 }
 
-                String topic = Config.topicPrefix +"/" + nr + "/" + topicNr1 + "/" + topicNr2 + "/" + topicNr3;
                 messageCounter++;
                 lastCounter++;
 
@@ -128,9 +133,15 @@ public class MqttPublisher {
                         statsMsg.setQos(Config.QOS);
                         statClient.publish(Config.statisticsTopic+"/publisher/instance_"+nr, statsMsg);
                     }
-
-                    TimeUnit.MILLISECONDS.sleep((long) Config.DELAY_PROCESSING);
                 }
+
+                if (Config.DELAY_PROCESSING_10>0 && messageCounter % 10 == 0) {
+                    TimeUnit.MILLISECONDS.sleep((long) Config.DELAY_PROCESSING_10);
+                }
+                if (Config.DELAY_PROCESSING_1>0) {
+                    TimeUnit.MILLISECONDS.sleep((long) Config.DELAY_PROCESSING_1);
+                }
+
             }
 
             System.out.println("Done.");
