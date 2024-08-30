@@ -58,7 +58,7 @@ public class MqttSubscriber {
             statClient.connect();
 
             // Create an MQTT client instance
-            var broker = Config.subscriberBroker[nr % Config.publisherBroker.length];
+            var broker = Config.subscriberBroker[nr % Config.subscriberBroker.length];
             MqttClient client = new MqttClient(broker, testClientId, new MemoryPersistence());
 
             // Define the MQTT connection options

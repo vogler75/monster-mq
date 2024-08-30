@@ -59,7 +59,7 @@ class DistributorKafka(
         val codec = MqttMessageCodec()
         val buffer = Buffer.buffer()
         codec.encodeToWire(buffer, message)
-        val record = KafkaProducerRecord.create<String, ByteArray>("monster", message.topicName, buffer.bytes)
+        val record = KafkaProducerRecord.create<String, ByteArray>(topicName, message.topicName, buffer.bytes)
         kafkaProducer?.send(record)
     }
 }
