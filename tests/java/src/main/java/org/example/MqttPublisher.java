@@ -134,7 +134,9 @@ public class MqttPublisher {
                         statClient.publish(Config.statisticsTopic+"/publisher/instance_"+nr, statsMsg);
                     }
                 }
-
+                if (Config.DELAY_PROCESSING_100>0 && messageCounter % 100 == 0) {
+                    TimeUnit.MILLISECONDS.sleep((long) Config.DELAY_PROCESSING_100);
+                }
                 if (Config.DELAY_PROCESSING_10>0 && messageCounter % 10 == 0) {
                     TimeUnit.MILLISECONDS.sleep((long) Config.DELAY_PROCESSING_10);
                 }
