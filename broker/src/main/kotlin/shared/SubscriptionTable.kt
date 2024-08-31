@@ -2,7 +2,6 @@ package at.rocworks.shared
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttClientId
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttTopicName
 import at.rocworks.data.TopicTreeLocal
@@ -27,11 +26,11 @@ class SubscriptionTable: AbstractVerticle() {
 
     override fun start(startPromise: Promise<Void>) {
         vertx.eventBus().consumer<MqttSubscription>(addAddress) {
-            index.add(it.body().topicName, it.body().clientId.identifier)
+            index.add(it.body().topicName, it.body().clientId)
         }
 
         vertx.eventBus().consumer<MqttSubscription>(delAddress) {
-            index.del(it.body().topicName, it.body().clientId.identifier)
+            index.del(it.body().topicName, it.body().clientId)
         }
 
         Utils.getMap<String, MutableSet<MqttTopicName>>(vertx, name).onSuccess { subscriptions ->
@@ -61,9 +60,9 @@ class SubscriptionTable: AbstractVerticle() {
     fun addSubscription(subscription: MqttSubscription) {
         vertx.eventBus().publish(addAddress, subscription)
         table?.let { subscriptions ->
-            subscriptions.get(subscription.clientId.identifier).onComplete { client ->
+            subscriptions.get(subscription.clientId).onComplete { client ->
                 client.result()?.add(subscription.topicName) ?: run {
-                    subscriptions.put(subscription.clientId.identifier, hashSetOf(subscription.topicName))
+                    subscriptions.put(subscription.clientId, hashSetOf(subscription.topicName))
                 }
             }.onFailure {
                logger.severe(it.message)
@@ -74,7 +73,7 @@ class SubscriptionTable: AbstractVerticle() {
     fun removeSubscription(subscription: MqttSubscription) {
         vertx.eventBus().publish(delAddress, subscription)
         table?.let { subscriptions ->
-            subscriptions.get(subscription.clientId.identifier).onComplete { client ->
+            subscriptions.get(subscription.clientId).onComplete { client ->
                 client.result()?.remove(subscription.topicName)
             }.onFailure {
                 logger.severe(it.message)
@@ -82,8 +81,8 @@ class SubscriptionTable: AbstractVerticle() {
         }
     }
 
-    fun removeClient(clientId: MqttClientId) {
-        table?.remove(clientId.identifier)?.onSuccess { topics: MutableSet<MqttTopicName>? ->
+    fun removeClient(clientId: String) {
+        table?.remove(clientId)?.onSuccess { topics: MutableSet<MqttTopicName>? ->
             topics?.forEach { topic ->
                 vertx.eventBus().publish(delAddress, MqttSubscription(clientId, topic))
             }

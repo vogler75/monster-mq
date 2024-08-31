@@ -1,6 +1,5 @@
 package at.rocworks
 
-import at.rocworks.data.MqttClientId
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttTopicName
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
@@ -37,7 +36,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         logger.level = Const.DEBUG_LEVEL
     }
 
-    fun getClientId() = MqttClientId(deploymentID())
+    fun getClientId() = deploymentID()
 
     companion object {
         private val logger = Logger.getLogger(this::class.simpleName)
@@ -69,9 +68,9 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
             }
         }
 
-        fun getClientAddress(clientId: MqttClientId) = "${Const.CLIENT_NAMESPACE}/${clientId.identifier}"
+        fun getClientAddress(clientId: String) = "${Const.CLIENT_NAMESPACE}/${clientId}"
 
-        fun sendMessageToClient(vertx: Vertx, clientId: MqttClientId, message: MqttMessage) {
+        fun sendMessageToClient(vertx: Vertx, clientId: String, message: MqttMessage) {
             vertx.eventBus().publish(getClientAddress(clientId), message)
         }
     }

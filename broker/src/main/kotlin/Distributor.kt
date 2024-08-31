@@ -48,14 +48,14 @@ abstract class Distributor(
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName.identifier)
-            .put(Const.CLIENT_KEY, client.getClientId().identifier)
+            .put(Const.CLIENT_KEY, client.getClientId())
         vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
             if (!it.succeeded())  logger.severe("Subscribe request failed: ${it.cause()}")
         }
     }
 
     private fun subscribeCommand(command: Message<JsonObject>) {
-        val clientId = MqttClientId(command.body().getString(Const.CLIENT_KEY))
+        val clientId = command.body().getString(Const.CLIENT_KEY)
         val topicName = MqttTopicName(command.body().getString(Const.TOPIC_KEY))
 
         retainedMessages.findMatching(topicName) { message ->
@@ -82,7 +82,7 @@ abstract class Distributor(
     }
 
     private fun unsubscribeCommand(command: Message<JsonObject>) {
-        val clientId = MqttClientId(command.body().getString(Const.CLIENT_KEY))
+        val clientId = command.body().getString(Const.CLIENT_KEY)
         val topicName = MqttTopicName(command.body().getString(Const.TOPIC_KEY))
         subscriptionTable.removeSubscription(MqttSubscription(clientId, topicName))
         command.reply(true)
@@ -93,7 +93,7 @@ abstract class Distributor(
     fun cleanSessionRequest(client: MqttClient) {
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_CLEANSESSION)
-            .put(Const.CLIENT_KEY, client.getClientId().identifier)
+            .put(Const.CLIENT_KEY, client.getClientId())
 
         vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
             if (!it.succeeded()) logger.severe("Clean session request failed: ${it.cause()}")
@@ -101,7 +101,7 @@ abstract class Distributor(
     }
 
     private fun cleanSessionCommand(command: Message<JsonObject>) {
-        val clientId = MqttClientId(command.body().getString(Const.CLIENT_KEY))
+        val clientId = command.body().getString(Const.CLIENT_KEY)
         subscriptionTable.removeClient(clientId)
         command.reply(true)
     }
@@ -118,7 +118,7 @@ abstract class Distributor(
     protected fun consumeMessageFromBus(message: MqttMessage) {
         val topicName = MqttTopicName(message.topicName)
         subscriptionTable.findClients(topicName).forEach {
-            MqttClient.sendMessageToClient(vertx, MqttClientId(it), message)
+            MqttClient.sendMessageToClient(vertx, it, message)
         }
     }
 }

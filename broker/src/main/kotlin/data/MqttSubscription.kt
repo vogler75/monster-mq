@@ -2,4 +2,4 @@ package at.rocworks.data
 
 import java.io.Serializable
 
-class MqttSubscription(val clientId: MqttClientId, val topicName: MqttTopicName): Serializable
+class MqttSubscription(val clientId: String, val topicName: MqttTopicName): Serializable
