@@ -48,19 +48,25 @@ fun main(args: Array<String>) {
         val subscriptionTable = SubscriptionTable()
         val retainedMessages = RetainedMessages(retainedIndex, retainedStore)
 
-        val distributor = if (kafkaServers.isNotBlank())
-            DistributorKafka(subscriptionTable, retainedMessages, kafkaServers, kafkaTopic)
-        else DistributorVertx(subscriptionTable, retainedMessages)
+        val distributors = mutableListOf<Distributor>()
+        val servers = mutableListOf<MqttServer>()
 
-        val servers = listOfNotNull(
-            if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
-            if (useWs) MqttServer(usePort, useSsl, true, distributor) else null,
-        )
+        repeat(1) {
+            val distributor = if (kafkaServers.isNotBlank())
+                DistributorKafka(subscriptionTable, retainedMessages, kafkaServers, kafkaTopic)
+            else DistributorVertx(subscriptionTable, retainedMessages)
+            distributors.add(distributor)
+
+            servers.addAll(listOfNotNull(
+                if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
+                if (useWs) MqttServer(usePort, useSsl, true, distributor) else null,
+            ))
+        }
 
         Future.succeededFuture<String>()
             .compose { vertx.deployVerticle(subscriptionTable) }
             .compose { vertx.deployVerticle(retainedMessages) }
-            .compose { vertx.deployVerticle(distributor) }
+            .compose { Future.all(distributors.map { vertx.deployVerticle(it) }) }
             .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
             .onFailure {
                 logger.severe("Startup error: ${it.message}")

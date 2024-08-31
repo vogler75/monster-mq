@@ -27,8 +27,11 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
 
     private var messageQueueError: Boolean = false
 
-    @Volatile
     private var lastMessageId: Int = 0
+    private fun getNextMessageId() = if (lastMessageId == 65535) {
+        lastMessageId = 0
+        0
+    } else ++lastMessageId
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -106,7 +109,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
             endpoint.accept(endpoint.isCleanSession) // TODO: check if we have an existing session
 
             logger.info("Client [${endpoint.clientIdentifier()}] Queued messages: ${messageQueue.size}")
-            messageQueue.forEach { it.publish(endpoint, ++lastMessageId) }
+            messageQueue.forEach { it.publish(endpoint, getNextMessageId()) }
             messageQueue.clear()
 
             this.endpoint = endpoint
@@ -157,7 +160,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     private fun consumeMessage(message: MqttMessage) {
         this.endpoint?.let { endpoint ->
             if (this.connected) {
-                message.publish(endpoint, ++lastMessageId)
+                message.publish(endpoint, getNextMessageId())
                 logger.finest { "Client [${endpoint.clientIdentifier()}] Delivered message [${message.messageId}] for topic [${message.topicName}]" }
             } else {
                 try {
