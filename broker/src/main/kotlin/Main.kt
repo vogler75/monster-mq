@@ -42,7 +42,6 @@ fun main(args: Array<String>) {
 
     fun startMonster(vertx: Vertx, retainedIndex: TopicTree, retainedStore: MutableMap<String, MqttMessage>) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
-        vertx.eventBus().registerDefaultCodec(MqttTopicName::class.java, MqttTopicNameCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
         val subscriptionTable = SubscriptionTable()

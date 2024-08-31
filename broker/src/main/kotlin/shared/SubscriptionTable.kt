@@ -3,7 +3,6 @@ package at.rocworks.shared
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttSubscription
-import at.rocworks.data.MqttTopicName
 import at.rocworks.data.TopicTreeLocal
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -15,7 +14,7 @@ class SubscriptionTable: AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val name = "Subscriptions"
     private val index = TopicTreeLocal()
-    private var table: AsyncMap<String, MutableSet<MqttTopicName>>? = null // key as MqttClientId does not work
+    private var table: AsyncMap<String, MutableSet<String>>? = null // clientId to topicName
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -33,7 +32,7 @@ class SubscriptionTable: AbstractVerticle() {
             index.del(it.body().topicName, it.body().clientId)
         }
 
-        Utils.getMap<String, MutableSet<MqttTopicName>>(vertx, name).onSuccess { subscriptions ->
+        Utils.getMap<String, MutableSet<String>>(vertx, name).onSuccess { subscriptions ->
             logger.info("Indexing subscription table [$name].")
             this.table = subscriptions
             subscriptions.keys()
@@ -82,13 +81,13 @@ class SubscriptionTable: AbstractVerticle() {
     }
 
     fun removeClient(clientId: String) {
-        table?.remove(clientId)?.onSuccess { topics: MutableSet<MqttTopicName>? ->
+        table?.remove(clientId)?.onSuccess { topics: MutableSet<String>? ->
             topics?.forEach { topic ->
                 vertx.eventBus().publish(delAddress, MqttSubscription(clientId, topic))
             }
         }
     }
 
-    fun findClients(topicName: MqttTopicName) = index.findDataOfTopicName(topicName).toSet()
+    fun findClients(topicName: String): Set<String> = index.findDataOfTopicName(topicName).toSet()
 
 }

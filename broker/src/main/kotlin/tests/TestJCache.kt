@@ -1,5 +1,4 @@
 package at.rocworks.tests
-import at.rocworks.data.MqttTopicName
 import at.rocworks.data.TopicTreeHazelcast
 import com.hazelcast.core.HazelcastInstance
 import com.hazelcast.map.IMap
@@ -78,14 +77,14 @@ private fun test2(hazelcastInstance: HazelcastInstance) {
         "b/a/a",
         "b/b/a"
     )
-    topics.forEach { tree.add(MqttTopicName(it)) }
-    tree.add(MqttTopicName("a/a"), "test")
-    tree.add(MqttTopicName("a/a"), "test2")
+    topics.forEach { tree.add(it) }
+    tree.add("a/a", "test")
+    tree.add("a/a", "test2")
     println(tree)
-    tree.del(MqttTopicName("a/a"), "test")
-    tree.del(MqttTopicName("a/a"), "test2")
+    tree.del("a/a", "test")
+    tree.del("a/a", "test2")
     println(tree)
-    tree.del(MqttTopicName("a/a/a"))
+    tree.del("a/a/a")
     println(tree)
 }
 

@@ -38,19 +38,15 @@ class RetainedMessages(
             logger.info("Index type [${index.getType()}]")
             if (index.getType() == TopicTreeType.LOCAL) {
                 vertx.eventBus().consumer<JsonArray>(addAddress) {
-                    index.addAll(it.body().map {
-                        MqttTopicName(it.toString())
-                    })
+                    index.addAll(it.body().map { it.toString() })
                 }
 
                 vertx.eventBus().consumer<JsonArray>(delAddress) {
-                    index.delAll(it.body().map {
-                        MqttTopicName(it.toString())
-                    })
+                    index.delAll(it.body().map { it.toString() })
                 }
 
                 logger.info("Indexing retained message store...")
-                store.keys.forEach { index.add(MqttTopicName(it)) }
+                store.keys.forEach { index.add(it) }
                 logger.info("Indexing retained message store finished.")
             }
 
@@ -87,21 +83,21 @@ class RetainedMessages(
                 }
 
                 if (delBlock.size > 0) {
-                    val topics = delBlock.map { it.topicName }.distinct().map { MqttTopicName(it) }
+                    val topics = delBlock.map { it.topicName }.distinct()
                     when (index.getType()) {
-                        TopicTreeType.LOCAL -> vertx.eventBus().publish(delAddress, JsonArray(topics.map { it.identifier }))
+                        TopicTreeType.LOCAL -> vertx.eventBus().publish(delAddress, JsonArray(topics))
                         TopicTreeType.DISTRIBUTED -> index.delAll(topics)
                     }
-                    topics.forEach { store.remove(it.identifier) } // there is no delAll
+                    topics.forEach { store.remove(it) } // there is no delAll
                     delBlock.clear()
                 }
 
                 if (addBlock.size > 0) {
                     val startTime = Instant.now()
 
-                    val topics = addBlock.map { it.topicName }.distinct().map { MqttTopicName(it) }
+                    val topics = addBlock.map { it.topicName }.distinct()
                     when (index.getType()) {
-                        TopicTreeType.LOCAL -> vertx.eventBus().publish(addAddress, JsonArray(topics.map { it.identifier }))
+                        TopicTreeType.LOCAL -> vertx.eventBus().publish(addAddress, JsonArray(topics))
                         TopicTreeType.DISTRIBUTED -> index.addAll(topics)
                     }
                     val duration1 = Duration.between(startTime, Instant.now()).toMillis()
@@ -129,14 +125,14 @@ class RetainedMessages(
         return Future.succeededFuture()
     }
 
-    fun findMatching(topicName: MqttTopicName, callback: (message: MqttMessage)->Unit): Future<Int> {
+    fun findMatching(topicName: String, callback: (message: MqttMessage)->Unit): Future<Int> {
         val promise = Promise.promise<Int>()
         vertx.executeBlocking(Callable {
             var counter = 0
             try {
                 index.findMatchingTopicNames(topicName) { topic ->
                     logger.finest { "Found matching topic [$topic] for [$topicName]" }
-                    val message = store.get(topic.identifier)
+                    val message = store[topic]
                     if (message != null) {
                         counter++
                         callback(message)

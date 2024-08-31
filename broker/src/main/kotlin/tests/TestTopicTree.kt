@@ -1,6 +1,5 @@
 package at.rocworks.tests
 
-import at.rocworks.data.MqttTopicName
 import at.rocworks.data.TopicTreeLocal
 
 fun main(args: Array<String>) {
@@ -14,10 +13,10 @@ fun main(args: Array<String>) {
         "b/a/a",
         "b/b/a"
         )
-    topics.forEach { tree.add(MqttTopicName(it)) }
+    topics.forEach { tree.add(it) }
 
     val tests = listOf("#", "a/#", "a/+/b", "a/b/+", "a/b/a", "x", "x/y")
     tests.forEach {
-        println("Test: $it: "+tree.findMatchingTopicNames(MqttTopicName(it)).joinToString(" | "))
+        println("Test: $it: "+tree.findMatchingTopicNames(it).joinToString(" | "))
     }
 }

@@ -33,6 +33,9 @@ object Utils {
         }
     }
 
+    fun getTopicLevels(topicName: String) = topicName.split("/")
+    fun addTopicLevel(topicName: String, level: String) = "$topicName/$level"
+
     fun <K,V> getMap(vertx: Vertx, name: String): Future<AsyncMap<K, V>> {
         val promise = Promise.promise<AsyncMap<K, V>>()
         val sharedData = vertx.sharedData()

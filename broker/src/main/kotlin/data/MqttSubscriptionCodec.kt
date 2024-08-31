@@ -8,7 +8,7 @@ class MqttSubscriptionCodec : MessageCodec<MqttSubscription, MqttSubscription> {
         val clientId = s.clientId.toByteArray(Charsets.UTF_8)
         buffer.appendInt(clientId.size)
         buffer.appendBytes(clientId)
-        val topicName = s.topicName.identifier.toByteArray(Charsets.UTF_8)
+        val topicName = s.topicName.toByteArray(Charsets.UTF_8)
         buffer.appendInt(topicName.size)
         buffer.appendBytes(topicName)
     }
@@ -22,7 +22,7 @@ class MqttSubscriptionCodec : MessageCodec<MqttSubscription, MqttSubscription> {
         val topicNameLen = buffer.getInt(position)
         position += 4
         val topicName = buffer.getString(position, position + topicNameLen)
-        return MqttSubscription(clientId, MqttTopicName(topicName))
+        return MqttSubscription(clientId, topicName)
     }
 
     override fun transform(s: MqttSubscription): MqttSubscription {

@@ -1,6 +1,7 @@
 package at.rocworks.data
 
 import at.rocworks.Const
+import at.rocworks.Utils
 import com.hazelcast.core.HazelcastInstance
 import com.hazelcast.map.IMap
 import java.util.*
@@ -45,9 +46,9 @@ class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : Topi
         }
     }
 
-    override fun add(topicName: MqttTopicName) = add(topicName, null)
+    override fun add(topicName: String) = add(topicName, null)
 
-    override fun add(topicName: MqttTopicName, data: String?) {
+    override fun add(topicName: String, data: String?) {
         fun addTopicNode(nodeId: String, topic: String, rest: List<String>) {
             val node = cache[nodeId]
             if (node != null) {
@@ -81,13 +82,13 @@ class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : Topi
                 logger.severe("Failed to read cache item!")
             }
         }
-        val xs = topicName.getLevels()
+        val xs = Utils.getTopicLevels(topicName)
         if (xs.isNotEmpty()) addTopicNode(rootNodeId, xs.first(), xs.drop(1))
     }
 
-    override fun del(topicName: MqttTopicName) = del(topicName, null)
+    override fun del(topicName: String) = del(topicName, null)
 
-    override fun del(topicName: MqttTopicName, data: String?) {
+    override fun del(topicName: String, data: String?) {
         fun delTopicNode(id: String, node: Node, first: String, rest: List<String>) {
             fun deleteIfEmpty(child: Node) {
                 if (child.dataset.isEmpty() && child.children.isEmpty()) {
@@ -112,11 +113,11 @@ class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : Topi
                 }
             }
         }
-        val xs = topicName.getLevels()
+        val xs = Utils.getTopicLevels(topicName)
         if (xs.isNotEmpty()) delTopicNode(rootNodeId, cache[rootNodeId]!!, xs.first(), xs.drop(1))
     }
 
-    override fun findDataOfTopicName(topicName: MqttTopicName): List<String> {
+    override fun findDataOfTopicName(topicName: String): List<String> {
         fun find(node: Node, current: String, rest: List<String>): List<String> {
             return node.children.flatMap { entry ->
                 cache[entry.value]?.let { child ->
@@ -130,18 +131,18 @@ class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : Topi
                 } ?: listOf()
             }
         }
-        val xs = topicName.getLevels()
+        val xs = Utils.getTopicLevels(topicName)
         return if (xs.isNotEmpty()) find(cache.get(rootNodeId)!!, xs.first(), xs.drop(1)) else listOf()
     }
 
-    override fun findMatchingTopicNames(topicName: MqttTopicName): List<MqttTopicName> {
-        fun find(node:Node, current: String, rest: List<String>, topic: MqttTopicName?): List<MqttTopicName> {
+    override fun findMatchingTopicNames(topicName: String): List<String> {
+        fun find(node:Node, current: String, rest: List<String>, topic: String?): List<String> {
             return if (node.children.isEmpty() && rest.isEmpty()) // is leaf
                 if (topic==null) listOf() else listOf(topic)
             else
                 node.children.flatMap { entry ->
                     cache[entry.value]?.let { child ->
-                        val check = topic?.addLevel(entry.key) ?: MqttTopicName(entry.key)
+                        val check = topic?.let { Utils.addTopicLevel(it, entry.key) } ?: entry.key
                         when (current) {
                             "#" -> find(child,"#", listOf(), check )
                             "+", entry.key -> if (rest.isNotEmpty()) find(child, rest.first(), rest.drop(1), check)
@@ -152,7 +153,7 @@ class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : Topi
                 }
         }
         val startTime = System.currentTimeMillis()
-        val xs = topicName.getLevels()
+        val xs = Utils.getTopicLevels(topicName)
         val ret = if (xs.isNotEmpty()) find(cache.get(rootNodeId)!!, xs.first(), xs.drop(1), null) else listOf()
         val endTime = System.currentTimeMillis()
         val elapsedTime = endTime - startTime
@@ -160,8 +161,8 @@ class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : Topi
         return ret
     }
 
-    override fun findMatchingTopicNames(topicName: MqttTopicName, callback: (MqttTopicName)->Boolean) {
-        fun find(node:Node, current: String, rest: List<String>, topic: MqttTopicName?): Boolean {
+    override fun findMatchingTopicNames(topicName: String, callback: (String)->Boolean) {
+        fun find(node:Node, current: String, rest: List<String>, topic: String?): Boolean {
             logger.finest { "Find Node [$node] Current [$current] Rest [${rest.joinToString(",")}] Topic: [$topic]"}
             if (node.children.isEmpty() && rest.isEmpty()) { // is leaf
                 if (topic != null) return callback(topic)
@@ -171,7 +172,7 @@ class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : Topi
                     if (child == null) {
                         logger.severe("Child entry [${entry.value}] has no object in cache!")
                     } else {
-                        val check = topic?.addLevel(entry.key) ?: MqttTopicName(entry.key)
+                        val check = topic?.let { Utils.addTopicLevel(it, entry.key) } ?: entry.key
                         logger.finest { "  Check [$check] Child [$child]" }
                         when (current) {
                             "#" -> if (!find(child, "#", listOf(), check)) return false
@@ -186,7 +187,7 @@ class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : Topi
             return true
         }
         val startTime = System.currentTimeMillis()
-        val xs = topicName.getLevels()
+        val xs = Utils.getTopicLevels(topicName)
         if (xs.isNotEmpty()) find(cache.get(rootNodeId)!!, xs.first(), xs.drop(1), null)
         val endTime = System.currentTimeMillis()
         val elapsedTime = endTime - startTime

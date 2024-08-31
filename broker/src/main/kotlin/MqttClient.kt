@@ -1,7 +1,6 @@
 package at.rocworks
 
 import at.rocworks.data.MqttMessage
-import at.rocworks.data.MqttTopicName
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
@@ -152,7 +151,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         // Subscribe
         subscribe.topicSubscriptions().forEach { subscription ->
             logger.info("Client [${endpoint.clientIdentifier()}] Subscription for [${subscription.topicName()}] with QoS ${subscription.qualityOfService()}")
-            distributor.subscribeRequest(this, MqttTopicName(subscription.topicName()))
+            distributor.subscribeRequest(this, subscription.topicName())
         }
     }
 
@@ -179,7 +178,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     private fun unsubscribeHandler(endpoint: MqttEndpoint, unsubscribe: MqttUnsubscribeMessage) {
         unsubscribe.topics().forEach { topicName ->
             logger.info("Client [${endpoint.clientIdentifier()}] Unsubscribe for [${topicName}]}")
-            distributor.unsubscribeRequest(this, MqttTopicName(topicName))
+            distributor.unsubscribeRequest(this, topicName)
         }
         endpoint.unsubscribeAcknowledge(unsubscribe.messageId())
     }

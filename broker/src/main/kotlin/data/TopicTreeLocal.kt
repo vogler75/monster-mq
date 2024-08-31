@@ -1,5 +1,6 @@
 package at.rocworks.data
 
+import at.rocworks.Utils
 import io.vertx.core.impl.ConcurrentHashSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
@@ -16,8 +17,8 @@ class TopicTreeLocal : TopicTree {
 
     override fun getType(): TopicTreeType = TopicTreeType.LOCAL
 
-    override fun add(topicName: MqttTopicName) = add(topicName, null)
-    override fun add(topicName: MqttTopicName, data: String?) {
+    override fun add(topicName: String) = add(topicName, null)
+    override fun add(topicName: String, data: String?) {
         fun addTopicNode(node: Node, first: String, rest: List<String>) {
             val child = node.children.getOrPut(first) { Node() }
             if (rest.isEmpty()) {
@@ -26,12 +27,12 @@ class TopicTreeLocal : TopicTree {
                 addTopicNode(child, rest.first(), rest.drop(1))
             }
         }
-        val xs = topicName.getLevels()
+        val xs = Utils.getTopicLevels(topicName)
         if (xs.isNotEmpty()) addTopicNode(root, xs.first(), xs.drop(1))
     }
 
-    override fun del(topicName: MqttTopicName) = del(topicName, null)
-    override fun del(topicName: MqttTopicName, data: String?) {
+    override fun del(topicName: String) = del(topicName, null)
+    override fun del(topicName: String, data: String?) {
         fun delTopicNode(node: Node, first: String, rest: List<String>) {
             fun deleteIfEmpty(child: Node) {
                 if (child.dataset.isEmpty() && child.children.isEmpty()) {
@@ -50,11 +51,11 @@ class TopicTreeLocal : TopicTree {
                 }
             }
         }
-        val xs = topicName.getLevels()
+        val xs = Utils.getTopicLevels(topicName)
         if (xs.isNotEmpty()) delTopicNode(root, xs.first(), xs.drop(1))
     }
 
-    override fun findDataOfTopicName(topicName: MqttTopicName): List<String> {
+    override fun findDataOfTopicName(topicName: String): List<String> {
         fun find(node: Node, current: String, rest: List<String>): List<String> {
             return node.children.flatMap { child ->
                 when (child.key) {
@@ -66,36 +67,36 @@ class TopicTreeLocal : TopicTree {
                 }
             }
         }
-        val xs = topicName.getLevels()
+        val xs = Utils.getTopicLevels(topicName)
         return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1)) else listOf()
     }
 
-    override fun findMatchingTopicNames(topicName: MqttTopicName): List<MqttTopicName> {
-        fun find(node: Node, current: String, rest: List<String>, topic: MqttTopicName?): List<MqttTopicName> {
+    override fun findMatchingTopicNames(topicName: String): List<String> {
+        fun find(node: Node, current: String, rest: List<String>, topic: String?): List<String> {
             return if (node.children.isEmpty() && rest.isEmpty()) // is leaf
                 if (topic==null) listOf() else listOf(topic)
             else
                 node.children.flatMap { child ->
                     when (current) {
-                        "#" -> find(child.value,"#", listOf(), topic?.addLevel(child.key) ?: MqttTopicName(child.key), )
-                        "+", child.key -> if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), topic?.addLevel(child.key) ?: MqttTopicName(child.key))
-                               else listOf(topic?.addLevel(child.key) ?: MqttTopicName(child.key))
+                        "#" -> find(child.value,"#", listOf(), topic?.let { Utils.addTopicLevel(it, child.key) } ?: child.key)
+                        "+", child.key -> if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), topic?.let { Utils.addTopicLevel(it, child.key) } ?: child.key)
+                               else listOf(topic?.let { Utils.addTopicLevel(it, child.key) } ?: child.key)
                         else -> listOf()
                     }
                 }
         }
-        val xs = topicName.getLevels()
+        val xs = Utils.getTopicLevels(topicName)
         return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1), null) else listOf()
     }
 
-    override fun findMatchingTopicNames(topicName: MqttTopicName, callback: (MqttTopicName)->Boolean) {
-        fun find(node: Node, current: String, rest: List<String>, topic: MqttTopicName?): Boolean {
+    override fun findMatchingTopicNames(topicName: String, callback: (String)->Boolean) {
+        fun find(node: Node, current: String, rest: List<String>, topic: String?): Boolean {
             logger.finest { "Find Node [$node] Current [$current] Rest [${rest.joinToString(",")}] Topic: [$topic]"}
             if (node.children.isEmpty() && rest.isEmpty()) { // is leaf
                 if (topic != null) return callback(topic)
             } else {
                 node.children.forEach { child ->
-                    val check = topic?.addLevel(child.key) ?: MqttTopicName(child.key)
+                    val check = topic?.let { Utils.addTopicLevel(it, child.key) } ?: child.key
                     logger.finest { "  Check [$check] Child [$child]" }
                     when (current) {
                         "#" -> if (!find(child.value, "#", listOf(), check)) return false
@@ -109,7 +110,7 @@ class TopicTreeLocal : TopicTree {
             return true
         }
         val startTime = System.currentTimeMillis()
-        val xs = topicName.getLevels()
+        val xs = Utils.getTopicLevels(topicName)
         if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1), null)
         val endTime = System.currentTimeMillis()
         val elapsedTime = endTime - startTime
