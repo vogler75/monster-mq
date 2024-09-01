@@ -11,6 +11,7 @@ import at.rocworks.shared.SubscriptionTable
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.MessageStoreHazelcast
 import at.rocworks.stores.MessageStore
+import at.rocworks.stores.MessageStorePostgres
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Vertx
@@ -80,7 +81,8 @@ fun main(args: Array<String>) {
 
     fun localSetup(builder: VertxBuilder) {
         val vertx = builder.build()
-        val retained = MessageStore("Retained-Store")
+        //val retained = MessageStore("Retained-Store")
+        val retained = MessageStorePostgres("Retained-Store", "postgresql://system:manager@linux0:5432/postgres")
         vertx.deployVerticle(retained).onComplete {
             startMonster(vertx, retained)
         }
