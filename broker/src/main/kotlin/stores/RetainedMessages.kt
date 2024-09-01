@@ -90,7 +90,7 @@ class RetainedMessages(private val store: IMessageStore): AbstractVerticle() {
             try {
                 store.findMatchingTopicNames(topicName) { topic ->
                     logger.finest { "Found matching topic [$topic] for [$topicName]" }
-                    val message = store.get(topic)
+                    val message = store[topic]
                     if (message != null) {
                         counter++
                         callback(message)

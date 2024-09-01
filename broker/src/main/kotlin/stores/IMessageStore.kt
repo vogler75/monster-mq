@@ -4,7 +4,7 @@ import at.rocworks.data.MqttMessage
 import io.vertx.core.AbstractVerticle
 
 interface IMessageStore {
-    fun get(topic: String): MqttMessage?
+    operator fun get(topic: String): MqttMessage?
 
     fun addAll(messages: List<MqttMessage>)
     fun delAll(messages: List<MqttMessage>)
