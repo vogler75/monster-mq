@@ -8,11 +8,13 @@ import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import at.rocworks.data.*
 import at.rocworks.shared.RetainedMessages
 import at.rocworks.shared.SubscriptionTable
+import at.rocworks.stores.IMessageStore
+import at.rocworks.stores.MessageStoreHazelcast
+import at.rocworks.stores.MessageStore
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.VertxBuilder
-import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
@@ -40,12 +42,12 @@ fun main(args: Array<String>) {
 
     logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs Kafka: $kafkaServers")
 
-    fun startMonster(vertx: Vertx, retainedIndex: TopicTree, retainedStore: MutableMap<String, MqttMessage>) {
+    fun startMonster(vertx: Vertx, retainedStore: IMessageStore) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
         val subscriptionTable = SubscriptionTable()
-        val retainedMessages = RetainedMessages(retainedIndex, retainedStore)
+        val retainedMessages = RetainedMessages(retainedStore)
 
         val distributors = mutableListOf<Distributor>()
         val servers = mutableListOf<MqttServer>()
@@ -77,9 +79,11 @@ fun main(args: Array<String>) {
     }
 
     fun localSetup(builder: VertxBuilder) {
-        val retainedIndex = TopicTreeLocal()
-        val retainedStore = mutableMapOf<String, MqttMessage>()
-        startMonster(builder.build(), retainedIndex, retainedStore)
+        val vertx = builder.build()
+        val retained = MessageStore("Retained-Store")
+        vertx.deployVerticle(retained).onComplete {
+            startMonster(vertx, retained)
+        }
     }
 
     fun clusterSetup(builder: VertxBuilder) {
@@ -95,14 +99,11 @@ fun main(args: Array<String>) {
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
             if (res.succeeded() && res.result() != null) {
                 val vertx = res.result()!!
-
                 val hz = clusterManager.hazelcastInstance
-
-                //val index = TopicTreeHazelcast(hz, "Retained-Index")
-                val index = TopicTreeLocal()
-                val store: MutableMap<String, MqttMessage> = hz.getMap("Retained-Store")
-
-                startMonster(vertx, index, store)
+                val retained = MessageStoreHazelcast("Retained-Store", hz)
+                vertx.deployVerticle(retained).onComplete {
+                    startMonster(vertx, retained)
+                }
             } else {
                 logger.severe("Vertx building failed: ${res.cause()}")
             }

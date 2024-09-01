@@ -2,6 +2,7 @@ package at.rocworks.shared
 
 import at.rocworks.Const
 import at.rocworks.data.*
+import at.rocworks.stores.IMessageStore
 import com.hazelcast.map.IMap
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -15,17 +16,11 @@ import java.util.concurrent.TimeUnit
 import java.util.logging.Logger
 import kotlin.concurrent.thread
 
-class RetainedMessages(
-    private val index: TopicTree,
-    private val store: MutableMap<String, MqttMessage>
-): AbstractVerticle() {
+class RetainedMessages(private val store: IMessageStore): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val queues: List<ArrayBlockingQueue<MqttMessage>>
 
     private val maxRetainedMessagesSentToClient = 0 // 100_000 // TODO: configurable or timed
-
-    private val addAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/A"
-    private val delAddress = Const.GLOBAL_RETAINED_MESSAGES_NAMESPACE +"/D"
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -33,27 +28,8 @@ class RetainedMessages(
         queues = List(queuesCount) { ArrayBlockingQueue<MqttMessage>(100_000) } // TODO: configurable
     }
 
-    override fun start(startPromise: Promise<Void>) {
-        vertx.executeBlocking(Callable {
-            logger.info("Index type [${index.getType()}]")
-            if (index.getType() == TopicTreeType.LOCAL) {
-                vertx.eventBus().consumer<JsonArray>(addAddress) {
-                    index.addAll(it.body().map { it.toString() })
-                }
-
-                vertx.eventBus().consumer<JsonArray>(delAddress) {
-                    index.delAll(it.body().map { it.toString() })
-                }
-
-                logger.info("Indexing retained message store...")
-                store.keys.forEach { index.add(it) }
-                logger.info("Indexing retained message store finished.")
-            }
-
-            queues.forEachIndexed { index, queue -> writerThread(index, queue) }
-
-            startPromise.complete()
-        })
+    override fun start() {
+        queues.forEachIndexed { index, queue -> writerThread(index, queue) }
     }
 
     private fun writerThread(nr: Int, queue: ArrayBlockingQueue<MqttMessage>) = thread(start = true) {
@@ -83,30 +59,12 @@ class RetainedMessages(
                 }
 
                 if (delBlock.size > 0) {
-                    val topics = delBlock.map { it.topicName }.distinct()
-                    when (index.getType()) {
-                        TopicTreeType.LOCAL -> vertx.eventBus().publish(delAddress, JsonArray(topics))
-                        TopicTreeType.DISTRIBUTED -> index.delAll(topics)
-                    }
-                    topics.forEach { store.remove(it) } // there is no delAll
+                    store.delAll(delBlock)
                     delBlock.clear()
                 }
 
                 if (addBlock.size > 0) {
-                    val startTime = Instant.now()
-
-                    val topics = addBlock.map { it.topicName }.distinct()
-                    when (index.getType()) {
-                        TopicTreeType.LOCAL -> vertx.eventBus().publish(addAddress, JsonArray(topics))
-                        TopicTreeType.DISTRIBUTED -> index.addAll(topics)
-                    }
-                    val duration1 = Duration.between(startTime, Instant.now()).toMillis()
-
-                    if (store is IMap) store.putAllAsync(addBlock.associateBy { it.topicName })
-                    else store.putAll(addBlock.map { Pair(it.topicName, it) }) // needs 450ms for 1000 entries
-
-                    val duration2 = Duration.between(startTime, Instant.now()).toMillis()
-                    logger.finest { "Write block of size [${addBlock.size}] to map took [$duration1] [$duration2]" }
+                    store.addAll(addBlock)
                     addBlock.clear()
                 }
             }
@@ -130,9 +88,9 @@ class RetainedMessages(
         vertx.executeBlocking(Callable {
             var counter = 0
             try {
-                index.findMatchingTopicNames(topicName) { topic ->
+                store.findMatchingTopicNames(topicName) { topic ->
                     logger.finest { "Found matching topic [$topic] for [$topicName]" }
-                    val message = store[topic]
+                    val message = store.get(topic)
                     if (message != null) {
                         counter++
                         callback(message)

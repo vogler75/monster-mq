@@ -3,7 +3,7 @@ package at.rocworks.shared
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttSubscription
-import at.rocworks.data.TopicTreeLocal
+import at.rocworks.data.TopicTree
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -13,7 +13,7 @@ import java.util.logging.Logger
 class SubscriptionTable: AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val name = "Subscriptions"
-    private val index = TopicTreeLocal()
+    private val index = TopicTree()
     private var table: AsyncMap<String, MutableSet<String>>? = null // clientId to topicName
 
     init {

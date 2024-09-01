@@ -1,9 +1,9 @@
 package at.rocworks.tests
 
-import at.rocworks.data.TopicTreeLocal
+import at.rocworks.data.TopicTree
 
 fun main(args: Array<String>) {
-    val tree = TopicTreeLocal()
+    val tree = TopicTree()
 
     val topics = listOf(
         "a/a/a",

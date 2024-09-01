@@ -9,7 +9,7 @@ import java.util.logging.Logger
 
 import kotlin.system.exitProcess
 
-class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : TopicTree {
+class TopicTreeHazelcast(hazelcast: HazelcastInstance, cacheName: String) : ITopicTree {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     //private val cachingProvider: CachingProvider = Caching.getCachingProvider()
     //private val cacheManager: CacheManager = cachingProvider.cacheManager
