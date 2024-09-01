@@ -82,7 +82,7 @@ fun main(args: Array<String>) {
     fun localSetup(builder: VertxBuilder) {
         val vertx = builder.build()
         //val retained = MessageStore("Retained-Store")
-        val retained = MessageStorePostgres("Retained-Store", "postgresql://system:manager@linux0:5432/postgres")
+        val retained = MessageStorePostgres("Retained-Store", "jdbc:postgresql://linux0:5432/postgres", "system", "manager")
         vertx.deployVerticle(retained).onComplete {
             startMonster(vertx, retained)
         }
