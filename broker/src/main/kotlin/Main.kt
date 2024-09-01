@@ -100,9 +100,7 @@ fun main(args: Array<String>) {
 
                 //val index = TopicTreeHazelcast(hz, "Retained-Index")
                 val index = TopicTreeLocal()
-
                 val store: MutableMap<String, MqttMessage> = hz.getMap("Retained-Store")
-                //val store: MutableMap<String, MqttMessage> = ConcurrentHashMap<String, MqttMessage>()
 
                 startMonster(vertx, index, store)
             } else {
