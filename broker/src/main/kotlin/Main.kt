@@ -99,11 +99,11 @@ fun main(args: Array<String>) {
                 val hz = clusterManager.hazelcastInstance
 
                 //val index = TopicTreeHazelcast(hz, "Retained-Index")
-                val store: MutableMap<String, MqttMessage> = hz.getMap("Retained-Store")
-                val x = hz.getMap<String, MqttMessage>("Retained-Store")
-
                 val index = TopicTreeLocal()
-                //val store = ConcurrentHashMap<String, MqttMessage>()
+
+                val store: MutableMap<String, MqttMessage> = hz.getMap("Retained-Store")
+                //val store: MutableMap<String, MqttMessage> = ConcurrentHashMap<String, MqttMessage>()
+
                 startMonster(vertx, index, store)
             } else {
                 logger.severe("Vertx building failed: ${res.cause()}")
