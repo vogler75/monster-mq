@@ -2,8 +2,8 @@ package at.rocworks
 
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
+import at.rocworks.stores.ISubscriptionTable
 import at.rocworks.stores.RetainedMessageHandler
-import at.rocworks.stores.SubscriptionTableAsyncMap
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
 import io.vertx.kafka.client.consumer.KafkaConsumer
@@ -11,10 +11,10 @@ import io.vertx.kafka.client.producer.KafkaProducer
 import io.vertx.kafka.client.producer.KafkaProducerRecord
 
 class DistributorKafka(
-    subscriptionTable: SubscriptionTableAsyncMap,
+    subscriptionTable: ISubscriptionTable,
     retainedMessageHandler: RetainedMessageHandler,
     private val bootstrapServers: String,
-    private val topicName: String
+    private val kafkaTopicName: String
 ): Distributor(subscriptionTable, retainedMessageHandler) {
 
     private val kafkaGroupId = "Monster"
@@ -48,7 +48,7 @@ class DistributorKafka(
                 consumer.handler { record ->
                     consumeMessageFromBus(codec.decodeFromWire(0, Buffer.buffer(record.value())))
                 }
-                consumer.subscribe(topicName)
+                consumer.subscribe(kafkaTopicName)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -59,7 +59,7 @@ class DistributorKafka(
         val codec = MqttMessageCodec()
         val buffer = Buffer.buffer()
         codec.encodeToWire(buffer, message)
-        val record = KafkaProducerRecord.create<String, ByteArray>(topicName, message.topicName, buffer.bytes)
+        val record = KafkaProducerRecord.create<String, ByteArray>(kafkaTopicName, message.topicName, buffer.bytes)
         kafkaProducer?.send(record)
     }
 }

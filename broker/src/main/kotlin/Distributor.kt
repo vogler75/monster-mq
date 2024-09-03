@@ -1,8 +1,8 @@
 package at.rocworks
 
 import at.rocworks.data.*
+import at.rocworks.stores.ISubscriptionTable
 import at.rocworks.stores.RetainedMessageHandler
-import at.rocworks.stores.SubscriptionTableAsyncMap
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
@@ -10,7 +10,7 @@ import io.vertx.core.json.JsonObject
 import java.util.logging.Logger
 
 abstract class Distributor(
-    private val subscriptionTable: SubscriptionTableAsyncMap,
+    private val subscriptionTable: ISubscriptionTable,
     private val retainedMessageHandler: RetainedMessageHandler
 ): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)

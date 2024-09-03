@@ -6,17 +6,16 @@ package at.rocworks
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 
 import at.rocworks.data.*
-import at.rocworks.stores.RetainedMessageHandler
-import at.rocworks.stores.SubscriptionTableAsyncMap
-import at.rocworks.stores.IMessageStore
-import at.rocworks.stores.MessageStorePostgres
+import at.rocworks.stores.*
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.VertxBuilder
+import io.vertx.core.spi.cluster.ClusterManager
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
+
 
 fun main(args: Array<String>) {
     Utils.initLogging()
@@ -30,6 +29,7 @@ fun main(args: Array<String>) {
     val useTcp = args.indexOf("-tcp") != -1 || !useWs
     val kafkaServers = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
     val kafkaTopic = args.indexOf("-topic").let { if (it != -1) args.getOrNull(it+1)?:"" else "monster" }
+    val retainedMessageStoreType = MessageStoreType.POSTGRES
 
     args.indexOf("-log").let {
         if (it != -1) {
@@ -41,20 +41,58 @@ fun main(args: Array<String>) {
 
     logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs Kafka: $kafkaServers")
 
-    fun startMonster(vertx: Vertx, retainedStore: IMessageStore) {
+    fun getRetainedStore(vertx: Vertx, name: String, clusterManager: ClusterManager?): IMessageStore
+    = when (retainedMessageStoreType) {
+        MessageStoreType.MEMORY -> {
+            val store = MessageStoreMemory(name)
+            vertx.deployVerticle(store)
+            store
+        }
+        MessageStoreType.POSTGRES -> {
+            val store = MessageStorePostgres(
+                name = name,
+                url = "jdbc:postgresql://192.168.1.30:5432/postgres",
+                username = "system",
+                password = "manager"
+            )
+            vertx.deployVerticle(store)
+            store
+        }
+        MessageStoreType.HAZELCAST -> {
+            if (clusterManager is HazelcastClusterManager) {
+                val store = MessageStoreHazelcast(name, clusterManager.hazelcastInstance)
+                vertx.deployVerticle(store)
+                store
+            } else {
+                logger.severe("Cannot create Hazelcast message store with this cluster manager.")
+                exitProcess(-1)
+            }
+        }
+    }
+
+    fun getDistributor(
+        subscriptionTable: ISubscriptionTable,
+        retainedMessageHandler: RetainedMessageHandler
+    ): Distributor {
+        val distributor = if (kafkaServers.isNotBlank())
+            DistributorKafka(subscriptionTable, retainedMessageHandler, kafkaServers, kafkaTopic)
+        else DistributorVertx(subscriptionTable, retainedMessageHandler)
+        return distributor
+    }
+
+    fun startMonster(vertx: Vertx, clusterManager: ClusterManager?) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
         val subscriptionTable = SubscriptionTableAsyncMap()
-        val retainedMessageHandler = RetainedMessageHandler(retainedStore)
+        val retainedMessageStore = getRetainedStore(vertx, "RetainedStore", clusterManager)
+        val retainedMessageHandler = RetainedMessageHandler(retainedMessageStore)
 
         val distributors = mutableListOf<Distributor>()
         val servers = mutableListOf<MqttServer>()
 
         repeat(1) {
-            val distributor = if (kafkaServers.isNotBlank())
-                DistributorKafka(subscriptionTable, retainedMessageHandler, kafkaServers, kafkaTopic)
-            else DistributorVertx(subscriptionTable, retainedMessageHandler)
+            val distributor = getDistributor(subscriptionTable, retainedMessageHandler)
             distributors.add(distributor)
 
             servers.addAll(listOfNotNull(
@@ -77,20 +115,9 @@ fun main(args: Array<String>) {
             }
     }
 
-    fun getPostgresMessageStore() = MessageStorePostgres(
-        name = "RetainedStore",
-        url = "jdbc:postgresql://192.168.1.30:5432/postgres",
-        username = "system",
-        password = "manager"
-    )
-
     fun localSetup(builder: VertxBuilder) {
         val vertx = builder.build()
-        //val retained = MessageStoreMemory("RetainedStore")
-        val retained = getPostgresMessageStore()
-        vertx.deployVerticle(retained).onComplete {
-            startMonster(vertx, retained)
-        }
+        startMonster(vertx, null)
     }
 
     fun clusterSetup(builder: VertxBuilder) {
@@ -106,11 +133,7 @@ fun main(args: Array<String>) {
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
             if (res.succeeded() && res.result() != null) {
                 val vertx = res.result()!!
-                //val retained = MessageStoreHazelcast("RetainedStore", clusterManager.hazelcastInstance)
-                val retained = getPostgresMessageStore()
-                vertx.deployVerticle(retained).onComplete {
-                    startMonster(vertx, retained)
-                }
+                startMonster(vertx, clusterManager)
             } else {
                 logger.severe("Vertx building failed: ${res.cause()}")
             }

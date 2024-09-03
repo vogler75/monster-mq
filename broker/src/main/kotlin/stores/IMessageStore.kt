@@ -2,6 +2,12 @@ package at.rocworks.stores
 
 import at.rocworks.data.MqttMessage
 
+enum class MessageStoreType {
+    MEMORY,
+    HAZELCAST,
+    POSTGRES
+}
+
 interface IMessageStore {
     operator fun get(topicName: String): MqttMessage?
 

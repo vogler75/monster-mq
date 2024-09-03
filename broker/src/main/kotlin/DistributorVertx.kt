@@ -1,13 +1,13 @@
 package at.rocworks
 
 import at.rocworks.data.MqttMessage
+import at.rocworks.stores.ISubscriptionTable
 import at.rocworks.stores.RetainedMessageHandler
-import at.rocworks.stores.SubscriptionTableAsyncMap
 import io.vertx.core.Promise
 import java.util.logging.Logger
 
 class DistributorVertx(
-    subscriptionTable: SubscriptionTableAsyncMap,
+    subscriptionTable: ISubscriptionTable,
     retainedMessageHandler: RetainedMessageHandler
 ): Distributor(subscriptionTable, retainedMessageHandler) {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
