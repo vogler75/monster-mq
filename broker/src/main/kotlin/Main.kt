@@ -92,13 +92,13 @@ fun main(args: Array<String>) {
         val servers = mutableListOf<MqttServer>()
 
         repeat(1) {
-            val distributor = getDistributor(subscriptionTable, retainedMessageHandler)
-            distributors.add(distributor)
-
-            servers.addAll(listOfNotNull(
-                if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
-                if (useWs) MqttServer(usePort, useSsl, true, distributor) else null,
-            ))
+            getDistributor(subscriptionTable, retainedMessageHandler).let { distributor ->
+                distributors.add(distributor)
+                servers.addAll(listOfNotNull(
+                    if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
+                    if (useWs) MqttServer(usePort, useSsl, true, distributor) else null,
+                ))
+            }
         }
 
         Future.succeededFuture<String>()
