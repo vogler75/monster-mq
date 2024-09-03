@@ -81,7 +81,7 @@ fun main(args: Array<String>) {
     fun localSetup(builder: VertxBuilder) {
         val vertx = builder.build()
         //val retained = MessageStore("Retained-Store")
-        val retained = MessageStorePostgres("Retained-Store", "jdbc:postgresql://192.168.1.30:5432/postgres", "system", "manager")
+        val retained = MessageStorePostgres("RetainedStore", "jdbc:postgresql://192.168.1.30:5432/postgres", "system", "manager")
         vertx.deployVerticle(retained).onComplete {
             startMonster(vertx, retained)
         }
@@ -100,8 +100,13 @@ fun main(args: Array<String>) {
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
             if (res.succeeded() && res.result() != null) {
                 val vertx = res.result()!!
-                val hz = clusterManager.hazelcastInstance
-                val retained = MessageStoreHazelcast("Retained-Store", hz)
+                //val hz = clusterManager.hazelcastInstance
+                //val retained = MessageStoreHazelcast("RetainedStore", hz)
+                val retained = MessageStorePostgres(
+                    name="RetainedStore",
+                    url="jdbc:postgresql://192.168.1.30:5432/postgres",
+                    username="system",
+                    password="manager")
                 vertx.deployVerticle(retained).onComplete {
                     startMonster(vertx, retained)
                 }

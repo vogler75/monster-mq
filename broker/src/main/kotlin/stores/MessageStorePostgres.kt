@@ -16,19 +16,11 @@ class MessageStorePostgres(
 
     private var connection: Connection? = null
 
-    /*
-        CREATE TABLE retained (
-            topic text[] PRIMARY KEY,
-            payload BYTEA,
-            time TIMESTAMPTZ
-        )
-    */
-
     override fun start() {
-        connectDatabase()
-        vertx.setPeriodic(5000) {
+        connection = connectDatabase()
+        vertx.setPeriodic(5000) { // TODO: configurable
             if (!checkConnection())
-                connectDatabase()
+                connection = connectDatabase()
         }
     }
 
@@ -45,26 +37,42 @@ class MessageStorePostgres(
         return false
     }
 
-    private fun connectDatabase() {
-        if (connection == null) {
-            try {
-                logger.info("Connect to PostgreSQL Database...")
-                DriverManager.getConnection(url, username, password)
-                    ?.let { // TODO: check failure and retry to connect
-                        connection = it
-                        it.autoCommit = true
-                        logger.info("Connection established.")
-                    }
-            } catch (e: Exception) {
-                logger.warning("Error opening connection [${e.message}]")
-            }
+    private fun connectDatabase(): Connection? {
+        try {
+            logger.info("Connect to PostgreSQL Database...")
+            DriverManager.getConnection(url, username, password)
+                ?.let { // TODO: check failure and retry to connect
+                    it.autoCommit = true
+                    logger.info("Connection established.")
+                    checkTable(it)
+                    return it
+                }
+        } catch (e: Exception) {
+            logger.warning("Error opening connection [${e.message}]")
+        }
+        return null
+    }
+
+    private fun checkTable(connection: Connection) {
+        try {
+            val statement: Statement = connection.createStatement()
+            statement.executeUpdate("""
+            CREATE TABLE IF NOT EXISTS $name (
+                topic text[] PRIMARY KEY,
+                payload BYTEA,
+                time TIMESTAMPTZ
+            )
+            """.trimIndent())
+            logger.info("Table [$name] is ready.")
+        } catch (e: Exception) {
+            logger.severe("Error in creating table [$name]: ${e.message}")
         }
     }
 
     override fun get(topicName: String): MqttMessage? {
         try {
             connection?.let { connection ->
-                val sql = "SELECT payload FROM retained WHERE topic = ?"
+                val sql = "SELECT payload FROM $name WHERE topic = ?"
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 val topicLevels = topicName.split("/").toTypedArray()
                 preparedStatement.setArray(1, connection.createArrayOf("text", topicLevels))
@@ -96,7 +104,7 @@ class MessageStorePostgres(
             rows.add(Pair(levels, message.payload))
         }
 
-        val sql = "INSERT INTO retained (topic, payload, time) VALUES (?, ?, ?) "+
+        val sql = "INSERT INTO $name (topic, payload, time) VALUES (?, ?, ?) "+
                     "ON CONFLICT (topic) DO UPDATE SET payload = EXCLUDED.payload, time = EXCLUDED.time"
 
         try {
@@ -125,7 +133,7 @@ class MessageStorePostgres(
             rows.add(levels)
         }
 
-        val sql = "DELETE FROM retained WHERE topic = ? "
+        val sql = "DELETE FROM $name WHERE topic = ? "
 
         try {
             connection?.let { connection ->
@@ -156,7 +164,7 @@ class MessageStorePostgres(
 
         try {
             connection?.let { connection ->
-                val sql = "SELECT array_to_string(topic, '/'), payload FROM retained WHERE "+topicLevels.joinToString(" AND ") { it.first }
+                val sql = "SELECT array_to_string(topic, '/'), payload FROM $name WHERE "+topicLevels.joinToString(" AND ") { it.first }
                 logger.info("FindMatchingMessages [$sql])")
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 topicLevels.forEachIndexed { index, level ->
