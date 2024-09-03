@@ -1,8 +1,7 @@
-package at.rocworks.shared
+package at.rocworks.stores
 
 import at.rocworks.Const
 import at.rocworks.data.*
-import at.rocworks.stores.IMessageStore
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
