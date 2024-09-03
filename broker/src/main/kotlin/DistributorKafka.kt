@@ -2,7 +2,7 @@ package at.rocworks
 
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
-import at.rocworks.shared.RetainedMessages
+import at.rocworks.shared.RetainedMessageHandler
 import at.rocworks.shared.SubscriptionTable
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
@@ -12,10 +12,10 @@ import io.vertx.kafka.client.producer.KafkaProducerRecord
 
 class DistributorKafka(
     subscriptionTable: SubscriptionTable,
-    retainedMessages: RetainedMessages,
+    retainedMessageHandler: RetainedMessageHandler,
     private val bootstrapServers: String,
     private val topicName: String
-): Distributor(subscriptionTable, retainedMessages) {
+): Distributor(subscriptionTable, retainedMessageHandler) {
 
     private val kafkaGroupId = "Monster"
 

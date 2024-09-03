@@ -1,7 +1,7 @@
 package at.rocworks
 
 import at.rocworks.data.*
-import at.rocworks.shared.RetainedMessages
+import at.rocworks.shared.RetainedMessageHandler
 import at.rocworks.shared.SubscriptionTable
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.eventbus.Message
@@ -11,7 +11,7 @@ import java.util.logging.Logger
 
 abstract class Distributor(
     private val subscriptionTable: SubscriptionTable,
-    private val retainedMessages: RetainedMessages
+    private val retainedMessageHandler: RetainedMessageHandler
 ): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
@@ -58,7 +58,7 @@ abstract class Distributor(
         val clientId = command.body().getString(Const.CLIENT_KEY)
         val topicName = command.body().getString(Const.TOPIC_KEY)
 
-        retainedMessages.findMatching(topicName) { message ->
+        retainedMessageHandler.findMatching(topicName) { message ->
             logger.finest { "Publish retained message [${message.topicName}]" }
             MqttClient.sendMessageToClient(vertx, clientId, message)
         }.onComplete {
@@ -110,7 +110,7 @@ abstract class Distributor(
 
     fun publishMessage(message: MqttMessage) {
         publishMessageToBus(message)
-        if (message.isRetain) retainedMessages.saveMessage(message)
+        if (message.isRetain) retainedMessageHandler.saveMessage(message)
     }
 
     abstract fun publishMessageToBus(message: MqttMessage)

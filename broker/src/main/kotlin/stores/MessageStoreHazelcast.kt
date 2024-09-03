@@ -38,7 +38,7 @@ class MessageStoreHazelcast(
         })
     }
 
-    override fun get(topic: String): MqttMessage? = store[topic]
+    override fun get(topicName: String): MqttMessage? = store[topicName]
 
     override fun addAll(messages: List<MqttMessage>) {
         val startTime = Instant.now()
@@ -57,7 +57,11 @@ class MessageStoreHazelcast(
         topics.forEach { store.remove(it) } // there is no delAll
     }
 
-    override fun findMatchingTopicNames(topicName: String, callback: (String) -> Boolean) {
-        index.findMatchingTopicNames(topicName, callback)
+    override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
+        index.findMatchingTopicNames(topicName) { foundTopicName ->
+            val message = store[foundTopicName]
+            if (message != null) callback(message)
+            else true
+        }
     }
 }

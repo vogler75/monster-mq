@@ -6,11 +6,10 @@ package at.rocworks
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 
 import at.rocworks.data.*
-import at.rocworks.shared.RetainedMessages
+import at.rocworks.shared.RetainedMessageHandler
 import at.rocworks.shared.SubscriptionTable
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.MessageStoreHazelcast
-import at.rocworks.stores.MessageStore
 import at.rocworks.stores.MessageStorePostgres
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
@@ -48,15 +47,15 @@ fun main(args: Array<String>) {
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
         val subscriptionTable = SubscriptionTable()
-        val retainedMessages = RetainedMessages(retainedStore)
+        val retainedMessageHandler = RetainedMessageHandler(retainedStore)
 
         val distributors = mutableListOf<Distributor>()
         val servers = mutableListOf<MqttServer>()
 
         repeat(1) {
             val distributor = if (kafkaServers.isNotBlank())
-                DistributorKafka(subscriptionTable, retainedMessages, kafkaServers, kafkaTopic)
-            else DistributorVertx(subscriptionTable, retainedMessages)
+                DistributorKafka(subscriptionTable, retainedMessageHandler, kafkaServers, kafkaTopic)
+            else DistributorVertx(subscriptionTable, retainedMessageHandler)
             distributors.add(distributor)
 
             servers.addAll(listOfNotNull(
@@ -67,7 +66,7 @@ fun main(args: Array<String>) {
 
         Future.succeededFuture<String>()
             .compose { vertx.deployVerticle(subscriptionTable) }
-            .compose { vertx.deployVerticle(retainedMessages) }
+            .compose { vertx.deployVerticle(retainedMessageHandler) }
             .compose { Future.all(distributors.map { vertx.deployVerticle(it) }) }
             .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
             .onFailure {
@@ -82,7 +81,7 @@ fun main(args: Array<String>) {
     fun localSetup(builder: VertxBuilder) {
         val vertx = builder.build()
         //val retained = MessageStore("Retained-Store")
-        val retained = MessageStorePostgres("Retained-Store", "jdbc:postgresql://linux0:5432/postgres", "system", "manager")
+        val retained = MessageStorePostgres("Retained-Store", "jdbc:postgresql://192.168.1.30:5432/postgres", "system", "manager")
         vertx.deployVerticle(retained).onComplete {
             startMonster(vertx, retained)
         }

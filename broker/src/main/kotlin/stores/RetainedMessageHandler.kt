@@ -3,20 +3,16 @@ package at.rocworks.shared
 import at.rocworks.Const
 import at.rocworks.data.*
 import at.rocworks.stores.IMessageStore
-import com.hazelcast.map.IMap
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
-import io.vertx.core.json.JsonArray
-import java.time.Duration
-import java.time.Instant
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
 import java.util.logging.Logger
 import kotlin.concurrent.thread
 
-class RetainedMessages(private val store: IMessageStore): AbstractVerticle() {
+class RetainedMessageHandler(private val store: IMessageStore): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val queues: List<ArrayBlockingQueue<MqttMessage>>
 
@@ -88,15 +84,10 @@ class RetainedMessages(private val store: IMessageStore): AbstractVerticle() {
         vertx.executeBlocking(Callable {
             var counter = 0
             try {
-                store.findMatchingTopicNames(topicName) { topic ->
-                    logger.finest { "Found matching topic [$topic] for [$topicName]" }
-                    val message = store[topic]
-                    if (message != null) {
-                        counter++
-                        callback(message)
-                    } else { // it could be a node inside the tree index where we haven't stored a value
-                        logger.finest { "Stored message for [$topic] is null!" }
-                    }
+                store.findMatchingMessages(topicName) { message ->
+                    logger.finest { "Found matching message [${message.topicName}] for [$topicName]" }
+                    counter++
+                    callback(message)
                     if (maxRetainedMessagesSentToClient > 0 && counter >= maxRetainedMessagesSentToClient) {
                         logger.warning("Maximum retained messages sent.")
                         false
