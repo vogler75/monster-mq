@@ -2,8 +2,8 @@ package at.rocworks
 
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
-import at.rocworks.shared.RetainedMessageHandler
-import at.rocworks.shared.SubscriptionTable
+import at.rocworks.stores.RetainedMessageHandler
+import at.rocworks.stores.SubscriptionTableAsyncMap
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
 import io.vertx.kafka.client.consumer.KafkaConsumer
@@ -11,7 +11,7 @@ import io.vertx.kafka.client.producer.KafkaProducer
 import io.vertx.kafka.client.producer.KafkaProducerRecord
 
 class DistributorKafka(
-    subscriptionTable: SubscriptionTable,
+    subscriptionTable: SubscriptionTableAsyncMap,
     retainedMessageHandler: RetainedMessageHandler,
     private val bootstrapServers: String,
     private val topicName: String

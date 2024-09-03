@@ -1,4 +1,4 @@
-package at.rocworks.shared
+package at.rocworks.stores
 
 import at.rocworks.Const
 import at.rocworks.Utils
@@ -10,7 +10,7 @@ import io.vertx.core.Promise
 import io.vertx.core.shareddata.AsyncMap
 import java.util.logging.Logger
 
-class SubscriptionTable: AbstractVerticle() {
+class SubscriptionTableAsyncMap: AbstractVerticle(), ISubscriptionTable {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val name = "Subscriptions"
     private val index = TopicTree()
@@ -56,7 +56,7 @@ class SubscriptionTable: AbstractVerticle() {
         }
     }
 
-    fun addSubscription(subscription: MqttSubscription) {
+    override fun addSubscription(subscription: MqttSubscription) {
         vertx.eventBus().publish(addAddress, subscription)
         table?.let { subscriptions ->
             subscriptions.get(subscription.clientId).onComplete { client ->
@@ -69,7 +69,7 @@ class SubscriptionTable: AbstractVerticle() {
         }
     }
 
-    fun removeSubscription(subscription: MqttSubscription) {
+    override fun removeSubscription(subscription: MqttSubscription) {
         vertx.eventBus().publish(delAddress, subscription)
         table?.let { subscriptions ->
             subscriptions.get(subscription.clientId).onComplete { client ->
@@ -80,7 +80,7 @@ class SubscriptionTable: AbstractVerticle() {
         }
     }
 
-    fun removeClient(clientId: String) {
+    override fun removeClient(clientId: String) {
         table?.remove(clientId)?.onSuccess { topics: MutableSet<String>? ->
             topics?.forEach { topic ->
                 vertx.eventBus().publish(delAddress, MqttSubscription(clientId, topic))
@@ -88,6 +88,6 @@ class SubscriptionTable: AbstractVerticle() {
         }
     }
 
-    fun findClients(topicName: String): Set<String> = index.findDataOfTopicName(topicName).toSet()
+    override fun findClients(topicName: String): Set<String> = index.findDataOfTopicName(topicName).toSet()
 
 }

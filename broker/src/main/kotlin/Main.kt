@@ -6,11 +6,9 @@ package at.rocworks
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 
 import at.rocworks.data.*
-import at.rocworks.shared.RetainedMessageHandler
-import at.rocworks.shared.SubscriptionTable
+import at.rocworks.stores.RetainedMessageHandler
+import at.rocworks.stores.SubscriptionTableAsyncMap
 import at.rocworks.stores.IMessageStore
-import at.rocworks.stores.MessageStoreHazelcast
-import at.rocworks.stores.MessageStoreMemory
 import at.rocworks.stores.MessageStorePostgres
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
@@ -47,7 +45,7 @@ fun main(args: Array<String>) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
-        val subscriptionTable = SubscriptionTable()
+        val subscriptionTable = SubscriptionTableAsyncMap()
         val retainedMessageHandler = RetainedMessageHandler(retainedStore)
 
         val distributors = mutableListOf<Distributor>()
@@ -108,8 +106,7 @@ fun main(args: Array<String>) {
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
             if (res.succeeded() && res.result() != null) {
                 val vertx = res.result()!!
-                //val hz = clusterManager.hazelcastInstance
-                //val retained = MessageStoreHazelcast("RetainedStore", hz)
+                //val retained = MessageStoreHazelcast("RetainedStore", clusterManager.hazelcastInstance)
                 val retained = getPostgresMessageStore()
                 vertx.deployVerticle(retained).onComplete {
                     startMonster(vertx, retained)
