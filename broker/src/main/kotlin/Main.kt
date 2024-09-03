@@ -84,7 +84,11 @@ fun main(args: Array<String>) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
-        val subscriptionTable = SubscriptionTableAsyncMap()
+        val subscriptionTable = SubscriptionTablePostgres(
+            url = "jdbc:postgresql://192.168.1.30:5432/postgres",
+            username = "system",
+            password = "manager"
+        ) // SubscriptionTableAsyncMap()
         val retainedMessageStore = getRetainedStore(vertx, "RetainedStore", clusterManager)
         val retainedMessageHandler = RetainedMessageHandler(retainedMessageStore)
 

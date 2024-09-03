@@ -14,64 +14,35 @@ class MessageStorePostgres(
 ): AbstractVerticle(), IMessageStore {
     private val logger = Logger.getLogger(this.javaClass.simpleName+"/"+name)
 
-    private var connection: Connection? = null
-
-    override fun start() {
-        connection = connectDatabase()
-        vertx.setPeriodic(5000) { // TODO: configurable
-            if (!checkConnection())
-                connection = connectDatabase()
-        }
-    }
-
-    private fun checkConnection(): Boolean {
-        if (connection != null && !connection!!.isClosed) {
-            connection!!.prepareStatement("SELECT 1").use { stmt ->
-                stmt.executeQuery().use { rs ->
-                    if (rs.next()) {
-                        return true // Connection is good
-                    }
-                }
+    private val db = object : PostgresConnection(logger, url, username, password) {
+        override fun checkTable(connection: Connection) {
+            try {
+                val statement: Statement = connection.createStatement()
+                statement.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS $name (
+                    topic text[] PRIMARY KEY,
+                    payload BYTEA,
+                    time TIMESTAMPTZ
+                )
+                """.trimIndent())
+                logger.info("Table [$name] is ready.")
+            } catch (e: Exception) {
+                logger.severe("Error in creating table [$name]: ${e.message}")
             }
         }
-        return false
     }
 
-    private fun connectDatabase(): Connection? {
-        try {
-            logger.info("Connect to PostgreSQL Database...")
-            DriverManager.getConnection(url, username, password)
-                ?.let { // TODO: check failure and retry to connect
-                    it.autoCommit = true
-                    logger.info("Connection established.")
-                    checkTable(it)
-                    return it
-                }
-        } catch (e: Exception) {
-            logger.warning("Error opening connection [${e.message}]")
-        }
-        return null
-    }
-
-    private fun checkTable(connection: Connection) {
-        try {
-            val statement: Statement = connection.createStatement()
-            statement.executeUpdate("""
-            CREATE TABLE IF NOT EXISTS $name (
-                topic text[] PRIMARY KEY,
-                payload BYTEA,
-                time TIMESTAMPTZ
-            )
-            """.trimIndent())
-            logger.info("Table [$name] is ready.")
-        } catch (e: Exception) {
-            logger.severe("Error in creating table [$name]: ${e.message}")
+    override fun start() {
+        db.connectDatabase()
+        vertx.setPeriodic(5000) { // TODO: configurable
+            if (!db.checkConnection())
+                db.connectDatabase()
         }
     }
 
     override fun get(topicName: String): MqttMessage? {
         try {
-            connection?.let { connection ->
+            db.connection?.let { connection ->
                 val sql = "SELECT payload FROM $name WHERE topic = ?"
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 val topicLevels = topicName.split("/").toTypedArray()
@@ -108,7 +79,7 @@ class MessageStorePostgres(
                     "ON CONFLICT (topic) DO UPDATE SET payload = EXCLUDED.payload, time = EXCLUDED.time"
 
         try {
-            connection?.let { connection ->
+            db.connection?.let { connection ->
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
 
                 for ((topic, payload) in rows) {
@@ -136,7 +107,7 @@ class MessageStorePostgres(
         val sql = "DELETE FROM $name WHERE topic = ? "
 
         try {
-            connection?.let { connection ->
+            db.connection?.let { connection ->
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
 
                 for (topic in rows) {
@@ -163,7 +134,7 @@ class MessageStorePostgres(
         }.filterNotNull()
 
         try {
-            connection?.let { connection ->
+            db.connection?.let { connection ->
                 val sql = "SELECT array_to_string(topic, '/'), payload FROM $name WHERE "+topicLevels.joinToString(" AND ") { it.first }
                 logger.info("FindMatchingMessages [$sql])")
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
