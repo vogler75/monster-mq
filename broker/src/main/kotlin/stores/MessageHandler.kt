@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 import java.util.logging.Logger
 import kotlin.concurrent.thread
 
-class RetainedMessageHandler(private val store: IMessageStore): AbstractVerticle() {
+class MessageHandler(private val store: IMessageStore): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val queues: List<ArrayBlockingQueue<MqttMessage>>
 
@@ -31,7 +31,7 @@ class RetainedMessageHandler(private val store: IMessageStore): AbstractVerticle
         logger.info("Start thread...")
         vertx.setPeriodic(1000) {
             if (queue.size > 0)
-                logger.info("Retained message queue [$nr] size [${queue.size}]")
+                logger.info("Message queue [$nr] size [${queue.size}]")
         }
 
         val addBlock = arrayListOf<MqttMessage>()
@@ -68,7 +68,7 @@ class RetainedMessageHandler(private val store: IMessageStore): AbstractVerticle
 
     private var queueIdx=0
     fun saveMessage(message: MqttMessage): Future<Void> {
-        logger.finest { "Save retained topic [${message.topicName}]" }
+        logger.finest { "Save topic [${message.topicName}]" }
         try {
             queues[queueIdx].add(message)
         } catch (e: IllegalStateException) {
@@ -88,14 +88,14 @@ class RetainedMessageHandler(private val store: IMessageStore): AbstractVerticle
                     counter++
                     callback(message)
                     if (maxRetainedMessagesSentToClient > 0 && counter >= maxRetainedMessagesSentToClient) {
-                        logger.warning("Maximum retained messages sent.")
+                        logger.warning("Maximum messages sent.")
                         false
                     } else true
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-            logger.fine { "Found [$counter] matching retained messages for [$topicName]." }
+            logger.fine { "Found [$counter] matching messages for [$topicName]." }
             promise.complete(counter)
         })
         return promise.future()

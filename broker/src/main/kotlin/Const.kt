@@ -20,5 +20,5 @@ object Const {
     const val TOPIC_KEY = "Topic"
     const val CLIENT_KEY = "Client"
 
-    var DEBUG_LEVEL: Level = Level.INFO
+    var DEBUG_LEVEL: Level = Level.ALL
 }

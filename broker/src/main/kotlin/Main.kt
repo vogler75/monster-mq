@@ -30,7 +30,7 @@ fun main(args: Array<String>) {
     val kafkaServers = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
     val kafkaTopic = args.indexOf("-topic").let { if (it != -1) args.getOrNull(it+1)?:"" else "monster" }
     val retainedMessageStoreType = MessageStoreType.POSTGRES
-    val subscriptionTableType = SubscriptionTableType.ASYNCMAP
+    val subscriptionTableType = SubscriptionTableType.POSTGRES
 
     args.indexOf("-log").let {
         if (it != -1) {
@@ -90,12 +90,12 @@ fun main(args: Array<String>) {
     }
 
     fun getDistributor(
-        subscriptionTable: ISubscriptionTable,
-        retainedMessageHandler: RetainedMessageHandler
+        subscriptionHandler: SubscriptionHandler,
+        messageHandler: MessageHandler
     ): Distributor {
         val distributor = if (kafkaServers.isNotBlank())
-            DistributorKafka(subscriptionTable, retainedMessageHandler, kafkaServers, kafkaTopic)
-        else DistributorVertx(subscriptionTable, retainedMessageHandler)
+            DistributorKafka(subscriptionHandler, messageHandler, kafkaServers, kafkaTopic)
+        else DistributorVertx(subscriptionHandler, messageHandler)
         return distributor
     }
 
@@ -104,15 +104,16 @@ fun main(args: Array<String>) {
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
         val subscriptionTable = getSubscriptionTable(vertx, "SubscriptionTable")
+        val subscriptionHandler = SubscriptionHandler(subscriptionTable)
 
-        val retainedMessageStore = getMessageStore(vertx, "RetainedStore", clusterManager)
-        val retainedMessageHandler = RetainedMessageHandler(retainedMessageStore)
+        val messageStore = getMessageStore(vertx, "RetainedStore", clusterManager)
+        val messageHandler = MessageHandler(messageStore)
 
         val distributors = mutableListOf<Distributor>()
         val servers = mutableListOf<MqttServer>()
 
         repeat(1) {
-            getDistributor(subscriptionTable, retainedMessageHandler).let { distributor ->
+            getDistributor(subscriptionHandler, messageHandler).let { distributor ->
                 distributors.add(distributor)
                 servers.addAll(listOfNotNull(
                     if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
@@ -122,7 +123,8 @@ fun main(args: Array<String>) {
         }
 
         Future.succeededFuture<String>()
-            .compose { vertx.deployVerticle(retainedMessageHandler) }
+            .compose { vertx.deployVerticle(messageHandler) }
+            .compose { vertx.deployVerticle(subscriptionHandler) }
             .compose { Future.all(distributors.map { vertx.deployVerticle(it) }) }
             .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
             .onFailure {
