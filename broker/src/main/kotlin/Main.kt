@@ -30,6 +30,7 @@ fun main(args: Array<String>) {
     val kafkaServers = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
     val kafkaTopic = args.indexOf("-topic").let { if (it != -1) args.getOrNull(it+1)?:"" else "monster" }
     val retainedMessageStoreType = MessageStoreType.POSTGRES
+    val subscriptionTableType = SubscriptionTableType.ASYNCMAP
 
     args.indexOf("-log").let {
         if (it != -1) {
@@ -41,7 +42,25 @@ fun main(args: Array<String>) {
 
     logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs Kafka: $kafkaServers")
 
-    fun getRetainedStore(vertx: Vertx, name: String, clusterManager: ClusterManager?): IMessageStore
+    fun getSubscriptionTable(vertx: Vertx, name: String): ISubscriptionTable
+    = when (subscriptionTableType) {
+        SubscriptionTableType.ASYNCMAP -> {
+            val table = SubscriptionTableAsyncMap()
+            vertx.deployVerticle(table)
+            table
+        }
+        SubscriptionTableType.POSTGRES -> {
+            val table = SubscriptionTablePostgres(
+                url = "jdbc:postgresql://192.168.1.30:5432/postgres",
+                username = "system",
+                password = "manager"
+            )
+            vertx.deployVerticle(table)
+            table
+        }
+    }
+
+    fun getMessageStore(vertx: Vertx, name: String, clusterManager: ClusterManager?): IMessageStore
     = when (retainedMessageStoreType) {
         MessageStoreType.MEMORY -> {
             val store = MessageStoreMemory(name)
@@ -84,12 +103,9 @@ fun main(args: Array<String>) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
-        val subscriptionTable = SubscriptionTablePostgres(
-            url = "jdbc:postgresql://192.168.1.30:5432/postgres",
-            username = "system",
-            password = "manager"
-        ) // SubscriptionTableAsyncMap()
-        val retainedMessageStore = getRetainedStore(vertx, "RetainedStore", clusterManager)
+        val subscriptionTable = getSubscriptionTable(vertx, "SubscriptionTable")
+
+        val retainedMessageStore = getMessageStore(vertx, "RetainedStore", clusterManager)
         val retainedMessageHandler = RetainedMessageHandler(retainedMessageStore)
 
         val distributors = mutableListOf<Distributor>()
@@ -106,7 +122,6 @@ fun main(args: Array<String>) {
         }
 
         Future.succeededFuture<String>()
-            .compose { vertx.deployVerticle(subscriptionTable) }
             .compose { vertx.deployVerticle(retainedMessageHandler) }
             .compose { Future.all(distributors.map { vertx.deployVerticle(it) }) }
             .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }

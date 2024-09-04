@@ -23,6 +23,8 @@ class MessageStoreHazelcast(
     private val addAddress = "$name/A"
     private val delAddress = "$name/D"
 
+    override fun getType(): MessageStoreType = MessageStoreType.HAZELCAST
+
     override fun start(startPromise: Promise<Void>) {
         vertx.executeBlocking(Callable {
             vertx.eventBus().consumer<JsonArray>(addAddress) {

@@ -9,6 +9,8 @@ enum class MessageStoreType {
 }
 
 interface IMessageStore {
+    fun getType(): MessageStoreType
+
     operator fun get(topicName: String): MqttMessage?
 
     fun addAll(messages: List<MqttMessage>)

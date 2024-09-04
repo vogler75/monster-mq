@@ -34,6 +34,8 @@ class MessageStorePostgres(
         }
     }
 
+    override fun getType(): MessageStoreType = MessageStoreType.POSTGRES
+
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)
     }

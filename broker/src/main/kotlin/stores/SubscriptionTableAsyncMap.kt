@@ -23,6 +23,8 @@ class SubscriptionTableAsyncMap: AbstractVerticle(), ISubscriptionTable {
     private val addAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE +"/A"
     private val delAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE +"/D"
 
+    override fun getType(): SubscriptionTableType = SubscriptionTableType.ASYNCMAP
+
     override fun start(startPromise: Promise<Void>) {
         vertx.eventBus().consumer<MqttSubscription>(addAddress) {
             index.add(it.body().topicName, it.body().clientId)
@@ -89,5 +91,4 @@ class SubscriptionTableAsyncMap: AbstractVerticle(), ISubscriptionTable {
     }
 
     override fun findClients(topicName: String): Set<String> = index.findDataOfTopicName(topicName).toSet()
-
 }

@@ -26,6 +26,8 @@ class SubscriptionTablePostgres(
         logger.level = Const.DEBUG_LEVEL
     }
 
+    override fun getType(): SubscriptionTableType = SubscriptionTableType.POSTGRES
+
     private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun checkTable(connection: Connection) {
             try {
