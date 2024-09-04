@@ -3,8 +3,8 @@ package org.example;
 public class Config {
     public static String statBroker = "tcp://scada:1883";
 
-    public static String[] publisherBroker = new String[] { "tcp://localhost:1883" };
-    public static String[] subscriberBroker = new String[] { "tcp://localhost:1883" };
+    public static String[] publisherBroker = new String[] { "tcp://nuc1:1883" };
+    public static String[] subscriberBroker = new String[] { "tcp://nuc1:1883" };
 
     //public static String[] publisherBroker = new String[] { "tcp://linux1:1883", "tcp://linux2:1883", "tcp://linux3:1883" };
     //public static String[] subscriberBroker = new String[] { "tcp://linux1:1883", "tcp://linux2:1883", "tcp://linux3:1883" };

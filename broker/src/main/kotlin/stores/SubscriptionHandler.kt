@@ -26,7 +26,7 @@ class SubscriptionHandler(private val table: ISubscriptionTable): AbstractVertic
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Start subscription handler...")
+        logger.info("Start handler...")
         vertx.eventBus().consumer<MqttSubscription>(addAddress) {
             index.add(it.body().topicName, it.body().clientId)
         }
@@ -57,8 +57,9 @@ class SubscriptionHandler(private val table: ISubscriptionTable): AbstractVertic
                     // nothing to do here
                 }
                 if (block.size > 0) {
-                    logger.info("Write block with size [${block.size}]")
+                    logger.finest("Write block with size [${block.size}]")
                     execute(block)
+                    block.clear()
                 }
             }
         }

@@ -16,6 +16,7 @@ class MessageHandler(private val store: IMessageStore): AbstractVerticle() {
     private val queues: List<ArrayBlockingQueue<MqttMessage>>
 
     private val maxRetainedMessagesSentToClient = 0 // 100_000 // TODO: configurable or timed
+    private val maxWriteBlockSize = 1000
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -24,6 +25,7 @@ class MessageHandler(private val store: IMessageStore): AbstractVerticle() {
     }
 
     override fun start() {
+        logger.info("Start handler...")
         queues.forEachIndexed { index, queue -> writerThread(index, queue) }
     }
 
@@ -48,8 +50,8 @@ class MessageHandler(private val store: IMessageStore): AbstractVerticle() {
             queue.poll(100, TimeUnit.MILLISECONDS)?.let { message ->
                 addMessage(message)
                 while (queue.poll()?.let(::addMessage) != null
-                    && addBlock.size < 1000
-                    && delBlock.size < 1000) {
+                    && addBlock.size < maxWriteBlockSize
+                    && delBlock.size < maxWriteBlockSize) {
                     // nothing to do here
                 }
 
