@@ -17,9 +17,9 @@ public class Config {
     public static int SUBSCRIBER_COUNT = 10;
 
     public static boolean SUBSCRIBER_CHECK_MESSAGE_ORDER = false;
-    public static boolean SUBSCRIBER_WILDCARD_SUBSCRIPTION = false;
+    public static boolean SUBSCRIBER_WILDCARD_SUBSCRIPTION = true;
 
-    public static double DELAY_PROCESSING_EVERY_100_MESSAGES = 100;
+    public static double DELAY_PROCESSING_EVERY_100_MESSAGES = 40;
     public static double DELAY_PROCESSING_EVERY_10_MESSAGES = 0;
     public static double DELAY_PROCESSING_EVERY_MESSAGE = 0;
 

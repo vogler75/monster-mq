@@ -31,6 +31,9 @@ fun main(args: Array<String>) {
     val kafkaTopic = args.indexOf("-topic").let { if (it != -1) args.getOrNull(it+1)?:"" else "monster" }
     val retainedMessageStoreType = MessageStoreType.POSTGRES
     val subscriptionTableType = SubscriptionTableType.POSTGRES
+    val postgresUrl = "jdbc:postgresql://192.168.1.3:5432/postgres"
+    val postgresUser = "system"
+    val postgresPass = "manager"
 
     args.indexOf("-log").let {
         if (it != -1) {
@@ -50,11 +53,7 @@ fun main(args: Array<String>) {
             table
         }
         SubscriptionTableType.POSTGRES -> {
-            val table = SubscriptionTablePostgres(
-                url = "jdbc:postgresql://192.168.1.30:5432/postgres",
-                username = "system",
-                password = "manager"
-            )
+            val table = SubscriptionTablePostgres(postgresUrl, postgresUser, postgresPass)
             vertx.deployVerticle(table)
             table
         }
@@ -70,9 +69,9 @@ fun main(args: Array<String>) {
         MessageStoreType.POSTGRES -> {
             val store = MessageStorePostgres(
                 name = name,
-                url = "jdbc:postgresql://192.168.1.30:5432/postgres",
-                username = "system",
-                password = "manager"
+                url = postgresUrl,
+                username = postgresUser,
+                password = postgresPass
             )
             vertx.deployVerticle(store)
             store

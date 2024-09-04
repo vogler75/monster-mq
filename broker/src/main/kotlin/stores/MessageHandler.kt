@@ -13,70 +13,59 @@ import kotlin.concurrent.thread
 
 class MessageHandler(private val store: IMessageStore): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
-    private val queues: List<ArrayBlockingQueue<MqttMessage>>
+
+    private val addQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000)
+    private val delQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000)
 
     private val maxRetainedMessagesSentToClient = 0 // 100_000 // TODO: configurable or timed
-    private val maxWriteBlockSize = 1000
+    private val maxWriteBlockSize = 4000 // TODO: configurable
 
     init {
         logger.level = Const.DEBUG_LEVEL
-        val queuesCount = 1 // TODO: configurable
-        queues = List(queuesCount) { ArrayBlockingQueue<MqttMessage>(100_000) } // TODO: configurable
     }
 
     override fun start() {
         logger.info("Start handler...")
-        queues.forEachIndexed { index, queue -> writerThread(index, queue) }
+        writerThread(addQueue, store::addAll)
+        writerThread(delQueue, store::delAll)
     }
 
-    private fun writerThread(nr: Int, queue: ArrayBlockingQueue<MqttMessage>) = thread(start = true) {
+    private fun writerThread(queue: ArrayBlockingQueue<MqttMessage>, execute: (List<MqttMessage>)->Unit)
+    = thread(start = true) {
         logger.info("Start thread...")
         vertx.setPeriodic(1000) {
             if (queue.size > 0)
-                logger.info("Message queue [$nr] size [${queue.size}]")
+                logger.info("Message queue size [${queue.size}]")
         }
 
-        val addBlock = arrayListOf<MqttMessage>()
-        val delBlock = arrayListOf<MqttMessage>()
-
-        fun addMessage(message: MqttMessage) {
-            if (message.payload.isEmpty())
-                delBlock.add(message)
-            else
-                addBlock.add(message)
-        }
+        val block = arrayListOf<MqttMessage>()
 
         while (true) {
             queue.poll(100, TimeUnit.MILLISECONDS)?.let { message ->
-                addMessage(message)
-                while (queue.poll()?.let(::addMessage) != null
-                    && addBlock.size < maxWriteBlockSize
-                    && delBlock.size < maxWriteBlockSize) {
+                block.add(message)
+                while (queue.poll()?.let(block::add) != null
+                    && block.size < maxWriteBlockSize) {
                     // nothing to do here
                 }
 
-                if (delBlock.size > 0) {
-                    store.delAll(delBlock)
-                    delBlock.clear()
-                }
-
-                if (addBlock.size > 0) {
-                    store.addAll(addBlock)
-                    addBlock.clear()
+                if (block.size > 0) {
+                    execute(block)
+                    block.clear()
                 }
             }
         }
     }
 
-    private var queueIdx=0
     fun saveMessage(message: MqttMessage): Future<Void> {
         logger.finest { "Save topic [${message.topicName}]" }
         try {
-            queues[queueIdx].add(message)
+            if (message.payload.isEmpty())
+                delQueue.add(message)
+            else
+                addQueue.add(message)
         } catch (e: IllegalStateException) {
             // TODO: Alert
         }
-        if (queues.size > 1 && ++queueIdx==queues.size) queueIdx=0
         return Future.succeededFuture()
     }
 

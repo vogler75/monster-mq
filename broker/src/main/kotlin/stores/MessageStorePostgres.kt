@@ -63,7 +63,7 @@ class MessageStorePostgres(
                 }
             }
         } catch (e: SQLException) {
-            logger.warning("Get: Error fetching data for topic [$topicName]: ${e.message}")
+            logger.warning("Error fetching data for topic [$topicName]: ${e.message}")
         }
         return null
     }
@@ -90,10 +90,10 @@ class MessageStorePostgres(
                 }
 
                 preparedStatement.executeBatch()
-                logger.finer { "AddAll: Batch insert of [${rows.count()}] rows successful." }
+                logger.finest { "Batch insert of [${rows.count()}] rows successful." }
             }
         } catch (e: SQLException) {
-            logger.warning("AddAll: Error inserting batch data [${e.message}]")
+            logger.warning("Error inserting batch data [${e.message}]")
         }
     }
 
@@ -116,10 +116,10 @@ class MessageStorePostgres(
                 }
 
                 preparedStatement.executeBatch()
-                logger.finer { "DellAll: Batch deleted of [${rows.count()}] rows successful." }
+                logger.finer { "Batch deleted of [${rows.count()}] rows successful." }
             }
         } catch (e: SQLException) {
-            logger.warning("AddAll: Error inserting batch data [${e.message}]")
+            logger.warning("Error deleting batch data [${e.message}]")
         }
     }
 
@@ -156,7 +156,7 @@ class MessageStorePostgres(
                 }
             }
         } catch (e: SQLException) {
-            logger.warning("FindMatchingMessages: Error fetching data for topic [$topicName]: ${e.message}")
+            logger.warning("Error finding data for topic [$topicName]: ${e.message}")
         }
     }
 }
