@@ -1,7 +1,9 @@
 package at.rocworks.stores
 
+import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.Promise
 import java.sql.*
 import java.time.Instant
 import java.util.logging.Logger
@@ -14,7 +16,7 @@ class MessageStorePostgres(
 ): AbstractVerticle(), IMessageStore {
     private val logger = Logger.getLogger(this.javaClass.simpleName+"/"+name)
 
-    private val db = object : PostgresConnection(logger, url, username, password) {
+    private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun checkTable(connection: Connection) {
             try {
                 val statement: Statement = connection.createStatement()
@@ -32,12 +34,8 @@ class MessageStorePostgres(
         }
     }
 
-    override fun start() {
-        db.connectDatabase()
-        vertx.setPeriodic(5000) { // TODO: configurable
-            if (!db.checkConnection())
-                db.connectDatabase()
-        }
+    override fun start(startPromise: Promise<Void>) {
+        db.start(vertx, startPromise)
     }
 
     override fun get(topicName: String): MqttMessage? {
@@ -45,7 +43,7 @@ class MessageStorePostgres(
             db.connection?.let { connection ->
                 val sql = "SELECT payload FROM $name WHERE topic = ?"
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                val topicLevels = topicName.split("/").toTypedArray()
+                val topicLevels = Utils.getTopicLevels(topicName).toTypedArray()
                 preparedStatement.setArray(1, connection.createArrayOf("text", topicLevels))
 
                 val resultSet = preparedStatement.executeQuery()
@@ -71,7 +69,7 @@ class MessageStorePostgres(
     override fun addAll(messages: List<MqttMessage>) {
         val rows: MutableList<Pair<Array<String>, ByteArray>> = ArrayList()
         messages.forEach { message ->
-            val levels = message.topicName.split("/").toTypedArray()
+            val levels = Utils.getTopicLevels(message.topicName).toTypedArray()
             rows.add(Pair(levels, message.payload))
         }
 
@@ -100,7 +98,7 @@ class MessageStorePostgres(
     override fun delAll(messages: List<MqttMessage>) {
         val rows: MutableList<Array<String>> = ArrayList()
         messages.forEach { message ->
-            val levels = message.topicName.split("/").toTypedArray()
+            val levels = Utils.getTopicLevels(message.topicName).toTypedArray()
             rows.add(levels)
         }
 
@@ -124,7 +122,7 @@ class MessageStorePostgres(
     }
 
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
-        val topicLevels = topicName.split("/").mapIndexed { index, level ->
+        val topicLevels = Utils.getTopicLevels(topicName).mapIndexed { index, level ->
             when (level) {
                 "+", "#" -> null
                 else -> {
@@ -136,7 +134,6 @@ class MessageStorePostgres(
         try {
             db.connection?.let { connection ->
                 val sql = "SELECT array_to_string(topic, '/'), payload FROM $name WHERE "+topicLevels.joinToString(" AND ") { it.first }
-                logger.info("FindMatchingMessages [$sql])")
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 topicLevels.forEachIndexed { index, level ->
                     preparedStatement.setString(index+1, level.second)

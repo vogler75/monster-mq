@@ -5,6 +5,7 @@ import io.netty.handler.codec.mqtt.MqttConnectReturnCode
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
+import io.vertx.core.eventbus.MessageConsumer
 import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
@@ -22,8 +23,9 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     private var connected: Boolean = false
 
     private val messageQueue = ArrayBlockingQueue<MqttMessage>(10000) // TODO: configurable
-
     private var messageQueueError: Boolean = false
+
+    private var messageConsumer : MessageConsumer<MqttMessage>? = null
 
     private var lastMessageId: Int = 0
     private fun getNextMessageId() = if (lastMessageId == 65535) {
@@ -35,7 +37,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         logger.level = Const.DEBUG_LEVEL
     }
 
-    fun getClientId() = deploymentID()
+    fun getClientId(): String = endpoint?.clientIdentifier() ?: throw(Exception("MqttClient::getClientId called without endpoint!"))// deploymentID()
 
     companion object {
         private val logger = Logger.getLogger(this::class.simpleName)
@@ -44,11 +46,10 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, distributor: Distributor) {
             val clientId = endpoint.clientIdentifier()
             clients[clientId]?.let { client ->
-                logger.info("Client [${endpoint.clientIdentifier()}] Redeploy existing session.")
-                if (endpoint.isCleanSession) client.cleanSession()
+                logger.info("Client [${endpoint.clientIdentifier()}] Redeploy existing session for [${endpoint.remoteAddress()}].")
                 client.startEndpoint(endpoint)
             } ?: run {
-                logger.info("Client [${endpoint.clientIdentifier()}] Deploy a new session.")
+                logger.info("Client [${endpoint.clientIdentifier()}] Deploy a new session for [${endpoint.remoteAddress()}].")
                 val client = MqttClient(distributor)
                 vertx.deployVerticle(client).onComplete {
                     clients[clientId] = client
@@ -75,9 +76,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     }
 
     override fun start() {
-        vertx.eventBus().consumer(getClientAddress(getClientId())) {
-            consumeMessage(it.body())
-        }
+
     }
 
     fun startEndpoint(endpoint: MqttEndpoint) {
@@ -89,6 +88,8 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
             endpoint.close()
             undeployEndpoint(vertx, endpoint)
         } else {
+            this.endpoint = endpoint
+
             endpoint.exceptionHandler { exceptionHandler(endpoint, it) }
             endpoint.pingHandler { pingHandler(endpoint) }
             endpoint.subscribeHandler { subscribeHandler(endpoint, it) }
@@ -106,11 +107,18 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
 
             endpoint.accept(endpoint.isCleanSession) // TODO: check if we have an existing session
 
+            if (endpoint.isCleanSession) cleanSession()
+
+            if (messageConsumer==null) {
+                messageConsumer = vertx.eventBus().consumer(getClientAddress(endpoint.clientIdentifier())) {
+                    consumeMessage(it.body())
+                }
+            }
+
             logger.info("Client [${endpoint.clientIdentifier()}] Queued messages: ${messageQueue.size}")
             messageQueue.forEach { it.publish(endpoint, getNextMessageId()) }
             messageQueue.clear()
 
-            this.endpoint = endpoint
             this.connected = true
         }
     }

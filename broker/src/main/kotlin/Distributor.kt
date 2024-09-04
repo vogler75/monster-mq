@@ -62,7 +62,7 @@ abstract class Distributor(
             logger.finest { "Publish retained message [${message.topicName}]" }
             MqttClient.sendMessageToClient(vertx, clientId, message)
         }.onComplete {
-            logger.info("Retained messages published [${it.result()}].")
+            logger.finest { "Retained messages published [${it.result()}]." }
             subscriptionTable.addSubscription(MqttSubscription(clientId, topicName))
             command.reply(true)
         }
@@ -75,7 +75,7 @@ abstract class Distributor(
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_UNSUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
-            .put(Const.CLIENT_KEY, client.deploymentID())
+            .put(Const.CLIENT_KEY, client.getClientId())
         vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
             if (!it.succeeded()) logger.severe("Unsubscribe request failed: ${it.cause()}")
         }

@@ -33,7 +33,7 @@ public class MqttSubscriber {
         String testClientId = "subscriber_" + UUID.randomUUID();
         String statClientId = "statistics_" + UUID.randomUUID(); // Second client for statistics
 
-        String TOPIC = Config.topicPrefix + "/" + nr + "/#";
+        String TOPIC = Config.topicPrefix + "/" + nr;
 
         try {
             // Create the second MQTT client instance for statistics
@@ -105,7 +105,30 @@ public class MqttSubscriber {
             System.out.println("Connected successfully "+nr);
 
             // Subscribe to the topic
-            client.subscribe(TOPIC);
+            if (Config.SUBSCRIBER_WILDCARD_SUBSCRIPTION) {
+                client.subscribe(TOPIC+"/#");
+            } else {
+                int topicNr1=0, topicNr2=0, topicNr3=0;
+                int amount=(int)(Math.pow(Config.TOPIC_LEVEL_DEPTH, 3));
+                for (int i=0; i<amount; i++) {
+                    topicNr3++;
+                    if (topicNr3 == Config.TOPIC_LEVEL_DEPTH) {
+                        topicNr3 = 0;
+                        topicNr2++;
+                        if (topicNr2 == Config.TOPIC_LEVEL_DEPTH) {
+                            topicNr2 = 0;
+                            topicNr1++;
+                            if (topicNr1 == Config.TOPIC_LEVEL_DEPTH) {
+                                topicNr1 = 0;
+                            }
+                        }
+                    }
+                    String topic = TOPIC + "/" + topicNr1 + "/" + topicNr2 + "/" + topicNr3;
+                    //System.out.println("Subscribe to "+topic);
+                    client.subscribe(topic);
+                }
+            }
+
             //System.out.println("Subscribed to topic: " + TOPIC);
 
             // Start the network loop

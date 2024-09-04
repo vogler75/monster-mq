@@ -108,6 +108,7 @@ public class MqttPublisher {
                 } else {
                     topic = Config.topicPrefix + "/" + nr + "/value";
                 }
+                //System.out.println(topic);
 
                 messageCounter++;
                 lastCounter++;
