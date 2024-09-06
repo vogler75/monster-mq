@@ -11,29 +11,35 @@ import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.VertxBuilder
+import io.vertx.core.json.JsonObject
 import io.vertx.core.spi.cluster.ClusterManager
+import io.vertx.config.ConfigRetriever
+import io.vertx.config.ConfigRetrieverOptions
+import io.vertx.config.ConfigStoreOptions
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
-
 
 fun main(args: Array<String>) {
     Utils.initLogging()
 
     val logger = Logger.getLogger("Main")
 
+    // Config file format
+    val configFileName = if (args.isNotEmpty()) args[0] else System.getenv("GATEWAY_CONFIG") ?: "config.yaml"
     val useCluster = args.find { it == "-cluster" } != null
-    val usePort = args.indexOf("-port").let { if (it != -1) args.getOrNull(it+1)?.toIntOrNull()?:1883 else 1883 }
-    val useSsl = args.indexOf("-ssl") != -1
-    val useWs = args.indexOf("-ws") != -1
-    val useTcp = args.indexOf("-tcp") != -1 || !useWs
-    val kafkaServers = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
-    val kafkaTopic = args.indexOf("-topic").let { if (it != -1) args.getOrNull(it+1)?:"" else "monster" }
-    val retainedMessageStoreType = MessageStoreType.POSTGRES
-    val subscriptionTableType = SubscriptionTableType.POSTGRES
-    val postgresUrl = "jdbc:postgresql://192.168.1.3:5432/postgres"
-    val postgresUser = "system"
-    val postgresPass = "manager"
+
+//    val usePort = args.indexOf("-port").let { if (it != -1) args.getOrNull(it+1)?.toIntOrNull()?:1883 else 1883 }
+//    val useSsl = args.indexOf("-ssl") != -1
+//    val useWs = args.indexOf("-ws") != -1
+//    val useTcp = args.indexOf("-tcp") != -1 || !useWs
+//    val kafkaServers = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
+//    val kafkaTopic = args.indexOf("-topic").let { if (it != -1) args.getOrNull(it+1)?:"" else "monster" }
+//    val retainedMessageStoreType = MessageStoreType.POSTGRES
+//    val subscriptionTableType = SubscriptionTableType.POSTGRES
+//    val postgresUrl = "jdbc:postgresql://192.168.1.3:5432/postgres"
+//    val postgresUser = "system"
+//    val postgresPass = "manager"
 
     args.indexOf("-log").let {
         if (it != -1) {
@@ -43,62 +49,98 @@ fun main(args: Array<String>) {
         }
     }
 
-    logger.info("Cluster: $useCluster Port: $usePort SSL: $useSsl Websockets: $useWs Kafka: $kafkaServers")
+    logger.info("Cluster: $useCluster")
 
-    fun getSubscriptionTable(vertx: Vertx, name: String): ISubscriptionTable
-    = when (subscriptionTableType) {
-        SubscriptionTableType.ASYNCMAP -> {
-            val table = SubscriptionTableAsyncMap()
-            vertx.deployVerticle(table)
-            table
-        }
-        SubscriptionTableType.POSTGRES -> {
-            val table = SubscriptionTablePostgres(postgresUrl, postgresUser, postgresPass)
-            vertx.deployVerticle(table)
-            table
-        }
+    fun retrieveConfig(vertx: Vertx): ConfigRetriever {
+        logger.info("Monster config file: $configFileName")
+        return ConfigRetriever.create(
+            vertx,
+            ConfigRetrieverOptions().addStore(
+                ConfigStoreOptions()
+                    .setType("file")
+                    .setFormat("yaml")
+                    .setConfig(JsonObject().put("path", configFileName))
+            )
+        )
     }
 
-    fun getMessageStore(vertx: Vertx, name: String, clusterManager: ClusterManager?): IMessageStore
-    = when (retainedMessageStoreType) {
-        MessageStoreType.MEMORY -> {
-            val store = MessageStoreMemory(name)
-            vertx.deployVerticle(store)
-            store
+    fun startMonster(vertx: Vertx, config: JsonObject, clusterManager: ClusterManager?) {
+        val usePort = config.getInteger("Port", 1883)
+        val useSsl = config.getBoolean("SSL", false)
+        val useWs = config.getBoolean("WS", false)
+        val useTcp = config.getBoolean("TCP", true)
+
+        val retainedMessageStoreType =
+            MessageStoreType.valueOf(config.getString("RetainedMessageStoreType", "POSTGRES"))
+        val subscriptionTableType =
+            SubscriptionTableType.valueOf(config.getString("SubscriptionTableType", "POSTGRES"))
+
+        val postgres = config.getJsonObject("Postgres", JsonObject())
+        val postgresUrl = postgres.getString("Url", "jdbc:postgresql://192.168.1.3:5432/postgres")
+        val postgresUser = postgres.getString("User", "system")
+        val postgresPass = postgres.getString("Pass", "manager")
+
+        logger.info("usePort: $usePort, useSsl: $useSsl, useWs: $useWs, useTcp: $useTcp")
+        logger.info("retainedMessageStoreType: $retainedMessageStoreType, subscriptionTableType: $subscriptionTableType")
+        logger.info("Postgres Url: $postgresUrl, User: $postgresUser, Pass: $postgresPass")
+
+        fun getDistributor(
+            subscriptionHandler: SubscriptionHandler,
+            messageHandler: MessageHandler
+        ): Distributor {
+            val kafka = config.getJsonObject("Kafka", JsonObject())
+            val distributor = if (kafka.isEmpty) DistributorVertx(subscriptionHandler, messageHandler)
+            else {
+                val kafkaServers = kafka.getString("Servers", "")
+                val kafkaTopic = kafka.getString("Topic", "monster")
+                DistributorKafka(subscriptionHandler, messageHandler, kafkaServers, kafkaTopic)
+            }
+            return distributor
         }
-        MessageStoreType.POSTGRES -> {
-            val store = MessageStorePostgres(
-                name = name,
-                url = postgresUrl,
-                username = postgresUser,
-                password = postgresPass
-            )
-            vertx.deployVerticle(store)
-            store
-        }
-        MessageStoreType.HAZELCAST -> {
-            if (clusterManager is HazelcastClusterManager) {
-                val store = MessageStoreHazelcast(name, clusterManager.hazelcastInstance)
-                vertx.deployVerticle(store)
-                store
-            } else {
-                logger.severe("Cannot create Hazelcast message store with this cluster manager.")
-                exitProcess(-1)
+
+        fun getSubscriptionTable(vertx: Vertx, name: String): ISubscriptionTable
+                = when (subscriptionTableType) {
+            SubscriptionTableType.ASYNCMAP -> {
+                val table = SubscriptionTableAsyncMap()
+                vertx.deployVerticle(table)
+                table
+            }
+            SubscriptionTableType.POSTGRES -> {
+                val table = SubscriptionTablePostgres(postgresUrl, postgresUser, postgresPass)
+                vertx.deployVerticle(table)
+                table
             }
         }
-    }
 
-    fun getDistributor(
-        subscriptionHandler: SubscriptionHandler,
-        messageHandler: MessageHandler
-    ): Distributor {
-        val distributor = if (kafkaServers.isNotBlank())
-            DistributorKafka(subscriptionHandler, messageHandler, kafkaServers, kafkaTopic)
-        else DistributorVertx(subscriptionHandler, messageHandler)
-        return distributor
-    }
+        fun getMessageStore(vertx: Vertx, name: String, clusterManager: ClusterManager?): IMessageStore
+                = when (retainedMessageStoreType) {
+            MessageStoreType.MEMORY -> {
+                val store = MessageStoreMemory(name)
+                vertx.deployVerticle(store)
+                store
+            }
+            MessageStoreType.POSTGRES -> {
+                val store = MessageStorePostgres(
+                    name = name,
+                    url = postgresUrl,
+                    username = postgresUser,
+                    password = postgresPass
+                )
+                vertx.deployVerticle(store)
+                store
+            }
+            MessageStoreType.HAZELCAST -> {
+                if (clusterManager is HazelcastClusterManager) {
+                    val store = MessageStoreHazelcast(name, clusterManager.hazelcastInstance)
+                    vertx.deployVerticle(store)
+                    store
+                } else {
+                    logger.severe("Cannot create Hazelcast message store with this cluster manager.")
+                    exitProcess(-1)
+                }
+            }
+        }
 
-    fun startMonster(vertx: Vertx, clusterManager: ClusterManager?) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
@@ -135,9 +177,19 @@ fun main(args: Array<String>) {
             }
     }
 
+    fun getConfigAndStart(vertx: Vertx, clusterManager: ClusterManager?) {
+        retrieveConfig(vertx).config.onComplete { it ->
+            if (it.succeeded()) {
+                startMonster(vertx, it.result(), clusterManager)
+            } else {
+                logger.severe("Config loading failed: ${it.cause()}")
+            }
+        }
+    }
+
     fun localSetup(builder: VertxBuilder) {
         val vertx = builder.build()
-        startMonster(vertx, null)
+        getConfigAndStart(vertx, null)
     }
 
     fun clusterSetup(builder: VertxBuilder) {
@@ -153,7 +205,7 @@ fun main(args: Array<String>) {
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
             if (res.succeeded() && res.result() != null) {
                 val vertx = res.result()!!
-                startMonster(vertx, clusterManager)
+                getConfigAndStart(vertx, clusterManager)
             } else {
                 logger.severe("Vertx building failed: ${res.cause()}")
             }

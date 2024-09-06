@@ -1,0 +1,16 @@
+Port: 1883
+SSL: false
+WS: false
+TCP: true
+
+RetainedMessageStoreType: POSTGRES
+SubscriptionTableType: POSTGRES
+
+#Kafka:
+#  Servers: linux0:9092
+#  Topic: monster
+
+Postgres:
+  Url: jdbc:postgresql://192.168.1.30:5432/postgres
+  User: system
+  Pass: manager
