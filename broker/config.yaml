@@ -4,7 +4,7 @@ WS: false
 TCP: true
 
 RetainedMessageStoreType: POSTGRES
-SubscriptionTableType: POSTGRES
+SubscriptionStoreType: POSTGRES
 
 #Kafka:
 #  Servers: linux0:9092

@@ -3,13 +3,13 @@ package at.rocworks.stores
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
 
-enum class SubscriptionTableType {
+enum class SubscriptionStoreType {
     MEMORY,
     POSTGRES
 }
 
-interface ISubscriptionTable {
-    fun getType(): SubscriptionTableType
+interface ISubscriptionStore {
+    fun getType(): SubscriptionStoreType
     fun populateIndex(index: TopicTree)
     fun addSubscriptions(subscriptions: List<MqttSubscription>)
     fun removeSubscriptions(subscriptions: List<MqttSubscription>)

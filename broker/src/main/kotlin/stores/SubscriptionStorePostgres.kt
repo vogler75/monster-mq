@@ -13,7 +13,7 @@ class SubscriptionStorePostgres(
     private val url: String,
     private val username: String,
     private val password: String
-): AbstractVerticle(), ISubscriptionTable {
+): AbstractVerticle(), ISubscriptionStore {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
     private val tableName = "Subscriptions"
 
@@ -21,7 +21,7 @@ class SubscriptionStorePostgres(
         logger.level = Const.DEBUG_LEVEL
     }
 
-    override fun getType(): SubscriptionTableType = SubscriptionTableType.POSTGRES
+    override fun getType(): SubscriptionStoreType = SubscriptionStoreType.POSTGRES
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun checkTable(connection: Connection) {
@@ -37,8 +37,8 @@ class SubscriptionStorePostgres(
 
                 // Create the index on the topic column
                 val createIndexesSQL = listOf(
-                    "CREATE INDEX IF NOT EXISTS idx_topic ON SubscriptionTable (topic);",
-                    "CREATE INDEX IF NOT EXISTS idx_wildcard ON SubscriptionTable (wildcard) WHERE wildcard = TRUE;"
+                    "CREATE INDEX IF NOT EXISTS idx_topic ON $tableName (topic);",
+                    "CREATE INDEX IF NOT EXISTS idx_wildcard ON $tableName (wildcard) WHERE wildcard = TRUE;"
                 )
 
                 // Execute the SQL statements

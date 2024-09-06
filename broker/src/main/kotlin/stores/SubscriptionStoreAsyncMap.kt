@@ -10,9 +10,9 @@ import io.vertx.core.Promise
 import io.vertx.core.shareddata.AsyncMap
 import java.util.logging.Logger
 
-class SubscriptionStoreAsyncMap: AbstractVerticle(), ISubscriptionTable {
+class SubscriptionStoreAsyncMap: AbstractVerticle(), ISubscriptionStore {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
-    private val tableName = "SubscriptionTable"
+    private val tableName = "Subscriptions"
 
     private var table: AsyncMap<String, MutableSet<String>>? = null // clientId to topicName
 
@@ -20,7 +20,7 @@ class SubscriptionStoreAsyncMap: AbstractVerticle(), ISubscriptionTable {
         logger.level = Const.DEBUG_LEVEL
     }
 
-    override fun getType(): SubscriptionTableType = SubscriptionTableType.MEMORY
+    override fun getType(): SubscriptionStoreType = SubscriptionStoreType.MEMORY
 
     override fun start(startPromise: Promise<Void>) {
         Utils.getMap<String, MutableSet<String>>(vertx, tableName).onSuccess { subscriptions ->

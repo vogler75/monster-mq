@@ -29,17 +29,6 @@ fun main(args: Array<String>) {
     val configFileName = if (args.isNotEmpty()) args[0] else System.getenv("GATEWAY_CONFIG") ?: "config.yaml"
     val useCluster = args.find { it == "-cluster" } != null
 
-//    val usePort = args.indexOf("-port").let { if (it != -1) args.getOrNull(it+1)?.toIntOrNull()?:1883 else 1883 }
-//    val useSsl = args.indexOf("-ssl") != -1
-//    val useWs = args.indexOf("-ws") != -1
-//    val useTcp = args.indexOf("-tcp") != -1 || !useWs
-//    val kafkaServers = args.indexOf("-kafka").let { if (it != -1) args.getOrNull(it+1)?:"" else "" }
-//    val kafkaTopic = args.indexOf("-topic").let { if (it != -1) args.getOrNull(it+1)?:"" else "monster" }
-//    val retainedMessageStoreType = MessageStoreType.POSTGRES
-//    val subscriptionTableType = SubscriptionTableType.POSTGRES
-//    val postgresUrl = "jdbc:postgresql://192.168.1.3:5432/postgres"
-//    val postgresUser = "system"
-//    val postgresPass = "manager"
 
     args.indexOf("-log").let {
         if (it != -1) {
@@ -72,8 +61,8 @@ fun main(args: Array<String>) {
 
         val retainedMessageStoreType =
             MessageStoreType.valueOf(config.getString("RetainedMessageStoreType", "POSTGRES"))
-        val subscriptionTableType =
-            SubscriptionTableType.valueOf(config.getString("SubscriptionTableType", "POSTGRES"))
+        val subscriptionStoreType =
+            SubscriptionStoreType.valueOf(config.getString("SubscriptionStoreType", "POSTGRES"))
 
         val postgres = config.getJsonObject("Postgres", JsonObject())
         val postgresUrl = postgres.getString("Url", "jdbc:postgresql://192.168.1.3:5432/postgres")
@@ -81,7 +70,7 @@ fun main(args: Array<String>) {
         val postgresPass = postgres.getString("Pass", "manager")
 
         logger.info("usePort: $usePort, useSsl: $useSsl, useWs: $useWs, useTcp: $useTcp")
-        logger.info("retainedMessageStoreType: $retainedMessageStoreType, subscriptionTableType: $subscriptionTableType")
+        logger.info("retainedMessageStoreType: $retainedMessageStoreType, subscriptionStoreType: $subscriptionStoreType")
         logger.info("Postgres Url: $postgresUrl, User: $postgresUser, Pass: $postgresPass")
 
         fun getDistributor(
@@ -98,14 +87,14 @@ fun main(args: Array<String>) {
             return distributor
         }
 
-        fun getSubscriptionTable(vertx: Vertx, name: String): ISubscriptionTable
-                = when (subscriptionTableType) {
-            SubscriptionTableType.MEMORY -> {
+        fun getSubscriptionStore(vertx: Vertx, name: String): ISubscriptionStore
+                = when (subscriptionStoreType) {
+            SubscriptionStoreType.MEMORY -> {
                 val table = SubscriptionStoreAsyncMap()
                 vertx.deployVerticle(table)
                 table
             }
-            SubscriptionTableType.POSTGRES -> {
+            SubscriptionStoreType.POSTGRES -> {
                 val table = SubscriptionStorePostgres(postgresUrl, postgresUser, postgresPass)
                 vertx.deployVerticle(table)
                 table
@@ -144,8 +133,8 @@ fun main(args: Array<String>) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
-        val subscriptionTable = getSubscriptionTable(vertx, "SubscriptionTable")
-        val subscriptionHandler = SubscriptionHandler(subscriptionTable)
+        val subscriptionStore = getSubscriptionStore(vertx, "SubscriptionStore")
+        val subscriptionHandler = SubscriptionHandler(subscriptionStore)
 
         val messageStore = getMessageStore(vertx, "RetainedStore", clusterManager)
         val messageHandler = MessageHandler(messageStore)

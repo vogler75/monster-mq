@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 import java.util.logging.Logger
 import kotlin.concurrent.thread
 
-class SubscriptionHandler(private val table: ISubscriptionTable): AbstractVerticle() {
+class SubscriptionHandler(private val table: ISubscriptionStore): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private val index = TopicTree()

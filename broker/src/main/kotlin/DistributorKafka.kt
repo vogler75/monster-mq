@@ -2,7 +2,6 @@ package at.rocworks
 
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
-import at.rocworks.stores.ISubscriptionTable
 import at.rocworks.stores.MessageHandler
 import at.rocworks.stores.SubscriptionHandler
 import io.vertx.core.Promise
