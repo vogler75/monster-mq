@@ -34,6 +34,7 @@ class MessageStorePostgres(
         }
     }
 
+    override fun getName(): String = name
     override fun getType(): MessageStoreType = MessageStoreType.POSTGRES
 
     override fun start(startPromise: Promise<Void>) {

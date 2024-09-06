@@ -17,6 +17,7 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
     private val addAddress = "$name/A"
     private val delAddress = "$name/D"
 
+    override fun getName(): String = name
     override fun getType(): MessageStoreType = MessageStoreType.MEMORY
 
     override fun start(startPromise: Promise<Void>) {

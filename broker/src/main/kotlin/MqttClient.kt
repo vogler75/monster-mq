@@ -5,7 +5,9 @@ import io.netty.handler.codec.mqtt.MqttConnectReturnCode
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Vertx
+import io.vertx.core.eventbus.Message
 import io.vertx.core.eventbus.MessageConsumer
+import io.vertx.core.json.JsonObject
 import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
@@ -25,7 +27,8 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
     private val messageQueue = ArrayBlockingQueue<MqttMessage>(10000) // TODO: configurable
     private var messageQueueError: Boolean = false
 
-    private var messageConsumer : MessageConsumer<MqttMessage>? = null
+    private var messageConsumer: MessageConsumer<MqttMessage>? = null
+    private var commandConsumer: MessageConsumer<JsonObject>? = null
 
     private var lastMessageId: Int = 0
     private fun getNextMessageId() = if (lastMessageId == 65535) {
@@ -46,10 +49,10 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, distributor: Distributor) {
             val clientId = endpoint.clientIdentifier()
             clients[clientId]?.let { client ->
-                logger.info("Client [${endpoint.clientIdentifier()}] Redeploy existing session for [${endpoint.remoteAddress()}].")
+                logger.info("Client [${clientId}] Redeploy existing session for [${endpoint.remoteAddress()}].")
                 client.startEndpoint(endpoint)
             } ?: run {
-                logger.info("Client [${endpoint.clientIdentifier()}] Deploy a new session for [${endpoint.remoteAddress()}].")
+                logger.info("Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}].")
                 val client = MqttClient(distributor)
                 vertx.deployVerticle(client).onComplete {
                     clients[clientId] = client
@@ -60,7 +63,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
 
         fun undeployEndpoint(vertx: Vertx, endpoint: MqttEndpoint) {
             val clientId = endpoint.clientIdentifier()
-            logger.info("Remove client [${endpoint.clientIdentifier()}]")
+            logger.info("Remove client [${clientId}]")
             clients[clientId]?.let { client ->
                 vertx.undeploy(client.deploymentID()).onComplete {
                     clients.remove(clientId)
@@ -69,14 +72,16 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         }
 
         fun getClientAddress(clientId: String) = "${Const.CLIENT_NAMESPACE}/${clientId}"
+        fun getClientAddressMessages(clientId: String) = "${getClientAddress(clientId)}/m"
+        fun getClientAddressCommands(clientId: String) = "${getClientAddress(clientId)}/c"
 
         fun sendMessageToClient(vertx: Vertx, clientId: String, message: MqttMessage) {
-            vertx.eventBus().publish(getClientAddress(clientId), message)
+            vertx.eventBus().publish(getClientAddressMessages(clientId), message)
         }
-    }
 
-    override fun start() {
-
+        fun sendCommandToClient(vertx: Vertx, clientId: String, command: JsonObject) {
+            vertx.eventBus().publish(getClientAddressCommands(clientId), command)
+        }
     }
 
     fun startEndpoint(endpoint: MqttEndpoint) {
@@ -110,8 +115,11 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
             if (endpoint.isCleanSession) cleanSession()
 
             if (messageConsumer==null) {
-                messageConsumer = vertx.eventBus().consumer(getClientAddress(endpoint.clientIdentifier())) {
-                    consumeMessage(it.body())
+                messageConsumer = vertx.eventBus().consumer(getClientAddressMessages(endpoint.clientIdentifier())) {
+                    consumeMessage(it)
+                }
+                commandConsumer = vertx.eventBus().consumer(getClientAddressCommands(endpoint.clientIdentifier())) {
+                    consumeCommand(it)
                 }
             }
 
@@ -163,21 +171,37 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         }
     }
 
-    private fun consumeMessage(message: MqttMessage) {
+    private fun consumeMessage(message: Message<MqttMessage>) {
         this.endpoint?.let { endpoint ->
+            val mqttMessage = message.body()
             if (this.connected) {
-                message.publish(endpoint, getNextMessageId())
-                logger.finest { "Client [${endpoint.clientIdentifier()}] Delivered message [${message.messageId}] for topic [${message.topicName}]" }
+                mqttMessage.publish(endpoint, getNextMessageId())
+                logger.finest { "Client [${endpoint.clientIdentifier()}] Delivered message [${mqttMessage.messageId}] for topic [${mqttMessage.topicName}]" }
             } else {
                 try {
-                    messageQueue.add(message)
+                    messageQueue.add(mqttMessage)
                     if (messageQueueError) messageQueueError = false
-                    logger.finest { "Client [${endpoint.clientIdentifier()}] Queued message [${message.messageId}] for topic [${message.topicName}]" }
+                    logger.finest { "Client [${endpoint.clientIdentifier()}] Queued message [${mqttMessage.messageId}] for topic [${mqttMessage.topicName}]" }
                 } catch (e: IllegalStateException) {
                     if (!messageQueueError) {
                         messageQueueError = true
                         logger.warning("Client [${endpoint.clientIdentifier()}] Error adding message to queue: [${e.message}]")
                     }
+                }
+            }
+        }
+    }
+
+    private fun consumeCommand(message: Message<JsonObject>) {
+        this.endpoint?.let { endpoint ->
+            val command = message.body()
+            when (val key = command.getString(Const.COMMAND_KEY)) {
+                Const.COMMAND_STATUS -> {
+                    logger.info("Client [${endpoint.clientIdentifier()}] Status command received.")
+                    message.reply(JsonObject().put("Connected", connected))
+                }
+                else -> {
+                    logger.warning("Client [${endpoint.clientIdentifier()}] Received unknown command [$key].")
                 }
             }
         }

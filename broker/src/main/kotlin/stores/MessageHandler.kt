@@ -12,7 +12,7 @@ import java.util.logging.Logger
 import kotlin.concurrent.thread
 
 class MessageHandler(private val store: IMessageStore): AbstractVerticle() {
-    private val logger = Logger.getLogger(this.javaClass.simpleName)
+    private val logger = Logger.getLogger(this.javaClass.simpleName+"/"+store.getName())
 
     private val addQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000)
     private val delQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000)

@@ -33,19 +33,20 @@ class SubscriptionHandler(private val table: ISubscriptionTable): AbstractVertic
         vertx.eventBus().consumer<MqttSubscription>(delAddress) {
             index.del(it.body().topicName, it.body().clientId)
         }
-        workerThread(addQueue, table::addSubscriptions)
-        workerThread(delQueue, table::removeSubscriptions)
+        workerThread("Add", addQueue, table::addSubscriptions)
+        workerThread("Del", delQueue, table::removeSubscriptions)
         startPromise.complete()
     }
 
     private fun workerThread(
+        name: String,
         queue: ArrayBlockingQueue<MqttSubscription>,
         execute: (block: List<MqttSubscription>)->Unit
     ) = thread(start = true) {
-        logger.info("Start thread...")
+        logger.info("Start [$name] thread")
         vertx.setPeriodic(1000) {
             if (queue.size > 0)
-                logger.info("Subscription queue size [${queue.size}]")
+                logger.info("Queue [$name] size [${queue.size}]")
         }
 
         val block = arrayListOf<MqttSubscription>()
@@ -57,7 +58,7 @@ class SubscriptionHandler(private val table: ISubscriptionTable): AbstractVertic
                     // nothing to do here
                 }
                 if (block.size > 0) {
-                    logger.finest("Write block with size [${block.size}]")
+                    logger.finest("Queue [$name] block with size [${block.size}]")
                     execute(block)
                     block.clear()
                 }

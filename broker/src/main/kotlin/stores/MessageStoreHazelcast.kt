@@ -23,6 +23,7 @@ class MessageStoreHazelcast(
     private val addAddress = "$name/A"
     private val delAddress = "$name/D"
 
+    override fun getName(): String = name
     override fun getType(): MessageStoreType = MessageStoreType.HAZELCAST
 
     override fun start(startPromise: Promise<Void>) {
