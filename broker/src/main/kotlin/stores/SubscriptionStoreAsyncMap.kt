@@ -50,7 +50,7 @@ class SubscriptionStoreAsyncMap: AbstractVerticle(), ISubscriptionStore {
         }
     }
 
-    override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
+    override fun addAll(subscriptions: List<MqttSubscription>) {
         table?.let { table ->
             subscriptions.forEach { subscription ->
                 table.get(subscription.clientId).onComplete { client ->
@@ -64,7 +64,7 @@ class SubscriptionStoreAsyncMap: AbstractVerticle(), ISubscriptionStore {
         }
     }
 
-    override fun removeSubscriptions(subscriptions: List<MqttSubscription>) {
+    override fun delAll(subscriptions: List<MqttSubscription>) {
         table?.let { table ->
             subscriptions.forEach { subscription ->
                 table.get(subscription.clientId).onComplete { client ->
@@ -76,7 +76,7 @@ class SubscriptionStoreAsyncMap: AbstractVerticle(), ISubscriptionStore {
         }
     }
 
-    override fun removeClient(clientId: String, callback: (MqttSubscription)->Unit) {
+    override fun delClient(clientId: String, callback: (MqttSubscription)->Unit) {
         table?.remove(clientId)?.onSuccess { topics: MutableSet<String>? ->
             topics?.forEach { topic ->
                 callback(MqttSubscription(clientId, topic))

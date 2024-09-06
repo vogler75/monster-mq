@@ -33,8 +33,8 @@ class SubscriptionHandler(private val table: ISubscriptionStore): AbstractVertic
         vertx.eventBus().consumer<MqttSubscription>(delAddress) {
             index.del(it.body().topicName, it.body().clientId)
         }
-        workerThread("Add", addQueue, table::addSubscriptions)
-        workerThread("Del", delQueue, table::removeSubscriptions)
+        workerThread("Add", addQueue, table::addAll)
+        workerThread("Del", delQueue, table::delAll)
         startPromise.complete()
     }
 
@@ -86,7 +86,7 @@ class SubscriptionHandler(private val table: ISubscriptionStore): AbstractVertic
     }
 
     fun removeClient(clientId: String) {
-        table.removeClient(clientId) { subscription ->
+        table.delClient(clientId) { subscription ->
             vertx.eventBus().publish(delAddress, subscription)
         }
     }

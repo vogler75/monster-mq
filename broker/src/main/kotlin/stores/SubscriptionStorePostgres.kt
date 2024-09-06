@@ -75,7 +75,7 @@ class SubscriptionStorePostgres(
         }
     }
 
-    override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
+    override fun addAll(subscriptions: List<MqttSubscription>) {
         val sql = "INSERT INTO $tableName (client, topic, wildcard) VALUES (?, ?, ?) "+
                   "ON CONFLICT (client, topic) DO NOTHING"
         try {
@@ -95,7 +95,7 @@ class SubscriptionStorePostgres(
         }
     }
 
-    override fun removeSubscriptions(subscriptions: List<MqttSubscription>) {
+    override fun delAll(subscriptions: List<MqttSubscription>) {
         val sql = "DELETE FROM $tableName WHERE client = ? AND topic = ?"
         try {
             db.connection?.let { connection ->
@@ -113,7 +113,7 @@ class SubscriptionStorePostgres(
         }
     }
 
-    override fun removeClient(clientId: String, callback: (MqttSubscription)->Unit) {
+    override fun delClient(clientId: String, callback: (MqttSubscription)->Unit) {
         val sql = "DELETE FROM $tableName WHERE client = ? RETURNING topic"
         try {
             db.connection?.let { connection ->

@@ -11,7 +11,7 @@ enum class SubscriptionStoreType {
 interface ISubscriptionStore {
     fun getType(): SubscriptionStoreType
     fun populateIndex(index: TopicTree)
-    fun addSubscriptions(subscriptions: List<MqttSubscription>)
-    fun removeSubscriptions(subscriptions: List<MqttSubscription>)
-    fun removeClient(clientId: String, callback: (MqttSubscription)->Unit)
+    fun addAll(subscriptions: List<MqttSubscription>)
+    fun delAll(subscriptions: List<MqttSubscription>)
+    fun delClient(clientId: String, callback: (MqttSubscription)->Unit)
 }

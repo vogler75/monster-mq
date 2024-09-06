@@ -1,14 +1,9 @@
 package at.rocworks.stores
 
-import java.time.Instant
-
-data class SessionData(
-    val cleanSession: Boolean,
-    val createDate: Instant
-)
+import at.rocworks.data.MqttSession
 
 interface ISessionStore {
-    fun get(clientId: String): SessionData?
-    fun put(clientId: String, data: SessionData)
-    fun remove(clientId: String)
+    fun get(clientId: String): MqttSession?
+    fun add(session: MqttSession)
+    fun del(clientId: String)
 }
