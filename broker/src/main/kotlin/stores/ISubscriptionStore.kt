@@ -4,7 +4,7 @@ import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
 
 enum class SubscriptionTableType {
-    ASYNCMAP,
+    MEMORY,
     POSTGRES
 }
 

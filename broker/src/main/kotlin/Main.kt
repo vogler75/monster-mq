@@ -100,13 +100,13 @@ fun main(args: Array<String>) {
 
         fun getSubscriptionTable(vertx: Vertx, name: String): ISubscriptionTable
                 = when (subscriptionTableType) {
-            SubscriptionTableType.ASYNCMAP -> {
-                val table = SubscriptionTableAsyncMap()
+            SubscriptionTableType.MEMORY -> {
+                val table = SubscriptionStoreAsyncMap()
                 vertx.deployVerticle(table)
                 table
             }
             SubscriptionTableType.POSTGRES -> {
-                val table = SubscriptionTablePostgres(postgresUrl, postgresUser, postgresPass)
+                val table = SubscriptionStorePostgres(postgresUrl, postgresUser, postgresPass)
                 vertx.deployVerticle(table)
                 table
             }

@@ -36,7 +36,7 @@
     },
     "SubscriptionTableType": {
       "type": "string",
-      "enum": ["ASYNCMAP", "POSTGRES"]
+      "enum": ["MEMORY", "POSTGRES"]
     },
     "Postgres": {
       "type": "object",

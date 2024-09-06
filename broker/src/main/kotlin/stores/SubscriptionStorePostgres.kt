@@ -7,16 +7,15 @@ import at.rocworks.data.TopicTree
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import java.sql.*
-import java.util.logging.Level
 import java.util.logging.Logger
 
-class SubscriptionTablePostgres(
+class SubscriptionStorePostgres(
     private val url: String,
     private val username: String,
     private val password: String
 ): AbstractVerticle(), ISubscriptionTable {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
-    private val tableName = "SubscriptionTable"
+    private val tableName = "Subscriptions"
 
     init {
         logger.level = Const.DEBUG_LEVEL
