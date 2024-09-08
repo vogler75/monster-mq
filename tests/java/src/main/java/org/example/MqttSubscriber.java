@@ -13,8 +13,12 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+
 
 public class MqttSubscriber {
+
+    static AtomicInteger runningTasks = new AtomicInteger(0);
 
     public static void main(String[] args) {
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -23,39 +27,32 @@ public class MqttSubscriber {
             if (args.length > 0) startNr = Integer.parseInt(args[0]);
             for (int i = 0; i < Config.SUBSCRIBER_COUNT; i++) {
                 int nr = startNr + i;
+                // use a atomic variable to keep track of running tasks
+                runningTasks.incrementAndGet();
                 executor.submit(() -> test(nr));
-                //new Thread(() -> test(nr)).start();
+                if (i % 1000 == 0) {
+                    System.out.println("Started subscriber " + nr);
+                    // Check if executor has running tasks
+                    while (runningTasks.get()>0) {
+                        Thread.sleep(100);
+                    }
+
+                }
             }
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
     static void test(int nr) {
-        String testClientId = "subscriber_" + UUID.randomUUID();
-        String statClientId = "statistics_" + UUID.randomUUID(); // Second client for statistics
+        String testClientId = "subscriber_" + nr; // UUID.randomUUID();
+        String statClientId = "statistics_" + nr; // UUID.randomUUID(); // Second client for statistics
 
         String TOPIC = Config.topicPrefix + "/" + nr;
 
         try {
             // Create the second MQTT client instance for statistics
-            MqttClient statClient = new MqttClient(Config.statBroker, statClientId, new MemoryPersistence());
-
-            // Define callback for the second client
-            statClient.setCallback(new MqttCallback() {
-                @Override
-                public void connectionLost(Throwable cause) {
-                    System.out.println("Connection to broker lost: " + cause.getMessage());
-                }
-
-                @Override
-                public void messageArrived(String topic, MqttMessage message) throws Exception {
-                    // No incoming messages expected for this client in this scenario
-                }
-
-                @Override
-                public void deliveryComplete(IMqttDeliveryToken token) {
-                }
-            });
-            statClient.connect();
+            MqttClient statClient = Config.SUBSCRIBER_EXIT ? null : getMqttClient(statClientId);
 
             // Create an MQTT client instance
             var broker = Config.subscriberBroker[nr % Config.subscriberBroker.length];
@@ -63,7 +60,7 @@ public class MqttSubscriber {
 
             // Define the MQTT connection options
             MqttConnectOptions options = new MqttConnectOptions();
-            options.setCleanSession(true);
+            options.setCleanSession(Config.SUBSCRIBER_CLEANSESSION);
 
             // Set up the callback functions
             var callback = new MqttCallback() {
@@ -102,11 +99,13 @@ public class MqttSubscriber {
 
             // Connect to the MQTT broker
             client.connect(options);
-            System.out.println("Connected successfully "+nr);
+            //System.out.println("Connected successfully "+nr);
 
             // Subscribe to the topic
             if (Config.SUBSCRIBER_WILDCARD_SUBSCRIPTION) {
                 client.subscribe(TOPIC+"/#");
+                if (Config.SUBSCRIBER_SUBSCRIBE_BROADCAST)
+                    client.subscribe(Config.topicPrefix+"/broadcast");
             } else {
                 int topicNr1=0, topicNr2=0, topicNr3=0;
                 int amount=(int)(Math.pow(Config.TOPIC_LEVEL_DEPTH, 3));
@@ -135,7 +134,11 @@ public class MqttSubscriber {
             Instant lastTime = Instant.now();
             int lastCounter = 0;
 
-            while (true) {
+            if (Config.SUBSCRIBER_EXIT) {
+                client.disconnect();
+                if (statClient != null) statClient.disconnect();
+            }
+            else while (true) {
                 // Optionally add some logic to exit the loop if necessary
                 Thread.sleep(1000);
 
@@ -156,12 +159,35 @@ public class MqttSubscriber {
                 MqttMessage statsMsg = new MqttMessage(statisticsMessage.getBytes());
                 statsMsg.setQos(0);
                 statClient.publish(Config.statisticsTopic+"/subscriber/instance_"+nr, statsMsg);
-
             }
-
         } catch (MqttException | InterruptedException e) {
             e.printStackTrace();
         }
+        runningTasks.decrementAndGet();
+        //System.out.println("Exiting subscriber "+nr);
+    }
+
+    private static MqttClient getMqttClient(String statClientId) throws MqttException {
+        MqttClient statClient = new MqttClient(Config.statBroker, statClientId, new MemoryPersistence());
+
+        // Define callback for the second client
+        statClient.setCallback(new MqttCallback() {
+            @Override
+            public void connectionLost(Throwable cause) {
+                System.out.println("Connection to broker lost: " + cause.getMessage());
+            }
+
+            @Override
+            public void messageArrived(String topic, MqttMessage message) throws Exception {
+                // No incoming messages expected for this client in this scenario
+            }
+
+            @Override
+            public void deliveryComplete(IMqttDeliveryToken token) {
+            }
+        });
+        statClient.connect();
+        return statClient;
     }
 }
 

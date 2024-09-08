@@ -4,14 +4,14 @@ from datetime import datetime
 
 # Define the MQTT broker details
 broker_address = "192.168.1.30"  # Example broker address, you can change it to your broker's address
-topic = "hello/topic"  # Example topic
+topic = "test/broadcast"  # Example topic
 
 
 # Function to publish a message
 def publish_messages():
     while True:
         message = datetime.now().isoformat()
-        client.publish(topic, message).wait_for_publish()
+        client.publish(topic, message, qos=1).wait_for_publish()
         # Print the current time in ISO format
         print("Message Published at:", message)
         time.sleep(1)
