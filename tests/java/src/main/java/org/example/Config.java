@@ -3,8 +3,8 @@ package org.example;
 public class Config {
     public static String statBroker = "tcp://scada:1883";
 
-    public static String[] publisherBroker = new String[] { "tcp://nuc1:1883" };
-    public static String[] subscriberBroker = new String[] { "tcp://nuc1:1883" };
+    public static String[] publisherBroker = new String[] { "tcp://linux0:1883" };
+    public static String[] subscriberBroker = new String[] { "tcp://linux0:1883" };
 
     //public static String[] publisherBroker = new String[] { "tcp://linux1:1883", "tcp://linux2:1883", "tcp://linux3:1883" };
     //public static String[] subscriberBroker = new String[] { "tcp://linux1:1883", "tcp://linux2:1883", "tcp://linux3:1883" };
@@ -14,10 +14,13 @@ public class Config {
     public static String statisticsTopic = "monitor"; // Topic for publishing statistics
 
     public static int PUBLISHER_COUNT = 10;
-    public static int SUBSCRIBER_COUNT = 10;
+    public static int SUBSCRIBER_COUNT = 1_000_000;
 
     public static boolean SUBSCRIBER_CHECK_MESSAGE_ORDER = false;
     public static boolean SUBSCRIBER_WILDCARD_SUBSCRIPTION = true;
+    public static boolean SUBSCRIBER_CLEANSESSION = false;
+    public static boolean SUBSCRIBER_EXIT = true;
+    public static boolean SUBSCRIBER_SUBSCRIBE_BROADCAST = true;
 
     public static double DELAY_PROCESSING_EVERY_100_MESSAGES = 40;
     public static double DELAY_PROCESSING_EVERY_10_MESSAGES = 0;
