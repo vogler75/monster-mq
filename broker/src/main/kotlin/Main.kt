@@ -25,10 +25,16 @@ fun main(args: Array<String>) {
 
     val logger = Logger.getLogger("Main")
 
-    // Config file format
-    val configFileName = if (args.isNotEmpty()) args[0] else System.getenv("GATEWAY_CONFIG") ?: "config.yaml"
+    // Clustering
     val useCluster = args.find { it == "-cluster" } != null
 
+    // Config file
+    val configFileIndex = args.indexOf("-config")
+    val configFileName = if (configFileIndex != -1 && configFileIndex + 1 < args.size) {
+        args[configFileIndex + 1]
+    } else {
+        System.getenv("GATEWAY_CONFIG") ?: "config.yaml"
+    }
 
     args.indexOf("-log").let {
         if (it != -1) {
