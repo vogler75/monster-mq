@@ -65,19 +65,23 @@ fun main(args: Array<String>) {
         val useWs = config.getBoolean("WS", false)
         val useTcp = config.getBoolean("TCP", true)
 
-        val retainedMessageStoreType =
-            MessageStoreType.valueOf(config.getString("RetainedMessageStoreType", "POSTGRES"))
-        val subscriptionStoreType =
-            SubscriptionStoreType.valueOf(config.getString("SubscriptionStoreType", "POSTGRES"))
+        val retainedMessageStoreType = MessageStoreType.valueOf(
+            config.getString("RetainedMessageStoreType", "MEMORY")
+        )
+
+        val subscriptionStoreType = SubscriptionStoreType.valueOf(
+            config.getString("SubscriptionStoreType", "MEMORY")
+        )
 
         val postgres = config.getJsonObject("Postgres", JsonObject())
-        val postgresUrl = postgres.getString("Url", "jdbc:postgresql://192.168.1.3:5432/postgres")
+
+        val postgresUrl = postgres.getString("Url", "jdbc:postgresql://localhost:5432/postgres")
         val postgresUser = postgres.getString("User", "system")
         val postgresPass = postgres.getString("Pass", "manager")
 
-        logger.info("usePort: $usePort, useSsl: $useSsl, useWs: $useWs, useTcp: $useTcp")
-        logger.info("retainedMessageStoreType: $retainedMessageStoreType, subscriptionStoreType: $subscriptionStoreType")
-        logger.info("Postgres Url: $postgresUrl, User: $postgresUser, Pass: $postgresPass")
+        logger.info("Port [$usePort] SSL [$useSsl] WS [$useWs] TCP [$useTcp]")
+        logger.info("RetainedMessageStoreType [$retainedMessageStoreType] SubscriptionStoreType [$subscriptionStoreType]")
+        logger.info("Postgres Url [$postgresUrl] User [$postgresUser] Pass [$postgresPass]")
 
         fun getDistributor(
             subscriptionHandler: SubscriptionHandler,
