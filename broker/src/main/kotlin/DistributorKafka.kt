@@ -3,7 +3,7 @@ package at.rocworks
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
 import at.rocworks.stores.MessageHandler
-import at.rocworks.stores.SubscriptionHandler
+import at.rocworks.stores.SessionHandler
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
 import io.vertx.kafka.client.consumer.KafkaConsumer
@@ -11,11 +11,11 @@ import io.vertx.kafka.client.producer.KafkaProducer
 import io.vertx.kafka.client.producer.KafkaProducerRecord
 
 class DistributorKafka(
-    subscriptionHandler: SubscriptionHandler,
+    sessionHandler: SessionHandler,
     messageHandler: MessageHandler,
     private val bootstrapServers: String,
     private val kafkaTopicName: String
-): Distributor(subscriptionHandler, messageHandler) {
+): Distributor(sessionHandler, messageHandler) {
 
     private val kafkaGroupId = "Monster"
 

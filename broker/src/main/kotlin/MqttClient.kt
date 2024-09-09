@@ -12,7 +12,6 @@ import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
-import java.util.concurrent.ArrayBlockingQueue
 import java.util.logging.Logger
 
 class MqttClient(private val distributor: Distributor): AbstractVerticle() {
@@ -23,9 +22,6 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
 
     @Volatile
     private var connected: Boolean = false
-
-    private val messageQueue = ArrayBlockingQueue<MqttMessage>(10000) // TODO: configurable
-    private var messageQueueError: Boolean = false
 
     private var messageConsumer: MessageConsumer<MqttMessage>? = null
     private var commandConsumer: MessageConsumer<JsonObject>? = null
@@ -71,7 +67,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
             }
         }
 
-        fun getClientAddress(clientId: String) = "${Const.CLIENT_NAMESPACE}/${clientId}"
+        private fun getClientAddress(clientId: String) = "${Const.CLIENT_NAMESPACE}/${clientId}"
         fun getClientAddressMessages(clientId: String) = "${getClientAddress(clientId)}/m"
         fun getClientAddressCommands(clientId: String) = "${getClientAddress(clientId)}/c"
 
@@ -112,8 +108,6 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
 
             endpoint.accept(endpoint.isCleanSession) // TODO: check if we have an existing session
 
-            if (endpoint.isCleanSession) cleanSession()
-
             if (messageConsumer==null) {
                 messageConsumer = vertx.eventBus().consumer(getClientAddressMessages(endpoint.clientIdentifier())) {
                     consumeMessage(it)
@@ -123,29 +117,31 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
                 }
             }
 
-            logger.info("Client [${endpoint.clientIdentifier()}] Queued messages: ${messageQueue.size}")
-            messageQueue.forEach { it.publish(endpoint, getNextMessageId()) }
-            messageQueue.clear()
-
+            if (endpoint.isCleanSession) {
+                // Clean and remove any existing session state
+                distributor.sessionHandler.removeClient(getClientId())
+            } else {
+                // Publish queued messages
+                distributor.sessionHandler.dequeueMessages(endpoint.clientIdentifier()) { message ->
+                    logger.finest { "Client [${endpoint.clientIdentifier()}] Dequeued message [${message.messageId}] for topic [${message.topicName}]" }
+                    message.publish(endpoint, getNextMessageId())
+                }
+            }
+            distributor.sessionHandler.putClient(endpoint.clientIdentifier(), endpoint.isCleanSession, true)
             this.connected = true
         }
     }
 
     private fun stopEndpoint(endpoint: MqttEndpoint) {
         this.connected = false
-
         if (endpoint.isCleanSession) {
-            logger.info("Client [${endpoint.clientIdentifier()}] Undeploy client, it is a clean session.")
-            cleanSession()
-            undeployEndpoint(vertx, endpoint)
+            logger.info("Client [${endpoint.clientIdentifier()}] Remove client, it is a clean session.")
+            distributor.sessionHandler.removeClient(getClientId())
         } else {
             logger.info("Client [${endpoint.clientIdentifier()}] Pause client, it is not a clean session.")
+            distributor.sessionHandler.pauseClient(getClientId())
         }
-    }
-
-    private fun cleanSession() {
-        distributor.cleanSessionRequest(this)
-        messageQueue.clear()
+        undeployEndpoint(vertx, endpoint)
     }
 
     private fun exceptionHandler(endpoint: MqttEndpoint, throwable: Throwable) {
@@ -177,17 +173,6 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
             if (this.connected) {
                 mqttMessage.publish(endpoint, getNextMessageId())
                 logger.finest { "Client [${endpoint.clientIdentifier()}] Delivered message [${mqttMessage.messageId}] for topic [${mqttMessage.topicName}]" }
-            } else {
-                try {
-                    messageQueue.add(mqttMessage)
-                    if (messageQueueError) messageQueueError = false
-                    logger.finest { "Client [${endpoint.clientIdentifier()}] Queued message [${mqttMessage.messageId}] for topic [${mqttMessage.topicName}]" }
-                } catch (e: IllegalStateException) {
-                    if (!messageQueueError) {
-                        messageQueueError = true
-                        logger.warning("Client [${endpoint.clientIdentifier()}] Error adding message to queue: [${e.message}]")
-                    }
-                }
             }
         }
     }

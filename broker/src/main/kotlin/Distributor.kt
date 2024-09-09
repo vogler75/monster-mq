@@ -2,7 +2,7 @@ package at.rocworks
 
 import at.rocworks.data.*
 import at.rocworks.stores.MessageHandler
-import at.rocworks.stores.SubscriptionHandler
+import at.rocworks.stores.SessionHandler
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
@@ -10,7 +10,7 @@ import io.vertx.core.json.JsonObject
 import java.util.logging.Logger
 
 abstract class Distributor(
-    private val subscriptionHandler: SubscriptionHandler,
+    val sessionHandler: SessionHandler,
     private val messageHandler: MessageHandler
 ): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
@@ -19,7 +19,6 @@ abstract class Distributor(
         const val COMMAND_KEY = "C"
         const val COMMAND_SUBSCRIBE = "S"
         const val COMMAND_UNSUBSCRIBE = "U"
-        const val COMMAND_CLEANSESSION = "C"
     }
 
     init {
@@ -36,7 +35,6 @@ abstract class Distributor(
                 when (payload.getString(COMMAND_KEY)) {
                     COMMAND_SUBSCRIBE -> subscribeCommand(message)
                     COMMAND_UNSUBSCRIBE -> unsubscribeCommand(message)
-                    COMMAND_CLEANSESSION -> cleanSessionCommand(message)
                 }
             }
         }
@@ -63,10 +61,9 @@ abstract class Distributor(
             MqttClient.sendMessageToClient(vertx, clientId, message)
         }.onComplete {
             logger.finest { "Retained messages published [${it.result()}]." }
-            subscriptionHandler.addSubscription(MqttSubscription(clientId, topicName))
+            sessionHandler.addSubscription(MqttSubscription(clientId, topicName))
             command.reply(true)
         }
-
     }
 
     //----------------------------------------------------------------------------------------------------
@@ -84,25 +81,7 @@ abstract class Distributor(
     private fun unsubscribeCommand(command: Message<JsonObject>) {
         val clientId = command.body().getString(Const.CLIENT_KEY)
         val topicName = command.body().getString(Const.TOPIC_KEY)
-        subscriptionHandler.removeSubscription(MqttSubscription(clientId, topicName))
-        command.reply(true)
-    }
-
-    //----------------------------------------------------------------------------------------------------
-
-    fun cleanSessionRequest(client: MqttClient) {
-        val request = JsonObject()
-            .put(COMMAND_KEY, COMMAND_CLEANSESSION)
-            .put(Const.CLIENT_KEY, client.getClientId())
-
-        vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
-            if (!it.succeeded()) logger.severe("Clean session request failed: ${it.cause()}")
-        }
-    }
-
-    private fun cleanSessionCommand(command: Message<JsonObject>) {
-        val clientId = command.body().getString(Const.CLIENT_KEY)
-        subscriptionHandler.removeClient(clientId)
+        sessionHandler.removeSubscription(MqttSubscription(clientId, topicName))
         command.reply(true)
     }
 
@@ -110,14 +89,15 @@ abstract class Distributor(
 
     fun publishMessage(message: MqttMessage) {
         publishMessageToBus(message)
-        if (message.isRetain) messageHandler.saveMessage(message)
+        if (message.isRetain)
+            messageHandler.saveMessage(message)
     }
 
     abstract fun publishMessageToBus(message: MqttMessage)
 
     protected fun consumeMessageFromBus(message: MqttMessage) {
-        subscriptionHandler.findClients(message.topicName).forEach {
-            MqttClient.sendMessageToClient(vertx, it, message)
-        }
+        val (online, offline) = sessionHandler.findClients(message.topicName).partition { sessionHandler.isConnected(it) }
+        online.forEach { clientId -> MqttClient.sendMessageToClient(vertx, clientId, message) }
+        if (offline.isNotEmpty()) sessionHandler.enqueueMessage(message, offline)
     }
 }

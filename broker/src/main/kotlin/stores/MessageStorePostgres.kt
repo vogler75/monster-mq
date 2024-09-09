@@ -136,7 +136,8 @@ class MessageStorePostgres(
 
         try {
             db.connection?.let { connection ->
-                val sql = "SELECT array_to_string(topic, '/'), payload FROM $name WHERE "+topicLevels.joinToString(" AND ") { it.first }
+                val where = topicLevels.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
+                val sql = "SELECT array_to_string(topic, '/'), payload FROM $name WHERE $where"
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 topicLevels.forEachIndexed { index, level ->
                     preparedStatement.setString(index+1, level.second)

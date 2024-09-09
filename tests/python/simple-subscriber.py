@@ -23,7 +23,7 @@ def on_message(client, userdata, msg):
     # the content of the message is a timestamp in iso, take this and calculate the time difference between now and the time the message was sent
     sent_time = datetime.fromisoformat(msg.payload.decode())
     time_diff = datetime.now() - sent_time
-    print(f"Time difference: {time_diff.total_seconds()} seconds")
+    print(f"Received `{msg.payload.decode()}` from `{msg.topic}`. Time difference: {time_diff.total_seconds()} seconds")
 
 
 # Create an MQTT client instance

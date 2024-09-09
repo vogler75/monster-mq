@@ -69,7 +69,7 @@ fun main(args: Array<String>) {
             config.getString("RetainedMessageStoreType", "MEMORY")
         )
 
-        val subscriptionStoreType = SubscriptionStoreType.valueOf(
+        val sessionStoreType = SessionStoreType.valueOf(
             config.getString("SubscriptionStoreType", "MEMORY")
         )
 
@@ -80,32 +80,32 @@ fun main(args: Array<String>) {
         val postgresPass = postgres.getString("Pass", "manager")
 
         logger.info("Port [$usePort] SSL [$useSsl] WS [$useWs] TCP [$useTcp]")
-        logger.info("RetainedMessageStoreType [$retainedMessageStoreType] SubscriptionStoreType [$subscriptionStoreType]")
-        logger.info("Postgres Url [$postgresUrl] User [$postgresUser] Pass [$postgresPass]")
+        logger.info("RetainedMessageStoreType [$retainedMessageStoreType]")
+        logger.info("SubscriptionStoreType [$sessionStoreType]")
 
         fun getDistributor(
-            subscriptionHandler: SubscriptionHandler,
+            sessionHandler: SessionHandler,
             messageHandler: MessageHandler
         ): Distributor {
             val kafka = config.getJsonObject("Kafka", JsonObject())
-            val distributor = if (kafka.isEmpty) DistributorVertx(subscriptionHandler, messageHandler)
+            val distributor = if (kafka.isEmpty) DistributorVertx(sessionHandler, messageHandler)
             else {
                 val kafkaServers = kafka.getString("Servers", "")
                 val kafkaTopic = kafka.getString("Topic", "monster")
-                DistributorKafka(subscriptionHandler, messageHandler, kafkaServers, kafkaTopic)
+                DistributorKafka(sessionHandler, messageHandler, kafkaServers, kafkaTopic)
             }
             return distributor
         }
 
-        fun getSubscriptionStore(vertx: Vertx, name: String): ISubscriptionStore
-                = when (subscriptionStoreType) {
-            SubscriptionStoreType.MEMORY -> {
-                val table = SubscriptionStoreAsyncMap()
+        fun getSessionStore(vertx: Vertx): ISessionStore
+                = when (sessionStoreType) {
+            SessionStoreType.MEMORY -> {
+                val table = SessionStoreAsyncMap()
                 vertx.deployVerticle(table)
                 table
             }
-            SubscriptionStoreType.POSTGRES -> {
-                val table = SubscriptionStorePostgres(postgresUrl, postgresUser, postgresPass)
+            SessionStoreType.POSTGRES -> {
+                val table = SessionStorePostgres(postgresUrl, postgresUser, postgresPass)
                 vertx.deployVerticle(table)
                 table
             }
@@ -143,17 +143,17 @@ fun main(args: Array<String>) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
-        val subscriptionStore = getSubscriptionStore(vertx, "SubscriptionStore")
-        val subscriptionHandler = SubscriptionHandler(subscriptionStore)
+        val subscriptionStore = getSessionStore(vertx)
+        val sessionHandler = SessionHandler(subscriptionStore)
 
-        val messageStore = getMessageStore(vertx, "RetainedStore", clusterManager)
+        val messageStore = getMessageStore(vertx, "Retained", clusterManager)
         val messageHandler = MessageHandler(messageStore)
 
         val distributors = mutableListOf<Distributor>()
         val servers = mutableListOf<MqttServer>()
 
         repeat(1) {
-            getDistributor(subscriptionHandler, messageHandler).let { distributor ->
+            getDistributor(sessionHandler, messageHandler).let { distributor ->
                 distributors.add(distributor)
                 servers.addAll(listOfNotNull(
                     if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
@@ -164,7 +164,7 @@ fun main(args: Array<String>) {
 
         Future.succeededFuture<String>()
             .compose { vertx.deployVerticle(messageHandler) }
-            .compose { vertx.deployVerticle(subscriptionHandler) }
+            .compose { vertx.deployVerticle(sessionHandler) }
             .compose { Future.all(distributors.map { vertx.deployVerticle(it) }) }
             .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
             .onFailure {

@@ -1,6 +1,7 @@
 package at.rocworks.stores
 
 import at.rocworks.Const
+import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
 import io.vertx.core.AbstractVerticle
@@ -10,7 +11,7 @@ import java.util.concurrent.TimeUnit
 import java.util.logging.Logger
 import kotlin.concurrent.thread
 
-class SubscriptionHandler(private val table: ISubscriptionStore): AbstractVerticle() {
+class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     private val index = TopicTree()
@@ -33,8 +34,8 @@ class SubscriptionHandler(private val table: ISubscriptionStore): AbstractVertic
         vertx.eventBus().consumer<MqttSubscription>(delAddress) {
             index.del(it.body().topicName, it.body().clientId)
         }
-        workerThread("Add", addQueue, table::addAll)
-        workerThread("Del", delQueue, table::delAll)
+        workerThread("Add", addQueue, store::addSubscriptions)
+        workerThread("Del", delQueue, store::delSubscriptions)
         startPromise.complete()
     }
 
@@ -66,6 +67,25 @@ class SubscriptionHandler(private val table: ISubscriptionStore): AbstractVertic
         }
     }
 
+    fun pauseClient(clientId: String) {
+        store.setConnected(clientId, false)
+    }
+
+    fun putClient(clientId: String, cleanSession: Boolean, connected: Boolean) {
+        store.putClient(clientId, cleanSession, connected)
+    }
+
+    fun isConnected(clientId: String): Boolean {
+        return store.isConnected(clientId) // TODO: must be cached
+    }
+
+    fun enqueueMessage(message: MqttMessage, clientIds: List<String>) {
+        store.enqueueMessages(clientIds, listOf(message)) // TODO: build block
+    }
+
+    fun dequeueMessages(clientId: String, callback: (MqttMessage)->Unit) {
+        store.dequeueMessages(clientId, callback)
+    }
 
     fun addSubscription(subscription: MqttSubscription) {
         vertx.eventBus().publish(addAddress, subscription)
@@ -86,7 +106,7 @@ class SubscriptionHandler(private val table: ISubscriptionStore): AbstractVertic
     }
 
     fun removeClient(clientId: String) {
-        table.delClient(clientId) { subscription ->
+        store.delClient(clientId) { subscription ->
             vertx.eventBus().publish(delAddress, subscription)
         }
     }
