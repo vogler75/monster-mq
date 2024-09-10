@@ -3,6 +3,7 @@ package at.rocworks.stores
 import at.rocworks.Config
 import at.rocworks.Const
 import at.rocworks.Utils
+import at.rocworks.data.MqttClientQoS
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
@@ -110,18 +111,19 @@ class SessionStorePostgres(
         db.start(vertx, startPromise)
     }
 
-    override fun buildIndex(index: TopicTree) {
+    override fun buildIndex(index: TopicTree<MqttClientQoS>) {
         try {
             logger.info("Indexing subscription table [$subscriptionTableName].")
             db.connection?.let { connection ->
                 var rows = 0
-                val sql = "SELECT client, array_to_string(topic, '/') FROM $subscriptionTableName "
+                val sql = "SELECT client, array_to_string(topic, '/'), qos FROM $subscriptionTableName "
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 val resultSet = preparedStatement.executeQuery()
                 while (resultSet.next()) {
                     val client = resultSet.getString(1)
                     val topic = resultSet.getString(2)
-                    index.add(topic, client)
+                    val qos = MqttQoS.valueOf(resultSet.getInt(3))
+                    index.add(topic, MqttClientQoS(client, qos))
                     rows++
                 }
                 logger.info("Indexing subscription table [$subscriptionTableName] finished [$rows].")

@@ -2,10 +2,7 @@ package at.rocworks.stores
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
-import at.rocworks.data.MqttSession
-import at.rocworks.data.MqttSubscription
-import at.rocworks.data.TopicTree
+import at.rocworks.data.*
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -20,7 +17,7 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
     private val subscriptionTableName = "Subscriptions"
 
     private var sessionTable: AsyncMap<String, MqttSession>? = null // clientId to sessionId
-    private var subscriptionTable: AsyncMap<String, MutableSet<String>>? = null // clientId to topicName
+    private var subscriptionTable: AsyncMap<String, MutableSet<Pair<String, MqttQoS>>>? = null // clientId to topicName
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -39,7 +36,7 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
             }.onFailure {
                 logger.severe("Error in getting map [$sessionTableName] [${it.message}]")
             },
-            Utils.getMap<String, MutableSet<String>>(vertx, subscriptionTableName).onSuccess { subscriptions ->
+            Utils.getMap<String, MutableSet<Pair<String, MqttQoS>>>(vertx, subscriptionTableName).onSuccess { subscriptions ->
                 logger.info("Indexing subscription table [$subscriptionTableName].")
                 this.subscriptionTable = subscriptions
             }.onFailure {
@@ -51,13 +48,13 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
         }
     }
 
-    override fun buildIndex(index: TopicTree) {
+    override fun buildIndex(index: TopicTree<MqttClientQoS>) {
         subscriptionTable?.let { table ->
             table.keys()
                 .onSuccess { clients ->
                     Future.all(clients.map { client ->
                         table.get(client).onComplete { topics ->
-                            topics.result().forEach { index.add(it, client) }
+                            topics.result().forEach { index.add(it.first, MqttClientQoS(client, it.second)) }
                         }
                     }).onComplete {
                         logger.info("Indexing subscription table [$subscriptionTableName] finished.")
@@ -99,8 +96,9 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
         subscriptionTable?.let { table ->
             subscriptions.forEach { subscription ->
                 table.get(subscription.clientId).onComplete { client ->
-                    client.result()?.add(subscription.topicName) ?: run {
-                        table.put(subscription.clientId, hashSetOf(subscription.topicName))
+                    val item = subscription.topicName to subscription.qos
+                    client.result()?.add(item) ?: run {
+                        table.put(subscription.clientId, hashSetOf(item))
                     }
                 }.onFailure {
                     logger.severe(it.message)
@@ -113,7 +111,7 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
         subscriptionTable?.let { table ->
             subscriptions.forEach { subscription ->
                 table.get(subscription.clientId).onComplete { client ->
-                    client.result()?.remove(subscription.topicName)
+                    client.result()?.remove(subscription.topicName to subscription.qos)
                 }.onFailure {
                     logger.severe(it.message)
                 }
@@ -122,9 +120,9 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
     }
 
     override fun delClient(clientId: String, callback: (MqttSubscription)->Unit) {
-        subscriptionTable?.remove(clientId)?.onSuccess { topics: MutableSet<String>? ->
+        subscriptionTable?.remove(clientId)?.onSuccess { topics: MutableSet<Pair<String, MqttQoS>>? ->
             topics?.forEach { topic ->
-                callback(MqttSubscription(clientId, topic, MqttQoS.FAILURE /* not needed */))
+                callback(MqttSubscription(clientId, topic.first, topic.second))
             }
         }
     }

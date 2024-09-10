@@ -1,5 +1,4 @@
 package at.rocworks.tests
-import at.rocworks.data.TopicTreeHazelcast
 import com.hazelcast.core.HazelcastInstance
 import com.hazelcast.map.IMap
 import io.vertx.core.Vertx
@@ -36,7 +35,6 @@ fun main(args: Array<String>) {
             val vertx = res.result()
             thread {
                 if (args.indexOf("1")!=-1) test1()
-                if (args.indexOf("2")!=-1) test2(clusterManager.hazelcastInstance)
                 if (args.indexOf("3")!=-1) test3()
                 if (args.indexOf("4")!=-1) test4(clusterManager.hazelcastInstance)
             }
@@ -65,27 +63,6 @@ private fun test1() {
 
     val value2 = cache.get("key1")
     println("Cache Value for key1: $value2")  // Output: Cache Value for key1: value1
-}
-
-private fun test2(hazelcastInstance: HazelcastInstance) {
-    val tree = TopicTreeHazelcast(hazelcastInstance,"test")
-    val topics = listOf(
-        "a/a/a",
-        "a/a/b",
-        "a/b/a",
-        "a/b/b",
-        "b/a/a",
-        "b/b/a"
-    )
-    topics.forEach { tree.add(it) }
-    tree.add("a/a", "test")
-    tree.add("a/a", "test2")
-    println(tree)
-    tree.del("a/a", "test")
-    tree.del("a/a", "test2")
-    println(tree)
-    tree.del("a/a/a")
-    println(tree)
 }
 
 private fun test3() {

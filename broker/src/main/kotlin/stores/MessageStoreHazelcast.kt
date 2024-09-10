@@ -17,7 +17,7 @@ class MessageStoreHazelcast(
 ): AbstractVerticle(), IMessageStore {
     private val logger = Logger.getLogger(this.javaClass.simpleName+"/"+name)
 
-    private val index = TopicTree()
+    private val index = TopicTree<Void>()
     private val store = hazelcast.getMap<String, MqttMessage>(name)
 
     private val addAddress = "$name/A"

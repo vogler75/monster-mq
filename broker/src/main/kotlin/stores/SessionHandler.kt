@@ -1,9 +1,11 @@
 package at.rocworks.stores
 
 import at.rocworks.Const
+import at.rocworks.data.MqttClientQoS
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
+import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import java.util.concurrent.ArrayBlockingQueue
@@ -14,7 +16,7 @@ import kotlin.concurrent.thread
 class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
-    private val index = TopicTree() // Topic index
+    private val index = TopicTree<MqttClientQoS>() // Topic index
     private val offline = mutableSetOf<String>() // Offline clients
 
     private val subAddQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
@@ -35,10 +37,10 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     override fun start(startPromise: Promise<Void>) {
         logger.info("Start session handler...")
         vertx.eventBus().consumer<MqttSubscription>(subscriptionAddAddress) {
-            index.add(it.body().topicName, it.body().clientId)
+            index.add(it.body().topicName, MqttClientQoS(it.body().clientId, it.body().qos))
         }
         vertx.eventBus().consumer<MqttSubscription>(subscriptionDelAddress) {
-            index.del(it.body().topicName, it.body().clientId)
+            index.del(it.body().topicName, MqttClientQoS(it.body().clientId, it.body().qos))
         }
         vertx.eventBus().consumer<String>(clientOnlineAddress) {
             offline.remove(it.body())
@@ -134,7 +136,7 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
         }
     }
 
-    fun findClients(topicName: String): Set<String> {
+    fun findClients(topicName: String): Set<MqttClientQoS> {
         val result = index.findDataOfTopicName(topicName).toSet()
         logger.finest { "Found [${result.size}] clients." }
         return result

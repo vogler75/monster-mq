@@ -1,8 +1,10 @@
 package at.rocworks.stores
 
+import at.rocworks.data.MqttClientQoS
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
+import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.Future
 
 enum class SessionStoreType {
@@ -14,7 +16,7 @@ interface ISessionStore {
     fun getType(): SessionStoreType
     fun storeReady(): Future<Void>
     fun offlineClients(offline: MutableSet<String>)
-    fun buildIndex(index: TopicTree)
+    fun buildIndex(index: TopicTree<MqttClientQoS>)
     fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean)
     fun setConnected(clientId: String, connected: Boolean)
     fun isConnected(clientId: String): Boolean

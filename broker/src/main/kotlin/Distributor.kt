@@ -99,11 +99,16 @@ abstract class Distributor(
     abstract fun publishMessageToBus(message: MqttMessage)
 
     protected fun consumeMessageFromBus(message: MqttMessage) {
-        val (online, offline) = sessionHandler.findClients(message.topicName).partition { sessionHandler.isConnected(it) }
+        val (online, offline) = sessionHandler.findClients(message.topicName).partition {
+            sessionHandler.isConnected(it.client)
+        }
         online.forEach {
-            clientId -> MqttClient.sendMessageToClient(vertx, clientId, message)
+            // TODO: potentially downgrade QoS
+            MqttClient.sendMessageToClient(vertx, it.client, message)
         }
         logger.info { "Message sent to [${online.size}] clients. Now enqueuing for [${offline.size}] offline sessions." }
-        if (offline.isNotEmpty()) sessionHandler.enqueueMessage(message, offline)
+        if (offline.isNotEmpty()) {
+            sessionHandler.enqueueMessage(message, offline.map { it.client })
+        }
     }
 }

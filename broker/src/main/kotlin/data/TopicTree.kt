@@ -5,21 +5,21 @@ import io.vertx.core.impl.ConcurrentHashSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
 
-class TopicTree : ITopicTree {
+class TopicTree<T> : ITopicTree<T> {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
-    data class Node (
-        val children: ConcurrentHashMap<String, Node> = ConcurrentHashMap(), // Level to Node
-        val dataset: ConcurrentHashSet<String> = ConcurrentHashSet()
+    data class Node<T> (
+        val children: ConcurrentHashMap<String, Node<T>> = ConcurrentHashMap(), // Level to Node
+        val dataset: ConcurrentHashSet<T> = ConcurrentHashSet()
     )
 
-    private val root = Node()
+    private val root = Node<T>()
 
     override fun getType(): TopicTreeType = TopicTreeType.LOCAL
 
     override fun add(topicName: String) = add(topicName, null)
-    override fun add(topicName: String, data: String?) {
-        fun addTopicNode(node: Node, first: String, rest: List<String>) {
+    override fun add(topicName: String, data: T?) {
+        fun addTopicNode(node: Node<T>, first: String, rest: List<String>) {
             val child = node.children.getOrPut(first) { Node() }
             if (rest.isEmpty()) {
                 data?.let { child.dataset.add(it) }
@@ -32,9 +32,9 @@ class TopicTree : ITopicTree {
     }
 
     override fun del(topicName: String) = del(topicName, null)
-    override fun del(topicName: String, data: String?) {
-        fun delTopicNode(node: Node, first: String, rest: List<String>) {
-            fun deleteIfEmpty(child: Node) {
+    override fun del(topicName: String, data: T?) {
+        fun delTopicNode(node: Node<T>, first: String, rest: List<String>) {
+            fun deleteIfEmpty(child: Node<T>) {
                 if (child.dataset.isEmpty() && child.children.isEmpty()) {
                     node.children.remove(first)
                 }
@@ -55,8 +55,8 @@ class TopicTree : ITopicTree {
         if (xs.isNotEmpty()) delTopicNode(root, xs.first(), xs.drop(1))
     }
 
-    override fun findDataOfTopicName(topicName: String): List<String> {
-        fun find(node: Node, current: String, rest: List<String>): List<String> {
+    override fun findDataOfTopicName(topicName: String): List<T> {
+        fun find(node: Node<T>, current: String, rest: List<String>): List<T> {
             return node.children.flatMap { child ->
                 when (child.key) {
                     "#" -> child.value.dataset.toList()
@@ -72,7 +72,7 @@ class TopicTree : ITopicTree {
     }
 
     override fun findMatchingTopicNames(topicName: String): List<String> {
-        fun find(node: Node, current: String, rest: List<String>, topic: String?): List<String> {
+        fun find(node: Node<T>, current: String, rest: List<String>, topic: String?): List<String> {
             return if (node.children.isEmpty() && rest.isEmpty()) // is leaf
                 if (topic==null) listOf() else listOf(topic)
             else
@@ -90,7 +90,7 @@ class TopicTree : ITopicTree {
     }
 
     override fun findMatchingTopicNames(topicName: String, callback: (String)->Boolean) {
-        fun find(node: Node, current: String, rest: List<String>, topic: String?): Boolean {
+        fun find(node: Node<T>, current: String, rest: List<String>, topic: String?): Boolean {
             logger.finest { "Find Node [$node] Current [$current] Rest [${rest.joinToString(",")}] Topic: [$topic]"}
             if (node.children.isEmpty() && rest.isEmpty()) { // is leaf
                 if (topic != null) return callback(topic)
@@ -121,7 +121,7 @@ class TopicTree : ITopicTree {
         return "TopicTree dump: \n" + printTreeNode("", root).joinToString("\n")
     }
 
-    private fun printTreeNode(root: String, node: Node, level: Int = -1): List<String> {
+    private fun printTreeNode(root: String, node: Node<T>, level: Int = -1): List<String> {
         val text = mutableListOf<String>()
         if (level > -1) text.add("  ".repeat(level)+"- [${root.padEnd(40-level*2)}] Dataset: "+node.dataset.joinToString {"[$it]"})
         node.children.forEach {
