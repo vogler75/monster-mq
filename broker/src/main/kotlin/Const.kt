@@ -11,6 +11,7 @@ object Const {
 
     const val TOPIC_KEY = "Topic"
     const val CLIENT_KEY = "Client"
+    const val QOS_KEY = "QoS"
     const val COMMAND_KEY = "Command"
 
     const val COMMAND_STATUS = "Status"

@@ -6,6 +6,7 @@ import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
+import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -39,7 +40,7 @@ class SessionStorePostgres(
         override fun init(connection: Connection) {
             try {
                 val createTableSQL = listOf("""
-                   CREATE TABLE IF NOT EXISTS $sessionTableName (
+                 CREATE TABLE IF NOT EXISTS $sessionTableName (
                     client TEXT PRIMARY KEY,
                     clean_session BOOLEAN,
                     connected BOOLEAN,
@@ -53,6 +54,7 @@ class SessionStorePostgres(
                 CREATE TABLE IF NOT EXISTS $subscriptionTableName (
                     client TEXT,
                     topic TEXT[],
+                    qos INT,
                     wildcard BOOLEAN,
                     PRIMARY KEY (client, topic)
                 );
@@ -214,7 +216,7 @@ class SessionStorePostgres(
     }
 
     override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
-        val sql = "INSERT INTO $subscriptionTableName (client, topic, wildcard) VALUES (?, ?, ?) "+
+        val sql = "INSERT INTO $subscriptionTableName (client, topic, qos, wildcard) VALUES (?, ?, ?, ?) "+
                   "ON CONFLICT (client, topic) DO NOTHING"
         try {
             db.connection?.let { connection ->
@@ -223,7 +225,8 @@ class SessionStorePostgres(
                     val levels = Utils.getTopicLevels(subscription.topicName).toTypedArray()
                     preparedStatement.setString(1, subscription.clientId)
                     preparedStatement.setArray(2, connection.createArrayOf("text", levels))
-                    preparedStatement.setBoolean(3, Utils.isWildCardTopic(subscription.topicName))
+                    preparedStatement.setInt(3, subscription.qos.value())
+                    preparedStatement.setBoolean(4, Utils.isWildCardTopic(subscription.topicName))
                     preparedStatement.addBatch()
                 }
                 preparedStatement.executeBatch()
@@ -254,13 +257,15 @@ class SessionStorePostgres(
     override fun delClient(clientId: String, callback: (MqttSubscription)->Unit) {
         try {
             db.connection?.let { connection ->
-                "DELETE FROM $subscriptionTableName WHERE client = ? RETURNING topic".let { sql ->
+                "DELETE FROM $subscriptionTableName WHERE client = ? RETURNING topic, qos".let { sql ->
                     val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                     preparedStatement.setString(1, clientId)
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
                         val topic = resultSet.getArray(1).array
-                        if (topic is Array<*>) callback(MqttSubscription(clientId, topic.joinToString("/")))
+                        val qos = MqttQoS.valueOf(resultSet.getInt(2))
+                        if (topic is Array<*>)
+                            callback(MqttSubscription(clientId, topic.joinToString("/"), qos))
                     }
                 }
 

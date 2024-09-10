@@ -165,7 +165,7 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         // Subscribe
         subscribe.topicSubscriptions().forEach { subscription ->
             logger.info("Client [${endpoint.clientIdentifier()}] Subscription for [${subscription.topicName()}] with QoS ${subscription.qualityOfService()}")
-            distributor.subscribeRequest(this, subscription.topicName())
+            distributor.subscribeRequest(this, subscription.topicName(), subscription.qualityOfService())
         }
     }
 

@@ -6,6 +6,7 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSession
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
+import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -123,7 +124,7 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
     override fun delClient(clientId: String, callback: (MqttSubscription)->Unit) {
         subscriptionTable?.remove(clientId)?.onSuccess { topics: MutableSet<String>? ->
             topics?.forEach { topic ->
-                callback(MqttSubscription(clientId, topic))
+                callback(MqttSubscription(clientId, topic, MqttQoS.FAILURE /* not needed */))
             }
         }
     }

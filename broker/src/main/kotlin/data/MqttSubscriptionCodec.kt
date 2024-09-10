@@ -1,5 +1,6 @@
 package at.rocworks.data
 
+import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.MessageCodec
 
@@ -11,6 +12,7 @@ class MqttSubscriptionCodec : MessageCodec<MqttSubscription, MqttSubscription> {
         val topicName = s.topicName.toByteArray(Charsets.UTF_8)
         buffer.appendInt(topicName.size)
         buffer.appendBytes(topicName)
+        buffer.appendInt(s.qos.value())
     }
 
     override fun decodeFromWire(pos: Int, buffer: Buffer): MqttSubscription {
@@ -22,7 +24,9 @@ class MqttSubscriptionCodec : MessageCodec<MqttSubscription, MqttSubscription> {
         val topicNameLen = buffer.getInt(position)
         position += 4
         val topicName = buffer.getString(position, position + topicNameLen)
-        return MqttSubscription(clientId, topicName)
+        position += topicNameLen
+        val qos = MqttQoS.valueOf(buffer.getInt(position + topicNameLen))
+        return MqttSubscription(clientId, topicName, qos)
     }
 
     override fun transform(s: MqttSubscription): MqttSubscription {

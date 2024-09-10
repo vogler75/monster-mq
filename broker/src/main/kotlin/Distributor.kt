@@ -3,6 +3,7 @@ package at.rocworks
 import at.rocworks.data.*
 import at.rocworks.stores.MessageHandler
 import at.rocworks.stores.SessionHandler
+import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
@@ -42,11 +43,12 @@ abstract class Distributor(
 
     //----------------------------------------------------------------------------------------------------
 
-    fun subscribeRequest(client: MqttClient, topicName: String) {
+    fun subscribeRequest(client: MqttClient, topicName: String, qos: MqttQoS) {
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
             .put(Const.CLIENT_KEY, client.getClientId())
+            .put(Const.QOS_KEY, qos.value())
         vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
             if (!it.succeeded())  logger.severe("Subscribe request failed: ${it.cause()}")
         }
@@ -55,13 +57,14 @@ abstract class Distributor(
     private fun subscribeCommand(command: Message<JsonObject>) {
         val clientId = command.body().getString(Const.CLIENT_KEY)
         val topicName = command.body().getString(Const.TOPIC_KEY)
+        val qos = MqttQoS.valueOf(command.body().getInteger(Const.QOS_KEY))
 
         messageHandler.findMatching(topicName) { message ->
             logger.finest { "Publish retained message [${message.topicName}]" }
             MqttClient.sendMessageToClient(vertx, clientId, message)
         }.onComplete {
             logger.finest { "Retained messages published [${it.result()}]." }
-            sessionHandler.addSubscription(MqttSubscription(clientId, topicName))
+            sessionHandler.addSubscription(MqttSubscription(clientId, topicName, qos))
             command.reply(true)
         }
     }
@@ -81,7 +84,7 @@ abstract class Distributor(
     private fun unsubscribeCommand(command: Message<JsonObject>) {
         val clientId = command.body().getString(Const.CLIENT_KEY)
         val topicName = command.body().getString(Const.TOPIC_KEY)
-        sessionHandler.delSubscription(MqttSubscription(clientId, topicName))
+        sessionHandler.delSubscription(MqttSubscription(clientId, topicName, MqttQoS.FAILURE /* not needed */))
         command.reply(true)
     }
 
