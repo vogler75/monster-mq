@@ -17,7 +17,7 @@ class MessageStorePostgres(
     private val logger = Logger.getLogger(this.javaClass.simpleName+"/"+name)
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
-        override fun checkTable(connection: Connection) {
+        override fun init(connection: Connection) {
             try {
                 val statement: Statement = connection.createStatement()
                 statement.executeUpdate("""

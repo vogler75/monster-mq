@@ -14,9 +14,10 @@ public class Config {
     public static String statisticsTopic = "monitor"; // Topic for publishing statistics
 
     public static int PUBLISHER_COUNT = 10;
-    public static int SUBSCRIBER_COUNT = 1_000_000;
+    public static int SUBSCRIBER_COUNT = 20_000;
 
     public static boolean SUBSCRIBER_CHECK_MESSAGE_ORDER = false;
+    public static int SUBSCRIBER_QOS = 1;
     public static boolean SUBSCRIBER_WILDCARD_SUBSCRIPTION = true;
     public static boolean SUBSCRIBER_CLEANSESSION = false;
     public static boolean SUBSCRIBER_EXIT = true;

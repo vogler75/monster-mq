@@ -1,11 +1,13 @@
 package at.rocworks.stores
 
+import at.rocworks.Config
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.Future
 import io.vertx.core.Promise
 import java.sql.*
 import java.util.logging.Logger
@@ -28,16 +30,20 @@ class SessionStorePostgres(
         logger.level = Const.DEBUG_LEVEL
     }
 
+    private val readyPromise: Promise<Void> = Promise.promise()
+    override fun storeReady(): Future<Void> = readyPromise.future()
+
     override fun getType(): SessionStoreType = SessionStoreType.POSTGRES
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
-        override fun checkTable(connection: Connection) {
+        override fun init(connection: Connection) {
             try {
                 val createTableSQL = listOf("""
                    CREATE TABLE IF NOT EXISTS $sessionTableName (
                     client TEXT PRIMARY KEY,
                     clean_session BOOLEAN,
                     connected BOOLEAN,
+                    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_will_topic TEXT,
                     last_will_message BYTEA,
                     last_will_qos INT,
@@ -75,7 +81,23 @@ class SessionStorePostgres(
                 val statement: Statement = connection.createStatement()
                 createTableSQL.forEach(statement::executeUpdate)
                 createIndexesSQL.forEach(statement::executeUpdate)
-                logger.info("Table [$subscriptionTableName] is ready.")
+
+                // select max(message_id) from QueuedMessages
+                val sql = "SELECT MAX(message_id) FROM $queuedMessageTableName"
+                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
+                val resultSet = preparedStatement.executeQuery()
+                if (resultSet.next()) queuedMessageId = resultSet.getLong(1) + 1
+
+                // if not clustered, then remove all sessions and subscriptions of clean sessions
+                if (!Config.isClustered()) {
+                    statement.executeUpdate(
+                        "DELETE FROM $subscriptionTableName WHERE client IN "+
+                            "(SELECT client FROM $sessionTableName WHERE clean_session = TRUE)")
+                    statement.executeUpdate("DELETE FROM $sessionTableName WHERE clean_session = TRUE")
+                }
+
+                logger.info("Tables are ready. QueuedMessageId [$queuedMessageId].")
+                readyPromise.complete()
             } catch (e: Exception) {
                 logger.severe("Error in creating table: ${e.message}")
             }
@@ -90,13 +112,17 @@ class SessionStorePostgres(
         try {
             logger.info("Indexing subscription table [$subscriptionTableName].")
             db.connection?.let { connection ->
-                val sql = "SELECT array_to_string(topic, '/') FROM $subscriptionTableName "
+                var rows = 0
+                val sql = "SELECT client, array_to_string(topic, '/') FROM $subscriptionTableName "
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 val resultSet = preparedStatement.executeQuery()
-                if (resultSet.next()) {
-                    index.add(resultSet.getString(1))
+                while (resultSet.next()) {
+                    val client = resultSet.getString(1)
+                    val topic = resultSet.getString(2)
+                    index.add(topic, client)
+                    rows++
                 }
-                logger.info("Indexing subscription table [$subscriptionTableName] finished.")
+                logger.info("Indexing subscription table [$subscriptionTableName] finished [$rows].")
             } ?: run {
                 logger.severe("Indexing subscription table not possible without database connection!")
             }
@@ -105,7 +131,25 @@ class SessionStorePostgres(
         }
     }
 
-    override fun putClient(clientId: String, cleanSession: Boolean, connected: Boolean) {
+    override fun offlineClients(offline: MutableSet<String>) {
+        offline.clear()
+        try {
+            db.connection?.let { connection ->
+                "SELECT client FROM $sessionTableName WHERE connected = FALSE AND clean_session = FALSE".let { sql ->
+                    val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        offline.add(resultSet.getString(1))
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error at fetching offline clients [${e.message}]")
+        }
+    }
+
+    override fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean) {
+        logger.finest { "Put client [$clientId] cleanSession [$cleanSession] connected [$connected]" }
         val sql = "INSERT INTO $sessionTableName (client, clean_session, connected) VALUES (?, ?, ?) "+
                   "ON CONFLICT (client) DO UPDATE SET clean_session = EXCLUDED.clean_session, connected = EXCLUDED.connected"
         try {
@@ -233,7 +277,7 @@ class SessionStorePostgres(
         }
     }
 
-    override fun enqueueMessages(clientIds: List<String>, messages: List<MqttMessage>) {
+    override fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>) {
         val sql1 = "INSERT INTO $queuedMessageTableName (message_id, topic, payload) VALUES (?, ?, ?) "+
                   "ON CONFLICT (message_id) DO NOTHING"
         val sql2 = "INSERT INTO $queuedClientsTableName (client, message_id) VALUES (?, ?) "+
@@ -247,12 +291,12 @@ class SessionStorePostgres(
 
                     // Add message
                     preparedStatement1.setLong(1, messageId)
-                    preparedStatement1.setString(2, message.topicName)
-                    preparedStatement1.setBytes(3, message.payload)
+                    preparedStatement1.setString(2, message.first.topicName)
+                    preparedStatement1.setBytes(3, message.first.payload)
                     preparedStatement1.addBatch()
 
                     // Add client to message relation
-                    clientIds.forEach { clientId ->
+                    message.second.forEach { clientId ->
                         preparedStatement2.setString(1, clientId)
                         preparedStatement2.setLong(2, messageId)
                         preparedStatement2.addBatch()
@@ -267,7 +311,7 @@ class SessionStorePostgres(
     }
 
     override fun dequeueMessages(clientId: String, callback: (MqttMessage)->Unit) {
-        // turn the sql to a delete statement with returning topic and payload
+        /*
         val sql = "DELETE FROM $queuedClientsTableName USING $queuedMessageTableName WHERE $queuedClientsTableName.message_id = $queuedMessageTableName.message_id AND client = ? RETURNING topic, payload"
         try {
             db.connection?.let { connection ->
@@ -290,7 +334,8 @@ class SessionStorePostgres(
         } catch (e: SQLException) {
             logger.warning("Error at fetching queued message [${e.message}]")
         }
-        /*
+         */
+
         val sql = "SELECT topic, payload FROM $queuedMessageTableName JOIN $queuedClientsTableName USING (message_id) WHERE client = ?"
         try {
             db.connection?.let { connection ->
@@ -313,6 +358,5 @@ class SessionStorePostgres(
         } catch (e: SQLException) {
             logger.warning("Error at fetching queued message [${e.message}]")
         }
-         */
     }
 }

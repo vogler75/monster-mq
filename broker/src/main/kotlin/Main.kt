@@ -3,22 +3,20 @@ package at.rocworks
 //import io.vertx.spi.cluster.zookeeper.ZookeeperClusterManager
 //import io.vertx.ext.cluster.infinispan.InfinispanClusterManager
 //import io.vertx.spi.cluster.ignite.IgniteClusterManager
-import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 
 import at.rocworks.data.*
 import at.rocworks.stores.*
-import io.vertx.core.AsyncResult
-import io.vertx.core.Future
-import io.vertx.core.Vertx
-import io.vertx.core.VertxBuilder
-import io.vertx.core.json.JsonObject
-import io.vertx.core.spi.cluster.ClusterManager
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
+import io.vertx.core.*
+import io.vertx.core.json.JsonObject
+import io.vertx.core.spi.cluster.ClusterManager
+import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
+
 
 fun main(args: Array<String>) {
     Utils.initLogging()
@@ -26,7 +24,7 @@ fun main(args: Array<String>) {
     val logger = Logger.getLogger("Main")
 
     // Clustering
-    val useCluster = args.find { it == "-cluster" } != null
+    Config.setClustered(args.find { it == "-cluster" } != null)
 
     // Config file
     val configFileIndex = args.indexOf("-config")
@@ -44,7 +42,7 @@ fun main(args: Array<String>) {
         }
     }
 
-    logger.info("Cluster: $useCluster")
+    logger.info("Cluster: ${Config.isClustered()}")
 
     fun retrieveConfig(vertx: Vertx): ConfigRetriever {
         logger.info("Monster config file: $configFileName")
@@ -70,7 +68,7 @@ fun main(args: Array<String>) {
         )
 
         val sessionStoreType = SessionStoreType.valueOf(
-            config.getString("SubscriptionStoreType", "MEMORY")
+            config.getString("SessionStoreType", "MEMORY")
         )
 
         val postgres = config.getJsonObject("Postgres", JsonObject())
@@ -81,7 +79,7 @@ fun main(args: Array<String>) {
 
         logger.info("Port [$usePort] SSL [$useSsl] WS [$useWs] TCP [$useTcp]")
         logger.info("RetainedMessageStoreType [$retainedMessageStoreType]")
-        logger.info("SubscriptionStoreType [$sessionStoreType]")
+        logger.info("SessionStoreType [$sessionStoreType]")
 
         fun getDistributor(
             sessionHandler: SessionHandler,
@@ -106,7 +104,8 @@ fun main(args: Array<String>) {
             }
             SessionStoreType.POSTGRES -> {
                 val table = SessionStorePostgres(postgresUrl, postgresUser, postgresPass)
-                vertx.deployVerticle(table)
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(table, options)
                 table
             }
         }
@@ -125,7 +124,8 @@ fun main(args: Array<String>) {
                     username = postgresUser,
                     password = postgresPass
                 )
-                vertx.deployVerticle(store)
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options)
                 store
             }
             MessageStoreType.HAZELCAST -> {
@@ -212,7 +212,9 @@ fun main(args: Array<String>) {
     }
 
     val builder = Vertx.builder()
-    if (useCluster) clusterSetup(builder)
-    else localSetup(builder)
+    if (Config.isClustered())
+        clusterSetup(builder)
+    else
+        localSetup(builder)
 }
 

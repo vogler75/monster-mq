@@ -1,7 +1,6 @@
 package at.rocworks.data
 
 import java.io.Serializable
-import java.time.Instant
 
 data class MqttSession(
     val clientId: String,

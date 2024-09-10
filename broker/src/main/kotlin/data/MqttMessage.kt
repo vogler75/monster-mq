@@ -39,6 +39,6 @@ class MqttMessage(
 
     private fun getQoS(): MqttQoS = MqttQoS.valueOf(qosLevel)
 
-    fun publish(endpoint: MqttEndpoint, messageId: Int): Future<Int>
-    = endpoint.publish(topicName, getPayloadAsBuffer(), getQoS(), isDup, isRetain, messageId)
+    fun publish(endpoint: MqttEndpoint, qos: MqttQoS=getQoS()): Future<Int>
+    = endpoint.publish(topicName, getPayloadAsBuffer(), qos, isDup, isRetain, messageId)
 }

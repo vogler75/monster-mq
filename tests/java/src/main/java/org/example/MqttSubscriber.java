@@ -103,9 +103,9 @@ public class MqttSubscriber {
 
             // Subscribe to the topic
             if (Config.SUBSCRIBER_WILDCARD_SUBSCRIPTION) {
-                client.subscribe(TOPIC+"/#");
+                client.subscribe(TOPIC+"/#", Config.SUBSCRIBER_QOS);
                 if (Config.SUBSCRIBER_SUBSCRIBE_BROADCAST)
-                    client.subscribe(Config.topicPrefix+"/broadcast");
+                    client.subscribe(Config.topicPrefix+"/broadcast", Config.SUBSCRIBER_QOS);
             } else {
                 int topicNr1=0, topicNr2=0, topicNr3=0;
                 int amount=(int)(Math.pow(Config.TOPIC_LEVEL_DEPTH, 3));
@@ -124,7 +124,7 @@ public class MqttSubscriber {
                     }
                     String topic = TOPIC + "/" + topicNr1 + "/" + topicNr2 + "/" + topicNr3;
                     //System.out.println("Subscribe to "+topic);
-                    client.subscribe(topic);
+                    client.subscribe(topic, Config.SUBSCRIBER_QOS);
                 }
             }
 
@@ -161,6 +161,7 @@ public class MqttSubscriber {
                 statClient.publish(Config.statisticsTopic+"/subscriber/instance_"+nr, statsMsg);
             }
         } catch (MqttException | InterruptedException e) {
+            System.out.println("An error occurred: " + e.getMessage());
             e.printStackTrace();
         }
         runningTasks.decrementAndGet();

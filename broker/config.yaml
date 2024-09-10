@@ -3,8 +3,8 @@ SSL: false
 WS: false
 TCP: true
 
+SessionStoreType: POSTGRES
 RetainedMessageStoreType: POSTGRES
-SubscriptionStoreType: POSTGRES
 
 #Kafka:
 #  Servers: linux0:9092

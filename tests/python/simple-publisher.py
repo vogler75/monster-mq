@@ -1,19 +1,23 @@
 import paho.mqtt.client as mqtt
 import time
+import json
 from datetime import datetime
 
 # Define the MQTT broker details
-broker_address = "192.168.1.30"  # Example broker address, you can change it to your broker's address
+broker_address = "localhost"  # Example broker address, you can change it to your broker's address
 topic = "test/broadcast"  # Example topic
 
+message_id = 0
 
 # Function to publish a message
 def publish_messages():
+    global message_id
     while True:
-        message = datetime.now().isoformat()
-        client.publish(topic, message, qos=1).wait_for_publish()
-        # Print the current time in ISO format
-        print("Message Published at:", message)
+        ts = datetime.now().isoformat()
+        message_id = message_id + 1
+        payload = { "id": message_id, "ts": ts }
+        client.publish(topic, json.dumps(payload), qos=1).wait_for_publish()
+        print("Message Published:", payload)
         time.sleep(1)
 
 

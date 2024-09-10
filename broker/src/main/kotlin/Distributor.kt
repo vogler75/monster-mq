@@ -81,7 +81,7 @@ abstract class Distributor(
     private fun unsubscribeCommand(command: Message<JsonObject>) {
         val clientId = command.body().getString(Const.CLIENT_KEY)
         val topicName = command.body().getString(Const.TOPIC_KEY)
-        sessionHandler.removeSubscription(MqttSubscription(clientId, topicName))
+        sessionHandler.delSubscription(MqttSubscription(clientId, topicName))
         command.reply(true)
     }
 
@@ -97,7 +97,10 @@ abstract class Distributor(
 
     protected fun consumeMessageFromBus(message: MqttMessage) {
         val (online, offline) = sessionHandler.findClients(message.topicName).partition { sessionHandler.isConnected(it) }
-        online.forEach { clientId -> MqttClient.sendMessageToClient(vertx, clientId, message) }
+        online.forEach {
+            clientId -> MqttClient.sendMessageToClient(vertx, clientId, message)
+        }
+        logger.info { "Message sent to [${online.size}] clients. Now enqueuing for [${offline.size}] offline sessions." }
         if (offline.isNotEmpty()) sessionHandler.enqueueMessage(message, offline)
     }
 }

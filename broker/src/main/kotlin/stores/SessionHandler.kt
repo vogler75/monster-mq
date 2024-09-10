@@ -14,35 +14,55 @@ import kotlin.concurrent.thread
 class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
-    private val index = TopicTree()
+    private val index = TopicTree() // Topic index
+    private val offline = mutableSetOf<String>() // Offline clients
 
-    private val addQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
-    private val delQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
+    private val subAddQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
+    private val subDelQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
 
-    private val addAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE +"/A"
-    private val delAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE +"/D"
+    private val messageQueue: ArrayBlockingQueue<Pair<MqttMessage, List<String>>> = ArrayBlockingQueue(10_000) // TODO: configurable
+
+    private val subscriptionAddAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/A"
+    private val subscriptionDelAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/D"
+
+    private val clientOnlineAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/C"
+    private val clientOfflineAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/D"
 
     init {
         logger.level = Const.DEBUG_LEVEL
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Start handler...")
-        vertx.eventBus().consumer<MqttSubscription>(addAddress) {
+        logger.info("Start session handler...")
+        vertx.eventBus().consumer<MqttSubscription>(subscriptionAddAddress) {
             index.add(it.body().topicName, it.body().clientId)
         }
-        vertx.eventBus().consumer<MqttSubscription>(delAddress) {
+        vertx.eventBus().consumer<MqttSubscription>(subscriptionDelAddress) {
             index.del(it.body().topicName, it.body().clientId)
         }
-        workerThread("Add", addQueue, store::addSubscriptions)
-        workerThread("Del", delQueue, store::delSubscriptions)
-        startPromise.complete()
+        vertx.eventBus().consumer<String>(clientOnlineAddress) {
+            offline.remove(it.body())
+        }
+        vertx.eventBus().consumer<String>(clientOfflineAddress) {
+            offline.add(it.body())
+        }
+
+        queueWorkerThread("SubAddQueue", subAddQueue, 1000, store::addSubscriptions)
+        queueWorkerThread("SubDelQueue", subDelQueue, 1000, store::delSubscriptions)
+        queueWorkerThread("MessageQueue", messageQueue, 1000, store::enqueueMessages)
+
+        store.storeReady().onSuccess {
+            store.buildIndex(index)
+            store.offlineClients(offline)
+            startPromise.complete()
+        }
     }
 
-    private fun workerThread(
+    private fun <T> queueWorkerThread(
         name: String,
-        queue: ArrayBlockingQueue<MqttSubscription>,
-        execute: (block: List<MqttSubscription>)->Unit
+        queue: ArrayBlockingQueue<T>,
+        blockSize: Int,
+        execute: (block: List<T>)->Unit
     ) = thread(start = true) {
         logger.info("Start [$name] thread")
         vertx.setPeriodic(1000) {
@@ -50,12 +70,12 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
                 logger.info("Queue [$name] size [${queue.size}]")
         }
 
-        val block = arrayListOf<MqttSubscription>()
+        val block = arrayListOf<T>()
 
         while (true) {
-            queue.poll(100, TimeUnit.MILLISECONDS)?.let { subscription ->
-                block.add(subscription)
-                while (queue.poll()?.let(block::add) != null && block.size < 1000) {
+            queue.poll(100, TimeUnit.MILLISECONDS)?.let { item ->
+                block.add(item)
+                while (queue.poll()?.let(block::add) != null && block.size < blockSize) {
                     // nothing to do here
                 }
                 if (block.size > 0) {
@@ -67,20 +87,29 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
         }
     }
 
+    fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean) {
+        vertx.eventBus().publish(if (connected) clientOnlineAddress else clientOfflineAddress, clientId)
+        store.setClient(clientId, cleanSession, connected)
+    }
+
+    fun delClient(clientId: String) {
+        vertx.eventBus().publish(clientOfflineAddress, clientId)
+        store.delClient(clientId) { subscription ->
+            vertx.eventBus().publish(subscriptionDelAddress, subscription)
+        }
+    }
+
     fun pauseClient(clientId: String) {
+        vertx.eventBus().publish(clientOfflineAddress, clientId)
         store.setConnected(clientId, false)
     }
 
-    fun putClient(clientId: String, cleanSession: Boolean, connected: Boolean) {
-        store.putClient(clientId, cleanSession, connected)
-    }
-
     fun isConnected(clientId: String): Boolean {
-        return store.isConnected(clientId) // TODO: must be cached
+        return !offline.contains(clientId)
     }
 
     fun enqueueMessage(message: MqttMessage, clientIds: List<String>) {
-        store.enqueueMessages(clientIds, listOf(message)) // TODO: build block
+        messageQueue.add(Pair(message, clientIds))
     }
 
     fun dequeueMessages(clientId: String, callback: (MqttMessage)->Unit) {
@@ -88,26 +117,20 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     }
 
     fun addSubscription(subscription: MqttSubscription) {
-        vertx.eventBus().publish(addAddress, subscription)
+        vertx.eventBus().publish(subscriptionAddAddress, subscription)
         try {
-            addQueue.add(subscription)
+            subAddQueue.add(subscription)
         } catch (e: IllegalStateException) {
             // TODO: Alert
         }
     }
 
-    fun removeSubscription(subscription: MqttSubscription) {
-        vertx.eventBus().publish(delAddress, subscription)
+    fun delSubscription(subscription: MqttSubscription) {
+        vertx.eventBus().publish(subscriptionDelAddress, subscription)
         try {
-            delQueue.add(subscription)
+            subDelQueue.add(subscription)
         } catch (e: IllegalStateException) {
             // TODO: Alert
-        }
-    }
-
-    fun removeClient(clientId: String) {
-        store.delClient(clientId) { subscription ->
-            vertx.eventBus().publish(delAddress, subscription)
         }
     }
 

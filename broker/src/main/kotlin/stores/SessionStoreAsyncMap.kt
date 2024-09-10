@@ -27,6 +27,9 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
 
     override fun getType(): SessionStoreType = SessionStoreType.MEMORY
 
+    private val readyPromise: Promise<Void> = Promise.promise()
+    override fun storeReady(): Future<Void> = readyPromise.future()
+
     override fun start(startPromise: Promise<Void>) {
         Future.all(listOf(
             Utils.getMap<String, MqttSession>(vertx, sessionTableName).onSuccess { sessions ->
@@ -42,6 +45,7 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
                 logger.severe("Error in getting map [$subscriptionTableName] [${it.message}]")
             }
         )).onComplete {
+            readyPromise.complete()
             startPromise.complete()
         }
     }
@@ -64,7 +68,11 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
         }
     }
 
-    override fun putClient(clientId: String, cleanSession: Boolean, connected: Boolean) {
+    override fun offlineClients(offline: MutableSet<String>) {
+        TODO("Not yet implemented")
+    }
+
+    override fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean) {
         sessionTable?.put(clientId, MqttSession(clientId, cleanSession = cleanSession, connected = connected))
     }
 
@@ -120,11 +128,11 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
         }
     }
 
-    override fun enqueueMessages(clientIds: List<String>, messages: List<MqttMessage>) {
-        TODO()
+    override fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>) {
+        TODO("Not yet implemented")
     }
 
     override fun dequeueMessages(clientId: String, callback: (MqttMessage)->Unit) {
-        TODO()
+        TODO("Not yet implemented")
     }
 }

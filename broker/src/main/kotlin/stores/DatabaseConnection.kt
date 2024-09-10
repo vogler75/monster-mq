@@ -50,9 +50,9 @@ abstract class DatabaseConnection(
             DriverManager.getConnection(url, username, password)
                 ?.let {
                     it.autoCommit = true
-                    logger.info("Connection established.")
-                    checkTable(it)
                     connection = it
+                    logger.info("Connection established.")
+                    init(it)
                     promise.complete()
                 }
         } catch (e: Exception) {
@@ -88,5 +88,5 @@ abstract class DatabaseConnection(
         }
     }
 
-    abstract fun checkTable(connection: Connection)
+    abstract fun init(connection: Connection)
 }
