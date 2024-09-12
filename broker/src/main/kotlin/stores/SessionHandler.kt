@@ -1,7 +1,6 @@
 package at.rocworks.stores
 
 import at.rocworks.Const
-import at.rocworks.data.MqttClientQoS
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
@@ -16,7 +15,7 @@ import kotlin.concurrent.thread
 class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
-    private val index = TopicTree<MqttClientQoS>() // Topic index
+    private val index = TopicTree<String, Int>() // Topic index with client and QoS
     private val offline = mutableSetOf<String>() // Offline clients
 
     private val subAddQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
@@ -37,10 +36,10 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     override fun start(startPromise: Promise<Void>) {
         logger.info("Start session handler...")
         vertx.eventBus().consumer<MqttSubscription>(subscriptionAddAddress) {
-            index.add(it.body().topicName, MqttClientQoS(it.body().clientId, it.body().qos))
+            index.add(it.body().topicName, it.body().clientId, it.body().qos.value())
         }
         vertx.eventBus().consumer<MqttSubscription>(subscriptionDelAddress) {
-            index.del(it.body().topicName, MqttClientQoS(it.body().clientId, it.body().qos))
+            index.del(it.body().topicName, it.body().clientId)
         }
         vertx.eventBus().consumer<String>(clientOnlineAddress) {
             offline.remove(it.body())
@@ -137,7 +136,7 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
         }
     }
 
-    fun findClients(topicName: String): Set<MqttClientQoS> {
+    fun findClients(topicName: String): Set<Pair<String, Int>> {
         val result = index.findDataOfTopicName(topicName).toSet()
         logger.finest { "Found [${result.size}] clients." }
         return result

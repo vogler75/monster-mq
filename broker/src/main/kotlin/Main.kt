@@ -146,7 +146,7 @@ fun main(args: Array<String>) {
         val subscriptionStore = getSessionStore(vertx)
         val sessionHandler = SessionHandler(subscriptionStore)
 
-        val messageStore = getMessageStore(vertx, "Retained", clusterManager)
+        val messageStore = getMessageStore(vertx, "RetainedMessages", clusterManager)
         val messageHandler = MessageHandler(messageStore)
 
         val distributors = mutableListOf<Distributor>()

@@ -6,29 +6,30 @@ import io.vertx.core.impl.ConcurrentHashSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
 
-class TopicTree<T> : ITopicTree<T> {
+class TopicTree<K, V> : ITopicTree<K, V> {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
 
     init {
         logger.level = Const.DEBUG_LEVEL
     }
 
-    data class Node<T> (
-        val children: ConcurrentHashMap<String, Node<T>> = ConcurrentHashMap(), // Level to Node
-        val dataset: ConcurrentHashSet<T> = ConcurrentHashSet()
+    data class Node<K, V> (
+        val children: ConcurrentHashMap<String, Node<K, V>> = ConcurrentHashMap(), // Level to Node
+        val dataset: ConcurrentHashMap<K, V> = ConcurrentHashMap()
     )
 
-    private val root = Node<T>()
+    private val root = Node<K, V>()
 
     override fun getType(): TopicTreeType = TopicTreeType.LOCAL
 
-    override fun add(topicName: String) = add(topicName, null)
-    override fun add(topicName: String, data: T?) {
-        logger.finest { "Add topic [$topicName] data [$data]" }
-        fun addTopicNode(node: Node<T>, first: String, rest: List<String>) {
+    override fun add(topicName: String) = add(topicName, null, null)
+    override fun add(topicName: String, key: K?, value: V?) {
+        logger.finest { "Add topic [$topicName] key [$key] value [$value]" }
+        fun addTopicNode(node: Node<K, V>, first: String, rest: List<String>) {
             val child = node.children.getOrPut(first) { Node() }
             if (rest.isEmpty()) {
-                data?.let { child.dataset.add(it) }
+                if (key!=null && value!=null)
+                    child.dataset[key] = value
             } else {
                 addTopicNode(child, rest.first(), rest.drop(1))
             }
@@ -38,17 +39,17 @@ class TopicTree<T> : ITopicTree<T> {
     }
 
     override fun del(topicName: String) = del(topicName, null)
-    override fun del(topicName: String, data: T?) {
-        logger.finest { "Delete topic [$topicName] data [$data]" }
-        fun delTopicNode(node: Node<T>, first: String, rest: List<String>) {
-            fun deleteIfEmpty(child: Node<T>) {
+    override fun del(topicName: String, key: K?) {
+        logger.finest { "Delete topic [$topicName] key [$key]" }
+        fun delTopicNode(node: Node<K, V>, first: String, rest: List<String>) {
+            fun deleteIfEmpty(child: Node<K, V>) {
                 if (child.dataset.isEmpty() && child.children.isEmpty()) {
                     node.children.remove(first)
                 }
             }
             if (rest.isEmpty()) {
                 node.children[first]?.let { child ->
-                    data?.let { child.dataset.remove(it) }
+                    key?.let { child.dataset.remove(it) }
                     deleteIfEmpty(child)
                 }
             } else {
@@ -62,8 +63,8 @@ class TopicTree<T> : ITopicTree<T> {
         if (xs.isNotEmpty()) delTopicNode(root, xs.first(), xs.drop(1))
     }
 
-    override fun findDataOfTopicName(topicName: String): List<T> {
-        fun find(node: Node<T>, current: String, rest: List<String>): List<T> {
+    override fun findDataOfTopicName(topicName: String): List<Pair<K, V>> {
+        fun find(node: Node<K, V>, current: String, rest: List<String>): List<Pair<K, V>> {
             return node.children.flatMap { child ->
                 when (child.key) {
                     "#" -> child.value.dataset.toList()
@@ -79,7 +80,7 @@ class TopicTree<T> : ITopicTree<T> {
     }
 
     override fun findMatchingTopicNames(topicName: String): List<String> {
-        fun find(node: Node<T>, current: String, rest: List<String>, topic: String?): List<String> {
+        fun find(node: Node<K, V>, current: String, rest: List<String>, topic: String?): List<String> {
             return if (node.children.isEmpty() && rest.isEmpty()) // is leaf
                 if (topic==null) listOf() else listOf(topic)
             else
@@ -97,7 +98,7 @@ class TopicTree<T> : ITopicTree<T> {
     }
 
     override fun findMatchingTopicNames(topicName: String, callback: (String)->Boolean) {
-        fun find(node: Node<T>, current: String, rest: List<String>, topic: String?): Boolean {
+        fun find(node: Node<K, V>, current: String, rest: List<String>, topic: String?): Boolean {
             logger.finest { "Find Node [$node] Current [$current] Rest [${rest.joinToString(",")}] Topic: [$topic]"}
             if (node.children.isEmpty() && rest.isEmpty()) { // is leaf
                 if (topic != null) return callback(topic)
@@ -128,9 +129,9 @@ class TopicTree<T> : ITopicTree<T> {
         return "TopicTree dump: \n" + printTreeNode("", root).joinToString("\n")
     }
 
-    private fun printTreeNode(root: String, node: Node<T>, level: Int = -1): List<String> {
+    private fun printTreeNode(root: String, node: Node<K, V>, level: Int = -1): List<String> {
         val text = mutableListOf<String>()
-        if (level > -1) text.add("  ".repeat(level)+"- [${root.padEnd(40-level*2)}] Dataset: "+node.dataset.joinToString {"[$it]"})
+        if (level > -1) text.add("  ".repeat(level)+"- [${root.padEnd(40-level*2)}] Dataset: "+node.dataset.keys.joinToString {"[$it]"})
         node.children.forEach {
             text.addAll(printTreeNode(it.key, it.value, level + 1))
         }

@@ -48,13 +48,13 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
         }
     }
 
-    override fun buildIndex(index: TopicTree<MqttClientQoS>) {
+    override fun buildIndex(index: TopicTree<String, Int>) {
         subscriptionTable?.let { table ->
             table.keys()
                 .onSuccess { clients ->
                     Future.all(clients.map { client ->
                         table.get(client).onComplete { topics ->
-                            topics.result().forEach { index.add(it.first, MqttClientQoS(client, it.second)) }
+                            topics.result().forEach { index.add(it.first, client, it.second.value()) }
                         }
                     }).onComplete {
                         logger.info("Indexing subscription table [$subscriptionTableName] finished.")

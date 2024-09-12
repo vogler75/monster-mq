@@ -100,20 +100,20 @@ abstract class Distributor(
 
     protected fun consumeMessageFromBus(message: MqttMessage) {
         val (online, offline) = sessionHandler.findClients(message.topicName).partition {
-            sessionHandler.isConnected(it.client)
+            sessionHandler.isConnected(it.first)
         }
         online.forEach {
             // TODO: potentially downgrade QoS
-            if (message.qosLevel > it.qosLevel.value()) {
-                logger.finest { "Downgrading QoS from [${message.qosLevel}] to [${it.qosLevel}]" }
+            if (message.qosLevel > it.second) {
+                logger.finest { "Downgrading QoS from [${message.qosLevel}] to [${it.second}]" }
 
             } else {
-                MqttClient.sendMessageToClient(vertx, it.client, message)
+                MqttClient.sendMessageToClient(vertx, it.first, message)
             }
         }
         logger.info { "Message sent to [${online.size}] clients. Now enqueuing for [${offline.size}] offline sessions." }
         if (offline.isNotEmpty()) {
-            sessionHandler.enqueueMessage(message, offline.map { it.client })
+            sessionHandler.enqueueMessage(message, offline.map { it.first })
         }
     }
 }

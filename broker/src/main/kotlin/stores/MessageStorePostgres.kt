@@ -24,6 +24,7 @@ class MessageStorePostgres(
                 CREATE TABLE IF NOT EXISTS $name (
                     topic text[] PRIMARY KEY,
                     payload BYTEA,
+                    qos INT,
                     time TIMESTAMPTZ
                 )
                 """.trimIndent())
@@ -44,7 +45,7 @@ class MessageStorePostgres(
     override fun get(topicName: String): MqttMessage? {
         try {
             db.connection?.let { connection ->
-                val sql = "SELECT payload FROM $name WHERE topic = ?"
+                val sql = "SELECT payload, qos FROM $name WHERE topic = ?"
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 val topicLevels = Utils.getTopicLevels(topicName).toTypedArray()
                 preparedStatement.setArray(1, connection.createArrayOf("text", topicLevels))
@@ -52,12 +53,13 @@ class MessageStorePostgres(
                 val resultSet = preparedStatement.executeQuery()
 
                 if (resultSet.next()) {
-                    val payload = resultSet.getBytes("payload")
+                    val payload = resultSet.getBytes(1)
+                    val qos = resultSet.getInt(2)
                     return MqttMessage(
                         messageId = 0,
                         topicName = topicName,
                         payload = payload,
-                        qosLevel = 0,
+                        qosLevel = qos,
                         isRetain = true,
                         isDup = false
                     )
@@ -76,8 +78,9 @@ class MessageStorePostgres(
             rows.add(Pair(levels, message.payload))
         }
 
-        val sql = "INSERT INTO $name (topic, payload, time) VALUES (?, ?, ?) "+
-                    "ON CONFLICT (topic) DO UPDATE SET payload = EXCLUDED.payload, time = EXCLUDED.time"
+        val sql = "INSERT INTO $name (topic, payload, qos, time) VALUES (?, ?, ?, ?) "+
+                   "ON CONFLICT (topic) DO UPDATE "+
+                   "SET payload = EXCLUDED.payload, qos = EXCLUDED.qos, time = EXCLUDED.time"
 
         try {
             db.connection?.let { connection ->
@@ -137,7 +140,7 @@ class MessageStorePostgres(
         try {
             db.connection?.let { connection ->
                 val where = topicLevels.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
-                val sql = "SELECT array_to_string(topic, '/'), payload FROM $name WHERE $where"
+                val sql = "SELECT array_to_string(topic, '/'), payload, qos FROM $name WHERE $where"
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 topicLevels.forEachIndexed { index, level ->
                     preparedStatement.setString(index+1, level.second)
@@ -146,11 +149,12 @@ class MessageStorePostgres(
                 if (resultSet.next()) {
                     val topic = resultSet.getString(1)
                     val payload = resultSet.getBytes(2)
+                    val qos = resultSet.getInt(3)
                     val message = MqttMessage(
                         messageId = 0,
                         topicName = topic,
                         payload = payload,
-                        qosLevel = 0,
+                        qosLevel = qos,
                         isRetain = true,
                         isDup = false
                     )

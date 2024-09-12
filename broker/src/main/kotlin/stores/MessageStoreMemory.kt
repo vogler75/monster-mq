@@ -11,7 +11,7 @@ import java.util.logging.Logger
 class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessageStore {
     private val logger = Logger.getLogger(this.javaClass.simpleName+"/"+name)
 
-    private val index = TopicTree<Void>()
+    private val index = TopicTree<Void, Void>()
     private val store = getStore()
 
     private val addAddress = "$name/A"

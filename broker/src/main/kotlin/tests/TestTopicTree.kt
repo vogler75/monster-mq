@@ -3,7 +3,7 @@ package at.rocworks.tests
 import at.rocworks.data.TopicTree
 
 fun main(args: Array<String>) {
-    val tree = TopicTree<Void>()
+    val tree = TopicTree<Void, Void>()
 
     val topics = listOf(
         "a/a/a",

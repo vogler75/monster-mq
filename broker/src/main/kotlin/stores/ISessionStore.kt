@@ -1,6 +1,5 @@
 package at.rocworks.stores
 
-import at.rocworks.data.MqttClientQoS
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
@@ -16,7 +15,7 @@ interface ISessionStore {
     fun getType(): SessionStoreType
     fun storeReady(): Future<Void>
     fun offlineClients(offline: MutableSet<String>)
-    fun buildIndex(index: TopicTree<MqttClientQoS>)
+    fun buildIndex(index: TopicTree<String, Int>) // Topic, QoS
     fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean)
     fun setConnected(clientId: String, connected: Boolean)
     fun isConnected(clientId: String): Boolean
