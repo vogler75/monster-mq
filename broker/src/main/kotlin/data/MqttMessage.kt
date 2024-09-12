@@ -15,7 +15,7 @@ class MqttMessage(
     val qosLevel: Int,
     val isRetain: Boolean,
     val isDup: Boolean,
-    // TODO: Properties
+    // TODO: Properties for MQTT 5.0
 ): Serializable {
     constructor(message: MqttPublishMessage): this(
         message.messageId(),
@@ -34,6 +34,8 @@ class MqttMessage(
         message.isWillRetain,
         false
     )
+
+    fun copy(qosLevel: Int): MqttMessage = MqttMessage(messageId, topicName, payload, qosLevel, isRetain, isDup)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 

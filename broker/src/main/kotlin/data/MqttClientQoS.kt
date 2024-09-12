@@ -4,5 +4,5 @@ import io.netty.handler.codec.mqtt.MqttQoS
 
 class MqttClientQoS(
     val client: String,
-    val qos: MqttQoS
+    val qosLevel: MqttQoS
 )

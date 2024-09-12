@@ -104,7 +104,12 @@ abstract class Distributor(
         }
         online.forEach {
             // TODO: potentially downgrade QoS
-            MqttClient.sendMessageToClient(vertx, it.client, message)
+            if (message.qosLevel > it.qosLevel.value()) {
+                logger.finest { "Downgrading QoS from [${message.qosLevel}] to [${it.qosLevel}]" }
+
+            } else {
+                MqttClient.sendMessageToClient(vertx, it.client, message)
+            }
         }
         logger.info { "Message sent to [${online.size}] clients. Now enqueuing for [${offline.size}] offline sessions." }
         if (offline.isNotEmpty()) {
