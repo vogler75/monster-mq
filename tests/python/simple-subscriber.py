@@ -6,7 +6,7 @@ from datetime import datetime
 BROKER = 'localhost'
 PORT = 1883
 TOPIC = 'test/broadcast'
-CLIENT_ID = "subscriber_24"
+CLIENT_ID = "subscriber_1"
 
 
 # Callback when the client connects to the broker
@@ -27,10 +27,10 @@ def on_message(client, userdata, msg):
         sent_time = datetime.fromisoformat(payload['ts'])
         message_id = payload['id']
         time_diff = datetime.now() - sent_time
-        print(f"Received `{msg.payload.decode()}` with id {message_id} from `{msg.topic}`. Time difference: {time_diff.total_seconds()} seconds")
+        print(f"Received [{msg.mid}] [{msg.retain}] `{msg.payload.decode()}` with id {message_id} from `{msg.topic}`. Time difference: {time_diff.total_seconds()} seconds")
     except ValueError:
-        print(f"Received `{msg.payload.decode()}` from `{msg.topic}`. Time difference: N/A")
-        exit(-1)
+        print(f"Received [{msg.mid}] [{msg.retain}] `{msg.payload.decode()}` from `{msg.topic}`. Time difference: N/A")
+        #exit(-1)
 
 
 # Create an MQTT client instance

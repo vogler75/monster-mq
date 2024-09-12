@@ -18,7 +18,7 @@ class MqttMessage(
     // TODO: Properties for MQTT 5.0
 ): Serializable {
     constructor(message: MqttPublishMessage): this(
-        message.messageId(),
+        if (message.messageId()<0) 0 else message.messageId(),
         message.topicName(),
         message.payload().bytes,
         message.qosLevel().value(),

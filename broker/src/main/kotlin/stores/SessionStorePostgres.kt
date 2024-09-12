@@ -318,7 +318,6 @@ class SessionStorePostgres(
     }
 
     override fun dequeueMessages(clientId: String, callback: (MqttMessage)->Unit) {
-        /*
         val sql = "DELETE FROM $queuedClientsTableName USING $queuedMessageTableName WHERE $queuedClientsTableName.message_id = $queuedMessageTableName.message_id AND client = ? RETURNING topic, payload"
         try {
             db.connection?.let { connection ->
@@ -341,8 +340,8 @@ class SessionStorePostgres(
         } catch (e: SQLException) {
             logger.warning("Error at fetching queued message [${e.message}]")
         }
-         */
 
+        /*
         val sql = "SELECT topic, payload FROM $queuedMessageTableName JOIN $queuedClientsTableName USING (message_id) WHERE client = ?"
         try {
             db.connection?.let { connection ->
@@ -365,5 +364,6 @@ class SessionStorePostgres(
         } catch (e: SQLException) {
             logger.warning("Error at fetching queued message [${e.message}]")
         }
+        */
     }
 }

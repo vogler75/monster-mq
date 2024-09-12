@@ -97,6 +97,7 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     fun delClient(clientId: String) {
         vertx.eventBus().publish(clientOfflineAddress, clientId)
         store.delClient(clientId) { subscription ->
+            logger.finest { "Delete subscription [$subscription]" }
             vertx.eventBus().publish(subscriptionDelAddress, subscription)
         }
     }

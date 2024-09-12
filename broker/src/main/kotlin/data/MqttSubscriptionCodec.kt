@@ -25,7 +25,7 @@ class MqttSubscriptionCodec : MessageCodec<MqttSubscription, MqttSubscription> {
         position += 4
         val topicName = buffer.getString(position, position + topicNameLen)
         position += topicNameLen
-        val qos = MqttQoS.valueOf(buffer.getInt(position + topicNameLen))
+        val qos = MqttQoS.valueOf(buffer.getInt(position))
         return MqttSubscription(clientId, topicName, qos)
     }
 

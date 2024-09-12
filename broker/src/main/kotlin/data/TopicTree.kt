@@ -1,5 +1,6 @@
 package at.rocworks.data
 
+import at.rocworks.Const
 import at.rocworks.Utils
 import io.vertx.core.impl.ConcurrentHashSet
 import java.util.concurrent.ConcurrentHashMap
@@ -7,6 +8,10 @@ import java.util.logging.Logger
 
 class TopicTree<T> : ITopicTree<T> {
     private val logger = Logger.getLogger(this.javaClass.simpleName)
+
+    init {
+        logger.level = Const.DEBUG_LEVEL
+    }
 
     data class Node<T> (
         val children: ConcurrentHashMap<String, Node<T>> = ConcurrentHashMap(), // Level to Node
@@ -19,6 +24,7 @@ class TopicTree<T> : ITopicTree<T> {
 
     override fun add(topicName: String) = add(topicName, null)
     override fun add(topicName: String, data: T?) {
+        logger.finest { "Add topic [$topicName] data [$data]" }
         fun addTopicNode(node: Node<T>, first: String, rest: List<String>) {
             val child = node.children.getOrPut(first) { Node() }
             if (rest.isEmpty()) {
@@ -33,6 +39,7 @@ class TopicTree<T> : ITopicTree<T> {
 
     override fun del(topicName: String) = del(topicName, null)
     override fun del(topicName: String, data: T?) {
+        logger.finest { "Delete topic [$topicName] data [$data]" }
         fun delTopicNode(node: Node<T>, first: String, rest: List<String>) {
             fun deleteIfEmpty(child: Node<T>) {
                 if (child.dataset.isEmpty() && child.children.isEmpty()) {
