@@ -96,7 +96,7 @@ class SessionStorePostgres(
                 // if not clustered, then remove all sessions and subscriptions of clean sessions
                 if (!Config.isClustered()) {
                     statement.executeUpdate(
-                        "DELETE FROM $subscriptionsTableName WHERE client IN "+
+                        "DELETE FROM $subscriptionsTableName WHERE client_id IN "+
                             "(SELECT client_id FROM $sessionsTableName WHERE clean_session = TRUE)")
                     statement.executeUpdate("DELETE FROM $sessionsTableName WHERE clean_session = TRUE")
                 }
@@ -104,7 +104,8 @@ class SessionStorePostgres(
                 logger.info("Tables are ready.")
                 readyPromise.complete()
             } catch (e: Exception) {
-                logger.severe("Error in creating table: ${e.message}")
+                logger.severe("Error in getting tables ready: ${e.message}")
+                readyPromise.fail(e)
             }
         }
     }

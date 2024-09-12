@@ -103,10 +103,11 @@ abstract class Distributor(
             sessionHandler.isConnected(it.first)
         }
         online.forEach {
-            // TODO: potentially downgrade QoS
-            if (message.qosLevel > it.second) {
+            // Potentially downgrade QoS
+            if (it.second < message.qosLevel) {
                 logger.finest { "Downgrading QoS from [${message.qosLevel}] to [${it.second}]" }
-
+                val newMessage = message.copy(it.second)
+                MqttClient.sendMessageToClient(vertx, it.first, newMessage)
             } else {
                 MqttClient.sendMessageToClient(vertx, it.first, message)
             }

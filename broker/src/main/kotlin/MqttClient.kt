@@ -74,7 +74,12 @@ class MqttClient(private val distributor: Distributor): AbstractVerticle() {
         fun getClientAddressCommands(clientId: String) = "${getClientAddress(clientId)}/c"
 
         fun sendMessageToClient(vertx: Vertx, clientId: String, message: MqttMessage) {
-            vertx.eventBus().publish(getClientAddressMessages(clientId), message)
+            if (message.qosLevel==0) {
+                vertx.eventBus().send(getClientAddressMessages(clientId), message)
+            } else {
+                vertx.eventBus().send(getClientAddressMessages(clientId), message)
+            }
+
         }
 
         fun sendCommandToClient(vertx: Vertx, clientId: String, command: JsonObject) {
