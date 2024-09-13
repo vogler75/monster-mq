@@ -203,6 +203,21 @@ class SessionStorePostgres(
         return false
     }
 
+    override fun isPresent(clientId: String): Boolean {
+        val sql = "SELECT client_id FROM $sessionsTableName WHERE client_id = ?"
+        try {
+            db.connection?.let { connection ->
+                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
+                preparedStatement.setString(1, clientId)
+                val resultSet = preparedStatement.executeQuery()
+                return resultSet.next()
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error at fetching client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
+        }
+        return false
+    }
+
     override fun setLastWill(clientId: String, topic: String, message: MqttMessage) {
         val sql = "UPDATE $sessionsTableName "+
                 "SET last_will_topic = ?, last_will_message = ?, last_will_qos = ?, last_will_retain = ? "+

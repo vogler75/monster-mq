@@ -16,6 +16,7 @@ interface ISessionStore {
     fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean)
     fun setConnected(clientId: String, connected: Boolean)
     fun isConnected(clientId: String): Boolean
+    fun isPresent(clientId: String): Boolean
     fun setLastWill(clientId: String, topic: String, message: MqttMessage)
     fun addSubscriptions(subscriptions: List<MqttSubscription>)
     fun delSubscriptions(subscriptions: List<MqttSubscription>)

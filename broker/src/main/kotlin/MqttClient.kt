@@ -111,8 +111,6 @@ class MqttClient(
             endpoint.disconnectHandler { disconnectHandler() }
             endpoint.closeHandler { closeHandler() }
 
-            endpoint.accept(endpoint.isCleanSession) // TODO: check if we have an existing session
-
             if (!deployed) {
                 deployed = true
                 busConsumers.add(vertx.eventBus().consumer(getCommandAddress(clientId), ::consumeCommand))
@@ -122,9 +120,13 @@ class MqttClient(
             }
 
             if (endpoint.isCleanSession) {
-                // Clean and remove any existing session state
-                distributor.sessionHandler.delClient(clientId)
+                distributor.sessionHandler.delClient(clientId) // Clean and remove any existing session state
+                endpoint.accept(false) // false... session not present because of clean session requested
             } else {
+                // Check if session was already present or if it was the first connect
+                val sessionPresent = distributor.sessionHandler.isPresent(clientId)
+                endpoint.accept(sessionPresent) // TODO: check if we have an existing session
+
                 // Publish queued messages
                 distributor.sessionHandler.dequeueMessages(clientId) { message ->
                     logger.finest { "Client [$clientId] Dequeued message [${message.messageId}] for topic [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }

@@ -114,6 +114,10 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
         return !offline.contains(clientId)
     }
 
+    fun isPresent(clientId: String): Boolean {
+        return store.isPresent(clientId)
+    }
+
     fun enqueueMessage(message: MqttMessage, clientIds: List<String>) {
         messageAddQueue.add(Pair(message, clientIds))
     }
