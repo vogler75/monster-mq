@@ -95,13 +95,7 @@ fun main(args: Array<String>) {
             return distributor
         }
 
-        fun getSessionStore(vertx: Vertx): ISessionStore
-                = when (sessionStoreType) {
-            SessionStoreType.MEMORY -> {
-                val table = SessionStoreAsyncMap()
-                vertx.deployVerticle(table)
-                table
-            }
+        fun getSessionStore(vertx: Vertx): ISessionStore = when (sessionStoreType) {
             SessionStoreType.POSTGRES -> {
                 val table = SessionStorePostgres(postgresUrl, postgresUser, postgresPass)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)

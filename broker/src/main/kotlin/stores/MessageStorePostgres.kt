@@ -56,12 +56,10 @@ class MessageStorePostgres(
                     val payload = resultSet.getBytes(1)
                     val qos = resultSet.getInt(2)
                     return MqttMessage(
-                        messageId = 0,
                         topicName = topicName,
                         payload = payload,
                         qosLevel = qos,
-                        isRetain = true,
-                        isDup = false
+                        isRetain = true
                     )
                 }
             }
@@ -151,12 +149,10 @@ class MessageStorePostgres(
                     val payload = resultSet.getBytes(2)
                     val qos = resultSet.getInt(3)
                     val message = MqttMessage(
-                        messageId = 0,
                         topicName = topic,
                         payload = payload,
                         qosLevel = qos,
-                        isRetain = true,
-                        isDup = false
+                        isRetain = true
                     )
                     callback(message)
                 }

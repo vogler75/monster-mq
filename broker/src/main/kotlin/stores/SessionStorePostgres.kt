@@ -5,14 +5,13 @@ import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
-import at.rocworks.data.TopicTree
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import java.sql.*
 import java.util.UUID
-import java.util.logging.Logger
+import java.util.concurrent.Callable
 
 class SessionStorePostgres(
     private val url: String,
@@ -87,12 +86,6 @@ class SessionStorePostgres(
                 createTableSQL.forEach(statement::executeUpdate)
                 createIndexesSQL.forEach(statement::executeUpdate)
 
-                // select max(message_id) from QueuedMessages
-                //val sql = "SELECT MAX(id) FROM $queuedMessageTableName"
-                //val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                //val resultSet = preparedStatement.executeQuery()
-                //if (resultSet.next()) queuedMessageId = resultSet.getLong(1) + 1
-
                 // if not clustered, then remove all sessions and subscriptions of clean sessions
                 if (!Config.isClustered()) {
                     statement.executeUpdate(
@@ -112,11 +105,17 @@ class SessionStorePostgres(
 
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)
+        startPromise.future().onSuccess {
+            vertx.executeBlocking(Callable { purgeQueuedMessages() }).onComplete {
+                vertx.setPeriodic(60_000) {
+                    vertx.executeBlocking(Callable { purgeQueuedMessages() })
+                }
+            }
+        }
     }
 
-    override fun buildIndex(index: TopicTree<String, Int>) {
+    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int)->Unit) {
         try {
-            logger.info("Indexing subscription table [$subscriptionsTableName] [${Utils.getCurrentFunctionName()}]")
             db.connection?.let { connection ->
                 var rows = 0
                 val sql = "SELECT client_id, array_to_string(topic, '/'), qos FROM $subscriptionsTableName "
@@ -126,29 +125,29 @@ class SessionStorePostgres(
                     val clientId = resultSet.getString(1)
                     val topic = resultSet.getString(2)
                     val qos = MqttQoS.valueOf(resultSet.getInt(3))
-                    index.add(topic, clientId, qos.value())
+                    callback(topic, clientId, qos.value())
                     rows++
                 }
-                logger.info("Indexing subscription table [$subscriptionsTableName] finished [$rows] [${Utils.getCurrentFunctionName()}]")
             } ?: run {
-                logger.severe("Indexing subscription table not possible without database connection! [${Utils.getCurrentFunctionName()}]")
+                logger.severe("Iterating subscription table not possible without database connection! [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
-            logger.warning("CreateLocalIndex: Error fetching data: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            logger.warning("Error fetching subscriptions: ${e.message} [${Utils.getCurrentFunctionName()}]")
         }
     }
 
-    override fun offlineClients(offline: MutableSet<String>) {
-        offline.clear()
+    override fun iterateOfflineClients(callback: (clientId: String)->Unit) {
         try {
             db.connection?.let { connection ->
                 "SELECT client_id FROM $sessionsTableName WHERE connected = FALSE AND clean_session = FALSE".let { sql ->
                     val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
-                        offline.add(resultSet.getString(1))
+                        callback(resultSet.getString(1))
                     }
                 }
+            } ?: run {
+                logger.severe("Iterating offline clients not possible without database connection! [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
             logger.warning("Error at fetching offline clients [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -335,21 +334,28 @@ class SessionStorePostgres(
     }
 
     override fun dequeueMessages(clientId: String, callback: (MqttMessage)->Unit) {
+        /*
         val sql = "DELETE FROM $queuedMessagesClientsTableName USING $queuedMessagesTableName "+
                   "WHERE $queuedMessagesClientsTableName.message_uuid = $queuedMessagesTableName.message_uuid "+
                   "AND client_id = ? "+
                   "RETURNING message_id, topic, payload, qos"
+        */
+        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos "+
+                  "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) "+
+                  "WHERE c.client_id = ?"
         try {
             db.connection?.let { connection ->
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 preparedStatement.setString(1, clientId)
                 val resultSet = preparedStatement.executeQuery()
                 while (resultSet.next()) {
-                    val messageId = resultSet.getInt(1)
-                    val topic = resultSet.getString(2)
-                    val payload = resultSet.getBytes(3)
-                    val qos = resultSet.getInt(4)
+                    val messageUuid = resultSet.getString(1)
+                    val messageId = resultSet.getInt(2)
+                    val topic = resultSet.getString(3)
+                    val payload = resultSet.getBytes(4)
+                    val qos = resultSet.getInt(5)
                     callback(MqttMessage(
+                        messageUuid = messageUuid,
                         messageId = messageId,
                         topicName = topic,
                         payload = payload,
@@ -362,30 +368,35 @@ class SessionStorePostgres(
         } catch (e: SQLException) {
             logger.warning("Error at fetching queued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
+    }
 
-        /*
-        val sql = "SELECT topic, payload FROM $queuedMessageTableName JOIN $queuedClientsTableName USING (message_id) WHERE client = ?"
+    override fun removeMessages(messageUuid: List<String>) {
+        val sql = "DELETE FROM $queuedMessagesClientsTableName WHERE message_uuid = ANY (?)"
         try {
             db.connection?.let { connection ->
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                preparedStatement.setString(1, clientId)
-                val resultSet = preparedStatement.executeQuery()
-                while (resultSet.next()) {
-                    val topic = resultSet.getString(1)
-                    val payload = resultSet.getBytes(2)
-                    callback(MqttMessage(
-                        messageId = 0,
-                        topicName = topic,
-                        payload = payload,
-                        qosLevel = 0,
-                        isRetain = false,
-                        isDup = false
-                    ))
-                }
+                preparedStatement.setArray(1, connection.createArrayOf("text", messageUuid.toTypedArray()))
+                preparedStatement.executeUpdate()
             }
         } catch (e: SQLException) {
-            logger.warning("Error at fetching queued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            logger.warning("Error at removing dequeued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
-        */
+    }
+
+    private fun purgeQueuedMessages() {
+        val sql = "DELETE FROM $queuedMessagesTableName WHERE message_id NOT IN " +
+                "(SELECT message_id FROM $queuedMessagesClientsTableName)"
+        try {
+            DriverManager.getConnection(url, username, password).use { connection ->
+                val startTime = System.currentTimeMillis()
+                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
+                preparedStatement.executeUpdate()
+                val endTime = System.currentTimeMillis()
+                val duration = (endTime - startTime) / 1000.0
+                logger.info("Purging queued messages finished in $duration seconds [${Utils.getCurrentFunctionName()}]")
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error at purging queued messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
     }
 }

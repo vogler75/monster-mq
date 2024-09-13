@@ -9,15 +9,17 @@ import io.vertx.mqtt.messages.MqttPublishMessage
 import java.io.Serializable
 
 class MqttMessage(
-    val messageId: Int,
+    val messageUuid: String = "",
+    val messageId: Int = 0,
     val topicName: String,
     val payload: ByteArray,
     val qosLevel: Int,
     val isRetain: Boolean,
-    val isDup: Boolean,
+    val isDup: Boolean = false
     // TODO: Properties for MQTT 5.0
 ): Serializable {
     constructor(message: MqttPublishMessage): this(
+        "",
         if (message.messageId()<0) 0 else message.messageId(),
         message.topicName(),
         message.payload().bytes,
@@ -27,6 +29,7 @@ class MqttMessage(
     )
 
     constructor(message: MqttWill): this(
+        "",
         0,
         message.willTopic,
         message.willMessageBytes,
@@ -35,8 +38,8 @@ class MqttMessage(
         false
     )
 
-    fun cloneWithNewQoS(qosLevel: Int): MqttMessage = MqttMessage(messageId, topicName, payload, qosLevel, isRetain, isDup)
-    fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageId, topicName, payload, qosLevel, isRetain, isDup)
+    fun cloneWithNewQoS(qosLevel: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup)
+    fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 

@@ -292,6 +292,11 @@ class MqttClient(
         }
     }
 
+    private fun publishMessageCompleted(message: MqttMessage) {
+        inFlightMessagesSnd.removeFirst()
+        distributor.publishMessageCompleted(message)
+    }
+
     private fun consumeMessageQoS1(busMessage: Message<MqttMessage>) {
         val message = busMessage.body().cloneWithNewMessageId(getNextMessageId())
         if (this.connected) {
@@ -306,7 +311,7 @@ class MqttClient(
             inFlightMessagesSnd.first().let { inFlightMessage ->
                 if (inFlightMessage.message.messageId == id) {
                     logger.finest { "Client [$clientId] Subscribe: got acknowledge id [$id] [${Utils.getCurrentFunctionName()}]" }
-                    inFlightMessagesSnd.removeFirst()
+                    publishMessageCompleted(inFlightMessage.message)
                     publishMessageCheckNext()
                 } else {
                     logger.warning { "Client [$clientId] Subscribe: got acknowledge id [$id] but expected [${inFlightMessage.message.messageId}] [${Utils.getCurrentFunctionName()}]" }
@@ -347,7 +352,7 @@ class MqttClient(
             inFlightMessagesSnd.first().let { inFlightMessage ->
                 if (inFlightMessage.message.messageId == id) {
                     logger.finest { "Client [$clientId] Subscribe: got complete id [$id] [${Utils.getCurrentFunctionName()}]" }
-                    inFlightMessagesSnd.removeFirst()
+                    publishMessageCompleted(inFlightMessage.message)
                     publishMessageCheckNext()
                 } else {
                     logger.warning { "Client [$clientId] Subscribe: got complete id [$id] but expected [${inFlightMessage.message.messageId}] [${Utils.getCurrentFunctionName()}]" }

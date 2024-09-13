@@ -2,20 +2,17 @@ package at.rocworks.stores
 
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
-import at.rocworks.data.TopicTree
-import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.Future
 
 enum class SessionStoreType {
-    MEMORY,
     POSTGRES
 }
 
 interface ISessionStore {
     fun getType(): SessionStoreType
     fun storeReady(): Future<Void>
-    fun offlineClients(offline: MutableSet<String>)
-    fun buildIndex(index: TopicTree<String, Int>) // Topic, QoS
+    fun iterateOfflineClients(callback: (clientId: String)->Unit)
+    fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int)->Unit)
     fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean)
     fun setConnected(clientId: String, connected: Boolean)
     fun isConnected(clientId: String): Boolean
@@ -25,4 +22,5 @@ interface ISessionStore {
     fun delClient(clientId: String, callback: (MqttSubscription)->Unit)
     fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>)
     fun dequeueMessages(clientId: String, callback: (MqttMessage)->Unit)
+    fun removeMessages(messageUuid: List<String>)
 }

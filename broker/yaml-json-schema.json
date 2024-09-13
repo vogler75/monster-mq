@@ -34,9 +34,9 @@
       "type": "string",
       "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
     },
-    "SubscriptionStoreType": {
+    "SessionStoreType": {
       "type": "string",
-      "enum": ["MEMORY", "POSTGRES"]
+      "enum": ["POSTGRES"]
     },
     "Postgres": {
       "type": "object",
@@ -54,5 +54,5 @@
       "required": ["Url", "User", "Pass"]
     }
   },
-  "required": ["Port", "SSL", "WS", "TCP", "RetainedMessageStoreType", "SubscriptionStoreType"]
+  "required": ["Port", "SSL", "WS", "TCP", "RetainedMessageStoreType", "SessionStoreType"]
 }

@@ -5,12 +5,10 @@ import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
-import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
-import java.util.logging.Logger
 import kotlin.concurrent.thread
 
 class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
@@ -22,7 +20,8 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     private val subAddQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
     private val subDelQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
 
-    private val messageQueue: ArrayBlockingQueue<Pair<MqttMessage, List<String>>> = ArrayBlockingQueue(10_000) // TODO: configurable
+    private val messageAddQueue: ArrayBlockingQueue<Pair<MqttMessage, List<String>>> = ArrayBlockingQueue(10_000) // TODO: configurable
+    private val messageDelQueue: ArrayBlockingQueue<String> = ArrayBlockingQueue(10_000) // TODO: configurable
 
     private val subscriptionAddAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/A"
     private val subscriptionDelAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/D"
@@ -51,11 +50,15 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
 
         queueWorkerThread("SubAddQueue", subAddQueue, 1000, store::addSubscriptions)
         queueWorkerThread("SubDelQueue", subDelQueue, 1000, store::delSubscriptions)
-        queueWorkerThread("MessageQueue", messageQueue, 1000, store::enqueueMessages)
+        queueWorkerThread("MsgAddQueue", messageAddQueue, 1000, store::enqueueMessages)
+        queueWorkerThread("MsgDelQueue", messageDelQueue, 1000, store::removeMessages)
 
         store.storeReady().onSuccess {
-            store.buildIndex(index)
-            store.offlineClients(offline)
+            logger.info("Indexing subscription table [${Utils.getCurrentFunctionName()}]")
+            store.iterateSubscriptions(index::add)
+            logger.info("Indexing offline clients [${Utils.getCurrentFunctionName()}]")
+            store.iterateOfflineClients(offline::add)
+            logger.info("Session handler ready [${Utils.getCurrentFunctionName()}]")
             startPromise.complete()
         }
     }
@@ -112,11 +115,15 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     }
 
     fun enqueueMessage(message: MqttMessage, clientIds: List<String>) {
-        messageQueue.add(Pair(message, clientIds))
+        messageAddQueue.add(Pair(message, clientIds))
     }
 
     fun dequeueMessages(clientId: String, callback: (MqttMessage)->Unit) {
         store.dequeueMessages(clientId, callback)
+    }
+
+    fun removeMessage(messageUuid: String) {
+        messageDelQueue.add(messageUuid)
     }
 
     fun addSubscription(subscription: MqttSubscription) {
@@ -139,7 +146,7 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
 
     fun findClients(topicName: String): Set<Pair<String, Int>> {
         val result = index.findDataOfTopicName(topicName).toSet()
-        logger.finest { "Found [${result.size}] clients [${Utils.getCurrentFunctionName()}]" }
+        logger.finest { "Found [${result.size}] clients [${result.joinToString(",")}] [${Utils.getCurrentFunctionName()}]" }
         return result
     }
 }

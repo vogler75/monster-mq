@@ -108,6 +108,10 @@ abstract class Distributor(
             messageHandler.saveMessage(message)
     }
 
+    fun publishMessageCompleted(message: MqttMessage) {
+        sessionHandler.removeMessage(message.messageUuid)
+    }
+
     abstract fun publishMessageToBus(message: MqttMessage)
 
     protected fun consumeMessageFromBus(message: MqttMessage) {
@@ -125,7 +129,7 @@ abstract class Distributor(
             }
         }
         logger.info { "Message sent to [${online.size}] clients. Now enqueuing for [${offline.size}] offline sessions [${Utils.getCurrentFunctionName()}]" }
-        if (offline.isNotEmpty()) {
+        if (offline.isNotEmpty() && message.qosLevel > 0) {
             sessionHandler.enqueueMessage(message, offline.map { it.first })
         }
     }
