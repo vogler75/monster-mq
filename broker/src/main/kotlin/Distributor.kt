@@ -125,7 +125,7 @@ abstract class Distributor(
                 sendMessageToClient(it.first, message)
             }
         }
-        logger.info { "Message sent to [${online.size}] clients. Now enqueuing for [${offline.size}] offline sessions [${Utils.getCurrentFunctionName()}]" }
+        logger.finest { "Message sent to [${online.size}] clients. Now enqueuing for [${offline.size}] offline sessions [${Utils.getCurrentFunctionName()}]" }
         if (offline.isNotEmpty() && message.qosLevel > 0) {
             sessionHandler.enqueueMessage(message, offline.map { it.first })
         }

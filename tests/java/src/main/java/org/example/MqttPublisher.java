@@ -83,7 +83,6 @@ public class MqttPublisher {
                 TimeUnit.SECONDS.sleep(1);
             }
 
-            System.out.println("Start "+nr);
             int messageCounter = 0;
             LocalDateTime lastTime = LocalDateTime.now();
             int lastCounter = 0;
@@ -114,9 +113,10 @@ public class MqttPublisher {
                 lastCounter++;
 
                 MqttMessage message = new MqttMessage(Integer.toString(messageCounter).getBytes());
-                message.setQos(Config.QOS);
+                message.setQos(Config.PUBLISHER_QOS);
                 message.setRetained(Config.RETAINED_MESSAGES);
 
+                //System.out.println("Publishing message " + messageCounter + " to topic " + topic);
                 testClient.publish(topic, message);
 
                 if (messageCounter % 100 == 0) {
@@ -131,7 +131,6 @@ public class MqttPublisher {
 
                         // Publish statistics to the second broker
                         MqttMessage statsMsg = new MqttMessage(statisticsMessage.getBytes());
-                        statsMsg.setQos(Config.QOS);
                         statClient.publish(Config.statisticsTopic+"/publisher/instance_"+nr, statsMsg);
                     }
                 }

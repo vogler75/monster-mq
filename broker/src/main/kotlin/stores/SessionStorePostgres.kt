@@ -107,9 +107,9 @@ class SessionStorePostgres(
         db.start(vertx, startPromise)
         startPromise.future().onSuccess {
             vertx.executeBlocking(Callable { purgeQueuedMessages() }).onComplete {
-                vertx.setPeriodic(60_000) {
-                    vertx.executeBlocking(Callable { purgeQueuedMessages() })
-                }
+                //vertx.setPeriodic(60_000) {
+                //    vertx.executeBlocking(Callable { purgeQueuedMessages() })
+                //}
             }
         }
     }

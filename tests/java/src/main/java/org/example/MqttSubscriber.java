@@ -30,14 +30,16 @@ public class MqttSubscriber {
                 // use a atomic variable to keep track of running tasks
                 runningTasks.incrementAndGet();
                 executor.submit(() -> test(nr));
+                Thread.sleep(100);
+                /*
                 if (i % 1000 == 0) {
                     System.out.println("Started subscriber " + nr);
                     // Check if executor has running tasks
                     while (runningTasks.get()>0) {
                         Thread.sleep(100);
                     }
-
                 }
+                 */
             }
         } catch (InterruptedException e) {
             throw new RuntimeException(e);

@@ -53,7 +53,7 @@ class MqttClient(
     }
 
     companion object {
-        const val MAX_IN_FLIGHT_MESSAGES = 1000 // TODO make this configurable
+        const val MAX_IN_FLIGHT_MESSAGES = 100_000 // TODO make this configurable
 
         private val logger = Utils.getLogger(this::class.java)
 
@@ -161,7 +161,7 @@ class MqttClient(
 
     private fun pingHandler() {
         lastPing = Instant.now()
-        endpoint.pong()
+        //endpoint.pong()
     }
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
@@ -279,6 +279,7 @@ class MqttClient(
         } else {
             if (inFlightMessagesSnd.size > MAX_IN_FLIGHT_MESSAGES) {
                 logger.warning { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, queue is full [${Utils.getCurrentFunctionName()}]" }
+                // TODO: message must be removed from message store (queued messages)
             } else {
                 inFlightMessagesSnd.addLast(InFlightMessage(message))
                 if (inFlightMessagesSnd.size == 1) {
