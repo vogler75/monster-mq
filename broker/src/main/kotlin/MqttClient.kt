@@ -161,7 +161,7 @@ class MqttClient(
 
     private fun pingHandler() {
         lastPing = Instant.now()
-        //endpoint.pong()
+        endpoint.pong()
     }
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
