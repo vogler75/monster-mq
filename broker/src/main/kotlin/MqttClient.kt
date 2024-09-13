@@ -57,6 +57,7 @@ class MqttClient(
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, distributor: Distributor) {
             val clientId = endpoint.clientIdentifier()
             logger.info("Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]")
+            // TODO: check if the client is already connected (cluster wide)
             val client = MqttClient(endpoint, distributor)
             vertx.deployVerticle(client).onComplete {
                 client.startEndpoint()
