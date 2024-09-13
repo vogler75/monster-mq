@@ -7,9 +7,6 @@ import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
-import java.time.Instant
-
-import java.util.logging.Logger
 
 abstract class Distributor(
     val sessionHandler: SessionHandler,

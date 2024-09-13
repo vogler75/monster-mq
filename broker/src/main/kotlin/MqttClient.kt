@@ -27,7 +27,10 @@ class MqttClient(
     private var lastPing: Instant = Instant.MIN
 
     private var nextMessageId: Int = 0
-    private fun getNextMessageId(): Int = ++nextMessageId
+    private fun getNextMessageId(): Int = if (nextMessageId==Int.MAX_VALUE) {
+        nextMessageId=1
+        nextMessageId
+    } else ++nextMessageId
 
     private data class InFlightMessage(
         val message: MqttMessage,
@@ -130,7 +133,7 @@ class MqttClient(
                 // Publish queued messages
                 distributor.sessionHandler.dequeueMessages(clientId) { message ->
                     logger.finest { "Client [$clientId] Dequeued message [${message.messageId}] for topic [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                    publishMessage(message)
+                    publishMessage(message.cloneWithNewMessageId(getNextMessageId()))
                 }
             }
 
