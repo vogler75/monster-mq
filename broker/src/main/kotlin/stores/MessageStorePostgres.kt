@@ -87,6 +87,7 @@ class MessageStorePostgres(
                 for ((topic, payload) in rows) {
                     preparedStatement.setArray(1, connection.createArrayOf("text", topic))
                     preparedStatement.setBytes(2, payload)
+                    preparedStatement.setInt(3, 0)
                     preparedStatement.setTimestamp(3, Timestamp.from(Instant.now()))
                     preparedStatement.addBatch()
                 }
