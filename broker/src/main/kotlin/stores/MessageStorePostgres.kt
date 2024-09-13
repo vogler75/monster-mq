@@ -71,10 +71,7 @@ class MessageStorePostgres(
 
     override fun addAll(messages: List<MqttMessage>) {
         val rows: MutableList<Pair<Array<String>, ByteArray>> = ArrayList()
-        messages.forEach { message ->
-            val levels = Utils.getTopicLevels(message.topicName).toTypedArray()
-            rows.add(Pair(levels, message.payload))
-        }
+
 
         val sql = "INSERT INTO $name (topic, payload, qos, time) VALUES (?, ?, ?, ?) "+
                    "ON CONFLICT (topic) DO UPDATE "+
@@ -84,11 +81,12 @@ class MessageStorePostgres(
             db.connection?.let { connection ->
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
 
-                for ((topic, payload) in rows) {
+                messages.forEach { message ->
+                    val topic = Utils.getTopicLevels(message.topicName).toTypedArray()
                     preparedStatement.setArray(1, connection.createArrayOf("text", topic))
-                    preparedStatement.setBytes(2, payload)
-                    preparedStatement.setInt(3, 0)
-                    preparedStatement.setTimestamp(3, Timestamp.from(Instant.now()))
+                    preparedStatement.setBytes(2, message.payload)
+                    preparedStatement.setInt(3, message.qosLevel)
+                    preparedStatement.setTimestamp(4, Timestamp.from(Instant.now()))
                     preparedStatement.addBatch()
                 }
 
