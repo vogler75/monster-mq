@@ -1,5 +1,6 @@
 package at.rocworks.stores
 
+import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import io.vertx.core.AbstractVerticle
@@ -15,6 +16,10 @@ class MessageStorePostgres(
     private val password: String
 ): AbstractVerticle(), IMessageStore {
     private val logger = Utils.getLogger(this::class.java, name)
+
+    init {
+        logger.level = Const.DEBUG_LEVEL
+    }
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun init(connection: Connection) {
@@ -71,7 +76,6 @@ class MessageStorePostgres(
 
     override fun addAll(messages: List<MqttMessage>) {
         val rows: MutableList<Pair<Array<String>, ByteArray>> = ArrayList()
-
 
         val sql = "INSERT INTO $name (topic, payload, qos, time) VALUES (?, ?, ?, ?) "+
                    "ON CONFLICT (topic) DO UPDATE "+
@@ -133,17 +137,17 @@ class MessageStorePostgres(
                 }
             }
         }.filterNotNull()
-
         try {
             db.connection?.let { connection ->
                 val where = topicLevels.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
                 val sql = "SELECT array_to_string(topic, '/'), payload, qos FROM $name WHERE $where"
+                logger.finest { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 topicLevels.forEachIndexed { index, level ->
                     preparedStatement.setString(index+1, level.second)
                 }
                 val resultSet = preparedStatement.executeQuery()
-                if (resultSet.next()) {
+                while (resultSet.next()) {
                     val topic = resultSet.getString(1)
                     val payload = resultSet.getBytes(2)
                     val qos = resultSet.getInt(3)

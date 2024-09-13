@@ -79,7 +79,7 @@ class MessageHandler(private val store: IMessageStore): AbstractVerticle() {
                     logger.finest { "Found matching message [${message.topicName}] for [$topicName] [${Utils.getCurrentFunctionName()}]" }
                     counter++
                     callback(message)
-                    if (maxRetainedMessagesSentToClient > 0 && counter >= maxRetainedMessagesSentToClient) {
+                    if (maxRetainedMessagesSentToClient > 0 && counter > maxRetainedMessagesSentToClient) {
                         logger.warning("Maximum messages sent [${Utils.getCurrentFunctionName()}]")
                         false
                     } else true
