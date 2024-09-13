@@ -19,7 +19,7 @@ class SessionStorePostgres(
     private val username: String,
     private val password: String
 ): AbstractVerticle(), ISessionStore {
-    private val logger = Logger.getLogger(this.javaClass.simpleName)
+    private val logger = Utils.getLogger(this::class.java)
 
     private val sessionsTableName = "Sessions"
     private val subscriptionsTableName = "Subscriptions"
@@ -101,10 +101,10 @@ class SessionStorePostgres(
                     statement.executeUpdate("DELETE FROM $sessionsTableName WHERE clean_session = TRUE")
                 }
 
-                logger.info("Tables are ready.")
+                logger.info("Tables are ready [${Utils.getCurrentFunctionName()}]")
                 readyPromise.complete()
             } catch (e: Exception) {
-                logger.severe("Error in getting tables ready: ${e.message}")
+                logger.severe("Error in getting tables ready: ${e.message} [${Utils.getCurrentFunctionName()}]")
                 readyPromise.fail(e)
             }
         }
@@ -116,7 +116,7 @@ class SessionStorePostgres(
 
     override fun buildIndex(index: TopicTree<String, Int>) {
         try {
-            logger.info("Indexing subscription table [$subscriptionsTableName].")
+            logger.info("Indexing subscription table [$subscriptionsTableName] [${Utils.getCurrentFunctionName()}]")
             db.connection?.let { connection ->
                 var rows = 0
                 val sql = "SELECT client_id, array_to_string(topic, '/'), qos FROM $subscriptionsTableName "
@@ -129,12 +129,12 @@ class SessionStorePostgres(
                     index.add(topic, clientId, qos.value())
                     rows++
                 }
-                logger.info("Indexing subscription table [$subscriptionsTableName] finished [$rows].")
+                logger.info("Indexing subscription table [$subscriptionsTableName] finished [$rows] [${Utils.getCurrentFunctionName()}]")
             } ?: run {
-                logger.severe("Indexing subscription table not possible without database connection!")
+                logger.severe("Indexing subscription table not possible without database connection! [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
-            logger.warning("CreateLocalIndex: Error fetching data: ${e.message}")
+            logger.warning("CreateLocalIndex: Error fetching data: ${e.message} [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -151,12 +151,12 @@ class SessionStorePostgres(
                 }
             }
         } catch (e: SQLException) {
-            logger.warning("Error at fetching offline clients [${e.message}]")
+            logger.warning("Error at fetching offline clients [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
     override fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean) {
-        logger.finest { "Put client [$clientId] cleanSession [$cleanSession] connected [$connected]" }
+        logger.finest { "Put client [$clientId] cleanSession [$cleanSession] connected [$connected] [${Utils.getCurrentFunctionName()}]" }
         val sql = "INSERT INTO $sessionsTableName (client_id, clean_session, connected) VALUES (?, ?, ?) "+
                   "ON CONFLICT (client_id) DO UPDATE SET clean_session = EXCLUDED.clean_session, "+
                   "connected = EXCLUDED.connected, update_time = CURRENT_TIMESTAMP"
@@ -169,7 +169,7 @@ class SessionStorePostgres(
                 preparedStatement.executeUpdate()
             }
         } catch (e: SQLException) {
-            logger.warning("Error at inserting client [${e.message}] SQL: [$sql]")
+            logger.warning("Error at inserting client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -183,7 +183,7 @@ class SessionStorePostgres(
                 preparedStatement.executeUpdate()
             }
         } catch (e: SQLException) {
-            logger.warning("Error at updating client [${e.message}] SQL: [$sql]")
+            logger.warning("Error at updating client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -199,7 +199,7 @@ class SessionStorePostgres(
                 }
             }
         } catch (e: SQLException) {
-            logger.warning("Error at fetching client [${e.message}] SQL: [$sql]")
+            logger.warning("Error at fetching client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
         }
         return false
     }
@@ -220,7 +220,7 @@ class SessionStorePostgres(
                 preparedStatement.executeUpdate()
             }
         } catch (e: SQLException) {
-            logger.warning("Error at setting last will [${e.message}] SQL: [$sql]")
+            logger.warning("Error at setting last will [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -241,7 +241,7 @@ class SessionStorePostgres(
                 preparedStatement.executeBatch()
             }
         } catch (e: SQLException) {
-            logger.warning("Error at inserting subscription [${e.message}] SQL: [$sql]")
+            logger.warning("Error at inserting subscription [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -259,7 +259,7 @@ class SessionStorePostgres(
                 preparedStatement.executeBatch()
             }
         } catch (e: SQLException) {
-            logger.warning("Error at removing subscription [${e.message}] SQL: [$sql]")
+            logger.warning("Error at removing subscription [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -294,7 +294,7 @@ class SessionStorePostgres(
             }
 
         } catch (e: SQLException) {
-            logger.warning("Error at removing client [${e.message}]")
+            logger.warning("Error at removing client [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -330,7 +330,7 @@ class SessionStorePostgres(
                 preparedStatement2.executeBatch()
             }
         } catch (e: SQLException) {
-            logger.warning("Error at inserting queued message [${e.message}]")
+            logger.warning("Error at inserting queued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -360,7 +360,7 @@ class SessionStorePostgres(
                 }
             }
         } catch (e: SQLException) {
-            logger.warning("Error at fetching queued message [${e.message}]")
+            logger.warning("Error at fetching queued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
 
         /*
@@ -384,7 +384,7 @@ class SessionStorePostgres(
                 }
             }
         } catch (e: SQLException) {
-            logger.warning("Error at fetching queued message [${e.message}]")
+            logger.warning("Error at fetching queued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
         */
     }

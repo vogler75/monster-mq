@@ -1,6 +1,7 @@
 package at.rocworks.stores
 
 import at.rocworks.Const
+import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
@@ -13,7 +14,7 @@ import java.util.logging.Logger
 import kotlin.concurrent.thread
 
 class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
-    private val logger = Logger.getLogger(this.javaClass.simpleName)
+    private val logger = Utils.getLogger(this::class.java)
 
     private val index = TopicTree<String, Int>() // Topic index with client and QoS
     private val offline = mutableSetOf<String>() // Offline clients
@@ -138,7 +139,7 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
 
     fun findClients(topicName: String): Set<Pair<String, Int>> {
         val result = index.findDataOfTopicName(topicName).toSet()
-        logger.finest { "Found [${result.size}] clients." }
+        logger.finest { "Found [${result.size}] clients [${Utils.getCurrentFunctionName()}]" }
         return result
     }
 }

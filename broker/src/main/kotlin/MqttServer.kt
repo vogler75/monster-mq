@@ -15,7 +15,7 @@ class MqttServer(
     private val ws: Boolean,
     private val distributor: Distributor
 ) : AbstractVerticle() {
-    private val logger = Logger.getLogger(this.javaClass.simpleName)
+    private val logger = Utils.getLogger(this::class.java)
 
     private val options = MqttServerOptions().apply {
         isSsl = ssl
@@ -37,16 +37,16 @@ class MqttServer(
         }
 
         mqttServer.endpointHandler { endpoint ->
-            logger.info("MQTT Client on server [${deploymentID()}]")
+            logger.info("MQTT Client on server [${deploymentID()}] [${Utils.getCurrentFunctionName()}]")
             MqttClient.deployEndpoint(vertx, endpoint, distributor)
         }
 
         mqttServer.listen(port) { ar ->
             if (ar.succeeded()) {
-                logger.info("MQTT Server is listening on port [${ar.result().actualPort()}] SSL [$ssl] WS [$ws] [${deploymentID()}]")
+                logger.info("MQTT Server is listening on port [${ar.result().actualPort()}] SSL [$ssl] WS [$ws] [${deploymentID()}] [${Utils.getCurrentFunctionName()}]")
                 startPromise.complete()
             } else {
-                logger.severe("Error starting MQTT Server: ${ar.cause().message}")
+                logger.severe("Error starting MQTT Server: ${ar.cause().message} [${Utils.getCurrentFunctionName()}]")
                 startPromise.fail(ar.cause())
             }
         }

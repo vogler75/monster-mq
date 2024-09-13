@@ -1,5 +1,6 @@
 package at.rocworks.stores
 
+import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.TopicTree
 import com.hazelcast.core.HazelcastInstance
@@ -15,7 +16,7 @@ class MessageStoreHazelcast(
     private val name: String,
     private val hazelcast: HazelcastInstance
 ): AbstractVerticle(), IMessageStore {
-    private val logger = Logger.getLogger(this.javaClass.simpleName+"/"+name)
+    private val logger = Utils.getLogger(this::class.java, name)
 
     private val index = TopicTree<Void, Void>()
     private val store = hazelcast.getMap<String, MqttMessage>(name)
@@ -34,9 +35,9 @@ class MessageStoreHazelcast(
             vertx.eventBus().consumer<JsonArray>(delAddress) {
                 index.delAll(it.body().map { it.toString() })
             }
-            logger.info("Indexing [$name] message store...")
+            logger.info("Indexing [$name] message store [${Utils.getCurrentFunctionName()}]")
             store.keys.forEach { index.add(it) }
-            logger.info("Indexing [$name] message store finished.")
+            logger.info("Indexing [$name] message store finished [${Utils.getCurrentFunctionName()}]")
             startPromise.complete()
         })
     }
@@ -51,7 +52,7 @@ class MessageStoreHazelcast(
         store.putAllAsync(messages.associateBy { it.topicName })
 
         val duration = Duration.between(startTime, Instant.now()).toMillis()
-        logger.finest { "Write block of size [${messages.size}] to map took [$duration]" }
+        logger.finest { "Write block of size [${messages.size}] to map took [$duration] [${Utils.getCurrentFunctionName()}]" }
     }
 
     override fun delAll(messages: List<MqttMessage>) {

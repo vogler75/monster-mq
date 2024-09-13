@@ -14,7 +14,7 @@ class MessageStorePostgres(
     private val username: String,
     private val password: String
 ): AbstractVerticle(), IMessageStore {
-    private val logger = Logger.getLogger(this.javaClass.simpleName+"/"+name)
+    private val logger = Utils.getLogger(this::class.java, name)
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun init(connection: Connection) {
@@ -28,9 +28,9 @@ class MessageStorePostgres(
                     time TIMESTAMPTZ
                 )
                 """.trimIndent())
-                logger.info("Table [$name] is ready.")
+                logger.info("Table [$name] is ready [${Utils.getCurrentFunctionName()}]")
             } catch (e: Exception) {
-                logger.severe("Error in creating table [$name]: ${e.message}")
+                logger.severe("Error in creating table [$name]: ${e.message} [${Utils.getCurrentFunctionName()}]")
             }
         }
     }
@@ -66,7 +66,7 @@ class MessageStorePostgres(
                 }
             }
         } catch (e: SQLException) {
-            logger.warning("Error fetching data for topic [$topicName]: ${e.message}")
+            logger.warning("Error fetching data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
         }
         return null
     }
@@ -94,10 +94,10 @@ class MessageStorePostgres(
                 }
 
                 preparedStatement.executeBatch()
-                logger.finest { "Batch insert of [${rows.count()}] rows successful." }
+                logger.finest { "Batch insert of [${rows.count()}] rows successful [${Utils.getCurrentFunctionName()}]" }
             }
         } catch (e: SQLException) {
-            logger.warning("Error inserting batch data [${e.message}]")
+            logger.warning("Error inserting batch data [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -120,10 +120,10 @@ class MessageStorePostgres(
                 }
 
                 preparedStatement.executeBatch()
-                logger.finer { "Batch deleted of [${rows.count()}] rows successful." }
+                logger.finer { "Batch deleted of [${rows.count()}] rows successful [${Utils.getCurrentFunctionName()}]" }
             }
         } catch (e: SQLException) {
-            logger.warning("Error deleting batch data [${e.message}]")
+            logger.warning("Error deleting batch data [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -162,7 +162,7 @@ class MessageStorePostgres(
                 }
             }
         } catch (e: SQLException) {
-            logger.warning("Error finding data for topic [$topicName]: ${e.message}")
+            logger.warning("Error finding data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
         }
     }
 }

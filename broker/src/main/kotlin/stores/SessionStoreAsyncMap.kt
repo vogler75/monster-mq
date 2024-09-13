@@ -11,7 +11,7 @@ import io.vertx.core.shareddata.AsyncMap
 import java.util.logging.Logger
 
 class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
-    private val logger = Logger.getLogger(this.javaClass.simpleName)
+    private val logger = Utils.getLogger(this::class.java)
 
     private val sessionTableName = "Sessions"
     private val subscriptionTableName = "Subscriptions"
@@ -31,16 +31,16 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
     override fun start(startPromise: Promise<Void>) {
         Future.all(listOf(
             Utils.getMap<String, MqttSession>(vertx, sessionTableName).onSuccess { sessions ->
-                logger.info("Indexing session table [$sessionTableName].")
+                logger.info("Indexing session table [$sessionTableName] [${Utils.getCurrentFunctionName()}]")
                 this.sessionTable = sessions
             }.onFailure {
-                logger.severe("Error in getting map [$sessionTableName] [${it.message}]")
+                logger.severe("Error in getting map [$sessionTableName] [${it.message}] [${Utils.getCurrentFunctionName()}]")
             },
             Utils.getMap<String, MutableSet<Pair<String, MqttQoS>>>(vertx, subscriptionTableName).onSuccess { subscriptions ->
-                logger.info("Indexing subscription table [$subscriptionTableName].")
+                logger.info("Indexing subscription table [$subscriptionTableName] [${Utils.getCurrentFunctionName()}]")
                 this.subscriptionTable = subscriptions
             }.onFailure {
-                logger.severe("Error in getting map [$subscriptionTableName] [${it.message}]")
+                logger.severe("Error in getting map [$subscriptionTableName] [${it.message}] [${Utils.getCurrentFunctionName()}]")
             }
         )).onComplete {
             readyPromise.complete()
@@ -57,11 +57,11 @@ class SessionStoreAsyncMap: AbstractVerticle(), ISessionStore {
                             topics.result().forEach { index.add(it.first, client, it.second.value()) }
                         }
                     }).onComplete {
-                        logger.info("Indexing subscription table [$subscriptionTableName] finished.")
+                        logger.info("Indexing subscription table [$subscriptionTableName] finished [${Utils.getCurrentFunctionName()}]")
                     }
                 }
                 .onFailure {
-                    logger.severe("Error in getting keys of [$subscriptionTableName] [${it.message}]")
+                    logger.severe("Error in getting keys of [$subscriptionTableName] [${it.message}] [${Utils.getCurrentFunctionName()}]")
                 }
         }
     }

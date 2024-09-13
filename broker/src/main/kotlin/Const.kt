@@ -16,5 +16,8 @@ object Const {
 
     const val COMMAND_STATUS = "Status"
 
+    const val QOS2_RETRY_INTERVAL = 10L // Seconds
+    const val QOS2_RETRY_COUNT = 6*10 // 10 Minutes
+
     var DEBUG_LEVEL: Level = Level.INFO
 }

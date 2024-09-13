@@ -10,13 +10,13 @@ class DistributorVertx(
     sessionHandler: SessionHandler,
     messageHandler: MessageHandler
 ): Distributor(sessionHandler, messageHandler) {
-    private val logger = Logger.getLogger(this.javaClass.simpleName)
+    private val logger = Utils.getLogger(this::class.java)
 
     override fun start(startPromise: Promise<Void>?) {
         super.start(startPromise)
         vertx.eventBus().consumer<MqttMessage>(getDistributorMessageAddress()) { message ->
             message.body()?.let { payload ->
-                logger.finest { "Received message [${payload.topicName}] retained [${payload.isRetain}]" }
+                logger.finest { "Received message [${payload.topicName}] retained [${payload.isRetain}] [${Utils.getCurrentFunctionName()}]" }
                 consumeMessageFromBus(payload)
             }
         }

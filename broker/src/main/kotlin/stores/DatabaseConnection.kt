@@ -1,5 +1,6 @@
 package at.rocworks.stores
 
+import at.rocworks.Utils
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.Vertx
@@ -30,14 +31,14 @@ abstract class DatabaseConnection(
                         }
                         connectPromise.complete()
                     } else {
-                        logger.warning("Connect failed!")
+                        logger.warning("Connect failed! [${Utils.getCurrentFunctionName()}]")
                         vertx.setTimer(defaultRetryWaitTime) {
                             connect(vertx, connectPromise)
                         }
                     }
                 }
             } catch (e: Exception) {
-                logger.warning("Error in connect [${e.message}]")
+                logger.warning("Error in connect [${e.message}] [${Utils.getCurrentFunctionName()}]")
                 connectPromise.fail(e)
             }
         })
@@ -46,17 +47,17 @@ abstract class DatabaseConnection(
     private fun open(): Future<Void> {
         val promise = Promise.promise<Void>()
         try {
-            logger.info("Connect to database...")
+            logger.info("Connect to database [${Utils.getCurrentFunctionName()}]")
             DriverManager.getConnection(url, username, password)
                 ?.let {
                     it.autoCommit = true
                     connection = it
-                    logger.info("Connection established.")
+                    logger.info("Connection established [${Utils.getCurrentFunctionName()}]")
                     init(it)
                     promise.complete()
                 }
         } catch (e: Exception) {
-            logger.warning("Error opening connection [${e.message}]")
+            logger.warning("Error opening connection [${e.message}] [${Utils.getCurrentFunctionName()}]")
             promise.fail(e)
         }
         return promise.future()
@@ -78,7 +79,7 @@ abstract class DatabaseConnection(
 
     private fun reconnect(vertx: Vertx) {
         if (!reconnectOngoing) {
-            logger.info("Reconnect...")
+            logger.info("Reconnect [${Utils.getCurrentFunctionName()}]")
             reconnectOngoing = true
             val promise = Promise.promise<Void>()
             promise.future().onComplete {

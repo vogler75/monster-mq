@@ -11,6 +11,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 import java.util.logging.LogManager
+import java.util.logging.Logger
 
 object Utils {
     fun toByteBuf(buffer: Buffer): ByteBuf = Unpooled.wrappedBuffer(buffer.bytes)
@@ -33,9 +34,17 @@ object Utils {
         }
     }
 
+    fun getLogger(o: Class<*>, additionalName: String=""): Logger
+    = Logger.getLogger(o.name.substringAfterLast(".") + if (additionalName.isEmpty()) "" else "/$additionalName")
+    //= Logger.getLogger(o.name.removePrefix("at.rocworks.") + if (additionalName.isEmpty()) "" else "/$additionalName")
+
     fun getTopicLevels(topicName: String) = topicName.split("/")
     fun addTopicLevel(topicName: String, level: String) = "$topicName/$level"
     fun isWildCardTopic(topicName: String) = topicName.any { it == '#' || it == '+' } // TODO: check if this is faster then: topicName.contains("#") || topicName.contains("+")
+
+    fun getCurrentFunctionName(): String {
+        return Thread.currentThread().stackTrace[2].methodName
+    }
 
     fun <K,V> getMap(vertx: Vertx, name: String): Future<AsyncMap<K, V>> {
         val promise = Promise.promise<AsyncMap<K, V>>()

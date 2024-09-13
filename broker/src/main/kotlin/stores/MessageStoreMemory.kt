@@ -1,5 +1,6 @@
 package at.rocworks.stores
 
+import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.TopicTree
 import io.vertx.core.AbstractVerticle
@@ -9,7 +10,7 @@ import java.util.concurrent.Callable
 import java.util.logging.Logger
 
 class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessageStore {
-    private val logger = Logger.getLogger(this.javaClass.simpleName+"/"+name)
+    private val logger = Utils.getLogger(this::class.java, name)
 
     private val index = TopicTree<Void, Void>()
     private val store = getStore()
@@ -28,9 +29,9 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
             vertx.eventBus().consumer<JsonArray>(delAddress) {
                 index.delAll(it.body().map { it.toString() })
             }
-            logger.info("Indexing [$name] message store...")
+            logger.info("Indexing [$name] message store [${Utils.getCurrentFunctionName()}]")
             store.keys.forEach { index.add(it) }
-            logger.info("Indexing [$name] message store finished.")
+            logger.info("Indexing [$name] message store finished [${Utils.getCurrentFunctionName()}]")
             startPromise.complete()
         })
     }

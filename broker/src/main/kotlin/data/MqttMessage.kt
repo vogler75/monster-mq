@@ -35,7 +35,8 @@ class MqttMessage(
         false
     )
 
-    fun copy(qosLevel: Int): MqttMessage = MqttMessage(messageId, topicName, payload, qosLevel, isRetain, isDup)
+    fun cloneWithNewQoS(qosLevel: Int): MqttMessage = MqttMessage(messageId, topicName, payload, qosLevel, isRetain, isDup)
+    fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageId, topicName, payload, qosLevel, isRetain, isDup)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 
