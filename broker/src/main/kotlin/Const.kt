@@ -15,6 +15,7 @@ object Const {
     const val COMMAND_KEY = "Command"
 
     const val COMMAND_STATUS = "Status"
+    const val COMMAND_DISCONNECT = "Disconnect"
 
     const val QOS2_RETRY_INTERVAL = 10L // Seconds
     const val QOS2_RETRY_COUNT = 6*10 // 10 Minutes

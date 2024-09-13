@@ -6,7 +6,7 @@ from datetime import datetime
 BROKER = 'localhost'
 PORT = 1883
 TOPIC = 'test/broadcast'
-CLIENT_ID = "subscriber_1"
+CLIENT_ID = "test"
 
 
 # Callback when the client connects to the broker
@@ -28,7 +28,7 @@ def on_message(client, userdata, msg):
         message_id = payload['id']
         time_diff = datetime.now() - sent_time
         print(f"Received [{msg.mid}] [{msg.retain}] `{msg.payload.decode()}` with id {message_id} from `{msg.topic}`. Time difference: {time_diff.total_seconds()} seconds")
-    except ValueError:
+    except Exception as e:
         print(f"Received [{msg.mid}] [{msg.retain}] `{msg.payload.decode()}` from `{msg.topic}`. Time difference: N/A")
         #exit(-1)
 

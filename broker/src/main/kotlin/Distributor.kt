@@ -59,7 +59,7 @@ abstract class Distributor(
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
-            .put(Const.CLIENT_KEY, client.getClientId())
+            .put(Const.CLIENT_KEY, client.clientId)
             .put(Const.QOS_KEY, qos.value())
         vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
             if (!it.succeeded())  logger.severe("Subscribe request failed [${it.cause()}] [${Utils.getCurrentFunctionName()}]")
@@ -87,7 +87,7 @@ abstract class Distributor(
         val request = JsonObject()
             .put(COMMAND_KEY, COMMAND_UNSUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
-            .put(Const.CLIENT_KEY, client.getClientId())
+            .put(Const.CLIENT_KEY, client.clientId)
         vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
             if (!it.succeeded()) logger.severe("Unsubscribe request failed [${it.cause()}] [${Utils.getCurrentFunctionName()}]")
         }
