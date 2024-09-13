@@ -218,18 +218,17 @@ class SessionStorePostgres(
         return false
     }
 
-    override fun setLastWill(clientId: String, topic: String, message: MqttMessage) {
+    override fun setLastWill(clientId: String, message: MqttMessage?) {
         val sql = "UPDATE $sessionsTableName "+
                 "SET last_will_topic = ?, last_will_message = ?, last_will_qos = ?, last_will_retain = ? "+
-                ", update_time = CURRENT_TIMESTAMP "+
                 "WHERE client_id = ?"
         try {
             db.connection?.let { connection ->
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                preparedStatement.setString(1, topic)
-                preparedStatement.setBytes(2, message.payload)
-                preparedStatement.setInt(3, message.qosLevel)
-                preparedStatement.setBoolean(4, message.isRetain)
+                preparedStatement.setString(1, message?.topicName)
+                preparedStatement.setBytes(2, message?.payload)
+                message?.qosLevel?.let { preparedStatement.setInt(3, it) } ?: preparedStatement.setNull(3, Types.INTEGER)
+                message?.isRetain?.let { preparedStatement.setBoolean(4, it) } ?: preparedStatement.setNull(4, Types.BOOLEAN)
                 preparedStatement.setString(5, clientId)
                 preparedStatement.executeUpdate()
             }
@@ -385,13 +384,19 @@ class SessionStorePostgres(
         }
     }
 
-    override fun removeMessages(messageUuid: List<String>) {
-        val sql = "DELETE FROM $queuedMessagesClientsTableName WHERE message_uuid = ANY (?)"
+    override fun removeMessages(messages: List<Pair<String, String>>) { // clientId, messageUuid
+        val groupedMessages = messages.groupBy({ it.first }, { it.second })
+        val sql = "DELETE FROM $queuedMessagesClientsTableName WHERE client_id = ? AND message_uuid = ANY (?)"
         try {
             db.connection?.let { connection ->
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                preparedStatement.setArray(1, connection.createArrayOf("text", messageUuid.toTypedArray()))
+                groupedMessages.forEach { (clientId, messageUuids) ->
+                    preparedStatement.setString(1, clientId)
+                    preparedStatement.setArray(2, connection.createArrayOf("text", messageUuids.toTypedArray()))
+                    preparedStatement.addBatch()
+                }
                 preparedStatement.executeUpdate()
+
             }
         } catch (e: SQLException) {
             logger.warning("Error at removing dequeued message [${e.message}] [${Utils.getCurrentFunctionName()}]")

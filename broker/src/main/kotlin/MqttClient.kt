@@ -136,6 +136,7 @@ class MqttClient(
 
             this.connected = true
             distributor.sessionHandler.setClient(clientId, endpoint.isCleanSession, true)
+            distributor.sessionHandler.setLastWill(clientId, endpoint.will())
         }
     }
 
@@ -296,7 +297,7 @@ class MqttClient(
 
     private fun publishMessageCompleted(message: MqttMessage) {
         inFlightMessagesSnd.removeFirst()
-        distributor.publishMessageCompleted(message)
+        distributor.publishMessageCompleted(clientId, message)
     }
 
     private fun consumeMessageQoS1(busMessage: Message<MqttMessage>) {

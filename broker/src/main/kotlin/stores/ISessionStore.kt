@@ -17,11 +17,11 @@ interface ISessionStore {
     fun setConnected(clientId: String, connected: Boolean)
     fun isConnected(clientId: String): Boolean
     fun isPresent(clientId: String): Boolean
-    fun setLastWill(clientId: String, topic: String, message: MqttMessage)
+    fun setLastWill(clientId: String, message: MqttMessage?)
     fun addSubscriptions(subscriptions: List<MqttSubscription>)
     fun delSubscriptions(subscriptions: List<MqttSubscription>)
     fun delClient(clientId: String, callback: (MqttSubscription)->Unit)
     fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>)
     fun dequeueMessages(clientId: String, callback: (MqttMessage)->Unit)
-    fun removeMessages(messageUuid: List<String>)
+    fun removeMessages(messages: List<Pair<String, String>>)
 }

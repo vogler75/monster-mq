@@ -108,8 +108,8 @@ abstract class Distributor(
             messageHandler.saveMessage(message)
     }
 
-    fun publishMessageCompleted(message: MqttMessage) {
-        sessionHandler.removeMessage(message.messageUuid)
+    fun publishMessageCompleted(clientId: String, message: MqttMessage) {
+        sessionHandler.removeMessage(clientId, message.messageUuid)
     }
 
     abstract fun publishMessageToBus(message: MqttMessage)

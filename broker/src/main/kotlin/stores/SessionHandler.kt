@@ -7,6 +7,7 @@ import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
+import io.vertx.mqtt.MqttWill
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -21,7 +22,7 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     private val subDelQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
 
     private val messageAddQueue: ArrayBlockingQueue<Pair<MqttMessage, List<String>>> = ArrayBlockingQueue(10_000) // TODO: configurable
-    private val messageDelQueue: ArrayBlockingQueue<String> = ArrayBlockingQueue(10_000) // TODO: configurable
+    private val messageDelQueue: ArrayBlockingQueue<Pair<String, String>> = ArrayBlockingQueue(10_000) // TODO: configurable
 
     private val subscriptionAddAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/A"
     private val subscriptionDelAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/D"
@@ -97,6 +98,16 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
         store.setClient(clientId, cleanSession, connected)
     }
 
+    fun setLastWill(clientId: String, will: MqttWill) {
+        if (will.isWillFlag) {
+            val topic = will.willTopic
+            val message = MqttMessage(will)
+            store.setLastWill(clientId, message)
+        } else {
+            store.setLastWill(clientId, null)
+        }
+    }
+
     fun delClient(clientId: String) {
         vertx.eventBus().publish(clientOfflineAddress, clientId)
         store.delClient(clientId) { subscription ->
@@ -126,8 +137,8 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
         store.dequeueMessages(clientId, callback)
     }
 
-    fun removeMessage(messageUuid: String) {
-        messageDelQueue.add(messageUuid)
+    fun removeMessage(clientId: String, messageUuid: String) {
+        messageDelQueue.add(Pair(clientId, messageUuid))
     }
 
     fun addSubscription(subscription: MqttSubscription) {
