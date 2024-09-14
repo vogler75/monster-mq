@@ -3,8 +3,8 @@ package org.example;
 public class Config {
     public static String statBroker = "tcp://scada:1883";
 
-    public static String[] publisherBroker = new String[] { "tcp://linux0:1883" };
-    public static String[] subscriberBroker = new String[] { "tcp://linux0:1883" };
+    public static String[] publisherBroker = new String[] { "tcp://linux2:1883" };
+    public static String[] subscriberBroker = new String[] { "tcp://linux1:1883" };
 
     //public static String[] publisherBroker = new String[] { "tcp://linux1:1883", "tcp://linux2:1883", "tcp://linux3:1883" };
     //public static String[] subscriberBroker = new String[] { "tcp://linux1:1883", "tcp://linux2:1883", "tcp://linux3:1883" };
@@ -13,8 +13,8 @@ public class Config {
     public static String topicPrefix = "test";
     public static String statisticsTopic = "monitor"; // Topic for publishing statistics
 
-    public static int PUBLISHER_COUNT = 300;
-    public static int SUBSCRIBER_COUNT = 100;
+    public static int PUBLISHER_COUNT = 10;
+    public static int SUBSCRIBER_COUNT = 10;
 
     public static int SUBSCRIBER_QOS = 0;
     public static int PUBLISHER_QOS = 1;

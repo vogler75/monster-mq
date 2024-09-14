@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 # Define the MQTT broker details
-broker_address = "localhost"  # Example broker address, you can change it to your broker's address
+broker_address = "linux1"  # Example broker address, you can change it to your broker's address
 topic = "test/broadcast"  # Example topic
 
 message_id = 0

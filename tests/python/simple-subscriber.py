@@ -3,17 +3,20 @@ import json
 from datetime import datetime
 
 # MQTT settings
-BROKER = 'localhost'
+BROKER = 'linux2'
 PORT = 1883
 TOPIC = 'test/broadcast'
-CLIENT_ID = "test"
+CLIENT_ID = "python-simple-subscriber"
 
 
 # Callback when the client connects to the broker
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print("Connected successfully")
-        client.subscribe(TOPIC, qos=2)
+        print("Connected successfully "+str(flags))
+        # Subscribe to the topic if 'session present' flag is 0
+        if not flags['session present']:
+            print("Subscribing to topic", TOPIC)
+            client.subscribe(TOPIC, qos=2)
     else:
         print(f"Connection failed with code {rc}")
 
@@ -34,11 +37,14 @@ def on_message(client, userdata, msg):
 
 
 # Create an MQTT client instance
-client = mqtt.Client(client_id=CLIENT_ID, clean_session=False)
+client = mqtt.Client(client_id=CLIENT_ID, clean_session=True)
 
 # Assign the callback functions
 client.on_connect = on_connect
 client.on_message = on_message
+
+# add a last will message
+#client.will_set("test/lastwill", payload="I'm dead", qos=2, retain=True)
 
 # Connect to the broker
 client.connect(BROKER, PORT, 60)
