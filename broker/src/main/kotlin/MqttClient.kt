@@ -138,7 +138,12 @@ class MqttClient(
             }
 
             this.connected = true
-            distributor.sessionHandler.setClient(clientId, endpoint.isCleanSession, true)
+            val information = JsonObject()
+            information.put("RemoteAddress", endpoint.remoteAddress().toString())
+            information.put("LocalAddress", endpoint.localAddress().toString())
+            information.put("ProtocolVersion", endpoint.protocolVersion())
+            information.put("SSL", endpoint.isSsl)
+            distributor.sessionHandler.setClient(clientId, endpoint.isCleanSession, true, information)
             distributor.sessionHandler.setLastWill(clientId, endpoint.will())
         }
     }

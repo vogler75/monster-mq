@@ -9,6 +9,7 @@ import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.json.JsonObject
 import java.sql.*
 import java.util.UUID
 import java.util.concurrent.Callable
@@ -45,6 +46,7 @@ class SessionStorePostgres(
                     clean_session BOOLEAN,
                     connected BOOLEAN,
                     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    information JSONB,
                     last_will_topic TEXT,
                     last_will_message BYTEA,
                     last_will_qos INT,
@@ -154,17 +156,21 @@ class SessionStorePostgres(
         }
     }
 
-    override fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean) {
+    override fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean, information: JsonObject) {
         logger.finest { "Put client [$clientId] cleanSession [$cleanSession] connected [$connected] [${Utils.getCurrentFunctionName()}]" }
-        val sql = "INSERT INTO $sessionsTableName (client_id, clean_session, connected) VALUES (?, ?, ?) "+
-                  "ON CONFLICT (client_id) DO UPDATE SET clean_session = EXCLUDED.clean_session, "+
-                  "connected = EXCLUDED.connected, update_time = CURRENT_TIMESTAMP"
+        val sql = "INSERT INTO $sessionsTableName (client_id, clean_session, connected, information) VALUES (?, ?, ?, ?::jsonb) "+
+                  "ON CONFLICT (client_id) DO UPDATE "+
+                  "SET clean_session = EXCLUDED.clean_session, "+
+                  "connected = EXCLUDED.connected, "+
+                  "information = EXCLUDED.information, "+
+                  "update_time = CURRENT_TIMESTAMP"
         try {
             db.connection?.let { connection ->
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 preparedStatement.setString(1, clientId)
                 preparedStatement.setBoolean(2, cleanSession)
                 preparedStatement.setBoolean(3, connected)
+                preparedStatement.setString(4, information.encode())
                 preparedStatement.executeUpdate()
             }
         } catch (e: SQLException) {

@@ -7,6 +7,7 @@ import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
+import io.vertx.core.json.JsonObject
 import io.vertx.mqtt.MqttWill
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -93,9 +94,9 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
         }
     }
 
-    fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean) {
+    fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean, information: JsonObject) {
         vertx.eventBus().publish(if (connected) clientOnlineAddress else clientOfflineAddress, clientId)
-        store.setClient(clientId, cleanSession, connected)
+        store.setClient(clientId, cleanSession, connected, information)
     }
 
     fun setLastWill(clientId: String, will: MqttWill) {
