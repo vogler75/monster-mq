@@ -68,7 +68,7 @@ abstract class Distributor(
         val topicName = command.body().getString(Const.TOPIC_KEY)
         val qos = MqttQoS.valueOf(command.body().getInteger(Const.QOS_KEY))
 
-        messageHandler.findMatching(topicName) { message ->
+        messageHandler.findMatching(topicName, 0) { message -> // TODO: max must be configurable
             logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
             sendMessageToClient(clientId, message)
         }.onComplete {
@@ -101,8 +101,7 @@ abstract class Distributor(
 
     fun publishMessage(message: MqttMessage) {
         publishMessageToBus(message)
-        if (message.isRetain)
-            messageHandler.saveMessage(message)
+        messageHandler.saveMessage(message)
     }
 
     fun publishMessageCompleted(clientId: String, message: MqttMessage) {

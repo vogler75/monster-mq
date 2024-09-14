@@ -63,13 +63,19 @@ fun main(args: Array<String>) {
         val useWs = config.getBoolean("WS", false)
         val useTcp = config.getBoolean("TCP", true)
 
-        val retainedMessageStoreType = MessageStoreType.valueOf(
-            config.getString("RetainedMessageStoreType", "MEMORY")
-        )
-
         val sessionStoreType = SessionStoreType.valueOf(
             config.getString("SessionStoreType", "MEMORY")
         )
+
+        val retainedMessageStoreType: MessageStoreType = MessageStoreType.valueOf(
+            config.getString("RetainedMessageStoreType", "MEMORY")
+        )
+        val retainedMessageStoreJson = config.getBoolean("RetainedMessageStoreJson", false)
+
+        val lastValueMessageStoreType = MessageStoreType.valueOf(
+            config.getString("LastValueMessageStoreType", "NONE")
+        )
+        val lastValueMessageStoreJson = config.getBoolean("LastValueMessageStoreJson", false)
 
         val postgres = config.getJsonObject("Postgres", JsonObject())
 
@@ -79,6 +85,7 @@ fun main(args: Array<String>) {
 
         logger.info("Port [$usePort] SSL [$useSsl] WS [$useWs] TCP [$useTcp]")
         logger.info("RetainedMessageStoreType [$retainedMessageStoreType]")
+        logger.info("LastValueMessageStoreType [$lastValueMessageStoreType]")
         logger.info("SessionStoreType [$sessionStoreType]")
 
         fun getDistributor(
@@ -104,19 +111,27 @@ fun main(args: Array<String>) {
             }
         }
 
-        fun getMessageStore(vertx: Vertx, name: String, clusterManager: ClusterManager?): IMessageStore
-                = when (retainedMessageStoreType) {
+        fun getMessageStore(
+            vertx: Vertx,
+            name: String,
+            storeType: MessageStoreType,
+            storeJson: Boolean,
+            clusterManager: ClusterManager?
+        ): IMessageStore?
+        = when (storeType) {
+            MessageStoreType.NONE -> null
             MessageStoreType.MEMORY -> {
-                val store = LastValueStoreMemory(name)
+                val store = MessageStoreMemory(name)
                 vertx.deployVerticle(store)
                 store
             }
             MessageStoreType.POSTGRES -> {
-                val store = LastValueStorePostgres(
+                val store = MessageStorePostgres(
                     name = name,
                     url = postgresUrl,
                     username = postgresUser,
-                    password = postgresPass
+                    password = postgresPass,
+                    storeJson = storeJson
                 )
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options)
@@ -124,7 +139,7 @@ fun main(args: Array<String>) {
             }
             MessageStoreType.HAZELCAST -> {
                 if (clusterManager is HazelcastClusterManager) {
-                    val store = LastValueStoreHazelcast(name, clusterManager.hazelcastInstance)
+                    val store = MessageStoreHazelcast(name, clusterManager.hazelcastInstance)
                     vertx.deployVerticle(store)
                     store
                 } else {
@@ -140,8 +155,18 @@ fun main(args: Array<String>) {
         val subscriptionStore = getSessionStore(vertx)
         val sessionHandler = SessionHandler(subscriptionStore)
 
-        val messageStore = getMessageStore(vertx, "RetainedMessages", clusterManager)
-        val messageHandler = MessageHandler(messageStore)
+        val retainedStore = getMessageStore(vertx,
+            "RetainedMessages",
+            retainedMessageStoreType,
+            retainedMessageStoreJson,
+            clusterManager)
+        val lastValueStore = getMessageStore(vertx,
+            "LastValueMessages",
+            lastValueMessageStoreType,
+            lastValueMessageStoreJson,
+            clusterManager)
+
+        val messageHandler = MessageHandler(retainedStore!!, lastValueStore)
 
         val distributors = mutableListOf<Distributor>()
         val servers = mutableListOf<MqttServer>()

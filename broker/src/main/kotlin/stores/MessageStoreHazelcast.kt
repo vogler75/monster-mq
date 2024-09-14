@@ -11,7 +11,7 @@ import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.Callable
 
-class LastValueStoreHazelcast(
+class MessageStoreHazelcast(
     private val name: String,
     private val hazelcast: HazelcastInstance
 ): AbstractVerticle(), IMessageStore {

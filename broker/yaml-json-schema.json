@@ -34,6 +34,18 @@
       "type": "string",
       "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
     },
+    "RetainedMessageStoreJson": {
+      "type": "boolean",
+      "default": false
+    },
+    "LastValueMessageStoreType": {
+      "type": "string",
+      "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
+    },
+    "LastValueMessageStoreJson": {
+      "type": "boolean",
+      "default": false
+    },
     "SessionStoreType": {
       "type": "string",
       "enum": ["POSTGRES"]

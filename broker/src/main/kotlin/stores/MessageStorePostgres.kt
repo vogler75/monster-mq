@@ -8,11 +8,12 @@ import io.vertx.core.Promise
 import java.sql.*
 import java.time.Instant
 
-class LastValueStorePostgres(
+class MessageStorePostgres(
     private val name: String,
     private val url: String,
     private val username: String,
-    private val password: String
+    private val password: String,
+    private val storeJson: Boolean
 ): AbstractVerticle(), IMessageStore {
     private val logger = Utils.getLogger(this::class.java, name)
 
@@ -28,10 +29,11 @@ class LastValueStorePostgres(
                 CREATE TABLE IF NOT EXISTS $name (
                     topic text[] PRIMARY KEY,
                     payload BYTEA,
+                    payload_json JSONB,
                     qos INT,
                     client_id VARCHAR(65535), 
-                    time TIMESTAMPTZ,
-                    message_uuid VARCHAR(36)
+                    message_uuid VARCHAR(36),
+                    time TIMESTAMPTZ
                 )
                 """.trimIndent())
                 logger.info("Table [$name] is ready [${Utils.getCurrentFunctionName()}]")
@@ -84,9 +86,11 @@ class LastValueStorePostgres(
     override fun addAll(messages: List<MqttMessage>) {
         val rows: MutableList<Pair<Array<String>, ByteArray>> = ArrayList()
 
-        val sql = "INSERT INTO $name (topic, payload, qos, time, client_id, message_uuid) VALUES (?, ?, ?, ?, ?, ?) "+
+        val sql = "INSERT INTO $name (topic, payload, payload_json, qos, time, client_id, message_uuid) "+
+                   "VALUES (?, ?, ?::JSONB, ?, ?, ?, ?) "+
                    "ON CONFLICT (topic) DO UPDATE "+
                    "SET payload = EXCLUDED.payload, "+
+                   "payload_json = EXCLUDED.payload_json, "+
                    "qos = EXCLUDED.qos, "+
                    "client_id = EXCLUDED.client_id, "+
                    "message_uuid = EXCLUDED.message_uuid, "+
@@ -98,17 +102,19 @@ class LastValueStorePostgres(
 
                 messages.forEach { message ->
                     val topic = Utils.getTopicLevels(message.topicName).toTypedArray()
+                    val jsonValue = if (storeJson) Utils.getJson(message.payload) else null
                     preparedStatement.setArray(1, connection.createArrayOf("text", topic))
                     preparedStatement.setBytes(2, message.payload)
-                    preparedStatement.setInt(3, message.qosLevel)
-                    preparedStatement.setTimestamp(4, Timestamp.from(Instant.now()))
-                    preparedStatement.setString(5, message.clientId)
-                    preparedStatement.setString(6, message.messageUuid)
+                    preparedStatement.setString(3, jsonValue)
+                    preparedStatement.setInt(4, message.qosLevel)
+                    preparedStatement.setTimestamp(5, Timestamp.from(Instant.now()))
+                    preparedStatement.setString(6, message.clientId)
+                    preparedStatement.setString(7, message.messageUuid)
                     preparedStatement.addBatch()
                 }
 
                 preparedStatement.executeBatch()
-                logger.finest { "Batch insert of [${rows.count()}] rows successful [${Utils.getCurrentFunctionName()}]" }
+                logger.finest { "Batch insert successful [${Utils.getCurrentFunctionName()}]" }
             }
         } catch (e: SQLException) {
             logger.warning("Error inserting batch data [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -134,7 +140,7 @@ class LastValueStorePostgres(
                 }
 
                 preparedStatement.executeBatch()
-                logger.finer { "Batch deleted of [${rows.count()}] rows successful [${Utils.getCurrentFunctionName()}]" }
+                logger.finer { "Batch deleted successful [${Utils.getCurrentFunctionName()}]" }
             }
         } catch (e: SQLException) {
             logger.warning("Error deleting batch data [${e.message}] [${Utils.getCurrentFunctionName()}]")

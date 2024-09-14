@@ -3,6 +3,7 @@ package at.rocworks.stores
 import at.rocworks.data.MqttMessage
 
 enum class MessageStoreType {
+    NONE,
     MEMORY,
     HAZELCAST,
     POSTGRES

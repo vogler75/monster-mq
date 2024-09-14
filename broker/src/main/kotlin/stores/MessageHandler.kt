@@ -9,16 +9,18 @@ import io.vertx.core.Promise
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
-import java.util.logging.Logger
 import kotlin.concurrent.thread
 
-class MessageHandler(private val store: IMessageStore): AbstractVerticle() {
-    private val logger = Utils.getLogger(this::class.java, store.getName())
+class MessageHandler(
+    private val retainedStore: IMessageStore,
+    private val lastValueStore: IMessageStore?
+): AbstractVerticle() {
+    private val logger = Utils.getLogger(this::class.java)
 
-    private val addQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000)
-    private val delQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000)
+    private val retainedAddQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000) // TODO: configurable
+    private val retainedDelQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000) // TODO: configurable
+    private val lastValueQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000) // TODO: configurable
 
-    private val maxRetainedMessagesSentToClient = 0 // 100_000 // TODO: configurable or timed
     private val maxWriteBlockSize = 4000 // TODO: configurable
 
     init {
@@ -27,16 +29,17 @@ class MessageHandler(private val store: IMessageStore): AbstractVerticle() {
 
     override fun start() {
         logger.info("Start handler [${Utils.getCurrentFunctionName()}]")
-        writerThread(addQueue, store::addAll)
-        writerThread(delQueue, store::delAll)
+        writerThread("RetainedAddQueue", retainedAddQueue, retainedStore::addAll)
+        writerThread("RetainedDelQueue", retainedDelQueue, retainedStore::delAll)
+        if (lastValueStore != null) writerThread("LastValueQueue", lastValueQueue, lastValueStore::addAll)
     }
 
-    private fun writerThread(queue: ArrayBlockingQueue<MqttMessage>, execute: (List<MqttMessage>)->Unit)
+    private fun writerThread(name: String, queue: ArrayBlockingQueue<MqttMessage>, execute: (List<MqttMessage>)->Unit)
     = thread(start = true) {
         logger.info("Start thread [${Utils.getCurrentFunctionName()}]")
         vertx.setPeriodic(1000) {
             if (queue.size > 0)
-                logger.info("Message queue size [${queue.size}] [${Utils.getCurrentFunctionName()}]")
+                logger.info("Queue [$name] size [${queue.size}] [${Utils.getCurrentFunctionName()}]")
         }
 
         val block = arrayListOf<MqttMessage>()
@@ -58,28 +61,36 @@ class MessageHandler(private val store: IMessageStore): AbstractVerticle() {
     }
 
     fun saveMessage(message: MqttMessage): Future<Void> {
-        logger.finest { "Save topic [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-        try {
-            if (message.payload.isEmpty())
-                delQueue.add(message)
-            else
-                addQueue.add(message)
-        } catch (e: IllegalStateException) {
-            // TODO: Alert
+        if (message.isRetain) {
+            try {
+                if (message.payload.isEmpty())
+                    retainedDelQueue.add(message)
+                else
+                    retainedAddQueue.add(message)
+            } catch (e: IllegalStateException) {
+                // TODO: Alert when queue is full
+            }
+        }
+        if (lastValueStore != null) {
+            try {
+                lastValueQueue.add(message)
+            } catch (e: IllegalStateException) {
+                // TODO: Alert when queue is full
+            }
         }
         return Future.succeededFuture()
     }
 
-    fun findMatching(topicName: String, callback: (message: MqttMessage)->Unit): Future<Int> {
+    fun findMatching(topicName: String, max: Int, callback: (message: MqttMessage)->Unit): Future<Int> {
         val promise = Promise.promise<Int>()
         vertx.executeBlocking(Callable {
             var counter = 0
             try {
-                store.findMatchingMessages(topicName) { message ->
+                retainedStore.findMatchingMessages(topicName) { message ->
                     logger.finest { "Found matching message [${message.topicName}] for [$topicName] [${Utils.getCurrentFunctionName()}]" }
                     counter++
                     callback(message)
-                    if (maxRetainedMessagesSentToClient > 0 && counter > maxRetainedMessagesSentToClient) {
+                    if (max > 0 && counter > max) {
                         logger.warning("Maximum messages sent [${Utils.getCurrentFunctionName()}]")
                         false
                     } else true
