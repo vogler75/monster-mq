@@ -7,9 +7,8 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import java.sql.*
 import java.time.Instant
-import java.util.logging.Logger
 
-class MessageStorePostgres(
+class LastValueStorePostgres(
     private val name: String,
     private val url: String,
     private val username: String,

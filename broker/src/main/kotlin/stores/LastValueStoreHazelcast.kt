@@ -10,9 +10,8 @@ import io.vertx.core.json.JsonArray
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.Callable
-import java.util.logging.Logger
 
-class MessageStoreHazelcast(
+class LastValueStoreHazelcast(
     private val name: String,
     private val hazelcast: HazelcastInstance
 ): AbstractVerticle(), IMessageStore {

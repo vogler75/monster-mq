@@ -6,7 +6,6 @@ package at.rocworks
 
 import at.rocworks.data.*
 import at.rocworks.stores.*
-import com.github.f4b6a3.uuid.UuidCreator
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
@@ -108,12 +107,12 @@ fun main(args: Array<String>) {
         fun getMessageStore(vertx: Vertx, name: String, clusterManager: ClusterManager?): IMessageStore
                 = when (retainedMessageStoreType) {
             MessageStoreType.MEMORY -> {
-                val store = MessageStoreMemory(name)
+                val store = LastValueStoreMemory(name)
                 vertx.deployVerticle(store)
                 store
             }
             MessageStoreType.POSTGRES -> {
-                val store = MessageStorePostgres(
+                val store = LastValueStorePostgres(
                     name = name,
                     url = postgresUrl,
                     username = postgresUser,
@@ -125,7 +124,7 @@ fun main(args: Array<String>) {
             }
             MessageStoreType.HAZELCAST -> {
                 if (clusterManager is HazelcastClusterManager) {
-                    val store = MessageStoreHazelcast(name, clusterManager.hazelcastInstance)
+                    val store = LastValueStoreHazelcast(name, clusterManager.hazelcastInstance)
                     vertx.deployVerticle(store)
                     store
                 } else {

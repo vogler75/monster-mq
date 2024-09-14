@@ -7,9 +7,8 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
 import java.util.concurrent.Callable
-import java.util.logging.Logger
 
-class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessageStore {
+class LastValueStoreMemory(private val name: String): AbstractVerticle(), IMessageStore {
     private val logger = Utils.getLogger(this::class.java, name)
 
     private val index = TopicTree<Void, Void>()
