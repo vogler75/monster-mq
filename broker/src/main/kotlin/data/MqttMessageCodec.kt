@@ -2,6 +2,7 @@ package at.rocworks.data
 
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.MessageCodec
+import java.time.Instant
 
 class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
 
@@ -19,6 +20,7 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
         buffer.appendByte(if (s.isRetain) 1 else 0.toByte())
         addString(s.topicName)
         addString(s.clientId)
+        buffer.appendLong(s.time.toEpochMilli())
         buffer.appendBuffer(Buffer.buffer(s.payload))
     }
 
@@ -44,6 +46,8 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
         position += 1
         val topicName = readString()
         val clientId = readString()
+        val time = buffer.getLong(position)
+        position += 8
         val payload = buffer.slice(position, buffer.length())
 
         return MqttMessage(
@@ -54,7 +58,8 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
             qos,
             isRetain,
             isDup,
-            clientId
+            clientId,
+            Instant.ofEpochMilli(time)
         )
     }
 

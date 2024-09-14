@@ -9,6 +9,7 @@ import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.MqttWill
 import io.vertx.mqtt.messages.MqttPublishMessage
 import java.io.Serializable
+import java.time.Instant
 
 class MqttMessage(
     val messageUuid: String ,
@@ -18,7 +19,8 @@ class MqttMessage(
     val qosLevel: Int,
     val isRetain: Boolean,
     val isDup: Boolean,
-    val clientId: String
+    val clientId: String,
+    val time: Instant = Instant.now(),
     // TODO: Properties for MQTT 5.0
 ): Serializable {
     constructor(clientId: String, message: MqttPublishMessage): this(
@@ -47,6 +49,15 @@ class MqttMessage(
     fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, clientId)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
+    fun getPayloadAsJson(): String? {
+        return try {
+            val jsonString = String(payload)
+            io.vertx.core.json.JsonObject(jsonString)
+            jsonString
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     private fun getQoS(): MqttQoS = MqttQoS.valueOf(qosLevel)
 

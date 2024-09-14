@@ -13,7 +13,9 @@ import kotlin.concurrent.thread
 
 class MessageHandler(
     private val retainedStore: IMessageStore,
-    private val lastValueStore: IMessageStore?
+    private val retainedStoreHistory: Boolean,
+    private val lastValueStore: IMessageStore?,
+    private val lastValueStoreHistory: Boolean
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -29,14 +31,18 @@ class MessageHandler(
 
     override fun start() {
         logger.info("Start handler [${Utils.getCurrentFunctionName()}]")
-        writerThread("RetainedAddQueue", retainedAddQueue, retainedStore::addAll)
-        writerThread("RetainedDelQueue", retainedDelQueue, retainedStore::delAll)
-        if (lastValueStore != null) writerThread("LastValueQueue", lastValueQueue, lastValueStore::addAll)
+        writerThread("RA", retainedAddQueue, retainedStore::addAll)
+        writerThread("RD", retainedDelQueue, retainedStore::delAll)
+        writerThread("RH", retainedAddQueue, retainedStore::addAllHistory)
+        if (lastValueStore != null) {
+            writerThread("LV", lastValueQueue, lastValueStore::addAll)
+            writerThread("HV", lastValueQueue, lastValueStore::addAllHistory)
+        }
     }
 
     private fun writerThread(name: String, queue: ArrayBlockingQueue<MqttMessage>, execute: (List<MqttMessage>)->Unit)
     = thread(start = true) {
-        logger.info("Start thread [${Utils.getCurrentFunctionName()}]")
+        logger.info("Start [$name] thread [${Utils.getCurrentFunctionName()}]")
         vertx.setPeriodic(1000) {
             if (queue.size > 0)
                 logger.info("Queue [$name] size [${queue.size}] [${Utils.getCurrentFunctionName()}]")
@@ -65,8 +71,12 @@ class MessageHandler(
             try {
                 if (message.payload.isEmpty())
                     retainedDelQueue.add(message)
-                else
+                else {
                     retainedAddQueue.add(message)
+                    if (retainedStoreHistory) {
+                        retainedAddQueue.add(message)
+                    }
+                }
             } catch (e: IllegalStateException) {
                 // TODO: Alert when queue is full
             }
@@ -74,6 +84,9 @@ class MessageHandler(
         if (lastValueStore != null) {
             try {
                 lastValueQueue.add(message)
+                if (lastValueStoreHistory) {
+                    lastValueQueue.add(message)
+                }
             } catch (e: IllegalStateException) {
                 // TODO: Alert when queue is full
             }

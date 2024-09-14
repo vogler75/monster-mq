@@ -6,10 +6,10 @@ TCP: true
 SessionStoreType: POSTGRES
 
 RetainedMessageStoreType: POSTGRES
-RetainedMessageStoreJson: true
+RetainedMessageStoreArch: true
 
 LastValueMessageStoreType: POSTGRES
-LastValueMessageStoreJson: true
+LastValueMessageStoreArch: true
 
 #Kafka:
 #  Servers: linux0:9092

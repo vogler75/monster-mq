@@ -70,12 +70,12 @@ fun main(args: Array<String>) {
         val retainedMessageStoreType: MessageStoreType = MessageStoreType.valueOf(
             config.getString("RetainedMessageStoreType", "MEMORY")
         )
-        val retainedMessageStoreJson = config.getBoolean("RetainedMessageStoreJson", false)
+        val retainedMessageStoreArch = config.getBoolean("RetainedMessageStoreArch", false)
 
         val lastValueMessageStoreType = MessageStoreType.valueOf(
             config.getString("LastValueMessageStoreType", "NONE")
         )
-        val lastValueMessageStoreJson = config.getBoolean("LastValueMessageStoreJson", false)
+        val lastValueMessageStoreArch = config.getBoolean("LastValueMessageStoreArch", false)
 
         val postgres = config.getJsonObject("Postgres", JsonObject())
 
@@ -115,7 +115,6 @@ fun main(args: Array<String>) {
             vertx: Vertx,
             name: String,
             storeType: MessageStoreType,
-            storeJson: Boolean,
             clusterManager: ClusterManager?
         ): IMessageStore?
         = when (storeType) {
@@ -130,8 +129,7 @@ fun main(args: Array<String>) {
                     name = name,
                     url = postgresUrl,
                     username = postgresUser,
-                    password = postgresPass,
-                    storeJson = storeJson
+                    password = postgresPass
                 )
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options)
@@ -158,15 +156,18 @@ fun main(args: Array<String>) {
         val retainedStore = getMessageStore(vertx,
             "RetainedMessages",
             retainedMessageStoreType,
-            retainedMessageStoreJson,
             clusterManager)
         val lastValueStore = getMessageStore(vertx,
             "LastValueMessages",
             lastValueMessageStoreType,
-            lastValueMessageStoreJson,
             clusterManager)
 
-        val messageHandler = MessageHandler(retainedStore!!, lastValueStore)
+        val messageHandler = MessageHandler(
+            retainedStore!!,
+            retainedMessageStoreArch,
+            lastValueStore,
+            lastValueMessageStoreArch
+        )
 
         val distributors = mutableListOf<Distributor>()
         val servers = mutableListOf<MqttServer>()

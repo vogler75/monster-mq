@@ -12,10 +12,11 @@ class MessageStorePostgres(
     private val name: String,
     private val url: String,
     private val username: String,
-    private val password: String,
-    private val storeJson: Boolean
+    private val password: String
 ): AbstractVerticle(), IMessageStore {
     private val logger = Utils.getLogger(this::class.java, name)
+    private val tableName = "${name}"
+    private val tableNameHistory = "${name}history"
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -26,17 +27,30 @@ class MessageStorePostgres(
             try {
                 val statement: Statement = connection.createStatement()
                 statement.executeUpdate("""
-                CREATE TABLE IF NOT EXISTS $name (
+                CREATE TABLE IF NOT EXISTS $tableName (
                     topic text[] PRIMARY KEY,
+                    time TIMESTAMPTZ,                    
+                    payload BYTEA,
+                    payload_json JSONB,
+                    qos INT,
+                    client_id VARCHAR(65535), 
+                    message_uuid VARCHAR(36)
+                )
+                """.trimIndent())
+                statement.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS $tableNameHistory (
+                    topic text[],
+                    time TIMESTAMPTZ,                    
                     payload BYTEA,
                     payload_json JSONB,
                     qos INT,
                     client_id VARCHAR(65535), 
                     message_uuid VARCHAR(36),
-                    time TIMESTAMPTZ
+                    PRIMARY KEY (topic, time)
                 )
                 """.trimIndent())
-                logger.info("Table [$name] is ready [${Utils.getCurrentFunctionName()}]")
+                statement.executeUpdate("CREATE INDEX IF NOT EXISTS ${tableNameHistory}_time_idx ON $tableNameHistory (time);")
+                logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
             } catch (e: Exception) {
                 logger.severe("Error in creating table [$name]: ${e.message} [${Utils.getCurrentFunctionName()}]")
             }
@@ -53,7 +67,7 @@ class MessageStorePostgres(
     override fun get(topicName: String): MqttMessage? {
         try {
             db.connection?.let { connection ->
-                val sql = "SELECT payload, qos, client_id, message_uuid FROM $name WHERE topic = ?"
+                val sql = "SELECT payload, qos, client_id, message_uuid FROM $tableName WHERE topic = ?"
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 val topicLevels = Utils.getTopicLevels(topicName).toTypedArray()
                 preparedStatement.setArray(1, connection.createArrayOf("text", topicLevels))
@@ -84,17 +98,15 @@ class MessageStorePostgres(
     }
 
     override fun addAll(messages: List<MqttMessage>) {
-        val rows: MutableList<Pair<Array<String>, ByteArray>> = ArrayList()
-
-        val sql = "INSERT INTO $name (topic, payload, payload_json, qos, time, client_id, message_uuid) "+
-                   "VALUES (?, ?, ?::JSONB, ?, ?, ?, ?) "+
+        val sql = "INSERT INTO $tableName (topic, time, payload, payload_json, qos, client_id, message_uuid) "+
+                   "VALUES (?, ?, ?, ?::JSONB, ?, ?, ?) "+
                    "ON CONFLICT (topic) DO UPDATE "+
-                   "SET payload = EXCLUDED.payload, "+
+                   "SET time = EXCLUDED.time, "+
+                   "payload = EXCLUDED.payload, "+
                    "payload_json = EXCLUDED.payload_json, "+
                    "qos = EXCLUDED.qos, "+
                    "client_id = EXCLUDED.client_id, "+
-                   "message_uuid = EXCLUDED.message_uuid, "+
-                   "time = EXCLUDED.time"
+                   "message_uuid = EXCLUDED.message_uuid "
 
         try {
             db.connection?.let { connection ->
@@ -102,12 +114,11 @@ class MessageStorePostgres(
 
                 messages.forEach { message ->
                     val topic = Utils.getTopicLevels(message.topicName).toTypedArray()
-                    val jsonValue = if (storeJson) Utils.getJson(message.payload) else null
                     preparedStatement.setArray(1, connection.createArrayOf("text", topic))
-                    preparedStatement.setBytes(2, message.payload)
-                    preparedStatement.setString(3, jsonValue)
-                    preparedStatement.setInt(4, message.qosLevel)
-                    preparedStatement.setTimestamp(5, Timestamp.from(Instant.now()))
+                    preparedStatement.setTimestamp(2, Timestamp.from(Instant.now()))
+                    preparedStatement.setBytes(3, message.payload)
+                    preparedStatement.setString(4, message.getPayloadAsJson())
+                    preparedStatement.setInt(5, message.qosLevel)
                     preparedStatement.setString(6, message.clientId)
                     preparedStatement.setString(7, message.messageUuid)
                     preparedStatement.addBatch()
@@ -128,7 +139,7 @@ class MessageStorePostgres(
             rows.add(levels)
         }
 
-        val sql = "DELETE FROM $name WHERE topic = ? "
+        val sql = "DELETE FROM $tableName WHERE topic = ? "
 
         try {
             db.connection?.let { connection ->
@@ -147,6 +158,41 @@ class MessageStorePostgres(
         }
     }
 
+    override fun addAllHistory(messages: List<MqttMessage>) {
+        val sql = "INSERT INTO $tableNameHistory (topic, time, payload, payload_json, qos, client_id, message_uuid) "+
+                   "VALUES (?, ?, ?, ?::JSONB, ?, ?, ?) "+
+                   "ON CONFLICT (topic, time) DO UPDATE "+
+                   "SET payload = EXCLUDED.payload, "+
+                   "payload_json = EXCLUDED.payload_json, "+
+                   "qos = EXCLUDED.qos, "+
+                   "client_id = EXCLUDED.client_id, "+
+                   "message_uuid = EXCLUDED.message_uuid"
+
+        try {
+            db.connection?.let { connection ->
+                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
+
+                messages.forEach { message ->
+                    val topic = Utils.getTopicLevels(message.topicName).toTypedArray()
+                    preparedStatement.setArray(1, connection.createArrayOf("text", topic))
+                    preparedStatement.setTimestamp(2, Timestamp.from(Instant.now()))
+                    preparedStatement.setBytes(3, message.payload)
+                    preparedStatement.setString(4, message.getPayloadAsJson())
+                    preparedStatement.setInt(5, message.qosLevel)
+                    preparedStatement.setString(6, message.clientId)
+                    preparedStatement.setString(7, message.messageUuid)
+                    preparedStatement.addBatch()
+                }
+
+                preparedStatement.executeBatch()
+                logger.finest { "Batch insert successful [${Utils.getCurrentFunctionName()}]" }
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error inserting batch data [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
+
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
         val topicLevels = Utils.getTopicLevels(topicName).mapIndexed { index, level ->
             when (level) {
@@ -159,7 +205,7 @@ class MessageStorePostgres(
         try {
             db.connection?.let { connection ->
                 val where = topicLevels.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
-                val sql = "SELECT array_to_string(topic, '/'), payload, qos, client_id, message_uuid FROM $name WHERE $where"
+                val sql = "SELECT array_to_string(topic, '/'), payload, qos, client_id, message_uuid FROM $tableName WHERE $where"
                 logger.finest { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 topicLevels.forEachIndexed { index, level ->

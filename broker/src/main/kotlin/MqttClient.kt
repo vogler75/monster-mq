@@ -384,7 +384,7 @@ class MqttClient(
                         inFlightMessage.lastTryTime = Instant.now()
                         inFlightMessage.retryCount++
                         when (inFlightMessage.stage) {
-                            1 -> endpoint.let { inFlightMessage.message.publish(it) }
+                            1 -> endpoint.let { inFlightMessage.message.publish(it) } // TODO: set isDup to true
                             2 -> endpoint.publishReceived(inFlightMessage.message.messageId)
                             else -> logger.warning { "Client [$clientId] Subscribe: unknown stage [${inFlightMessage.stage}] for message [${inFlightMessage.message.messageId}] [${Utils.getCurrentFunctionName()}]" }
                         }

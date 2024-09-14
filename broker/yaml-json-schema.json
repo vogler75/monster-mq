@@ -34,7 +34,7 @@
       "type": "string",
       "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
     },
-    "RetainedMessageStoreJson": {
+    "RetainedMessageStoreArch": {
       "type": "boolean",
       "default": false
     },
@@ -42,7 +42,7 @@
       "type": "string",
       "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
     },
-    "LastValueMessageStoreJson": {
+    "LastValueMessageStoreArch": {
       "type": "boolean",
       "default": false
     },

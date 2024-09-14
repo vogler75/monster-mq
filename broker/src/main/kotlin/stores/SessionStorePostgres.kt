@@ -80,8 +80,8 @@ class SessionStorePostgres(
 
                 // Create the index on the topic column
                 val createIndexesSQL = listOf(
-                    "CREATE INDEX IF NOT EXISTS idx_topic ON $subscriptionsTableName (topic);",
-                    "CREATE INDEX IF NOT EXISTS idx_wildcard ON $subscriptionsTableName (wildcard) WHERE wildcard = TRUE;"
+                    "CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_topic_idx ON $subscriptionsTableName (topic);",
+                    "CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_wildcard_idx ON $subscriptionsTableName (wildcard) WHERE wildcard = TRUE;"
                 )
 
                 // Execute the SQL statements
@@ -110,9 +110,9 @@ class SessionStorePostgres(
         db.start(vertx, startPromise)
         startPromise.future().onSuccess {
             vertx.executeBlocking(Callable { purgeQueuedMessages() }).onComplete {
-                //vertx.setPeriodic(60_000) {
-                //    vertx.executeBlocking(Callable { purgeQueuedMessages() })
-                //}
+                vertx.setPeriodic(60_000) {
+                    vertx.executeBlocking(Callable { purgeQueuedMessages() })
+                }
             }
         }
     }
