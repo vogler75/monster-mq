@@ -18,6 +18,7 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
         buffer.appendByte(if (s.isDup) 1 else 0.toByte())
         buffer.appendByte(if (s.isRetain) 1 else 0.toByte())
         addString(s.topicName)
+        addString(s.clientId)
         buffer.appendBuffer(Buffer.buffer(s.payload))
     }
 
@@ -42,6 +43,7 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
         val isRetain = (buffer.getByte(position)) == 1.toByte()
         position += 1
         val topicName = readString()
+        val clientId = readString()
         val payload = buffer.slice(position, buffer.length())
 
         return MqttMessage(
@@ -52,6 +54,7 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
             qos,
             isRetain,
             isDup,
+            clientId
         )
     }
 

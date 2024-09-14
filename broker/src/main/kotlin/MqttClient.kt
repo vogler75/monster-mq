@@ -218,18 +218,18 @@ class MqttClient(
         when (message.qosLevel()) {
             MqttQoS.AT_MOST_ONCE -> { // Level 0
                 logger.finest { "Client [$clientId] Publish: no acknowledge needed [${Utils.getCurrentFunctionName()}]" }
-                distributor.publishMessage(MqttMessage(message))
+                distributor.publishMessage(MqttMessage(clientId, message))
             }
             MqttQoS.AT_LEAST_ONCE -> { // Level 1
                 logger.finest { "Client [$clientId] Publish: sending acknowledge for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
-                distributor.publishMessage(MqttMessage(message))
+                distributor.publishMessage(MqttMessage(clientId, message))
                 // TODO: check the result of the publishMessage and send the acknowledge only if the message was delivered
                 endpoint.publishAcknowledge(message.messageId())
             }
             MqttQoS.EXACTLY_ONCE -> { // Level 2
                 logger.finest { "Client [$clientId] Publish: sending received for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
                 endpoint.publishReceived(message.messageId())
-                inFlightMessagesRcv[message.messageId()] = InFlightMessage(MqttMessage(message))
+                inFlightMessagesRcv[message.messageId()] = InFlightMessage(MqttMessage(clientId, message))
             }
             else -> {
                 logger.warning { "Client [$clientId] Publish: unknown QoS level [${message.qosLevel()}] [${Utils.getCurrentFunctionName()}]" }
@@ -409,7 +409,7 @@ class MqttClient(
         logger.info("Client [$clientId] Sending Last-Will message [${Utils.getCurrentFunctionName()}]")
         endpoint.will()?.let { will ->
             if (will.isWillFlag) {
-                distributor.publishMessage(MqttMessage(will))
+                distributor.publishMessage(MqttMessage(clientId, will))
             }
         }
     }

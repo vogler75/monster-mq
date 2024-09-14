@@ -6,6 +6,7 @@ package at.rocworks
 
 import at.rocworks.data.*
 import at.rocworks.stores.*
+import com.github.f4b6a3.uuid.UuidCreator
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions

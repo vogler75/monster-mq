@@ -67,8 +67,9 @@ class SessionStorePostgres(
                     topic TEXT,                    
                     payload BYTEA,
                     qos INT,
+                    client_id VARCHAR(65535), 
                     PRIMARY KEY (message_uuid)
-                );
+                );             
                 """.trimIndent(), """
                 CREATE TABLE IF NOT EXISTS $queuedMessagesClientsTableName (
                     client_id VARCHAR(65535),                
@@ -319,7 +320,7 @@ class SessionStorePostgres(
 
     override fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>) {
         val sql1 = "INSERT INTO $queuedMessagesTableName "+
-                   "(message_uuid, message_id, topic, payload, qos) VALUES (?, ?, ?, ?, ?) "+
+                   "(message_uuid, message_id, topic, payload, qos, client_id) VALUES (?, ?, ?, ?, ?, ?) "+
                    "ON CONFLICT (message_uuid) DO NOTHING"
         val sql2 = "INSERT INTO $queuedMessagesClientsTableName "+
                    "(client_id, message_uuid) VALUES (?, ?) "+
@@ -330,18 +331,18 @@ class SessionStorePostgres(
                 val preparedStatement2: PreparedStatement = connection.prepareStatement(sql2)
                 messages.forEach { message ->
                     // Add message
-                    val messageUuid = UUID.randomUUID().toString()
-                    preparedStatement1.setObject(1, messageUuid)
+                    preparedStatement1.setObject(1, message.first.messageUuid)
                     preparedStatement1.setInt(2, message.first.messageId)
                     preparedStatement1.setString(3, message.first.topicName)
                     preparedStatement1.setBytes(4, message.first.payload)
                     preparedStatement1.setInt(5, message.first.qosLevel)
+                    preparedStatement1.setString(6, message.first.clientId)
                     preparedStatement1.addBatch()
 
                     // Add client to message relation
                     message.second.forEach { clientId ->
                         preparedStatement2.setString(1, clientId)
-                        preparedStatement2.setString(2, messageUuid)
+                        preparedStatement2.setString(2, message.first.messageUuid)
                         preparedStatement2.addBatch()
                     }
                 }
@@ -360,9 +361,10 @@ class SessionStorePostgres(
                   "AND client_id = ? "+
                   "RETURNING message_id, topic, payload, qos"
         */
-        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos "+
+        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.client_id "+
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) "+
-                  "WHERE c.client_id = ?"
+                  "WHERE c.client_id = ? "+
+                  "ORDER BY m.message_uuid" // Time Based UUIDs
         try {
             db.connection?.let { connection ->
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
@@ -374,6 +376,7 @@ class SessionStorePostgres(
                     val topic = resultSet.getString(3)
                     val payload = resultSet.getBytes(4)
                     val qos = resultSet.getInt(5)
+                    val clientId = resultSet.getString(6)
                     callback(MqttMessage(
                         messageUuid = messageUuid,
                         messageId = messageId,
@@ -381,7 +384,8 @@ class SessionStorePostgres(
                         payload = payload,
                         qosLevel = qos,
                         isRetain = false,
-                        isDup = false
+                        isDup = false,
+                        clientId = clientId
                     ))
                 }
             }

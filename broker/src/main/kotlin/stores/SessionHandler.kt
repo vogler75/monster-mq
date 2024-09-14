@@ -102,7 +102,7 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     fun setLastWill(clientId: String, will: MqttWill) {
         if (will.isWillFlag) {
             val topic = will.willTopic
-            val message = MqttMessage(will)
+            val message = MqttMessage(clientId, will)
             store.setLastWill(clientId, message)
         } else {
             store.setLastWill(clientId, null)

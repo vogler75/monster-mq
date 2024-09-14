@@ -30,7 +30,9 @@ class MessageStorePostgres(
                     topic text[] PRIMARY KEY,
                     payload BYTEA,
                     qos INT,
-                    time TIMESTAMPTZ
+                    client_id VARCHAR(65535), 
+                    time TIMESTAMPTZ,
+                    message_uuid VARCHAR(36)
                 )
                 """.trimIndent())
                 logger.info("Table [$name] is ready [${Utils.getCurrentFunctionName()}]")
@@ -50,7 +52,7 @@ class MessageStorePostgres(
     override fun get(topicName: String): MqttMessage? {
         try {
             db.connection?.let { connection ->
-                val sql = "SELECT payload, qos FROM $name WHERE topic = ?"
+                val sql = "SELECT payload, qos, client_id, message_uuid FROM $name WHERE topic = ?"
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 val topicLevels = Utils.getTopicLevels(topicName).toTypedArray()
                 preparedStatement.setArray(1, connection.createArrayOf("text", topicLevels))
@@ -60,11 +62,17 @@ class MessageStorePostgres(
                 if (resultSet.next()) {
                     val payload = resultSet.getBytes(1)
                     val qos = resultSet.getInt(2)
+                    val clientId = resultSet.getString(3)
+                    val messageUuid = resultSet.getString(4)
                     return MqttMessage(
+                        messageUuid = messageUuid,
+                        messageId = 0,
                         topicName = topicName,
                         payload = payload,
                         qosLevel = qos,
-                        isRetain = true
+                        isRetain = true,
+                        clientId = clientId,
+                        isDup = false
                     )
                 }
             }
@@ -77,9 +85,13 @@ class MessageStorePostgres(
     override fun addAll(messages: List<MqttMessage>) {
         val rows: MutableList<Pair<Array<String>, ByteArray>> = ArrayList()
 
-        val sql = "INSERT INTO $name (topic, payload, qos, time) VALUES (?, ?, ?, ?) "+
+        val sql = "INSERT INTO $name (topic, payload, qos, time, client_id, message_uuid) VALUES (?, ?, ?, ?, ?, ?) "+
                    "ON CONFLICT (topic) DO UPDATE "+
-                   "SET payload = EXCLUDED.payload, qos = EXCLUDED.qos, time = EXCLUDED.time"
+                   "SET payload = EXCLUDED.payload, "+
+                   "qos = EXCLUDED.qos, "+
+                   "client_id = EXCLUDED.client_id, "+
+                   "message_uuid = EXCLUDED.message_uuid, "+
+                   "time = EXCLUDED.time"
 
         try {
             db.connection?.let { connection ->
@@ -91,6 +103,8 @@ class MessageStorePostgres(
                     preparedStatement.setBytes(2, message.payload)
                     preparedStatement.setInt(3, message.qosLevel)
                     preparedStatement.setTimestamp(4, Timestamp.from(Instant.now()))
+                    preparedStatement.setString(5, message.clientId)
+                    preparedStatement.setString(6, message.messageUuid)
                     preparedStatement.addBatch()
                 }
 
@@ -140,7 +154,7 @@ class MessageStorePostgres(
         try {
             db.connection?.let { connection ->
                 val where = topicLevels.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
-                val sql = "SELECT array_to_string(topic, '/'), payload, qos FROM $name WHERE $where"
+                val sql = "SELECT array_to_string(topic, '/'), payload, qos, client_id, message_uuid FROM $name WHERE $where"
                 logger.finest { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
                 topicLevels.forEachIndexed { index, level ->
@@ -151,11 +165,17 @@ class MessageStorePostgres(
                     val topic = resultSet.getString(1)
                     val payload = resultSet.getBytes(2)
                     val qos = resultSet.getInt(3)
+                    val clientId = resultSet.getString(4)
+                    val messageUuid = resultSet.getString(5)
                     val message = MqttMessage(
+                        messageUuid = messageUuid,
+                        messageId = 0,
                         topicName = topic,
                         payload = payload,
                         qosLevel = qos,
-                        isRetain = true
+                        isRetain = true,
+                        isDup = false,
+                        clientId = clientId
                     )
                     callback(message)
                 }

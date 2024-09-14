@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 
 # MQTT settings
-BROKER = 'linux2'
+BROKER = 'localhost'
 PORT = 1883
 TOPIC = 'test/broadcast'
 CLIENT_ID = "python-simple-subscriber"
@@ -37,7 +37,7 @@ def on_message(client, userdata, msg):
 
 
 # Create an MQTT client instance
-client = mqtt.Client(client_id=CLIENT_ID, clean_session=True)
+client = mqtt.Client(client_id=CLIENT_ID, clean_session=False)
 
 # Assign the callback functions
 client.on_connect = on_connect

@@ -11,6 +11,6 @@ RetainedMessageStoreType: POSTGRES
 #  Topic: monster
 
 Postgres:
-  Url: jdbc:postgresql://192.168.1.30:5432/postgres
+  Url: jdbc:postgresql://192.168.1.30:5432/test
   User: system
   Pass: manager

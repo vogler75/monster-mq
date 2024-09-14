@@ -1,5 +1,6 @@
 package at.rocworks
 
+import com.github.f4b6a3.uuid.UuidCreator
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import io.vertx.core.Future
@@ -42,9 +43,8 @@ object Utils {
     fun addTopicLevel(topicName: String, level: String) = "$topicName/$level"
     fun isWildCardTopic(topicName: String) = topicName.any { it == '#' || it == '+' } // TODO: check if this is faster then: topicName.contains("#") || topicName.contains("+")
 
-    fun getCurrentFunctionName(): String {
-        return Thread.currentThread().stackTrace[2].methodName
-    }
+    fun getCurrentFunctionName(): String = Thread.currentThread().stackTrace[2].methodName
+    fun getUuid(): String = UuidCreator.getTimeOrdered().toString()
 
     fun <K,V> getMap(vertx: Vertx, name: String): Future<AsyncMap<K, V>> {
         val promise = Promise.promise<AsyncMap<K, V>>()
