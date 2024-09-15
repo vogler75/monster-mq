@@ -76,7 +76,7 @@ class MessageHandler(
     = thread(start = true) {
         logger.info("Start [$name] thread [${Utils.getCurrentFunctionName()}]")
         vertx.setPeriodic(1000) {
-            if (queue.size > 0)
+            if (queue.size > 100) // TODO: configurable
                 logger.info("Queue [$name] size [${queue.size}] [${Utils.getCurrentFunctionName()}]")
         }
 
