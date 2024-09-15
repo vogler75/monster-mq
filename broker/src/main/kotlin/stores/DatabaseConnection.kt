@@ -49,12 +49,11 @@ abstract class DatabaseConnection(
         try {
             logger.info("Connect to database [${Utils.getCurrentFunctionName()}]")
             DriverManager.getConnection(url, username, password)
-                ?.let {
-                    it.autoCommit = true
-                    connection = it
+                ?.let { connection ->
+                    connection.autoCommit = true
+                    this.connection = connection
                     logger.info("Connection established [${Utils.getCurrentFunctionName()}]")
-                    init(it)
-                    promise.complete()
+                    init(connection).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 }
         } catch (e: Exception) {
             logger.warning("Error opening connection [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -65,12 +64,16 @@ abstract class DatabaseConnection(
 
     private fun check(): Boolean {
         if (connection != null && !connection!!.isClosed) {
-            connection!!.prepareStatement("SELECT 1").use { stmt ->
-                stmt.executeQuery().use { rs ->
-                    if (rs.next()) {
-                        return true // Connection is good
+            try {
+                connection!!.prepareStatement("SELECT 1").use { stmt ->
+                    stmt.executeQuery().use { rs ->
+                        if (rs.next()) {
+                            return true // Connection is good
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                logger.warning("Error checking connection [${e.message}] [${Utils.getCurrentFunctionName()}]")
             }
         }
         return false
@@ -89,5 +92,5 @@ abstract class DatabaseConnection(
         }
     }
 
-    abstract fun init(connection: Connection)
+    abstract fun init(connection: Connection): Future<Void>
 }

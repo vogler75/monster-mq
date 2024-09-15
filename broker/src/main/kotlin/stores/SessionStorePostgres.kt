@@ -11,7 +11,6 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import java.sql.*
-import java.util.UUID
 import java.util.concurrent.Callable
 
 class SessionStorePostgres(
@@ -32,13 +31,11 @@ class SessionStorePostgres(
         logger.level = Const.DEBUG_LEVEL
     }
 
-    private val readyPromise: Promise<Void> = Promise.promise()
-    override fun storeReady(): Future<Void> = readyPromise.future()
-
     override fun getType(): SessionStoreType = SessionStoreType.POSTGRES
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
-        override fun init(connection: Connection) {
+        override fun init(connection: Connection): Future<Void> {
+            val promise = Promise.promise<Void>()
             try {
                 val createTableSQL = listOf("""
                  CREATE TABLE IF NOT EXISTS $sessionsTableName (
@@ -98,11 +95,12 @@ class SessionStorePostgres(
                 }
 
                 logger.info("Tables are ready [${Utils.getCurrentFunctionName()}]")
-                readyPromise.complete()
+                promise.complete()
             } catch (e: Exception) {
                 logger.severe("Error in getting tables ready: ${e.message} [${Utils.getCurrentFunctionName()}]")
-                readyPromise.fail(e)
+                promise.fail(e)
             }
+            return promise.future()
         }
     }
 

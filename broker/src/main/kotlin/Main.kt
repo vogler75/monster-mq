@@ -17,7 +17,6 @@ import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
 
-
 fun main(args: Array<String>) {
     Utils.initLogging()
 
@@ -102,13 +101,16 @@ fun main(args: Array<String>) {
             return distributor
         }
 
-        fun getSessionStore(vertx: Vertx): ISessionStore = when (sessionStoreType) {
-            SessionStoreType.POSTGRES -> {
-                val table = SessionStorePostgres(postgresUrl, postgresUser, postgresPass)
-                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(table, options)
-                table
+        fun getSessionStore(vertx: Vertx): Future<ISessionStore> {
+            val promise = Promise.promise<ISessionStore>()
+            when (sessionStoreType) {
+                SessionStoreType.POSTGRES -> {
+                    val store = SessionStorePostgres(postgresUrl, postgresUser, postgresPass)
+                    val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                }
             }
+            return promise.future()
         }
 
         fun getMessageStore(
@@ -150,50 +152,32 @@ fun main(args: Array<String>) {
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
-        val subscriptionStore = getSessionStore(vertx)
-        val sessionHandler = SessionHandler(subscriptionStore)
+        getSessionStore(vertx).onSuccess { sessionStore ->
+            val retainedStore = getMessageStore(vertx, "RetainedMessages", retainedMessageStoreType, clusterManager)
+            val lastValueStore = getMessageStore(vertx, "LastValueMessages", lastValueMessageStoreType, clusterManager)
+            val messageHandler = MessageHandler(retainedStore!!, retainedMessageStoreArch, lastValueStore, lastValueMessageStoreArch)
+            val sessionHandler = SessionHandler(sessionStore)
+            val distributor = getDistributor(sessionHandler, messageHandler)
+            val servers = listOfNotNull(
+                if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
+                if (useWs) MqttServer(usePort, useSsl, true, distributor) else null
+            )
 
-        val retainedStore = getMessageStore(vertx,
-            "RetainedMessages",
-            retainedMessageStoreType,
-            clusterManager)
-        val lastValueStore = getMessageStore(vertx,
-            "LastValueMessages",
-            lastValueMessageStoreType,
-            clusterManager)
-
-        val messageHandler = MessageHandler(
-            retainedStore!!,
-            retainedMessageStoreArch,
-            lastValueStore,
-            lastValueMessageStoreArch
-        )
-
-        val distributors = mutableListOf<Distributor>()
-        val servers = mutableListOf<MqttServer>()
-
-        repeat(1) {
-            getDistributor(sessionHandler, messageHandler).let { distributor ->
-                distributors.add(distributor)
-                servers.addAll(listOfNotNull(
-                    if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
-                    if (useWs) MqttServer(usePort, useSsl, true, distributor) else null,
-                ))
-            }
+            Future.succeededFuture<String>()
+                .compose { vertx.deployVerticle(messageHandler) }
+                .compose { vertx.deployVerticle(sessionHandler) }
+                .compose { vertx.deployVerticle(distributor) }
+                .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
+                .onFailure {
+                    logger.severe("Startup error: ${it.message}")
+                    exitProcess(-1)
+                }
+                .onComplete {
+                    logger.info("The Monster is ready.")
+                }
+        }.onFailure {
+            logger.severe("Session store creation failed: ${it.message}")
         }
-
-        Future.succeededFuture<String>()
-            .compose { vertx.deployVerticle(messageHandler) }
-            .compose { vertx.deployVerticle(sessionHandler) }
-            .compose { Future.all(distributors.map { vertx.deployVerticle(it) }) }
-            .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
-            .onFailure {
-                logger.severe("Startup error: ${it.message}")
-                exitProcess(-1)
-            }
-            .onComplete {
-                logger.info("The Monster is ready.")
-            }
     }
 
     fun getConfigAndStart(vertx: Vertx, clusterManager: ClusterManager?) {

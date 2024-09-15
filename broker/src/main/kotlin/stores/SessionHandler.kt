@@ -55,14 +55,12 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
         queueWorkerThread("MsgAddQueue", messageAddQueue, 1000, store::enqueueMessages)
         queueWorkerThread("MsgDelQueue", messageDelQueue, 1000, store::removeMessages)
 
-        store.storeReady().onSuccess {
-            logger.info("Indexing subscription table [${Utils.getCurrentFunctionName()}]")
-            store.iterateSubscriptions(index::add)
-            logger.info("Indexing offline clients [${Utils.getCurrentFunctionName()}]")
-            store.iterateOfflineClients(offline::add)
-            logger.info("Session handler ready [${Utils.getCurrentFunctionName()}]")
-            startPromise.complete()
-        }
+        logger.info("Indexing subscription table [${Utils.getCurrentFunctionName()}]")
+        store.iterateSubscriptions(index::add)
+        logger.info("Indexing offline clients [${Utils.getCurrentFunctionName()}]")
+        store.iterateOfflineClients(offline::add)
+        logger.info("Session handler ready [${Utils.getCurrentFunctionName()}]")
+        startPromise.complete()
     }
 
     private fun <T> queueWorkerThread(

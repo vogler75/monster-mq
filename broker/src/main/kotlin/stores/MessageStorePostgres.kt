@@ -4,6 +4,7 @@ import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.Future
 import io.vertx.core.Promise
 import java.sql.*
 import java.time.Instant
@@ -15,7 +16,7 @@ class MessageStorePostgres(
     private val password: String
 ): AbstractVerticle(), IMessageStore {
     private val logger = Utils.getLogger(this::class.java, name)
-    private val tableName = "${name}"
+    private val tableName = name
     private val tableNameHistory = "${name}history"
 
     init {
@@ -23,7 +24,8 @@ class MessageStorePostgres(
     }
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
-        override fun init(connection: Connection) {
+        override fun init(connection: Connection): Future<Void> {
+            val promise = Promise.promise<Void>()
             try {
                 val statement: Statement = connection.createStatement()
                 statement.executeUpdate("""
@@ -54,6 +56,7 @@ class MessageStorePostgres(
             } catch (e: Exception) {
                 logger.severe("Error in creating table [$name]: ${e.message} [${Utils.getCurrentFunctionName()}]")
             }
+            return promise.future()
         }
     }
 
