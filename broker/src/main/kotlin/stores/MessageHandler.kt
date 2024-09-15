@@ -13,9 +13,9 @@ import kotlin.concurrent.thread
 
 class MessageHandler(
     private val retainedStore: IMessageStore,
-    private val retainedArchive: IMessageStore?,
+    private val retainedArchive: IMessageArchive?,
     private val lastValueStore: IMessageStore?,
-    private val lastValueArchive: IMessageStore?
+    private val lastValueArchive: IMessageArchive?
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -70,7 +70,6 @@ class MessageHandler(
             }
         }
         lastValueStore?.addAll(add)
-        lastValueArchive?.addAllHistory(list)
     }
 
     private fun <T> writerThread(name: String, queue: ArrayBlockingQueue<T>, execute: (List<T>)->Unit)

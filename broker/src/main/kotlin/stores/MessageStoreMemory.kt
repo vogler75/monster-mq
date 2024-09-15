@@ -50,10 +50,6 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
         topics.forEach { store.remove(it) } // there is no delAll
     }
 
-    override fun addAllHistory(messages: List<MqttMessage>) {
-        TODO("Not yet implemented")
-    }
-
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
         index.findMatchingTopicNames(topicName) { foundTopicName ->
             val message = store[foundTopicName]

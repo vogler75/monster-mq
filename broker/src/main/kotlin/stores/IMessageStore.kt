@@ -17,6 +17,5 @@ interface IMessageStore {
 
     fun addAll(messages: List<MqttMessage>)
     fun delAll(topics: List<String>)
-    fun addAllHistory(messages: List<MqttMessage>)
     fun findMatchingMessages(topicName: String, callback: (MqttMessage)->Boolean)
 }

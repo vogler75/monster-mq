@@ -34,17 +34,17 @@
       "type": "string",
       "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
     },
-    "RetainedMessageStoreArch": {
+    "RetainedMessageArchiveType": {
       "type": "string",
-      "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
+      "enum": ["POSTGRES"]
     },
     "LastValueMessageStoreType": {
       "type": "string",
       "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
     },
-    "LastValueMessageStoreArch": {
+    "LastValueMessageArchiveType": {
       "type": "string",
-      "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
+      "enum": ["POSTGRES"]
     },
     "SessionStoreType": {
       "type": "string",

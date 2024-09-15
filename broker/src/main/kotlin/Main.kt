@@ -67,9 +67,10 @@ fun main(args: Array<String>) {
         )
 
         val retainedMessageStoreType = MessageStoreType.valueOf(config.getString("RetainedMessageStoreType", "MEMORY"))
-        val retainedMessageStoreArch = MessageStoreType.valueOf(config.getString("RetainedMessageStoreArch", "NONE"))
         val lastValueMessageStoreType = MessageStoreType.valueOf(config.getString("LastValueMessageStoreType", "NONE"))
-        val lastValueMessageStoreArch = MessageStoreType.valueOf(config.getString("LastValueMessageStoreArch", "NONE"))
+
+        val retainedMessageArchiveType = MessageArchiveType.valueOf(config.getString("RetainedMessageArchiveType", "NONE"))
+        val lastValueMessageArchiveType = MessageArchiveType.valueOf(config.getString("LastValueMessageArchiveType", "NONE"))
 
         val postgres = config.getJsonObject("Postgres", JsonObject())
 
@@ -139,14 +140,33 @@ fun main(args: Array<String>) {
             return promise.future()
         }
 
+        fun getMessageArchive(vertx: Vertx, name: String, storeType: MessageArchiveType): Future<IMessageArchive?> {
+            val promise = Promise.promise<IMessageArchive?>()
+            when (storeType) {
+                MessageArchiveType.NONE -> null
+                MessageArchiveType.POSTGRES -> {
+                    val store = MessageArchivePostgres(
+                        name = name,
+                        url = postgresUrl,
+                        username = postgresUser,
+                        password = postgresPass
+                    )
+                    val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                }
+            }
+            return promise.future()
+        }
+
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
         getSessionStore(vertx).onSuccess { sessionStore ->
             val retainedStore = getMessageStore(vertx, "RetainedMessages", retainedMessageStoreType, clusterManager)
             val lastValueStore = getMessageStore(vertx, "LastValueMessages", lastValueMessageStoreType, clusterManager)
-            val retainedArch = getMessageStore(vertx, "RetainedMessages", retainedMessageStoreArch, clusterManager)
-            val lastValueArch = getMessageStore(vertx, "LastValueMessages", lastValueMessageStoreArch, clusterManager)
+
+            val retainedArch = getMessageArchive(vertx, "RetainedArchive", retainedMessageArchiveType)
+            val lastValueArch = getMessageArchive(vertx, "LastValueArchive", lastValueMessageArchiveType)
 
             Future.succeededFuture<Unit>()
                 .compose { retainedStore }
@@ -157,7 +177,8 @@ fun main(args: Array<String>) {
                     logger.severe("Message store creation failed: ${it.message}")
                     exitProcess(-1)
                 }
-                .onSuccess {
+                .onComplete {
+                    logger.info("Message stores are ready.")
                     val messageHandler = MessageHandler(
                         retainedStore.result()!!,
                         retainedArch.result(),
