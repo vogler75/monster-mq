@@ -30,8 +30,8 @@ public class MqttPublisher {
 
     public static void test(int nr) {
         System.out.println("Nr: "+nr);
-        String testClientId = "publisher_" + UUID.randomUUID();
-        String statClientId = "statistics_" + UUID.randomUUID(); // Second client for statistics
+        String testClientId = "publisher_" + nr;
+        String statClientId = "publisher_stats_" +nr; // Second client for statistics
 
         try {
             var broker = Config.publisherBroker[nr % Config.publisherBroker.length];

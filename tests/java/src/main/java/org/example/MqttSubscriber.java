@@ -48,7 +48,7 @@ public class MqttSubscriber {
 
     static void test(int nr) {
         String testClientId = "subscriber_" + nr; // UUID.randomUUID();
-        String statClientId = "statistics_" + nr; // UUID.randomUUID(); // Second client for statistics
+        String statClientId = "subscriber_stats_" + nr; // UUID.randomUUID(); // Second client for statistics
 
         String TOPIC = Config.topicPrefix + "/" + nr;
 

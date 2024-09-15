@@ -143,6 +143,8 @@ class MqttClient(
             information.put("LocalAddress", endpoint.localAddress().toString())
             information.put("ProtocolVersion", endpoint.protocolVersion())
             information.put("SSL", endpoint.isSsl)
+            information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
+            information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
             distributor.sessionHandler.setClient(clientId, endpoint.isCleanSession, true, information)
             distributor.sessionHandler.setLastWill(clientId, endpoint.will())
         }
@@ -166,7 +168,7 @@ class MqttClient(
 
     private fun pingHandler() {
         lastPing = Instant.now()
-        endpoint.pong()
+        //endpoint.pong() // A java clients dies when pong is sent
     }
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
