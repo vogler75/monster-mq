@@ -31,12 +31,17 @@ class MessageHandler(
 
     override fun start() {
         logger.info("Start handler [${Utils.getCurrentFunctionName()}]")
-        writerThread("RA", retainedAddQueue, retainedStore::addAll)
+        // Retained messages
+        writerThread("RA", retainedAddQueue, retainedStore::addAll) // TODO: add and remove in different threads is dangerous because of message order
         writerThread("RD", retainedDelQueue, retainedStore::delAll)
+
+        // Retained messages history
         writerThread("RH", retainedAddQueue, retainedStore::addAllHistory)
+
+        // Last value messages
         if (lastValueStore != null) {
-            writerThread("LV", lastValueQueue, lastValueStore::addAll)
-            writerThread("HV", lastValueQueue, lastValueStore::addAllHistory)
+            writerThread("LV", lastValueQueue, lastValueStore::addAll) // Last value messages
+            writerThread("HV", lastValueQueue, lastValueStore::addAllHistory) // Last value messages history
         }
     }
 
