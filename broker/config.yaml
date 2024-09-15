@@ -5,15 +5,18 @@ TCP: true
 
 SessionStoreType: POSTGRES
 
-RetainedMessageStoreType: POSTGRES
-RetainedMessageArchiveType: POSTGRES
+RetainedMessages:
+    StoreType: POSTGRES
+    ArchiveType: POSTGRES
 
-LastValueMessageStoreType: POSTGRES
-LastValueMessageArchiveType: POSTGRES
+LastValueMessages:
+    StoreType: POSTGRES
+    ArchiveType: POSTGRES
 
-#Kafka:
-#  Servers: linux0:9092
-#  Topic: monster
+Kafka:
+  Enabled: false
+  Servers: linux0:9092
+  Topic: monster
 
 Postgres:
   Url: jdbc:postgresql://192.168.1.30:5432/postgres

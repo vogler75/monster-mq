@@ -1,7 +1,7 @@
 package at.rocworks.stores
 
-import at.rocworks.Config
 import at.rocworks.Const
+import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
@@ -64,6 +64,7 @@ class SessionStorePostgres(
                     topic TEXT,                    
                     payload BYTEA,
                     qos INT,
+                    retained BOOLEAN,
                     client_id VARCHAR(65535), 
                     PRIMARY KEY (message_uuid)
                 );             
@@ -87,7 +88,7 @@ class SessionStorePostgres(
                 createIndexesSQL.forEach(statement::executeUpdate)
 
                 // if not clustered, then remove all sessions and subscriptions of clean sessions
-                if (!Config.isClustered()) {
+                if (!Monster.isClustered()) {
                     statement.executeUpdate(
                         "DELETE FROM $subscriptionsTableName WHERE client_id IN "+
                             "(SELECT client_id FROM $sessionsTableName WHERE clean_session = TRUE)")
@@ -318,7 +319,7 @@ class SessionStorePostgres(
 
     override fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>) {
         val sql1 = "INSERT INTO $queuedMessagesTableName "+
-                   "(message_uuid, message_id, topic, payload, qos, client_id) VALUES (?, ?, ?, ?, ?, ?) "+
+                   "(message_uuid, message_id, topic, payload, qos, retained, client_id) VALUES (?, ?, ?, ?, ?, ?, ?) "+
                    "ON CONFLICT (message_uuid) DO NOTHING"
         val sql2 = "INSERT INTO $queuedMessagesClientsTableName "+
                    "(client_id, message_uuid) VALUES (?, ?) "+
@@ -334,7 +335,8 @@ class SessionStorePostgres(
                     preparedStatement1.setString(3, message.first.topicName)
                     preparedStatement1.setBytes(4, message.first.payload)
                     preparedStatement1.setInt(5, message.first.qosLevel)
-                    preparedStatement1.setString(6, message.first.clientId)
+                    preparedStatement1.setBoolean(6, message.first.isRetain)
+                    preparedStatement1.setString(7, message.first.clientId)
                     preparedStatement1.addBatch()
 
                     // Add client to message relation
@@ -359,7 +361,7 @@ class SessionStorePostgres(
                   "AND client_id = ? "+
                   "RETURNING message_id, topic, payload, qos"
         */
-        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.client_id "+
+        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id "+
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) "+
                   "WHERE c.client_id = ? "+
                   "ORDER BY m.message_uuid" // Time Based UUIDs
@@ -374,6 +376,7 @@ class SessionStorePostgres(
                     val topic = resultSet.getString(3)
                     val payload = resultSet.getBytes(4)
                     val qos = resultSet.getInt(5)
+                    val retained = resultSet.getBoolean(6)
                     val clientId = resultSet.getString(6)
                     callback(MqttMessage(
                         messageUuid = messageUuid,
@@ -381,7 +384,7 @@ class SessionStorePostgres(
                         topicName = topic,
                         payload = payload,
                         qosLevel = qos,
-                        isRetain = false,
+                        isRetain = retained,
                         isDup = false,
                         clientId = clientId
                     ))

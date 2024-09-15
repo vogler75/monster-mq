@@ -21,6 +21,10 @@
     "Kafka": {
       "type": "object",
       "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "default": false
+        },
         "Servers": {
           "type": "string"
         },
@@ -28,27 +32,54 @@
           "type": "string"
         }
       },
-      "required": ["Servers", "Topic"]
+      "required": [
+        "Servers",
+        "Topic"
+      ]
     },
-    "RetainedMessageStoreType": {
-      "type": "string",
-      "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
+    "RetainedMessages": {
+      "type": "object",
+      "properties": {
+        "StoreType": {
+          "type": "string",
+          "enum": [
+            "MEMORY",
+            "POSTGRES",
+            "HAZELCAST"
+          ]
+        },
+        "ArchiveType": {
+          "type": "string",
+          "enum": [
+            "POSTGRES"
+          ]
+        }
+      }
     },
-    "RetainedMessageArchiveType": {
-      "type": "string",
-      "enum": ["POSTGRES"]
-    },
-    "LastValueMessageStoreType": {
-      "type": "string",
-      "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
-    },
-    "LastValueMessageArchiveType": {
-      "type": "string",
-      "enum": ["POSTGRES"]
+    "LastValueMessages": {
+      "type": "object",
+      "properties": {
+        "StoreType": {
+          "type": "string",
+          "enum": [
+            "MEMORY",
+            "POSTGRES",
+            "HAZELCAST"
+          ]
+        },
+        "ArchiveType": {
+          "type": "string",
+          "enum": [
+            "POSTGRES"
+          ]
+        }
+      }
     },
     "SessionStoreType": {
       "type": "string",
-      "enum": ["POSTGRES"]
+      "enum": [
+        "POSTGRES"
+      ]
     },
     "Postgres": {
       "type": "object",
@@ -63,8 +94,17 @@
           "type": "string"
         }
       },
-      "required": ["Url", "User", "Pass"]
+      "required": [
+        "Url",
+        "User",
+        "Pass"
+      ]
     }
   },
-  "required": ["Port", "SSL", "WS", "TCP", "RetainedMessageStoreType", "SessionStoreType"]
+  "required": [
+    "Port",
+    "SSL",
+    "WS",
+    "TCP"
+  ]
 }
