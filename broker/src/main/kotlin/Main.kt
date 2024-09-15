@@ -108,40 +108,35 @@ fun main(args: Array<String>) {
             return promise.future()
         }
 
-        fun getMessageStore(
-            vertx: Vertx,
-            name: String,
-            storeType: MessageStoreType,
-            clusterManager: ClusterManager?
-        ): IMessageStore?
-        = when (storeType) {
-            MessageStoreType.NONE -> null
-            MessageStoreType.MEMORY -> {
-                val store = MessageStoreMemory(name)
-                vertx.deployVerticle(store)
-                store
-            }
-            MessageStoreType.POSTGRES -> {
-                val store = MessageStorePostgres(
-                    name = name,
-                    url = postgresUrl,
-                    username = postgresUser,
-                    password = postgresPass
-                )
-                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options)
-                store
-            }
-            MessageStoreType.HAZELCAST -> {
-                if (clusterManager is HazelcastClusterManager) {
-                    val store = MessageStoreHazelcast(name, clusterManager.hazelcastInstance)
-                    vertx.deployVerticle(store)
-                    store
-                } else {
-                    logger.severe("Cannot create Hazelcast message store with this cluster manager.")
-                    exitProcess(-1)
+        fun getMessageStore(vertx: Vertx, name: String, storeType: MessageStoreType, clusterManager: ClusterManager?): Future<IMessageStore?> {
+            val promise = Promise.promise<IMessageStore?>()
+            when (storeType) {
+                MessageStoreType.NONE -> null
+                MessageStoreType.MEMORY -> {
+                    val store = MessageStoreMemory(name)
+                    vertx.deployVerticle(store).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                }
+                MessageStoreType.POSTGRES -> {
+                    val store = MessageStorePostgres(
+                        name = name,
+                        url = postgresUrl,
+                        username = postgresUser,
+                        password = postgresPass
+                    )
+                    val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                }
+                MessageStoreType.HAZELCAST -> {
+                    if (clusterManager is HazelcastClusterManager) {
+                        val store = MessageStoreHazelcast(name, clusterManager.hazelcastInstance)
+                        vertx.deployVerticle(store).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                    } else {
+                        logger.severe("Cannot create Hazelcast message store with this cluster manager.")
+                        exitProcess(-1)
+                    }
                 }
             }
+            return promise.future()
         }
 
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
@@ -150,27 +145,45 @@ fun main(args: Array<String>) {
         getSessionStore(vertx).onSuccess { sessionStore ->
             val retainedStore = getMessageStore(vertx, "RetainedMessages", retainedMessageStoreType, clusterManager)
             val lastValueStore = getMessageStore(vertx, "LastValueMessages", lastValueMessageStoreType, clusterManager)
-            val retainedArch = getMessageStore(vertx, "RetainedMessagesArch", retainedMessageStoreArch, clusterManager)
-            val lastValueArch = getMessageStore(vertx, "LastValueMessagesArch", lastValueMessageStoreArch, clusterManager)
-            val messageHandler = MessageHandler(retainedStore!!, retainedArch, lastValueStore, lastValueArch)
-            val sessionHandler = SessionHandler(sessionStore)
-            val distributor = getDistributor(sessionHandler, messageHandler)
-            val servers = listOfNotNull(
-                if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
-                if (useWs) MqttServer(usePort, useSsl, true, distributor) else null
-            )
+            val retainedArch = getMessageStore(vertx, "RetainedMessages", retainedMessageStoreArch, clusterManager)
+            val lastValueArch = getMessageStore(vertx, "LastValueMessages", lastValueMessageStoreArch, clusterManager)
 
-            Future.succeededFuture<String>()
-                .compose { vertx.deployVerticle(messageHandler) }
-                .compose { vertx.deployVerticle(sessionHandler) }
-                .compose { vertx.deployVerticle(distributor) }
-                .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
+            Future.succeededFuture<Unit>()
+                .compose { retainedStore }
+                .compose { lastValueStore }
+                .compose { retainedArch }
+                .compose { lastValueArch }
                 .onFailure {
-                    logger.severe("Startup error: ${it.message}")
+                    logger.severe("Message store creation failed: ${it.message}")
                     exitProcess(-1)
                 }
-                .onComplete {
-                    logger.info("The Monster is ready.")
+                .onSuccess {
+                    val messageHandler = MessageHandler(
+                        retainedStore.result()!!,
+                        retainedArch.result(),
+                        lastValueStore.result(),
+                        lastValueArch.result()
+                    )
+                    val sessionHandler = SessionHandler(sessionStore)
+
+                    val distributor = getDistributor(sessionHandler, messageHandler)
+                    val servers = listOfNotNull(
+                        if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
+                        if (useWs) MqttServer(usePort, useSsl, true, distributor) else null
+                    )
+
+                    Future.succeededFuture<String>()
+                        .compose { vertx.deployVerticle(messageHandler) }
+                        .compose { vertx.deployVerticle(sessionHandler) }
+                        .compose { vertx.deployVerticle(distributor) }
+                        .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
+                        .onFailure {
+                            logger.severe("Startup error: ${it.message}")
+                            exitProcess(-1)
+                        }
+                        .onComplete {
+                            logger.info("The Monster is ready.")
+                        }
                 }
         }.onFailure {
             logger.severe("Session store creation failed: ${it.message}")

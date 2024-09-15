@@ -13,14 +13,17 @@ import kotlin.concurrent.thread
 
 class MessageHandler(
     private val retainedStore: IMessageStore,
-    private val retainedStoreHistory: IMessageStore?,
+    private val retainedArchive: IMessageStore?,
     private val lastValueStore: IMessageStore?,
-    private val lastValueStoreHistory: IMessageStore?
+    private val lastValueArchive: IMessageStore?
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
-    private val retainedQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
-    private val lastValueQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
+    private val retainedQueueStore: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
+    private val retainedQueueArchive: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
+
+    private val lastValueQueueStore: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
+    private val lastValueQueueArchive: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
 
     private val maxWriteBlockSize = 4000 // TODO: configurable
 
@@ -30,12 +33,13 @@ class MessageHandler(
 
     override fun start() {
         logger.info("Start handler [${Utils.getCurrentFunctionName()}]")
-        writerThread("RM", retainedQueue, ::retainedQueueWriter)
-        writerThread("LV", lastValueQueue, ::lastValueQueueWriter)
+        writerThread("RM", retainedQueueStore, ::retainedQueueWriter)
+        writerThread("LV", lastValueQueueStore, ::lastValueQueueWriter)
+        retainedArchive?.let { writerThread("RMA", retainedQueueArchive, it::addAllHistory) }
+        lastValueArchive?.let { writerThread("LVA", lastValueQueueArchive, it::addAllHistory) }
     }
 
     private fun retainedQueueWriter(list: List<MqttMessage>) {
-        println("Retained messages: ${list.size}")
         val set = mutableSetOf<String>()
         val add = arrayListOf<MqttMessage>()
         val del = arrayListOf<String>()
@@ -52,7 +56,6 @@ class MessageHandler(
         }
         if (add.isNotEmpty()) retainedStore.addAll(add)
         if (del.isNotEmpty()) retainedStore.delAll(del)
-        retainedStoreHistory?.addAllHistory(list)
     }
 
     private fun lastValueQueueWriter(list: List<MqttMessage>) {
@@ -67,7 +70,7 @@ class MessageHandler(
             }
         }
         lastValueStore?.addAll(add)
-        lastValueStoreHistory?.addAllHistory(list)
+        lastValueArchive?.addAllHistory(list)
     }
 
     private fun <T> writerThread(name: String, queue: ArrayBlockingQueue<T>, execute: (List<T>)->Unit)
@@ -99,16 +102,30 @@ class MessageHandler(
     fun saveMessage(message: MqttMessage): Future<Void> {
         if (message.isRetain) {
             try {
-                retainedQueue.add(message)
+                retainedQueueStore.add(message)
             } catch (e: IllegalStateException) {
-                // TODO: Alert when queue is full
+                // TODO: handle exception
+            }
+            if (retainedArchive != null) {
+                try {
+                    retainedQueueArchive.add(message)
+                } catch (e: IllegalStateException) {
+                    // TODO: handle exception
+                }
             }
         }
         if (lastValueStore != null) {
             try {
-                lastValueQueue.add(message)
+                lastValueQueueStore.add(message)
             } catch (e: IllegalStateException) {
-                // TODO: Alert when queue is full
+                // TODO: handle exception
+            }
+        }
+        if (lastValueArchive != null) {
+            try {
+                lastValueQueueArchive.add(message)
+            } catch (e: IllegalStateException) {
+                // TODO: handle exception
             }
         }
         return Future.succeededFuture()

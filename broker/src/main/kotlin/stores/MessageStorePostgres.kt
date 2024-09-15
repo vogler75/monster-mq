@@ -189,7 +189,6 @@ class MessageStorePostgres(
         }
     }
 
-
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
         val topicLevels = Utils.getTopicLevels(topicName).mapIndexed { index, level ->
             when (level) {
