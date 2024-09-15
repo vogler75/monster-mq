@@ -45,8 +45,7 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
         store.putAll(messages.map { Pair(it.topicName, it) })
     }
 
-    override fun delAll(messages: List<MqttMessage>) {
-        val topics = messages.map { it.topicName }.distinct()
+    override fun delAll(topics: List<String>) {
         vertx.eventBus().publish(delAddress, JsonArray(topics))
         topics.forEach { store.remove(it) } // there is no delAll
     }

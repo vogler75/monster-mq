@@ -66,15 +66,10 @@ fun main(args: Array<String>) {
             config.getString("SessionStoreType", "MEMORY")
         )
 
-        val retainedMessageStoreType: MessageStoreType = MessageStoreType.valueOf(
-            config.getString("RetainedMessageStoreType", "MEMORY")
-        )
-        val retainedMessageStoreArch = config.getBoolean("RetainedMessageStoreArch", false)
-
-        val lastValueMessageStoreType = MessageStoreType.valueOf(
-            config.getString("LastValueMessageStoreType", "NONE")
-        )
-        val lastValueMessageStoreArch = config.getBoolean("LastValueMessageStoreArch", false)
+        val retainedMessageStoreType = MessageStoreType.valueOf(config.getString("RetainedMessageStoreType", "MEMORY"))
+        val retainedMessageStoreArch = MessageStoreType.valueOf(config.getString("RetainedMessageStoreArch", "NONE"))
+        val lastValueMessageStoreType = MessageStoreType.valueOf(config.getString("LastValueMessageStoreType", "NONE"))
+        val lastValueMessageStoreArch = MessageStoreType.valueOf(config.getString("LastValueMessageStoreArch", "NONE"))
 
         val postgres = config.getJsonObject("Postgres", JsonObject())
 
@@ -155,7 +150,9 @@ fun main(args: Array<String>) {
         getSessionStore(vertx).onSuccess { sessionStore ->
             val retainedStore = getMessageStore(vertx, "RetainedMessages", retainedMessageStoreType, clusterManager)
             val lastValueStore = getMessageStore(vertx, "LastValueMessages", lastValueMessageStoreType, clusterManager)
-            val messageHandler = MessageHandler(retainedStore!!, retainedMessageStoreArch, lastValueStore, lastValueMessageStoreArch)
+            val retainedArch = getMessageStore(vertx, "RetainedMessagesArch", retainedMessageStoreArch, clusterManager)
+            val lastValueArch = getMessageStore(vertx, "LastValueMessagesArch", lastValueMessageStoreArch, clusterManager)
+            val messageHandler = MessageHandler(retainedStore!!, retainedArch, lastValueStore, lastValueArch)
             val sessionHandler = SessionHandler(sessionStore)
             val distributor = getDistributor(sessionHandler, messageHandler)
             val servers = listOfNotNull(

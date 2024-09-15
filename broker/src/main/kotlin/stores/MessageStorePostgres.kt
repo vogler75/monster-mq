@@ -135,15 +135,9 @@ class MessageStorePostgres(
         }
     }
 
-    override fun delAll(messages: List<MqttMessage>) {
-        val rows: MutableList<Array<String>> = ArrayList()
-        messages.forEach { message ->
-            val levels = Utils.getTopicLevels(message.topicName).toTypedArray()
-            rows.add(levels)
-        }
-
-        val sql = "DELETE FROM $tableName WHERE topic = ? "
-
+    override fun delAll(topics: List<String>) {
+        val rows = topics.map { Utils.getTopicLevels(it).toTypedArray() }
+        val sql = "DELETE FROM $tableName WHERE topic = ? " // TODO: can be converted to use IN operator with a list of topics
         try {
             db.connection?.let { connection ->
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)

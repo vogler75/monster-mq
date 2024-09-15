@@ -35,16 +35,16 @@
       "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
     },
     "RetainedMessageStoreArch": {
-      "type": "boolean",
-      "default": false
+      "type": "string",
+      "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
     },
     "LastValueMessageStoreType": {
       "type": "string",
       "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
     },
     "LastValueMessageStoreArch": {
-      "type": "boolean",
-      "default": false
+      "type": "string",
+      "enum": ["MEMORY", "POSTGRES", "HAZELCAST"]
     },
     "SessionStoreType": {
       "type": "string",

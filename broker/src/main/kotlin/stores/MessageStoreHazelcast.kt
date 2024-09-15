@@ -54,8 +54,7 @@ class MessageStoreHazelcast(
         logger.finest { "Write block of size [${messages.size}] to map took [$duration] [${Utils.getCurrentFunctionName()}]" }
     }
 
-    override fun delAll(messages: List<MqttMessage>) {
-        val topics = messages.map { it.topicName }.distinct()
+    override fun delAll(topics: List<String>) {
         vertx.eventBus().publish(delAddress, JsonArray(topics))
         topics.forEach { store.remove(it) } // there is no delAll
     }

@@ -13,15 +13,14 @@ import kotlin.concurrent.thread
 
 class MessageHandler(
     private val retainedStore: IMessageStore,
-    private val retainedStoreHistory: Boolean,
+    private val retainedStoreHistory: IMessageStore?,
     private val lastValueStore: IMessageStore?,
-    private val lastValueStoreHistory: Boolean
+    private val lastValueStoreHistory: IMessageStore?
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
-    private val retainedAddQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000) // TODO: configurable
-    private val retainedDelQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000) // TODO: configurable
-    private val lastValueQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue<MqttMessage>(100_000) // TODO: configurable
+    private val retainedQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
+    private val lastValueQueue: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
 
     private val maxWriteBlockSize = 4000 // TODO: configurable
 
@@ -31,21 +30,47 @@ class MessageHandler(
 
     override fun start() {
         logger.info("Start handler [${Utils.getCurrentFunctionName()}]")
-        // Retained messages
-        writerThread("RA", retainedAddQueue, retainedStore::addAll) // TODO: add and remove in different threads is dangerous because of message order
-        writerThread("RD", retainedDelQueue, retainedStore::delAll)
-
-        // Retained messages history
-        writerThread("RH", retainedAddQueue, retainedStore::addAllHistory)
-
-        // Last value messages
-        if (lastValueStore != null) {
-            writerThread("LV", lastValueQueue, lastValueStore::addAll) // Last value messages
-            writerThread("HV", lastValueQueue, lastValueStore::addAllHistory) // Last value messages history
-        }
+        writerThread("RM", retainedQueue, ::retainedQueueWriter)
+        writerThread("LV", lastValueQueue, ::lastValueQueueWriter)
     }
 
-    private fun writerThread(name: String, queue: ArrayBlockingQueue<MqttMessage>, execute: (List<MqttMessage>)->Unit)
+    private fun retainedQueueWriter(list: List<MqttMessage>) {
+        println("Retained messages: ${list.size}")
+        val set = mutableSetOf<String>()
+        val add = arrayListOf<MqttMessage>()
+        val del = arrayListOf<String>()
+        var i = list.size-1
+        while (i >= 0) {
+            val it = list[i]; i--
+            if (!set.contains(it.topicName)) {
+                set.add(it.topicName)
+                if (it.payload.isEmpty())
+                    del.add(it.topicName)
+                else
+                    add.add(it)
+            }
+        }
+        if (add.isNotEmpty()) retainedStore.addAll(add)
+        if (del.isNotEmpty()) retainedStore.delAll(del)
+        retainedStoreHistory?.addAllHistory(list)
+    }
+
+    private fun lastValueQueueWriter(list: List<MqttMessage>) {
+        val set = mutableSetOf<String>()
+        val add = arrayListOf<MqttMessage>()
+        var i = list.size-1
+        while (i >= 0) {
+            val it = list[i]; i--
+            if (!set.contains(it.topicName)) {
+                set.add(it.topicName)
+                add.add(it)
+            }
+        }
+        lastValueStore?.addAll(add)
+        lastValueStoreHistory?.addAllHistory(list)
+    }
+
+    private fun <T> writerThread(name: String, queue: ArrayBlockingQueue<T>, execute: (List<T>)->Unit)
     = thread(start = true) {
         logger.info("Start [$name] thread [${Utils.getCurrentFunctionName()}]")
         vertx.setPeriodic(1000) {
@@ -53,7 +78,7 @@ class MessageHandler(
                 logger.info("Queue [$name] size [${queue.size}] [${Utils.getCurrentFunctionName()}]")
         }
 
-        val block = arrayListOf<MqttMessage>()
+        val block = arrayListOf<T>()
 
         while (true) {
             queue.poll(100, TimeUnit.MILLISECONDS)?.let { message ->
@@ -74,14 +99,7 @@ class MessageHandler(
     fun saveMessage(message: MqttMessage): Future<Void> {
         if (message.isRetain) {
             try {
-                if (message.payload.isEmpty())
-                    retainedDelQueue.add(message)
-                else {
-                    retainedAddQueue.add(message)
-                    if (retainedStoreHistory) {
-                        retainedAddQueue.add(message)
-                    }
-                }
+                retainedQueue.add(message)
             } catch (e: IllegalStateException) {
                 // TODO: Alert when queue is full
             }
@@ -89,9 +107,6 @@ class MessageHandler(
         if (lastValueStore != null) {
             try {
                 lastValueQueue.add(message)
-                if (lastValueStoreHistory) {
-                    lastValueQueue.add(message)
-                }
             } catch (e: IllegalStateException) {
                 // TODO: Alert when queue is full
             }
