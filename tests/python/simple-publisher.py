@@ -4,8 +4,10 @@ import json
 from datetime import datetime
 
 # Define the MQTT broker details
-broker_address = "scada"  # Example broker address, you can change it to your broker's address
-topic = "test/broadcast"  # Example topic
+BROKER = 'scada'
+PORT = 1884
+TOPIC = 'test/broadcast'
+CLIENT_ID = "python-simple-publisher"
 
 message_id = 0
 
@@ -16,7 +18,7 @@ def publish_messages():
         ts = datetime.now().isoformat()
         message_id = message_id + 1
         payload = { "id": message_id, "ts": ts }
-        client.publish(topic, json.dumps(payload), qos=0).wait_for_publish()
+        client.publish(TOPIC, json.dumps(payload), qos=0).wait_for_publish()
         print("Message Published:", payload)
         time.sleep(1)
 
@@ -29,14 +31,14 @@ def on_connect(client, userdata, flags, rc):
 
 
 # Create a client instance
-client = mqtt.Client()
+client = mqtt.Client(client_id=CLIENT_ID, clean_session=True)
 client.on_connect = on_connect
 
 
 # Function to connect to the broker
 def connect_mqtt():
     try:
-        client.connect(broker_address)
+        client.connect(BROKER, PORT, 60)
     except Exception as e:
         print(f"Failed to connect to MQTT broker: {e}")
         exit(1)
