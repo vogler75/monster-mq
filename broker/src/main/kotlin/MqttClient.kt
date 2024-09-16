@@ -27,7 +27,7 @@ class MqttClient(
     private var lastPing: Instant = Instant.MIN
 
     private var nextMessageId: Int = 0
-    private fun getNextMessageId(): Int = if (nextMessageId==Int.MAX_VALUE) {
+    private fun getNextMessageId(): Int = if (nextMessageId==65535) {
         nextMessageId=1
         nextMessageId
     } else ++nextMessageId
