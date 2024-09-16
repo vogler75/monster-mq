@@ -26,21 +26,43 @@ class MessageArchivePostgres (
         override fun init(connection: Connection): Future<Void> {
             val promise = Promise.promise<Void>()
             try {
-                val statement: Statement = connection.createStatement()
-                statement.executeUpdate("""
-                CREATE TABLE IF NOT EXISTS $tableName (
-                    topic text[],
-                    time TIMESTAMPTZ,                    
-                    payload BYTEA,
-                    payload_json JSONB,
-                    qos INT,
-                    retained BOOLEAN,
-                    client_id VARCHAR(65535), 
-                    message_uuid VARCHAR(36),
-                    PRIMARY KEY (topic, time)
-                )
-                """.trimIndent())
-                statement.executeUpdate("CREATE INDEX IF NOT EXISTS ${tableName}_time_idx ON $tableName (time);")
+                connection.createStatement().use { statement ->
+                    statement.executeUpdate(
+                        """
+                    CREATE TABLE IF NOT EXISTS $tableName (
+                        topic text[],
+                        time TIMESTAMPTZ,                    
+                        payload BYTEA,
+                        payload_json JSONB,
+                        qos INT,
+                        retained BOOLEAN,
+                        client_id VARCHAR(65535), 
+                        message_uuid VARCHAR(36),
+                        PRIMARY KEY (topic, time)
+                    )
+                    """.trimIndent()
+                    )
+                    statement.executeUpdate("CREATE INDEX IF NOT EXISTS ${tableName}_time_idx ON $tableName (time);")
+
+                    // Check if TimescaleDB extension is available
+                    val resultSet = statement.executeQuery("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb';")
+                    if (resultSet.next()) {
+                        logger.info("TimescaleDB extension is available [${Utils.getCurrentFunctionName()}]")
+                        if (resultSet.next()) {
+                            logger.info("TimescaleDB extension is available [${Utils.getCurrentFunctionName()}]")
+                            val hypertableCheck =
+                                statement.executeQuery("SELECT hypertable_name FROM timescaledb_information.hypertables WHERE hypertable_name = '$tableName';")
+                            if (!hypertableCheck.next()) {
+                                statement.executeUpdate("SELECT create_hypertable('$tableName', 'time');")
+                                logger.info("Table $tableName converted to hypertable [${Utils.getCurrentFunctionName()}]")
+                            } else {
+                                logger.info("Table $tableName is already a hypertable [${Utils.getCurrentFunctionName()}]")
+                            }
+                        }
+                    } else {
+                        logger.warning("TimescaleDB extension is not available [${Utils.getCurrentFunctionName()}]")
+                    }
+                }
                 logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
             } catch (e: Exception) {
