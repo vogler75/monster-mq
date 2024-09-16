@@ -14,6 +14,7 @@ import kotlin.concurrent.thread
 class MessageHandler(
     private val retainedStore: IMessageStore,
     private val retainedArchive: IMessageArchive?,
+    private val lastValueFilter: List<String>,
     private val lastValueStore: IMessageStore?,
     private val lastValueArchive: IMessageArchive?
 ): AbstractVerticle() {
@@ -27,8 +28,11 @@ class MessageHandler(
 
     private val maxWriteBlockSize = 4000 // TODO: configurable
 
+    private val lastValueFilterTree = TopicTree<Boolean, Boolean>()
+
     init {
         logger.level = Const.DEBUG_LEVEL
+        lastValueFilter.forEach { lastValueFilterTree.add(it, true, true) }
     }
 
     override fun start() {
@@ -113,20 +117,30 @@ class MessageHandler(
                 }
             }
         }
-        if (lastValueStore != null) {
-            try {
-                lastValueQueueStore.add(message)
-            } catch (e: IllegalStateException) {
-                // TODO: handle exception
+
+        fun processLastValue() {
+            if (lastValueStore != null) {
+                try {
+                    lastValueQueueStore.add(message)
+                } catch (e: IllegalStateException) {
+                    // TODO: handle exception
+                }
+            }
+            if (lastValueArchive != null) {
+                try {
+                    lastValueQueueArchive.add(message)
+                } catch (e: IllegalStateException) {
+                    // TODO: handle exception
+                }
             }
         }
-        if (lastValueArchive != null) {
-            try {
-                lastValueQueueArchive.add(message)
-            } catch (e: IllegalStateException) {
-                // TODO: handle exception
-            }
+
+        if (lastValueFilter.isEmpty()) processLastValue()
+        else {
+            val matched = lastValueFilterTree.isTopicNameMatching(message.topicName)
+            if (matched) processLastValue()
         }
+
         return Future.succeededFuture()
     }
 

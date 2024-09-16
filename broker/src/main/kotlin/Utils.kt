@@ -45,15 +45,6 @@ object Utils {
 
     fun getCurrentFunctionName(): String = Thread.currentThread().stackTrace[2].methodName
     fun getUuid(): String = UuidCreator.getTimeOrdered().toString()
-    fun getJson(obj: ByteArray): String? {
-        return try {
-            val jsonString = String(obj)
-            io.vertx.core.json.JsonObject(jsonString)
-            jsonString
-        } catch (e: Exception) {
-            null
-        }
-    }
 
     fun <K,V> getMap(vertx: Vertx, name: String): Future<AsyncMap<K, V>> {
         val promise = Promise.promise<AsyncMap<K, V>>()

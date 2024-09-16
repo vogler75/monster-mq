@@ -51,6 +51,7 @@
         "ArchiveType": {
           "type": "string",
           "enum": [
+            "NONE",
             "POSTGRES"
           ]
         }
@@ -59,9 +60,16 @@
     "LastValueMessages": {
       "type": "object",
       "properties": {
+        "TopicFilter": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "StoreType": {
           "type": "string",
           "enum": [
+            "NONE",
             "MEMORY",
             "POSTGRES",
             "HAZELCAST"
@@ -70,6 +78,7 @@
         "ArchiveType": {
           "type": "string",
           "enum": [
+            "NONE",
             "POSTGRES"
           ]
         }

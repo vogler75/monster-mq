@@ -9,6 +9,7 @@ import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
 import io.vertx.core.*
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.core.spi.cluster.ClusterManager
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
@@ -64,7 +65,7 @@ class Monster(args: Array<String>) {
             localSetup(builder)
     }
 
-    private fun retrieveConfig(vertx: Vertx): ConfigRetriever {
+    private fun getConfigRetriever(vertx: Vertx): ConfigRetriever {
         logger.info("Monster config file: $configFileName")
         return ConfigRetriever.create(
             vertx,
@@ -78,7 +79,7 @@ class Monster(args: Array<String>) {
     }
 
     private fun getConfigAndStart(vertx: Vertx, clusterManager: ClusterManager?) {
-        retrieveConfig(vertx).config.onComplete { it ->
+        getConfigRetriever(vertx).config.onComplete { it ->
             if (it.succeeded()) {
                 this.config = it.result()
                 val pg = config.getJsonObject("Postgres", JsonObject())
@@ -125,6 +126,7 @@ class Monster(args: Array<String>) {
 
         val retainedMessages = config.getJsonObject("RetainedMessages", JsonObject())
         val lastValueMessages = config.getJsonObject("LastValueMessages", JsonObject())
+        val lastValueFilter = lastValueMessages.getJsonArray("TopicFilter", JsonArray()).toList().map { it as String }
 
         val retainedMessage = object {
             val storeType = MessageStoreType.valueOf(retainedMessages.getString("StoreType", "MEMORY"))
@@ -165,6 +167,7 @@ class Monster(args: Array<String>) {
                     val messageHandler = MessageHandler(
                         retainedStore.result()!!,
                         retainedArch.result(),
+                        lastValueFilter,
                         lastValueStore.result(),
                         lastValueArch.result()
                     )
@@ -224,7 +227,7 @@ class Monster(args: Array<String>) {
     private fun getMessageStore(vertx: Vertx, name: String, storeType: MessageStoreType, clusterManager: ClusterManager?): Future<IMessageStore?> {
         val promise = Promise.promise<IMessageStore?>()
         when (storeType) {
-            MessageStoreType.NONE -> null
+            MessageStoreType.NONE -> promise.complete()
             MessageStoreType.MEMORY -> {
                 val store = MessageStoreMemory(name)
                 vertx.deployVerticle(store).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
@@ -255,7 +258,7 @@ class Monster(args: Array<String>) {
     private fun getMessageArchive(vertx: Vertx, name: String, storeType: MessageArchiveType): Future<IMessageArchive?> {
         val promise = Promise.promise<IMessageArchive?>()
         when (storeType) {
-            MessageArchiveType.NONE -> null
+            MessageArchiveType.NONE -> promise.complete()
             MessageArchiveType.POSTGRES -> {
                 val store = MessageArchivePostgres(
                     name = name,

@@ -63,12 +63,42 @@ class TopicTree<K, V> : ITopicTree<K, V> {
         if (xs.isNotEmpty()) delTopicNode(root, xs.first(), xs.drop(1))
     }
 
+    override fun isTopicNameMatching(topicName: String): Boolean {
+        fun find(node: Node<K, V>, current: String, rest: List<String>): Boolean {
+            return node.children.any { child ->
+                when (child.key) {
+                    "#" -> true
+                    "+", current -> (rest.isEmpty() && child.value.dataset.isNotEmpty() )
+                            || (rest.isNotEmpty() && find(child.value, rest.first(), rest.drop(1)))
+                    else -> false
+                }
+            }
+        }
+        val xs = Utils.getTopicLevels(topicName)
+        return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1)) else false
+    }
+
     override fun findDataOfTopicName(topicName: String): List<Pair<K, V>> {
         fun find(node: Node<K, V>, current: String, rest: List<String>): List<Pair<K, V>> {
             return node.children.flatMap { child ->
                 when (child.key) {
                     "#" -> child.value.dataset.toList()
-                    "+", current -> child.value.dataset.toList() +
+                    "+", current -> (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
+                            (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1)) else listOf())
+                    else -> listOf()
+                }
+            }
+        }
+        val xs = Utils.getTopicLevels(topicName)
+        return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1)) else listOf()
+    }
+
+    fun findDataOfTopicName_backup(topicName: String): List<Pair<K, V>> {
+        fun find(node: Node<K, V>, current: String, rest: List<String>): List<Pair<K, V>> {
+            return node.children.flatMap { child ->
+                when (child.key) {
+                    "#" -> child.value.dataset.toList()
+                    "+", current -> (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
                             if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1))
                             else listOf()
                     else -> listOf()

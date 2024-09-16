@@ -7,9 +7,10 @@ SessionStoreType: POSTGRES
 
 RetainedMessages:
     StoreType: POSTGRES
-    ArchiveType: POSTGRES
+    ArchiveType: NONE
 
 LastValueMessages:
+    TopicFilter: [ "#" ]
     StoreType: POSTGRES
     ArchiveType: POSTGRES
 
