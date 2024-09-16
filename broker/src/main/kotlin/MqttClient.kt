@@ -133,7 +133,7 @@ class MqttClient(
                 // Publish queued messages
                 distributor.sessionHandler.dequeueMessages(clientId) { message ->
                     logger.finest { "Client [$clientId] Dequeued message [${message.messageId}] for topic [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                    publishMessage(message.cloneWithNewMessageId(getNextMessageId()))
+                    publishMessage(message.cloneWithNewMessageId(getNextMessageId())) // TODO: if qos is >0 then all messages are put in the inflight queue
                 }
             }
 
