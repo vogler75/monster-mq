@@ -9,6 +9,8 @@ object Const {
     const val GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE = "ST"
     const val GLOBAL_CLIENT_TABLE_NAMESPACE = "CT"
 
+    const val GLOBAL_SPARKPLUG_NAMESPACE = "SP"
+
     const val TOPIC_KEY = "Topic"
     const val CLIENT_KEY = "Client"
     const val QOS_KEY = "QoS"

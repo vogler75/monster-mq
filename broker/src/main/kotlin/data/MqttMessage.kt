@@ -12,7 +12,7 @@ import java.io.Serializable
 import java.time.Instant
 
 class MqttMessage(
-    val messageUuid: String ,
+    val messageUuid: String = Utils.getUuid(),
     val messageId: Int,
     val topicName: String,
     val payload: ByteArray,

@@ -3,6 +3,7 @@ package at.rocworks
 import at.rocworks.data.*
 import at.rocworks.stores.MessageHandler
 import at.rocworks.stores.SessionHandler
+import at.rocworks.stores.SparkplugHandler
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.eventbus.Message
@@ -26,6 +27,8 @@ abstract class Distributor(
 
     private fun getDistributorCommandAddress() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}/C"
     protected fun getDistributorMessageAddress() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}/M"
+
+    private val sparkplugHandler = SparkplugHandler()
 
     override fun start() {
         vertx.eventBus().consumer<JsonObject>(getDistributorCommandAddress()) { message ->
@@ -102,6 +105,10 @@ abstract class Distributor(
     fun publishMessage(message: MqttMessage) {
         publishMessageToBus(message)
         messageHandler.saveMessage(message)
+        sparkplugHandler.metricExpansion(message) { spbMessage ->
+            publishMessageToBus(spbMessage)
+            messageHandler.saveMessage(spbMessage)
+        }
     }
 
     fun publishMessageCompleted(clientId: String, message: MqttMessage) {
