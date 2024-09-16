@@ -7,7 +7,6 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import java.sql.*
-import java.time.Instant
 
 class MessageArchivePostgres (
     private val name: String,
@@ -17,6 +16,7 @@ class MessageArchivePostgres (
 ): AbstractVerticle(), IMessageArchive {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name
+    private var lastAddAllHistoryError: Int = 0
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -80,10 +80,17 @@ class MessageArchivePostgres (
                 }
 
                 preparedStatement.executeBatch()
-                logger.finest { "Batch insert successful [${Utils.getCurrentFunctionName()}]" }
+
+                if (lastAddAllHistoryError != 0) {
+                    logger.info("Batch insert successful after error [${Utils.getCurrentFunctionName()}]")
+                    lastAddAllHistoryError = 0
+                }
             }
         } catch (e: SQLException) {
-            logger.warning("Error inserting batch data [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            if (e.errorCode != lastAddAllHistoryError) { // avoid spamming the logs
+                logger.warning("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
+                lastAddAllHistoryError = e.errorCode
+            }
         }
     }
 }

@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 # Define the MQTT broker details
-broker_address = "linux1"  # Example broker address, you can change it to your broker's address
+broker_address = "scada"  # Example broker address, you can change it to your broker's address
 topic = "test/broadcast"  # Example topic
 
 message_id = 0
@@ -16,7 +16,7 @@ def publish_messages():
         ts = datetime.now().isoformat()
         message_id = message_id + 1
         payload = { "id": message_id, "ts": ts }
-        client.publish(topic, json.dumps(payload), qos=1).wait_for_publish()
+        client.publish(topic, json.dumps(payload), qos=0).wait_for_publish()
         print("Message Published:", payload)
         time.sleep(1)
 

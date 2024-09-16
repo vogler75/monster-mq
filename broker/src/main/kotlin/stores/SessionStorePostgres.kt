@@ -83,18 +83,19 @@ class SessionStorePostgres(
                 )
 
                 // Execute the SQL statements
-                val statement: Statement = connection.createStatement()
-                createTableSQL.forEach(statement::executeUpdate)
-                createIndexesSQL.forEach(statement::executeUpdate)
+                connection.createStatement().use { statement ->
+                    createTableSQL.forEach(statement::executeUpdate)
+                    createIndexesSQL.forEach(statement::executeUpdate)
 
-                // if not clustered, then remove all sessions and subscriptions of clean sessions
-                if (!Monster.isClustered()) {
-                    statement.executeUpdate(
-                        "DELETE FROM $subscriptionsTableName WHERE client_id IN "+
-                            "(SELECT client_id FROM $sessionsTableName WHERE clean_session = TRUE)")
-                    statement.executeUpdate("DELETE FROM $sessionsTableName WHERE clean_session = TRUE")
+                    // if not clustered, then remove all sessions and subscriptions of clean sessions
+                    if (!Monster.isClustered()) {
+                        statement.executeUpdate(
+                            "DELETE FROM $subscriptionsTableName WHERE client_id IN " +
+                                    "(SELECT client_id FROM $sessionsTableName WHERE clean_session = TRUE)"
+                        )
+                        statement.executeUpdate("DELETE FROM $sessionsTableName WHERE clean_session = TRUE")
+                    }
                 }
-
                 logger.info("Tables are ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
             } catch (e: Exception) {
@@ -121,14 +122,15 @@ class SessionStorePostgres(
             db.connection?.let { connection ->
                 var rows = 0
                 val sql = "SELECT client_id, array_to_string(topic, '/'), qos FROM $subscriptionsTableName "
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                val resultSet = preparedStatement.executeQuery()
-                while (resultSet.next()) {
-                    val clientId = resultSet.getString(1)
-                    val topic = resultSet.getString(2)
-                    val qos = MqttQoS.valueOf(resultSet.getInt(3))
-                    callback(topic, clientId, qos.value())
-                    rows++
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        val clientId = resultSet.getString(1)
+                        val topic = resultSet.getString(2)
+                        val qos = MqttQoS.valueOf(resultSet.getInt(3))
+                        callback(topic, clientId, qos.value())
+                        rows++
+                    }
                 }
             } ?: run {
                 logger.severe("Iterating subscription table not possible without database connection! [${Utils.getCurrentFunctionName()}]")
@@ -142,10 +144,11 @@ class SessionStorePostgres(
         try {
             db.connection?.let { connection ->
                 "SELECT client_id FROM $sessionsTableName WHERE connected = FALSE AND clean_session = FALSE".let { sql ->
-                    val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                    val resultSet = preparedStatement.executeQuery()
-                    while (resultSet.next()) {
-                        callback(resultSet.getString(1))
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        val resultSet = preparedStatement.executeQuery()
+                        while (resultSet.next()) {
+                            callback(resultSet.getString(1))
+                        }
                     }
                 }
             } ?: run {
@@ -166,12 +169,13 @@ class SessionStorePostgres(
                   "update_time = CURRENT_TIMESTAMP"
         try {
             db.connection?.let { connection ->
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                preparedStatement.setString(1, clientId)
-                preparedStatement.setBoolean(2, cleanSession)
-                preparedStatement.setBoolean(3, connected)
-                preparedStatement.setString(4, information.encode())
-                preparedStatement.executeUpdate()
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, clientId)
+                    preparedStatement.setBoolean(2, cleanSession)
+                    preparedStatement.setBoolean(3, connected)
+                    preparedStatement.setString(4, information.encode())
+                    preparedStatement.executeUpdate()
+                }
             }
         } catch (e: SQLException) {
             logger.warning("Error at inserting client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -182,10 +186,11 @@ class SessionStorePostgres(
         val sql = "UPDATE $sessionsTableName SET connected = ?, update_time = CURRENT_TIMESTAMP WHERE client_id = ?"
         try {
             db.connection?.let { connection ->
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                preparedStatement.setBoolean(1, connected)
-                preparedStatement.setString(2, clientId)
-                preparedStatement.executeUpdate()
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setBoolean(1, connected)
+                    preparedStatement.setString(2, clientId)
+                    preparedStatement.executeUpdate()
+                }
             }
         } catch (e: SQLException) {
             logger.warning("Error at updating client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -196,11 +201,12 @@ class SessionStorePostgres(
         val sql = "SELECT connected FROM $sessionsTableName WHERE client_id = ?"
         try {
             db.connection?.let { connection ->
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                preparedStatement.setString(1, clientId)
-                val resultSet = preparedStatement.executeQuery()
-                if (resultSet.next()) {
-                    return resultSet.getBoolean(1)
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, clientId)
+                    val resultSet = preparedStatement.executeQuery()
+                    if (resultSet.next()) {
+                        return resultSet.getBoolean(1)
+                    }
                 }
             }
         } catch (e: SQLException) {
@@ -213,10 +219,11 @@ class SessionStorePostgres(
         val sql = "SELECT client_id FROM $sessionsTableName WHERE client_id = ?"
         try {
             db.connection?.let { connection ->
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                preparedStatement.setString(1, clientId)
-                val resultSet = preparedStatement.executeQuery()
-                return resultSet.next()
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, clientId)
+                    val resultSet = preparedStatement.executeQuery()
+                    return resultSet.next()
+                }
             }
         } catch (e: SQLException) {
             logger.warning("Error at fetching client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -230,13 +237,20 @@ class SessionStorePostgres(
                 "WHERE client_id = ?"
         try {
             db.connection?.let { connection ->
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                preparedStatement.setString(1, message?.topicName)
-                preparedStatement.setBytes(2, message?.payload)
-                message?.qosLevel?.let { preparedStatement.setInt(3, it) } ?: preparedStatement.setNull(3, Types.INTEGER)
-                message?.isRetain?.let { preparedStatement.setBoolean(4, it) } ?: preparedStatement.setNull(4, Types.BOOLEAN)
-                preparedStatement.setString(5, clientId)
-                preparedStatement.executeUpdate()
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, message?.topicName)
+                    preparedStatement.setBytes(2, message?.payload)
+                    message?.qosLevel?.let { preparedStatement.setInt(3, it) } ?: preparedStatement.setNull(
+                        3,
+                        Types.INTEGER
+                    )
+                    message?.isRetain?.let { preparedStatement.setBoolean(4, it) } ?: preparedStatement.setNull(
+                        4,
+                        Types.BOOLEAN
+                    )
+                    preparedStatement.setString(5, clientId)
+                    preparedStatement.executeUpdate()
+                }
             }
         } catch (e: SQLException) {
             logger.warning("Error at setting last will [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -248,16 +262,17 @@ class SessionStorePostgres(
                   "ON CONFLICT (client_id, topic) DO NOTHING"
         try {
             db.connection?.let { connection ->
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                subscriptions.forEach { subscription ->
-                    val levels = Utils.getTopicLevels(subscription.topicName).toTypedArray()
-                    preparedStatement.setString(1, subscription.clientId)
-                    preparedStatement.setArray(2, connection.createArrayOf("text", levels))
-                    preparedStatement.setInt(3, subscription.qos.value())
-                    preparedStatement.setBoolean(4, Utils.isWildCardTopic(subscription.topicName))
-                    preparedStatement.addBatch()
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    subscriptions.forEach { subscription ->
+                        val levels = Utils.getTopicLevels(subscription.topicName).toTypedArray()
+                        preparedStatement.setString(1, subscription.clientId)
+                        preparedStatement.setArray(2, connection.createArrayOf("text", levels))
+                        preparedStatement.setInt(3, subscription.qos.value())
+                        preparedStatement.setBoolean(4, Utils.isWildCardTopic(subscription.topicName))
+                        preparedStatement.addBatch()
+                    }
+                    preparedStatement.executeBatch()
                 }
-                preparedStatement.executeBatch()
             }
         } catch (e: SQLException) {
             logger.warning("Error at inserting subscription [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -268,14 +283,15 @@ class SessionStorePostgres(
         val sql = "DELETE FROM $subscriptionsTableName WHERE client_id = ? AND topic = ?"
         try {
             db.connection?.let { connection ->
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                subscriptions.forEach { subscription ->
-                    val levels = Utils.getTopicLevels(subscription.topicName).toTypedArray()
-                    preparedStatement.setString(1, subscription.clientId)
-                    preparedStatement.setArray(2, connection.createArrayOf("text", levels))
-                    preparedStatement.addBatch()
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    subscriptions.forEach { subscription ->
+                        val levels = Utils.getTopicLevels(subscription.topicName).toTypedArray()
+                        preparedStatement.setString(1, subscription.clientId)
+                        preparedStatement.setArray(2, connection.createArrayOf("text", levels))
+                        preparedStatement.addBatch()
+                    }
+                    preparedStatement.executeBatch()
                 }
-                preparedStatement.executeBatch()
             }
         } catch (e: SQLException) {
             logger.warning("Error at removing subscription [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -286,29 +302,32 @@ class SessionStorePostgres(
         try {
             db.connection?.let { connection ->
                 "DELETE FROM $subscriptionsTableName WHERE client_id = ? RETURNING topic, qos".let { sql ->
-                    val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                    preparedStatement.setString(1, clientId)
-                    val resultSet = preparedStatement.executeQuery()
-                    while (resultSet.next()) {
-                        val topic = resultSet.getArray(1).array
-                        val qos = MqttQoS.valueOf(resultSet.getInt(2))
-                        if (topic is Array<*>)
-                            callback(MqttSubscription(clientId, topic.joinToString("/"), qos))
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        preparedStatement.setString(1, clientId)
+                        val resultSet = preparedStatement.executeQuery()
+                        while (resultSet.next()) {
+                            val topic = resultSet.getArray(1).array
+                            val qos = MqttQoS.valueOf(resultSet.getInt(2))
+                            if (topic is Array<*>)
+                                callback(MqttSubscription(clientId, topic.joinToString("/"), qos))
+                        }
                     }
                 }
 
                 // Remove the client from the session table
                 "DELETE FROM $sessionsTableName WHERE client_id = ?".let { sql ->
-                    val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                    preparedStatement.setString(1, clientId)
-                    preparedStatement.executeUpdate()
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        preparedStatement.setString(1, clientId)
+                        preparedStatement.executeUpdate()
+                    }
                 }
 
                 // Remove the client from the queued clients table
                 "DELETE FROM $queuedMessagesClientsTableName WHERE client_id = ?".let { sql ->
-                    val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                    preparedStatement.setString(1, clientId)
-                    preparedStatement.executeUpdate()
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        preparedStatement.setString(1, clientId)
+                        preparedStatement.executeUpdate()
+                    }
                 }
             }
 
@@ -326,28 +345,30 @@ class SessionStorePostgres(
                    "ON CONFLICT (client_id, message_uuid) DO NOTHING"
         try {
             db.connection?.let { connection ->
-                val preparedStatement1: PreparedStatement = connection.prepareStatement(sql1)
-                val preparedStatement2: PreparedStatement = connection.prepareStatement(sql2)
-                messages.forEach { message ->
-                    // Add message
-                    preparedStatement1.setObject(1, message.first.messageUuid)
-                    preparedStatement1.setInt(2, message.first.messageId)
-                    preparedStatement1.setString(3, message.first.topicName)
-                    preparedStatement1.setBytes(4, message.first.payload)
-                    preparedStatement1.setInt(5, message.first.qosLevel)
-                    preparedStatement1.setBoolean(6, message.first.isRetain)
-                    preparedStatement1.setString(7, message.first.clientId)
-                    preparedStatement1.addBatch()
+               connection.prepareStatement(sql1).use { preparedStatement1 ->
+                   connection.prepareStatement(sql2).use { preparedStatement2 ->
+                       messages.forEach { message ->
+                           // Add message
+                           preparedStatement1.setObject(1, message.first.messageUuid)
+                           preparedStatement1.setInt(2, message.first.messageId)
+                           preparedStatement1.setString(3, message.first.topicName)
+                           preparedStatement1.setBytes(4, message.first.payload)
+                           preparedStatement1.setInt(5, message.first.qosLevel)
+                           preparedStatement1.setBoolean(6, message.first.isRetain)
+                           preparedStatement1.setString(7, message.first.clientId)
+                           preparedStatement1.addBatch()
 
-                    // Add client to message relation
-                    message.second.forEach { clientId ->
-                        preparedStatement2.setString(1, clientId)
-                        preparedStatement2.setString(2, message.first.messageUuid)
-                        preparedStatement2.addBatch()
-                    }
-                }
-                preparedStatement1.executeBatch()
-                preparedStatement2.executeBatch()
+                           // Add client to message relation
+                           message.second.forEach { clientId ->
+                               preparedStatement2.setString(1, clientId)
+                               preparedStatement2.setString(2, message.first.messageUuid)
+                               preparedStatement2.addBatch()
+                           }
+                       }
+                       preparedStatement1.executeBatch()
+                       preparedStatement2.executeBatch()
+                   }
+               }
             }
         } catch (e: SQLException) {
             logger.warning("Error at inserting queued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -367,27 +388,30 @@ class SessionStorePostgres(
                   "ORDER BY m.message_uuid" // Time Based UUIDs
         try {
             db.connection?.let { connection ->
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                preparedStatement.setString(1, clientId)
-                val resultSet = preparedStatement.executeQuery()
-                while (resultSet.next()) {
-                    val messageUuid = resultSet.getString(1)
-                    val messageId = resultSet.getInt(2)
-                    val topic = resultSet.getString(3)
-                    val payload = resultSet.getBytes(4)
-                    val qos = resultSet.getInt(5)
-                    val retained = resultSet.getBoolean(6)
-                    val clientId = resultSet.getString(6)
-                    callback(MqttMessage(
-                        messageUuid = messageUuid,
-                        messageId = messageId,
-                        topicName = topic,
-                        payload = payload,
-                        qosLevel = qos,
-                        isRetain = retained,
-                        isDup = false,
-                        clientId = clientId
-                    ))
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, clientId)
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        val messageUuid = resultSet.getString(1)
+                        val messageId = resultSet.getInt(2)
+                        val topic = resultSet.getString(3)
+                        val payload = resultSet.getBytes(4)
+                        val qos = resultSet.getInt(5)
+                        val retained = resultSet.getBoolean(6)
+                        val clientId = resultSet.getString(6)
+                        callback(
+                            MqttMessage(
+                                messageUuid = messageUuid,
+                                messageId = messageId,
+                                topicName = topic,
+                                payload = payload,
+                                qosLevel = qos,
+                                isRetain = retained,
+                                isDup = false,
+                                clientId = clientId
+                            )
+                        )
+                    }
                 }
             }
         } catch (e: SQLException) {
@@ -400,13 +424,14 @@ class SessionStorePostgres(
         val sql = "DELETE FROM $queuedMessagesClientsTableName WHERE client_id = ? AND message_uuid = ANY (?)"
         try {
             db.connection?.let { connection ->
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                groupedMessages.forEach { (clientId, messageUuids) ->
-                    preparedStatement.setString(1, clientId)
-                    preparedStatement.setArray(2, connection.createArrayOf("text", messageUuids.toTypedArray()))
-                    preparedStatement.addBatch()
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    groupedMessages.forEach { (clientId, messageUuids) ->
+                        preparedStatement.setString(1, clientId)
+                        preparedStatement.setArray(2, connection.createArrayOf("text", messageUuids.toTypedArray()))
+                        preparedStatement.addBatch()
+                    }
+                    preparedStatement.executeUpdate()
                 }
-                preparedStatement.executeUpdate()
 
             }
         } catch (e: SQLException) {
@@ -420,11 +445,12 @@ class SessionStorePostgres(
         try {
             DriverManager.getConnection(url, username, password).use { connection ->
                 val startTime = System.currentTimeMillis()
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
-                preparedStatement.executeUpdate()
-                val endTime = System.currentTimeMillis()
-                val duration = (endTime - startTime) / 1000.0
-                logger.info("Purging queued messages finished in $duration seconds [${Utils.getCurrentFunctionName()}]")
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.executeUpdate()
+                    val endTime = System.currentTimeMillis()
+                    val duration = (endTime - startTime) / 1000.0
+                    logger.info("Purging queued messages finished in $duration seconds [${Utils.getCurrentFunctionName()}]")
+                }
             }
         } catch (e: SQLException) {
             logger.warning("Error at purging queued messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
