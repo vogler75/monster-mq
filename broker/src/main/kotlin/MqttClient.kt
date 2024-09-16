@@ -13,6 +13,8 @@ import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedDeque
 
 class MqttClient(
     private val endpoint: MqttEndpoint,
@@ -39,8 +41,8 @@ class MqttClient(
         var retryCount: Int = 0
     )
 
-    private val inFlightMessagesRcv = mutableMapOf<Int, InFlightMessage>() // messageId
-    private val inFlightMessagesSnd : ArrayDeque<InFlightMessage> = ArrayDeque()
+    private val inFlightMessagesRcv = ConcurrentHashMap<Int, InFlightMessage>() // messageId
+    private val inFlightMessagesSnd : ConcurrentLinkedDeque<InFlightMessage> = ConcurrentLinkedDeque()
 
     private val busConsumers = mutableListOf<MessageConsumer<*>>()
 
