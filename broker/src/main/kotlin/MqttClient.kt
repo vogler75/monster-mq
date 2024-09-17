@@ -130,11 +130,12 @@ class MqttClient(
             if (endpoint.isCleanSession) {
                 sessionHandler.delClient(clientId) // Clean and remove any existing session state
                 endpoint.accept(false) // false... session not present because of clean session requested
+                this.connected = true
             } else {
                 // Check if session was already present or if it was the first connect
                 val sessionPresent = sessionHandler.isPresent(clientId)
                 endpoint.accept(sessionPresent) // TODO: check if we have an existing session
-
+                this.connected = true
                 // Publish queued messages
                 sessionHandler.dequeueMessages(clientId) { message ->
                     logger.finest { "Client [$clientId] Dequeued message [${message.messageId}] for topic [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }

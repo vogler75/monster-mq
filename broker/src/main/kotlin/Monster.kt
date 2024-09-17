@@ -5,6 +5,7 @@ import at.rocworks.data.MqttMessageCodec
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
 import at.rocworks.handlers.*
+import at.rocworks.handlers.MessageHandler
 import at.rocworks.stores.*
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
