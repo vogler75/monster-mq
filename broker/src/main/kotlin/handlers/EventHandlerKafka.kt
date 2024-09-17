@@ -1,21 +1,19 @@
-package at.rocworks
+package at.rocworks.handlers
 
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
-import at.rocworks.stores.MessageHandler
-import at.rocworks.stores.SessionHandler
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
 import io.vertx.kafka.client.consumer.KafkaConsumer
 import io.vertx.kafka.client.producer.KafkaProducer
 import io.vertx.kafka.client.producer.KafkaProducerRecord
 
-class DistributorKafka(
+class EventHandlerKafka(
     sessionHandler: SessionHandler,
     messageHandler: MessageHandler,
     private val bootstrapServers: String,
     private val kafkaTopicName: String
-): Distributor(sessionHandler, messageHandler) {
+): EventHandler(sessionHandler, messageHandler) {
 
     private val kafkaGroupId = "Monster"
 

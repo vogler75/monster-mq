@@ -1,6 +1,8 @@
 package at.rocworks
 
 import at.rocworks.data.MqttMessage
+import at.rocworks.handlers.EventHandler
+import at.rocworks.handlers.SessionHandler
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
@@ -18,7 +20,8 @@ import java.util.concurrent.ConcurrentLinkedDeque
 
 class MqttClient(
     private val endpoint: MqttEndpoint,
-    private val distributor: Distributor
+    private val eventHandler: EventHandler,
+    private val sessionHandler: SessionHandler,
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -59,11 +62,11 @@ class MqttClient(
 
         private val logger = Utils.getLogger(this::class.java)
 
-        fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, distributor: Distributor) {
+        fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, eventHandler: EventHandler, sessionHandler: SessionHandler) {
             val clientId = endpoint.clientIdentifier()
             logger.info("Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]")
             // TODO: check if the client is already connected (cluster wide)
-            val client = MqttClient(endpoint, distributor)
+            val client = MqttClient(endpoint, eventHandler, sessionHandler)
             vertx.deployVerticle(client).onComplete {
                 client.startEndpoint()
             }
@@ -125,21 +128,20 @@ class MqttClient(
             }
 
             if (endpoint.isCleanSession) {
-                distributor.sessionHandler.delClient(clientId) // Clean and remove any existing session state
+                sessionHandler.delClient(clientId) // Clean and remove any existing session state
                 endpoint.accept(false) // false... session not present because of clean session requested
             } else {
                 // Check if session was already present or if it was the first connect
-                val sessionPresent = distributor.sessionHandler.isPresent(clientId)
+                val sessionPresent = sessionHandler.isPresent(clientId)
                 endpoint.accept(sessionPresent) // TODO: check if we have an existing session
 
                 // Publish queued messages
-                distributor.sessionHandler.dequeueMessages(clientId) { message ->
+                sessionHandler.dequeueMessages(clientId) { message ->
                     logger.finest { "Client [$clientId] Dequeued message [${message.messageId}] for topic [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
                     publishMessage(message.cloneWithNewMessageId(getNextMessageId())) // TODO: if qos is >0 then all messages are put in the inflight queue
                 }
             }
 
-            this.connected = true
             val information = JsonObject()
             information.put("RemoteAddress", endpoint.remoteAddress().toString())
             information.put("LocalAddress", endpoint.localAddress().toString())
@@ -147,18 +149,18 @@ class MqttClient(
             information.put("SSL", endpoint.isSsl)
             information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
             information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
-            distributor.sessionHandler.setClient(clientId, endpoint.isCleanSession, true, information)
-            distributor.sessionHandler.setLastWill(clientId, endpoint.will())
+            sessionHandler.setClient(clientId, endpoint.isCleanSession, true, information)
+            sessionHandler.setLastWill(clientId, endpoint.will())
         }
     }
 
     private fun stopEndpoint() {
         if (endpoint.isCleanSession) {
             logger.info("Client [$clientId] Remove client, it is a clean session [${Utils.getCurrentFunctionName()}]")
-            distributor.sessionHandler.delClient(clientId)
+            sessionHandler.delClient(clientId)
         } else {
             logger.info("Client [$clientId] Pause client, it is not a clean session [${Utils.getCurrentFunctionName()}]")
-            distributor.sessionHandler.pauseClient(clientId)
+            sessionHandler.pauseClient(clientId)
         }
         undeployEndpoint(vertx, this.deploymentID())
     }
@@ -181,7 +183,7 @@ class MqttClient(
         // Subscribe
         subscribe.topicSubscriptions().forEach { subscription ->
             logger.info("Client [$clientId] Subscription for [${subscription.topicName()}] with QoS ${subscription.qualityOfService()} [${Utils.getCurrentFunctionName()}]")
-            distributor.subscribeRequest(this, subscription.topicName(), subscription.qualityOfService())
+            eventHandler.subscribeRequest(this, subscription.topicName(), subscription.qualityOfService())
         }
     }
 
@@ -207,7 +209,7 @@ class MqttClient(
     private fun unsubscribeHandler(unsubscribe: MqttUnsubscribeMessage) {
         unsubscribe.topics().forEach { topicName ->
             logger.info("Client [$clientId] Unsubscribe for [${topicName}]} [${Utils.getCurrentFunctionName()}]")
-            distributor.unsubscribeRequest(this, topicName)
+            eventHandler.unsubscribeRequest(this, topicName)
         }
         endpoint.unsubscribeAcknowledge(unsubscribe.messageId())
     }
@@ -222,11 +224,11 @@ class MqttClient(
         when (message.qosLevel()) {
             MqttQoS.AT_MOST_ONCE -> { // Level 0
                 logger.finest { "Client [$clientId] Publish: no acknowledge needed [${Utils.getCurrentFunctionName()}]" }
-                distributor.publishMessage(MqttMessage(clientId, message))
+                eventHandler.publishMessage(MqttMessage(clientId, message))
             }
             MqttQoS.AT_LEAST_ONCE -> { // Level 1
                 logger.finest { "Client [$clientId] Publish: sending acknowledge for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
-                distributor.publishMessage(MqttMessage(clientId, message))
+                eventHandler.publishMessage(MqttMessage(clientId, message))
                 // TODO: check the result of the publishMessage and send the acknowledge only if the message was delivered
                 endpoint.publishAcknowledge(message.messageId())
             }
@@ -245,7 +247,7 @@ class MqttClient(
         inFlightMessagesRcv[id]?.let { inFlightMessage ->
             logger.finest { "Client [$clientId] Publish: got publish release id [$id], now sending complete to client [${Utils.getCurrentFunctionName()}]"}
             endpoint.publishComplete(id)
-            distributor.publishMessage(inFlightMessage.message)
+            eventHandler.publishMessage(inFlightMessage.message)
             inFlightMessagesRcv.remove(id)
         } ?: run {
             logger.warning { "Client [$clientId] Publish: got publish release for unknown id [$id] [${Utils.getCurrentFunctionName()}]"}
@@ -283,19 +285,23 @@ class MqttClient(
     }
 
     private fun publishMessage(message: MqttMessage) {
-        if (message.qosLevel == 0) {
-            message.publish(endpoint)
+        if (!endpoint.isConnected) {
+            logger.warning("Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]")
         } else {
-            if (inFlightMessagesSnd.size > MAX_IN_FLIGHT_MESSAGES) {
-                logger.warning { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, queue is full [${Utils.getCurrentFunctionName()}]" }
-                // TODO: message must be removed from message store (queued messages)
+            if (message.qosLevel == 0) {
+                message.publish(endpoint)
             } else {
-                inFlightMessagesSnd.addLast(InFlightMessage(message))
-                if (inFlightMessagesSnd.size == 1) {
-                    message.publish(endpoint)
-                    logger.finest { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] delivered [${Utils.getCurrentFunctionName()}]" }
+                if (inFlightMessagesSnd.size > MAX_IN_FLIGHT_MESSAGES) {
+                    logger.warning { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, queue is full [${Utils.getCurrentFunctionName()}]" }
+                    // TODO: message must be removed from message store (queued messages)
                 } else {
-                    logger.finest { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] queued [${Utils.getCurrentFunctionName()}]" }
+                    inFlightMessagesSnd.addLast(InFlightMessage(message))
+                    if (inFlightMessagesSnd.size == 1) {
+                        message.publish(endpoint)
+                        logger.finest { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] delivered [${Utils.getCurrentFunctionName()}]" }
+                    } else {
+                        logger.finest { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] queued [${Utils.getCurrentFunctionName()}]" }
+                    }
                 }
             }
         }
@@ -310,7 +316,7 @@ class MqttClient(
 
     private fun publishMessageCompleted(message: MqttMessage) {
         inFlightMessagesSnd.removeFirst()
-        distributor.publishMessageCompleted(clientId, message)
+        eventHandler.publishMessageCompleted(clientId, message)
     }
 
     private fun consumeMessageQoS1(busMessage: Message<MqttMessage>) {
@@ -413,7 +419,7 @@ class MqttClient(
         logger.info("Client [$clientId] Sending Last-Will message [${Utils.getCurrentFunctionName()}]")
         endpoint.will()?.let { will ->
             if (will.isWillFlag) {
-                distributor.publishMessage(MqttMessage(clientId, will))
+                eventHandler.publishMessage(MqttMessage(clientId, will))
             }
         }
     }

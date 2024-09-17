@@ -89,6 +89,7 @@ class SessionStorePostgres(
 
                     // if not clustered, then remove all sessions and subscriptions of clean sessions
                     if (!Monster.isClustered()) {
+                        statement.executeUpdate("UPDATE $sessionsTableName SET connected = FALSE")
                         statement.executeUpdate(
                             "DELETE FROM $subscriptionsTableName WHERE client_id IN " +
                                     "(SELECT client_id FROM $sessionsTableName WHERE clean_session = TRUE)"

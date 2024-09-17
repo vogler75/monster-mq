@@ -1,5 +1,7 @@
 package at.rocworks
 
+import at.rocworks.handlers.EventHandler
+import at.rocworks.handlers.SessionHandler
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.net.JksOptions
@@ -7,13 +9,12 @@ import io.vertx.core.net.JksOptions
 import io.vertx.mqtt.MqttServer
 import io.vertx.mqtt.MqttServerOptions
 
-import java.util.logging.Logger
-
 class MqttServer(
     private val port: Int,
     private val ssl: Boolean,
     private val ws: Boolean,
-    private val distributor: Distributor
+    private val eventHandler: EventHandler,
+    private val sessionHandler: SessionHandler
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -38,7 +39,7 @@ class MqttServer(
 
         mqttServer.endpointHandler { endpoint ->
             logger.info("MQTT Client on server [${deploymentID()}] [${Utils.getCurrentFunctionName()}]")
-            MqttClient.deployEndpoint(vertx, endpoint, distributor)
+            MqttClient.deployEndpoint(vertx, endpoint, eventHandler, sessionHandler)
         }
 
         mqttServer.listen(port) { ar ->

@@ -1,10 +1,11 @@
-package at.rocworks.stores
+package at.rocworks.handlers
 
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.TopicTree
+import at.rocworks.stores.ISessionStore
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject

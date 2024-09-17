@@ -1,16 +1,16 @@
-package at.rocworks
+package at.rocworks.handlers
 
+import at.rocworks.Const
+import at.rocworks.MqttClient
+import at.rocworks.Utils
 import at.rocworks.data.*
-import at.rocworks.stores.MessageHandler
-import at.rocworks.stores.SessionHandler
-import at.rocworks.stores.SparkplugHandler
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
 
-abstract class Distributor(
-    val sessionHandler: SessionHandler,
+abstract class EventHandler(
+    private val sessionHandler: SessionHandler,
     private val messageHandler: MessageHandler
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
@@ -62,7 +62,7 @@ abstract class Distributor(
             .put(Const.CLIENT_KEY, client.clientId)
             .put(Const.QOS_KEY, qos.value())
         vertx.eventBus().request<Boolean>(getDistributorCommandAddress(), request) {
-            if (!it.succeeded())  logger.severe("Subscribe request failed [${it.cause()}] [${Utils.getCurrentFunctionName()}]")
+            if (!it.succeeded()) logger.severe("Subscribe request failed [${it.cause()}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -71,7 +71,7 @@ abstract class Distributor(
         val topicName = command.body().getString(Const.TOPIC_KEY)
         val qos = MqttQoS.valueOf(command.body().getInteger(Const.QOS_KEY))
 
-        messageHandler.findMatching(topicName, 0) { message -> // TODO: max must be configurable
+        messageHandler.findRetainedMessages(topicName, 0) { message -> // TODO: max must be configurable
             logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
             sendMessageToClient(clientId, message)
         }.onComplete {

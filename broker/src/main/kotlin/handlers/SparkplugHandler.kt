@@ -1,4 +1,4 @@
-package at.rocworks.stores
+package at.rocworks.handlers
 
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage

@@ -1,15 +1,13 @@
-package at.rocworks
+package at.rocworks.handlers
 
+import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
-import at.rocworks.stores.MessageHandler
-import at.rocworks.stores.SessionHandler
 import io.vertx.core.Promise
-import java.util.logging.Logger
 
-class DistributorVertx(
+class EventHandlerVertx(
     sessionHandler: SessionHandler,
     messageHandler: MessageHandler
-): Distributor(sessionHandler, messageHandler) {
+): EventHandler(sessionHandler, messageHandler) {
     private val logger = Utils.getLogger(this::class.java)
 
     override fun start(startPromise: Promise<Void>?) {

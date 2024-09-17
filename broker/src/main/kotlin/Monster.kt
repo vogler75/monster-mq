@@ -4,6 +4,7 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
+import at.rocworks.handlers.*
 import at.rocworks.stores.*
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
@@ -175,8 +176,8 @@ class Monster(args: Array<String>) {
 
                     val distributor = getDistributor(sessionHandler, messageHandler)
                     val servers = listOfNotNull(
-                        if (useTcp) MqttServer(usePort, useSsl, false, distributor) else null,
-                        if (useWs) MqttServer(usePort, useSsl, true, distributor) else null
+                        if (useTcp) MqttServer(usePort, useSsl, false, distributor, sessionHandler) else null,
+                        if (useWs) MqttServer(usePort, useSsl, true, distributor, sessionHandler) else null
                     )
 
                     Future.succeededFuture<String>()
@@ -197,14 +198,14 @@ class Monster(args: Array<String>) {
         }
     }
 
-    private fun getDistributor(sessionHandler: SessionHandler, messageHandler: MessageHandler): Distributor {
+    private fun getDistributor(sessionHandler: SessionHandler, messageHandler: MessageHandler): EventHandler {
         val kafka = config.getJsonObject("Kafka", JsonObject())
         val kafkaEnabled = kafka.getBoolean("Enabled", false)
-        val distributor = if (!kafkaEnabled) DistributorVertx(sessionHandler, messageHandler)
+        val distributor = if (!kafkaEnabled) EventHandlerVertx(sessionHandler, messageHandler)
         else {
             val kafkaServers = kafka.getString("Servers", "")
             val kafkaTopic = kafka.getString("Topic", "monster")
-            DistributorKafka(sessionHandler, messageHandler, kafkaServers, kafkaTopic)
+            EventHandlerKafka(sessionHandler, messageHandler, kafkaServers, kafkaTopic)
         }
         return distributor
     }
