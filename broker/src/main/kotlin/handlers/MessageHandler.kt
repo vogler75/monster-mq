@@ -39,8 +39,8 @@ class MessageHandler(
 
     override fun start() {
         logger.info("Start handler [${Utils.getCurrentFunctionName()}]")
-        writerThread("RM", retainedQueueStore, ::retainedQueueWriter)
-        writerThread("LV", lastValueQueueStore, ::lastValueQueueWriter)
+        writerThread("RMS", retainedQueueStore, ::retainedQueueWriter)
+        writerThread("LVS", lastValueQueueStore, ::lastValueQueueWriter)
         retainedArchive?.let { writerThread("RMA", retainedQueueArchive, it::addAllHistory) }
         lastValueArchive?.let { writerThread("LVA", lastValueQueueArchive, it::addAllHistory) }
     }

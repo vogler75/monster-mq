@@ -1,16 +1,22 @@
 package at.rocworks.handlers
 
+import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import io.vertx.core.json.JsonObject
 import org.eclipse.tahu.message.SparkplugBPayloadDecoder
 
-class SparkplugHandler {
+class SparkplugHandler(config: JsonObject) {
     private val logger = Utils.getLogger(this::class.java)
 
     private val decoder = SparkplugBPayloadDecoder()
     private val sourceNamespace = "spBv1.0/"
     private val expandedNamespace= "spBv1.0e/"
+
+    init {
+        logger.level = Const.DEBUG_LEVEL
+        logger.info("Initialize SparkplugbHandler")
+    }
 
     fun metricExpansion(message: MqttMessage, callback: (MqttMessage) -> Unit) {
         if (message.topicName.startsWith(sourceNamespace))

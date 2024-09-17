@@ -104,7 +104,7 @@ class MqttClient(
             undeployEndpoint(vertx, this.deploymentID())
         } else {
             endpoint.exceptionHandler(::exceptionHandler)
-            endpoint.pingHandler() { pingHandler() }
+            endpoint.pingHandler { pingHandler() }
             endpoint.subscribeHandler(::subscribeHandler)
             endpoint.unsubscribeHandler(::unsubscribeHandler)
             endpoint.publishHandler(::publishHandler)

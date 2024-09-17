@@ -22,7 +22,9 @@ import kotlin.system.exitProcess
 class Monster(args: Array<String>) {
     private val logger: Logger = Logger.getLogger("Monster")
 
+    private val isClustered = args.find { it == "-cluster" } != null
     private val configFileName: String
+
     private var config: JsonObject = JsonObject()
 
     private val postgres = object {
@@ -32,15 +34,25 @@ class Monster(args: Array<String>) {
     }
 
     companion object {
-        private var isClustered = false
-        fun isClustered() = isClustered
+        private var singleton: Monster? = null
+
+        private fun getInstance(): Monster = if (singleton==null) throw Exception("Monster instance is not initialized.") else singleton!!
+
+        fun isClustered() = getInstance().isClustered
+
+        fun getSparkplugHandler(): SparkplugHandler? {
+            return getInstance().config.getJsonObject("SparkplugMetricExpansion", JsonObject())?.let {
+                if (it.getBoolean("Enabled", false)) SparkplugHandler(it)
+                else null
+            }
+        }
     }
 
     init {
         Utils.initLogging()
 
-        // Clustering
-        isClustered = args.find { it == "-cluster" } != null
+        if (singleton==null) singleton = this
+        else throw Exception("Monster instance is already initialized.")
 
         // Config file
         val configFileIndex = args.indexOf("-config")

@@ -1,6 +1,7 @@
 package at.rocworks.handlers
 
 import at.rocworks.Const
+import at.rocworks.Monster
 import at.rocworks.MqttClient
 import at.rocworks.Utils
 import at.rocworks.data.*
@@ -25,10 +26,10 @@ abstract class EventHandler(
         logger.level = Const.DEBUG_LEVEL
     }
 
+    private val sparkplugHandler = Monster.getSparkplugHandler()
+
     private fun getDistributorCommandAddress() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}/C"
     protected fun getDistributorMessageAddress() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}/M"
-
-    private val sparkplugHandler = SparkplugHandler()
 
     override fun start() {
         vertx.eventBus().consumer<JsonObject>(getDistributorCommandAddress()) { message ->
@@ -105,7 +106,8 @@ abstract class EventHandler(
     fun publishMessage(message: MqttMessage) {
         publishMessageToBus(message)
         messageHandler.saveMessage(message)
-        sparkplugHandler.metricExpansion(message) { spbMessage ->
+        sparkplugHandler?.metricExpansion(message) { spbMessage ->
+            logger.finest { "Publishing Sparkplug message [${spbMessage.topicName}] [${Utils.getCurrentFunctionName()}]" }
             publishMessageToBus(spbMessage)
             messageHandler.saveMessage(spbMessage)
         }
