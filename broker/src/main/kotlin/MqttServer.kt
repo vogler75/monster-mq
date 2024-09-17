@@ -38,7 +38,6 @@ class MqttServer(
         }
 
         mqttServer.endpointHandler { endpoint ->
-            logger.info("MQTT Client on server [${deploymentID()}] [${Utils.getCurrentFunctionName()}]")
             MqttClient.deployEndpoint(vertx, endpoint, eventHandler, sessionHandler)
         }
 

@@ -1,9 +1,10 @@
 import paho.mqtt.client as mqtt
 import json
 from datetime import datetime
+import time
 
 # MQTT settings
-BROKER = 'scada'
+BROKER = 'localhost'
 PORT = 1883
 TOPIC = 'test/broadcast'
 CLIENT_ID = "python-simple-subscriber"
@@ -13,6 +14,7 @@ CLIENT_ID = "python-simple-subscriber"
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("Connected successfully "+str(flags))
+        client.publish("test/status", payload="I'm alive", qos=1, retain=True)
         # Subscribe to the topic if 'session present' flag is 0
         if not flags['session present']:
             print("Subscribing to topic", TOPIC)
@@ -52,10 +54,22 @@ client.on_connect = on_connect
 client.on_message = on_message
 
 # add a last will message
-client.will_set("test/lastwill", payload="I'm dead", qos=1, retain=True)
+client.will_set("test/status", payload="I'm dead", qos=1, retain=True)
 
 # Connect to the broker
 client.connect(BROKER, PORT, 60)
 
 # Start the network loop
-client.loop_forever()
+client.loop_start()
+
+while True:
+    try:
+        input("Press Enter to exit...\n")
+        break
+    except Exception as e:
+        break
+print("Exiting")
+client.disconnect()
+client.loop_stop()
+time.sleep(1)
+print("End")

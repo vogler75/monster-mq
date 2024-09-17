@@ -25,11 +25,9 @@ class MqttClient(
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
-    @Volatile
-    private var connected: Boolean = false
-
     private var deployed: Boolean = false
     private var lastPing: Instant = Instant.MIN
+    private var gracefulDisconnected: Boolean = false
 
     private var nextMessageId: Int = 0
     private fun getNextMessageId(): Int = if (nextMessageId==65535) {
@@ -64,7 +62,7 @@ class MqttClient(
 
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, eventHandler: EventHandler, sessionHandler: SessionHandler) {
             val clientId = endpoint.clientIdentifier()
-            logger.info("Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]")
+            logger.fine("Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]")
             // TODO: check if the client is already connected (cluster wide)
             val client = MqttClient(endpoint, eventHandler, sessionHandler)
             vertx.deployVerticle(client).onComplete {
@@ -73,9 +71,9 @@ class MqttClient(
         }
 
         fun undeployEndpoint(vertx: Vertx, deploymentID: String) {
-            logger.info("DeploymentID [$deploymentID] undeploy [${Utils.getCurrentFunctionName()}]")
+            logger.fine("DeploymentID [$deploymentID] undeploy [${Utils.getCurrentFunctionName()}]")
             vertx.undeploy(deploymentID).onComplete {
-                logger.info("DeploymentID [$deploymentID] undeployed [${Utils.getCurrentFunctionName()}]")
+                logger.fine("DeploymentID [$deploymentID] undeployed [${Utils.getCurrentFunctionName()}]")
             }
         }
 
@@ -92,7 +90,7 @@ class MqttClient(
     }
 
     override fun stop() {
-        logger.info("Client [${clientId}] Stop [${Utils.getCurrentFunctionName()}] ")
+        logger.fine("Client [${clientId}] Stop [${Utils.getCurrentFunctionName()}] ")
         busConsumers.forEach { it.unregister() }
     }
 
@@ -130,12 +128,10 @@ class MqttClient(
             if (endpoint.isCleanSession) {
                 sessionHandler.delClient(clientId) // Clean and remove any existing session state
                 endpoint.accept(false) // false... session not present because of clean session requested
-                this.connected = true
             } else {
                 // Check if session was already present or if it was the first connect
                 val sessionPresent = sessionHandler.isPresent(clientId)
                 endpoint.accept(sessionPresent) // TODO: check if we have an existing session
-                this.connected = true
                 // Publish queued messages
                 sessionHandler.dequeueMessages(clientId) { message ->
                     logger.finest { "Client [$clientId] Dequeued message [${message.messageId}] for topic [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
@@ -193,7 +189,7 @@ class MqttClient(
         when (val key = command.getString(Const.COMMAND_KEY)) {
             Const.COMMAND_STATUS -> {
                 logger.info("Client [$clientId] Status command received [${Utils.getCurrentFunctionName()}]")
-                message.reply(JsonObject().put("Connected", connected))
+                message.reply(JsonObject().put("Connected", endpoint.isConnected))
             }
             Const.COMMAND_DISCONNECT -> {
                 logger.info("Client [$clientId] Disconnect command received [${Utils.getCurrentFunctionName()}]")
@@ -277,7 +273,7 @@ class MqttClient(
 
     private fun consumeMessageQoS0(busMessage: Message<MqttMessage>) {
         val message = busMessage.body().cloneWithNewMessageId(0)
-        if (this.connected) {
+        if (endpoint.isConnected) {
             publishMessage(message)
             logger.finest { "Client [$clientId] QoS [0] message [${message.messageId}] for topic [${message.topicName}] delivered  [${Utils.getCurrentFunctionName()}]" }
         } else {
@@ -322,7 +318,7 @@ class MqttClient(
 
     private fun consumeMessageQoS1(busMessage: Message<MqttMessage>) {
         val message = busMessage.body().cloneWithNewMessageId(getNextMessageId())
-        if (this.connected) {
+        if (endpoint.isConnected) {
             publishMessage(message)
         } else {
             logger.finest { "Client [$clientId] QoS [1] message [${message.messageId}] for topic [${message.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]" }
@@ -347,7 +343,7 @@ class MqttClient(
 
     private fun consumeMessageQoS2(busMessage: Message<MqttMessage>) {
         val message = busMessage.body().cloneWithNewMessageId(getNextMessageId())
-        if (this.connected) {
+        if (endpoint.isConnected) {
             publishMessage(message)
         } else {
             logger.finest { "Client [$clientId] QoS [2] message [${message.messageId}] for topic [${message.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]" }
@@ -430,15 +426,13 @@ class MqttClient(
     // -----------------------------------------------------------------------------------------------------------------
 
     private fun disconnectHandler() {
-        logger.info("Client [$clientId] Disconnect received [${Utils.getCurrentFunctionName()}]")
-        if (this.connected) {
-            stopEndpoint()
-            this.connected=false
-        }
+        // Graceful disconnect by the client, closeHandler is also called after this
+        logger.info("Client [$clientId] Graceful disconnect [${endpoint.isConnected}] [${Utils.getCurrentFunctionName()}]")
+        gracefulDisconnected = true
     }
 
     private fun closeHandler() {
-        logger.info("Client [$clientId] Close received [${Utils.getCurrentFunctionName()}]")
+        logger.info("Client [$clientId] Close received [${endpoint.isConnected}] [${Utils.getCurrentFunctionName()}]")
         closeConnection()
     }
 
@@ -447,11 +441,10 @@ class MqttClient(
     // -----------------------------------------------------------------------------------------------------------------
 
     private fun closeConnection() {
-        logger.info("Client [$clientId] Close connection [${Utils.getCurrentFunctionName()}]")
-        if (this.connected) { // if there was no disconnect before
+        logger.info("Client [$clientId] Close connection [${endpoint.isConnected}] [${Utils.getCurrentFunctionName()}]")
+        if (!gracefulDisconnected) { // if there was no disconnect before
             sendLastWill()
-            stopEndpoint()
-            this.connected=false
         }
+        stopEndpoint()
     }
 }
