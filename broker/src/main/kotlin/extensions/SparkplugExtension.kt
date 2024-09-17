@@ -1,4 +1,4 @@
-package at.rocworks.handlers
+package at.rocworks.extensions
 
 import at.rocworks.Const
 import at.rocworks.Utils
@@ -6,7 +6,7 @@ import at.rocworks.data.MqttMessage
 import io.vertx.core.json.JsonObject
 import org.eclipse.tahu.message.SparkplugBPayloadDecoder
 
-class SparkplugHandler(config: JsonObject) {
+class SparkplugExtension(config: JsonObject) {
     private val logger = Utils.getLogger(this::class.java)
 
     private val decoder = SparkplugBPayloadDecoder()

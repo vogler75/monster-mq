@@ -4,6 +4,7 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
+import at.rocworks.extensions.SparkplugExtension
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.stores.*
@@ -40,9 +41,9 @@ class Monster(args: Array<String>) {
 
         fun isClustered() = getInstance().isClustered
 
-        fun getSparkplugHandler(): SparkplugHandler? {
+        fun getSparkplugExtension(): SparkplugExtension? {
             return getInstance().config.getJsonObject("SparkplugMetricExpansion", JsonObject())?.let {
-                if (it.getBoolean("Enabled", false)) SparkplugHandler(it)
+                if (it.getBoolean("Enabled", false)) SparkplugExtension(it)
                 else null
             }
         }

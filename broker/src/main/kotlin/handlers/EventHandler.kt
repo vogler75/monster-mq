@@ -26,7 +26,7 @@ abstract class EventHandler(
         logger.level = Const.DEBUG_LEVEL
     }
 
-    private val sparkplugHandler = Monster.getSparkplugHandler()
+    private val sparkplugHandler = Monster.getSparkplugExtension()
 
     private fun getDistributorCommandAddress() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}/C"
     protected fun getDistributorMessageAddress() = "${Const.GLOBAL_DISTRIBUTOR_NAMESPACE}/${deploymentID()}/M"
