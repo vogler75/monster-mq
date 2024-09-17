@@ -4,7 +4,7 @@ from datetime import datetime
 
 # MQTT settings
 BROKER = 'scada'
-PORT = 1884
+PORT = 1883
 TOPIC = 'test/broadcast'
 CLIENT_ID = "python-simple-subscriber"
 

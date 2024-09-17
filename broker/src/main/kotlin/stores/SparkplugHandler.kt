@@ -13,6 +13,7 @@ class SparkplugHandler {
     private val expandedNamespace= "spBv1.0e/"
 
     fun metricExpansion(message: MqttMessage, callback: (MqttMessage) -> Unit) {
+        if (message.topicName.startsWith(sourceNamespace))
         try {
             val spb = decoder.buildFromByteArray(message.payload, null)
             logger.finest { "Received message [${spb}] [${Utils.getCurrentFunctionName()}]" }
