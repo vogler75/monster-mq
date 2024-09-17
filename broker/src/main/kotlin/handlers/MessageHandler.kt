@@ -97,8 +97,8 @@ class MessageHandler(
                 }
 
                 val currentTime = System.currentTimeMillis()
-                if (currentTime - lastCheckTime >= 1000 && queue.size > 100) { // TODO: configurable
-                    logger.info("Queue [$name] size [${queue.size}] [${Utils.getCurrentFunctionName()}]")
+                if (currentTime - lastCheckTime >= 1000 && queue.size > 1000) { // TODO: configurable
+                    logger.warning("Queue [$name] size [${queue.size}] [${Utils.getCurrentFunctionName()}]")
                     lastCheckTime = currentTime
                 }
 
