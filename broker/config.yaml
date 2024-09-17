@@ -5,14 +5,17 @@ TCP: true
 
 SessionStoreType: POSTGRES
 
+SparkplugMetricExpansion:
+  Enabled: true
+
 RetainedMessages:
-    StoreType: POSTGRES
-    ArchiveType: NONE
+  StoreType: POSTGRES
+  ArchiveType: NONE
 
 LastValueMessages:
-    TopicFilter: [ "#" ]
-    StoreType: POSTGRES
-    ArchiveType: POSTGRES
+  TopicFilter: [  ]
+  StoreType: POSTGRES
+  ArchiveType: POSTGRES
 
 Kafka:
   Enabled: false
