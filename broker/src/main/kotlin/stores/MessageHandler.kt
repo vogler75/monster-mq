@@ -86,6 +86,7 @@ class MessageHandler(
 
         val block = arrayListOf<T>()
 
+        var lastCheckTime = System.currentTimeMillis()
         while (true) {
             queue.poll(100, TimeUnit.MILLISECONDS)?.let { message ->
                 block.add(message)
@@ -97,6 +98,12 @@ class MessageHandler(
                 if (block.size > 0) {
                     execute(block)
                     block.clear()
+                }
+
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastCheckTime >= 1000 && queue.size > 100) { // TODO: configurable
+                    logger.info("Queue [$name] size [${queue.size}] [${Utils.getCurrentFunctionName()}]")
+                    lastCheckTime = currentTime
                 }
             }
         }
