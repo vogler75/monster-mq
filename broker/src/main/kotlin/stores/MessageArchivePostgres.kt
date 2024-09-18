@@ -32,7 +32,7 @@ class MessageArchivePostgres (
                     CREATE TABLE IF NOT EXISTS $tableName (
                         topic text[],
                         time TIMESTAMPTZ,                    
-                        payload BYTEA,
+                        payload_blob BYTEA,
                         payload_json JSONB,
                         qos INT,
                         retained BOOLEAN,
@@ -80,7 +80,7 @@ class MessageArchivePostgres (
     }
 
     override fun addAllHistory(messages: List<MqttMessage>) {
-        val sql = "INSERT INTO $tableName (topic, time, payload, payload_json, qos, retained, client_id, message_uuid) "+
+        val sql = "INSERT INTO $tableName (topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid) "+
                 "VALUES (?, ?, ?, ?::JSONB, ?, ?, ?, ?) "+
                 "ON CONFLICT (topic, time) DO NOTHING" // TODO: ignore duplicates, what if time resolution is not enough?
 

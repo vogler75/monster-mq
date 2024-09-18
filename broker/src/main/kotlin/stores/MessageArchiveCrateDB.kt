@@ -32,8 +32,8 @@ class MessageArchiveCrateDB (
                     CREATE TABLE IF NOT EXISTS $tableName (
                         topic VARCHAR,
                         time TIMESTAMPTZ,                    
-                        payload VARCHAR,
-                        payload_json OBJECT,
+                        payload_b64 VARCHAR INDEX OFF,
+                        payload_obj OBJECT,
                         qos INT,
                         retained BOOLEAN,
                         client_id VARCHAR(65535), 
@@ -60,7 +60,7 @@ class MessageArchiveCrateDB (
     }
 
     override fun addAllHistory(messages: List<MqttMessage>) {
-        val sql = "INSERT INTO $tableName (topic, time, payload, payload_json, qos, retained, client_id, message_uuid) "+
+        val sql = "INSERT INTO $tableName (topic, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid) "+
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "+
                 "ON CONFLICT (topic, time) DO NOTHING" // TODO: ignore duplicates, what if time resolution is not enough?
 

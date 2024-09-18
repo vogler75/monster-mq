@@ -11,7 +11,6 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import java.sql.*
-import java.util.*
 import java.util.concurrent.Callable
 
 class SessionStoreCrateDB(
@@ -84,7 +83,7 @@ class SessionStoreCrateDB(
                     message_uuid VARCHAR(36),
                     message_id INT,                    
                     topic VARCHAR,   
-                    payload VARCHAR,
+                    payload VARCHAR INDEX OFF,
                     qos INT,
                     retained BOOLEAN,
                     client_id VARCHAR(65535), 
@@ -398,12 +397,6 @@ class SessionStoreCrateDB(
     }
 
     override fun dequeueMessages(clientId: String, callback: (MqttMessage)->Unit) {
-        /*
-        val sql = "DELETE FROM $queuedMessagesClientsTableName USING $queuedMessagesTableName "+
-                  "WHERE $queuedMessagesClientsTableName.message_uuid = $queuedMessagesTableName.message_uuid "+
-                  "AND client_id = ? "+
-                  "RETURNING message_id, topic, payload, qos"
-        */
         val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id "+
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) "+
                   "WHERE c.client_id = ? "+
@@ -420,7 +413,7 @@ class SessionStoreCrateDB(
                         val payload = MqttMessage.getPayloadFromBase64(resultSet.getString(4))
                         val qos = resultSet.getInt(5)
                         val retained = resultSet.getBoolean(6)
-                        val clientId = resultSet.getString(6)
+                        val ClientIdPublisher = resultSet.getString(6)
                         callback(
                             MqttMessage(
                                 messageUuid = messageUuid,
@@ -430,7 +423,7 @@ class SessionStoreCrateDB(
                                 qosLevel = qos,
                                 isRetain = retained,
                                 isDup = false,
-                                clientId = clientId
+                                clientId = ClientIdPublisher
                             )
                         )
                     }

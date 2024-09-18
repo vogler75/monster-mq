@@ -35,8 +35,8 @@ class MessageStoreCrateDB(
                         topic VARCHAR PRIMARY KEY,
                         topic_levels VARCHAR[],
                         time TIMESTAMPTZ,                    
-                        payload VARCHAR,
-                        payload_json OBJECT,
+                        payload_b64 VARCHAR INDEX OFF,
+                        payload_obj OBJECT,
                         qos INT,
                         retained BOOLEAN,
                         client_id VARCHAR(65535), 
@@ -64,7 +64,7 @@ class MessageStoreCrateDB(
     override fun get(topicName: String): MqttMessage? {
         try {
             db.connection?.let { connection ->
-                val sql = "SELECT payload, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?"
+                val sql = "SELECT payload_b64, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?"
                 connection.prepareStatement(sql).use { preparedStatement ->
                     val topicLevels = Utils.getTopicLevels(topicName).toTypedArray()
                     preparedStatement.setArray(1, connection.createArrayOf("varchar", topicLevels))
@@ -106,12 +106,12 @@ class MessageStoreCrateDB(
     }
 
     override fun addAll(messages: List<MqttMessage>) {
-        val sql = "INSERT INTO $tableName (topic, topic_levels, time, payload, payload_json, qos, retained, client_id, message_uuid) "+
+        val sql = "INSERT INTO $tableName (topic, topic_levels, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid) "+
                    "VALUES (?, ?::varchar[], ?, ?, ?, ?, ?, ?, ?) "+
                    "ON CONFLICT (topic) DO UPDATE "+
                    "SET time = EXCLUDED.time, "+
-                   "payload = EXCLUDED.payload, "+
-                   "payload_json = EXCLUDED.payload_json, "+
+                   "payload_b64 = EXCLUDED.payload_b64, "+
+                   "payload_obj = EXCLUDED.payload_obj, "+
                    "qos = EXCLUDED.qos, "+
                    "retained = EXCLUDED.retained, "+
                    "client_id = EXCLUDED.client_id, "+
@@ -184,7 +184,7 @@ class MessageStoreCrateDB(
         try {
             db.connection?.let { connection ->
                 val where = topicLevels.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
-                val sql = "SELECT topic, payload, qos, client_id, message_uuid FROM $tableName WHERE $where"
+                val sql = "SELECT topic, payload_b64, qos, client_id, message_uuid FROM $tableName WHERE $where"
                 logger.finest { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
                 connection.prepareStatement(sql).use { preparedStatement ->
                     topicLevels.forEachIndexed { index, level ->

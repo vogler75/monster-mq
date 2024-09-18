@@ -34,7 +34,7 @@ class MessageStorePostgres(
                     CREATE TABLE IF NOT EXISTS $tableName (
                         topic text[] PRIMARY KEY,
                         time TIMESTAMPTZ,                    
-                        payload BYTEA,
+                        payload_blob BYTEA,
                         payload_json JSONB,
                         qos INT,
                         retained BOOLEAN,
@@ -63,7 +63,7 @@ class MessageStorePostgres(
     override fun get(topicName: String): MqttMessage? {
         try {
             db.connection?.let { connection ->
-                val sql = "SELECT payload, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?"
+                val sql = "SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?"
                 connection.prepareStatement(sql).use { preparedStatement ->
                     val topicLevels = Utils.getTopicLevels(topicName).toTypedArray()
                     preparedStatement.setArray(1, connection.createArrayOf("text", topicLevels))
@@ -105,11 +105,11 @@ class MessageStorePostgres(
     }
 
     override fun addAll(messages: List<MqttMessage>) {
-        val sql = "INSERT INTO $tableName (topic, time, payload, payload_json, qos, retained, client_id, message_uuid) "+
+        val sql = "INSERT INTO $tableName (topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid) "+
                    "VALUES (?, ?, ?, ?::JSONB, ?, ?, ?, ?) "+
                    "ON CONFLICT (topic) DO UPDATE "+
                    "SET time = EXCLUDED.time, "+
-                   "payload = EXCLUDED.payload, "+
+                   "payload_blob = EXCLUDED.payload_blob, "+
                    "payload_json = EXCLUDED.payload_json, "+
                    "qos = EXCLUDED.qos, "+
                    "retained = EXCLUDED.retained, "+
@@ -183,7 +183,7 @@ class MessageStorePostgres(
         try {
             db.connection?.let { connection ->
                 val where = topicLevels.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
-                val sql = "SELECT array_to_string(topic, '/'), payload, qos, client_id, message_uuid FROM $tableName WHERE $where"
+                val sql = "SELECT array_to_string(topic, '/'), payload_blob, qos, client_id, message_uuid FROM $tableName WHERE $where"
                 logger.finest { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
                 connection.prepareStatement(sql).use { preparedStatement ->
                     topicLevels.forEachIndexed { index, level ->

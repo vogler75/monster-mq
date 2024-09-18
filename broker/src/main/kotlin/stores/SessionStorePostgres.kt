@@ -377,12 +377,6 @@ class SessionStorePostgres(
     }
 
     override fun dequeueMessages(clientId: String, callback: (MqttMessage)->Unit) {
-        /*
-        val sql = "DELETE FROM $queuedMessagesClientsTableName USING $queuedMessagesTableName "+
-                  "WHERE $queuedMessagesClientsTableName.message_uuid = $queuedMessagesTableName.message_uuid "+
-                  "AND client_id = ? "+
-                  "RETURNING message_id, topic, payload, qos"
-        */
         val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id "+
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) "+
                   "WHERE c.client_id = ? "+
@@ -399,7 +393,7 @@ class SessionStorePostgres(
                         val payload = resultSet.getBytes(4)
                         val qos = resultSet.getInt(5)
                         val retained = resultSet.getBoolean(6)
-                        val clientId = resultSet.getString(6)
+                        val clientIdPublisher = resultSet.getString(6)
                         callback(
                             MqttMessage(
                                 messageUuid = messageUuid,
@@ -409,7 +403,7 @@ class SessionStorePostgres(
                                 qosLevel = qos,
                                 isRetain = retained,
                                 isDup = false,
-                                clientId = clientId
+                                clientId = clientIdPublisher
                             )
                         )
                     }
