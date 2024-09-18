@@ -10,6 +10,7 @@ import io.vertx.mqtt.MqttWill
 import io.vertx.mqtt.messages.MqttPublishMessage
 import java.io.Serializable
 import java.time.Instant
+import java.util.*
 
 class MqttMessage(
     val messageUuid: String = Utils.getUuid(),
@@ -49,6 +50,7 @@ class MqttMessage(
     fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, clientId)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
+
     fun getPayloadAsJson(): String? {
         return try {
             val jsonString = String(payload)
@@ -59,8 +61,14 @@ class MqttMessage(
         }
     }
 
+    fun getPayloadAsBase64(): String = Base64.getEncoder().encodeToString(payload)
+
     private fun getQoS(): MqttQoS = MqttQoS.valueOf(qosLevel)
 
     fun publish(endpoint: MqttEndpoint, qos: MqttQoS=getQoS()): Future<Int>
     = endpoint.publish(topicName, getPayloadAsBuffer(), qos, isDup, isRetain, messageId)
+
+    companion object {
+        fun getPayloadFromBase64(s: String): ByteArray = Base64.getDecoder().decode(s)
+    }
 }

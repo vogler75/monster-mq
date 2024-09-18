@@ -45,14 +45,16 @@
           "enum": [
             "MEMORY",
             "POSTGRES",
-            "HAZELCAST"
+            "HAZELCAST",
+            "CRATEDB"
           ]
         },
         "ArchiveType": {
           "type": "string",
           "enum": [
             "NONE",
-            "POSTGRES"
+            "POSTGRES",
+            "CRATEDB"
           ]
         }
       }
@@ -72,14 +74,16 @@
             "NONE",
             "MEMORY",
             "POSTGRES",
-            "HAZELCAST"
+            "HAZELCAST",
+            "CRATEDB"
           ]
         },
         "ArchiveType": {
           "type": "string",
           "enum": [
             "NONE",
-            "POSTGRES"
+            "POSTGRES",
+            "CRATEDB"
           ]
         }
       }
@@ -87,10 +91,30 @@
     "SessionStoreType": {
       "type": "string",
       "enum": [
-        "POSTGRES"
+        "POSTGRES",
+        "CRATEDB"
       ]
     },
     "Postgres": {
+      "type": "object",
+      "properties": {
+        "Url": {
+          "type": "string"
+        },
+        "User": {
+          "type": "string"
+        },
+        "Pass": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Url",
+        "User",
+        "Pass"
+      ]
+    },
+    "CrateDB": {
       "type": "object",
       "properties": {
         "Url": {

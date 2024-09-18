@@ -4,7 +4,8 @@ import at.rocworks.data.MqttMessage
 
 enum class MessageArchiveType {
     NONE,
-    POSTGRES
+    POSTGRES,
+    CRATEDB
 }
 
 interface IMessageArchive {

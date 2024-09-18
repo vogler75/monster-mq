@@ -1,10 +1,10 @@
 package org.example;
 
 public class Config {
-    public static String statBroker = "tcp://scada:1883";
+    public static String statBroker = "tcp://localhost:1883";
 
-    public static String[] publisherBroker = new String[] { "tcp://scada:1883" };
-    public static String[] subscriberBroker = new String[] { "tcp://scada:1883" };
+    public static String[] publisherBroker = new String[] { "tcp://localhost:1883" };
+    public static String[] subscriberBroker = new String[] { "tcp://localhost:1883" };
 
     //public static String[] publisherBroker = new String[] { "tcp://linux1:1883", "tcp://linux2:1883", "tcp://linux3:1883" };
     //public static String[] subscriberBroker = new String[] { "tcp://linux1:1883", "tcp://linux2:1883", "tcp://linux3:1883" };
@@ -30,6 +30,6 @@ public class Config {
     public static double DELAY_PROCESSING_EVERY_MESSAGE = 100;
 
     public static int TOPIC_LEVEL_DEPTH = 10; //100;
-    public static boolean RETAINED_MESSAGES = false;
+    public static boolean RETAINED_MESSAGES = true;
 
 }

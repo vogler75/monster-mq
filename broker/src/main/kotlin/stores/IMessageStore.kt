@@ -6,7 +6,8 @@ enum class MessageStoreType {
     NONE,
     MEMORY,
     HAZELCAST,
-    POSTGRES
+    POSTGRES,
+    CRATEDB
 }
 
 interface IMessageStore {

@@ -28,7 +28,13 @@ class Monster(args: Array<String>) {
 
     private var config: JsonObject = JsonObject()
 
-    private val postgres = object {
+    private val postgresConfig = object {
+        var url: String = ""
+        var user: String = ""
+        var pass: String = ""
+    }
+
+    private val crateDbConfig = object {
         var url: String = ""
         var user: String = ""
         var pass: String = ""
@@ -97,10 +103,16 @@ class Monster(args: Array<String>) {
         getConfigRetriever(vertx).config.onComplete { it ->
             if (it.succeeded()) {
                 this.config = it.result()
-                val pg = config.getJsonObject("Postgres", JsonObject())
-                postgres.url = pg.getString("Url", "jdbc:postgresql://localhost:5432/postgres")
-                postgres.user = pg.getString("User", "system")
-                postgres.pass = pg.getString("Pass", "manager")
+                config.getJsonObject("Postgres", JsonObject()).let { pg ->
+                    postgresConfig.url = pg.getString("Url", "jdbc:postgresql://localhost:5432/postgres")
+                    postgresConfig.user = pg.getString("User", "system")
+                    postgresConfig.pass = pg.getString("Pass", "manager")
+                }
+                config.getJsonObject("CrateDB", JsonObject()).let { crate ->
+                    crateDbConfig.url = crate.getString("Url", "jdbc:postgresql://localhost:5432/doc")
+                    crateDbConfig.user = crate.getString("User", "crate")
+                    crateDbConfig.pass = crate.getString("Pass", "")
+                }
                 startMonster(vertx, clusterManager)
             } else {
                 logger.severe("Config loading failed: ${it.cause()}")
@@ -231,7 +243,12 @@ class Monster(args: Array<String>) {
         )
         when (sessionStoreType) {
             SessionStoreType.POSTGRES -> {
-                val store = SessionStorePostgres(postgres.url, postgres.user, postgres.pass)
+                val store = SessionStorePostgres(postgresConfig.url, postgresConfig.user, postgresConfig.pass)
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+            }
+            SessionStoreType.CRATEDB -> {
+                val store = SessionStoreCrateDB(crateDbConfig.url, crateDbConfig.user, crateDbConfig.pass)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
             }
@@ -250,9 +267,19 @@ class Monster(args: Array<String>) {
             MessageStoreType.POSTGRES -> {
                 val store = MessageStorePostgres(
                     name = name,
-                    url = postgres.url,
-                    username = postgres.user,
-                    password = postgres.pass
+                    url = postgresConfig.url,
+                    username = postgresConfig.user,
+                    password = postgresConfig.pass
+                )
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+            }
+            MessageStoreType.CRATEDB -> {
+                val store = MessageStoreCrateDB(
+                    name = name,
+                    url = crateDbConfig.url,
+                    username = crateDbConfig.user,
+                    password = crateDbConfig.pass
                 )
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
@@ -277,9 +304,19 @@ class Monster(args: Array<String>) {
             MessageArchiveType.POSTGRES -> {
                 val store = MessageArchivePostgres(
                     name = name,
-                    url = postgres.url,
-                    username = postgres.user,
-                    password = postgres.pass
+                    url = postgresConfig.url,
+                    username = postgresConfig.user,
+                    password = postgresConfig.pass
+                )
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+            }
+            MessageArchiveType.CRATEDB -> {
+                val store = MessageArchiveCrateDB(
+                    name = name,
+                    url = crateDbConfig.url,
+                    username = crateDbConfig.user,
+                    password = crateDbConfig.pass
                 )
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
