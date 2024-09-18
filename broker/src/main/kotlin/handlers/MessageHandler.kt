@@ -3,7 +3,7 @@ package at.rocworks.handlers
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.*
-import at.rocworks.stores.IMessageArchive
+import at.rocworks.stores.ArchiveGroup
 import at.rocworks.stores.IMessageStore
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -15,34 +15,32 @@ import kotlin.concurrent.thread
 
 class MessageHandler(
     private val retainedStore: IMessageStore,
-    private val retainedArchive: IMessageArchive?,
-    private val lastValueFilter: List<String>,
-    private val lastValueStore: IMessageStore?,
-    private val lastValueArchive: IMessageArchive?
+    private val archiveGroups: List<ArchiveGroup>
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
     private val retainedQueueStore: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
-    private val retainedQueueArchive: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
 
-    private val lastValueQueueStore: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
-    private val lastValueQueueArchive: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
+    private val archiveQueues = mutableMapOf<String, ArrayBlockingQueue<MqttMessage>>()
 
     private val maxWriteBlockSize = 4000 // TODO: configurable
 
-    private val lastValueFilterTree = TopicTree<Boolean, Boolean>()
-
     init {
         logger.level = Const.DEBUG_LEVEL
-        lastValueFilter.forEach { lastValueFilterTree.add(it, key=true, value=true) }
+
     }
 
     override fun start() {
         logger.info("Start handler [${Utils.getCurrentFunctionName()}]")
-        writerThread("RMS", retainedQueueStore, ::retainedQueueWriter)
-        writerThread("LVS", lastValueQueueStore, ::lastValueQueueWriter)
-        retainedArchive?.let { writerThread("RMA", retainedQueueArchive, it::addAllHistory) }
-        lastValueArchive?.let { writerThread("LVA", lastValueQueueArchive, it::addAllHistory) }
+        writerThread("RM", retainedQueueStore, ::retainedQueueWriter)
+        archiveGroups.forEach { group ->
+            val queue = ArrayBlockingQueue<MqttMessage>(100_000) // TODO: configurable
+            archiveQueues[group.name] = queue
+            writerThread("AG-${group.name}", queue) { list ->
+                group.lastValStore?.addAll(getLastMessages(list))
+                group.archiveStore?.addAllHistory(list)
+            }
+        }
     }
 
     private fun retainedQueueWriter(list: List<MqttMessage>) {
@@ -64,18 +62,14 @@ class MessageHandler(
         if (del.isNotEmpty()) retainedStore.delAll(del)
     }
 
-    private fun lastValueQueueWriter(list: List<MqttMessage>) {
-        val set = mutableSetOf<String>()
-        val add = arrayListOf<MqttMessage>()
+    private fun getLastMessages(list: List<MqttMessage>): List<MqttMessage> {
+        val map = mutableMapOf<String, MqttMessage>()
         var i = list.size-1
         while (i >= 0) {
             val it = list[i]; i--
-            if (!set.contains(it.topicName)) {
-                set.add(it.topicName)
-                add.add(it)
-            }
+            if (!map.containsKey(it.topicName)) map[it.topicName] = it
         }
-        lastValueStore?.addAll(add)
+        return map.values.toList()
     }
 
     private fun <T> writerThread(name: String, queue: ArrayBlockingQueue<T>, execute: (List<T>)->Unit)
@@ -101,7 +95,6 @@ class MessageHandler(
                     logger.warning("Queue [$name] size [${queue.size}] [${Utils.getCurrentFunctionName()}]")
                     lastCheckTime = currentTime
                 }
-
             }
         }
     }
@@ -113,36 +106,18 @@ class MessageHandler(
             } catch (e: IllegalStateException) {
                 // TODO: handle exception
             }
-            if (retainedArchive != null) {
-                try {
-                    retainedQueueArchive.add(message)
-                } catch (e: IllegalStateException) {
-                    // TODO: handle exception
-                }
-            }
         }
 
-        fun processLastValue() {
-            if (lastValueStore != null) {
+        archiveGroups.forEach {
+            val queue = archiveQueues[it.name] ?: return@forEach
+            if ((!it.retainedOnly || message.isRetain) &&
+                (it.topicFilter.isEmpty() || it.filterTree.isTopicNameMatching(message.topicName))) {
                 try {
-                    lastValueQueueStore.add(message)
+                    queue.add(message)
                 } catch (e: IllegalStateException) {
                     // TODO: handle exception
                 }
             }
-            if (lastValueArchive != null) {
-                try {
-                    lastValueQueueArchive.add(message)
-                } catch (e: IllegalStateException) {
-                    // TODO: handle exception
-                }
-            }
-        }
-
-        if (lastValueFilter.isEmpty()) processLastValue()
-        else {
-            val matched = lastValueFilterTree.isTopicNameMatching(message.topicName)
-            if (matched) processLastValue()
         }
 
         return Future.succeededFuture()

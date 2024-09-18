@@ -150,53 +150,50 @@ class Monster(args: Array<String>) {
         val useSsl = config.getBoolean("SSL", false)
         val useWs = config.getBoolean("WS", false)
         val useTcp = config.getBoolean("TCP", true)
-
-        val retainedMessages = config.getJsonObject("RetainedMessages", JsonObject())
-        val lastValueMessages = config.getJsonObject("LastValueMessages", JsonObject())
-        val lastValueFilter = lastValueMessages.getJsonArray("TopicFilter", JsonArray()).toList().map { it as String }
-
-        val retainedMessage = object {
-            val storeType = MessageStoreType.valueOf(retainedMessages.getString("StoreType", "MEMORY"))
-            val archiveType = MessageArchiveType.valueOf(retainedMessages.getString("ArchiveType", "NONE"))
-        }
-
-        val lastValueMessage = object {
-            val storeType = MessageStoreType.valueOf(lastValueMessages.getString("StoreType", "NONE"))
-            val archiveType = MessageArchiveType.valueOf(lastValueMessages.getString("ArchiveType", "NONE"))
-        }
-
         logger.info("Port [$usePort] SSL [$useSsl] WS [$useWs] TCP [$useTcp]")
 
-        logger.info("RetainedMessageStoreType [${retainedMessage.storeType}]")
-        logger.info("LastValueMessageStoreType [${lastValueMessage.storeType}]")
+        val retainedStoreType = MessageStoreType.valueOf(config.getString("RetainedStoreType", "MEMORY"))
+        logger.info("RetainedMessageStoreType [${retainedStoreType}]")
 
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
         getSessionStore(vertx).onSuccess { sessionStore ->
-            val retainedStore = getMessageStore(vertx, "RetainedMessages", retainedMessage.storeType, clusterManager)
-            val lastValueStore = getMessageStore(vertx, "LastValueMessages", lastValueMessage.storeType, clusterManager)
+            val (retainedStore, retainedReady) = getMessageStore(vertx, "retainedmessages", retainedStoreType, clusterManager)
 
-            val retainedArch = getMessageArchive(vertx, "RetainedArchive", retainedMessage.archiveType)
-            val lastValueArch = getMessageArchive(vertx, "LastValueArchive", lastValueMessage.archiveType)
+            val archiveGroups = config.getJsonArray("ArchiveGroups", JsonArray())
+                .filterIsInstance<JsonObject>().filter { it.getBoolean("Enabled") }.map { c ->
+                val name = c.getString("Name", "ArchiveGroup")
+                val topicFilter = c.getJsonArray("TopicFilter", JsonArray()).toList().map { it as String }
+                val retainedOnly = c.getBoolean("RetainedOnly", false)
 
-            Future.succeededFuture<Unit>()
-                .compose { retainedStore }
-                .compose { lastValueStore }
-                .compose { retainedArch }
-                .compose { lastValueArch }
-                .onFailure {
+                val lastValType = MessageStoreType.valueOf(c.getString("LastValType", "NONE"))
+                val archiveType = MessageArchiveType.valueOf(c.getString("ArchiveType", "NONE"))
+
+                val (lastValStore, lastValReady) = getMessageStore(vertx, name+"lastval", lastValType, clusterManager)
+                val (archiveStore, archiveReady) = getMessageArchive(vertx, name+"archive", archiveType)
+
+                ArchiveGroup(name,
+                    topicFilter, retainedOnly,
+                    lastValStore, lastValReady,
+                    archiveStore, archiveReady
+                )
+            }
+
+            val futures = Future.succeededFuture<Unit>().compose { retainedReady }
+            archiveGroups.forEach { archiveGroup ->
+                futures.compose { archiveGroup.lastValReady }
+                futures.compose { archiveGroup.archiveReady }
+            }
+            futures.onFailure {
                     logger.severe("Message store creation failed: ${it.message}")
                     exitProcess(-1)
                 }
                 .onComplete {
                     logger.info("Message stores are ready.")
                     val messageHandler = MessageHandler(
-                        retainedStore.result()!!,
-                        retainedArch.result(),
-                        lastValueFilter,
-                        lastValueStore.result(),
-                        lastValueArch.result()
+                        retainedStore!!,
+                        archiveGroups
                     )
                     val sessionHandler = SessionHandler(sessionStore)
 
@@ -246,61 +243,68 @@ class Monster(args: Array<String>) {
                 val store = SessionStorePostgres(postgresConfig.url, postgresConfig.user, postgresConfig.pass)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                store to promise.future()
             }
             SessionStoreType.CRATEDB -> {
                 val store = SessionStoreCrateDB(crateDbConfig.url, crateDbConfig.user, crateDbConfig.pass)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                store to promise.future()
             }
         }
         return promise.future()
     }
 
-    private fun getMessageStore(vertx: Vertx, name: String, storeType: MessageStoreType, clusterManager: ClusterManager?): Future<IMessageStore?> {
-        val promise = Promise.promise<IMessageStore?>()
-        when (storeType) {
-            MessageStoreType.NONE -> promise.complete()
+    private fun getMessageStore(vertx: Vertx,
+                                name: String, storeType:
+                                MessageStoreType,
+                                clusterManager: ClusterManager?): Pair<IMessageStore?, Future<Void>> {
+        val promise = Promise.promise<Void>()
+        val store = when (storeType) {
+            MessageStoreType.NONE -> {
+                promise.complete()
+                null
+            }
             MessageStoreType.MEMORY -> {
                 val store = MessageStoreMemory(name)
-                vertx.deployVerticle(store).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                vertx.deployVerticle(store).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                store
             }
             MessageStoreType.POSTGRES -> {
-                val store = MessageStorePostgres(
-                    name = name,
-                    url = postgresConfig.url,
-                    username = postgresConfig.user,
-                    password = postgresConfig.pass
-                )
+                val store = MessageStorePostgres(name, postgresConfig.url, postgresConfig.user, postgresConfig.pass)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                store
             }
             MessageStoreType.CRATEDB -> {
-                val store = MessageStoreCrateDB(
-                    name = name,
-                    url = crateDbConfig.url,
-                    username = crateDbConfig.user,
-                    password = crateDbConfig.pass
-                )
+                val store = MessageStoreCrateDB(name, crateDbConfig.url, crateDbConfig.user, crateDbConfig.pass)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                store
             }
             MessageStoreType.HAZELCAST -> {
                 if (clusterManager is HazelcastClusterManager) {
                     val store = MessageStoreHazelcast(name, clusterManager.hazelcastInstance)
-                    vertx.deployVerticle(store).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                    vertx.deployVerticle(store).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                    store
                 } else {
                     logger.severe("Cannot create Hazelcast message store with this cluster manager.")
                     exitProcess(-1)
                 }
             }
         }
-        return promise.future()
+        return store to promise.future()
     }
 
-    private fun getMessageArchive(vertx: Vertx, name: String, storeType: MessageArchiveType): Future<IMessageArchive?> {
-        val promise = Promise.promise<IMessageArchive?>()
-        when (storeType) {
-            MessageArchiveType.NONE -> promise.complete()
+    private fun getMessageArchive(vertx: Vertx,
+                                  name: String,
+                                  storeType: MessageArchiveType): Pair<IMessageArchive?, Future<Void>> {
+        val promise = Promise.promise<Void>()
+        val archive = when (storeType) {
+            MessageArchiveType.NONE -> {
+                promise.complete()
+                null
+            }
             MessageArchiveType.POSTGRES -> {
                 val store = MessageArchivePostgres(
                     name = name,
@@ -309,7 +313,8 @@ class Monster(args: Array<String>) {
                     password = postgresConfig.pass
                 )
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                store
             }
             MessageArchiveType.CRATEDB -> {
                 val store = MessageArchiveCrateDB(
@@ -319,9 +324,10 @@ class Monster(args: Array<String>) {
                     password = crateDbConfig.pass
                 )
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onSuccess { promise.complete(store) }.onFailure { promise.fail(it) }
+                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                store
             }
         }
-        return promise.future()
+        return archive to promise.future()
     }
 }
