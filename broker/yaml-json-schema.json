@@ -37,63 +37,70 @@
         "Topic"
       ]
     },
-    "RetainedMessages": {
-      "type": "object",
-      "properties": {
-        "StoreType": {
-          "type": "string",
-          "enum": [
-            "MEMORY",
-            "POSTGRES",
-            "HAZELCAST",
-            "CRATEDB"
-          ]
-        },
-        "ArchiveType": {
-          "type": "string",
-          "enum": [
-            "NONE",
-            "POSTGRES",
-            "CRATEDB"
-          ]
-        }
-      }
-    },
-    "LastValueMessages": {
-      "type": "object",
-      "properties": {
-        "TopicFilter": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "StoreType": {
-          "type": "string",
-          "enum": [
-            "NONE",
-            "MEMORY",
-            "POSTGRES",
-            "HAZELCAST",
-            "CRATEDB"
-          ]
-        },
-        "ArchiveType": {
-          "type": "string",
-          "enum": [
-            "NONE",
-            "POSTGRES",
-            "CRATEDB"
-          ]
-        }
-      }
-    },
     "SessionStoreType": {
       "type": "string",
       "enum": [
         "POSTGRES",
         "CRATEDB"
       ]
+    },
+    "RetainedStoreType": {
+      "type": "string",
+      "enum": [
+        "MEMORY",
+        "HAZELCAST",
+        "POSTGRES",
+        "CRATEDB"
+      ]
+    },
+    "ArchiveGroups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Enabled": {
+            "type": "boolean"
+          },
+          "TopicFilter": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "RetainedOnly": {
+            "type": "boolean"
+          },
+          "LastValType": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "MEMORY",
+              "HAZELCAST",
+              "POSTGRES",
+              "CRATEDB"
+            ]
+          },
+          "ArchiveType": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "POSTGRES",
+              "CRATEDB"
+            ]
+          }
+        },
+        "required": [
+          "Name",
+          "Enabled",
+          "TopicFilter",
+          "RetainedOnly",
+          "LastValType",
+          "ArchiveType"
+        ]
+      }
     },
     "Postgres": {
       "type": "object",

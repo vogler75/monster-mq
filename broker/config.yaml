@@ -23,7 +23,6 @@ ArchiveGroups:
     LastValType: POSTGRES
     ArchiveType: POSTGRES
 
-
 Kafka:
   Enabled: false
   Servers: linux0:9092
