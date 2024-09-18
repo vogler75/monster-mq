@@ -441,8 +441,8 @@ class SessionStorePostgres(
     }
 
     private fun purgeQueuedMessages() {
-        val sql = "DELETE FROM $queuedMessagesTableName WHERE message_id NOT IN " +
-                "(SELECT message_id FROM $queuedMessagesClientsTableName)"
+        val sql = "DELETE FROM $queuedMessagesTableName WHERE message_uuid NOT IN " +
+                "(SELECT message_uuid FROM $queuedMessagesClientsTableName)"
         try {
             DriverManager.getConnection(url, username, password).use { connection ->
                 val startTime = System.currentTimeMillis()
