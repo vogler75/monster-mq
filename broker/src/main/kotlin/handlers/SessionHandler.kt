@@ -162,4 +162,12 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
         logger.finest { "Found [${result.size}] clients [${result.joinToString(",")}] [${Utils.getCurrentFunctionName()}]" }
         return result
     }
+
+    fun purgeSessions() {
+        store.purgeSessions()
+    }
+
+    fun purgeQueuedMessages() {
+        store.purgeQueuedMessages()
+    }
 }

@@ -28,6 +28,8 @@ class Monster(args: Array<String>) {
 
     private var config: JsonObject = JsonObject()
 
+    //private var sessionHandler: SessionHandler? = null
+
     private val postgresConfig = object {
         var url: String = ""
         var user: String = ""
@@ -46,6 +48,9 @@ class Monster(args: Array<String>) {
         private fun getInstance(): Monster = if (singleton==null) throw Exception("Monster instance is not initialized.") else singleton!!
 
         fun isClustered() = getInstance().isClustered
+        fun isNotClustered() = !isClustered()
+
+        //fun getSessionHandler() = getInstance().sessionHandler ?: throw Exception("SessionHandler is not initialized.")
 
         fun getSparkplugExtension(): SparkplugExtension? {
             return getInstance().config.getJsonObject("SparkplugMetricExpansion", JsonObject())?.let {
@@ -159,8 +164,10 @@ class Monster(args: Array<String>) {
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
         getSessionStore(vertx).onSuccess { sessionStore ->
+            // Retained messages
             val (retainedStore, retainedReady) = getMessageStore(vertx, "retainedmessages", retainedStoreType, clusterManager)
 
+            // Archive groups
             val archiveGroups = config.getJsonArray("ArchiveGroups", JsonArray())
                 .filterIsInstance<JsonObject>().filter { it.getBoolean("Enabled") }.map { c ->
                 val name = c.getString("Name", "ArchiveGroup")
@@ -180,33 +187,39 @@ class Monster(args: Array<String>) {
                 )
             }
 
+            // Wait for all stores to be ready
             val futures = Future.succeededFuture<Unit>().compose { retainedReady }
             archiveGroups.forEach { archiveGroup ->
                 futures.compose { archiveGroup.lastValReady }
                 futures.compose { archiveGroup.archiveReady }
             }
             futures.onFailure {
-                    logger.severe("Message store creation failed: ${it.message}")
-                    exitProcess(-1)
-                }
-                .onComplete {
-                    logger.info("Message stores are ready.")
-                    val messageHandler = MessageHandler(
-                        retainedStore!!,
-                        archiveGroups
-                    )
-                    val sessionHandler = SessionHandler(sessionStore)
+                logger.severe("Initialization of archive groups failed: ${it.message}")
+                exitProcess(-1)
+            }.onComplete {
+                // Session handler
+                SessionHandler(sessionStore).let { sessionHandler ->
+                    // Message handler
+                    val messageHandler = MessageHandler(retainedStore!!, archiveGroups)
 
-                    val distributor = getDistributor(sessionHandler, messageHandler)
+                    // Distributor
+                    val eventHandler = getEventHandler(sessionHandler, messageHandler)
+
+                    // Health handler
+                    val healthHandler = HealthHandler(sessionHandler)
+
+                    // MQTT Servers
                     val servers = listOfNotNull(
-                        if (useTcp) MqttServer(usePort, useSsl, false, distributor, sessionHandler) else null,
-                        if (useWs) MqttServer(usePort, useSsl, true, distributor, sessionHandler) else null
+                        if (useTcp) MqttServer(usePort, useSsl, false, eventHandler, sessionHandler) else null,
+                        if (useWs) MqttServer(usePort, useSsl, true, eventHandler, sessionHandler) else null
                     )
 
+                    // Deploy all verticles
                     Future.succeededFuture<String>()
-                        .compose { vertx.deployVerticle(messageHandler) }
                         .compose { vertx.deployVerticle(sessionHandler) }
-                        .compose { vertx.deployVerticle(distributor) }
+                        .compose { vertx.deployVerticle(messageHandler) }
+                        .compose { vertx.deployVerticle(eventHandler) }
+                        .compose { vertx.deployVerticle(healthHandler) }
                         .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
                         .onFailure {
                             logger.severe("Startup error: ${it.message}")
@@ -216,12 +229,13 @@ class Monster(args: Array<String>) {
                             logger.info("The Monster is ready.")
                         }
                 }
+            }
         }.onFailure {
             logger.severe("Session store creation failed: ${it.message}")
         }
     }
 
-    private fun getDistributor(sessionHandler: SessionHandler, messageHandler: MessageHandler): EventHandler {
+    private fun getEventHandler(sessionHandler: SessionHandler, messageHandler: MessageHandler): EventHandler {
         val kafka = config.getJsonObject("Kafka", JsonObject())
         val kafkaEnabled = kafka.getBoolean("Enabled", false)
         val distributor = if (!kafkaEnabled) EventHandlerVertx(sessionHandler, messageHandler)

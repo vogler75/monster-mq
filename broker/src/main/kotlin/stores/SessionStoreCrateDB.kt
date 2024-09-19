@@ -104,16 +104,6 @@ class SessionStoreCrateDB(
                 // Execute the SQL statements
                 connection.createStatement().use { statement ->
                     createTableSQL.forEach(statement::executeUpdate)
-
-                    // if not clustered, then remove all sessions and subscriptions of clean sessions
-                    if (!Monster.isClustered()) {
-                        statement.executeUpdate("UPDATE $sessionsTableName SET connected = FALSE")
-                        statement.executeUpdate(
-                            "DELETE FROM $subscriptionsTableName WHERE client_id IN " +
-                                    "(SELECT client_id FROM $sessionsTableName WHERE clean_session = TRUE)"
-                        )
-                        statement.executeUpdate("DELETE FROM $sessionsTableName WHERE clean_session = TRUE")
-                    }
                 }
                 logger.info("Tables are ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
@@ -127,13 +117,6 @@ class SessionStoreCrateDB(
 
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)
-        startPromise.future().onSuccess {
-            vertx.executeBlocking(Callable { purgeQueuedMessages() }).onComplete {
-                //vertx.setPeriodic(60_000) {
-                //    vertx.executeBlocking(Callable { purgeQueuedMessages() })
-                //}
-            }
-        }
     }
 
     override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int)->Unit) {
@@ -475,7 +458,7 @@ class SessionStoreCrateDB(
         }
     }
 
-    private fun purgeQueuedMessages() {
+    override fun purgeQueuedMessages() {
         val sql = "DELETE FROM $queuedMessagesTableName WHERE message_uuid NOT IN " +
                 "(SELECT message_uuid FROM $queuedMessagesClientsTableName)"
         try {
@@ -494,6 +477,22 @@ class SessionStoreCrateDB(
             }
         } catch (e: SQLException) {
             logger.warning("Error at purging queued messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
+    override fun purgeSessions() {
+        try {
+            DriverManager.getConnection(url, username, password).use { connection ->
+                val statement = connection.createStatement()
+                statement.executeUpdate("UPDATE $sessionsTableName SET connected = FALSE")
+                statement.executeUpdate(
+                    "DELETE FROM $subscriptionsTableName WHERE client_id IN " +
+                            "(SELECT client_id FROM $sessionsTableName WHERE clean_session = TRUE)"
+                )
+                statement.executeUpdate("DELETE FROM $sessionsTableName WHERE clean_session = TRUE")
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error at purging sessions [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 }
