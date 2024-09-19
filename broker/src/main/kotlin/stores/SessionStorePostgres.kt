@@ -102,13 +102,6 @@ class SessionStorePostgres(
 
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)
-        startPromise.future().onSuccess {
-            vertx.executeBlocking(Callable { purgeQueuedMessages() }).onComplete {
-                vertx.setPeriodic(60_000) {
-                    vertx.executeBlocking(Callable { purgeQueuedMessages() })
-                }
-            }
-        }
     }
 
     override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int)->Unit) {
@@ -440,8 +433,8 @@ class SessionStorePostgres(
         val sql = "DELETE FROM $queuedMessagesTableName WHERE message_uuid NOT IN " +
                 "(SELECT message_uuid FROM $queuedMessagesClientsTableName)"
         try {
+            val startTime = System.currentTimeMillis()
             DriverManager.getConnection(url, username, password).use { connection ->
-                val startTime = System.currentTimeMillis()
                 connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.executeUpdate()
                     val endTime = System.currentTimeMillis()
@@ -456,6 +449,7 @@ class SessionStorePostgres(
 
     override fun purgeSessions() {
         try {
+            val startTime = System.currentTimeMillis()
             DriverManager.getConnection(url, username, password).use { connection ->
                 val statement = connection.createStatement()
                 statement.executeUpdate("UPDATE $sessionsTableName SET connected = FALSE")
@@ -464,6 +458,9 @@ class SessionStorePostgres(
                             "(SELECT client_id FROM $sessionsTableName WHERE clean_session = TRUE)"
                 )
                 statement.executeUpdate("DELETE FROM $sessionsTableName WHERE clean_session = TRUE")
+                val endTime = System.currentTimeMillis()
+                val duration = (endTime - startTime) / 1000.0
+                logger.info("Purging sessions finished in $duration seconds [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
             logger.warning("Error at purging sessions [${e.message}] [${Utils.getCurrentFunctionName()}]")

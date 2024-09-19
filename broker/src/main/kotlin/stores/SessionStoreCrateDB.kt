@@ -25,8 +25,6 @@ class SessionStoreCrateDB(
     private val queuedMessagesTableName = "QueuedMessages".uppercase()
     private val queuedMessagesClientsTableName = "QueuedMessagesClients".uppercase()
 
-    //private var queuedMessageId = 0L
-
     init {
         logger.level = Const.DEBUG_LEVEL
     }

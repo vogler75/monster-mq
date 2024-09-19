@@ -12,6 +12,7 @@ import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
 import io.vertx.core.*
+import io.vertx.core.impl.VertxInternal
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.core.spi.cluster.ClusterManager
@@ -24,9 +25,9 @@ class Monster(args: Array<String>) {
     private val logger: Logger = Logger.getLogger("Monster")
 
     private val isClustered = args.find { it == "-cluster" } != null
-    private val configFileName: String
 
-    private var config: JsonObject = JsonObject()
+    private val configFile: String
+    private var configJson: JsonObject = JsonObject()
 
     //private var sessionHandler: SessionHandler? = null
 
@@ -53,7 +54,7 @@ class Monster(args: Array<String>) {
         //fun getSessionHandler() = getInstance().sessionHandler ?: throw Exception("SessionHandler is not initialized.")
 
         fun getSparkplugExtension(): SparkplugExtension? {
-            return getInstance().config.getJsonObject("SparkplugMetricExpansion", JsonObject())?.let {
+            return getInstance().configJson.getJsonObject("SparkplugMetricExpansion", JsonObject())?.let {
                 if (it.getBoolean("Enabled", false)) SparkplugExtension(it)
                 else null
             }
@@ -68,7 +69,7 @@ class Monster(args: Array<String>) {
 
         // Config file
         val configFileIndex = args.indexOf("-config")
-        configFileName = if (configFileIndex != -1 && configFileIndex + 1 < args.size) {
+        configFile = if (configFileIndex != -1 && configFileIndex + 1 < args.size) {
             args[configFileIndex + 1]
         } else {
             System.getenv("GATEWAY_CONFIG") ?: "config.yaml"
@@ -92,33 +93,33 @@ class Monster(args: Array<String>) {
     }
 
     private fun getConfigRetriever(vertx: Vertx): ConfigRetriever {
-        logger.info("Monster config file: $configFileName")
+        logger.info("Monster config file: $configFile")
         return ConfigRetriever.create(
             vertx,
             ConfigRetrieverOptions().addStore(
                 ConfigStoreOptions()
                     .setType("file")
                     .setFormat("yaml")
-                    .setConfig(JsonObject().put("path", configFileName))
+                    .setConfig(JsonObject().put("path", configFile))
             )
         )
     }
 
-    private fun getConfigAndStart(vertx: Vertx, clusterManager: ClusterManager?) {
+    private fun getConfigAndStart(vertx: Vertx) {
         getConfigRetriever(vertx).config.onComplete { it ->
             if (it.succeeded()) {
-                this.config = it.result()
-                config.getJsonObject("Postgres", JsonObject()).let { pg ->
+                this.configJson = it.result()
+                configJson.getJsonObject("Postgres", JsonObject()).let { pg ->
                     postgresConfig.url = pg.getString("Url", "jdbc:postgresql://localhost:5432/postgres")
                     postgresConfig.user = pg.getString("User", "system")
                     postgresConfig.pass = pg.getString("Pass", "manager")
                 }
-                config.getJsonObject("CrateDB", JsonObject()).let { crate ->
+                configJson.getJsonObject("CrateDB", JsonObject()).let { crate ->
                     crateDbConfig.url = crate.getString("Url", "jdbc:postgresql://localhost:5432/doc")
                     crateDbConfig.user = crate.getString("User", "crate")
                     crateDbConfig.pass = crate.getString("Pass", "")
                 }
-                startMonster(vertx, clusterManager)
+                startMonster(vertx)
             } else {
                 logger.severe("Config loading failed: ${it.cause()}")
             }
@@ -127,7 +128,7 @@ class Monster(args: Array<String>) {
 
     private fun localSetup(builder: VertxBuilder) {
         val vertx = builder.build()
-        getConfigAndStart(vertx, null)
+        getConfigAndStart(vertx)
     }
 
     private fun clusterSetup(builder: VertxBuilder) {
@@ -143,21 +144,21 @@ class Monster(args: Array<String>) {
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
             if (res.succeeded() && res.result() != null) {
                 val vertx = res.result()!!
-                getConfigAndStart(vertx, clusterManager)
+                getConfigAndStart(vertx)
             } else {
                 logger.severe("Vertx building failed: ${res.cause()}")
             }
         }
     }
 
-    private fun startMonster(vertx: Vertx, clusterManager: ClusterManager?) {
-        val usePort = config.getInteger("Port", 1883)
-        val useSsl = config.getBoolean("SSL", false)
-        val useWs = config.getBoolean("WS", false)
-        val useTcp = config.getBoolean("TCP", true)
+    private fun startMonster(vertx: Vertx) {
+        val usePort = configJson.getInteger("Port", 1883)
+        val useSsl = configJson.getBoolean("SSL", false)
+        val useWs = configJson.getBoolean("WS", false)
+        val useTcp = configJson.getBoolean("TCP", true)
         logger.info("Port [$usePort] SSL [$useSsl] WS [$useWs] TCP [$useTcp]")
 
-        val retainedStoreType = MessageStoreType.valueOf(config.getString("RetainedStoreType", "MEMORY"))
+        val retainedStoreType = MessageStoreType.valueOf(configJson.getString("RetainedStoreType", "MEMORY"))
         logger.info("RetainedMessageStoreType [${retainedStoreType}]")
 
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
@@ -165,27 +166,10 @@ class Monster(args: Array<String>) {
 
         getSessionStore(vertx).onSuccess { sessionStore ->
             // Retained messages
-            val (retainedStore, retainedReady) = getMessageStore(vertx, "retainedmessages", retainedStoreType, clusterManager)
+            val (retainedStore, retainedReady) = getMessageStore(vertx, "retainedmessages", retainedStoreType)
 
             // Archive groups
-            val archiveGroups = config.getJsonArray("ArchiveGroups", JsonArray())
-                .filterIsInstance<JsonObject>().filter { it.getBoolean("Enabled") }.map { c ->
-                val name = c.getString("Name", "ArchiveGroup")
-                val topicFilter = c.getJsonArray("TopicFilter", JsonArray()).toList().map { it as String }
-                val retainedOnly = c.getBoolean("RetainedOnly", false)
-
-                val lastValType = MessageStoreType.valueOf(c.getString("LastValType", "NONE"))
-                val archiveType = MessageArchiveType.valueOf(c.getString("ArchiveType", "NONE"))
-
-                val (lastValStore, lastValReady) = getMessageStore(vertx, name+"lastval", lastValType, clusterManager)
-                val (archiveStore, archiveReady) = getMessageArchive(vertx, name+"archive", archiveType)
-
-                ArchiveGroup(name,
-                    topicFilter, retainedOnly,
-                    lastValStore, lastValReady,
-                    archiveStore, archiveReady
-                )
-            }
+            val archiveGroups = getArchiveGroups(vertx)
 
             // Wait for all stores to be ready
             val futures = Future.succeededFuture<Unit>().compose { retainedReady }
@@ -235,8 +219,29 @@ class Monster(args: Array<String>) {
         }
     }
 
+    private fun getArchiveGroups(vertx: Vertx)
+    = configJson.getJsonArray("ArchiveGroups", JsonArray())
+        .filterIsInstance<JsonObject>().filter { it.getBoolean("Enabled") }.map { c ->
+            val name = c.getString("Name", "ArchiveGroup")
+            val topicFilter = c.getJsonArray("TopicFilter", JsonArray()).toList().map { it as String }
+            val retainedOnly = c.getBoolean("RetainedOnly", false)
+
+            val lastValType = MessageStoreType.valueOf(c.getString("LastValType", "NONE"))
+            val archiveType = MessageArchiveType.valueOf(c.getString("ArchiveType", "NONE"))
+
+            val (lastValStore, lastValReady) = getMessageStore(vertx, name + "lastval", lastValType)
+            val (archiveStore, archiveReady) = getMessageArchive(vertx, name + "archive", archiveType)
+
+            ArchiveGroup(
+                name,
+                topicFilter, retainedOnly,
+                lastValStore, lastValReady,
+                archiveStore, archiveReady
+            )
+        }
+
     private fun getEventHandler(sessionHandler: SessionHandler, messageHandler: MessageHandler): EventHandler {
-        val kafka = config.getJsonObject("Kafka", JsonObject())
+        val kafka = configJson.getJsonObject("Kafka", JsonObject())
         val kafkaEnabled = kafka.getBoolean("Enabled", false)
         val distributor = if (!kafkaEnabled) EventHandlerVertx(sessionHandler, messageHandler)
         else {
@@ -250,7 +255,7 @@ class Monster(args: Array<String>) {
     private fun getSessionStore(vertx: Vertx): Future<ISessionStore> {
         val promise = Promise.promise<ISessionStore>()
         val sessionStoreType = SessionStoreType.valueOf(
-            config.getString("SessionStoreType", "MEMORY")
+            configJson.getString("SessionStoreType", "MEMORY")
         )
         when (sessionStoreType) {
             SessionStoreType.POSTGRES -> {
@@ -271,8 +276,7 @@ class Monster(args: Array<String>) {
 
     private fun getMessageStore(vertx: Vertx,
                                 name: String, storeType:
-                                MessageStoreType,
-                                clusterManager: ClusterManager?): Pair<IMessageStore?, Future<Void>> {
+                                MessageStoreType): Pair<IMessageStore?, Future<Void>> {
         val promise = Promise.promise<Void>()
         val store = when (storeType) {
             MessageStoreType.NONE -> {
@@ -297,6 +301,7 @@ class Monster(args: Array<String>) {
                 store
             }
             MessageStoreType.HAZELCAST -> {
+                val clusterManager = (vertx as VertxInternal).clusterManager
                 if (clusterManager is HazelcastClusterManager) {
                     val store = MessageStoreHazelcast(name, clusterManager.hazelcastInstance)
                     vertx.deployVerticle(store).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
