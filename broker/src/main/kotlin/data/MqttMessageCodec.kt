@@ -15,10 +15,18 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
 
         addString(s.messageUuid)
         buffer.appendInt(s.messageId)
+
+        /*
         buffer.appendByte(s.qosLevel.toByte())
         buffer.appendByte(if (s.isDup) 1 else 0.toByte())
         buffer.appendByte(if (s.isRetain) 1 else 0.toByte())
         buffer.appendByte(if (s.isQueued) 1 else 0.toByte())
+        */
+
+        buffer.appendByte((((s.qosLevel and 0x03) shl 3) or
+                ((if (s.isDup) 1 else 0) shl 2)
+                or ((if (s.isRetain) 1 else 0) shl 1)
+                or (if (s.isQueued) 1 else 0)).toByte())
         addString(s.topicName)
         addString(s.clientId)
         buffer.appendLong(s.time.toEpochMilli())
@@ -39,6 +47,15 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
         val messageUuid = readString()
         val messageId = buffer.getInt(position)
         position += 4
+
+        val status = buffer.getByte(position)
+        val qos = (status.toInt() shr 3) and 0x03
+        val isDup = ((status.toInt() shr 2) and 0x01) == 1
+        val isRetain = ((status.toInt() shr 1) and 0x01) == 1
+        val isQueued = (status.toInt() and 0x01) == 1
+        position += 1
+
+        /*
         val qos = buffer.getByte(position).toInt()
         position += 1
         val isDup = (buffer.getByte(position)) == 1.toByte()
@@ -47,6 +64,7 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
         position += 1
         val isQueued = (buffer.getByte(position)) == 1.toByte()
         position += 1
+        */
         val topicName = readString()
         val clientId = readString()
         val time = buffer.getLong(position)
