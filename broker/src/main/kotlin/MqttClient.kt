@@ -131,12 +131,7 @@ class MqttClient(
             } else {
                 // Check if session was already present or if it was the first connect
                 val sessionPresent = sessionHandler.isPresent(clientId)
-                endpoint.accept(sessionPresent) // TODO: check if we have an existing session
-                // Publish queued messages
-                sessionHandler.dequeueMessages(clientId) { message ->
-                    logger.finest { "Client [$clientId] Dequeued message [${message.messageId}] for topic [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                    publishMessage(message.cloneWithNewMessageId(getNextMessageId())) // TODO: if qos is >0 then all messages are put in the inflight queue
-                }
+                endpoint.accept(sessionPresent)
             }
 
             val information = JsonObject()
@@ -146,8 +141,12 @@ class MqttClient(
             information.put("SSL", endpoint.isSsl)
             information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
             information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
-            sessionHandler.setClient(clientId, endpoint.isCleanSession, true, information)
             sessionHandler.setLastWill(clientId, endpoint.will())
+
+            // Set client to connected
+            sessionHandler.setClient(clientId, endpoint.isCleanSession, true, information)
+
+            vertx.eventBus().send(getCommandAddress(clientId), JsonObject().put(Const.COMMAND_KEY, Const.COMMAND_DEQUEUE))
         }
     }
 
@@ -195,6 +194,13 @@ class MqttClient(
                 logger.info("Client [$clientId] Disconnect command received [${Utils.getCurrentFunctionName()}]")
                 closeConnection()
                 message.reply(JsonObject().put("Connected", false))
+            }
+            Const.COMMAND_DEQUEUE -> {
+                // Publish queued messages
+                sessionHandler.dequeueMessages(clientId) { m ->
+                    logger.finest { "Client [$clientId] Dequeued message [${m.messageId}] for topic [${m.topicName}] [${Utils.getCurrentFunctionName()}]" }
+                    publishMessage(m.cloneWithNewMessageId(getNextMessageId())) // TODO: if qos is >0 then all messages are put in the inflight queue
+                }
             }
             else -> {
                 logger.warning("Client [$clientId] Received unknown command [$key] [${Utils.getCurrentFunctionName()}]")

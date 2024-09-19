@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 # Define the MQTT broker details
-BROKER = 'scada'
+BROKER = 'localhost'
 PORT = 1883
 TOPIC = 'test/broadcast'
 CLIENT_ID = "python-simple-publisher"
@@ -18,9 +18,9 @@ def publish_messages():
         ts = datetime.now().isoformat()
         message_id = message_id + 1
         payload = { "id": message_id, "ts": ts }
-        client.publish(TOPIC, json.dumps(payload), qos=0).wait_for_publish()
+        client.publish(TOPIC, json.dumps(payload), qos=1).wait_for_publish()
         print("Message Published:", payload)
-        time.sleep(1)
+        time.sleep(0.1)
 
 
 def on_connect(client, userdata, flags, rc):

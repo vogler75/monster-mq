@@ -18,7 +18,7 @@ def on_connect(client, userdata, flags, rc):
         # Subscribe to the topic if 'session present' flag is 0
         if not flags['session present']:
             print("Subscribing to topic", TOPIC)
-            client.subscribe(TOPIC, qos=2)
+            client.subscribe(TOPIC, qos=1)
     else:
         print(f"Connection failed with code {rc}")
 

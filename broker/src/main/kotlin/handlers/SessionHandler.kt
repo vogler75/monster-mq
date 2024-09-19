@@ -94,13 +94,12 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     }
 
     fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean, information: JsonObject) {
-        vertx.eventBus().publish(if (connected) clientOnlineAddress else clientOfflineAddress, clientId)
         store.setClient(clientId, cleanSession, connected, information)
+        vertx.eventBus().publish(if (connected) clientOnlineAddress else clientOfflineAddress, clientId)
     }
 
     fun setLastWill(clientId: String, will: MqttWill) {
         if (will.isWillFlag) {
-            val topic = will.willTopic
             val message = MqttMessage(clientId, will)
             store.setLastWill(clientId, message)
         } else {
