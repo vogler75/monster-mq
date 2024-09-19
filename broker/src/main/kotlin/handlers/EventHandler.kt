@@ -46,12 +46,7 @@ abstract class EventHandler(
     //----------------------------------------------------------------------------------------------------
 
     private fun sendMessageToClient(clientId: String, message: MqttMessage) {
-        when (message.qosLevel) {
-            0 -> vertx.eventBus().send(MqttClient.getMessages0Address(clientId), message)
-            1 -> vertx.eventBus().send(MqttClient.getMessages1Address(clientId), message)
-            2 -> vertx.eventBus().send(MqttClient.getMessages2Address(clientId), message)
-            else -> logger.severe { "Unknown QoS level [${message.qosLevel}] [${Utils.getCurrentFunctionName()}]" }
-        }
+        vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), message)
     }
 
     //----------------------------------------------------------------------------------------------------
@@ -111,10 +106,6 @@ abstract class EventHandler(
             publishMessageToBus(spbMessage)
             messageHandler.saveMessage(spbMessage)
         }
-    }
-
-    fun publishMessageCompleted(clientId: String, message: MqttMessage) {
-        sessionHandler.removeMessage(clientId, message.messageUuid)
     }
 
     abstract fun publishMessageToBus(message: MqttMessage)

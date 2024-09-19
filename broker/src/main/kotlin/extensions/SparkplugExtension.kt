@@ -38,6 +38,7 @@ class SparkplugExtension(config: JsonObject) {
                     qosLevel = 0,
                     isRetain = false,
                     isDup = false,
+                    isQueued = false,
                     clientId = message.clientId
                 )
                 callback(mqttMessage)

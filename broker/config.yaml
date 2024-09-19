@@ -3,8 +3,8 @@ SSL: false
 WS: false
 TCP: true
 
-SessionStoreType: POSTGRES
-RetainedStoreType: POSTGRES
+SessionStoreType: CRATEDB
+RetainedStoreType: CRATEDB
 
 SparkplugMetricExpansion:
   Enabled: true
@@ -19,7 +19,7 @@ ArchiveGroups:
   - Name: "group2"
     Enabled: true
     TopicFilter: [ "test2/#" ]
-    RetainedOnly: true
+    RetainedOnly: false
     LastValType: POSTGRES
     ArchiveType: POSTGRES
 
@@ -34,6 +34,6 @@ Postgres:
   Pass: manager
 
 CrateDB:
-  Url: jdbc:postgresql://192.168.1.31:5432/doc
+  Url: jdbc:postgresql://192.168.1.31:5432/test
   User: crate
   Pass: ""

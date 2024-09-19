@@ -37,8 +37,10 @@ class SessionStorePostgres(
         override fun init(connection: Connection): Future<Void> {
             val promise = Promise.promise<Void>()
             try {
+                connection.autoCommit = false
+
                 val createTableSQL = listOf("""
-                 CREATE TABLE IF NOT EXISTS $sessionsTableName (
+                CREATE TABLE IF NOT EXISTS $sessionsTableName (
                     client_id VARCHAR(65535) PRIMARY KEY,
                     clean_session BOOLEAN,
                     connected BOOLEAN,
@@ -97,6 +99,7 @@ class SessionStorePostgres(
                         statement.executeUpdate("DELETE FROM $sessionsTableName WHERE clean_session = TRUE")
                     }
                 }
+                connection.commit()
                 logger.info("Tables are ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
             } catch (e: Exception) {
@@ -177,6 +180,7 @@ class SessionStorePostgres(
                     preparedStatement.setString(4, information.encode())
                     preparedStatement.executeUpdate()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at inserting client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -192,6 +196,7 @@ class SessionStorePostgres(
                     preparedStatement.setString(2, clientId)
                     preparedStatement.executeUpdate()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at updating client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -252,6 +257,7 @@ class SessionStorePostgres(
                     preparedStatement.setString(5, clientId)
                     preparedStatement.executeUpdate()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at setting last will [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -274,6 +280,7 @@ class SessionStorePostgres(
                     }
                     preparedStatement.executeBatch()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at inserting subscription [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -293,6 +300,7 @@ class SessionStorePostgres(
                     }
                     preparedStatement.executeBatch()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at removing subscription [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -330,6 +338,8 @@ class SessionStorePostgres(
                         preparedStatement.executeUpdate()
                     }
                 }
+
+                connection.commit()
             }
 
         } catch (e: SQLException) {
@@ -346,7 +356,7 @@ class SessionStorePostgres(
                    "ON CONFLICT (client_id, message_uuid) DO NOTHING"
         try {
             db.connection?.let { connection ->
-               connection.prepareStatement(sql1).use { preparedStatement1 ->
+                connection.prepareStatement(sql1).use { preparedStatement1 ->
                    connection.prepareStatement(sql2).use { preparedStatement2 ->
                        messages.forEach { message ->
                            // Add message
@@ -369,7 +379,8 @@ class SessionStorePostgres(
                        preparedStatement1.executeBatch()
                        preparedStatement2.executeBatch()
                    }
-               }
+                }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at inserting queued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -403,6 +414,7 @@ class SessionStorePostgres(
                                 qosLevel = qos,
                                 isRetain = retained,
                                 isDup = false,
+                                isQueued = true,
                                 clientId = clientIdPublisher
                             )
                         )
@@ -427,7 +439,7 @@ class SessionStorePostgres(
                     }
                     preparedStatement.executeUpdate()
                 }
-
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at removing dequeued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -446,6 +458,7 @@ class SessionStorePostgres(
                     val duration = (endTime - startTime) / 1000.0
                     logger.info("Purging queued messages finished in $duration seconds [${Utils.getCurrentFunctionName()}]")
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at purging queued messages [${e.message}] [${Utils.getCurrentFunctionName()}]")

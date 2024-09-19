@@ -20,6 +20,7 @@ class MqttMessage(
     val qosLevel: Int,
     val isRetain: Boolean,
     val isDup: Boolean,
+    val isQueued: Boolean,
     val clientId: String,
     val time: Instant = Instant.now(),
     // TODO: Properties for MQTT 5.0
@@ -32,6 +33,7 @@ class MqttMessage(
         message.qosLevel().value(),
         message.isRetain,
         message.isDup,
+        false,
         clientId
     )
 
@@ -43,11 +45,12 @@ class MqttMessage(
         message.willQos,
         message.isWillRetain,
         false,
+        false,
         clientId
     )
 
-    fun cloneWithNewQoS(qosLevel: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, clientId)
-    fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, clientId)
+    fun cloneWithNewQoS(qosLevel: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId)
+    fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 

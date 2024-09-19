@@ -37,24 +37,28 @@ class SessionStoreCrateDB(
         override fun init(connection: Connection): Future<Void> {
             val promise = Promise.promise<Void>()
             try {
-                // query database type and version
+                connection.autoCommit = false
+
+                // Query database type and version
                 connection.metaData.let { metaData ->
                     logger.info("Connected to ${metaData.databaseProductName} ${metaData.databaseProductVersion} [${Utils.getCurrentFunctionName()}]")
                 }
-                // find out if it is a cratedb
-                val isCrate = run {
+
+                // Check if it is a CrateDB
+                run {
                     connection.createStatement().use { statement ->
                         statement.executeQuery("SELECT version()").use { resultSet ->
                             if (resultSet.next()) {
                                 val version = resultSet.getString(1)
                                 if (version.contains("CrateDB")) {
                                     logger.warning("CrateDB detected [$version] [${Utils.getCurrentFunctionName()}]")
-                                    return@run true
+                                    return@run
                                 }
                             }
                         }
                     }
-                    false
+                    promise.fail("Database is not a CrateDB")
+                    return promise.future()
                 }
 
                 // Create the tables
@@ -125,9 +129,9 @@ class SessionStoreCrateDB(
         db.start(vertx, startPromise)
         startPromise.future().onSuccess {
             vertx.executeBlocking(Callable { purgeQueuedMessages() }).onComplete {
-                vertx.setPeriodic(60_000) {
-                    vertx.executeBlocking(Callable { purgeQueuedMessages() })
-                }
+                //vertx.setPeriodic(60_000) {
+                //    vertx.executeBlocking(Callable { purgeQueuedMessages() })
+                //}
             }
         }
     }
@@ -191,6 +195,7 @@ class SessionStoreCrateDB(
                     preparedStatement.setString(4, information.encode())
                     preparedStatement.executeUpdate()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at inserting client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -206,6 +211,7 @@ class SessionStoreCrateDB(
                     preparedStatement.setString(2, clientId)
                     preparedStatement.executeUpdate()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at updating client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -267,6 +273,7 @@ class SessionStoreCrateDB(
                     preparedStatement.setString(5, clientId)
                     preparedStatement.executeUpdate()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at setting last will [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -288,6 +295,7 @@ class SessionStoreCrateDB(
                     }
                     preparedStatement.executeBatch()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at inserting subscription [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -306,6 +314,7 @@ class SessionStoreCrateDB(
                     }
                     preparedStatement.executeBatch()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at removing subscription [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
@@ -350,6 +359,7 @@ class SessionStoreCrateDB(
                         preparedStatement.executeUpdate()
                     }
                 }
+                connection.commit()
             }
 
         } catch (e: SQLException) {
@@ -366,7 +376,7 @@ class SessionStoreCrateDB(
                    "ON CONFLICT (client_id, message_uuid) DO NOTHING"
         try {
             db.connection?.let { connection ->
-               connection.prepareStatement(sql1).use { preparedStatement1 ->
+                connection.prepareStatement(sql1).use { preparedStatement1 ->
                    connection.prepareStatement(sql2).use { preparedStatement2 ->
                        messages.forEach { message ->
                            // Add message
@@ -389,7 +399,8 @@ class SessionStoreCrateDB(
                        preparedStatement1.executeBatch()
                        preparedStatement2.executeBatch()
                    }
-               }
+                }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at inserting queued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -403,6 +414,10 @@ class SessionStoreCrateDB(
                   "ORDER BY m.message_uuid" // Time Based UUIDs
         try {
             db.connection?.let { connection ->
+                connection.createStatement().use { statement ->
+                    statement.execute("REFRESH TABLE $queuedMessagesTableName")
+                    statement.execute("REFRESH TABLE $queuedMessagesClientsTableName")
+                }
                 connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, clientId)
                     val resultSet = preparedStatement.executeQuery()
@@ -413,7 +428,7 @@ class SessionStoreCrateDB(
                         val payload = MqttMessage.getPayloadFromBase64(resultSet.getString(4))
                         val qos = resultSet.getInt(5)
                         val retained = resultSet.getBoolean(6)
-                        val ClientIdPublisher = resultSet.getString(6)
+                        val clientIdPublisher = resultSet.getString(6)
                         callback(
                             MqttMessage(
                                 messageUuid = messageUuid,
@@ -423,7 +438,8 @@ class SessionStoreCrateDB(
                                 qosLevel = qos,
                                 isRetain = retained,
                                 isDup = false,
-                                clientId = ClientIdPublisher
+                                isQueued = true,
+                                clientId = clientIdPublisher
                             )
                         )
                     }
@@ -436,9 +452,14 @@ class SessionStoreCrateDB(
 
     override fun removeMessages(messages: List<Pair<String, String>>) { // clientId, messageUuid
         val groupedMessages = messages.groupBy({ it.first }, { it.second })
+        logger.finest { "Remove messages: $groupedMessages [${Utils.getCurrentFunctionName()}]" }
         val sql = "DELETE FROM $queuedMessagesClientsTableName WHERE client_id = ? AND message_uuid = ANY (?)"
         try {
             db.connection?.let { connection ->
+                connection.createStatement().use { statement ->
+                    statement.execute("REFRESH TABLE $queuedMessagesTableName")
+                    statement.execute("REFRESH TABLE $queuedMessagesClientsTableName")
+                }
                 connection.prepareStatement(sql).use { preparedStatement ->
                     groupedMessages.forEach { (clientId, messageUuids) ->
                         preparedStatement.setString(1, clientId)
@@ -447,7 +468,7 @@ class SessionStoreCrateDB(
                     }
                     preparedStatement.executeUpdate()
                 }
-
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error at removing dequeued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -460,6 +481,10 @@ class SessionStoreCrateDB(
         try {
             DriverManager.getConnection(url, username, password).use { connection ->
                 val startTime = System.currentTimeMillis()
+                connection.createStatement().use { statement ->
+                    statement.execute("REFRESH TABLE $queuedMessagesTableName")
+                    statement.execute("REFRESH TABLE $queuedMessagesClientsTableName")
+                }
                 connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.executeUpdate()
                     val endTime = System.currentTimeMillis()

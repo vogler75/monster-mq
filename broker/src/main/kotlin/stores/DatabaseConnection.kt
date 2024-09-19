@@ -31,7 +31,7 @@ abstract class DatabaseConnection(
                         }
                         connectPromise.complete()
                     } else {
-                        logger.warning("Connect failed! [${Utils.getCurrentFunctionName()}]")
+                        logger.warning("Connect failed! [${result.cause().message}] [${Utils.getCurrentFunctionName()}]")
                         vertx.setTimer(defaultRetryWaitTime) {
                             connect(vertx, connectPromise)
                         }
@@ -50,7 +50,6 @@ abstract class DatabaseConnection(
             logger.info("Connect to database [${Utils.getCurrentFunctionName()}]")
             DriverManager.getConnection(url, username, password)
                 ?.let { connection ->
-                    connection.autoCommit = true
                     this.connection = connection
                     logger.info("Connection established [${Utils.getCurrentFunctionName()}]")
                     init(connection).onSuccess { promise.complete() }.onFailure { promise.fail(it) }

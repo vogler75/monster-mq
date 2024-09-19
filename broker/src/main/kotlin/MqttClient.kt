@@ -28,6 +28,8 @@ class MqttClient(
     private var deployed: Boolean = false
     private var lastPing: Instant = Instant.MIN
     private var gracefulDisconnected: Boolean = false
+    //private var queueIncomingMessages: Boolean = false
+    //private val queuedIncomingMessages = arrayListOf<Message<MqttMessage>>()
 
     private var nextMessageId: Int = 0
     private fun getNextMessageId(): Int = if (nextMessageId==65535) {
@@ -78,10 +80,9 @@ class MqttClient(
         }
 
         private fun getBaseAddress(clientId: String) = "${Const.GLOBAL_CLIENT_NAMESPACE}/${clientId}"
+
         fun getCommandAddress(clientId: String) = "${getBaseAddress(clientId)}/c"
-        fun getMessages0Address(clientId: String) = "${getBaseAddress(clientId)}/m0"
-        fun getMessages1Address(clientId: String) = "${getBaseAddress(clientId)}/m1"
-        fun getMessages2Address(clientId: String) = "${getBaseAddress(clientId)}/m2"
+        fun getMessagesAddress(clientId: String) = "${getBaseAddress(clientId)}/m"
     }
 
     override fun start() {
@@ -117,14 +118,14 @@ class MqttClient(
             endpoint.disconnectHandler { disconnectHandler() }
             endpoint.closeHandler { closeHandler() }
 
+            // Message bus consumers
             if (!deployed) {
                 deployed = true
                 busConsumers.add(vertx.eventBus().consumer(getCommandAddress(clientId), ::consumeCommand))
-                busConsumers.add(vertx.eventBus().consumer(getMessages0Address(clientId), ::consumeMessageQoS0))
-                busConsumers.add(vertx.eventBus().consumer(getMessages1Address(clientId), ::consumeMessageQoS1))
-                busConsumers.add(vertx.eventBus().consumer(getMessages2Address(clientId), ::consumeMessageQoS2))
+                busConsumers.add(vertx.eventBus().consumer(getMessagesAddress(clientId), ::consumeMessage))
             }
 
+            // Accept connection
             if (endpoint.isCleanSession) {
                 sessionHandler.delClient(clientId) // Clean and remove any existing session state
                 endpoint.accept(false) // false... session not present because of clean session requested
@@ -134,6 +135,14 @@ class MqttClient(
                 endpoint.accept(sessionPresent)
             }
 
+            // Set last will
+            sessionHandler.setLastWill(clientId, endpoint.will())
+
+            // Request queued messages
+            //queueIncomingMessages = true
+            vertx.eventBus().send(getCommandAddress(clientId), JsonObject().put(Const.COMMAND_KEY, Const.COMMAND_DEQUEUE))
+
+            // Set client to connected
             val information = JsonObject()
             information.put("RemoteAddress", endpoint.remoteAddress().toString())
             information.put("LocalAddress", endpoint.localAddress().toString())
@@ -141,12 +150,7 @@ class MqttClient(
             information.put("SSL", endpoint.isSsl)
             information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
             information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
-            sessionHandler.setLastWill(clientId, endpoint.will())
-
-            // Set client to connected
             sessionHandler.setClient(clientId, endpoint.isCleanSession, true, information)
-
-            vertx.eventBus().send(getCommandAddress(clientId), JsonObject().put(Const.COMMAND_KEY, Const.COMMAND_DEQUEUE))
         }
     }
 
@@ -201,6 +205,10 @@ class MqttClient(
                     logger.finest { "Client [$clientId] Dequeued message [${m.messageId}] for topic [${m.topicName}] [${Utils.getCurrentFunctionName()}]" }
                     publishMessage(m.cloneWithNewMessageId(getNextMessageId())) // TODO: if qos is >0 then all messages are put in the inflight queue
                 }
+                //logger.info("Client [$clientId] Dequeue incoming messages [${queuedIncomingMessages.size}] [${Utils.getCurrentFunctionName()}]")
+                //queuedIncomingMessages.forEach(::consumeMessage)
+                //queuedIncomingMessages.clear()
+                //queueIncomingMessages = false
             }
             else -> {
                 logger.warning("Client [$clientId] Received unknown command [$key] [${Utils.getCurrentFunctionName()}]")
@@ -277,6 +285,20 @@ class MqttClient(
     // Sending messages to client (subscribe)
     // -----------------------------------------------------------------------------------------------------------------
 
+    private fun consumeMessage(busMessage: Message<MqttMessage>) {
+        //if (queueIncomingMessages)
+        //    queuedIncomingMessages.add(busMessage)
+        //else
+        when (busMessage.body().qosLevel) {
+            0 -> consumeMessageQoS0(busMessage)
+            1 -> consumeMessageQoS1(busMessage)
+            2 -> consumeMessageQoS2(busMessage)
+            else -> {
+                logger.warning { "Client [$clientId] Subscribe: unknown QoS level [${busMessage.body().qosLevel}] [${Utils.getCurrentFunctionName()}]" }
+            }
+        }
+    }
+
     private fun consumeMessageQoS0(busMessage: Message<MqttMessage>) {
         val message = busMessage.body().cloneWithNewMessageId(0)
         if (endpoint.isConnected) {
@@ -319,7 +341,7 @@ class MqttClient(
 
     private fun publishMessageCompleted(message: MqttMessage) {
         inFlightMessagesSnd.removeFirst()
-        eventHandler.publishMessageCompleted(clientId, message)
+        if (message.isQueued) sessionHandler.removeMessage(clientId, message.messageUuid)
     }
 
     private fun consumeMessageQoS1(busMessage: Message<MqttMessage>) {

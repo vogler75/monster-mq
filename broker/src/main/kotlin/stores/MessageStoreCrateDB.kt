@@ -90,6 +90,7 @@ class MessageStoreCrateDB(
                             payload = payload,
                             qosLevel = qos,
                             isRetain = retained,
+                            isQueued = false,
                             clientId = clientId,
                             isDup = false
                         )
@@ -205,6 +206,7 @@ class MessageStoreCrateDB(
                             qosLevel = qos,
                             isRetain = true,
                             isDup = false,
+                            isQueued = false,
                             clientId = clientId
                         )
                         callback(message)

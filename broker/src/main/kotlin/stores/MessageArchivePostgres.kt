@@ -26,6 +26,7 @@ class MessageArchivePostgres (
         override fun init(connection: Connection): Future<Void> {
             val promise = Promise.promise<Void>()
             try {
+                connection.autoCommit = false
                 connection.createStatement().use { statement ->
                     statement.executeUpdate(
                         """
@@ -63,6 +64,7 @@ class MessageArchivePostgres (
                         logger.warning("TimescaleDB extension is not available [${Utils.getCurrentFunctionName()}]")
                     }
                 }
+                connection.commit()
                 logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
             } catch (e: Exception) {
@@ -102,6 +104,7 @@ class MessageArchivePostgres (
                 }
 
                 preparedStatement.executeBatch()
+                connection.commit()
 
                 if (lastAddAllHistoryError != 0) {
                     logger.info("Batch insert successful after error [${Utils.getCurrentFunctionName()}]")

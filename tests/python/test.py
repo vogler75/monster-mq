@@ -6,7 +6,7 @@ import time
 # MQTT settings
 BROKER = 'localhost'
 PORT = 1883
-TOPIC = '#'
+TOPIC = 'test/broadcast'
 CLIENT_ID = "python-test-subscriber"
 
 
@@ -23,31 +23,39 @@ def on_connect(client, userdata, flags, rc):
 
 
 # Callback when a message is received from the broker
+last_message = None
+
 def on_message(client, userdata, msg):
-     print(f"[{datetime.now().isoformat()}] [{msg.mid}] [{msg.qos}] [{msg.topic.ljust(50)}] [{msg.payload.decode()}]")
+    global last_message
+    message = f"[{datetime.now().isoformat()}] [{msg.mid}] [{msg.qos}] [{msg.topic}] [{msg.payload.decode()}]"
+    if last_message is None:
+        print("START", message)
+    last_message = message
 
-
-# Create an MQTT client instance
-client = mqtt.Client(client_id=CLIENT_ID, clean_session=False)
-
-# Assign the callback functions
-client.on_connect = on_connect
-client.on_message = on_message
-
-# Connect to the broker
-client.connect(BROKER, PORT, 60)
-
-# Start the network loop
-client.loop_start()
 
 while True:
-    try:
-        input("Press Enter to exit...\n")
-        break
-    except Exception as e:
-        break
-print("Exiting")
-client.disconnect()
-client.loop_stop()
-time.sleep(1)
-print("End")
+    last_message = None
+    # Create an MQTT client instance
+    client = mqtt.Client(client_id=CLIENT_ID, clean_session=False)
+
+    # Assign the callback functions
+    client.on_connect = on_connect
+    client.on_message = on_message
+
+    # Connect to the broker
+    client.connect(BROKER, PORT, 60)
+
+    # Start the network loop
+    client.loop_start()
+
+    while True:
+        try:
+            input("Press Enter to exit...\n")
+            break
+        except Exception as e:
+            break
+    client.disconnect()
+    client.loop_stop()
+    time.sleep(1)
+    print("STOP", last_message)
+    input("Press Enter to start...\n")

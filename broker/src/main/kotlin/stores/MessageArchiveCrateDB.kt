@@ -26,9 +26,10 @@ class MessageArchiveCrateDB (
         override fun init(connection: Connection): Future<Void> {
             val promise = Promise.promise<Void>()
             try {
+                connection.autoCommit = false
                 connection.createStatement().use { statement ->
                     statement.executeUpdate(
-                        """
+                    """
                     CREATE TABLE IF NOT EXISTS $tableName (
                         topic VARCHAR,
                         time TIMESTAMPTZ,                    
@@ -81,6 +82,7 @@ class MessageArchiveCrateDB (
                 }
 
                 preparedStatement.executeBatch()
+                connection.commit()
 
                 if (lastAddAllHistoryError != 0) {
                     logger.info("Batch insert successful after error [${Utils.getCurrentFunctionName()}]")

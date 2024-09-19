@@ -2,9 +2,7 @@ package at.rocworks.handlers
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
-import at.rocworks.data.MqttSubscription
-import at.rocworks.data.TopicTree
+import at.rocworks.data.*
 import at.rocworks.stores.ISessionStore
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
@@ -61,6 +59,7 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
         logger.info("Indexing offline clients [${Utils.getCurrentFunctionName()}]")
         store.iterateOfflineClients(offline::add)
         logger.info("Session handler ready [${Utils.getCurrentFunctionName()}]")
+
         startPromise.complete()
     }
 
