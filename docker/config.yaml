@@ -1,0 +1,58 @@
+Port: 1883
+SSL: false
+WS: false
+TCP: true
+
+SessionStoreType: CRATEDB
+RetainedStoreType: CRATEDB
+
+SparkplugMetricExpansion:
+  Enabled: true
+
+ArchiveGroups:
+  - Name: "awattar"
+    Enabled: true
+    TopicFilter: [ "Awattar/#" ]
+    RetainedOnly: false
+    LastValType: CRATEDB
+    ArchiveType: CRATEDB
+  - Name: "Original"
+    Enabled: true
+    TopicFilter: [ "Original/#" ]
+    RetainedOnly: false
+    LastValType: CRATEDB
+    ArchiveType: CRATEDB
+  - Name: "Sparkplug"
+    Enabled: true
+    TopicFilter: [ "spBv1.0e/#" ]
+    RetainedOnly: false
+    LastValType: CRATEDB
+    ArchiveType: CRATEDB
+  - Name: "Charger"
+    Enabled: true
+    TopicFilter: [ "go-eCharger/#" ]
+    RetainedOnly: false
+    LastValType: CRATEDB
+    ArchiveType: CRATEDB
+  - Name: "Test"
+    Enabled: true
+    TopicFilter: [ "test/#" ]
+    RetainedOnly: false
+    LastValType: NONE
+    ArchiveType: CRATEDB
+
+Kafka:
+  Enabled: false
+  Servers: linux0:9092
+  Topic: monster
+
+Postgres:
+  Url: jdbc:postgresql://192.168.1.30:5432/postgres
+  User: system
+  Pass: manager
+
+CrateDB:
+  Url: jdbc:postgresql://192.168.1.31:5432/doc
+  User: crate
+  Pass: ""
+

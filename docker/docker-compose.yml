@@ -1,0 +1,12 @@
+version: '3'
+services:
+  mqtt:
+    image: rocworks/monstermq:latest
+    restart: always
+    network_mode: host
+    environment:
+      - HAZELCAST_CONFIG=hazelcast.xml
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./hazelcast.xml:/app/hazelcast.xml
+    command: ["-cluster"]
