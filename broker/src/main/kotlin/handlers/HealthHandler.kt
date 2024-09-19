@@ -10,6 +10,7 @@ import io.vertx.core.Promise
 import io.vertx.core.impl.VertxInternal
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import java.util.concurrent.Callable
+import kotlin.system.exitProcess
 
 
 class HealthHandler(private val sessionHandler: SessionHandler): AbstractVerticle() {
@@ -17,6 +18,8 @@ class HealthHandler(private val sessionHandler: SessionHandler): AbstractVerticl
 
     private var clusterManager: HazelcastClusterManager? = null
     private var leadershipMap: IMap<String, String>? = null
+
+    fun ourMemberUuid() = clusterManager?.hazelcastInstance?.cluster?.localMember?.uuid.toString()
 
     companion object {
         const val CLUSTER_MAP = "cluster-config"
@@ -52,8 +55,7 @@ class HealthHandler(private val sessionHandler: SessionHandler): AbstractVerticl
             val instance = clusterManager.hazelcastInstance
             val cluster = instance.cluster
 
-            logger.info("Cluster local: ${cluster.localMember.address}")
-            logger.info("Cluster members: ${cluster.members.joinToString(", ") { it.address.toString() }}")
+            logger.info("Cluster local: ${cluster.localMember.address} members: ${cluster.members.joinToString(", ") { it.address.toString() }}")
 
             leadershipMap = instance.getMap(CLUSTER_MAP);
             tryToBecomeLeader()
@@ -66,9 +68,14 @@ class HealthHandler(private val sessionHandler: SessionHandler): AbstractVerticl
                 override fun memberRemoved(event: MembershipEvent) {
                     val nodeId = event.member.uuid.toString()
                     logger.info("Cluster member removed: $nodeId")
-                    leadershipMap?.let { map ->
-                        map.remove(LEADER_KEY, nodeId)
-                        tryToBecomeLeader()
+                    if (nodeId == ourMemberUuid()) {
+                        logger.warning("We are removed from the cluster!")
+                        exitProcess(-1) // TODO: handle this properly
+                    } else {
+                        leadershipMap?.let { map ->
+                            map.remove(LEADER_KEY, nodeId)
+                            tryToBecomeLeader()
+                        }
                     }
                 }
             })
