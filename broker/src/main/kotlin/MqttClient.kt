@@ -131,12 +131,10 @@ class MqttClient(
                 endpoint.accept(false) // false... session not present because of clean session requested
             } else {
                 // Check if session was already present or if it was the first connect
+                // Check if session was already present or if it was the first connect
                 val sessionPresent = sessionHandler.isPresent(clientId)
                 endpoint.accept(sessionPresent)
             }
-
-            // Set last will
-            sessionHandler.setLastWill(clientId, endpoint.will())
 
             // Request queued messages
             //queueIncomingMessages = true
@@ -151,6 +149,9 @@ class MqttClient(
             information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
             information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
             sessionHandler.setClient(clientId, endpoint.isCleanSession, true, information)
+
+            // Set last will
+            sessionHandler.setLastWill(clientId, endpoint.will())
         }
     }
 

@@ -14,14 +14,14 @@ ArchiveGroups:
     Enabled: true
     TopicFilter: [ "test1/#" ]
     RetainedOnly: false
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
+    LastValType: CRATEDB
+    ArchiveType: CRATEDB
   - Name: "group2"
     Enabled: true
     TopicFilter: [ "test2/#" ]
     RetainedOnly: false
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
+    LastValType: CRATEDB
+    ArchiveType: CRATEDB
 
 Kafka:
   Enabled: false

@@ -2,6 +2,7 @@ package at.rocworks.handlers
 
 import at.rocworks.Monster
 import at.rocworks.Utils
+import at.rocworks.data.MqttMessage
 import com.hazelcast.cluster.MembershipEvent
 import com.hazelcast.cluster.MembershipListener
 import com.hazelcast.map.IMap
@@ -13,13 +14,16 @@ import java.util.concurrent.Callable
 import kotlin.system.exitProcess
 
 
-class HealthHandler(private val sessionHandler: SessionHandler): AbstractVerticle() {
+class HealthHandler(
+    private val sessionHandler: SessionHandler,
+    private val eventHandler: EventHandler
+): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
     private var clusterManager: HazelcastClusterManager? = null
-    private var leadershipMap: IMap<String, String>? = null
+    private var clusterDataMap: IMap<String, String>? = null
 
-    fun ourMemberUuid() = clusterManager?.hazelcastInstance?.cluster?.localMember?.uuid.toString()
+    private var periodicId: Long = 0
 
     companion object {
         const val CLUSTER_MAP = "cluster-config"
@@ -57,26 +61,17 @@ class HealthHandler(private val sessionHandler: SessionHandler): AbstractVerticl
 
             logger.info("Cluster local: ${cluster.localMember.address} members: ${cluster.members.joinToString(", ") { it.address.toString() }}")
 
-            leadershipMap = instance.getMap(CLUSTER_MAP);
-            tryToBecomeLeader()
+            instance.getMap<String, String>(CLUSTER_MAP).let { map ->
+                clusterDataMap = map
+                tryToBecomeLeader(map)
+            }
 
             cluster.addMembershipListener(object: MembershipListener {
                 override fun memberAdded(event: MembershipEvent) {
-                    val nodeId = event.member.uuid.toString()
-                    logger.info("Cluster member added: $nodeId")
+                    memberAddedHandler(event)
                 }
                 override fun memberRemoved(event: MembershipEvent) {
-                    val nodeId = event.member.uuid.toString()
-                    logger.info("Cluster member removed: $nodeId")
-                    if (nodeId == ourMemberUuid()) {
-                        logger.warning("We are removed from the cluster!")
-                        exitProcess(-1) // TODO: handle this properly
-                    } else {
-                        leadershipMap?.let { map ->
-                            map.remove(LEADER_KEY, nodeId)
-                            tryToBecomeLeader()
-                        }
-                    }
+                    memberRemovedHandler(event)
                 }
             })
 
@@ -86,28 +81,63 @@ class HealthHandler(private val sessionHandler: SessionHandler): AbstractVerticl
         }
     }
 
-    private fun tryToBecomeLeader() {
-        leadershipMap?.let { map ->
-            val nodeId = clusterManager!!.hazelcastInstance.cluster.localMember.uuid.toString()
-            val birth = map[BIRTH_KEY]
-            map.putIfAbsent(LEADER_KEY, nodeId)
-            val currentLeader = map[LEADER_KEY]
-            logger.info("Current leader [$currentLeader], we are [$nodeId]")
-            if (nodeId == currentLeader) {
-                map[BIRTH_KEY] = System.currentTimeMillis().toString()
-                weAreLeader(birth==null)
+    private fun memberAddedHandler(event: MembershipEvent) {
+        val nodeId = event.member.uuid.toString()
+        logger.info("Cluster member added: $nodeId")
+    }
+
+    private fun memberRemovedHandler(event: MembershipEvent) {
+        val nodeId = event.member.uuid.toString()
+        logger.info("Cluster member removed: $nodeId")
+        if (nodeId == Utils.getClusterNodeId(vertx)) {
+            logger.warning("We got removed from the cluster!")
+            exitProcess(-1) // TODO: handle this properly
+        } else {
+            clusterDataMap?.let { map ->
+                if (map.remove(LEADER_KEY, nodeId)) { // remove leader if it was the removed node
+                    tryToBecomeLeader(map)
+                }
+                if (areWeTheLeader(map)) {
+                    logger.info("We are still the leader")
+                    sessionHandler.iterateNodeClients(nodeId) { clientId, cleanSession, will ->
+                        logger.info("Sending last will for client $clientId")
+                        eventHandler.publishMessage(will)
+                        if (cleanSession)
+                            sessionHandler.delClient(clientId)
+                        else
+                            sessionHandler.pauseClient(clientId)
+                    }
+                }
             }
         }
     }
 
-    private fun weAreLeader(first: Boolean) {
-        logger.info("We are the ${if (first) "initial " else ""}leader now.")
+    private fun tryToBecomeLeader(map: IMap<String, String>) {
+        val nodeId = Utils.getClusterNodeId(vertx) // clusterManager!!.hazelcastInstance.cluster.localMember.uuid.toString()
+        val birth = map.putIfAbsent(BIRTH_KEY, System.currentTimeMillis().toString())
+        val leader = map.putIfAbsent(LEADER_KEY, nodeId)
+        if (leader == null) weBecameTheLeader(birth==null)
+    }
+
+    private fun weBecameTheLeader(first: Boolean) {
+        logger.info("We are the ${if (first) "first " else ""}leader now.")
         if (first) {
             sessionHandler.purgeSessions()
             sessionHandler.purgeQueuedMessages()
         }
-        vertx.setPeriodic(60_000) {
-            vertx.executeBlocking(Callable { sessionHandler.purgeQueuedMessages() })
+        if (periodicId == 0L) {
+            periodicId = vertx.setPeriodic(600_000) { // every 10 minutes
+                vertx.executeBlocking(Callable {
+                    sessionHandler.purgeQueuedMessages()
+                })
+            }
         }
+    }
+
+    private fun areWeTheLeader(map: IMap<String, String>): Boolean {
+        val nodeId = Utils.getClusterNodeId(vertx)
+        val leaderId = map[LEADER_KEY]
+        logger.info("Checking if we are the leader: $nodeId == $leaderId")
+        return nodeId == map[LEADER_KEY]
     }
 }

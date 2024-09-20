@@ -42,6 +42,7 @@ class SessionStorePostgres(
                 val createTableSQL = listOf("""
                 CREATE TABLE IF NOT EXISTS $sessionsTableName (
                     client_id VARCHAR(65535) PRIMARY KEY,
+                    node_id VARCHAR(65535),
                     clean_session BOOLEAN,
                     connected BOOLEAN,
                     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -146,11 +147,52 @@ class SessionStorePostgres(
         }
     }
 
-    override fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean, information: JsonObject) {
+    override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit) {
+        try {
+            db.connection?.let { connection ->
+                ("SELECT client_id, clean_session, last_will_topic, last_will_message, last_will_qos, last_will_retain "+
+                "FROM $sessionsTableName WHERE node_id = ?").let { sql ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        preparedStatement.setString(1, nodeId)
+                        val resultSet = preparedStatement.executeQuery()
+                        while (resultSet.next()) {
+                            val clientId = resultSet.getString(1)
+                            val cleanSession = resultSet.getBoolean(2)
+                            val topic = resultSet.getString(3)
+                            val payload = resultSet.getBytes(4)
+                            val qos = resultSet.getInt(5)
+                            val retained = resultSet.getBoolean(6)
+                            callback(
+                                clientId,
+                                cleanSession,
+                                MqttMessage(
+                                    messageId = 0,
+                                    topicName = topic,
+                                    payload = payload,
+                                    qosLevel = qos,
+                                    isRetain = retained,
+                                    isDup = false,
+                                    isQueued = false,
+                                    clientId = clientId
+                                )
+                            )
+                        }
+                    }
+                }
+            } ?: run {
+                logger.severe("Iterating node clients not possible without database connection! [${Utils.getCurrentFunctionName()}]")
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error at fetching node clients [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
+    override fun setClient(clientId: String, nodeId: String, cleanSession: Boolean, connected: Boolean, information: JsonObject) {
         logger.finest { "Put client [$clientId] cleanSession [$cleanSession] connected [$connected] [${Utils.getCurrentFunctionName()}]" }
-        val sql = "INSERT INTO $sessionsTableName (client_id, clean_session, connected, information) VALUES (?, ?, ?, ?::jsonb) "+
+        val sql = "INSERT INTO $sessionsTableName (client_id, node_id, clean_session, connected, information) VALUES (?, ?, ?, ?, ?::jsonb) "+
                   "ON CONFLICT (client_id) DO UPDATE "+
-                  "SET clean_session = EXCLUDED.clean_session, "+
+                  "SET node_id = EXCLUDED.node_id, "+
+                  "clean_session = EXCLUDED.clean_session, "+
                   "connected = EXCLUDED.connected, "+
                   "information = EXCLUDED.information, "+
                   "update_time = CURRENT_TIMESTAMP"
@@ -158,9 +200,10 @@ class SessionStorePostgres(
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, clientId)
-                    preparedStatement.setBoolean(2, cleanSession)
-                    preparedStatement.setBoolean(3, connected)
-                    preparedStatement.setString(4, information.encode())
+                    preparedStatement.setString(2, nodeId)
+                    preparedStatement.setBoolean(3, cleanSession)
+                    preparedStatement.setBoolean(4, connected)
+                    preparedStatement.setString(5, information.encode())
                     preparedStatement.executeUpdate()
                 }
                 connection.commit()
@@ -225,18 +268,15 @@ class SessionStorePostgres(
                 "SET last_will_topic = ?, last_will_message = ?, last_will_qos = ?, last_will_retain = ? "+
                 "WHERE client_id = ?"
         try {
+            logger.info { "Setting last will for client [$clientId] [${Utils.getCurrentFunctionName()}]" }
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, message?.topicName)
                     preparedStatement.setBytes(2, message?.payload)
-                    message?.qosLevel?.let { preparedStatement.setInt(3, it) } ?: preparedStatement.setNull(
-                        3,
-                        Types.INTEGER
-                    )
-                    message?.isRetain?.let { preparedStatement.setBoolean(4, it) } ?: preparedStatement.setNull(
-                        4,
-                        Types.BOOLEAN
-                    )
+                    message?.qosLevel?.let { preparedStatement.setInt(3, it) }
+                        ?: preparedStatement.setNull(3, Types.INTEGER)
+                    message?.isRetain?.let { preparedStatement.setBoolean(4, it) }
+                        ?: preparedStatement.setNull(4, Types.BOOLEAN)
                     preparedStatement.setString(5, clientId)
                     preparedStatement.executeUpdate()
                 }

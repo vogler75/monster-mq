@@ -6,6 +6,7 @@ import at.rocworks.data.*
 import at.rocworks.stores.ISessionStore
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
+import io.vertx.core.impl.VertxInternal
 import io.vertx.core.json.JsonObject
 import io.vertx.mqtt.MqttWill
 import java.util.concurrent.ArrayBlockingQueue
@@ -93,7 +94,7 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     }
 
     fun setClient(clientId: String, cleanSession: Boolean, connected: Boolean, information: JsonObject) {
-        store.setClient(clientId, cleanSession, connected, information)
+        store.setClient(clientId, Utils.getClusterNodeId(vertx), cleanSession, connected, information)
         vertx.eventBus().publish(if (connected) clientOnlineAddress else clientOfflineAddress, clientId)
     }
 
@@ -170,4 +171,7 @@ class SessionHandler(private val store: ISessionStore): AbstractVerticle() {
     fun purgeQueuedMessages() {
         store.purgeQueuedMessages()
     }
+
+    fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit)
+    = store.iterateNodeClients(nodeId, callback)
 }

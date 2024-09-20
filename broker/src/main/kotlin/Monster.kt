@@ -190,7 +190,7 @@ class Monster(args: Array<String>) {
                     val eventHandler = getEventHandler(sessionHandler, messageHandler)
 
                     // Health handler
-                    val healthHandler = HealthHandler(sessionHandler)
+                    val healthHandler = HealthHandler(sessionHandler, eventHandler)
 
                     // MQTT Servers
                     val servers = listOfNotNull(

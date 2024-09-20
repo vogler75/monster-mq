@@ -7,7 +7,9 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.Vertx
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.impl.VertxInternal
 import io.vertx.core.shareddata.AsyncMap
+import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
@@ -45,6 +47,10 @@ object Utils {
 
     fun getCurrentFunctionName(): String = Thread.currentThread().stackTrace[2].methodName
     fun getUuid(): String = UuidCreator.getTimeOrdered().toString()
+
+    fun getClusterNodeId(vertx: Vertx): String {
+        return ((vertx as VertxInternal).clusterManager as HazelcastClusterManager).hazelcastInstance.cluster.localMember.uuid.toString()
+    }
 
     fun <K,V> getMap(vertx: Vertx, name: String): Future<AsyncMap<K, V>> {
         val promise = Promise.promise<AsyncMap<K, V>>()
