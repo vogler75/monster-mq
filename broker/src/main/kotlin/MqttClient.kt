@@ -167,7 +167,7 @@ class MqttClient(
 
     private fun exceptionHandler(throwable: Throwable) {
         logger.severe("Client [$clientId] Exception: ${throwable.message} [${Utils.getCurrentFunctionName()}]")
-        closeConnection()
+        //closeConnection()
     }
 
     private fun pingHandler() {
@@ -441,9 +441,9 @@ class MqttClient(
     // -----------------------------------------------------------------------------------------------------------------
 
     private fun sendLastWill() {
-        logger.info("Client [$clientId] Sending Last-Will message [${Utils.getCurrentFunctionName()}]")
         endpoint.will()?.let { will ->
             if (will.isWillFlag) {
+                logger.info("Client [$clientId] Sending Last-Will message [${Utils.getCurrentFunctionName()}]")
                 eventHandler.publishMessage(MqttMessage(clientId, will))
             }
         }
