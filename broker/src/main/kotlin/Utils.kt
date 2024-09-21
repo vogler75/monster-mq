@@ -49,7 +49,10 @@ object Utils {
     fun getUuid(): String = UuidCreator.getTimeOrdered().toString()
 
     fun getClusterNodeId(vertx: Vertx): String {
-        return ((vertx as VertxInternal).clusterManager as HazelcastClusterManager).hazelcastInstance.cluster.localMember.uuid.toString()
+        val clusterManager = (vertx as VertxInternal).clusterManager
+        return if (clusterManager is HazelcastClusterManager) {
+            clusterManager.hazelcastInstance.cluster.localMember.uuid.toString()
+        } else "N/A"
     }
 
     fun <K,V> getMap(vertx: Vertx, name: String): Future<AsyncMap<K, V>> {

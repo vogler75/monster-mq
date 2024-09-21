@@ -100,7 +100,6 @@ class HealthHandler(
                 if (areWeTheLeader(map)) {
                     logger.info("We are still the leader")
                     sessionHandler.iterateNodeClients(nodeId) { clientId, cleanSession, will ->
-                        logger.info("Sending last will for client $clientId")
                         eventHandler.publishMessage(will)
                         if (cleanSession)
                             sessionHandler.delClient(clientId)
