@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "Port": {
+      "type": "integer",
+      "default": 1883
+    },
+    "SSL": {
+      "type": "boolean",
+      "default": false
+    },
+    "WS": {
+      "type": "boolean",
+      "default": false
+    },
+    "TCP": {
+      "type": "boolean",
+      "default": true
+    },
+    "Kafka": {
+      "type": "object",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "Servers": {
+          "type": "string"
+        },
+        "Topic": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Servers",
+        "Topic"
+      ]
+    },
+    "SessionStoreType": {
+      "type": "string",
+      "enum": [
+        "POSTGRES",
+        "CRATEDB"
+      ]
+    },
+    "RetainedStoreType": {
+      "type": "string",
+      "enum": [
+        "MEMORY",
+        "HAZELCAST",
+        "POSTGRES",
+        "CRATEDB"
+      ]
+    },
+    "ArchiveGroups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Enabled": {
+            "type": "boolean"
+          },
+          "TopicFilter": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "RetainedOnly": {
+            "type": "boolean"
+          },
+          "LastValType": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "MEMORY",
+              "HAZELCAST",
+              "POSTGRES",
+              "CRATEDB"
+            ]
+          },
+          "ArchiveType": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "POSTGRES",
+              "CRATEDB"
+            ]
+          }
+        },
+        "required": [
+          "Name",
+          "Enabled",
+          "TopicFilter",
+          "RetainedOnly",
+          "LastValType",
+          "ArchiveType"
+        ]
+      }
+    },
+    "Postgres": {
+      "type": "object",
+      "properties": {
+        "Url": {
+          "type": "string"
+        },
+        "User": {
+          "type": "string"
+        },
+        "Pass": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Url",
+        "User",
+        "Pass"
+      ]
+    },
+    "CrateDB": {
+      "type": "object",
+      "properties": {
+        "Url": {
+          "type": "string"
+        },
+        "User": {
+          "type": "string"
+        },
+        "Pass": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Url",
+        "User",
+        "Pass"
+      ]
+    }
+  },
+  "required": [
+    "Port",
+    "SSL",
+    "WS",
+    "TCP"
+  ]
+}
