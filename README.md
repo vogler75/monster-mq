@@ -2,7 +2,7 @@
 
 MonsterMQ is a MQTT broker built on Vert.X and Hazelcast with data persistence through PostgreSQL. 
 
-> docker run -v ./config.yaml:/app/config.yaml rocworks/monstermq [-cluster]
+> docker run -v ./config.yaml:/app/config.yaml rocworks/monstermq [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
 
 ```
 Port: 1883
