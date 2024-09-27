@@ -54,7 +54,7 @@ class MessageArchiveCrateDB (
     }
 
     override fun getName(): String = name
-    override fun getType(): MessageStoreType = MessageStoreType.CRATEDB
+    override fun getType() = MessageArchiveType.CRATEDB
 
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)

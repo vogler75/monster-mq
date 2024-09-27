@@ -18,23 +18,31 @@
       "type": "boolean",
       "default": true
     },
+    "MaxMessageSizeKb": {
+      "type": "integer",
+      "default": 8
+    },
     "Kafka": {
       "type": "object",
       "properties": {
-        "Enabled": {
-          "type": "boolean",
-          "default": false
-        },
         "Servers": {
           "type": "string"
         },
-        "Topic": {
-          "type": "string"
+        "Bus": {
+          "type": "object",
+          "default": false,
+          "Enabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "Topic": {
+            "type": "string",
+            "default": "monster"
+          }
         }
       },
       "required": [
-        "Servers",
-        "Topic"
+        "Servers"
       ]
     },
     "SessionStoreType": {
@@ -88,7 +96,8 @@
             "enum": [
               "NONE",
               "POSTGRES",
-              "CRATEDB"
+              "CRATEDB",
+              "KAFKA"
             ]
           }
         },

@@ -12,9 +12,9 @@ import io.vertx.kafka.client.producer.KafkaProducerRecord
 
 class MessageBusKafka(
     private val bootstrapServers: String,
-    private val kafkaTopicName: String
+    private val topicName: String
 ): AbstractVerticle(), IMessageBus {
-    private val kafkaGroupId = "Monster"
+    private val groupId = "Monster"
     private val configConsumer: MutableMap<String, String> = HashMap()
     private var kafkaProducer: KafkaProducer<String, ByteArray>? = null
     private var kafkaConsumer: KafkaConsumer<String, ByteArray>? = null
@@ -31,7 +31,7 @@ class MessageBusKafka(
         configConsumer["bootstrap.servers"] = bootstrapServers
         configConsumer["key.deserializer"] = "org.apache.kafka.common.serialization.StringDeserializer"
         configConsumer["value.deserializer"] = "org.apache.kafka.common.serialization.ByteArrayDeserializer"
-        configConsumer["group.id"] = kafkaGroupId
+        configConsumer["group.id"] = groupId
         configConsumer["auto.offset.reset"] = "earliest"
         configConsumer["enable.auto.commit"] = "true"
         startPromise.complete()
@@ -45,7 +45,7 @@ class MessageBusKafka(
                 consumer.handler { record ->
                     callback(codec.decodeFromWire(0, Buffer.buffer(record.value())))
                 }
-                consumer.subscribe(kafkaTopicName)
+                consumer.subscribe(topicName)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -55,10 +55,10 @@ class MessageBusKafka(
     }
 
     override fun publishMessageToBus(message: MqttMessage) {
-        val codec = MqttMessageCodec()
-        val buffer = Buffer.buffer()
-        codec.encodeToWire(buffer, message)
-        val record = KafkaProducerRecord.create<String, ByteArray>(kafkaTopicName, message.topicName, buffer.bytes)
-        kafkaProducer?.send(record)
+            val codec = MqttMessageCodec()
+            val buffer = Buffer.buffer()
+            codec.encodeToWire(buffer, message)
+            val record = KafkaProducerRecord.create<String, ByteArray>(topicName, message.topicName, buffer.bytes)
+            kafkaProducer?.send(record)
     }
 }

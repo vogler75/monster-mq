@@ -11,17 +11,20 @@ import io.vertx.mqtt.MqttServerOptions
 class MqttServer(
     private val port: Int,
     private val ssl: Boolean,
-    private val ws: Boolean,
+    private val useWebSocket: Boolean,
+    private val maxMessageSize: Int,
     private val sessionHandler: SessionHandler
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
-    private val options = MqttServerOptions().apply {
-        isSsl = ssl
-        keyStoreOptions = JksOptions()
+    private val options = MqttServerOptions().let { it ->
+        it.isSsl = ssl
+        it.keyStoreOptions = JksOptions()
             .setPath("server-keystore.jks")
             .setPassword("password")
-        isUseWebSocket = ws
+        it.isUseWebSocket = this.useWebSocket
+        it.maxMessageSize = this.maxMessageSize
+        it
     }
 
     init {
@@ -41,7 +44,7 @@ class MqttServer(
 
         mqttServer.listen(port) { ar ->
             if (ar.succeeded()) {
-                logger.info("MQTT Server is listening on port [${ar.result().actualPort()}] SSL [$ssl] WS [$ws] [${deploymentID()}] [${Utils.getCurrentFunctionName()}]")
+                logger.info("MQTT Server is listening on port [${ar.result().actualPort()}] SSL [$ssl] WS [$useWebSocket] [${deploymentID()}] [${Utils.getCurrentFunctionName()}]")
                 startPromise.complete()
             } else {
                 logger.severe("Error starting MQTT Server: ${ar.cause().message} [${Utils.getCurrentFunctionName()}]")

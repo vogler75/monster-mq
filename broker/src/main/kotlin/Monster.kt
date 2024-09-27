@@ -170,6 +170,7 @@ class Monster(args: Array<String>) {
         val useSsl = configJson.getBoolean("SSL", false)
         val useWs = configJson.getBoolean("WS", false)
         val useTcp = configJson.getBoolean("TCP", true)
+        val maxMessageSize = configJson.getInteger("MaxMessageSizeKb", 8) * 1024
         logger.info("Port [$usePort] SSL [$useSsl] WS [$useWs] TCP [$useTcp]")
 
         val retainedStoreType = MessageStoreType.valueOf(configJson.getString("RetainedStoreType", "MEMORY"))
@@ -211,8 +212,8 @@ class Monster(args: Array<String>) {
 
                 // MQTT Servers
                 val servers = listOfNotNull(
-                    if (useTcp) MqttServer(usePort, useSsl, false, sessionHandler) else null,
-                    if (useWs) MqttServer(usePort, useSsl, true, sessionHandler) else null
+                    if (useTcp) MqttServer(usePort, useSsl, false, maxMessageSize, sessionHandler) else null,
+                    if (useWs) MqttServer(usePort, useSsl, true, maxMessageSize, sessionHandler) else null
                 )
 
                 // Deploy all verticles
@@ -236,15 +237,18 @@ class Monster(args: Array<String>) {
 
     private fun getMessageBus(vertx: Vertx): Pair<IMessageBus, Future<String>> {
         val kafka = configJson.getJsonObject("Kafka", JsonObject())
-        val kafkaEnabled = kafka.getBoolean("Enabled", false)
-        return if (!kafkaEnabled) {
+        val kafkaServers = kafka.getString("Servers", "")
+
+        val kafkaBus = kafka.getJsonObject("Bus", JsonObject())
+        val kafkaBusEnabled = kafkaBus.getBoolean("Enabled", false)
+        val kafkaBusTopic = kafkaBus.getString("Topic", "monster")
+
+        return if (!kafkaBusEnabled) {
             val bus = MessageBusVertx()
             val busReady = vertx.deployVerticle(bus)
             bus to busReady
         } else {
-            val kafkaServers = kafka.getString("Servers", "")
-            val kafkaTopic = kafka.getString("Topic", "monster")
-            val bus = MessageBusKafka(kafkaServers, kafkaTopic)
+            val bus = MessageBusKafka(kafkaServers, kafkaBusTopic)
             val busReady = vertx.deployVerticle(bus)
             bus to busReady
         }
@@ -363,6 +367,14 @@ class Monster(args: Array<String>) {
                     username = crateDbConfig.user,
                     password = crateDbConfig.pass
                 )
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                store
+            }
+            MessageArchiveType.KAFKA -> {
+                val kafka = configJson.getJsonObject("Kafka", JsonObject())
+                val bootstrapServers = kafka.getString("Servers", "localhost:9092")
+                val store = MessageArchiveKafka(name, bootstrapServers)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 store

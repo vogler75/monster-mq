@@ -75,7 +75,7 @@ class MessageArchivePostgres (
     }
 
     override fun getName(): String = name
-    override fun getType(): MessageStoreType = MessageStoreType.POSTGRES
+    override fun getType() = MessageArchiveType.POSTGRES
 
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)

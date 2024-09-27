@@ -5,11 +5,12 @@ import at.rocworks.data.MqttMessage
 enum class MessageArchiveType {
     NONE,
     POSTGRES,
-    CRATEDB
+    CRATEDB,
+    KAFKA
 }
 
 interface IMessageArchive {
     fun getName(): String
-    fun getType(): MessageStoreType
+    fun getType(): MessageArchiveType
     fun addAllHistory(messages: List<MqttMessage>)
 }
