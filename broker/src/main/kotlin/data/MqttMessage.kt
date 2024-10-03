@@ -4,6 +4,9 @@ import at.rocworks.Utils
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.Future
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.json.Json
+import io.vertx.core.json.JsonArray
+import io.vertx.core.json.JsonObject
 import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.MqttWill
 import io.vertx.mqtt.messages.MqttPublishMessage
@@ -68,7 +71,7 @@ class MqttMessage(
     fun getPayloadAsJson(): String? {
         return try {
             val jsonString = String(payload)
-            io.vertx.core.json.JsonObject(jsonString)
+            Json.decodeValue(jsonString) // Check if it is a valid JSON
             jsonString
         } catch (e: Exception) {
             null
