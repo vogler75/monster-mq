@@ -1,8 +1,6 @@
 # Build
 
-## Build a single fat JAR
-
-> mvn clean install
+> mvn clean package
 
 ## Copy dependencies to a directory
 
