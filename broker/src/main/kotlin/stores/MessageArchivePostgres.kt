@@ -47,11 +47,11 @@ class MessageArchivePostgres (
 
                     // Check if TimescaleDB extension is available
                     val resultSet = statement.executeQuery("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb';")
-                    if (resultSet.first()) {
+                    if (resultSet.next()) {
                         logger.info("TimescaleDB extension is available [${Utils.getCurrentFunctionName()}]")
                         val hypertableCheck =
                             statement.executeQuery("SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = '$tableName';")
-                        if (!hypertableCheck.first()) {
+                        if (!hypertableCheck.next()) {
                             logger.info("Table $tableName convert to hypertable... [${Utils.getCurrentFunctionName()}]")
                             statement.executeUpdate("SELECT create_hypertable('$tableName', 'time');")
                             logger.info("Table $tableName converted to hypertable [${Utils.getCurrentFunctionName()}]")
