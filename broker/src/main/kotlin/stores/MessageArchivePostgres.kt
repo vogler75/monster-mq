@@ -53,7 +53,7 @@ class MessageArchivePostgres (
                             statement.executeQuery("SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = '$tableName';")
                         if (!hypertableCheck.next()) {
                             logger.info("Table $tableName convert to hypertable... [${Utils.getCurrentFunctionName()}]")
-                            statement.executeUpdate("SELECT create_hypertable('$tableName', 'time');")
+                            statement.executeQuery("SELECT create_hypertable('$tableName', 'time');")
                             logger.info("Table $tableName converted to hypertable [${Utils.getCurrentFunctionName()}]")
                         } else {
                             logger.info("Table $tableName is already a hypertable [${Utils.getCurrentFunctionName()}]")
