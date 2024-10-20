@@ -1,0 +1,7 @@
+git pull
+dir=`pwd`
+cd ../broker
+mvn package
+mkdir -p $dir/target
+rm -rf $dir/target/*
+mv target/broker-1.0-SNAPSHOT.jar target/dependencies $dir/target
