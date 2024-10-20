@@ -1,4 +1,0 @@
-version=`cat version.txt`
-
-docker push rocworks/monstermq:latest 
-
