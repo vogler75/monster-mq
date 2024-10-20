@@ -1,0 +1,1 @@
+docker run --rm -v ./config.yaml:/app/config.yaml rocworks/monstermq
