@@ -166,12 +166,11 @@ class Monster(args: Array<String>) {
     }
 
     private fun startMonster(vertx: Vertx) {
-        val usePort = configJson.getInteger("Port", 1883)
+        val useTcp = configJson.getInteger("TCP", 1883)
+        val useWs = configJson.getInteger("WS", 1884)
         val useSsl = configJson.getBoolean("SSL", false)
-        val useWs = configJson.getBoolean("WS", false)
-        val useTcp = configJson.getBoolean("TCP", true)
         val maxMessageSize = configJson.getInteger("MaxMessageSizeKb", 8) * 1024
-        logger.info("Port [$usePort] SSL [$useSsl] WS [$useWs] TCP [$useTcp]")
+        logger.info("SSL [$useSsl] TCP [$useTcp] WS [$useWs] ")
 
         val retainedStoreType = MessageStoreType.valueOf(configJson.getString("RetainedStoreType", "MEMORY"))
         logger.info("RetainedMessageStoreType [${retainedStoreType}]")
@@ -212,8 +211,8 @@ class Monster(args: Array<String>) {
 
                 // MQTT Servers
                 val servers = listOfNotNull(
-                    if (useTcp) MqttServer(usePort, useSsl, false, maxMessageSize, sessionHandler) else null,
-                    if (useWs) MqttServer(usePort, useSsl, true, maxMessageSize, sessionHandler) else null
+                    if (useTcp>0) MqttServer(useTcp, useSsl, false, maxMessageSize, sessionHandler) else null,
+                    if (useWs>0) MqttServer(useWs, useSsl, true, maxMessageSize, sessionHandler) else null
                 )
 
                 // Deploy all verticles

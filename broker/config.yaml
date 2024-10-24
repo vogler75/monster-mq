@@ -1,7 +1,6 @@
-Port: 1883
+TCP: 1883
+WS: 1884
 SSL: false
-WS: false
-TCP: true
 MaxMessageSizeKb: 512
 
 SessionStoreType: POSTGRES
@@ -24,7 +23,7 @@ ArchiveGroups:
     LastValType: POSTGRES
     ArchiveType: POSTGRES
   - Name: "video"
-    Enabled: true
+    Enabled: false
     TopicFilter: [ "video/#" ]
     RetainedOnly: false
     LastValType: NONE
@@ -37,7 +36,7 @@ Kafka:
     Topic: monster
 
 Postgres:
-  Url: jdbc:postgresql://192.168.1.30:5432/test
+  Url: jdbc:postgresql://192.168.1.4:5432/monster
   User: system
   Pass: manager
 

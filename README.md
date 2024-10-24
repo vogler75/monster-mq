@@ -17,10 +17,9 @@ MonsterMQ is a MQTT broker built on Vert.X and Hazelcast with data persistence t
 Use the YAML schema "broker/yaml-json-schema.json" in your editor.
 
 ```
-Port: 1883
-SSL: false 
-TCP: true 
-WS: false # Websockets
+TCP: 1883 # TCP Port (0=Disabled)
+WS: 1884 # Websockets Port (0=Disabled)
+SSL: false
 MaxMessageSizeKb: 512
 
 SessionStoreType: POSTGRES  # POSTGRES, CRATEDB

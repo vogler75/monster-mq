@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
-    "Port": {
+    "TCP": {
       "type": "integer",
       "default": 1883
     },
@@ -11,12 +11,8 @@
       "default": false
     },
     "WS": {
-      "type": "boolean",
-      "default": false
-    },
-    "TCP": {
-      "type": "boolean",
-      "default": true
+      "type": "integer",
+      "default": 0
     },
     "MaxMessageSizeKb": {
       "type": "integer",
