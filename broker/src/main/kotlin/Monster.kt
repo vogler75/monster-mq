@@ -167,7 +167,7 @@ class Monster(args: Array<String>) {
 
     private fun startMonster(vertx: Vertx) {
         val useTcp = configJson.getInteger("TCP", 1883)
-        val useWs = configJson.getInteger("WS", 1884)
+        val useWs = configJson.getInteger("WS", 0)
         val useSsl = configJson.getBoolean("SSL", false)
         val maxMessageSize = configJson.getInteger("MaxMessageSizeKb", 8) * 1024
         logger.info("SSL [$useSsl] TCP [$useTcp] WS [$useWs] ")
