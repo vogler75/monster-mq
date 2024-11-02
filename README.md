@@ -1,6 +1,9 @@
 # Monster MQ
 
 MonsterMQ is a MQTT broker built on Vert.X and Hazelcast with data persistence through PostgreSQL. 
+![Logo](Logo.png)
+
+
 
 ## Docker Image
 
