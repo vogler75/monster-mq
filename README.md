@@ -4,13 +4,13 @@ MonsterMQ is a MQTT broker built on Vert.X and Hazelcast with data persistence t
 
 ## Docker Image
 
-> docker run -v ./config.yaml:/app/config.yaml rocworks/monstermq [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
+> docker run -v ./log:/app/log -v ./config.yaml:/app/config.yaml rocworks/monstermq [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
 
 ## Build Locally 
 
-> cd broker
-> mvn package
-> java -classpath target/classes:target/dependencies/* at.rocworks.MainKt $@
+> cd broker  
+> mvn package  
+> java -classpath target/classes:target/dependencies/* at.rocworks.MainKt $@  
 
 ## Configuration 
 
