@@ -21,6 +21,7 @@ TCP: 1883 # TCP Port (0=Disabled)
 WS: 1884 # Websockets Port (0=Disabled)
 SSL: false
 MaxMessageSizeKb: 512
+QueuedMessagesEnabled: true # if false the QoS>0 messages will not be queued for persistant sessions
 
 SessionStoreType: POSTGRES  # POSTGRES, CRATEDB
 RetainedStoreType: POSTGRES  # MEMORY, HAZELCAST, POSTGRES, CRATEDB
