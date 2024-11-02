@@ -170,7 +170,8 @@ class Monster(args: Array<String>) {
         val useWs = configJson.getInteger("WS", 0)
         val useSsl = configJson.getBoolean("SSL", false)
         val maxMessageSize = configJson.getInteger("MaxMessageSizeKb", 8) * 1024
-        logger.info("SSL [$useSsl] TCP [$useTcp] WS [$useWs] ")
+        val queuedMessagesEnabled = configJson.getBoolean("QueuedMessagesEnabled", true)
+        logger.info("SSL [$useSsl] TCP [$useTcp] WS [$useWs] QME [$queuedMessagesEnabled]")
 
         val retainedStoreType = MessageStoreType.valueOf(configJson.getString("RetainedStoreType", "MEMORY"))
         logger.info("RetainedMessageStoreType [${retainedStoreType}]")
@@ -204,7 +205,7 @@ class Monster(args: Array<String>) {
                 val messageHandler = MessageHandler(retainedStore!!, archiveGroups)
 
                 // Session handler
-                val sessionHandler = SessionHandler(sessionStore, messageBus, messageHandler)
+                val sessionHandler = SessionHandler(sessionStore, messageBus, messageHandler, queuedMessagesEnabled)
 
                 // Health handler
                 val healthHandler = HealthHandler(sessionHandler)

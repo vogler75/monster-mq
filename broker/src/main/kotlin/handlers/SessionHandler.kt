@@ -23,7 +23,8 @@ import java.util.concurrent.TimeUnit
 open class SessionHandler(
     private val sessionStore: ISessionStoreAsync,
     private val messageBus: IMessageBus,
-    private val messageHandler: MessageHandler
+    private val messageHandler: MessageHandler,
+    private val enqueueMessages: Boolean
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -287,15 +288,13 @@ open class SessionHandler(
     fun isPresent(clientId: String): Future<Boolean> = sessionStore.isPresent(clientId)
 
     private fun enqueueMessage(message: MqttMessage, clientIds: List<String>) {
-        msgAddQueue.add(Pair(message, clientIds))
-        //sessionStore.enqueueMessages(listOf(message to clientIds))
+        if (enqueueMessages) msgAddQueue.add(Pair(message, clientIds))
     }
 
     fun dequeueMessages(clientId: String, callback: (MqttMessage)->Boolean) = sessionStore.dequeueMessages(clientId, callback)
 
     fun removeMessage(clientId: String, messageUuid: String) {
         msgDelQueue.add(Pair(clientId, messageUuid))
-        //sessionStore.removeMessages(listOf(clientId to messageUuid))
     }
 
     private fun addSubscription(subscription: MqttSubscription) {
@@ -359,7 +358,7 @@ open class SessionHandler(
         }
     }
 
-    fun flushInFlightToQueue(clientId: String) {
+    private fun flushInFlightToQueue(clientId: String) {
         inFlightMessages[clientId]?.let { queue ->
             queue.forEach { enqueueMessage(it, listOf(clientId)) }
             queue.clear()

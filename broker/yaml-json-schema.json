@@ -57,6 +57,10 @@
         "CRATEDB"
       ]
     },
+    "QueuedMessagesEnabled": {
+      "type": "boolean",
+      "default": true
+    },
     "ArchiveGroups": {
       "type": "array",
       "items": {

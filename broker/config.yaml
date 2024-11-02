@@ -2,6 +2,7 @@ TCP: 1883
 WS: 1884
 SSL: false
 MaxMessageSizeKb: 512
+QueuedMessagesEnabled: true
 
 SessionStoreType: POSTGRES
 RetainedStoreType: POSTGRES
