@@ -35,7 +35,8 @@ class MqttServer(
         val mqttServer: MqttServer = MqttServer.create(vertx, options)
 
         mqttServer.exceptionHandler {
-            it.printStackTrace()
+            logger.severe("MQTT Server error: ${it.message} [${Utils.getCurrentFunctionName()}]")
+            //it.printStackTrace()
         }
 
         mqttServer.endpointHandler { endpoint ->
