@@ -101,6 +101,10 @@ class MqttClient(
         // protocolVersion: 3=MQTTv31, 4=MQTTv311, 5=MQTTv5
         if (endpoint.protocolVersion()==5) {
             logger.warning("Client [$clientId] Protocol version 5 not yet supported. Closing session [${Utils.getCurrentFunctionName()}]")
+            // print all connectProperties
+            endpoint.connectProperties().listAll().forEach() { p ->
+                logger.info("Property [${p.propertyId()}] = ${p.value()}")
+            }
             rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_PROTOCOL_ERROR)
         } else {
             endpoint.exceptionHandler(::exceptionHandler)
@@ -178,7 +182,8 @@ class MqttClient(
 
     private fun rejectAndCloseEndpoint(code: MqttConnectReturnCode) {
         endpoint.reject(code)
-        endpoint.close()
+        if (endpoint.isConnected)
+            endpoint.close()
         undeployEndpoint(vertx, this.deploymentID())
     }
 
