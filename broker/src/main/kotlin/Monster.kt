@@ -168,10 +168,13 @@ class Monster(args: Array<String>) {
     private fun startMonster(vertx: Vertx) {
         val useTcp = configJson.getInteger("TCP", 1883)
         val useWs = configJson.getInteger("WS", 0)
-        val useSsl = configJson.getBoolean("SSL", false)
+
+        val useTcpSsl = configJson.getInteger("TCPS", 0)
+        val useWsSsl = configJson.getInteger("WSS", 0)
+
         val maxMessageSize = configJson.getInteger("MaxMessageSizeKb", 8) * 1024
         val queuedMessagesEnabled = configJson.getBoolean("QueuedMessagesEnabled", true)
-        logger.info("SSL [$useSsl] TCP [$useTcp] WS [$useWs] QME [$queuedMessagesEnabled]")
+        logger.info("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] QME [$queuedMessagesEnabled]")
 
         val retainedStoreType = MessageStoreType.valueOf(configJson.getString("RetainedStoreType", "MEMORY"))
         logger.info("RetainedMessageStoreType [${retainedStoreType}]")
@@ -212,8 +215,10 @@ class Monster(args: Array<String>) {
 
                 // MQTT Servers
                 val servers = listOfNotNull(
-                    if (useTcp>0) MqttServer(useTcp, useSsl, false, maxMessageSize, sessionHandler) else null,
-                    if (useWs>0) MqttServer(useWs, useSsl, true, maxMessageSize, sessionHandler) else null
+                    if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, sessionHandler) else null,
+                    if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, sessionHandler) else null,
+                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, sessionHandler) else null,
+                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, sessionHandler) else null
                 )
 
                 // Deploy all verticles

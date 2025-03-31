@@ -6,13 +6,19 @@
       "type": "integer",
       "default": 1883
     },
-    "SSL": {
-      "type": "boolean",
-      "default": false
-    },
     "WS": {
       "type": "integer",
       "default": 0
+    },
+    "TCPS": {
+      "type": "integer",
+      "default": 0,
+      "description": "TCP port for SSL connection"
+    },
+    "WSS": {
+      "type": "integer",
+      "default": 0,
+      "description": "WS port for SSL connection"
     },
     "MaxMessageSizeKb": {
       "type": "integer",
