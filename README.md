@@ -21,8 +21,11 @@ Use the YAML schema "broker/yaml-json-schema.json" in your editor.
 
 ```
 TCP: 1883 # TCP Port (0=Disabled)
-WS: 1884 # Websockets Port (0=Disabled)
-SSL: false
+TCPS: 1884 # TCP Port with TLS (0=Disabled)
+
+WS: 9001 # Websockets Port (0=Disabled)
+WSS: 9002 # Websockets Port with TLS (0=Disabled)
+
 MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true # if false the QoS>0 messages will not be queued for persistant sessions
 
