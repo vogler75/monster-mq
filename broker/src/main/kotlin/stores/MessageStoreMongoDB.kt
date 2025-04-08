@@ -7,9 +7,8 @@ import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.model.Filters.*
-import com.mongodb.client.model.Updates.*
+import com.mongodb.client.model.IndexOptions
 import io.vertx.core.AbstractVerticle
-import io.vertx.core.Future
 import io.vertx.core.Promise
 import org.bson.Document
 import java.time.Instant
@@ -41,10 +40,18 @@ class MessageStoreMongoDB(
         try {
             mongoClient = MongoClients.create(connectionString)
             database = mongoClient.getDatabase(databaseName)
-            collection = database.getCollection(tableName)
 
-            // Create index on topic for faster retrieval
-            collection.createIndex(Document("topic", 1))
+            // Check if the collection exists, if not create it
+            if (!database.listCollectionNames().contains(tableName)) {
+                logger.info("Collection [$tableName] will be created in MongoDB.")
+                database.createCollection(tableName)
+                collection = database.getCollection(tableName)
+                collection.createIndex(Document("topic", 1), IndexOptions().unique(true))
+                collection.createIndex(Document("topic_levels", 1))
+            } else {
+                logger.info("Collection [$tableName] already exists in MongoDB.")
+                collection = database.getCollection(tableName)
+            }
 
             logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
             startPromise.complete()
@@ -94,17 +101,28 @@ class MessageStoreMongoDB(
         try {
             val bulkOperations = messages.map { message ->
                 val filter = Document("topic", message.topicName)
-                val update = Document(
-                    "\$set", mapOf(
+                val json = message.getPayloadAsJson()
+                val doc = if (json != null)
+                    mapOf(
+                        "topic_levels" to Utils.getTopicLevels(message.topicName),
                         "time" to Instant.ofEpochMilli(message.time.toEpochMilli()),
-                        "payload" to message.payload,
-                        "payload_json" to message.getPayloadAsJson(),
+                        "payload" to message.getPayloadAsJson(),
                         "qos" to message.qosLevel,
                         "retained" to message.isRetain,
                         "client_id" to message.clientId,
                         "message_uuid" to message.messageUuid
                     )
-                )
+                else
+                    mapOf(
+                        "topic_levels" to Utils.getTopicLevels(message.topicName),
+                        "time" to Instant.ofEpochMilli(message.time.toEpochMilli()),
+                        "payload" to message.payload,
+                        "qos" to message.qosLevel,
+                        "retained" to message.isRetain,
+                        "client_id" to message.clientId,
+                        "message_uuid" to message.messageUuid
+                    )
+                val update = Document("\$set", doc)
                 com.mongodb.client.model.UpdateOneModel<Document>(
                     filter,
                     update,
@@ -148,14 +166,20 @@ class MessageStoreMongoDB(
     }
 
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
-        // Convert topic name to a regex pattern
-        val regexPattern = topicNameToRegex(topicName)
-
         try {
-            val filter = regex("topic", regexPattern)
+            val levels = Utils.getTopicLevels(topicName)
+            val filters = levels.map { if (it == "+" || it == "#") null else it }.mapIndexed { index, value ->
+                if (value != null) eq("topic_levels.$index", value)
+                else null
+            }.filterNotNull()
+            val filter = if (filters.isNotEmpty()) and(filters) else Document()
             collection.find(filter).forEach { document ->
                 val topic = document.getString("topic")
-                val payload = document.get("payload", org.bson.types.Binary::class.java).data
+                val payload = when (val rawPayload = document["payload"]) {
+                    is org.bson.types.Binary -> rawPayload.data
+                    is String -> rawPayload.toByteArray()
+                    else -> logger.severe("Unknown payload type: ${rawPayload?.javaClass}").let { "".toByteArray() }
+                }
                 val qos = document.getInteger("qos")
                 val clientId = document.getString("client_id")
                 val messageUuid = document.getString("message_uuid")
@@ -189,15 +213,5 @@ class MessageStoreMongoDB(
     override fun stop() {
         mongoClient.close()
         logger.info("MongoDB connection closed.")
-    }
-
-    // Extension function to convert a topic name to a regex pattern
-    fun topicNameToRegex(topicName: String): String {
-        // Replace MQTT wildcards with regex equivalents
-        var regex = topicName.replace("+", "[^/]+") // Single-level wildcard
-        regex = regex.replace("#", ".+")           // Multi-level wildcard
-        regex = "^" + regex + "$"                     // Match the whole topic
-
-        return regex
     }
 }

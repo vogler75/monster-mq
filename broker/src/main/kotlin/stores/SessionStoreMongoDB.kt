@@ -65,7 +65,7 @@ class SessionStoreMongoDB(
             val subscriptions = subscriptionsCollection.find()
             for (doc in subscriptions) {
                 val clientId = doc.getString("client_id")
-                val topic = doc.getList("topic", String::class.java).joinToString("/")
+                val topic = doc.getString("topic")
                 val qos = doc.getInteger("qos")
                 callback(topic, clientId, qos)
             }
@@ -199,7 +199,6 @@ class SessionStoreMongoDB(
     override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
         try {
             subscriptions.forEach { subscription ->
-                val levels = Utils.getTopicLevels(subscription.topicName)
                 val update = Document("\$set", Document(mapOf(
                     "qos" to subscription.qos.value(),
                     "wildcard" to Utils.isWildCardTopic(subscription.topicName)
@@ -207,7 +206,7 @@ class SessionStoreMongoDB(
                 subscriptionsCollection.updateOne(
                     and(
                         eq("client_id", subscription.clientId),
-                        eq("topic", levels)
+                        eq("topic", subscription.topicName)
                     ),
                     update,
                     com.mongodb.client.model.UpdateOptions().upsert(true)
@@ -224,7 +223,7 @@ class SessionStoreMongoDB(
                 subscriptionsCollection.deleteOne(
                     and(
                         eq("client_id", subscription.clientId),
-                        eq("topic", Utils.getTopicLevels(subscription.topicName))
+                        eq("topic", subscription.topicName)
                     )
                 )
             }
@@ -238,7 +237,7 @@ class SessionStoreMongoDB(
         try {
             val subscriptions = subscriptionsCollection.find(eq("client_id", clientId))
             for (doc in subscriptions) {
-                val topic = doc.getList("topic", String::class.java).joinToString("/")
+                val topic = doc.getString("topic")
                 val qos = MqttQoS.valueOf(doc.getInteger("qos"))
                 callback(MqttSubscription(clientId, topic, qos))
             }
@@ -253,7 +252,6 @@ class SessionStoreMongoDB(
     override fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>) {
         try {
             messages.forEach { (message, clientIds) ->
-                // Nachricht in die `QueuedMessages`-Collection einfügen
                 val messageDocument = Document(mapOf(
                     "message_uuid" to message.messageUuid,
                     "message_id" to message.messageId,
@@ -269,7 +267,6 @@ class SessionStoreMongoDB(
                     com.mongodb.client.model.UpdateOptions().upsert(true)
                 )
 
-                // Beziehung zwischen Client und Nachricht in die `QueuedMessagesClients`-Collection einfügen
                 clientIds.forEach { clientId ->
                     val clientMessageDocument = Document(mapOf(
                         "client_id" to clientId,
@@ -303,7 +300,7 @@ class SessionStoreMongoDB(
                     ))
                 ),
                 Document("\$unwind", "\$message"),
-                Document("\$sort", Document("message.message_uuid", 1)) // Sortierung nach UUID
+                Document("\$sort", Document("message.message_uuid", 1))
             )
 
             val results = queuedMessagesClientsCollection.aggregate(pipeline)
@@ -375,11 +372,7 @@ class SessionStoreMongoDB(
     override fun purgeSessions() {
         try {
             val startTime = System.currentTimeMillis()
-
-            // Lösche alle Sitzungen mit `clean_session = true`
             sessionsCollection.deleteMany(eq("clean_session", true))
-
-            // Lösche Abonnements, deren `client_id` nicht in der `Sessions`-Collection existiert
             subscriptionsCollection.deleteMany(
                 Document("\$expr", Document(
                     "\$not", Document(
@@ -388,7 +381,6 @@ class SessionStoreMongoDB(
                 ))
             )
 
-            // Setze `connected` auf `false` für alle Sitzungen
             sessionsCollection.updateMany(
                 Document(),
                 Document("\$set", Document("connected", false))

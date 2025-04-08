@@ -11,18 +11,18 @@ SparkplugMetricExpansion:
   Enabled: true
 
 ArchiveGroups:
-  - Name: "group1"
+  - Name: "Postgres"
     Enabled: true
-    TopicFilter: [ "test1/#" ]
+    TopicFilter: [ "postgres/#" ]
     RetainedOnly: false
     LastValType: POSTGRES
     ArchiveType: POSTGRES
-  - Name: "group2"
+  - Name: "MongoDB"
     Enabled: true
-    TopicFilter: [ "test2/#" ]
+    TopicFilter: [ "mongodb/#" ]
     RetainedOnly: false
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
+    LastValType: MONGODB
+    ArchiveType: MONGODB
 
 Kafka:
   Servers: linux0:9092
@@ -41,5 +41,5 @@ CrateDB:
   Pass: ""
 
 MongoDB:
-  Url: mongodb://system:manager@scada:27017
+  Url: mongodb://system:manager@linux0:27017
   Database: test

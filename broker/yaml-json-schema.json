@@ -96,7 +96,8 @@
               "MEMORY",
               "HAZELCAST",
               "POSTGRES",
-              "CRATEDB"
+              "CRATEDB",
+              "MONGODB"
             ]
           },
           "ArchiveType": {
@@ -105,6 +106,7 @@
               "NONE",
               "POSTGRES",
               "CRATEDB",
+              "MONGODB",
               "KAFKA"
             ]
           }

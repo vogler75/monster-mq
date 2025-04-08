@@ -394,6 +394,16 @@ class Monster(args: Array<String>) {
                 vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 store
             }
+            MessageArchiveType.MONGODB -> {
+                val store = MessageArchiveMongoDB(
+                    name = name,
+                    connectionString = mongoDbConfig.url,
+                    databaseName = mongoDbConfig.database
+                )
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                store
+            }
             MessageArchiveType.KAFKA -> {
                 val kafka = configJson.getJsonObject("Kafka", JsonObject())
                 val bootstrapServers = kafka.getString("Servers", "localhost:9092")
