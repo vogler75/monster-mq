@@ -1,11 +1,11 @@
 TCP: 1883
-WS: 1884
-SSL: false
+WS: 9001
+
 MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 
-SessionStoreType: POSTGRES
-RetainedStoreType: POSTGRES
+SessionStoreType: MONGODB
+RetainedStoreType: MONGODB
 
 SparkplugMetricExpansion:
   Enabled: true
@@ -23,12 +23,6 @@ ArchiveGroups:
     RetainedOnly: false
     LastValType: POSTGRES
     ArchiveType: POSTGRES
-  - Name: "video"
-    Enabled: false
-    TopicFilter: [ "video/#" ]
-    RetainedOnly: false
-    LastValType: NONE
-    ArchiveType: KAFKA
 
 Kafka:
   Servers: linux0:9092
@@ -37,11 +31,15 @@ Kafka:
     Topic: monster
 
 Postgres:
-  Url: jdbc:postgresql://192.168.1.4:5432/monster
+  Url: jdbc:postgresql://scada:5432/test
   User: system
   Pass: manager
 
 CrateDB:
-  Url: jdbc:postgresql://192.168.1.31:5432/test
+  Url: jdbc:postgresql://scada:5432/test
   User: crate
   Pass: ""
+
+MongoDB:
+  Url: mongodb://system:manager@scada:27017
+  Database: test

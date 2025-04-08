@@ -7,7 +7,8 @@ import io.vertx.core.json.JsonObject
 
 enum class SessionStoreType {
     POSTGRES,
-    CRATEDB
+    CRATEDB,
+    MONGODB
 }
 
 interface ISessionStore {
