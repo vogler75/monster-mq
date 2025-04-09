@@ -47,7 +47,6 @@ class MessageStoreMongoDB(
                 database.createCollection(tableName)
                 collection = database.getCollection(tableName)
                 collection.createIndex(Document("topic", 1), IndexOptions().unique(true))
-                collection.createIndex(Document("topic_levels", 1))
             } else {
                 logger.info("Collection [$tableName] already exists in MongoDB.")
                 collection = database.getCollection(tableName)
@@ -59,6 +58,23 @@ class MessageStoreMongoDB(
             logger.severe("Error in starting MongoDB connection: ${e.message} [${Utils.getCurrentFunctionName()}]")
             startPromise.fail(e)
         }
+    }
+
+    private fun topicLevelsAsDocument(topicName: String): Document {
+        val levels = Utils.getTopicLevels(topicName)
+        val document = Document()
+        levels.forEachIndexed { index, level ->
+            document.append("L${index}", level)
+        }
+        return document
+    }
+
+    private fun topicNameFromDocument(document: Document): String {
+        // get all items of the document and put them together to a string separated with "/"
+        val topicLevels = document.keys
+            .filter { it.startsWith("L") }
+            .map { document.getString(it) }
+        return topicLevels.joinToString("/")
     }
 
     override fun get(topicName: String): MqttMessage? {
@@ -104,7 +120,7 @@ class MessageStoreMongoDB(
                 val json = message.getPayloadAsJson()
                 val doc = if (json != null)
                     mapOf(
-                        "topic_levels" to Utils.getTopicLevels(message.topicName),
+                        //"topic_levels" to topicLevelsAsDocument(message.topicName),
                         "time" to Instant.ofEpochMilli(message.time.toEpochMilli()),
                         "payload" to message.getPayloadAsJson(),
                         "qos" to message.qosLevel,
@@ -114,7 +130,7 @@ class MessageStoreMongoDB(
                     )
                 else
                     mapOf(
-                        "topic_levels" to Utils.getTopicLevels(message.topicName),
+                        //"topic_levels" to topicLevelsAsDocument(message.topicName),
                         "time" to Instant.ofEpochMilli(message.time.toEpochMilli()),
                         "payload" to message.payload,
                         "qos" to message.qosLevel,
@@ -146,7 +162,7 @@ class MessageStoreMongoDB(
 
     override fun delAll(topics: List<String>) {
         try {
-            val deleteFilters = topics.map { eq("topic", it) }
+            val deleteFilters = topics.map { eq("topic", topicLevelsAsDocument(it)) }
             if (deleteFilters.isNotEmpty()) {
                 val combinedFilter = or(deleteFilters)
                 collection.deleteMany(combinedFilter)
@@ -167,13 +183,23 @@ class MessageStoreMongoDB(
 
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
         try {
-            val levels = Utils.getTopicLevels(topicName)
-            val filters = levels.map { if (it == "+" || it == "#") null else it }.mapIndexed { index, value ->
-                if (value != null) eq("topic_levels.$index", value)
-                else null
-            }.filterNotNull()
-            val filter = if (filters.isNotEmpty()) and(filters) else Document()
+            logger.info("Finding messages for topic [$topicName] [${Utils.getCurrentFunctionName()}]")
+
+            //val levels = Utils.getTopicLevels(topicName)
+            //val filters = levels.map { if (it == "+" || it == "#") null else it }.mapIndexed { index, value ->
+            //    if (value != null) eq("topic.L$index", value)
+            //    else null
+            //}.filterNotNull()
+            //val filter = if (filters.isNotEmpty()) and(filters) else Document()
+
+            // create a wildcard search with regex for the topic with "+" and "#"
+            val regex = topicName.replace("+", "[^/]+").replace("#", ".*")
+            val filter = Document("topic", Document("\$regex", regex))
+
+            var counter = 0
+            val t1 = System.currentTimeMillis()
             collection.find(filter).forEach { document ->
+                counter++
                 val topic = document.getString("topic")
                 val payload = when (val rawPayload = document["payload"]) {
                     is org.bson.types.Binary -> rawPayload.data
@@ -201,7 +227,8 @@ class MessageStoreMongoDB(
                 logger.info("Read successful after error [${Utils.getCurrentFunctionName()}]")
                 lastFetchError = 0
             }
-
+            val t2 = System.currentTimeMillis()
+            logger.info("Found $counter messages in ${t2 - t1} ms for topic [$topicName] [${Utils.getCurrentFunctionName()}]")
         } catch (e: Exception) {
             if (lastFetchError != e.hashCode()) {
                 logger.warning("Error finding data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
