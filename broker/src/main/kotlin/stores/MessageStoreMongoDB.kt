@@ -185,15 +185,9 @@ class MessageStoreMongoDB(
         try {
             logger.info("Finding messages for topic [$topicName] [${Utils.getCurrentFunctionName()}]")
 
-            //val levels = Utils.getTopicLevels(topicName)
-            //val filters = levels.map { if (it == "+" || it == "#") null else it }.mapIndexed { index, value ->
-            //    if (value != null) eq("topic.L$index", value)
-            //    else null
-            //}.filterNotNull()
-            //val filter = if (filters.isNotEmpty()) and(filters) else Document()
-
-            // create a wildcard search with regex for the topic with "+" and "#"
-            val regex = topicName.replace("+", "[^/]+").replace("#", ".*")
+            // TODO: Wildcard search is not performance optimized, consider using a more efficient way to handle wildcards
+            // NOTE: A index on an array of topic levels does not do the trick, array indexes work differently in MongoDB
+            val regex = topicName.replace("+", "[^/]+").replace("#", ".*") + "$"
             val filter = Document("topic", Document("\$regex", regex))
 
             var counter = 0
