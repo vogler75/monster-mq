@@ -15,7 +15,7 @@ class MessageArchivePostgres (
     private val password: String
 ): AbstractVerticle(), IMessageArchive {
     private val logger = Utils.getLogger(this::class.java, name)
-    private val tableName = name
+    private val tableName = name.lowercase()
     private var lastAddAllHistoryError: Int = 0
 
     init {

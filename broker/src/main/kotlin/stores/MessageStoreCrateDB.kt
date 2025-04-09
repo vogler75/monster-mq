@@ -15,7 +15,7 @@ class MessageStoreCrateDB(
     private val password: String
 ): AbstractVerticle(), IMessageStore {
     private val logger = Utils.getLogger(this::class.java, name)
-    private val tableName = name
+    private val tableName = name.lowercase()
     private var lastAddAllError: Int = 0
     private var lastGetError: Int = 0
     private var lastDelAllError: Int = 0

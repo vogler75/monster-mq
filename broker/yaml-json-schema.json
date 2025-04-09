@@ -51,7 +51,8 @@
       "type": "string",
       "enum": [
         "POSTGRES",
-        "CRATEDB"
+        "CRATEDB",
+        "MONGODB"
       ]
     },
     "RetainedStoreType": {
@@ -60,7 +61,8 @@
         "MEMORY",
         "HAZELCAST",
         "POSTGRES",
-        "CRATEDB"
+        "CRATEDB",
+        "MONGODB"
       ]
     },
     "QueuedMessagesEnabled": {
@@ -94,7 +96,8 @@
               "MEMORY",
               "HAZELCAST",
               "POSTGRES",
-              "CRATEDB"
+              "CRATEDB",
+              "MONGODB"
             ]
           },
           "ArchiveType": {
@@ -103,6 +106,7 @@
               "NONE",
               "POSTGRES",
               "CRATEDB",
+              "MONGODB",
               "KAFKA"
             ]
           }
@@ -153,6 +157,20 @@
         "Url",
         "User",
         "Pass"
+      ]
+    },
+    "MongoDB": {
+      "type": "object",
+      "properties": {
+        "Url": {
+          "type": "string"
+        },
+        "Database": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Url"
       ]
     }
   },

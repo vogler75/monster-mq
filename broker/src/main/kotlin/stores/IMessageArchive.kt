@@ -6,6 +6,7 @@ enum class MessageArchiveType {
     NONE,
     POSTGRES,
     CRATEDB,
+    MONGODB,
     KAFKA
 }
 

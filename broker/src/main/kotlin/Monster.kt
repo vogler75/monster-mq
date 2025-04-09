@@ -45,6 +45,11 @@ class Monster(args: Array<String>) {
         var pass: String = ""
     }
 
+    private val mongoDbConfig = object {
+        var url: String = ""
+        var database: String = ""
+    }
+
     companion object {
         private var singleton: Monster? = null
 
@@ -133,6 +138,10 @@ class Monster(args: Array<String>) {
                     crateDbConfig.user = crate.getString("User", "crate")
                     crateDbConfig.pass = crate.getString("Pass", "")
                 }
+                configJson.getJsonObject("MongoDB", JsonObject()).let { mongo ->
+                    mongoDbConfig.url = mongo.getString("Url", "mongodb://localhost:27017")
+                    mongoDbConfig.database = mongo.getString("Database", "monster")
+                }
                 startMonster(vertx)
             } else {
                 logger.severe("Config loading failed: ${it.cause()}")
@@ -187,7 +196,7 @@ class Monster(args: Array<String>) {
             val (messageBus, messageBusReady) = getMessageBus(vertx)
 
             // Retained messages
-            val (retainedStore, retainedReady) = getMessageStore(vertx, "retainedmessages", retainedStoreType)
+            val (retainedStore, retainedReady) = getMessageStore(vertx, "RetainedMessages", retainedStoreType)
 
             // Archive groups
             val archiveGroups = getArchiveGroups(vertx)
@@ -269,8 +278,8 @@ class Monster(args: Array<String>) {
             val lastValType = MessageStoreType.valueOf(c.getString("LastValType", "NONE"))
             val archiveType = MessageArchiveType.valueOf(c.getString("ArchiveType", "NONE"))
 
-            val (lastValStore, lastValReady) = getMessageStore(vertx, name + "lastval", lastValType)
-            val (archiveStore, archiveReady) = getMessageArchive(vertx, name + "archive", archiveType)
+            val (lastValStore, lastValReady) = getMessageStore(vertx, name + "Lastval", lastValType)
+            val (archiveStore, archiveReady) = getMessageArchive(vertx, name + "Archive", archiveType)
 
             ArchiveGroup(
                 name,
@@ -291,6 +300,9 @@ class Monster(args: Array<String>) {
             }
             SessionStoreType.CRATEDB -> {
                 SessionStoreCrateDB(crateDbConfig.url, crateDbConfig.user, crateDbConfig.pass)
+            }
+            SessionStoreType.MONGODB -> {
+                SessionStoreMongoDB(mongoDbConfig.url, mongoDbConfig.database)
             }
         }
         val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
@@ -341,6 +353,12 @@ class Monster(args: Array<String>) {
                     exitProcess(-1)
                 }
             }
+            MessageStoreType.MONGODB -> {
+                val store = MessageStoreMongoDB(name, mongoDbConfig.url, mongoDbConfig.database)
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                store
+            }
         }
         return store to promise.future()
     }
@@ -371,6 +389,16 @@ class Monster(args: Array<String>) {
                     url = crateDbConfig.url,
                     username = crateDbConfig.user,
                     password = crateDbConfig.pass
+                )
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                store
+            }
+            MessageArchiveType.MONGODB -> {
+                val store = MessageArchiveMongoDB(
+                    name = name,
+                    connectionString = mongoDbConfig.url,
+                    databaseName = mongoDbConfig.database
                 )
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
