@@ -81,27 +81,21 @@ class TopicTree<K, V> : ITopicTree<K, V> {
 
     override fun findDataOfTopicName(topicName: String): List<Pair<K, V>> {
         fun find(node: Node<K, V>, current: String, rest: List<String>): List<Pair<K, V>> {
+            logger.info("Find Current [$current] Rest [${rest.joinToString(",")}] Node [${node.children.keys.joinToString(",")}]")
             return node.children.flatMap { child ->
+                logger.info("  Child [${child.key}] [${child.value}]")
                 when (child.key) {
                     "#" -> child.value.dataset.toList()
-                    "+", current -> (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
-                            (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1)) else listOf())
-                    else -> listOf()
-                }
-            }
-        }
-        val xs = Utils.getTopicLevels(topicName)
-        return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1)) else listOf()
-    }
-
-    fun findDataOfTopicName_backup(topicName: String): List<Pair<K, V>> {
-        fun find(node: Node<K, V>, current: String, rest: List<String>): List<Pair<K, V>> {
-            return node.children.flatMap { child ->
-                when (child.key) {
-                    "#" -> child.value.dataset.toList()
-                    "+", current -> (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
-                            if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1))
-                            else listOf()
+                    "+" -> {
+                        (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
+                                (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1))
+                                else listOf())
+                    }
+                    current -> {
+                        (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
+                                (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1))
+                                else find(child.value, "", listOf()))
+                    }
                     else -> listOf()
                 }
             }
