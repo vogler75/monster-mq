@@ -81,9 +81,7 @@ class TopicTree<K, V> : ITopicTree<K, V> {
 
     override fun findDataOfTopicName(topicName: String): List<Pair<K, V>> {
         fun find(node: Node<K, V>, current: String, rest: List<String>): List<Pair<K, V>> {
-            logger.info("Find Current [$current] Rest [${rest.joinToString(",")}] Node [${node.children.keys.joinToString(",")}]")
             return node.children.flatMap { child ->
-                logger.info("  Child [${child.key}] [${child.value}]")
                 when (child.key) {
                     "#" -> child.value.dataset.toList()
                     "+" -> {
