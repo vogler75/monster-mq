@@ -16,10 +16,23 @@ class MessageStorePostgres(
 ): AbstractVerticle(), IMessageStore {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
-    private var lastAddAllError: Int = 0
-    private var lastGetError: Int = 0
-    private var lastDelAllError: Int = 0
-    private var lastFetchError: Int = 0
+    private var lastAddAllError: Int = Int.MAX_VALUE
+    private var lastGetError: Int = Int.MAX_VALUE
+    private var lastDelAllError: Int = Int.MAX_VALUE
+    private var lastFetchError: Int = Int.MAX_VALUE
+
+    private companion object {
+        const val MAX_FIXED_TOPIC_LEVELS = 9
+        val FIXED_TOPIC_COLUMN_NAMES = (0 until MAX_FIXED_TOPIC_LEVELS).map { "topic_${it+1}" }
+        val ALL_PK_COLUMNS = FIXED_TOPIC_COLUMN_NAMES + "topic_r"
+
+        fun splitTopic(topicName: String): Pair<List<String>, List<String>> {
+            val levels = Utils.getTopicLevels(topicName)
+            val first = levels.take(MAX_FIXED_TOPIC_LEVELS)
+            val rest = levels.drop(MAX_FIXED_TOPIC_LEVELS)
+            return Pair(first, rest)
+        }
+    }
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -30,16 +43,20 @@ class MessageStorePostgres(
             val promise = Promise.promise<Void>()
             try {
                 connection.createStatement().use { statement ->
+                    val pkColumnsString = ALL_PK_COLUMNS.joinToString(", ")
+                    val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it text NOT NULL" }
                     statement.executeUpdate("""
                     CREATE TABLE IF NOT EXISTS $tableName (
-                        topic text[] PRIMARY KEY,
+                        ${fixedTopicColumns},                         
+                        topic_r text[] NOT NULL,
                         time TIMESTAMPTZ,                    
                         payload_blob BYTEA,
                         payload_json JSONB,
                         qos INT,
                         retained BOOLEAN,
                         client_id VARCHAR(65535), 
-                        message_uuid VARCHAR(36)
+                        message_uuid VARCHAR(36),
+                        PRIMARY KEY ($pkColumnsString)
                     )
                     """.trimIndent())
                     logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
@@ -63,10 +80,13 @@ class MessageStorePostgres(
     override fun get(topicName: String): MqttMessage? {
         try {
             db.connection?.let { connection ->
-                val sql = "SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?"
+                val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString("AND ") { "$it=?" }
+                val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
+                             WHERE $fixedTopicColumns AND topic_r=?"""
                 connection.prepareStatement(sql).use { preparedStatement ->
-                    val topicLevels = Utils.getTopicLevels(topicName).toTypedArray()
-                    preparedStatement.setArray(1, connection.createArrayOf("text", topicLevels))
+                    val (first, rest) = splitTopic(topicName)
+                    repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 1, first.getOrNull(it) ?: "") }
+                    preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 1, connection.createArrayOf("text", rest.toTypedArray()))
 
                     val resultSet = preparedStatement.executeQuery()
 
@@ -106,30 +126,33 @@ class MessageStorePostgres(
     }
 
     override fun addAll(messages: List<MqttMessage>) {
-        val sql = "INSERT INTO $tableName (topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid) "+
-                   "VALUES (?, ?, ?, ?::JSONB, ?, ?, ?, ?) "+
-                   "ON CONFLICT (topic) DO UPDATE "+
-                   "SET time = EXCLUDED.time, "+
-                   "payload_blob = EXCLUDED.payload_blob, "+
-                   "payload_json = EXCLUDED.payload_json, "+
-                   "qos = EXCLUDED.qos, "+
-                   "retained = EXCLUDED.retained, "+
-                   "client_id = EXCLUDED.client_id, "+
-                   "message_uuid = EXCLUDED.message_uuid "
+        val sql = """INSERT INTO $tableName (topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7, topic_8, topic_9, topic_r, 
+                   time, payload_blob, payload_json, qos, retained, client_id, message_uuid) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::JSONB, ?, ?, ?, ?) 
+                   ON CONFLICT (topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7, topic_8, topic_9, topic_r) DO UPDATE 
+                   SET time = EXCLUDED.time, 
+                   payload_blob = EXCLUDED.payload_blob, 
+                   payload_json = EXCLUDED.payload_json,
+                   qos = EXCLUDED.qos, 
+                   retained = EXCLUDED.retained, 
+                   client_id = EXCLUDED.client_id, 
+                   message_uuid = EXCLUDED.message_uuid 
+                   """
 
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
                     messages.forEach { message ->
-                        val topic = Utils.getTopicLevels(message.topicName).toTypedArray()
-                        preparedStatement.setArray(1, connection.createArrayOf("text", topic))
-                        preparedStatement.setTimestamp(2, Timestamp.from(message.time))
-                        preparedStatement.setBytes(3, message.payload)
-                        preparedStatement.setString(4, message.getPayloadAsJson())
-                        preparedStatement.setInt(5, message.qosLevel)
-                        preparedStatement.setBoolean(6, message.isRetain)
-                        preparedStatement.setString(7, message.clientId)
-                        preparedStatement.setString(8, message.messageUuid)
+                        val (first, rest) = splitTopic(message.topicName)
+                        repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 1, first.getOrNull(it) ?: "") }
+                        preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 1, connection.createArrayOf("text", rest.toTypedArray()))
+                        preparedStatement.setTimestamp(11, Timestamp.from(message.time))
+                        preparedStatement.setBytes(12, message.payload)
+                        preparedStatement.setString(13, message.getPayloadAsJson())
+                        preparedStatement.setInt(14, message.qosLevel)
+                        preparedStatement.setBoolean(15, message.isRetain)
+                        preparedStatement.setString(16, message.clientId)
+                        preparedStatement.setString(17, message.messageUuid)
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
@@ -148,13 +171,14 @@ class MessageStorePostgres(
     }
 
     override fun delAll(topics: List<String>) {
-        val rows = topics.map { Utils.getTopicLevels(it).toTypedArray() }
-        val sql = "DELETE FROM $tableName WHERE topic = ? " // TODO: can be converted to use IN operator with a list of topics
+        val sql = "DELETE FROM $tableName WHERE topic_1 = ? AND topic_2 = ? AND topic_3 = ? AND topic_4 = ? AND topic_5 = ? AND topic_6 = ? AND topic_7 = ? AND topic_8 = ? AND topic_9 = ? AND topic_r = ?"
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
-                    for (topic in rows) {
-                        preparedStatement.setArray(1, connection.createArrayOf("text", topic))
+                    for (topic in topics) {
+                        val (first, rest) = splitTopic(topic)
+                        repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 1, first.getOrNull(it) ?: "") }
+                        preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 1, connection.createArrayOf("text", rest.toTypedArray()))
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
@@ -173,30 +197,37 @@ class MessageStorePostgres(
     }
 
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
-        val topicLevels = Utils.getTopicLevels(topicName).mapIndexed { index, level ->
+        val filter = Utils.getTopicLevels(topicName).mapIndexed { index, level ->
             when (level) {
                 "+", "#" -> null
                 else -> {
-                    Pair("topic[${index+1}] = ?", level)
+                    if (index >= MAX_FIXED_TOPIC_LEVELS) {
+                        Pair("topic_r[${index - MAX_FIXED_TOPIC_LEVELS + 1}] = ?", level)
+                    } else {
+                        Pair(FIXED_TOPIC_COLUMN_NAMES[index] + " = ?", level)
+                    }
                 }
             }
         }.filterNotNull()
         try {
             db.connection?.let { connection ->
-                val where = topicLevels.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
-                val sql = "SELECT array_to_string(topic, '/'), payload_blob, qos, client_id, message_uuid FROM $tableName WHERE $where"
+                val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
+                val sql = "SELECT topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7, topic_8, topic_9, topic_r, " +
+                          "payload_blob, qos, client_id, message_uuid "+
+                          "FROM $tableName WHERE $where"
                 logger.finest { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
                 connection.prepareStatement(sql).use { preparedStatement ->
-                    topicLevels.forEachIndexed { index, level ->
-                        preparedStatement.setString(index + 1, level.second)
-                    }
+                    filter.forEachIndexed { i, x -> preparedStatement.setString(i + 1, x.second) }
+
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
-                        val topic = resultSet.getString(1)
-                        val payload = resultSet.getBytes(2)
-                        val qos = resultSet.getInt(3)
-                        val clientId = resultSet.getString(4)
-                        val messageUuid = resultSet.getString(5)
+                        val topic = (((1 until MAX_FIXED_TOPIC_LEVELS + 1).mapNotNull { resultSet.getString(it) }) +
+                                (resultSet.getArray(MAX_FIXED_TOPIC_LEVELS + 1).array as Array<String>)).joinToString("/")
+
+                        val payload = resultSet.getBytes(11)
+                        val qos = resultSet.getInt(12)
+                        val clientId = resultSet.getString(13)
+                        val messageUuid = resultSet.getString(14)
                         val message = MqttMessage(
                             messageUuid = messageUuid,
                             messageId = 0,
