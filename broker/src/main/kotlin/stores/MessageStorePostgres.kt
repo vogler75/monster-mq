@@ -221,7 +221,7 @@ class MessageStorePostgres(
 
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
-                        val topic = (((1 until MAX_FIXED_TOPIC_LEVELS + 1).mapNotNull { resultSet.getString(it) }) +
+                        val topic = (((1 until MAX_FIXED_TOPIC_LEVELS + 1).map { resultSet.getString(it) }.filterNot { it.isNullOrEmpty() }) +
                                 (resultSet.getArray(MAX_FIXED_TOPIC_LEVELS + 1).array as Array<String>)).joinToString("/")
 
                         val payload = resultSet.getBytes(11)
