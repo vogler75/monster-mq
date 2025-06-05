@@ -15,9 +15,9 @@ services:
     container_name: timescale
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - 5432:5432
     volumes:
-      - /data/timescale:/var/lib/postgresql/data
+      - ./db:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: system
       POSTGRES_PASSWORD: manager
