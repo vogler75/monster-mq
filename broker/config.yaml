@@ -1,5 +1,7 @@
 TCP: 1883
-WS: 1884
+TPCS: 8883
+WS: 9000
+WSS: 9001
 
 MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
@@ -23,12 +25,6 @@ ArchiveGroups:
     RetainedOnly: false
     LastValType: POSTGRES
     ArchiveType: POSTGRES
-  - Name: "video"
-    Enabled: false
-    TopicFilter: [ "video/#" ]
-    RetainedOnly: false
-    LastValType: NONE
-    ArchiveType: KAFKA
 
 Kafka:
   Servers: linux0:9092
@@ -37,11 +33,11 @@ Kafka:
     Topic: monster
 
 Postgres:
-  Url: jdbc:postgresql://192.168.1.4:5432/monster
+  Url: jdbc:postgresql://timescale:5432/postgres
   User: system
   Pass: manager
 
 CrateDB:
-  Url: jdbc:postgresql://192.168.1.31:5432/test
+  Url: jdbc:postgresql://cratedb:5432/test
   User: crate
   Pass: ""

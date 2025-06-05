@@ -3,11 +3,40 @@
 MonsterMQ is a MQTT broker built on Vert.X and Hazelcast with data persistence through PostgreSQL. 
 ![Logo](Logo.png)
 
-
-
 ## Docker Image
 
 > docker run -v ./log:/app/log -v ./config.yaml:/app/config.yaml rocworks/monstermq [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
+
+## Docker Compose
+```
+services:
+  timescale:
+    image: timescale/timescaledb:latest-pg16
+    container_name: timescale
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - /data/timescale:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: system
+      POSTGRES_PASSWORD: manager
+  monstermq:
+    image: rocworks/monstermq:latest
+    container_name: monstermq
+    restart: unless-stopped
+    ports:
+      - 1883:1883
+      - 8883:8883
+      - 9000:9000
+      - 9001:9001
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      # optionally log to files with log rotation
+      #- ./log:/app/log      
+      #- ./logging-file.properties:/app/logging.properties # see broker/src/main/resources/*
+    command: ["-log INFO"]
+```
 
 ## Build Locally 
 
@@ -50,13 +79,6 @@ ArchiveGroups:
     LastValType: POSTGRES
     ArchiveType: POSTGRES
 
-  - Name: "video"
-    Enabled: true
-    TopicFilter: [ "video/#" ]
-    RetainedOnly: false
-    LastValType: NONE
-    ArchiveType: KAFKA
-
 Kafka:
   Servers: linux0:9092
   Bus: # Use Kafka as the message bus
@@ -64,12 +86,12 @@ Kafka:
     Topic: monster
 
 Postgres:
-  Url: jdbc:postgresql://192.168.1.30:5432/test
+  Url: jdbc:postgresql://timescale:5432/postgres
   User: system
   Pass: manager
 
 CrateDB:
-  Url: jdbc:postgresql://192.168.1.31:5432/test
+  Url: jdbc:postgresql://cratedb:5432/monster
   User: crate
   Pass: ""
 
