@@ -1,1 +1,2 @@
-docker build -t rocworks/monstermq .
+version=`cat version.txt`
+docker build -t rocworks/monstermq:$version -t rocworks/monstermq:latest .
