@@ -26,6 +26,6 @@ interface IMessageStore {
     fun delAll(topics: List<String>)
     fun findMatchingMessages(topicName: String, callback: (MqttMessage)->Boolean)
 
-    fun findTopicsByName(name: String, ignoreCase: Boolean) : List<TopicAndConfig>
-    fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean) : List<TopicAndConfig>
+    fun findTopicsByName(name: String, ignoreCase: Boolean, namespace: String) : List<String>
+    fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean, namespace: String) : List<TopicAndConfig>
 }

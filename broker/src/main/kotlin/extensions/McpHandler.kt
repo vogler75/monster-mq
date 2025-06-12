@@ -294,29 +294,12 @@ class McpHandler(
         // Register tools
         registerTool(
             AsyncTool(
-                "get-topic-value",
-                "Get the current/last value of a topic",
-                JsonObject()
-                    .put("type", "object")
-                    .put(
-                        "properties", JsonObject()
-                            .put(
-                                "topic", JsonObject()
-                                    .put("type", "string")
-                                    .put("description", "Topic to get the value for")
-                            )
-                    )
-                    .put("required", JsonArray().add("topic")),
-                ::getTopicValueTool
-            )
-        )
-        registerTool(
-            AsyncTool(
                 "find-topics-by-name",
                 """
                 Finds topics by name with wildcard options. 
                 Topics are separated by '/' forming a hierarchical structure. 
                 Wildcards can be used in the name, for example `my/topic/*` to match all topics under `my/topic/`.
+                You can also pass a namespace, so that the search is limited to that namespace. 
                 """.trimIndent(),
                 JsonObject()
                     .put("type", "object")
@@ -332,6 +315,10 @@ class McpHandler(
                                 .put("description", "Whether to ignore case when matching names")
                                 .put("default", true)
                             )
+                            .put("namespace", JsonObject()
+                                .put("type", "string")
+                                .put("description", "Optional namespace to limit the search to a specific topic prefix")
+                            )
                     )
                     .put("required", JsonArray().add("name")),
                 ::findTopicsByNameTool
@@ -345,6 +332,7 @@ class McpHandler(
                 Topics are separated by '/' forming a hierarchical structure.
                 Regex pattern can be used, for example `'*postgres|database*'` to match all topics with that description.
                 Be sure to add the wildcards in the given description argument.
+                You can also pass a namespace, so that the search is limited to that namespace. 
                 """.trimIndent(),
                 JsonObject()
                     .put("type", "object")
@@ -360,9 +348,31 @@ class McpHandler(
                                 .put("description", "Whether to ignore case when matching descriptions")
                                 .put("default", true)
                             )
+                            .put("namespace", JsonObject()
+                                .put("type", "string")
+                                .put("description", "Optional namespace to limit the search to a specific topic prefix")
+                            )
                     )
                     .put("required", JsonArray().add("description")),
                 ::findTopicsByDescriptionTool
+            )
+        )
+        registerTool(
+            AsyncTool(
+                "get-topic-value",
+                "Get the current/last value of a topic",
+                JsonObject()
+                    .put("type", "object")
+                    .put(
+                        "properties", JsonObject()
+                            .put(
+                                "topic", JsonObject()
+                                    .put("type", "string")
+                                    .put("description", "Topic to get the value for")
+                            )
+                    )
+                    .put("required", JsonArray().add("topic")),
+                ::getTopicValueTool
             )
         )
         registerTool(
@@ -399,40 +409,21 @@ class McpHandler(
 
     // --------------------------------------------------------------------------------------------------------------
 
-    private fun getTopicValueTool(args: JsonObject): Future<JsonArray> {
-        logger.info("getTopicValueTool called with args: $args")
-        if (!args.containsKey("topic")) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Topic parameter required"))
-        }
-
-        val topic = args.getString("topic", "")
-        val message = messageStore[topic] ?: return Future.succeededFuture(JsonArray())
-
-        val result = JsonArray().add(
-            JsonObject()
-                .put("type", "text")
-                .put("text", message.payload.toString(Charsets.UTF_8))
-        )
-        return Future.succeededFuture(result)
-    }
-
-    // --------------------------------------------------------------------------------------------------------------
-
     private fun findTopicsByNameTool(args: JsonObject): Future<JsonArray> {
         logger.info("findTopicByNameTool called with args: $args")
         if (!args.containsKey("name")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Name parameter required"))
         }
         val ignoreCase = args.getBoolean("ignoreCase", true)
+        val namespace = args.getString("namespace", "")
         val name = args.getString("name", "")
-        val list = retainedStore.findTopicsByName(name, ignoreCase)
+        val list = messageStore.findTopicsByName(name, ignoreCase, namespace)
         val result = JsonArray()
-        result.add(JsonObject().put("type", "text").put("text", "Result for name: $name"))
-        result.add(JsonObject().put("type", "text").put("text", "Topic;Config"))
+        result.add(JsonObject().put("type", "text").put("text", "Matching Topics:"))
         list.forEach {
             result.add(JsonObject()
                 .put("type", "text")
-                .put("text", it.topic + ";" + it.config)
+                .put("text", it)
             )
         }
         return Future.succeededFuture(result)
@@ -447,7 +438,8 @@ class McpHandler(
         }
         val ignoreCase = args.getBoolean("ignoreCase", true)
         val description = args.getString("description", "")
-        val list = retainedStore.findTopicsByConfig("Description", description, ignoreCase)
+        val namespace = args.getString("namespace", "")
+        val list = retainedStore.findTopicsByConfig("Description", description, ignoreCase, namespace)
         val result = JsonArray()
         result.add(JsonObject().put("type", "text").put("text", "Result for description: $description"))
         result.add(JsonObject().put("type", "text").put("text", "Topic;Config"))
@@ -457,6 +449,25 @@ class McpHandler(
                 .put("text", it.topic + ";" + it.config)
             )
         }
+        return Future.succeededFuture(result)
+    }
+
+    // --------------------------------------------------------------------------------------------------------------
+
+    private fun getTopicValueTool(args: JsonObject): Future<JsonArray> {
+        logger.info("getTopicValueTool called with args: $args")
+        if (!args.containsKey("topic")) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Topic parameter required"))
+        }
+
+        val topic = args.getString("topic", "")
+        val message = messageStore[topic] ?: return Future.succeededFuture(JsonArray())
+
+        val result = JsonArray().add(
+            JsonObject()
+                .put("type", "text")
+                .put("text", message.payload.toString(Charsets.UTF_8))
+        )
         return Future.succeededFuture(result)
     }
 

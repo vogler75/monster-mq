@@ -17,7 +17,7 @@ ArchiveGroups:
     Enabled: true
     TopicFilter: [ "Original/#" ]
     RetainedOnly: false
-    LastValType: MEMORY
+    LastValType: POSTGRES
     ArchiveType: POSTGRES
 
 Kafka:
