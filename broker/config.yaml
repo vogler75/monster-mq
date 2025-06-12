@@ -13,17 +13,11 @@ SparkplugMetricExpansion:
   Enabled: true
 
 ArchiveGroups:
-  - Name: "group1"
+  - Name: Default
     Enabled: true
-    TopicFilter: [ "test1/#" ]
+    TopicFilter: [ "Original/#" ]
     RetainedOnly: false
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
-  - Name: "group2"
-    Enabled: true
-    TopicFilter: [ "test2/#" ]
-    RetainedOnly: false
-    LastValType: POSTGRES
+    LastValType: MEMORY
     ArchiveType: POSTGRES
 
 Kafka:
@@ -33,7 +27,7 @@ Kafka:
     Topic: monster
 
 Postgres:
-  Url: jdbc:postgresql://timescale:5432/postgres
+  Url: jdbc:postgresql://linux0:5432/test
   User: system
   Pass: manager
 

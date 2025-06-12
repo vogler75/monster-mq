@@ -57,4 +57,12 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
             else true
         }
     }
+
+    override fun findTopicsByName(name: String, ignoreCase: Boolean): List<TopicAndConfig> {
+        TODO("Not yet implemented")
+    }
+
+    override fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean): List<TopicAndConfig> {
+        TODO("Not yet implemented")
+    }
 }

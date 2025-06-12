@@ -11,6 +11,11 @@ enum class MessageStoreType {
     MONGODB
 }
 
+data class TopicAndConfig(
+    val topic: String,
+    val config: String
+)
+
 interface IMessageStore {
     fun getName(): String
     fun getType(): MessageStoreType
@@ -20,4 +25,7 @@ interface IMessageStore {
     fun addAll(messages: List<MqttMessage>)
     fun delAll(topics: List<String>)
     fun findMatchingMessages(topicName: String, callback: (MqttMessage)->Boolean)
+
+    fun findTopicsByName(name: String, ignoreCase: Boolean) : List<TopicAndConfig>
+    fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean) : List<TopicAndConfig>
 }

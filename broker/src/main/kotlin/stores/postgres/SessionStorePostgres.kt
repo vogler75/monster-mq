@@ -1,9 +1,12 @@
-package at.rocworks.stores
+package at.rocworks.stores.postgres
 
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
+import at.rocworks.stores.DatabaseConnection
+import at.rocworks.stores.ISessionStore
+import at.rocworks.stores.SessionStoreType
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future

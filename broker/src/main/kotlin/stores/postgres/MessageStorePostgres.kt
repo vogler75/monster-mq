@@ -1,8 +1,12 @@
-package at.rocworks.stores
+package at.rocworks.stores.postgres
 
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
+import at.rocworks.stores.DatabaseConnection
+import at.rocworks.stores.IMessageStore
+import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.TopicAndConfig
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -16,21 +20,18 @@ class MessageStorePostgres(
 ): AbstractVerticle(), IMessageStore {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
-    private var lastAddAllError: Int = Int.MAX_VALUE
-    private var lastGetError: Int = Int.MAX_VALUE
-    private var lastDelAllError: Int = Int.MAX_VALUE
-    private var lastFetchError: Int = Int.MAX_VALUE
 
     private companion object {
         const val MAX_FIXED_TOPIC_LEVELS = 9
         val FIXED_TOPIC_COLUMN_NAMES = (0 until MAX_FIXED_TOPIC_LEVELS).map { "topic_${it+1}" }
         val ALL_PK_COLUMNS = FIXED_TOPIC_COLUMN_NAMES + "topic_r"
 
-        fun splitTopic(topicName: String): Pair<List<String>, List<String>> {
+        fun splitTopic(topicName: String): Triple<List<String>, List<String>, String> {
             val levels = Utils.getTopicLevels(topicName)
             val first = levels.take(MAX_FIXED_TOPIC_LEVELS)
             val rest = levels.drop(MAX_FIXED_TOPIC_LEVELS)
-            return Pair(first, rest)
+            val last = levels.last()
+            return Triple(first, rest, last)
         }
     }
 
@@ -47,8 +48,10 @@ class MessageStorePostgres(
                     val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it text NOT NULL" }
                     statement.executeUpdate("""
                     CREATE TABLE IF NOT EXISTS $tableName (
-                        ${fixedTopicColumns},                         
-                        topic_r text[] NOT NULL,
+                        topic text, -- full topic for                     
+                        ${fixedTopicColumns}, -- topic levels for wildcard matching                        
+                        topic_r text[] NOT NULL, -- remaining topic levels
+                        topic_l text NOT NULL, -- last level of the topic
                         time TIMESTAMPTZ,                    
                         payload_blob BYTEA,
                         payload_json JSONB,
@@ -56,8 +59,11 @@ class MessageStorePostgres(
                         retained BOOLEAN,
                         client_id VARCHAR(65535), 
                         message_uuid VARCHAR(36),
-                        PRIMARY KEY ($pkColumnsString)
+                        PRIMARY KEY (topic)
                     )
+                    """.trimIndent())
+                    statement.executeUpdate("""
+                    CREATE INDEX IF NOT EXISTS ${tableName}_topic ON $tableName ($pkColumnsString)
                     """.trimIndent())
                     logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
                     promise.complete()
@@ -80,27 +86,17 @@ class MessageStorePostgres(
     override fun get(topicName: String): MqttMessage? {
         try {
             db.connection?.let { connection ->
-                val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString("AND ") { "$it=?" }
                 val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
-                             WHERE $fixedTopicColumns AND topic_r=?"""
+                             WHERE topic = ?"""
                 connection.prepareStatement(sql).use { preparedStatement ->
-                    val (first, rest) = splitTopic(topicName)
-                    repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 1, first.getOrNull(it) ?: "") }
-                    preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 1, connection.createArrayOf("text", rest.toTypedArray()))
-
+                    preparedStatement.setString(1, topicName)
                     val resultSet = preparedStatement.executeQuery()
-
                     if (resultSet.next()) {
                         val payload = resultSet.getBytes(1)
                         val qos = resultSet.getInt(2)
                         val retained = resultSet.getBoolean(3)
                         val clientId = resultSet.getString(4)
                         val messageUuid = resultSet.getString(5)
-
-                        if (lastGetError != 0) {
-                            logger.info("Read successful after error [${Utils.getCurrentFunctionName()}]")
-                            lastGetError = 0
-                        }
 
                         return MqttMessage(
                             messageUuid = messageUuid,
@@ -117,19 +113,16 @@ class MessageStorePostgres(
                 }
             }
         } catch (e: SQLException) {
-            if (e.errorCode != lastGetError) { // avoid spamming the logs
-                logger.warning("Error fetching data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
-                lastGetError = e.errorCode
-            }
+            logger.severe("Error fetching data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
         }
         return null
     }
 
     override fun addAll(messages: List<MqttMessage>) {
-        val sql = """INSERT INTO $tableName (topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7, topic_8, topic_9, topic_r, 
+        val sql = """INSERT INTO $tableName (topic, topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7, topic_8, topic_9, topic_r, topic_l,
                    time, payload_blob, payload_json, qos, retained, client_id, message_uuid) 
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::JSONB, ?, ?, ?, ?) 
-                   ON CONFLICT (topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7, topic_8, topic_9, topic_r) DO UPDATE 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::JSONB, ?, ?, ?, ?) 
+                   ON CONFLICT (topic) DO UPDATE 
                    SET time = EXCLUDED.time, 
                    payload_blob = EXCLUDED.payload_blob, 
                    payload_json = EXCLUDED.payload_json,
@@ -143,30 +136,25 @@ class MessageStorePostgres(
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
                     messages.forEach { message ->
-                        val (first, rest) = splitTopic(message.topicName)
-                        repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 1, first.getOrNull(it) ?: "") }
-                        preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 1, connection.createArrayOf("text", rest.toTypedArray()))
-                        preparedStatement.setTimestamp(11, Timestamp.from(message.time))
-                        preparedStatement.setBytes(12, message.payload)
-                        preparedStatement.setString(13, message.getPayloadAsJson())
-                        preparedStatement.setInt(14, message.qosLevel)
-                        preparedStatement.setBoolean(15, message.isRetain)
-                        preparedStatement.setString(16, message.clientId)
-                        preparedStatement.setString(17, message.messageUuid)
+                        val (first, rest, last) = splitTopic(message.topicName)
+                        preparedStatement.setString(1, message.topicName)
+                        repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 2, first.getOrNull(it) ?: "") }
+                        preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 2, connection.createArrayOf("text", rest.toTypedArray()))
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 3, last)
+                        preparedStatement.setTimestamp(13, Timestamp.from(message.time))
+                        preparedStatement.setBytes(14, message.payload)
+                        preparedStatement.setString(15, message.getPayloadAsJson())
+                        preparedStatement.setInt(16, message.qosLevel)
+                        preparedStatement.setBoolean(17, message.isRetain)
+                        preparedStatement.setString(18, message.clientId)
+                        preparedStatement.setString(19, message.messageUuid)
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
-                    if (lastAddAllError != 0) {
-                        logger.info("Batch insert successful after error [${Utils.getCurrentFunctionName()}]")
-                        lastAddAllError = 0
-                    }
                 }
             }
         } catch (e: SQLException) {
-            if (e.errorCode != lastAddAllError) { // avoid spamming the logs
-                logger.warning("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
-                lastAddAllError = e.errorCode
-            }
+            logger.severe("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -176,23 +164,16 @@ class MessageStorePostgres(
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
                     for (topic in topics) {
-                        val (first, rest) = splitTopic(topic)
+                        val (first, rest, last) = splitTopic(topic)
                         repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 1, first.getOrNull(it) ?: "") }
                         preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 1, connection.createArrayOf("text", rest.toTypedArray()))
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
-                    if (lastAddAllError != 0) {
-                        logger.info("Batch delete successful after error [${Utils.getCurrentFunctionName()}]")
-                        lastAddAllError = 0
-                    }
                 }
             }
         } catch (e: SQLException) {
-            if (e.errorCode != lastDelAllError) { // avoid spamming the logs
-                logger.warning("Error deleting batch data [${e.message}] [${Utils.getCurrentFunctionName()}]")
-                lastDelAllError = e.errorCode
-            }
+            logger.severe("Error deleting batch data [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -242,16 +223,75 @@ class MessageStorePostgres(
                         callback(message)
                     }
                 }
-                if (lastFetchError != 0) {
-                    logger.info("Read successful after error [${Utils.getCurrentFunctionName()}]")
-                    lastFetchError = 0
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error finding data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
+    override fun findTopicsByName(name: String, ignoreCase: Boolean): List<TopicAndConfig> {
+        val resultTopics = mutableListOf<TopicAndConfig>()
+        val sqlSearchPattern = name.replace("*", "%").replace("+", "_") // Also handle MQTT single level wildcard for LIKE
+
+        val sql = """
+        SELECT topic, (SELECT payload_json FROM $tableName WHERE topic_l = '${Const.CONFIG_TOPIC_NAME}' AND topic = t.topic||'/${Const.CONFIG_TOPIC_NAME}') AS config
+        FROM $tableName AS t 
+        WHERE topic_l <> '${Const.CONFIG_TOPIC_NAME}'
+        AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"} 
+        ORDER BY topic
+        """.trimIndent()
+
+        logger.fine { "findTopicsByName SQL: $sql with pattern '$sqlSearchPattern' [${Utils.getCurrentFunctionName()}]" }
+
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, sqlSearchPattern)
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        val fullTopic = resultSet.getString("topic") ?: ""
+                        val configJson = resultSet.getString("config") ?: ""
+                        resultTopics.add(TopicAndConfig(fullTopic, configJson))
+                    }
                 }
             }
         } catch (e: SQLException) {
-            if (e.errorCode != lastFetchError) { // avoid spamming the logs
-                logger.warning("Error finding data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
-                lastFetchError = e.errorCode
-            }
+            logger.severe("Error in findTopicsByName for pattern [$name] [${e.errorCode}]: ${e.message} [${Utils.getCurrentFunctionName()}]")
         }
+        logger.fine("findTopicsByName result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        return resultTopics
+    }
+
+    override fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean): List<TopicAndConfig> {
+        val resultTopics = mutableListOf<TopicAndConfig>()
+        val sqlSearchPattern = description.replace("*", "%").replace("+", "_") // Also handle MQTT single level wildcard for LIKE
+
+        val sql = """
+        SELECT topic, payload_json AS config
+        FROM $tableName
+        WHERE topic_l = '${Const.CONFIG_TOPIC_NAME}' 
+        AND ${if (ignoreCase) "LOWER(payload_json->>'${config}')" else "topic"} SIMILAR TO ${if (ignoreCase) "LOWER(?)" else "?"}   
+        ORDER BY topic
+        """.trimIndent()
+
+        logger.fine { "findTopicsByDescription SQL: $sql with pattern '$sqlSearchPattern' [${Utils.getCurrentFunctionName()}]" }
+
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, sqlSearchPattern)
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        val fullTopic = resultSet.getString("topic") ?: ""
+                        val configJson = resultSet.getString("config") ?: ""
+                        resultTopics.add(TopicAndConfig(fullTopic, configJson))
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error in findTopicsByName for pattern [$name] [${e.errorCode}]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+        }
+        logger.fine("findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        return resultTopics
     }
 }

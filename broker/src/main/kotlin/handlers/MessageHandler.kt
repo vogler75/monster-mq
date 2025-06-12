@@ -37,7 +37,7 @@ class MessageHandler(
             archiveQueues[group.name] = queue
             writerThread("AG-${group.name}", queue) { list ->
                 group.lastValStore?.addAll(getLastMessages(list))
-                group.archiveStore?.addAllHistory(list)
+                group.archiveStore?.addHistory(list)
             }
         }
     }

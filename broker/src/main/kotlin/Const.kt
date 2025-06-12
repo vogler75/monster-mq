@@ -20,5 +20,8 @@ object Const {
     const val QOS2_RETRY_INTERVAL = 10L // Seconds
     const val QOS2_RETRY_COUNT = 6*10 // 10 Minutes
 
+    const val DEFAULT_ARCHIVE_GROUP = "Default"
+    const val CONFIG_TOPIC_NAME = "<config>"
+
     var DEBUG_LEVEL: Level = Level.INFO
 }

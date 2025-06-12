@@ -1,14 +1,17 @@
-package at.rocworks.stores
+package at.rocworks.stores.mongodb
 
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
+import at.rocworks.stores.ISessionStore
+import at.rocworks.stores.SessionStoreType
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
+import com.mongodb.client.MongoDatabase
 import com.mongodb.client.model.Filters.*
-import com.mongodb.client.model.Updates.*
+import com.mongodb.client.model.UpdateOptions
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
@@ -22,7 +25,7 @@ class SessionStoreMongoDB(
 ) : AbstractVerticle(), ISessionStore {
     private val logger = Utils.getLogger(this::class.java)
     private lateinit var mongoClient: MongoClient
-    private lateinit var database: com.mongodb.client.MongoDatabase
+    private lateinit var database: MongoDatabase
 
     private lateinit var sessionsCollection: MongoCollection<Document>
     private lateinit var subscriptionsCollection: MongoCollection<Document>
@@ -136,7 +139,7 @@ class SessionStoreMongoDB(
                 "information" to Document.parse(information.encode()),
                 "update_time" to System.currentTimeMillis()
             )))
-            sessionsCollection.updateOne(eq("client_id", clientId), update, com.mongodb.client.model.UpdateOptions().upsert(true))
+            sessionsCollection.updateOne(eq("client_id", clientId), update, UpdateOptions().upsert(true))
         } catch (e: Exception) {
             logger.warning("Error while setting client: ${e.message}")
         }
@@ -190,7 +193,7 @@ class SessionStoreMongoDB(
                     "last_will" to ""
                 )))
             }
-            sessionsCollection.updateOne(eq("client_id", clientId), update, com.mongodb.client.model.UpdateOptions().upsert(true))
+            sessionsCollection.updateOne(eq("client_id", clientId), update, UpdateOptions().upsert(true))
         } catch (e: Exception) {
             logger.warning("Error while setting last will: ${e.message}")
         }
@@ -209,7 +212,7 @@ class SessionStoreMongoDB(
                         eq("topic", subscription.topicName)
                     ),
                     update,
-                    com.mongodb.client.model.UpdateOptions().upsert(true)
+                    UpdateOptions().upsert(true)
                 )
             }
         } catch (e: Exception) {
@@ -264,7 +267,7 @@ class SessionStoreMongoDB(
                 queuedMessagesCollection.updateOne(
                     eq("message_uuid", message.messageUuid),
                     Document("\$setOnInsert", messageDocument),
-                    com.mongodb.client.model.UpdateOptions().upsert(true)
+                    UpdateOptions().upsert(true)
                 )
 
                 clientIds.forEach { clientId ->
@@ -278,7 +281,7 @@ class SessionStoreMongoDB(
                             eq("message_uuid", message.messageUuid)
                         ),
                         Document("\$setOnInsert", clientMessageDocument),
-                        com.mongodb.client.model.UpdateOptions().upsert(true)
+                        UpdateOptions().upsert(true)
                     )
                 }
             }

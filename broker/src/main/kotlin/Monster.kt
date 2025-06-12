@@ -7,10 +7,20 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
+import at.rocworks.extensions.McpServer
 import at.rocworks.extensions.SparkplugExtension
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.stores.*
+import at.rocworks.stores.cratedb.MessageArchiveCrateDB
+import at.rocworks.stores.cratedb.MessageStoreCrateDB
+import at.rocworks.stores.cratedb.SessionStoreCrateDB
+import at.rocworks.stores.mongodb.MessageArchiveMongoDB
+import at.rocworks.stores.mongodb.MessageStoreMongoDB
+import at.rocworks.stores.mongodb.SessionStoreMongoDB
+import at.rocworks.stores.postgres.MessageArchivePostgres
+import at.rocworks.stores.postgres.MessageStorePostgres
+import at.rocworks.stores.postgres.SessionStorePostgres
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
@@ -222,6 +232,15 @@ class Monster(args: Array<String>) {
                 // Health handler
                 val healthHandler = HealthHandler(sessionHandler)
 
+                // MCP Server
+                val defaultArchiveGroup = archiveGroups.find { it.name == Const.DEFAULT_ARCHIVE_GROUP }
+                val mcpServer = if (defaultArchiveGroup == null || defaultArchiveGroup.lastValStore == null || defaultArchiveGroup.archiveStore == null) {
+                    logger.severe("Default archive group is not defined. Please check your configuration. MCP server will not start.")
+                    null
+                } else {
+                    McpServer("localhost", 3001, retainedStore, defaultArchiveGroup.lastValStore, defaultArchiveGroup.archiveStore)
+                }
+
                 // MQTT Servers
                 val servers = listOfNotNull(
                     if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, sessionHandler) else null,
@@ -235,6 +254,7 @@ class Monster(args: Array<String>) {
                     .compose { vertx.deployVerticle(messageHandler) }
                     .compose { vertx.deployVerticle(sessionHandler) }
                     .compose { vertx.deployVerticle(healthHandler) }
+                    .compose { vertx.deployVerticle(mcpServer) }
                     .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
                     .onFailure {
                         logger.severe("Startup error: ${it.message}")

@@ -1,8 +1,12 @@
-package at.rocworks.stores
+package at.rocworks.stores.cratedb
 
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
+import at.rocworks.stores.DatabaseConnection
+import at.rocworks.stores.IMessageStore
+import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.TopicAndConfig
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -223,5 +227,13 @@ class MessageStoreCrateDB(
                 lastFetchError = e.errorCode
             }
         }
+    }
+
+    override fun findTopicsByName(name: String, ignoreCase: Boolean): List<TopicAndConfig> {
+        TODO("Not yet implemented")
+    }
+
+    override fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean): List<TopicAndConfig> {
+        TODO("Not yet implemented")
     }
 }
