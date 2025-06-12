@@ -235,10 +235,10 @@ class Monster(args: Array<String>) {
                 // MCP Server
                 val defaultArchiveGroup = archiveGroups.find { it.name == Const.DEFAULT_ARCHIVE_GROUP }
                 val mcpServer = if (defaultArchiveGroup == null || defaultArchiveGroup.lastValStore == null || defaultArchiveGroup.archiveStore == null) {
-                    logger.severe("Default archive group is not defined. Please check your configuration. MCP server will not start.")
+                    logger.warning("Default archive group is not defined. Please check your configuration. MCP server will not start.")
                     null
                 } else {
-                    McpServer("localhost", 3001, retainedStore, defaultArchiveGroup.lastValStore, defaultArchiveGroup.archiveStore)
+                    McpServer("0.0.0.0", 3001, retainedStore, defaultArchiveGroup.lastValStore, defaultArchiveGroup.archiveStore)
                 }
 
                 // MQTT Servers
@@ -246,7 +246,8 @@ class Monster(args: Array<String>) {
                     if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, sessionHandler) else null,
                     if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, sessionHandler) else null,
                     if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, sessionHandler) else null,
-                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, sessionHandler) else null
+                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, sessionHandler) else null,
+                    mcpServer
                 )
 
                 // Deploy all verticles
@@ -254,7 +255,6 @@ class Monster(args: Array<String>) {
                     .compose { vertx.deployVerticle(messageHandler) }
                     .compose { vertx.deployVerticle(sessionHandler) }
                     .compose { vertx.deployVerticle(healthHandler) }
-                    .compose { vertx.deployVerticle(mcpServer) }
                     .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
                     .onFailure {
                         logger.severe("Startup error: ${it.message}")
