@@ -1,5 +1,6 @@
 package at.rocworks.extensions
 
+import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.stores.IMessageArchive
 import at.rocworks.stores.IMessageStore
@@ -419,11 +420,13 @@ class McpHandler(
         val name = args.getString("name", "")
         val list = messageStore.findTopicsByName(name, ignoreCase, namespace)
         val result = JsonArray()
-        result.add(JsonObject().put("type", "text").put("text", "Matching Topics:"))
+
+        result.add(JsonObject().put("type", "text").put("text", "Topic: Configuration & Description"))
         list.forEach {
+            val config = retainedStore["$it/${Const.CONFIG_TOPIC_NAME}"] // TODO: should be optimized to do a fetch with the list of topics
             result.add(JsonObject()
                 .put("type", "text")
-                .put("text", it)
+                .put("text", "$it: ${config?.payload?.toString(Charsets.UTF_8) ?: "No config"}")
             )
         }
         return Future.succeededFuture(result)
@@ -441,12 +444,11 @@ class McpHandler(
         val namespace = args.getString("namespace", "")
         val list = retainedStore.findTopicsByConfig("Description", description, ignoreCase, namespace)
         val result = JsonArray()
-        result.add(JsonObject().put("type", "text").put("text", "Result for description: $description"))
-        result.add(JsonObject().put("type", "text").put("text", "Topic;Config"))
+        result.add(JsonObject().put("type", "text").put("text", "Topic: Configuration & Description"))
         list.forEach {
             result.add(JsonObject()
                 .put("type", "text")
-                .put("text", it.topic + ";" + it.config)
+                .put("text", "${it.topic}: ${it.config.ifEmpty { "No config" }}")
             )
         }
         return Future.succeededFuture(result)
@@ -485,13 +487,12 @@ class McpHandler(
 
         val messages = messageArchive.getHistory(topic, startTime, endTime, limit)
         val result = JsonArray()
-        result.add(JsonObject().put("type", "text").put("text", "Result for topic: $topic"))
-        result.add(JsonObject().put("type", "text").put("text", "Time;Payload"))
+        result.add(JsonObject().put("type", "text").put("text", "Time:Payload"))
         messages.forEach { message ->
             result.add(
                 JsonObject()
                     .put("type", "text")
-                    .put("text", "${message.time};${message.payload.toString(Charsets.UTF_8)}")
+                    .put("text", "${message.time}: ${message.payload.toString(Charsets.UTF_8)}")
             )
         }
         return Future.succeededFuture(result)

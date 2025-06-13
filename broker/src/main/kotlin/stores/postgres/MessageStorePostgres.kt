@@ -270,7 +270,7 @@ class MessageStorePostgres(
         val sqlNamespacePattern = if (namespace.isEmpty()) "%" else "$namespace/%"
 
         val sql = """
-        SELECT topic, payload_json AS config
+        SELECT RTRIM(topic, '/${Const.CONFIG_TOPIC_NAME}') AS topic, payload_json AS config, payload_json AS config
         FROM $tableName
         WHERE topic_l = '${Const.CONFIG_TOPIC_NAME}' 
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
