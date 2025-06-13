@@ -299,7 +299,8 @@ class McpHandler(
                 """
 **Find Topics by Name**
 
-Searches for topics (also called tags or datapoints) using name patterns with wildcard support. This tool helps locate specific data streams or topic hierarchies within a messaging or data system.
+Searches for topics (also called tags or datapoints) using name patterns with wildcard support. 
+This tool helps locate specific data streams or topic hierarchies within a messaging or data system.
 
 **MQTT Context:**
 - Topics are MQTT topic strings that follow standard MQTT conventions
@@ -322,7 +323,7 @@ Searches for topics (also called tags or datapoints) using name patterns with wi
 **Namespace Filtering:**
 - Optional namespace parameter limits search scope to topics with a specific prefix
 - Useful for filtering large topic hierarchies by system, device, or category
-- Example: namespace `production/` only searches topics starting with `production/`
+- Example: namespace `production` only searches topics starting with `production`
 
 **Best Practices:**
 - Start with broader patterns and narrow down if needed
@@ -359,7 +360,8 @@ Searches for topics (also called tags or datapoints) using name patterns with wi
                 """
 **Find Topics by Description**
 
-Searches for topics (also called tags or datapoints) by matching patterns against their description text using regex expressions. This tool helps discover relevant data streams based on their descriptive content rather than their hierarchical names.
+Searches for topics (also called tags or datapoints) by matching patterns against their description text using regex expressions. 
+This tool helps discover relevant data streams based on their descriptive content rather than their hierarchical names.
 
 **MQTT Context:**
 - Topics are MQTT topic strings that follow standard MQTT conventions
@@ -388,7 +390,7 @@ Searches for topics (also called tags or datapoints) by matching patterns agains
 
 **Namespace Filtering:**
 - Optional namespace parameter limits search to topics under a specific hierarchy
-- Example: namespace `production/sensors/` only searches sensor topics in production
+- Example: namespace `production/sensors` only searches sensor topics in production
 - Combines with regex patterns for precise filtering
 
 **Best Practices:**
@@ -397,7 +399,6 @@ Searches for topics (also called tags or datapoints) by matching patterns agains
 - Test patterns incrementally - complex regex can be hard to debug
 - Consider case sensitivity settings for your use case
 - Combine with name-based searches for comprehensive topic discovery
-
                 """.trimIndent(),
                 JsonObject()
                     .put("type", "object")
@@ -426,7 +427,7 @@ Searches for topics (also called tags or datapoints) by matching patterns agains
             AsyncTool(
                 "get-topic-value",
                 """
-**Get Topic Value Tool**
+**Get Topic Value**
 
 Retrieves the current or most recent value stored for a specific MQTT topic. This tool provides real-time access to the latest data point or message published to an MQTT topic (also referred to as tags or datapoints in some systems).
 
@@ -467,9 +468,7 @@ Retrieves the current or most recent value stored for a specific MQTT topic. Thi
 
 **Error Handling:**
 - Verify MQTT topic exists and is accessible before attempting to get its value
-- Handle cases where topics may not have any retained messages
-- Consider MQTT broker connectivity and permissions
-                    
+- Handle cases where topics may not have any retained messages                    
                 """.trimIndent(),
                 JsonObject()
                     .put("type", "object")
@@ -489,7 +488,7 @@ Retrieves the current or most recent value stored for a specific MQTT topic. Thi
             AsyncTool(
                 "query-message-archive",
                 """
-**Query Message Archive Tool**
+**Query Message Archive**
 
 Retrieves historical MQTT messages for a specific topic within a specified time range. This tool enables analysis of message patterns, trends, and historical data from MQTT topics (also referred to as tags or datapoints).
 
@@ -519,7 +518,7 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
 - If omitted, retrieves up to the most recent message
 - Must be after startTime if both are specified
 
-**limit** (optional, default: 1000):
+**limit** (optional, default: 100):
 - Maximum number of messages to return
 - Helps prevent overwhelming responses for high-frequency topics
 - Messages are returned chronologically, so you get the oldest messages first
@@ -536,7 +535,6 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
 - Array of historical MQTT messages with timestamps and payloads
 - Each message includes the published timestamp and message content
 - Messages are ordered chronologically (oldest first)
-- May include message metadata depending on system configuration
 
 **Best Practices:**
 - Use specific time ranges to avoid retrieving excessive data
