@@ -297,10 +297,38 @@ class McpHandler(
             AsyncTool(
                 "find-topics-by-name",
                 """
-                Finds topics by name with wildcard options. 
-                Topics are separated by '/' forming a hierarchical structure. 
-                Wildcards can be used in the name, for example `my/topic/*` to match all topics under `my/topic/`.
-                You can also pass a namespace, so that the search is limited to that namespace. 
+**Find Topics by Name**
+
+Searches for topics (also called tags or datapoints) using name patterns with wildcard support. This tool helps locate specific data streams or topic hierarchies within a messaging or data system.
+
+**MQTT Context:**
+- Topics are MQTT topic strings that follow standard MQTT conventions
+- Also known as "tags" or "datapoints" in industrial/IoT contexts
+- Represents real-time data streams from sensors, devices, or applications
+- Values are the payloads published to these MQTT topics
+
+**Topic Structure:**
+- Topics use a hierarchical naming convention with forward slashes as separators (e.g., `sensors/temperature/bedroom`)
+- Each level represents a category or subcategory, creating a tree-like organization
+- Topics function as unique identifiers for data streams, messages, or monitoring points
+
+**Wildcard Patterns:**
+- Use `*` to match any characters at that level
+- `my/topic/*` - matches all direct children under `my/topic/` (e.g., `my/topic/sensor1`, `my/topic/data`)
+- `sensors/*/temperature` - matches temperature topics across all sensor locations
+- `*/status` - matches any status topic at the second level
+- Case sensitivity is configurable (default: case-insensitive)
+
+**Namespace Filtering:**
+- Optional namespace parameter limits search scope to topics with a specific prefix
+- Useful for filtering large topic hierarchies by system, device, or category
+- Example: namespace `production/` only searches topics starting with `production/`
+
+**Best Practices:**
+- Start with broader patterns and narrow down if needed
+- Use namespace filtering for large systems to improve performance
+- Consider the hierarchical structure when designing search patterns
+- Combine with other topic tools for comprehensive data exploration
                 """.trimIndent(),
                 JsonObject()
                     .put("type", "object")
@@ -329,11 +357,47 @@ class McpHandler(
             AsyncTool(
                 "find-topics-by-description",
                 """
-                Finds topics by description with regex patterns.
-                Topics are separated by '/' forming a hierarchical structure.
-                Regex pattern can be used, for example `'*postgres|database*'` to match all topics with that description.
-                Be sure to add the wildcards in the given description argument.
-                You can also pass a namespace, so that the search is limited to that namespace. 
+**Find Topics by Description**
+
+Searches for topics (also called tags or datapoints) by matching patterns against their description text using regex expressions. This tool helps discover relevant data streams based on their descriptive content rather than their hierarchical names.
+
+**MQTT Context:**
+- Topics are MQTT topic strings that follow standard MQTT conventions
+- Also known as "tags" or "datapoints" in industrial/IoT contexts
+- Represents real-time data streams from sensors, devices, or applications
+- Values are the payloads published to these MQTT topics
+
+**Topic Structure:**
+- Topics use a hierarchical naming convention with forward slashes as separators (e.g., `sensors/temperature/bedroom`)
+- Each topic has an associated description that explains its purpose or content
+- This tool searches the description text, not the topic name itself
+
+**Regex Pattern Matching:**
+- Use standard regex patterns to match description content
+- `.*postgres.*|.*database.*` - matches topics with descriptions containing "postgres" or "database"
+- `temperature.*sensor` - matches descriptions starting with "temperature" and containing "sensor"
+- `(cpu|memory).*usage` - matches descriptions about CPU or memory usage
+- `error.*level.*[0-9]+` - matches error descriptions with numeric levels
+- Case sensitivity is configurable (default: case-insensitive)
+
+**Wildcard Usage:**
+- Include wildcards (`.*`) in your regex patterns for flexible matching
+- `.*keyword.*` - matches any description containing "keyword"
+- Use `|` for OR conditions: `.*wifi.*|.*bluetooth.*`
+- Use `^` and "\$" for exact start/end matching: "^System.*" matches descriptions starting with "System"
+
+**Namespace Filtering:**
+- Optional namespace parameter limits search to topics under a specific hierarchy
+- Example: namespace `production/sensors/` only searches sensor topics in production
+- Combines with regex patterns for precise filtering
+
+**Best Practices:**
+- Start with simple patterns like `.*keyword.*` and refine as needed
+- Use namespace filtering to narrow scope before applying complex regex
+- Test patterns incrementally - complex regex can be hard to debug
+- Consider case sensitivity settings for your use case
+- Combine with name-based searches for comprehensive topic discovery
+
                 """.trimIndent(),
                 JsonObject()
                     .put("type", "object")
@@ -361,7 +425,52 @@ class McpHandler(
         registerTool(
             AsyncTool(
                 "get-topic-value",
-                "Get the current/last value of a topic",
+                """
+**Get Topic Value Tool**
+
+Retrieves the current or most recent value stored for a specific MQTT topic. This tool provides real-time access to the latest data point or message published to an MQTT topic (also referred to as tags or datapoints in some systems).
+
+**MQTT Context:**
+- Topics are MQTT topic strings that follow standard MQTT conventions
+- Also known as "tags" or "datapoints" in industrial/IoT contexts
+- Represents real-time data streams from sensors, devices, or applications
+- Values are the payloads published to these MQTT topics
+
+**Functionality:**
+- Returns the most recently published value for the specified MQTT topic
+- Provides current state information for data streams, sensors, or message queues
+- Shows the actual message payload content, not just metadata about the topic
+
+**Input:**
+- **topic** (required): The exact MQTT topic string (e.g., `sensors/temperature/bedroom`)
+- Topic names are case-sensitive and must match exactly
+- Use forward slashes to specify the complete topic path following MQTT standards
+
+**Use Cases:**
+- Check current sensor readings: `sensors/temperature/living_room`
+- Get latest device status: `devices/thermostat/01/status`
+- Retrieve configuration values: `config/database/connection_string`
+- Monitor real-time metrics: `metrics/performance/response_time`
+- Read IoT device data: `home/lights/kitchen/brightness`
+
+**Return Value:**
+- The actual MQTT message payload (could be number, string, JSON object, etc.)
+- Timestamp information may be included depending on the MQTT broker configuration
+- Returns null or error if topic doesn't exist or has no retained/published values
+
+**Best Practices:**
+- Use find-topics tools first to discover available MQTT topic names
+- Ensure topic name follows MQTT naming conventions and hierarchy
+- Consider that values represent point-in-time MQTT messages that may change rapidly
+- For historical MQTT message analysis, use the message archive tool instead
+- Remember that MQTT topics without retained messages may return no value
+
+**Error Handling:**
+- Verify MQTT topic exists and is accessible before attempting to get its value
+- Handle cases where topics may not have any retained messages
+- Consider MQTT broker connectivity and permissions
+                    
+                """.trimIndent(),
                 JsonObject()
                     .put("type", "object")
                     .put(
@@ -379,7 +488,69 @@ class McpHandler(
         registerTool(
             AsyncTool(
                 "query-message-archive",
-                "Get the message archive for a specific topic within a time range",
+                """
+**Query Message Archive Tool**
+
+Retrieves historical MQTT messages for a specific topic within a specified time range. This tool enables analysis of message patterns, trends, and historical data from MQTT topics (also referred to as tags or datapoints).
+
+**MQTT Context:**
+- Queries archived MQTT messages from a specific topic
+- Provides historical view of data streams, sensor readings, or device communications
+- Useful for trend analysis, debugging, and historical reporting
+- Messages are retrieved in chronological order within the specified time window
+
+**Parameters:**
+
+**topic** (required):
+- The exact MQTT topic string to query (e.g., `sensors/temperature/bedroom`)
+- Must match the topic name exactly (case-sensitive)
+- Use forward slashes for hierarchical MQTT topic structure
+- Single topic only - use multiple calls for multiple topics
+
+**startTime** (optional):
+- Start of the time range in ISO 8601 format
+- Examples: `2024-01-15T10:30:00Z`, `2024-01-15T10:30:00.123Z`, `2024-01-15T10:30:00+02:00`
+- If omitted, retrieves from the earliest available message
+- Use UTC timezone (Z suffix) for consistent results across systems
+
+**endTime** (optional):
+- End of the time range in ISO 8601 format
+- Same format as startTime: `2024-01-15T18:45:00Z`
+- If omitted, retrieves up to the most recent message
+- Must be after startTime if both are specified
+
+**limit** (optional, default: 1000):
+- Maximum number of messages to return
+- Helps prevent overwhelming responses for high-frequency topics
+- Messages are returned chronologically, so you get the oldest messages first
+- Increase limit for comprehensive historical analysis, decrease for quick sampling
+
+**Use Cases:**
+- Analyze sensor data trends: `sensors/temperature/outdoor` over the last week
+- Debug device behavior: `devices/thermostat/errors` during a specific incident
+- Generate reports: `production/line1/output` for monthly reporting
+- Monitor system performance: `system/cpu_usage` during peak hours
+- Historical data export: retrieve all messages for backup or migration
+
+**Return Value:**
+- Array of historical MQTT messages with timestamps and payloads
+- Each message includes the published timestamp and message content
+- Messages are ordered chronologically (oldest first)
+- May include message metadata depending on system configuration
+
+**Best Practices:**
+- Use specific time ranges to avoid retrieving excessive data
+- Start with smaller time windows and adjust limit as needed
+- Consider system performance when querying high-frequency topics
+- Use ISO 8601 format with explicit timezone information
+- Combine with topic discovery tools to identify relevant topics first
+- For real-time data, use the get-topic-value tool instead
+
+**Example Queries:**
+- Last 24 hours: `startTime: "2024-01-15T00:00:00Z"`, `endTime: "2024-01-16T00:00:00Z"`
+- Specific incident window: `startTime: "2024-01-15T14:30:00Z"`, `endTime: "2024-01-15T15:00:00Z"`
+- Sample recent data: `limit: 100` (no time range for most recent 100 messages)                    
+                """.trimIndent(),
                 JsonObject()
                     .put("type", "object")
                     .put(
@@ -399,7 +570,7 @@ class McpHandler(
                             .put("limit", JsonObject()
                                 .put("type", "integer")
                                 .put("description", "Maximum number of messages to return")
-                                .put("default", 1000)
+                                .put("default", 100)
                             )
                     )
                     .put("required", JsonArray().add("topic")),
