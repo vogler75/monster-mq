@@ -80,26 +80,26 @@ class TopicTree<K, V> : ITopicTree<K, V> {
     }
 
     override fun findDataOfTopicName(topicName: String): List<Pair<K, V>> {
-        fun find(node: Node<K, V>, current: String, rest: List<String>): List<Pair<K, V>> {
+        fun find(node: Node<K, V>, current: String, rest: List<String>, level: Int): List<Pair<K, V>> {
             return node.children.flatMap { child ->
                 when (child.key) {
-                    "#" -> child.value.dataset.toList()
+                    "#" -> if (level == 1 && current == "\$SYS") listOf() else child.value.dataset.toList()
                     "+" -> {
                         (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
-                                (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1))
+                                (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), level+1)
                                 else listOf())
                     }
                     current -> {
                         (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
-                                (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1))
-                                else find(child.value, "", listOf()))
+                                (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), level+1)
+                                else find(child.value, "", listOf(), level+1))
                     }
                     else -> listOf()
                 }
             }
         }
         val xs = Utils.getTopicLevels(topicName)
-        return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1)) else listOf()
+        return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1), 1) else listOf()
     }
 
     override fun findMatchingTopicNames(topicName: String): List<String> {
