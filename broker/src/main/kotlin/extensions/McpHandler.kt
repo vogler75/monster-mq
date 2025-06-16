@@ -228,6 +228,7 @@ class McpHandler(
         }
 
         return when (name) {
+            /*
             "find-topics" -> {
                 val text = arguments.getString("text", "")
                 val prompt = String.format(
@@ -255,6 +256,7 @@ class McpHandler(
                         .put("messages", messages)
                 )
             }
+            */
             else -> Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Prompt not found: $name"))
         }
     }
@@ -429,7 +431,7 @@ This tool helps discover relevant data streams based on their descriptive conten
                 """
 **Get Topic Value**
 
-Retrieves the current or most recent value stored for a specific MQTT topic. This tool provides real-time access to the latest data point or message published to an MQTT topic (also referred to as tags or datapoints in some systems).
+Retrieves the current or most recent values stored for one or more MQTT topics. This tool provides real-time access to the latest data points or messages published to MQTT topics (also referred to as tags or datapoints in some systems).
 
 **MQTT Context:**
 - Topics are MQTT topic strings that follow standard MQTT conventions
@@ -438,49 +440,62 @@ Retrieves the current or most recent value stored for a specific MQTT topic. Thi
 - Values are the payloads published to these MQTT topics
 
 **Functionality:**
-- Returns the most recently published value for the specified MQTT topic
+- Returns the most recently published values for the specified MQTT topics
 - Provides current state information for data streams, sensors, or message queues
-- Shows the actual message payload content, not just metadata about the topic
+- Shows the actual message payload content, not just metadata about the topics
+- Supports both single and multiple topic queries using a unified array interface
 
 **Input:**
-- **topic** (required): The exact MQTT topic string (e.g., `sensors/temperature/bedroom`)
+- **topics** (required): An array of MQTT topic strings
+  - For single topic: `["sensors/temperature/bedroom"]`
+  - For multiple topics: `["sensors/temperature/bedroom", "sensors/humidity/bedroom", "devices/thermostat/01/status"]`
+- Each topic in the array must be an exact MQTT topic string
 - Topic names are case-sensitive and must match exactly
 - Use forward slashes to specify the complete topic path following MQTT standards
 
 **Use Cases:**
-- Check current sensor readings: `sensors/temperature/living_room`
-- Get latest device status: `devices/thermostat/01/status`
-- Retrieve configuration values: `config/database/connection_string`
-- Monitor real-time metrics: `metrics/performance/response_time`
-- Read IoT device data: `home/lights/kitchen/brightness`
+- Check single sensor reading: `["sensors/temperature/living_room"]`
+- Get single device status: `["devices/thermostat/01/status"]`
+- Retrieve single configuration value: `["config/database/connection_string"]`
+- Monitor single real-time metric: `["metrics/performance/response_time"]`
+- Read single IoT device data: `["home/lights/kitchen/brightness"]`
+- Bulk retrieval of related topics: `["sensors/temperature/bedroom", "sensors/humidity/bedroom", "sensors/co2/bedroom"]`
+- Monitor complete system state: `["devices/thermostat/status", "sensors/temperature/all_rooms", "system/power/status"]`
 
 **Return Value:**
-- The actual MQTT message payload (could be number, string, JSON object, etc.)
+- An object/map with topic names as keys and their corresponding values
+- Each value is the actual MQTT message payload for that topic (could be number, string, JSON object, etc.)
+- Topics that don't exist or have no retained messages will have null values
 - Timestamp information may be included depending on the MQTT broker configuration
-- Returns null or error if topic doesn't exist or has no retained/published values
+- For single topic queries, you'll get an object with one key-value pair
 
 **Best Practices:**
 - Use find-topics tools first to discover available MQTT topic names
-- Ensure topic name follows MQTT naming conventions and hierarchy
+- Ensure topic names follow MQTT naming conventions and hierarchy
 - Consider that values represent point-in-time MQTT messages that may change rapidly
 - For historical MQTT message analysis, use the message archive tool instead
 - Remember that MQTT topics without retained messages may return no value
+- Group related topics together in the array for efficient bulk retrieval
+- Even for single topics, always pass them as an array with one element
 
 **Error Handling:**
-- Verify MQTT topic exists and is accessible before attempting to get its value
-- Handle cases where topics may not have any retained messages                    
+- Verify MQTT topics exist and are accessible before attempting to get their values
+- Handle cases where topics may not have any retained messages
+- Individual topics in the array may fail while others succeed
+- Check the returned object for null values indicating missing or unavailable topics 
                 """.trimIndent(),
-                JsonObject()
+JsonObject()
                     .put("type", "object")
                     .put(
                         "properties", JsonObject()
                             .put(
-                                "topic", JsonObject()
-                                    .put("type", "string")
-                                    .put("description", "Topic to get the value for")
+                                "topics", JsonObject()
+                                    .put("type", "array")
+                                    .put("items", JsonObject().put("type", "string"))
+                                    .put("description", "Array of topics to get the values for")
                             )
                     )
-                    .put("required", JsonArray().add("topic")),
+                    .put("required", JsonArray().add("topics")),
                 ::getTopicValueTool
             )
         )
@@ -627,18 +642,35 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
 
     private fun getTopicValueTool(args: JsonObject): Future<JsonArray> {
         logger.info("getTopicValueTool called with args: $args")
-        if (!args.containsKey("topic")) {
+        if (!args.containsKey("topics")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Topic parameter required"))
         }
-
-        val topic = args.getString("topic", "")
-        val message = messageStore[topic] ?: return Future.succeededFuture(JsonArray())
-
-        val result = JsonArray().add(
-            JsonObject()
-                .put("type", "text")
-                .put("text", message.payload.toString(Charsets.UTF_8))
-        )
+        val topics = args.getJsonArray("topics", JsonArray())
+        val result = JsonArray()
+        topics.forEach { topic -> // TODO: Should be optimized to do a fetch with the list of topics directly in the database
+            if (topic is String) {
+                val message = retainedStore[topic] ?: messageStore[topic]
+                if (message != null) {
+                    result.add(
+                        JsonObject()
+                            .put("type", "text")
+                            .put("text", message.payload.toString(Charsets.UTF_8))
+                    )
+                } else {
+                    result.add(
+                        JsonObject()
+                            .put("type", "text")
+                            .put("text", "No value found for topic: $topic")
+                    )
+                }
+            } else {
+                result.add(
+                    JsonObject()
+                        .put("type", "text")
+                        .put("text", "Invalid topic format: $topic")
+                )
+            }
+        }
         return Future.succeededFuture(result)
     }
 
