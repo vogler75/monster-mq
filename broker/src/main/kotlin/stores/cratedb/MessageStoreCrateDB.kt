@@ -6,7 +6,6 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.MessageStoreType
-import at.rocworks.stores.TopicAndConfig
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise

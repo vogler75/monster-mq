@@ -704,7 +704,8 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val namespace = args.getString("namespace", "")
         val name = args.getString("name", "")
         try {
-            val list = messageStore.findTopicsByName(name, ignoreCase, namespace)
+            val list = (messageStore.findTopicsByName(name, ignoreCase, namespace) +
+                    retainedStore.findTopicsByName(name, ignoreCase, namespace)).distinct()
             val result = JsonArray()
             result.add(JsonArray().add("topic").add("description")) // Header row for the result table
             list.forEach {
@@ -742,7 +743,7 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
             val list = retainedStore.findTopicsByConfig("Description", description, ignoreCase, namespace)
             val result = JsonArray()
             result.add(JsonArray().add("topic").add("description")) // Header row for the result table
-            list.forEach { result.add(JsonArray().add(it.topic).add(it.config)) }
+            list.forEach { result.add(JsonArray().add(it.first).add(it.second)) }
             val answer = JsonArray().add(
                 JsonObject()
                     .put("type", "text")

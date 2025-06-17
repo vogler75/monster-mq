@@ -5,7 +5,6 @@ import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.MessageStoreType
-import at.rocworks.stores.TopicAndConfig
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection

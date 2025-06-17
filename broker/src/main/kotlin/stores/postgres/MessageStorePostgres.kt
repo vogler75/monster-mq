@@ -6,7 +6,6 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
-import at.rocworks.stores.TopicAndConfig
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -261,8 +260,8 @@ class MessageStorePostgres(
         return resultTopics
     }
 
-    override fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean, namespace: String): List<TopicAndConfig> {
-        val resultTopics = mutableListOf<TopicAndConfig>()
+    override fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean, namespace: String): List<Pair<String, String>> {
+        val resultTopics = mutableListOf<Pair<String, String>>()
         val sqlSearchPattern = description
         val sqlNamespacePattern = if (namespace.isEmpty()) "%" else "$namespace/%"
 
@@ -285,7 +284,7 @@ class MessageStorePostgres(
                 while (resultSet.next()) {
                     val fullTopic = resultSet.getString("topic") ?: ""
                     val configJson = resultSet.getString("config") ?: ""
-                    resultTopics.add(TopicAndConfig(fullTopic, configJson))
+                    resultTopics.add(Pair(fullTopic, configJson))
                 }
             }
         }
