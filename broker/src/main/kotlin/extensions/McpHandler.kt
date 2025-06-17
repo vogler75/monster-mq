@@ -11,6 +11,7 @@ import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.time.Instant
+import java.util.concurrent.Callable
 
 class McpHandler(
     private val vertx: Vertx,
@@ -703,30 +704,34 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val ignoreCase = args.getBoolean("ignoreCase", true)
         val namespace = args.getString("namespace", "")
         val name = args.getString("name", "")
-        try {
-            val list = (messageStore.findTopicsByName(name, ignoreCase, namespace) +
-                    retainedStore.findTopicsByName(name, ignoreCase, namespace)).distinct()
-            val result = JsonArray()
-            result.add(JsonArray().add("topic").add("description")) // Header row for the result table
-            list.forEach {
-                val config =
-                    retainedStore["$it/${Const.MCP_CONFIG_TOPIC}"] // TODO: should be optimized to do a fetch with the list of topics
-                result.add(
-                    JsonArray()
-                        .add(it)
-                        .add(config?.payload?.toString(Charsets.UTF_8) ?: "")
+        val promise = Promise.promise<JsonArray>()
+        vertx.executeBlocking(Callable {
+            try {
+                val list = (messageStore.findTopicsByName(name, ignoreCase, namespace) +
+                        retainedStore.findTopicsByName(name, ignoreCase, namespace)).distinct()
+                val result = JsonArray()
+                result.add(JsonArray().add("topic").add("description")) // Header row for the result table
+                list.forEach {
+                    val config =
+                        retainedStore["$it/${Const.MCP_CONFIG_TOPIC}"] // TODO: should be optimized to do a fetch with the list of topics
+                    result.add(
+                        JsonArray()
+                            .add(it)
+                            .add(config?.payload?.toString(Charsets.UTF_8) ?: "")
+                    )
+                }
+                val answer = JsonArray().add(
+                    JsonObject()
+                        .put("type", "text")
+                        .put("text", convertJsonTableToMarkdown(result))
                 )
+                promise.complete(answer)
+            } catch (e: Exception) {
+                logger.severe("Error finding topics by name: ${e.message}")
+                promise.fail(McpException(JSONRPC_INTERNAL_ERROR, "Error finding topics by name: ${e.message}"))
             }
-            val answer = JsonArray().add(
-                JsonObject()
-                    .put("type", "text")
-                    .put("text", convertJsonTableToMarkdown(result))
-            )
-            return Future.succeededFuture(answer)
-        } catch (e: Exception) {
-            logger.severe("Error finding topics by name: ${e.message}")
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Error finding topics by name: ${e.message}"))
-        }
+        })
+        return promise.future()
     }
 
     // --------------------------------------------------------------------------------------------------------------
@@ -739,21 +744,25 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val ignoreCase = args.getBoolean("ignoreCase", true)
         val description = args.getString("description", "")
         val namespace = args.getString("namespace", "")
-        try {
-            val list = retainedStore.findTopicsByConfig("Description", description, ignoreCase, namespace)
-            val result = JsonArray()
-            result.add(JsonArray().add("topic").add("description")) // Header row for the result table
-            list.forEach { result.add(JsonArray().add(it.first).add(it.second)) }
-            val answer = JsonArray().add(
-                JsonObject()
-                    .put("type", "text")
-                    .put("text", convertJsonTableToMarkdown(result))
-            )
-            return Future.succeededFuture(answer)
-        } catch (e: Exception) {
-            logger.severe("Error finding topics by description: ${e.message}")
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Error finding topics by description: ${e.message}"))
-        }
+        val promise = Promise.promise<JsonArray>()
+        vertx.executeBlocking(Callable {
+            try {
+                val list = retainedStore.findTopicsByConfig("Description", description, ignoreCase, namespace)
+                val result = JsonArray()
+                result.add(JsonArray().add("topic").add("description")) // Header row for the result table
+                list.forEach { result.add(JsonArray().add(it.first).add(it.second)) }
+                val answer = JsonArray().add(
+                    JsonObject()
+                        .put("type", "text")
+                        .put("text", convertJsonTableToMarkdown(result))
+                )
+                promise.complete(answer)
+            } catch (e: Exception) {
+                logger.severe("Error finding topics by description: ${e.message}")
+                promise.fail(McpException(JSONRPC_INTERNAL_ERROR,"Error finding topics by description: ${e.message}"))
+            }
+        })
+        return promise.future()
     }
 
     // --------------------------------------------------------------------------------------------------------------
@@ -765,17 +774,26 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         }
         val topics = args.getJsonArray("topics", JsonArray())
         val result = JsonArray()
-        result.add(JsonArray().add("topic").add("value")) // Header row for the result table
-        topics.forEach { topic -> // TODO: Should be optimized to do a fetch with the list of topics directly in the database
-            val message = topic.toString().let { retainedStore[it] ?: messageStore[it] }
-            result.add(JsonArray().add(topic.toString()).add(message?.payload?.toString(Charsets.UTF_8) ?: ""))
-        }
-        val answer = JsonArray().add(
-            JsonObject()
-                .put("type", "text")
-                .put("text", convertJsonTableToMarkdown(result))
-        )
-        return Future.succeededFuture(answer)
+        val promise = Promise.promise<JsonArray>()
+        vertx.executeBlocking(Callable {
+            try {
+                result.add(JsonArray().add("topic").add("value")) // Header row for the result table
+                topics.forEach { topic -> // TODO: Should be optimized to do a fetch with the list of topics directly in the database
+                    val message = topic.toString().let { retainedStore[it] ?: messageStore[it] }
+                    result.add(JsonArray().add(topic.toString()).add(message?.payload?.toString(Charsets.UTF_8) ?: ""))
+                }
+                val answer = JsonArray().add(
+                    JsonObject()
+                        .put("type", "text")
+                        .put("text", convertJsonTableToMarkdown(result))
+                )
+                promise.complete(answer)
+            } catch (e: Exception) {
+                logger.severe("Error getting topic values: ${e.message}")
+                promise.fail(McpException(JSONRPC_INTERNAL_ERROR, "Error getting topic values: ${e.message}"))
+            }
+        })
+        return promise.future()
     }
 
     // --------------------------------------------------------------------------------------------------------------
@@ -791,13 +809,20 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val limit = args.getInteger("limit", 1000)
 
         val promise = Promise.promise<JsonArray>()
-        messageArchive.getHistory(topic, startTime, endTime, limit).onSuccess { result ->
-            val answer = JsonArray().add(
-                JsonObject()
-                    .put("type", "text")
-                    .put("text", convertJsonTableToMarkdown(result ?: JsonArray())))
-            promise.complete(answer)
-        }.onFailure { promise.fail(it)  }
+        vertx.executeBlocking(Callable {
+            try {
+                val result = messageArchive.getHistory(topic, startTime, endTime, limit)
+                val answer = JsonArray().add(
+                    JsonObject()
+                        .put("type", "text")
+                        .put("text", convertJsonTableToMarkdown(result))
+                )
+                promise.complete(answer)
+            } catch (e: Exception) {
+                logger.severe("Error querying message archive: ${e.message}")
+                promise.fail(McpException(JSONRPC_INTERNAL_ERROR, "Error querying message archive: ${e.message}"))
+            }
+        })
         return promise.future()
     }
 
@@ -811,14 +836,20 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val sql = args.getString("sql", "")
         val promise = Promise.promise<JsonArray>()
         if (messageArchive is MessageArchivePostgres) {
-            messageArchive.executeQuery(sql).onSuccess { result ->
-                val answer = JsonArray().add(
-                    JsonObject()
-                        .put("type", "text")
-                        .put("text", convertJsonTableToMarkdown(result))
-                )
-                promise.complete(answer)
-            }.onFailure { promise.fail(it) }
+            vertx.executeBlocking(Callable {
+                try {
+                    val result = messageArchive.executeQuery(sql)
+                    val answer = JsonArray().add(
+                        JsonObject()
+                            .put("type", "text")
+                            .put("text", convertJsonTableToMarkdown(result))
+                    )
+                    promise.complete(answer)
+                } catch (e: Exception) {
+                    logger.severe("Error executing SQL query: ${e.message}")
+                    promise.fail(McpException(JSONRPC_INTERNAL_ERROR, "Error executing SQL query: ${e.message}"))
+                }
+            })
         } else {
             promise.fail(McpException(JSONRPC_INVALID_ARGUMENT, "Unsupported message archive type for SQL queries"))
         }

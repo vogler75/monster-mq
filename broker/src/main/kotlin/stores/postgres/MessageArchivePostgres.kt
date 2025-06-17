@@ -115,7 +115,7 @@ class MessageArchivePostgres (
         }
     }
 
-    fun getHistoryBlocking(
+    override fun getHistory(
         topic: String,
         startTime: Instant?,
         endTime: Instant?,
@@ -168,20 +168,7 @@ class MessageArchivePostgres (
         return messages
     }
 
-    override fun getHistory(
-        topic: String,
-        startTime: Instant?,
-        endTime: Instant?,
-        limit: Int
-    ): Future<JsonArray> {
-        val promise = Promise.promise<JsonArray>()
-        vertx.executeBlocking(Callable {
-            promise.complete(getHistoryBlocking(topic, startTime, endTime, limit))
-        })
-        return promise.future()
-    }
-
-    private fun executeQueryBlocking(sql: String): JsonArray {
+    override fun executeQuery(sql: String): JsonArray {
         return try {
             logger.fine("Executing SQL query: $sql [${Utils.getCurrentFunctionName()}]")
             db.connection?.let { connection ->
@@ -218,13 +205,5 @@ class MessageArchivePostgres (
             logger.severe("Error executing query: ${e.message} [${Utils.getCurrentFunctionName()}]")
             JsonArray().add("Error executing query: ${e.message}")
         }
-    }
-
-    override fun executeQuery(sql: String): Future<JsonArray> {
-        val promise = Promise.promise<JsonArray>()
-        vertx.executeBlocking(Callable {
-            promise.complete(executeQueryBlocking(sql))
-        })
-        return promise.future()
     }
 }

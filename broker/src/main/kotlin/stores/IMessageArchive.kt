@@ -26,7 +26,7 @@ interface IMessageArchiveExtended: IMessageArchive {
         startTime: Instant? = null,
         endTime: Instant? = null,
         limit: Int = 100
-    ): Future<JsonArray>
+    ): JsonArray
 
-    fun executeQuery(sql: String): Future<JsonArray>
+    fun executeQuery(sql: String): JsonArray
 }
