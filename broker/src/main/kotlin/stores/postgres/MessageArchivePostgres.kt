@@ -5,19 +5,23 @@ import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageArchive
+import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.MessageArchiveType
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.json.JsonArray
 import java.sql.*
 import java.time.Instant
+import java.util.concurrent.Callable
 
 class MessageArchivePostgres (
     private val name: String,
     private val url: String,
     private val username: String,
     private val password: String
-): AbstractVerticle(), IMessageArchive {
+): AbstractVerticle(), IMessageArchiveExtended {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
 
@@ -111,13 +115,13 @@ class MessageArchivePostgres (
         }
     }
 
-    override fun getHistory(
+    fun getHistoryBlocking(
         topic: String,
         startTime: Instant?,
         endTime: Instant?,
         limit: Int
-    ): List<MqttMessage> {
-        val sql = StringBuilder("SELECT topic, time, payload_blob, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?")
+    ): JsonArray {
+        val sql = StringBuilder("SELECT time, payload_blob FROM $tableName WHERE topic = ?")
         val params = mutableListOf<Any>()
         params.add(topic)
 
@@ -132,7 +136,12 @@ class MessageArchivePostgres (
         sql.append(" ORDER BY time DESC LIMIT ?")
         params.add(limit)
 
-        val messages = mutableListOf<MqttMessage>()
+        val messages = JsonArray().apply {
+            add(JsonArray().apply {
+                add("time")
+                add("payload")
+            })  // Header row
+        }
 
         try {
             db.connection?.let { connection ->
@@ -147,28 +156,9 @@ class MessageArchivePostgres (
                     }
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
-                        val topicName = resultSet.getString("topic")
                         val time = resultSet.getTimestamp("time").toInstant()
                         val payloadBlob = resultSet.getBytes("payload_blob")
-                        val qos = resultSet.getInt("qos")
-                        val retained = resultSet.getBoolean("retained")
-                        val clientId = resultSet.getString("client_id")
-                        val messageUuid = resultSet.getString("message_uuid")
-
-                        messages.add(
-                            MqttMessage(
-                                messageUuid = messageUuid,
-                                messageId = 0,
-                                topicName = topicName,
-                                payload = payloadBlob,
-                                qosLevel = qos,
-                                isRetain = retained,
-                                isDup = false,
-                                isQueued = false,
-                                clientId = clientId,
-                                time = time
-                            )
-                        )
+                        messages.add(JsonArray().add(time.toString()).add(payloadBlob.toString(Charsets.UTF_8)))
                     }
                 }
             }
@@ -176,5 +166,65 @@ class MessageArchivePostgres (
             logger.severe("Error retrieving history for topic [$topic]: ${e.message} [${Utils.getCurrentFunctionName()}]")
         }
         return messages
+    }
+
+    override fun getHistory(
+        topic: String,
+        startTime: Instant?,
+        endTime: Instant?,
+        limit: Int
+    ): Future<JsonArray> {
+        val promise = Promise.promise<JsonArray>()
+        vertx.executeBlocking(Callable {
+            promise.complete(getHistoryBlocking(topic, startTime, endTime, limit))
+        })
+        return promise.future()
+    }
+
+    private fun executeQueryBlocking(sql: String): JsonArray {
+        return try {
+            logger.fine("Executing SQL query: $sql [${Utils.getCurrentFunctionName()}]")
+            db.connection?.let { connection ->
+                connection.createStatement().use { statement ->
+                    statement.executeQuery(sql).use { resultSet ->
+                        val metaData = resultSet.metaData
+                        val columnCount = metaData.columnCount
+                        val result = JsonArray()
+
+                        // Add header row
+                        val header = JsonArray()
+                        for (i in 1..columnCount) {
+                            header.add(metaData.getColumnName(i))
+                        }
+                        result.add(header)
+
+                        // Add data rows
+                        while (resultSet.next()) {
+                            val row = JsonArray()
+                            for (i in 1..columnCount) {
+                                row.add(resultSet.getObject(i))
+                            }
+                            result.add(row)
+                        }
+                        logger.fine("SQL query executed successfully with [${result.size()}] rows. [${Utils.getCurrentFunctionName()}]")
+                        result
+                    }
+                }
+            } ?: run {
+                logger.warning("No database connection available. [${Utils.getCurrentFunctionName()}]")
+                JsonArray().add("No database connection available.")
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error executing query: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            JsonArray().add("Error executing query: ${e.message}")
+        }
+    }
+
+    override fun executeQuery(sql: String): Future<JsonArray> {
+        val promise = Promise.promise<JsonArray>()
+        vertx.executeBlocking(Callable {
+            promise.complete(executeQueryBlocking(sql))
+        })
+        return promise.future()
     }
 }

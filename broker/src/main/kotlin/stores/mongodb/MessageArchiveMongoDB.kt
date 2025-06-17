@@ -14,6 +14,7 @@ import com.mongodb.client.model.TimeSeriesGranularity
 import com.mongodb.client.model.TimeSeriesOptions
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
+import io.vertx.core.json.JsonArray
 import org.bson.Document
 import java.time.Instant
 import java.util.*
@@ -91,15 +92,6 @@ class MessageArchiveMongoDB(
         } catch (e: Exception) {
             logger.warning("Error inserting batch data: ${e.message}")
         }
-    }
-
-    override fun getHistory(
-        topic: String,
-        startTime: Instant?,
-        endTime: Instant?,
-        limit: Int
-    ): List<MqttMessage> {
-        TODO("Not yet implemented")
     }
 
     override fun getName(): String = name

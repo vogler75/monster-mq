@@ -13,7 +13,7 @@ SparkplugMetricExpansion:
   Enabled: true
 
 ArchiveGroups:
-  - Name: Default
+  - Name: MCP
     Enabled: true
     TopicFilter: [ "Original/#" ]
     RetainedOnly: false
@@ -27,11 +27,15 @@ Kafka:
     Topic: monster
 
 Postgres:
-  Url: jdbc:postgresql://linux0:5432/test
+  Url: jdbc:postgresql://linux0:5432/monster
   User: system
   Pass: manager
 
 CrateDB:
-  Url: jdbc:postgresql://cratedb:5432/test
+  Url: jdbc:postgresql://linux0:5432/monster
   User: crate
   Pass: ""
+
+MongoDB:
+  Url: mongodb://system:manager@scada:27017
+  Database: monster

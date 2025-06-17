@@ -228,12 +228,4 @@ class MessageStoreCrateDB(
             }
         }
     }
-
-    override fun findTopicsByName(name: String, ignoreCase: Boolean, namespace: String): List<String> {
-        TODO("Not yet implemented")
-    }
-
-    override fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean, namespace: String): List<TopicAndConfig> {
-        TODO("Not yet implemented")
-    }
 }

@@ -9,6 +9,7 @@ import at.rocworks.stores.MessageArchiveType
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.json.JsonArray
 import java.sql.*
 import java.time.Instant
 
@@ -99,14 +100,5 @@ class MessageArchiveCrateDB (
                 lastAddAllHistoryError = e.errorCode
             }
         }
-    }
-
-    override fun getHistory(
-        topic: String,
-        startTime: Instant?,
-        endTime: Instant?,
-        limit: Int
-    ): List<MqttMessage> {
-        TODO("Not yet implemented")
     }
 }

@@ -6,6 +6,7 @@ import at.rocworks.data.MqttMessageCodec
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.json.JsonArray
 import io.vertx.kafka.client.producer.KafkaProducer
 import io.vertx.kafka.client.producer.KafkaProducerRecord
 import java.time.Instant
@@ -46,14 +47,4 @@ class MessageArchiveKafka(
             kafkaProducer?.write(KafkaProducerRecord.create(topicName, message.topicName, buffer.bytes))
         }
     }
-
-    override fun getHistory(
-        topic: String,
-        startTime: Instant?,
-        endTime: Instant?,
-        limit: Int
-    ): List<MqttMessage> {
-        TODO("Not yet implemented")
-    }
-
 }

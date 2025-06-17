@@ -2,9 +2,11 @@ package at.rocworks.extensions
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.stores.IMessageArchive
-import at.rocworks.stores.IMessageStore
+import at.rocworks.stores.IMessageArchiveExtended
+import at.rocworks.stores.IMessageStoreExtended
+import at.rocworks.stores.postgres.MessageArchivePostgres
 import io.vertx.core.Future
+import io.vertx.core.Promise
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -12,9 +14,9 @@ import java.time.Instant
 
 class McpHandler(
     private val vertx: Vertx,
-    private val retainedStore: IMessageStore,
-    private val messageStore: IMessageStore,
-    private val messageArchive: IMessageArchive
+    private val retainedStore: IMessageStoreExtended,
+    private val messageStore: IMessageStoreExtended,
+    private val messageArchive: IMessageArchiveExtended
 ) {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -590,6 +592,103 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
                 ::queryMessageArchive
             )
         )
+        registerTool(
+        AsyncTool(
+            "query-message-archive-by-sql",
+            """
+**Query Message Archive by SQL**
+
+Execute PostgreSQL queries against historical MQTT topic data stored in the defaultarchive table. This tool enables advanced analysis of time-series IoT data through SQL aggregations, statistical operations, and complex filtering across multiple topics and time periods. **IMPORTANT: You MUST use the `get-topic-value` tool first to inspect the current payload structure of your topics before using this tool.**
+
+**MQTT Context:**
+- Queries the defaultarchive table containing historical MQTT message data
+- Provides flexible SQL-based analysis of sensor readings, device communications, and IoT data streams
+- Useful for trend analysis, statistical reporting, cross-topic correlations, and data mining
+- Supports complex aggregations and time-based grouping for comprehensive insights
+
+**Database Schema:**
+The defaultarchive table contains the following columns:
+- `topic` (text, NOT NULL) - MQTT topic path
+- `time` (timestamptz, NOT NULL) - Message timestamp  
+- `payload_json` (jsonb) - JSON-formatted message payload **or plain number/string values**
+- `qos` (int4) - MQTT Quality of Service level
+- `retained` (bool) - Whether message was retained
+- `client_id` (varchar) - MQTT client identifier
+- `message_uuid` (varchar) - Unique message identifier
+- Primary key: (topic, time)
+
+**MANDATORY PREREQUISITE:**
+**You MUST call `get-topic-value` first** to understand the payload structure:
+- **If payload is JSON object:** Identify the specific key names containing numeric values (e.g., `temperature`, `humidity`, `value`)
+- **If payload is plain number/string in JSON format:** The entire `payload_json` contains just a number or string value that can be converted directly
+- **If payload is plain text/string:** Determine if the content can be converted to numeric for aggregations
+- **If payload is binary:** Understand the data format before attempting text conversion
+
+**Parameters:**
+
+**sql** (required):
+- PostgreSQL query string to execute against the defaultarchive table
+- Must only reference the 'defaultarchive' table - no other tables allowed
+- Use standard PostgreSQL syntax with aggregation functions (AVG, MIN, MAX, COUNT, SUM)
+- For JSON object data: use `payload_json->>'field_name'` for text or `(payload_json->>'field_name')::numeric` for numbers
+- **For plain number/string in payload_json:** use `payload_json::text::numeric` or `(payload_json#>>'{}')::numeric` to convert directly
+- Include proper WHERE clauses with time filters for performance
+- Maximum query length: 8000 characters
+
+**SQL Guidelines:**
+- **Time-based grouping:** Use `date_trunc('hour'|'day'|'week'|'month', time)` for temporal aggregations
+- **JSON object field extraction:** `payload_json->>'field_name'` for text, `(payload_json->>'field_name')::numeric` for numbers
+- **Plain JSON values:** `payload_json::text::numeric` or `(payload_json#>>'{}')::numeric` when payload_json contains just a number/string
+- **Multiple topics:** Use `topic IN ('topic1', 'topic2')` or `topic LIKE 'pattern%'`
+- **Time filtering:** Always include `WHERE time >= 'start_date' AND time < 'end_date'` for performance
+- **NULL handling:** Use `COALESCE()` or `IS NOT NULL` checks for payload fields
+- **Result limiting:** Include `LIMIT` clause to prevent overwhelming responses
+
+**Use Cases:**
+- Calculate hourly/daily averages of sensor values across time ranges
+- Find minimum/maximum values from multiple topics during specific periods
+- Count message frequencies and detect communication patterns
+- Analyze correlations between different MQTT topics
+- Generate statistical reports with custom time groupings
+- Identify data anomalies and outliers in historical data
+- Export aggregated data for external analysis tools
+
+**Return Value:**
+- Query result set as structured data
+- Column names and data types based on SELECT clause
+- Rows ordered according to ORDER BY clause in query
+- Error messages if query fails or violates security constraints
+
+**Best Practices:**
+- **CRITICAL: Always use `get-topic-value` tool first** to understand current data structure before writing historical queries
+- **For JSON object payloads:** After inspecting with `get-topic-value`, use the exact key names you discovered
+- **For plain number/string in JSON:** Use direct conversion methods like `payload_json::text::numeric`
+- **For text/blob payloads:** Test numeric conversion on current values before applying to historical data
+- Start with simple queries and add complexity incrementally
+- Always include time range filters to improve query performance
+- Test JSON field paths with small result sets before large aggregations
+- Use appropriate data type casting when working with payload fields
+- Consider using indexes on topic and time columns for better performance
+
+**Example Queries:**
+- Hourly temperature averages (after discovering 'temperature' key via `get-topic-value`): `SELECT date_trunc('hour', time) as hour, AVG((payload_json->>'temperature')::numeric) as avg_temp FROM defaultarchive WHERE topic = 'sensors/temperature/room1' AND time >= NOW() - INTERVAL '24 hours' GROUP BY hour ORDER BY hour`
+- **Plain number values:** `SELECT date_trunc('hour', time) as hour, AVG(payload_json::text::numeric) as avg_value FROM defaultarchive WHERE topic = 'sensors/simple_value' AND time >= NOW() - INTERVAL '24 hours' GROUP BY hour ORDER BY hour`
+- Daily message counts: `SELECT date_trunc('day', time) as day, COUNT(*) as msg_count FROM defaultarchive WHERE topic LIKE 'devices/%' AND time >= '2024-01-01' GROUP BY day ORDER BY day`
+- Multi-topic statistics (after identifying 'value' key): `SELECT topic, MIN((payload_json->>'value')::numeric) as min_val, MAX((payload_json->>'value')::numeric) as max_val FROM defaultarchive WHERE topic IN ('sensor1', 'sensor2') AND time >= NOW() - INTERVAL '7 days' GROUP BY topic`                
+            """.trimIndent(),
+            JsonObject()
+                .put("type", "object")
+                .put(
+                    "properties", JsonObject()
+                        .put("sql", JsonObject()
+                            .put("type", "string")
+                            .put("description", "SQL query to execute against the message archive")
+                        )
+                )
+                .put("required", JsonArray().add("sql")),
+               ::queryMessageArchiveBySql
+            )
+        )
     }
 
     // --------------------------------------------------------------------------------------------------------------
@@ -602,18 +701,29 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
         val ignoreCase = args.getBoolean("ignoreCase", true)
         val namespace = args.getString("namespace", "")
         val name = args.getString("name", "")
-        val list = messageStore.findTopicsByName(name, ignoreCase, namespace)
-        val result = JsonArray()
-
-        result.add(JsonObject().put("type", "text").put("text", "Topic: Configuration & Description"))
-        list.forEach {
-            val config = retainedStore["$it/${Const.CONFIG_TOPIC_NAME}"] // TODO: should be optimized to do a fetch with the list of topics
-            result.add(JsonObject()
-                .put("type", "text")
-                .put("text", "$it: ${config?.payload?.toString(Charsets.UTF_8) ?: "No config"}")
+        try {
+            val list = messageStore.findTopicsByName(name, ignoreCase, namespace)
+            val result = JsonArray()
+            result.add(JsonArray().add("topic").add("description")) // Header row for the result table
+            list.forEach {
+                val config =
+                    retainedStore["$it/${Const.MCP_CONFIG_TOPIC}"] // TODO: should be optimized to do a fetch with the list of topics
+                result.add(
+                    JsonArray()
+                        .add(it)
+                        .add(config?.payload?.toString(Charsets.UTF_8) ?: "")
+                )
+            }
+            val answer = JsonArray().add(
+                JsonObject()
+                    .put("type", "text")
+                    .put("text", convertJsonTableToMarkdown(result))
             )
+            return Future.succeededFuture(answer)
+        } catch (e: Exception) {
+            logger.severe("Error finding topics by name: ${e.message}")
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Error finding topics by name: ${e.message}"))
         }
-        return Future.succeededFuture(result)
     }
 
     // --------------------------------------------------------------------------------------------------------------
@@ -626,16 +736,21 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
         val ignoreCase = args.getBoolean("ignoreCase", true)
         val description = args.getString("description", "")
         val namespace = args.getString("namespace", "")
-        val list = retainedStore.findTopicsByConfig("Description", description, ignoreCase, namespace)
-        val result = JsonArray()
-        result.add(JsonObject().put("type", "text").put("text", "Topic: Configuration & Description"))
-        list.forEach {
-            result.add(JsonObject()
-                .put("type", "text")
-                .put("text", "${it.topic}: ${it.config.ifEmpty { "No config" }}")
+        try {
+            val list = retainedStore.findTopicsByConfig("Description", description, ignoreCase, namespace)
+            val result = JsonArray()
+            result.add(JsonArray().add("topic").add("description")) // Header row for the result table
+            list.forEach { result.add(JsonArray().add(it.topic).add(it.config)) }
+            val answer = JsonArray().add(
+                JsonObject()
+                    .put("type", "text")
+                    .put("text", convertJsonTableToMarkdown(result))
             )
+            return Future.succeededFuture(answer)
+        } catch (e: Exception) {
+            logger.severe("Error finding topics by description: ${e.message}")
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Error finding topics by description: ${e.message}"))
         }
-        return Future.succeededFuture(result)
     }
 
     // --------------------------------------------------------------------------------------------------------------
@@ -647,31 +762,17 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
         }
         val topics = args.getJsonArray("topics", JsonArray())
         val result = JsonArray()
+        result.add(JsonArray().add("topic").add("value")) // Header row for the result table
         topics.forEach { topic -> // TODO: Should be optimized to do a fetch with the list of topics directly in the database
-            if (topic is String) {
-                val message = retainedStore[topic] ?: messageStore[topic]
-                if (message != null) {
-                    result.add(
-                        JsonObject()
-                            .put("type", "text")
-                            .put("text", message.payload.toString(Charsets.UTF_8))
-                    )
-                } else {
-                    result.add(
-                        JsonObject()
-                            .put("type", "text")
-                            .put("text", "No value found for topic: $topic")
-                    )
-                }
-            } else {
-                result.add(
-                    JsonObject()
-                        .put("type", "text")
-                        .put("text", "Invalid topic format: $topic")
-                )
-            }
+            val message = topic.toString().let { retainedStore[it] ?: messageStore[it] }
+            result.add(JsonArray().add(topic.toString()).add(message?.payload?.toString(Charsets.UTF_8) ?: ""))
         }
-        return Future.succeededFuture(result)
+        val answer = JsonArray().add(
+            JsonObject()
+                .put("type", "text")
+                .put("text", convertJsonTableToMarkdown(result))
+        )
+        return Future.succeededFuture(answer)
     }
 
     // --------------------------------------------------------------------------------------------------------------
@@ -686,16 +787,66 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
         val endTime = args.getString("endTime")?.let { Instant.parse(it) }
         val limit = args.getInteger("limit", 1000)
 
-        val messages = messageArchive.getHistory(topic, startTime, endTime, limit)
-        val result = JsonArray()
-        result.add(JsonObject().put("type", "text").put("text", "Time:Payload"))
-        messages.forEach { message ->
-            result.add(
+        val promise = Promise.promise<JsonArray>()
+        messageArchive.getHistory(topic, startTime, endTime, limit).onSuccess { result ->
+            val answer = JsonArray().add(
                 JsonObject()
                     .put("type", "text")
-                    .put("text", "${message.time}: ${message.payload.toString(Charsets.UTF_8)}")
-            )
+                    .put("text", convertJsonTableToMarkdown(result ?: JsonArray())))
+            promise.complete(answer)
+        }.onFailure { promise.fail(it)  }
+        return promise.future()
+    }
+
+    // --------------------------------------------------------------------------------------------------------------
+
+    private fun queryMessageArchiveBySql(args: JsonObject): Future<JsonArray> {
+        logger.info("queryMessageArchiveBySql called with args: $args")
+        if (!args.containsKey("sql")) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "SQL parameter required"))
         }
-        return Future.succeededFuture(result)
+        val sql = args.getString("sql", "")
+        val promise = Promise.promise<JsonArray>()
+        if (messageArchive is MessageArchivePostgres) {
+            messageArchive.executeQuery(sql).onSuccess { result ->
+                val answer = JsonArray().add(
+                    JsonObject()
+                        .put("type", "text")
+                        .put("text", convertJsonTableToMarkdown(result))
+                )
+                promise.complete(answer)
+            }.onFailure { promise.fail(it) }
+        } else {
+            promise.fail(McpException(JSONRPC_INVALID_ARGUMENT, "Unsupported message archive type for SQL queries"))
+        }
+        return promise.future()
+    }
+
+    private fun convertJsonTableToMarkdown(result: JsonArray): String {
+        // convert result, which is an array of an array to a Markdown table as string
+        val markdownTable = StringBuilder()
+        if (result.isEmpty) {
+            markdownTable.append("| No results found |\n")
+        } else {
+            // Add header row
+            markdownTable.append("| ")
+            markdownTable.append((result.first() as JsonArray).joinToString(" | "))
+            markdownTable.append(" |\n")
+            // Add separator row
+            markdownTable.append("| ")
+            markdownTable.append((result.first() as JsonArray).joinToString(" | ") { col -> "-".repeat(col.toString().length) })
+            markdownTable.append(" |\n")
+        }
+
+        // Add data rows
+        result.forEachIndexed { index, row ->
+            if (index > 0) { // Skip header row
+                markdownTable.append("| ")
+                markdownTable.append((row as JsonArray).joinToString(" | "))
+                markdownTable.append(" |\n")
+            }
+        }
+
+        return markdownTable.toString()
     }
 }

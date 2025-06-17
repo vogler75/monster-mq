@@ -233,12 +233,15 @@ class Monster(args: Array<String>) {
                 val healthHandler = HealthHandler(sessionHandler)
 
                 // MCP Server
-                val defaultArchiveGroup = archiveGroups.find { it.name == Const.DEFAULT_ARCHIVE_GROUP }
-                val mcpServer = if (defaultArchiveGroup == null || defaultArchiveGroup.lastValStore == null || defaultArchiveGroup.archiveStore == null) {
-                    logger.warning("Default archive group is not defined. Please check your configuration. MCP server will not start.")
-                    null
+                val mcpArchiveGroup = archiveGroups.find { it.name == Const.MCP_ARCHIVE_GROUP }
+                val mcpServer = if (mcpArchiveGroup != null &&
+                    retainedStore is IMessageStoreExtended &&
+                    (mcpArchiveGroup.lastValStore != null && mcpArchiveGroup.lastValStore is IMessageStoreExtended) &&
+                    (mcpArchiveGroup.archiveStore != null && mcpArchiveGroup.archiveStore is IMessageArchiveExtended)) {
+                    McpServer("0.0.0.0", 3001, retainedStore, mcpArchiveGroup.lastValStore, mcpArchiveGroup.archiveStore)
                 } else {
-                    McpServer("0.0.0.0", 3001, retainedStore, defaultArchiveGroup.lastValStore, defaultArchiveGroup.archiveStore)
+                    logger.warning("Default archive group is not defined or is not an extended archive group. MCP server will not start.")
+                    null
                 }
 
                 // MQTT Servers
