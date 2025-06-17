@@ -29,6 +29,8 @@ class McpHandler(
         const val JSONRPC_METHOD_NOT_FOUND = -32601
         const val JSONRPC_INVALID_ARGUMENT = -32602
         const val JSONRPC_INTERNAL_ERROR = -32603
+
+        val MCP_ARCHIVE_TABLE = Const.MCP_ARCHIVE_GROUP.lowercase()+"archive"
     }
 
     data class AsyncTool(
@@ -598,16 +600,16 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
             """
 **Query Message Archive by SQL**
 
-Execute PostgreSQL queries against historical MQTT topic data stored in the defaultarchive table. This tool enables advanced analysis of time-series IoT data through SQL aggregations, statistical operations, and complex filtering across multiple topics and time periods. **IMPORTANT: You MUST use the `get-topic-value` tool first to inspect the current payload structure of your topics before using this tool.**
+Execute PostgreSQL queries against historical MQTT topic data stored in the $MCP_ARCHIVE_TABLE table. This tool enables advanced analysis of time-series IoT data through SQL aggregations, statistical operations, and complex filtering across multiple topics and time periods. **IMPORTANT: You MUST use the `get-topic-value` tool first to inspect the current payload structure of your topics before using this tool.**
 
 **MQTT Context:**
-- Queries the defaultarchive table containing historical MQTT message data
+- Queries the $MCP_ARCHIVE_TABLE table containing historical MQTT message data
 - Provides flexible SQL-based analysis of sensor readings, device communications, and IoT data streams
 - Useful for trend analysis, statistical reporting, cross-topic correlations, and data mining
 - Supports complex aggregations and time-based grouping for comprehensive insights
 
 **Database Schema:**
-The defaultarchive table contains the following columns:
+The $MCP_ARCHIVE_TABLE table contains the following columns:
 - `topic` (text, NOT NULL) - MQTT topic path
 - `time` (timestamptz, NOT NULL) - Message timestamp  
 - `payload_json` (jsonb) - JSON-formatted message payload **or plain number/string values**
@@ -627,8 +629,8 @@ The defaultarchive table contains the following columns:
 **Parameters:**
 
 **sql** (required):
-- PostgreSQL query string to execute against the defaultarchive table
-- Must only reference the 'defaultarchive' table - no other tables allowed
+- PostgreSQL query string to execute against the $MCP_ARCHIVE_TABLE table
+- Must only reference the '$MCP_ARCHIVE_TABLE' table - no other tables allowed
 - Use standard PostgreSQL syntax with aggregation functions (AVG, MIN, MAX, COUNT, SUM)
 - For JSON object data: use `payload_json->>'field_name'` for text or `(payload_json->>'field_name')::numeric` for numbers
 - **For plain number/string in payload_json:** use `payload_json::text::numeric` or `(payload_json#>>'{}')::numeric` to convert directly
@@ -671,10 +673,10 @@ The defaultarchive table contains the following columns:
 - Consider using indexes on topic and time columns for better performance
 
 **Example Queries:**
-- Hourly temperature averages (after discovering 'temperature' key via `get-topic-value`): `SELECT date_trunc('hour', time) as hour, AVG((payload_json->>'temperature')::numeric) as avg_temp FROM defaultarchive WHERE topic = 'sensors/temperature/room1' AND time >= NOW() - INTERVAL '24 hours' GROUP BY hour ORDER BY hour`
-- **Plain number values:** `SELECT date_trunc('hour', time) as hour, AVG(payload_json::text::numeric) as avg_value FROM defaultarchive WHERE topic = 'sensors/simple_value' AND time >= NOW() - INTERVAL '24 hours' GROUP BY hour ORDER BY hour`
-- Daily message counts: `SELECT date_trunc('day', time) as day, COUNT(*) as msg_count FROM defaultarchive WHERE topic LIKE 'devices/%' AND time >= '2024-01-01' GROUP BY day ORDER BY day`
-- Multi-topic statistics (after identifying 'value' key): `SELECT topic, MIN((payload_json->>'value')::numeric) as min_val, MAX((payload_json->>'value')::numeric) as max_val FROM defaultarchive WHERE topic IN ('sensor1', 'sensor2') AND time >= NOW() - INTERVAL '7 days' GROUP BY topic`                
+- Hourly temperature averages (after discovering 'temperature' key via `get-topic-value`): `SELECT date_trunc('hour', time) as hour, AVG((payload_json->>'temperature')::numeric) as avg_temp FROM $MCP_ARCHIVE_TABLE WHERE topic = 'sensors/temperature/room1' AND time >= NOW() - INTERVAL '24 hours' GROUP BY hour ORDER BY hour`
+- **Plain number values:** `SELECT date_trunc('hour', time) as hour, AVG(payload_json::text::numeric) as avg_value FROM $MCP_ARCHIVE_TABLE WHERE topic = 'sensors/simple_value' AND time >= NOW() - INTERVAL '24 hours' GROUP BY hour ORDER BY hour`
+- Daily message counts: `SELECT date_trunc('day', time) as day, COUNT(*) as msg_count FROM $MCP_ARCHIVE_TABLE WHERE topic LIKE 'devices/%' AND time >= '2024-01-01' GROUP BY day ORDER BY day`
+- Multi-topic statistics (after identifying 'value' key): `SELECT topic, MIN((payload_json->>'value')::numeric) as min_val, MAX((payload_json->>'value')::numeric) as max_val FROM $MCP_ARCHIVE_TABLE WHERE topic IN ('sensor1', 'sensor2') AND time >= NOW() - INTERVAL '7 days' GROUP BY topic`                
             """.trimIndent(),
             JsonObject()
                 .put("type", "object")
