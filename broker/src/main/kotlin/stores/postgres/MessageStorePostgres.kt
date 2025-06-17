@@ -266,7 +266,7 @@ class MessageStorePostgres(
 
     override fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean, namespace: String): List<TopicAndConfig> {
         val resultTopics = mutableListOf<TopicAndConfig>()
-        val sqlSearchPattern = description.replace("*", "%").replace("+", "_") // Also handle MQTT single level wildcard for LIKE
+        val sqlSearchPattern = description
         val sqlNamespacePattern = if (namespace.isEmpty()) "%" else "$namespace/%"
 
         val sql = """
@@ -274,7 +274,7 @@ class MessageStorePostgres(
         FROM $tableName
         WHERE topic_l = '${Const.CONFIG_TOPIC_NAME}' 
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
-        AND ${if (ignoreCase) "LOWER(payload_json->>'${config}')" else "topic"} SIMILAR TO ${if (ignoreCase) "LOWER(?)" else "?"}   
+        AND payload_json->>'${config}' ${if (ignoreCase) "~*  ?" else "~ ?"}   
         ORDER BY topic
         """.trimIndent()
 
