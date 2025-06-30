@@ -28,21 +28,29 @@ class MessageStoreCrateDB(
         logger.level = Const.DEBUG_LEVEL
     }
 
+    // 1. Update table schema
+    private companion object {
+        const val MAX_FIXED_TOPIC_LEVELS = 9
+        val FIXED_TOPIC_COLUMN_NAMES = (0 until MAX_FIXED_TOPIC_LEVELS).map { "topic_${it+1}" }
+    }
+
     private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun init(connection: Connection): Future<Void> {
             val promise = Promise.promise<Void>()
             try {
                 connection.createStatement().use { statement ->
+                    val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it VARCHAR" }
                     statement.executeUpdate("""
                     CREATE TABLE IF NOT EXISTS $tableName (
                         topic VARCHAR PRIMARY KEY,
+                        $fixedTopicColumns,
                         topic_levels VARCHAR[],
-                        time TIMESTAMPTZ,                    
+                        time TIMESTAMPTZ,
                         payload_b64 VARCHAR INDEX OFF,
                         payload_obj OBJECT,
                         qos INT,
                         retained BOOLEAN,
-                        client_id VARCHAR(65535), 
+                        client_id VARCHAR(65535),
                         message_uuid VARCHAR(36)
                     )
                     """.trimIndent())
@@ -109,32 +117,40 @@ class MessageStoreCrateDB(
         return null
     }
 
+    // 2. Update addAll to insert into fixed topic columns
     override fun addAll(messages: List<MqttMessage>) {
-        val sql = "INSERT INTO $tableName (topic, topic_levels, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid) "+
-                   "VALUES (?, ?::varchar[], ?, ?, ?, ?, ?, ?, ?) "+
-                   "ON CONFLICT (topic) DO UPDATE "+
-                   "SET time = EXCLUDED.time, "+
-                   "payload_b64 = EXCLUDED.payload_b64, "+
-                   "payload_obj = EXCLUDED.payload_obj, "+
-                   "qos = EXCLUDED.qos, "+
-                   "retained = EXCLUDED.retained, "+
-                   "client_id = EXCLUDED.client_id, "+
-                   "message_uuid = EXCLUDED.message_uuid "
+        val fixedColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")
+        val fixedPlaceholders = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "?" }
+        val sql = "INSERT INTO $tableName (topic, $fixedColumns, topic_levels, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid) "+
+                "VALUES (?, $fixedPlaceholders, ?::varchar[], ?, ?, ?, ?, ?, ?, ?) "+
+                "ON CONFLICT (topic) DO UPDATE "+
+                "SET time = EXCLUDED.time, "+
+                "payload_b64 = EXCLUDED.payload_b64, "+
+                "payload_obj = EXCLUDED.payload_obj, "+
+                "qos = EXCLUDED.qos, "+
+                "retained = EXCLUDED.retained, "+
+                "client_id = EXCLUDED.client_id, "+
+                "message_uuid = EXCLUDED.message_uuid "
 
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
                     messages.forEach { message ->
-                        val topicLevels = Utils.getTopicLevels(message.topicName).toTypedArray()
+                        val topicLevels = Utils.getTopicLevels(message.topicName)
                         preparedStatement.setString(1, message.topicName)
-                        preparedStatement.setArray(2, connection.createArrayOf("varchar", topicLevels))
-                        preparedStatement.setTimestamp(3, Timestamp.from(message.time))
-                        preparedStatement.setString(4, message.getPayloadAsBase64())
-                        preparedStatement.setString(5, message.getPayloadAsJson())
-                        preparedStatement.setInt(6, message.qosLevel)
-                        preparedStatement.setBoolean(7, message.isRetain)
-                        preparedStatement.setString(8, message.clientId)
-                        preparedStatement.setString(9, message.messageUuid)
+                        // Set fixed topic columns
+                        for (i in 0 until MAX_FIXED_TOPIC_LEVELS) {
+                            preparedStatement.setString(2 + i, topicLevels.getOrNull(i) ?: "")
+                        }
+                        // Set topic_levels array
+                        preparedStatement.setArray(2 + MAX_FIXED_TOPIC_LEVELS, connection.createArrayOf("varchar", topicLevels.toTypedArray()))
+                        preparedStatement.setTimestamp(3 + MAX_FIXED_TOPIC_LEVELS, Timestamp.from(message.time))
+                        preparedStatement.setString(4 + MAX_FIXED_TOPIC_LEVELS, message.getPayloadAsBase64())
+                        preparedStatement.setString(5 + MAX_FIXED_TOPIC_LEVELS, message.getPayloadAsJson())
+                        preparedStatement.setInt(6 + MAX_FIXED_TOPIC_LEVELS, message.qosLevel)
+                        preparedStatement.setBoolean(7 + MAX_FIXED_TOPIC_LEVELS, message.isRetain)
+                        preparedStatement.setString(8 + MAX_FIXED_TOPIC_LEVELS, message.clientId)
+                        preparedStatement.setString(9 + MAX_FIXED_TOPIC_LEVELS, message.messageUuid)
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
@@ -145,7 +161,7 @@ class MessageStoreCrateDB(
                 }
             }
         } catch (e: SQLException) {
-            if (e.errorCode != lastAddAllError) { // avoid spamming the logs
+            if (e.errorCode != lastAddAllError) {
                 logger.warning("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
                 lastAddAllError = e.errorCode
             }
@@ -181,7 +197,11 @@ class MessageStoreCrateDB(
             when (level) {
                 "+", "#" -> null
                 else -> {
-                    Pair("topic_levels[${index+1}] = ?", level)
+                    if (index >= MAX_FIXED_TOPIC_LEVELS) {
+                        Pair("topic_levels[${index + 1}] = ?", level)
+                    } else {
+                        Pair(FIXED_TOPIC_COLUMN_NAMES[index] + " = ?", level)
+                    }
                 }
             }
         }.filterNotNull()
@@ -221,7 +241,7 @@ class MessageStoreCrateDB(
                 }
             }
         } catch (e: SQLException) {
-            if (e.errorCode != lastFetchError) { // avoid spamming the logs
+            if (e.errorCode != lastFetchError) {
                 logger.warning("Error finding data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
                 lastFetchError = e.errorCode
             }
