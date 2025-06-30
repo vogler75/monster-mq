@@ -158,14 +158,12 @@ class MessageStorePostgres(
     }
 
     override fun delAll(topics: List<String>) {
-        val sql = "DELETE FROM $tableName WHERE topic_1 = ? AND topic_2 = ? AND topic_3 = ? AND topic_4 = ? AND topic_5 = ? AND topic_6 = ? AND topic_7 = ? AND topic_8 = ? AND topic_9 = ? AND topic_r = ?"
+        val sql = "DELETE FROM $tableName WHERE topic = ?"
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
                     for (topic in topics) {
-                        val (first, rest, last) = splitTopic(topic)
-                        repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 1, first.getOrNull(it) ?: "") }
-                        preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 1, connection.createArrayOf("text", rest.toTypedArray()))
+                        preparedStatement.setString(1, topic)
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
