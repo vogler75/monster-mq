@@ -118,7 +118,7 @@ class MessageStorePostgres(
     }
 
     override fun addAll(messages: List<MqttMessage>) {
-        val sql = """INSERT INTO $tableName (topic, topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7, topic_8, topic_9, topic_r, topic_l,
+        val sql = """INSERT INTO $tableName (topic, ${FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")}, topic_r, topic_l,
                    time, payload_blob, payload_json, qos, retained, client_id, message_uuid) 
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::JSONB, ?, ?, ?, ?) 
                    ON CONFLICT (topic) DO UPDATE 
@@ -190,7 +190,7 @@ class MessageStorePostgres(
         try {
             db.connection?.let { connection ->
                 val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
-                val sql = "SELECT topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7, topic_8, topic_9, topic_r, " +
+                val sql = "SELECT ${FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")}, topic_r, " +
                           "payload_blob, qos, client_id, message_uuid "+
                           "FROM $tableName WHERE $where"
                 logger.finest { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
