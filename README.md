@@ -1,7 +1,21 @@
 # Monster MQ
 
-MonsterMQ is a MQTT broker built on Vert.X and Hazelcast with data persistence through PostgreSQL. 
+MonsterMQ is a MQTT broker built on Vert.X and Hazelcast with data persistence through PostgreSQL or CrateDB or MongoDB. It also comes with a MCP (Model Context Protocol) Server for AI integration.
 ![Logo](Logo.png)
+
+## Features
+
+MonsterMQ can store unlimited amounts of retained messages. Also the message queue for message with QoS>0 and persistent offline sessions are unlimited because they are stored in PostgreSQL/CrateDB/MongoDB.
+
+Clustering is supported through Hazelcast, which allows you to run multiple instances of the broker in a cluster. With that you can scale the broker horizontally and have a high availability setup, and also you can build hierarchical clusters with multiple levels of brokers, like having a top server and multiple server for each product line or factory. If clients are connected to the top server, they can subscribe to topics of the lower servers and receive messages from them. This allows you to build a distributed system with multiple levels of brokers.
+
+# Limitations
+
+Currently the broker does not support MQTT5 features like shared subscriptions, message expiry, etc. It is planned to add these features in the future.
+
+Because MonsterMQ uses databases like PostgreSQL or CrateDB for storage, its performance is limited by the database and the scalability options provided by those databases.
+
+Currenlty there are no ACL (Access Control Lists) implemented, so all clients can subscribe and publish to all topics. This is planned to be added in the future.
 
 ## Docker Image
 
@@ -30,6 +44,7 @@ services:
       - 8883:8883
       - 9000:9000
       - 9001:9001
+      - 3000:3000
     volumes:
       - ./config.yaml:/app/config.yaml
       # optionally log to files with log rotation
@@ -79,6 +94,13 @@ ArchiveGroups:
     LastValType: POSTGRES
     ArchiveType: POSTGRES
 
+  - Name: MCP # Must be named MCP to be used by the MCP Server
+    Enabled: true
+    TopicFilter: [ "Original/#" ]
+    RetainedOnly: false
+    LastValType: POSTGRES # Lst value is needed to read current values for MCP
+    ArchiveType: POSTGRES # Optionally store the messages in the archive to be able to read them by MCP
+
 Kafka:
   Servers: linux0:9092
   Bus: # Use Kafka as the message bus
@@ -86,7 +108,7 @@ Kafka:
     Topic: monster
 
 Postgres:
-  Url: jdbc:postgresql://timescale:5432/postgres
+  Url: jdbc:postgresql://timescale:5432/monster
   User: system
   Pass: manager
 
@@ -95,8 +117,17 @@ CrateDB:
   User: crate
   Pass: ""
 
+MongoDB:
+  Url: mongodb://system:manager@mongodb:27017
+  Database: monster  
+
 ```
 
+# MCP Server
+
+The MCP Server is a Model Context Protocol server that allows you to integrate AI models with MonsterMQ. The MCP Server needs a ArchiveGroup named "MCP", which is used to store the message which can be used by the MCP Server. If the archive group also has history enabled, the MCP Server can also read the history of messages. Currently only PostgreSQL is supported as a storage for the MCP Server.
+
+The MCP Server is running on port 3000. 
 
 
 
