@@ -220,7 +220,7 @@ class MessageStoreCrateDB(
                             if (levels.size < MAX_FIXED_TOPIC_LEVELS) {
                                 " AND " + FIXED_TOPIC_COLUMN_NAMES[levels.size] + " = ''"
                             } else {
-                                " AND ARRAY_LENGTH(topic_r, 1) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
+                                " AND COALESCE(ARRAY_LENGTH(topic_r, 1),0) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
                             }
                         })
                 val sql = "SELECT topic, payload_b64, qos, client_id, message_uuid " +
