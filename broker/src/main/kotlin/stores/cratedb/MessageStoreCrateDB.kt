@@ -32,6 +32,14 @@ class MessageStoreCrateDB(
     private companion object {
         const val MAX_FIXED_TOPIC_LEVELS = 9
         val FIXED_TOPIC_COLUMN_NAMES = (0 until MAX_FIXED_TOPIC_LEVELS).map { "topic_${it+1}" }
+
+        fun splitTopic(topicName: String): Triple<List<String>, List<String>, String> {
+            val levels = Utils.getTopicLevels(topicName)
+            val first = levels.take(MAX_FIXED_TOPIC_LEVELS)
+            val rest = levels.drop(MAX_FIXED_TOPIC_LEVELS)
+            val last = levels.last()
+            return Triple(first, rest, last)
+        }
     }
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
@@ -44,7 +52,8 @@ class MessageStoreCrateDB(
                     CREATE TABLE IF NOT EXISTS $tableName (
                         topic VARCHAR PRIMARY KEY,
                         $fixedTopicColumns,
-                        topic_levels VARCHAR[],
+                        topic_r VARCHAR[],
+                        topic_l VARCHAR,
                         time TIMESTAMPTZ,
                         payload_b64 VARCHAR INDEX OFF,
                         payload_obj OBJECT,
@@ -117,12 +126,11 @@ class MessageStoreCrateDB(
         return null
     }
 
-    // 2. Update addAll to insert into fixed topic columns
     override fun addAll(messages: List<MqttMessage>) {
         val fixedColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")
         val fixedPlaceholders = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "?" }
-        val sql = "INSERT INTO $tableName (topic, $fixedColumns, topic_levels, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid) "+
-                "VALUES (?, $fixedPlaceholders, ?::varchar[], ?, ?, ?, ?, ?, ?, ?) "+
+        val sql = "INSERT INTO $tableName (topic, $fixedColumns, topic_r, topic_l, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid) "+
+                "VALUES (?, $fixedPlaceholders, ?::varchar[], ?, ?, ?, ?, ?, ?, ?, ?) "+
                 "ON CONFLICT (topic) DO UPDATE "+
                 "SET time = EXCLUDED.time, "+
                 "payload_b64 = EXCLUDED.payload_b64, "+
@@ -136,21 +144,18 @@ class MessageStoreCrateDB(
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
                     messages.forEach { message ->
-                        val topicLevels = Utils.getTopicLevels(message.topicName)
+                        val (first, rest, last) = splitTopic(message.topicName)
                         preparedStatement.setString(1, message.topicName)
-                        // Set fixed topic columns
-                        for (i in 0 until MAX_FIXED_TOPIC_LEVELS) {
-                            preparedStatement.setString(2 + i, topicLevels.getOrNull(i) ?: "")
-                        }
-                        // Set topic_levels array
-                        preparedStatement.setArray(2 + MAX_FIXED_TOPIC_LEVELS, connection.createArrayOf("varchar", topicLevels.toTypedArray()))
-                        preparedStatement.setTimestamp(3 + MAX_FIXED_TOPIC_LEVELS, Timestamp.from(message.time))
-                        preparedStatement.setString(4 + MAX_FIXED_TOPIC_LEVELS, message.getPayloadAsBase64())
-                        preparedStatement.setString(5 + MAX_FIXED_TOPIC_LEVELS, message.getPayloadAsJson())
-                        preparedStatement.setInt(6 + MAX_FIXED_TOPIC_LEVELS, message.qosLevel)
-                        preparedStatement.setBoolean(7 + MAX_FIXED_TOPIC_LEVELS, message.isRetain)
-                        preparedStatement.setString(8 + MAX_FIXED_TOPIC_LEVELS, message.clientId)
-                        preparedStatement.setString(9 + MAX_FIXED_TOPIC_LEVELS, message.messageUuid)
+                        repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 2, first.getOrNull(it) ?: "") }
+                        preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 2, connection.createArrayOf("varchar", rest.toTypedArray()))
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 3, last)
+                        preparedStatement.setTimestamp(MAX_FIXED_TOPIC_LEVELS + 4, Timestamp.from(message.time))
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 5, message.getPayloadAsBase64())
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 6, message.getPayloadAsJson())
+                        preparedStatement.setInt(MAX_FIXED_TOPIC_LEVELS + 7, message.qosLevel)
+                        preparedStatement.setBoolean(MAX_FIXED_TOPIC_LEVELS + 8, message.isRetain)
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 9, message.clientId)
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 10, message.messageUuid)
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
@@ -167,6 +172,7 @@ class MessageStoreCrateDB(
             }
         }
     }
+
 
     override fun delAll(topics: List<String>) {
         val sql = "DELETE FROM $tableName WHERE topic = ? " // TODO: can be converted to use IN operator with a list of topics
@@ -193,12 +199,13 @@ class MessageStoreCrateDB(
     }
 
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
-        val topicLevels = Utils.getTopicLevels(topicName).mapIndexed { index, level ->
+        val levels = Utils.getTopicLevels(topicName)
+        val filter = levels.mapIndexed { index, level ->
             when (level) {
                 "+", "#" -> null
                 else -> {
                     if (index >= MAX_FIXED_TOPIC_LEVELS) {
-                        Pair("topic_levels[${index + 1}] = ?", level)
+                        Pair("topic_r[${index - MAX_FIXED_TOPIC_LEVELS + 1}] = ?", level)
                     } else {
                         Pair(FIXED_TOPIC_COLUMN_NAMES[index] + " = ?", level)
                     }
@@ -207,13 +214,20 @@ class MessageStoreCrateDB(
         }.filterNotNull()
         try {
             db.connection?.let { connection ->
-                val where = topicLevels.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
-                val sql = "SELECT topic, payload_b64, qos, client_id, message_uuid FROM $tableName WHERE $where"
-                logger.finest { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
+                val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" } +
+                        (if (topicName.endsWith("#")) ""
+                         else {
+                            if (levels.size < MAX_FIXED_TOPIC_LEVELS) {
+                                " AND " + FIXED_TOPIC_COLUMN_NAMES[levels.size] + " = ''"
+                            } else {
+                                " AND ARRAY_LENGTH(topic_r, 1) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
+                            }
+                        })
+                val sql = "SELECT topic, payload_b64, qos, client_id, message_uuid " +
+                          "FROM $tableName WHERE $where "
+                logger.fine { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
                 connection.prepareStatement(sql).use { preparedStatement ->
-                    topicLevels.forEachIndexed { index, level ->
-                        preparedStatement.setString(index + 1, level.second)
-                    }
+                    filter.forEachIndexed { i, x -> preparedStatement.setString(i + 1, x.second) }
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
                         val topic = resultSet.getString(1)

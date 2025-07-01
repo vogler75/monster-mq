@@ -6,6 +6,7 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.cratedb.MessageStoreCrateDB
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -175,7 +176,8 @@ class MessageStorePostgres(
     }
 
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
-        val filter = Utils.getTopicLevels(topicName).mapIndexed { index, level ->
+        val levels = Utils.getTopicLevels(topicName)
+        val filter = levels.mapIndexed { index, level ->
             when (level) {
                 "+", "#" -> null
                 else -> {
@@ -189,23 +191,27 @@ class MessageStorePostgres(
         }.filterNotNull()
         try {
             db.connection?.let { connection ->
-                val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
-                val sql = "SELECT ${FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")}, topic_r, " +
-                          "payload_blob, qos, client_id, message_uuid "+
+                val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" } +
+                        (if (topicName.endsWith("#")) ""
+                        else {
+                            if (levels.size < MAX_FIXED_TOPIC_LEVELS) {
+                                " AND " + FIXED_TOPIC_COLUMN_NAMES[levels.size] + " = ''"
+                            } else {
+                                " AND ARRAY_LENGTH(topic_r, 1) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
+                            }
+                        })
+                val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid " +
                           "FROM $tableName WHERE $where"
-                logger.finest { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
+                logger.fine { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
                 connection.prepareStatement(sql).use { preparedStatement ->
                     filter.forEachIndexed { i, x -> preparedStatement.setString(i + 1, x.second) }
-
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
-                        val topic = (((1 until MAX_FIXED_TOPIC_LEVELS + 1).map { resultSet.getString(it) }.filterNot { it.isNullOrEmpty() }) +
-                                (resultSet.getArray(MAX_FIXED_TOPIC_LEVELS + 1).array as Array<String>)).joinToString("/")
-
-                        val payload = resultSet.getBytes(11)
-                        val qos = resultSet.getInt(12)
-                        val clientId = resultSet.getString(13)
-                        val messageUuid = resultSet.getString(14)
+                        val topic = resultSet.getString(1)
+                        val payload = resultSet.getBytes(2)
+                        val qos = resultSet.getInt(3)
+                        val clientId = resultSet.getString(4)
+                        val messageUuid = resultSet.getString(5)
                         val message = MqttMessage(
                             messageUuid = messageUuid,
                             messageId = 0,
