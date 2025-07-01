@@ -9,7 +9,7 @@ MonsterMQ can store unlimited amounts of retained messages. Also the message que
 
 Clustering is supported through Hazelcast, which allows you to run multiple instances of the broker in a cluster. With that you can scale the broker horizontally and have a high availability setup, and also you can build hierarchical clusters with multiple levels of brokers, like having a top server and multiple server for each product line or factory. If clients are connected to the top server, they can subscribe to topics of the lower servers and receive messages from them. This allows you to build a distributed system with multiple levels of brokers.
 
-# Limitations
+## Limitations
 
 Currently the broker does not support MQTT5 features like shared subscriptions, message expiry, etc. It is planned to add these features in the future.
 
