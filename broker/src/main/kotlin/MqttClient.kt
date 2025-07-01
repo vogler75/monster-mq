@@ -268,6 +268,10 @@ class MqttClient(
     private fun publishHandler(message: MqttPublishMessage) {
         logger.finest { "Client [$clientId] Publish: message [${message.messageId()}] for [${message.topicName()}] with QoS ${message.qosLevel()} [${Utils.getCurrentFunctionName()}]" }
         // Handle QoS levels
+        if (message.topicName().startsWith(Const.SYS_TOPIC_NAME)) {
+            logger.warning { "Client [$clientId] Publish: message for system topic [${message.topicName()}] not allowed! [${Utils.getCurrentFunctionName()}]" }
+        }
+        else
         when (message.qosLevel()) {
             MqttQoS.AT_MOST_ONCE -> { // Level 0
                 logger.finest { "Client [$clientId] Publish: no acknowledge needed [${Utils.getCurrentFunctionName()}]" }

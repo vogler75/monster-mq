@@ -1,17 +1,22 @@
-package at.rocworks.stores
+package at.rocworks.stores.mongodb
 
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
+import at.rocworks.stores.IMessageArchive
+import at.rocworks.stores.MessageArchiveType
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
+import com.mongodb.client.MongoDatabase
 import com.mongodb.client.model.CreateCollectionOptions
 import com.mongodb.client.model.TimeSeriesGranularity
 import com.mongodb.client.model.TimeSeriesOptions
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
+import io.vertx.core.json.JsonArray
 import org.bson.Document
+import java.time.Instant
 import java.util.*
 
 class MessageArchiveMongoDB(
@@ -24,7 +29,7 @@ class MessageArchiveMongoDB(
     private val tableName = name
 
     private lateinit var mongoClient: MongoClient
-    private lateinit var database: com.mongodb.client.MongoDatabase
+    private lateinit var database: MongoDatabase
     private lateinit var collection: MongoCollection<Document>
 
     init {
@@ -53,7 +58,7 @@ class MessageArchiveMongoDB(
         }
     }
 
-    override fun addAllHistory(messages: List<MqttMessage>) {
+    override fun addHistory(messages: List<MqttMessage>) {
         val documents = messages.map { message ->
             val json = message.getPayloadAsJson()
             if (json != null)

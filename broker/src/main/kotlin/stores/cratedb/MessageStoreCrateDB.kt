@@ -1,14 +1,17 @@
-package at.rocworks.stores
+package at.rocworks.stores.cratedb
 
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
+import at.rocworks.stores.DatabaseConnection
+import at.rocworks.stores.IMessageStore
+import at.rocworks.stores.MessageStoreType
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import java.sql.*
 
-class MessageStorePostgres(
+class MessageStoreCrateDB(
     private val name: String,
     private val url: String,
     private val username: String,
@@ -16,26 +19,27 @@ class MessageStorePostgres(
 ): AbstractVerticle(), IMessageStore {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
-    private var lastAddAllError: Int = Int.MAX_VALUE
-    private var lastGetError: Int = Int.MAX_VALUE
-    private var lastDelAllError: Int = Int.MAX_VALUE
-    private var lastFetchError: Int = Int.MAX_VALUE
-
-    private companion object {
-        const val MAX_FIXED_TOPIC_LEVELS = 9
-        val FIXED_TOPIC_COLUMN_NAMES = (0 until MAX_FIXED_TOPIC_LEVELS).map { "topic_${it+1}" }
-        val ALL_PK_COLUMNS = FIXED_TOPIC_COLUMN_NAMES + "topic_r"
-
-        fun splitTopic(topicName: String): Pair<List<String>, List<String>> {
-            val levels = Utils.getTopicLevels(topicName)
-            val first = levels.take(MAX_FIXED_TOPIC_LEVELS)
-            val rest = levels.drop(MAX_FIXED_TOPIC_LEVELS)
-            return Pair(first, rest)
-        }
-    }
+    private var lastAddAllError: Int = 0
+    private var lastGetError: Int = 0
+    private var lastDelAllError: Int = 0
+    private var lastFetchError: Int = 0
 
     init {
         logger.level = Const.DEBUG_LEVEL
+    }
+
+    // 1. Update table schema
+    private companion object {
+        const val MAX_FIXED_TOPIC_LEVELS = 9
+        val FIXED_TOPIC_COLUMN_NAMES = (0 until MAX_FIXED_TOPIC_LEVELS).map { "topic_${it+1}" }
+
+        fun splitTopic(topicName: String): Triple<List<String>, List<String>, String> {
+            val levels = Utils.getTopicLevels(topicName)
+            val first = levels.take(MAX_FIXED_TOPIC_LEVELS)
+            val rest = levels.drop(MAX_FIXED_TOPIC_LEVELS)
+            val last = levels.last()
+            return Triple(first, rest, last)
+        }
     }
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
@@ -43,20 +47,20 @@ class MessageStorePostgres(
             val promise = Promise.promise<Void>()
             try {
                 connection.createStatement().use { statement ->
-                    val pkColumnsString = ALL_PK_COLUMNS.joinToString(", ")
-                    val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it text NOT NULL" }
+                    val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it VARCHAR" }
                     statement.executeUpdate("""
                     CREATE TABLE IF NOT EXISTS $tableName (
-                        ${fixedTopicColumns},                         
-                        topic_r text[] NOT NULL,
-                        time TIMESTAMPTZ,                    
-                        payload_blob BYTEA,
-                        payload_json JSONB,
+                        topic VARCHAR PRIMARY KEY,
+                        $fixedTopicColumns,
+                        topic_r VARCHAR[],
+                        topic_l VARCHAR,
+                        time TIMESTAMPTZ,
+                        payload_b64 VARCHAR INDEX OFF,
+                        payload_obj OBJECT,
                         qos INT,
                         retained BOOLEAN,
-                        client_id VARCHAR(65535), 
-                        message_uuid VARCHAR(36),
-                        PRIMARY KEY ($pkColumnsString)
+                        client_id VARCHAR(65535),
+                        message_uuid VARCHAR(36)
                     )
                     """.trimIndent())
                     logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
@@ -71,7 +75,7 @@ class MessageStorePostgres(
     }
 
     override fun getName(): String = name
-    override fun getType(): MessageStoreType = MessageStoreType.POSTGRES
+    override fun getType(): MessageStoreType = MessageStoreType.CRATEDB
 
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)
@@ -80,18 +84,15 @@ class MessageStorePostgres(
     override fun get(topicName: String): MqttMessage? {
         try {
             db.connection?.let { connection ->
-                val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString("AND ") { "$it=?" }
-                val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
-                             WHERE $fixedTopicColumns AND topic_r=?"""
+                val sql = "SELECT payload_b64, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?"
                 connection.prepareStatement(sql).use { preparedStatement ->
-                    val (first, rest) = splitTopic(topicName)
-                    repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 1, first.getOrNull(it) ?: "") }
-                    preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 1, connection.createArrayOf("text", rest.toTypedArray()))
+                    val topicLevels = Utils.getTopicLevels(topicName).toTypedArray()
+                    preparedStatement.setArray(1, connection.createArrayOf("varchar", topicLevels))
 
                     val resultSet = preparedStatement.executeQuery()
 
                     if (resultSet.next()) {
-                        val payload = resultSet.getBytes(1)
+                        val payload = MqttMessage.getPayloadFromBase64(resultSet.getString(1))
                         val qos = resultSet.getInt(2)
                         val retained = resultSet.getBoolean(3)
                         val clientId = resultSet.getString(4)
@@ -126,33 +127,35 @@ class MessageStorePostgres(
     }
 
     override fun addAll(messages: List<MqttMessage>) {
-        val sql = """INSERT INTO $tableName (topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7, topic_8, topic_9, topic_r, 
-                   time, payload_blob, payload_json, qos, retained, client_id, message_uuid) 
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::JSONB, ?, ?, ?, ?) 
-                   ON CONFLICT (topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7, topic_8, topic_9, topic_r) DO UPDATE 
-                   SET time = EXCLUDED.time, 
-                   payload_blob = EXCLUDED.payload_blob, 
-                   payload_json = EXCLUDED.payload_json,
-                   qos = EXCLUDED.qos, 
-                   retained = EXCLUDED.retained, 
-                   client_id = EXCLUDED.client_id, 
-                   message_uuid = EXCLUDED.message_uuid 
-                   """
+        val fixedColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")
+        val fixedPlaceholders = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "?" }
+        val sql = "INSERT INTO $tableName (topic, $fixedColumns, topic_r, topic_l, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid) "+
+                "VALUES (?, $fixedPlaceholders, ?::varchar[], ?, ?, ?, ?, ?, ?, ?, ?) "+
+                "ON CONFLICT (topic) DO UPDATE "+
+                "SET time = EXCLUDED.time, "+
+                "payload_b64 = EXCLUDED.payload_b64, "+
+                "payload_obj = EXCLUDED.payload_obj, "+
+                "qos = EXCLUDED.qos, "+
+                "retained = EXCLUDED.retained, "+
+                "client_id = EXCLUDED.client_id, "+
+                "message_uuid = EXCLUDED.message_uuid "
 
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
                     messages.forEach { message ->
-                        val (first, rest) = splitTopic(message.topicName)
-                        repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 1, first.getOrNull(it) ?: "") }
-                        preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 1, connection.createArrayOf("text", rest.toTypedArray()))
-                        preparedStatement.setTimestamp(11, Timestamp.from(message.time))
-                        preparedStatement.setBytes(12, message.payload)
-                        preparedStatement.setString(13, message.getPayloadAsJson())
-                        preparedStatement.setInt(14, message.qosLevel)
-                        preparedStatement.setBoolean(15, message.isRetain)
-                        preparedStatement.setString(16, message.clientId)
-                        preparedStatement.setString(17, message.messageUuid)
+                        val (first, rest, last) = splitTopic(message.topicName)
+                        preparedStatement.setString(1, message.topicName)
+                        repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 2, first.getOrNull(it) ?: "") }
+                        preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 2, connection.createArrayOf("varchar", rest.toTypedArray()))
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 3, last)
+                        preparedStatement.setTimestamp(MAX_FIXED_TOPIC_LEVELS + 4, Timestamp.from(message.time))
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 5, message.getPayloadAsBase64())
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 6, message.getPayloadAsJson())
+                        preparedStatement.setInt(MAX_FIXED_TOPIC_LEVELS + 7, message.qosLevel)
+                        preparedStatement.setBoolean(MAX_FIXED_TOPIC_LEVELS + 8, message.isRetain)
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 9, message.clientId)
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 10, message.messageUuid)
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
@@ -163,22 +166,21 @@ class MessageStorePostgres(
                 }
             }
         } catch (e: SQLException) {
-            if (e.errorCode != lastAddAllError) { // avoid spamming the logs
+            if (e.errorCode != lastAddAllError) {
                 logger.warning("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
                 lastAddAllError = e.errorCode
             }
         }
     }
 
+
     override fun delAll(topics: List<String>) {
-        val sql = "DELETE FROM $tableName WHERE topic_1 = ? AND topic_2 = ? AND topic_3 = ? AND topic_4 = ? AND topic_5 = ? AND topic_6 = ? AND topic_7 = ? AND topic_8 = ? AND topic_9 = ? AND topic_r = ?"
+        val sql = "DELETE FROM $tableName WHERE topic = ? " // TODO: can be converted to use IN operator with a list of topics
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
-                    for (topic in topics) {
-                        val (first, rest) = splitTopic(topic)
-                        repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 1, first.getOrNull(it) ?: "") }
-                        preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 1, connection.createArrayOf("text", rest.toTypedArray()))
+                    topics.forEach{ topic ->
+                        preparedStatement.setString(1, topic)
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
@@ -197,7 +199,8 @@ class MessageStorePostgres(
     }
 
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
-        val filter = Utils.getTopicLevels(topicName).mapIndexed { index, level ->
+        val levels = Utils.getTopicLevels(topicName)
+        val filter = levels.mapIndexed { index, level ->
             when (level) {
                 "+", "#" -> null
                 else -> {
@@ -211,23 +214,27 @@ class MessageStorePostgres(
         }.filterNotNull()
         try {
             db.connection?.let { connection ->
-                val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
-                val sql = "SELECT topic_1, topic_2, topic_3, topic_4, topic_5, topic_6, topic_7, topic_8, topic_9, topic_r, " +
-                          "payload_blob, qos, client_id, message_uuid "+
-                          "FROM $tableName WHERE $where"
-                logger.finest { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
+                val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" } +
+                        (if (topicName.endsWith("#")) ""
+                         else {
+                            if (levels.size < MAX_FIXED_TOPIC_LEVELS) {
+                                " AND " + FIXED_TOPIC_COLUMN_NAMES[levels.size] + " = ''"
+                            } else {
+                                " AND COALESCE(ARRAY_LENGTH(topic_r, 1),0) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
+                            }
+                        })
+                val sql = "SELECT topic, payload_b64, qos, client_id, message_uuid " +
+                          "FROM $tableName WHERE $where "
+                logger.fine { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
                 connection.prepareStatement(sql).use { preparedStatement ->
                     filter.forEachIndexed { i, x -> preparedStatement.setString(i + 1, x.second) }
-
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
-                        val topic = (((1 until MAX_FIXED_TOPIC_LEVELS + 1).map { resultSet.getString(it) }.filterNot { it.isNullOrEmpty() }) +
-                                (resultSet.getArray(MAX_FIXED_TOPIC_LEVELS + 1).array as Array<String>)).joinToString("/")
-
-                        val payload = resultSet.getBytes(11)
-                        val qos = resultSet.getInt(12)
-                        val clientId = resultSet.getString(13)
-                        val messageUuid = resultSet.getString(14)
+                        val topic = resultSet.getString(1)
+                        val payload = MqttMessage.getPayloadFromBase64(resultSet.getString(2))
+                        val qos = resultSet.getInt(3)
+                        val clientId = resultSet.getString(4)
+                        val messageUuid = resultSet.getString(5)
                         val message = MqttMessage(
                             messageUuid = messageUuid,
                             messageId = 0,
@@ -248,7 +255,7 @@ class MessageStorePostgres(
                 }
             }
         } catch (e: SQLException) {
-            if (e.errorCode != lastFetchError) { // avoid spamming the logs
+            if (e.errorCode != lastFetchError) {
                 logger.warning("Error finding data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
                 lastFetchError = e.errorCode
             }

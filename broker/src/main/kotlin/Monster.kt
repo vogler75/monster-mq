@@ -7,10 +7,20 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
+import at.rocworks.extensions.McpServer
 import at.rocworks.extensions.SparkplugExtension
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.stores.*
+import at.rocworks.stores.cratedb.MessageArchiveCrateDB
+import at.rocworks.stores.cratedb.MessageStoreCrateDB
+import at.rocworks.stores.cratedb.SessionStoreCrateDB
+import at.rocworks.stores.mongodb.MessageArchiveMongoDB
+import at.rocworks.stores.mongodb.MessageStoreMongoDB
+import at.rocworks.stores.mongodb.SessionStoreMongoDB
+import at.rocworks.stores.postgres.MessageArchivePostgres
+import at.rocworks.stores.postgres.MessageStorePostgres
+import at.rocworks.stores.postgres.SessionStorePostgres
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
@@ -222,12 +232,25 @@ class Monster(args: Array<String>) {
                 // Health handler
                 val healthHandler = HealthHandler(sessionHandler)
 
+                // MCP Server
+                val mcpArchiveGroup = archiveGroups.find { it.name == Const.MCP_ARCHIVE_GROUP }
+                val mcpServer = if (mcpArchiveGroup != null &&
+                    retainedStore is IMessageStoreExtended &&
+                    (mcpArchiveGroup.lastValStore != null && mcpArchiveGroup.lastValStore is IMessageStoreExtended) &&
+                    (mcpArchiveGroup.archiveStore != null && mcpArchiveGroup.archiveStore is IMessageArchiveExtended)) {
+                    McpServer("0.0.0.0", 3001, retainedStore, mcpArchiveGroup.lastValStore, mcpArchiveGroup.archiveStore)
+                } else {
+                    logger.warning("Default archive group is not defined or is not an extended archive group. MCP server will not start.")
+                    null
+                }
+
                 // MQTT Servers
                 val servers = listOfNotNull(
                     if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, sessionHandler) else null,
                     if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, sessionHandler) else null,
                     if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, sessionHandler) else null,
-                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, sessionHandler) else null
+                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, sessionHandler) else null,
+                    mcpServer
                 )
 
                 // Deploy all verticles

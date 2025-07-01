@@ -1,22 +1,29 @@
-package at.rocworks.stores
+package at.rocworks.stores.postgres
 
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
+import at.rocworks.stores.DatabaseConnection
+import at.rocworks.stores.IMessageArchive
+import at.rocworks.stores.IMessageArchiveExtended
+import at.rocworks.stores.MessageArchiveType
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.json.JsonArray
 import java.sql.*
+import java.time.Instant
+import java.util.concurrent.Callable
 
 class MessageArchivePostgres (
     private val name: String,
     private val url: String,
     private val username: String,
     private val password: String
-): AbstractVerticle(), IMessageArchive {
+): AbstractVerticle(), IMessageArchiveExtended {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
-    private var lastAddAllHistoryError: Int = 0
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -31,7 +38,7 @@ class MessageArchivePostgres (
                     statement.executeUpdate(
                         """
                     CREATE TABLE IF NOT EXISTS $tableName (
-                        topic text[],
+                        topic text,
                         time TIMESTAMPTZ,                    
                         payload_blob BYTEA,
                         payload_json JSONB,
@@ -79,7 +86,7 @@ class MessageArchivePostgres (
         db.start(vertx, startPromise)
     }
 
-    override fun addAllHistory(messages: List<MqttMessage>) {
+    override fun addHistory(messages: List<MqttMessage>) {
         val sql = "INSERT INTO $tableName (topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid) "+
                 "VALUES (?, ?, ?, ?::JSONB, ?, ?, ?, ?) "+
                 "ON CONFLICT (topic, time) DO NOTHING" // TODO: ignore duplicates, what if time resolution is not enough?
@@ -89,8 +96,7 @@ class MessageArchivePostgres (
                 val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
 
                 messages.forEach { message ->
-                    val topic = Utils.getTopicLevels(message.topicName).toTypedArray()
-                    preparedStatement.setArray(1, connection.createArrayOf("text", topic))
+                    preparedStatement.setString(1, message.topicName)
                     preparedStatement.setTimestamp(2, Timestamp.from(message.time))
                     preparedStatement.setBytes(3, message.payload)
                     preparedStatement.setString(4, message.getPayloadAsJson())
@@ -103,17 +109,101 @@ class MessageArchivePostgres (
 
                 preparedStatement.executeBatch()
                 connection.commit()
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
 
-                if (lastAddAllHistoryError != 0) {
-                    logger.info("Batch insert successful after error [${Utils.getCurrentFunctionName()}]")
-                    lastAddAllHistoryError = 0
+    override fun getHistory(
+        topic: String,
+        startTime: Instant?,
+        endTime: Instant?,
+        limit: Int
+    ): JsonArray {
+        val sql = StringBuilder("SELECT time, payload_blob FROM $tableName WHERE topic = ?")
+        val params = mutableListOf<Any>()
+        params.add(topic)
+
+        startTime?.let {
+            sql.append(" AND time >= ?")
+            params.add(Timestamp.from(it))
+        }
+        endTime?.let {
+            sql.append(" AND time <= ?")
+            params.add(Timestamp.from(it))
+        }
+        sql.append(" ORDER BY time DESC LIMIT ?")
+        params.add(limit)
+
+        val messages = JsonArray().apply {
+            add(JsonArray().apply {
+                add("time")
+                add("payload")
+            })  // Header row
+        }
+
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql.toString()).use { preparedStatement ->
+                    for ((index, param) in params.withIndex()) {
+                        when (param) {
+                            is String -> preparedStatement.setString(index + 1, param)
+                            is Timestamp -> preparedStatement.setTimestamp(index + 1, param)
+                            is Int -> preparedStatement.setInt(index + 1, param)
+                            else -> preparedStatement.setObject(index + 1, param)
+                        }
+                    }
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        val time = resultSet.getTimestamp("time").toInstant()
+                        val payloadBlob = resultSet.getBytes("payload_blob")
+                        messages.add(JsonArray().add(time.toString()).add(payloadBlob.toString(Charsets.UTF_8)))
+                    }
                 }
             }
         } catch (e: SQLException) {
-            if (e.errorCode != lastAddAllHistoryError) { // avoid spamming the logs
-                logger.warning("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
-                lastAddAllHistoryError = e.errorCode
+            logger.severe("Error retrieving history for topic [$topic]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+        }
+        return messages
+    }
+
+    override fun executeQuery(sql: String): JsonArray {
+        return try {
+            logger.fine("Executing SQL query: $sql [${Utils.getCurrentFunctionName()}]")
+            db.connection?.let { connection ->
+                connection.createStatement().use { statement ->
+                    statement.executeQuery(sql).use { resultSet ->
+                        val metaData = resultSet.metaData
+                        val columnCount = metaData.columnCount
+                        val result = JsonArray()
+
+                        // Add header row
+                        val header = JsonArray()
+                        for (i in 1..columnCount) {
+                            header.add(metaData.getColumnName(i))
+                        }
+                        result.add(header)
+
+                        // Add data rows
+                        while (resultSet.next()) {
+                            val row = JsonArray()
+                            for (i in 1..columnCount) {
+                                row.add(resultSet.getObject(i))
+                            }
+                            result.add(row)
+                        }
+                        logger.fine("SQL query executed successfully with [${result.size()}] rows. [${Utils.getCurrentFunctionName()}]")
+                        result
+                    }
+                }
+            } ?: run {
+                logger.warning("No database connection available. [${Utils.getCurrentFunctionName()}]")
+                JsonArray().add("No database connection available.")
             }
+        } catch (e: SQLException) {
+            logger.severe("Error executing query: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            JsonArray().add("Error executing query: ${e.message}")
         }
     }
 }

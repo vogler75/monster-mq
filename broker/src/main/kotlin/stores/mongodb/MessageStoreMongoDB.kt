@@ -1,16 +1,22 @@
-package at.rocworks.stores
+package at.rocworks.stores.mongodb
 
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
+import at.rocworks.stores.IMessageStore
+import at.rocworks.stores.MessageStoreType
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
+import com.mongodb.client.MongoDatabase
 import com.mongodb.client.model.Filters.*
 import com.mongodb.client.model.IndexOptions
+import com.mongodb.client.model.UpdateOneModel
+import com.mongodb.client.model.UpdateOptions
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import org.bson.Document
+import org.bson.types.Binary
 import java.time.Instant
 
 class MessageStoreMongoDB(
@@ -22,7 +28,7 @@ class MessageStoreMongoDB(
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name
     private lateinit var mongoClient: MongoClient
-    private lateinit var database: com.mongodb.client.MongoDatabase
+    private lateinit var database: MongoDatabase
     private lateinit var collection: MongoCollection<Document>
     private var lastAddAllError: Int = 0
     private var lastGetError: Int = 0
@@ -139,10 +145,10 @@ class MessageStoreMongoDB(
                         "message_uuid" to message.messageUuid
                     )
                 val update = Document("\$set", doc)
-                com.mongodb.client.model.UpdateOneModel<Document>(
+                UpdateOneModel<Document>(
                     filter,
                     update,
-                    com.mongodb.client.model.UpdateOptions().upsert(true)
+                    UpdateOptions().upsert(true)
                 )
             }
             collection.bulkWrite(bulkOperations)
@@ -196,7 +202,7 @@ class MessageStoreMongoDB(
                 counter++
                 val topic = document.getString("topic")
                 val payload = when (val rawPayload = document["payload"]) {
-                    is org.bson.types.Binary -> rawPayload.data
+                    is Binary -> rawPayload.data
                     is String -> rawPayload.toByteArray()
                     else -> logger.severe("Unknown payload type: ${rawPayload?.javaClass}").let { "".toByteArray() }
                 }
