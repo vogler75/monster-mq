@@ -1,6 +1,8 @@
 package at.rocworks
 
 import at.rocworks.data.MqttMessage
+import at.rocworks.data.MqttProperties
+import at.rocworks.data.MqttReasonCode
 import at.rocworks.handlers.SessionHandler
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
 import io.netty.handler.codec.mqtt.MqttQoS
@@ -36,6 +38,13 @@ class MqttClient(
         nextMessageId=1
         nextMessageId
     } else ++nextMessageId
+    
+    // MQTT 5 specific fields
+    private val protocolVersion: Int = endpoint.protocolVersion()
+    private var sessionExpiryInterval: Long? = null
+    private var receiveMaximum: Int = 65535  // Default MQTT 5 receive maximum
+    private var topicAliasMaximum: Int = 0  // No topic aliases by default
+    private val topicAliases = mutableMapOf<Int, String>()  // Topic alias mapping
 
     private data class InFlightMessage(
         val message: MqttMessage,
@@ -99,14 +108,32 @@ class MqttClient(
     fun startEndpoint() {
         logger.info("Client [$clientId] Request to connect. Clean session [${endpoint.isCleanSession}] protocol [${endpoint.protocolVersion()}] [${Utils.getCurrentFunctionName()}]")
         // protocolVersion: 3=MQTTv31, 4=MQTTv311, 5=MQTTv5
-        if (endpoint.protocolVersion()==5) {
-            logger.warning("Client [$clientId] Protocol version 5 not yet supported. Closing session [${Utils.getCurrentFunctionName()}]")
-            // print all connectProperties
-            endpoint.connectProperties().listAll().forEach() { p ->
-                logger.info("Property [${p.propertyId()}] = ${p.value()}")
+        
+        // Handle MQTT 5 specific connection properties
+        var connectProperties: MqttProperties? = null
+        if (endpoint.protocolVersion() == 5) {
+            logger.info("Client [$clientId] MQTT 5 connection detected [${Utils.getCurrentFunctionName()}]")
+            connectProperties = extractConnectProperties()
+            
+            // Process important MQTT 5 properties
+            connectProperties?.let { props ->
+                props.sessionExpiryInterval?.let { 
+                    sessionExpiryInterval = it
+                    logger.fine("Client [$clientId] Session expiry interval: $it seconds")
+                }
+                props.receiveMaximum?.let {
+                    receiveMaximum = it
+                    logger.fine("Client [$clientId] Receive maximum: $it")
+                }
+                props.topicAliasMaximum?.let {
+                    topicAliasMaximum = it
+                    logger.fine("Client [$clientId] Topic alias maximum: $it")
+                }
             }
-            rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_PROTOCOL_ERROR)
-        } else {
+        }
+        
+        // Now handle both MQTT 3.1.1 and MQTT 5 connections
+        if (true) {  // Accept all versions now
             endpoint.exceptionHandler(::exceptionHandler)
             endpoint.pingHandler { pingHandler() }
             endpoint.subscribeHandler(::subscribeHandler)
@@ -130,11 +157,15 @@ class MqttClient(
                 logger.severe("Client [$clientId] Already deployed [${Utils.getCurrentFunctionName()}]")
             }
 
-            // Set last will
-            sessionHandler.setLastWill(clientId, endpoint.will())
+            // Set last will (with MQTT 5 properties if applicable)
+            val willMessage = if (endpoint.will() != null) {
+                MqttMessage(clientId, endpoint.will()!!, protocolVersion)
+            } else null
+            sessionHandler.setLastWill(clientId, willMessage)
 
             fun finishClientStartup(present: Boolean) {
                 // Accept connection
+                // TODO: Add MQTT 5 properties support when upgrading to Vert.x 5
                 endpoint.accept(present)
 
                 // Set client to connected
@@ -145,7 +176,13 @@ class MqttClient(
                 information.put("SSL", endpoint.isSsl)
                 information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
                 information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
-                sessionHandler.setClient(clientId, endpoint.isCleanSession, information).onComplete {
+                if (protocolVersion == 5) {
+                    information.put("SessionExpiryInterval", sessionExpiryInterval)
+                    information.put("ReceiveMaximum", receiveMaximum)
+                    information.put("TopicAliasMaximum", topicAliasMaximum)
+                }
+                val cleanStart = if (protocolVersion == 5) endpoint.isCleanSession else endpoint.isCleanSession
+                sessionHandler.setClient(clientId, cleanStart, information).onComplete {
                     logger.fine("Dequeue messages for client [$clientId] [${Utils.getCurrentFunctionName()}]")
                     sessionHandler.dequeueMessages(clientId) { m ->
                         logger.finest { "Client [$clientId] Dequeued message [${m.messageId}] for topic [${m.topicName}] [${Utils.getCurrentFunctionName()}]" }
@@ -160,8 +197,14 @@ class MqttClient(
                 }
             }
 
-            // Accept connection
-            if (endpoint.isCleanSession) {
+            // Accept connection based on clean session/clean start
+            val shouldClean = if (protocolVersion == 5) {
+                endpoint.isCleanSession  // In MQTT 5, this represents Clean Start
+            } else {
+                endpoint.isCleanSession
+            }
+            
+            if (shouldClean) {
                 sessionHandler.delClient(clientId).onComplete { // Clean and remove any existing session state
                     finishClientStartup(false) // false... session not present because of clean session requested
                 }.onFailure {
@@ -275,18 +318,20 @@ class MqttClient(
         when (message.qosLevel()) {
             MqttQoS.AT_MOST_ONCE -> { // Level 0
                 logger.finest { "Client [$clientId] Publish: no acknowledge needed [${Utils.getCurrentFunctionName()}]" }
-                sessionHandler.publishMessage(MqttMessage(clientId, message))
+                sessionHandler.publishMessage(MqttMessage(clientId, message, protocolVersion))
             }
             MqttQoS.AT_LEAST_ONCE -> { // Level 1
                 logger.finest { "Client [$clientId] Publish: sending acknowledge for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
-                sessionHandler.publishMessage(MqttMessage(clientId, message))
+                sessionHandler.publishMessage(MqttMessage(clientId, message, protocolVersion))
                 // TODO: check the result of the publishMessage and send the acknowledge only if the message was delivered
+                // TODO: Add MQTT 5 reason code support when upgrading Vert.x
                 endpoint.publishAcknowledge(message.messageId())
             }
             MqttQoS.EXACTLY_ONCE -> { // Level 2
                 logger.finest { "Client [$clientId] Publish: sending received for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
+                // TODO: Add MQTT 5 reason code support when upgrading Vert.x
                 endpoint.publishReceived(message.messageId())
-                inFlightMessagesRcv[message.messageId()] = InFlightMessage(MqttMessage(clientId, message))
+                inFlightMessagesRcv[message.messageId()] = InFlightMessage(MqttMessage(clientId, message, protocolVersion))
             }
             else -> {
                 logger.warning { "Client [$clientId] Publish: unknown QoS level [${message.qosLevel()}] [${Utils.getCurrentFunctionName()}]" }
@@ -297,6 +342,7 @@ class MqttClient(
     private fun publishReleaseHandler(id: Int) {
         inFlightMessagesRcv[id]?.let { inFlightMessage ->
             logger.finest { "Client [$clientId] Publish: got publish release id [$id], now sending complete to client [${Utils.getCurrentFunctionName()}]"}
+            // TODO: Add MQTT 5 reason code support when upgrading Vert.x
             endpoint.publishComplete(id)
             sessionHandler.publishMessage(inFlightMessage.message)
             inFlightMessagesRcv.remove(id)
@@ -518,5 +564,46 @@ class MqttClient(
             sendLastWill()
         }
         stopEndpoint()
+    }
+    
+    // -----------------------------------------------------------------------------------------------------------------
+    // MQTT 5 Helper Methods
+    // -----------------------------------------------------------------------------------------------------------------
+    
+    /**
+     * Extract MQTT 5 connection properties from the endpoint
+     */
+    private fun extractConnectProperties(): MqttProperties? {
+        if (endpoint.protocolVersion() != 5) return null
+        
+        val props = MqttProperties()
+        endpoint.connectProperties()?.listAll()?.forEach { p ->
+            when (p.propertyId()) {
+                0x11 -> props.sessionExpiryInterval = (p.value() as? Number)?.toLong()
+                0x15 -> props.authenticationMethod = p.value() as? String
+                0x16 -> props.authenticationData = (p.value() as? io.netty.buffer.ByteBuf)?.array()
+                0x17 -> props.requestProblemInformation = (p.value() as? Number)?.toByte()
+                0x19 -> props.requestResponseInformation = (p.value() as? Number)?.toByte()
+                0x21 -> props.receiveMaximum = (p.value() as? Number)?.toInt()
+                0x22 -> props.topicAliasMaximum = (p.value() as? Number)?.toInt()
+                0x24 -> props.maximumQoS = (p.value() as? Number)?.toByte()
+                0x26 -> {
+                    // User properties
+                    // User properties - need special handling
+                    // Skip for now as Vert.x structure is different
+                }
+                0x27 -> props.maximumPacketSize = (p.value() as? Number)?.toLong()
+            }
+        }
+        return props
+    }
+    
+    /**
+     * Create CONNACK properties for MQTT 5
+     */
+    private fun createConnackProperties(sessionPresent: Boolean): Any? {
+        // Return null for now - Vert.x MqttProperties API is not available in 4.5.14
+        // TODO: Implement when upgrading to Vert.x 5 which has full MQTT 5 support
+        return null
     }
 }

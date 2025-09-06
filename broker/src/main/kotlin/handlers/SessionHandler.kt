@@ -276,13 +276,17 @@ open class SessionHandler(
         }
     }
 
-    fun setLastWill(clientId: String, will: MqttWill): Future<Void> {
-        if (will.isWillFlag) {
+    fun setLastWill(clientId: String, will: MqttWill?): Future<Void> {
+        return if (will != null && will.isWillFlag) {
             val message = MqttMessage(clientId, will)
-            return sessionStore.setLastWill(clientId, message)
+            sessionStore.setLastWill(clientId, message)
         } else {
-            return sessionStore.setLastWill(clientId, null)
+            sessionStore.setLastWill(clientId, null)
         }
+    }
+    
+    fun setLastWill(clientId: String, willMessage: MqttMessage?): Future<Void> {
+        return sessionStore.setLastWill(clientId, willMessage)
     }
 
     fun isPresent(clientId: String): Future<Boolean> = sessionStore.isPresent(clientId)

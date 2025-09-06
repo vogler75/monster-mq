@@ -25,9 +25,10 @@ class MqttMessage(
     val isQueued: Boolean,
     val clientId: String,
     val time: Instant = Instant.now(),
-    // TODO: Properties for MQTT 5.0
+    val properties: MqttProperties? = null, // MQTT 5.0 properties
+    val protocolVersion: Int = 4 // 4 = MQTT 3.1.1, 5 = MQTT 5.0
 ): Serializable {
-    constructor(clientId: String, message: MqttPublishMessage): this(
+    constructor(clientId: String, message: MqttPublishMessage, protocolVersion: Int = 4): this(
         Utils.getUuid(),
         if (message.messageId()<0) 0 else message.messageId(),
         message.topicName(),
@@ -36,10 +37,13 @@ class MqttMessage(
         message.isRetain,
         message.isDup,
         false,
-        clientId
+        clientId,
+        Instant.now(),
+        null, // TODO: Extract MQTT 5 properties from message when Vert.x API supports it
+        protocolVersion
     )
 
-    constructor(clientId: String, message: MqttWill): this(
+    constructor(clientId: String, message: MqttWill, protocolVersion: Int = 4): this(
         Utils.getUuid(),
         0,
         message.willTopic,
@@ -48,7 +52,10 @@ class MqttMessage(
         message.isWillRetain,
         false,
         false,
-        clientId
+        clientId,
+        Instant.now(),
+        null, // TODO: Extract MQTT 5 will properties when Vert.x API supports it
+        protocolVersion
     )
 
     constructor(clientId: String, topic: String, payload: String) : this(
@@ -63,8 +70,8 @@ class MqttMessage(
         clientId
     )
 
-    fun cloneWithNewQoS(qosLevel: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId)
-    fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId)
+    fun cloneWithNewQoS(qosLevel: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, properties, protocolVersion)
+    fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, properties, protocolVersion)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 
@@ -87,5 +94,6 @@ class MqttMessage(
 
     companion object {
         fun getPayloadFromBase64(s: String): ByteArray = Base64.getDecoder().decode(s)
+        
     }
 }
