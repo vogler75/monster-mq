@@ -23,7 +23,7 @@ import at.rocworks.stores.postgres.MessageStorePostgres
 import at.rocworks.stores.postgres.SessionStorePostgres
 import at.rocworks.stores.sqlite.MessageArchiveSQLite
 import at.rocworks.stores.sqlite.MessageStoreSQLite
-import at.rocworks.stores.sqlite.SessionStoreSQLiteSimple
+import at.rocworks.stores.sqlite.SessionStoreSQLite
 import at.rocworks.stores.sqlite.SQLiteVerticle
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
@@ -368,7 +368,7 @@ class Monster(args: Array<String>) {
                     SessionStoreMongoDB(mongoDbConfig.url, mongoDbConfig.database)
                 }
                 SessionStoreType.SQLITE -> {
-                    SessionStoreSQLiteSimple(sqliteConfig.path)
+                    SessionStoreSQLite(sqliteConfig.path)
                 }
             }
             val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)

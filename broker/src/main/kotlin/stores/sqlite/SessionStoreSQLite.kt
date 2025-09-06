@@ -11,13 +11,12 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
-import java.util.concurrent.TimeUnit
 
 /**
  * Clean SQLiteVerticle-only implementation of SessionStore
  * No SharedSQLiteConnection - uses only event bus communication
  */
-class SessionStoreSQLiteSimple(
+class SessionStoreSQLite(
     private val dbPath: String
 ): AbstractVerticle(), ISessionStore {
     private val logger = Utils.getLogger(this::class.java)
