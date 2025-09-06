@@ -24,6 +24,7 @@ import at.rocworks.stores.postgres.SessionStorePostgres
 import at.rocworks.stores.sqlite.MessageArchiveSQLite
 import at.rocworks.stores.sqlite.MessageStoreSQLite
 import at.rocworks.stores.sqlite.SessionStoreSQLiteSimple
+import at.rocworks.stores.sqlite.SQLiteVerticle
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
@@ -68,6 +69,7 @@ class Monster(args: Array<String>) {
 
     companion object {
         private var singleton: Monster? = null
+        private var sqliteVerticleDeploymentId: String? = null
 
         private fun getInstance(): Monster = if (singleton==null) throw Exception("Monster instance is not initialized.") else singleton!!
 
@@ -91,6 +93,26 @@ class Monster(args: Array<String>) {
             return getInstance().configJson.getJsonObject("SparkplugMetricExpansion", JsonObject())?.let {
                 if (it.getBoolean("Enabled", false)) SparkplugExtension(it)
                 else null
+            }
+        }
+        
+        private fun ensureSQLiteVerticleDeployed(vertx: Vertx): Future<String> {
+            return if (sqliteVerticleDeploymentId == null) {
+                val promise = Promise.promise<String>()
+                vertx.deployVerticle(SQLiteVerticle()).onComplete { result ->
+                    if (result.succeeded()) {
+                        sqliteVerticleDeploymentId = result.result()
+                        Logger.getLogger("Monster").info("SQLiteVerticle deployed as singleton with ID: ${sqliteVerticleDeploymentId}")
+                        promise.complete(result.result())
+                    } else {
+                        Logger.getLogger("Monster").severe("Failed to deploy SQLiteVerticle: ${result.cause()?.message}")
+                        promise.fail(result.cause())
+                    }
+                }
+                promise.future()
+            } else {
+                Logger.getLogger("Monster").fine("SQLiteVerticle already deployed with ID: $sqliteVerticleDeploymentId")
+                Future.succeededFuture(sqliteVerticleDeploymentId)
             }
         }
 
@@ -326,27 +348,41 @@ class Monster(args: Array<String>) {
         val sessionStoreType = SessionStoreType.valueOf(
             configJson.getString("SessionStoreType", "MEMORY")
         )
-        val store = when (sessionStoreType) {
-            SessionStoreType.POSTGRES -> {
-                SessionStorePostgres(postgresConfig.url, postgresConfig.user, postgresConfig.pass)
+        
+        // For SQLite, ensure SQLiteVerticle is deployed first
+        val sqliteReady = if (sessionStoreType == SessionStoreType.SQLITE) {
+            ensureSQLiteVerticleDeployed(vertx)
+        } else {
+            Future.succeededFuture("N/A")
+        }
+        
+        sqliteReady.compose { _ ->
+            val store = when (sessionStoreType) {
+                SessionStoreType.POSTGRES -> {
+                    SessionStorePostgres(postgresConfig.url, postgresConfig.user, postgresConfig.pass)
+                }
+                SessionStoreType.CRATEDB -> {
+                    SessionStoreCrateDB(crateDbConfig.url, crateDbConfig.user, crateDbConfig.pass)
+                }
+                SessionStoreType.MONGODB -> {
+                    SessionStoreMongoDB(mongoDbConfig.url, mongoDbConfig.database)
+                }
+                SessionStoreType.SQLITE -> {
+                    SessionStoreSQLiteSimple(sqliteConfig.path)
+                }
             }
-            SessionStoreType.CRATEDB -> {
-                SessionStoreCrateDB(crateDbConfig.url, crateDbConfig.user, crateDbConfig.pass)
+            val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+            vertx.deployVerticle(store, options).compose { _ ->
+                val async = SessionStoreAsync(store)
+                vertx.deployVerticle(async).map { async }
             }
-            SessionStoreType.MONGODB -> {
-                SessionStoreMongoDB(mongoDbConfig.url, mongoDbConfig.database)
-            }
-            SessionStoreType.SQLITE -> {
-                SessionStoreSQLiteSimple(sqliteConfig.path)
+        }.onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                promise.fail(result.cause())
             }
         }
-        val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-        vertx.deployVerticle(store, options).onSuccess {
-            val async = SessionStoreAsync(store)
-            vertx.deployVerticle(async).onSuccess {
-                promise.complete(async)
-            }.onFailure { promise.fail(it) }
-        }.onFailure { promise.fail(it) }
 
         return promise.future()
     }
@@ -397,7 +433,9 @@ class Monster(args: Array<String>) {
             MessageStoreType.SQLITE -> {
                 val store = MessageStoreSQLite(name, sqliteConfig.path)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                ensureSQLiteVerticleDeployed(vertx).compose { _ ->
+                    vertx.deployVerticle(store, options)
+                }.onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 store
             }
         }
@@ -451,7 +489,9 @@ class Monster(args: Array<String>) {
                     dbPath = sqliteConfig.path
                 )
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                ensureSQLiteVerticleDeployed(vertx).compose { _ ->
+                    vertx.deployVerticle(store, options)
+                }.onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 store
             }
             MessageArchiveType.KAFKA -> {

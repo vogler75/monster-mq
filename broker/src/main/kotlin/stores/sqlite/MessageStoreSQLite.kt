@@ -3,19 +3,23 @@ package at.rocworks.stores.sqlite
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
-import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
 import io.vertx.core.AbstractVerticle
-import io.vertx.core.Future
 import io.vertx.core.Promise
-import java.sql.*
+import io.vertx.core.json.JsonArray
+import io.vertx.core.json.JsonObject
 
+/**
+ * Clean SQLiteVerticle-only implementation of MessageStore
+ * No SharedSQLiteConnection - uses only event bus communication
+ */
 class MessageStoreSQLite(
     private val name: String,
     private val dbPath: String
 ): AbstractVerticle(), IMessageStoreExtended {
     private val logger = Utils.getLogger(this::class.java, name)
+    private lateinit var sqlClient: SQLiteClient
     private val tableName = name.lowercase()
 
     private companion object {
@@ -26,7 +30,7 @@ class MessageStoreSQLite(
             val levels = Utils.getTopicLevels(topicName)
             val first = levels.take(MAX_FIXED_TOPIC_LEVELS)
             val rest = levels.drop(MAX_FIXED_TOPIC_LEVELS)
-            val last = levels.last()
+            val last = if (levels.isNotEmpty()) levels.last() else ""
             return Triple(first, rest, last)
         }
     }
@@ -39,68 +43,71 @@ class MessageStoreSQLite(
     override fun getType(): MessageStoreType = MessageStoreType.SQLITE
 
     override fun start(startPromise: Promise<Void>) {
-        // Initialize shared connection
-        SharedSQLiteConnection.initialize(vertx)
+        // Initialize SQLiteClient - assumes SQLiteVerticle is already deployed by Monster.kt
+        sqlClient = SQLiteClient(vertx, dbPath)
         
-        // Create tables using shared connection
-        SharedSQLiteConnection.executeBlockingVoid(dbPath) { connection ->
-            connection.createStatement().use { statement ->
-                val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it TEXT NOT NULL DEFAULT ''" }
-                statement.executeUpdate("""
-                CREATE TABLE IF NOT EXISTS $tableName (
-                    topic TEXT PRIMARY KEY, -- full topic                   
-                    ${fixedTopicColumns}, -- topic levels for wildcard matching                        
-                    topic_r TEXT, -- remaining topic levels as JSON
-                    topic_l TEXT NOT NULL, -- last level of the topic
-                    time TEXT,                    
-                    payload_blob BLOB,
-                    payload_json TEXT,
-                    qos INTEGER,
-                    retained BOOLEAN,
-                    client_id TEXT, 
-                    message_uuid TEXT
-                )
-                """.trimIndent())
-                val allPkColumns = FIXED_TOPIC_COLUMN_NAMES + "topic_r"
-                statement.executeUpdate("""
-                CREATE INDEX IF NOT EXISTS ${tableName}_topic ON $tableName (${allPkColumns.joinToString(", ")})
-                """.trimIndent())
+        // Create tables using SQLiteClient
+        val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it TEXT NOT NULL DEFAULT ''" }
+        val createTableSQL = JsonArray()
+            .add("""
+            CREATE TABLE IF NOT EXISTS $tableName (
+                topic TEXT PRIMARY KEY, -- full topic                   
+                ${fixedTopicColumns}, -- topic levels for wildcard matching                        
+                topic_r TEXT, -- remaining topic levels as JSON
+                topic_l TEXT NOT NULL, -- last level of the topic
+                time TEXT,                    
+                payload_blob BLOB,
+                payload_json TEXT,
+                qos INTEGER,
+                retained BOOLEAN,
+                client_id TEXT, 
+                message_uuid TEXT
+            )
+            """.trimIndent())
+            .add("""
+            CREATE INDEX IF NOT EXISTS ${tableName}_topic ON $tableName (${(FIXED_TOPIC_COLUMN_NAMES + "topic_r").joinToString(", ")})
+            """.trimIndent())
+
+        sqlClient.initDatabase(createTableSQL).onComplete { result ->
+            if (result.succeeded()) {
                 logger.info("SQLite Message store [$name] is ready [start]")
+                startPromise.complete()
+            } else {
+                logger.severe("Failed to initialize SQLite message store: ${result.cause()?.message}")
+                startPromise.fail(result.cause())
             }
-        }.onComplete(startPromise)
+        }
     }
 
     override fun get(topicName: String): MqttMessage? {
+        val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
+                     WHERE topic = ?"""
+        val params = JsonArray().add(topicName)
+        
         return try {
-            SharedSQLiteConnection.executeBlocking(dbPath) { connection ->
-                val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
-                             WHERE topic = ?"""
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    preparedStatement.setString(1, topicName)
-                    val resultSet = preparedStatement.executeQuery()
-                    if (resultSet.next()) {
-                        val payload = resultSet.getBytes(1)
-                        val qos = resultSet.getInt(2)
-                        val retained = resultSet.getBoolean(3)
-                        val clientId = resultSet.getString(4)
-                        val messageUuid = resultSet.getString(5)
+            val results = sqlClient.executeQuerySync(sql, params)
+            if (results.size() > 0) {
+                val row = results.getJsonObject(0)
+                val payload = row.getBinary("payload_blob") ?: ByteArray(0)
+                val qos = row.getInteger("qos", 0)
+                val retained = row.getBoolean("retained", false)
+                val clientId = row.getString("client_id") ?: ""
+                val messageUuid = row.getString("message_uuid") ?: ""
 
-                        MqttMessage(
-                            messageUuid = messageUuid,
-                            messageId = 0,
-                            topicName = topicName,
-                            payload = payload,
-                            qosLevel = qos,
-                            isRetain = retained,
-                            isQueued = false,
-                            clientId = clientId,
-                            isDup = false
-                        )
-                    } else {
-                        null
-                    }
-                }
-            }.result()
+                MqttMessage(
+                    messageUuid = messageUuid,
+                    messageId = 0,
+                    topicName = topicName,
+                    payload = payload,
+                    qosLevel = qos,
+                    isRetain = retained,
+                    isQueued = false,
+                    clientId = clientId,
+                    isDup = false
+                )
+            } else {
+                null
+            }
         } catch (e: Exception) {
             logger.severe("Error fetching data for topic [$topicName]: ${e.message} [get]")
             null
@@ -108,6 +115,8 @@ class MessageStoreSQLite(
     }
 
     override fun addAll(messages: List<MqttMessage>) {
+        if (messages.isEmpty()) return
+        
         val fixedColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")
         val placeholders = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "?" }
         val sql = """INSERT INTO $tableName (topic, $fixedColumns, topic_r, topic_l,
@@ -123,55 +132,59 @@ class MessageStoreSQLite(
                    message_uuid = excluded.message_uuid 
                    """
 
-        try {
-            SharedSQLiteConnection.executeBlockingVoid(dbPath) { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    messages.forEach { message ->
-                        val (first, rest, last) = splitTopic(message.topicName)
-                        var paramIndex = 1
-                        preparedStatement.setString(paramIndex++, message.topicName)
-                        repeat(MAX_FIXED_TOPIC_LEVELS) { 
-                            preparedStatement.setString(paramIndex++, first.getOrNull(it) ?: "") 
-                        }
-                        // Store remaining levels as JSON string instead of PostgreSQL array
-                        val restJson = if (rest.isNotEmpty()) {
-                            "[\"${rest.joinToString("\",\"")}\"]"
-                        } else {
-                            "[]"
-                        }
-                        preparedStatement.setString(paramIndex++, restJson)
-                        preparedStatement.setString(paramIndex++, last)
-                        preparedStatement.setString(paramIndex++, message.time.toString())
-                        preparedStatement.setBytes(paramIndex++, message.payload)
-                        preparedStatement.setString(paramIndex++, message.getPayloadAsJson())
-                        preparedStatement.setInt(paramIndex++, message.qosLevel)
-                        preparedStatement.setBoolean(paramIndex++, message.isRetain)
-                        preparedStatement.setString(paramIndex++, message.clientId)
-                        preparedStatement.setString(paramIndex, message.messageUuid)
-                        preparedStatement.addBatch()
-                    }
-                    preparedStatement.executeBatch()
-                }
+        val batchParams = JsonArray()
+        messages.forEach { message ->
+            val (first, rest, last) = splitTopic(message.topicName)
+            val params = JsonArray().add(message.topicName)
+            
+            // Add fixed topic columns
+            repeat(MAX_FIXED_TOPIC_LEVELS) { 
+                params.add(first.getOrNull(it) ?: "") 
             }
-        } catch (e: SQLException) {
-            logger.severe("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            
+            // Store remaining levels as JSON string
+            val restJson = if (rest.isNotEmpty()) {
+                "[\"${rest.joinToString("\",\"")}\"]"
+            } else {
+                "[]"
+            }
+            params.add(restJson)
+            params.add(last)
+            params.add(message.time.toString())
+            params.add(message.payload)
+            params.add(message.getPayloadAsJson())
+            params.add(message.qosLevel)
+            params.add(message.isRetain)
+            params.add(message.clientId)
+            params.add(message.messageUuid)
+            
+            batchParams.add(params)
+        }
+
+        sqlClient.executeBatch(sql, batchParams).onComplete { result ->
+            if (result.failed()) {
+                logger.severe("Error inserting batch data: ${result.cause()?.message}")
+            } else {
+                logger.fine("Added ${messages.size} messages to store")
+            }
         }
     }
 
     override fun delAll(topics: List<String>) {
+        if (topics.isEmpty()) return
+        
         val sql = "DELETE FROM $tableName WHERE topic = ?"
-        try {
-            SharedSQLiteConnection.executeBlockingVoid(dbPath) { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    for (topic in topics) {
-                        preparedStatement.setString(1, topic)
-                        preparedStatement.addBatch()
-                    }
-                    preparedStatement.executeBatch()
-                }
+        val batchParams = JsonArray()
+        topics.forEach { topic ->
+            batchParams.add(JsonArray().add(topic))
+        }
+        
+        sqlClient.executeBatch(sql, batchParams).onComplete { result ->
+            if (result.failed()) {
+                logger.severe("Error deleting batch data: ${result.cause()?.message}")
+            } else {
+                logger.fine("Deleted ${topics.size} topics from store")
             }
-        } catch (e: SQLException) {
-            logger.severe("Error deleting batch data [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -184,7 +197,7 @@ class MessageStoreSQLite(
                     if (index >= MAX_FIXED_TOPIC_LEVELS) {
                         // For SQLite, we need to use JSON functions to extract array elements
                         val jsonIndex = index - MAX_FIXED_TOPIC_LEVELS
-                        Pair("json_extract(topic_r, '\$[$jsonIndex]') = ?", level)
+                        Pair("json_extract(topic_r, '$[$jsonIndex]') = ?", level)
                     } else {
                         Pair(FIXED_TOPIC_COLUMN_NAMES[index] + " = ?", level)
                     }
@@ -192,47 +205,50 @@ class MessageStoreSQLite(
             }
         }.filterNotNull()
         
-        try {
-            SharedSQLiteConnection.executeBlockingVoid(dbPath) { connection ->
-                val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" } +
-                        (if (topicName.endsWith("#")) ""
-                        else {
-                            if (levels.size < MAX_FIXED_TOPIC_LEVELS) {
-                                " AND " + FIXED_TOPIC_COLUMN_NAMES[levels.size] + " = ''"
-                            } else {
-                                // For SQLite, check JSON array length
-                                " AND json_array_length(topic_r) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
-                            }
-                        })
-                val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid " +
-                          "FROM $tableName WHERE $where"
-                logger.fine { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    filter.forEachIndexed { i, x -> preparedStatement.setString(i + 1, x.second) }
-                    val resultSet = preparedStatement.executeQuery()
-                    while (resultSet.next()) {
-                        val topic = resultSet.getString(1)
-                        val payload = resultSet.getBytes(2)
-                        val qos = resultSet.getInt(3)
-                        val clientId = resultSet.getString(4)
-                        val messageUuid = resultSet.getString(5)
-                        val message = MqttMessage(
-                            messageUuid = messageUuid,
-                            messageId = 0,
-                            topicName = topic,
-                            payload = payload,
-                            qosLevel = qos,
-                            isRetain = true,
-                            isDup = false,
-                            isQueued = false,
-                            clientId = clientId
-                        )
-                        callback(message)
+        val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" } +
+                (if (topicName.endsWith("#")) ""
+                else {
+                    if (levels.size < MAX_FIXED_TOPIC_LEVELS) {
+                        " AND " + FIXED_TOPIC_COLUMN_NAMES[levels.size] + " = ''"
+                    } else {
+                        // For SQLite, check JSON array length
+                        " AND json_array_length(topic_r) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
                     }
+                })
+        val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid " +
+                  "FROM $tableName WHERE $where"
+        
+        val params = JsonArray()
+        filter.forEach { params.add(it.second) }
+        
+        logger.fine { "SQL: $sql [findMatchingMessages]" }
+        
+        sqlClient.executeQuery(sql, params).onComplete { result ->
+            if (result.succeeded()) {
+                val results = result.result()
+                results.forEach { row ->
+                    val rowObj = row as JsonObject
+                    val topic = rowObj.getString("topic")
+                    val payload = rowObj.getBinary("payload_blob") ?: ByteArray(0)
+                    val qos = rowObj.getInteger("qos", 0)
+                    val clientId = rowObj.getString("client_id", "")
+                    val messageUuid = rowObj.getString("message_uuid", "")
+                    val message = MqttMessage(
+                        messageUuid = messageUuid,
+                        messageId = 0,
+                        topicName = topic,
+                        payload = payload,
+                        qosLevel = qos,
+                        isRetain = true,
+                        isDup = false,
+                        isQueued = false,
+                        clientId = clientId
+                    )
+                    callback(message)
                 }
+            } else {
+                logger.severe("Error finding data for topic [$topicName]: ${result.cause()?.message}")
             }
-        } catch (e: SQLException) {
-            logger.severe("Error finding data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
         }
     }
 
@@ -250,21 +266,16 @@ class MessageStoreSQLite(
         ORDER BY topic
         """.trimIndent()
 
-        logger.fine { "findTopicsByName SQL: $sql with pattern '$sqlSearchPattern' [${Utils.getCurrentFunctionName()}]" }
-
-        SharedSQLiteConnection.executeBlockingVoid(dbPath) { connection ->
-            connection.prepareStatement(sql).use { preparedStatement ->
-                preparedStatement.setString(1, sqlNamespacePattern)
-                preparedStatement.setString(2, sqlSearchPattern)
-                val resultSet = preparedStatement.executeQuery()
-                while (resultSet.next()) {
-                    val fullTopic = resultSet.getString("topic") ?: ""
-                    resultTopics.add(fullTopic)
-                }
-            }
+        val params = JsonArray().add(sqlNamespacePattern).add(sqlSearchPattern)
+        
+        val results = sqlClient.executeQuerySync(sql, params)
+        results.forEach { row ->
+            val rowObj = row as JsonObject
+            val fullTopic = rowObj.getString("topic") ?: ""
+            resultTopics.add(fullTopic)
         }
 
-        logger.fine("findTopicsByName result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        logger.fine("findTopicsByName result: ${resultTopics.size} topics found")
         return resultTopics
     }
 
@@ -279,26 +290,21 @@ class MessageStoreSQLite(
         FROM $tableName
         WHERE topic_l = '${Const.MCP_CONFIG_TOPIC}' 
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
-        AND ${if (ignoreCase) "LOWER(json_extract(payload_json, '\$.$config'))" else "json_extract(payload_json, '\$.$config')"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
+        AND ${if (ignoreCase) "LOWER(json_extract(payload_json, '$.$config'))" else "json_extract(payload_json, '$.$config')"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
         ORDER BY topic
         """.trimIndent()
 
-        logger.fine { "findTopicsByDescription SQL: $sql with pattern '$sqlSearchPattern' [${Utils.getCurrentFunctionName()}]" }
-
-        SharedSQLiteConnection.executeBlockingVoid(dbPath) { connection ->
-            connection.prepareStatement(sql).use { preparedStatement ->
-                preparedStatement.setString(1, sqlNamespacePattern)
-                preparedStatement.setString(2, "%$sqlSearchPattern%")
-                val resultSet = preparedStatement.executeQuery()
-                while (resultSet.next()) {
-                    val fullTopic = resultSet.getString("topic") ?: ""
-                    val configJson = resultSet.getString("config") ?: ""
-                    resultTopics.add(Pair(fullTopic, configJson))
-                }
-            }
+        val params = JsonArray().add(sqlNamespacePattern).add("%$sqlSearchPattern%")
+        
+        val results = sqlClient.executeQuerySync(sql, params)
+        results.forEach { row ->
+            val rowObj = row as JsonObject
+            val fullTopic = rowObj.getString("topic") ?: ""
+            val configJson = rowObj.getString("config") ?: ""
+            resultTopics.add(Pair(fullTopic, configJson))
         }
 
-        logger.fine("findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        logger.fine("findTopicsByConfig result: ${resultTopics.size} topics found")
         return resultTopics
     }
 }
