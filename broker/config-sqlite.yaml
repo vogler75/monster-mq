@@ -1,0 +1,28 @@
+# MonsterMQ Configuration with SQLite Support
+TCP: 1883
+WS: 8080
+MaxMessageSizeKb: 8
+
+# Use SQLite for all storage needs
+SessionStoreType: SQLITE
+RetainedStoreType: SQLITE
+
+QueuedMessagesEnabled: true
+
+# Archive configuration with SQLite
+ArchiveGroups:
+  - Name: MCP
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: SQLITE
+    ArchiveType: SQLITE
+
+# SQLite configuration
+SQLite:
+  Path: "monstermq.db"
+
+# MCP Server configuration
+MCP:
+  Enabled: true
+  Port: 3000

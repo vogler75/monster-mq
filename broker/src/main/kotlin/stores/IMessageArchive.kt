@@ -11,7 +11,8 @@ enum class MessageArchiveType {
     POSTGRES,
     CRATEDB,
     MONGODB,
-    KAFKA
+    KAFKA,
+    SQLITE
 }
 
 interface IMessageArchive {

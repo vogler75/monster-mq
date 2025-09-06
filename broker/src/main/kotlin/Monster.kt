@@ -21,6 +21,9 @@ import at.rocworks.stores.mongodb.SessionStoreMongoDB
 import at.rocworks.stores.postgres.MessageArchivePostgres
 import at.rocworks.stores.postgres.MessageStorePostgres
 import at.rocworks.stores.postgres.SessionStorePostgres
+import at.rocworks.stores.sqlite.MessageArchiveSQLite
+import at.rocworks.stores.sqlite.MessageStoreSQLite
+import at.rocworks.stores.sqlite.SessionStoreSQLiteSimple
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
@@ -58,6 +61,9 @@ class Monster(args: Array<String>) {
     private val mongoDbConfig = object {
         var url: String = ""
         var database: String = ""
+    }
+    private val sqliteConfig = object {
+        var path: String = ""
     }
 
     companion object {
@@ -151,6 +157,9 @@ class Monster(args: Array<String>) {
                 configJson.getJsonObject("MongoDB", JsonObject()).let { mongo ->
                     mongoDbConfig.url = mongo.getString("Url", "mongodb://localhost:27017")
                     mongoDbConfig.database = mongo.getString("Database", "monster")
+                }
+                configJson.getJsonObject("SQLite", JsonObject()).let { sqlite ->
+                    sqliteConfig.path = sqlite.getString("Path", "monstermq.db")
                 }
                 startMonster(vertx)
             } else {
@@ -327,6 +336,9 @@ class Monster(args: Array<String>) {
             SessionStoreType.MONGODB -> {
                 SessionStoreMongoDB(mongoDbConfig.url, mongoDbConfig.database)
             }
+            SessionStoreType.SQLITE -> {
+                SessionStoreSQLiteSimple(sqliteConfig.path)
+            }
         }
         val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
         vertx.deployVerticle(store, options).onSuccess {
@@ -382,6 +394,12 @@ class Monster(args: Array<String>) {
                 vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 store
             }
+            MessageStoreType.SQLITE -> {
+                val store = MessageStoreSQLite(name, sqliteConfig.path)
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                store
+            }
         }
         return store to promise.future()
     }
@@ -422,6 +440,15 @@ class Monster(args: Array<String>) {
                     name = name,
                     connectionString = mongoDbConfig.url,
                     databaseName = mongoDbConfig.database
+                )
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                store
+            }
+            MessageArchiveType.SQLITE -> {
+                val store = MessageArchiveSQLite(
+                    name = name,
+                    dbPath = sqliteConfig.path
                 )
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }

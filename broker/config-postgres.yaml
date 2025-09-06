@@ -1,0 +1,32 @@
+TCP: 1883
+TPCS: 8883
+WS: 9000
+WSS: 9001
+
+MaxMessageSizeKb: 512
+QueuedMessagesEnabled: true
+
+SessionStoreType: POSTGRES
+RetainedStoreType: POSTGRES
+
+SparkplugMetricExpansion:
+  Enabled: true
+
+ArchiveGroups:
+  - Name: MCP
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
+
+Kafka:
+  Servers: linux0:9092
+  Bus: # Use Kafka as the message bus
+    Enabled: false
+    Topic: monster
+
+Postgres:
+  Url: jdbc:postgresql://linux5:5432/monster
+  User: system
+  Pass: manager

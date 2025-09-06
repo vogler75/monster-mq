@@ -52,7 +52,8 @@
       "enum": [
         "POSTGRES",
         "CRATEDB",
-        "MONGODB"
+        "MONGODB",
+        "SQLITE"
       ]
     },
     "RetainedStoreType": {
@@ -62,7 +63,8 @@
         "HAZELCAST",
         "POSTGRES",
         "CRATEDB",
-        "MONGODB"
+        "MONGODB",
+        "SQLITE"
       ]
     },
     "QueuedMessagesEnabled": {
@@ -97,7 +99,8 @@
               "HAZELCAST",
               "POSTGRES",
               "CRATEDB",
-              "MONGODB"
+              "MONGODB",
+              "SQLITE"
             ]
           },
           "ArchiveType": {
@@ -107,7 +110,8 @@
               "POSTGRES",
               "CRATEDB",
               "MONGODB",
-              "KAFKA"
+              "KAFKA",
+              "SQLITE"
             ]
           }
         },
@@ -172,6 +176,16 @@
       "required": [
         "Url"
       ]
+    },
+    "SQLite": {
+      "type": "object",
+      "properties": {
+        "Path": {
+          "type": "string",
+          "description": "Path to SQLite database file",
+          "default": "monstermq.db"
+        }
+      }
     }
   },
   "required": [

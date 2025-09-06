@@ -163,6 +163,13 @@
             <version>5.4.0</version>
         </dependency>
 
+        <!-- SQLite JDBC Driver -->
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
+            <version>3.47.1.0</version>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.github.f4b6a3/uuid-creator -->
         <dependency>
             <groupId>com.github.f4b6a3</groupId>
