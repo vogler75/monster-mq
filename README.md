@@ -1,32 +1,89 @@
-# Monster MQ
+# MonsterMQ
 
-MonsterMQ is a MQTT broker built on Vert.X and Hazelcast with data persistence through PostgreSQL or CrateDB or MongoDB. It also comes with a MCP (Model Context Protocol) Server for AI integration.
+MonsterMQ is a high-performance, scalable MQTT broker built on Vert.X and Hazelcast with persistent data storage through PostgreSQL, CrateDB, MongoDB, or SQLite. It features built-in clustering, unlimited message storage, and AI integration through a Model Context Protocol (MCP) server.
+
 ![Logo](Logo.png)
 
-## Features
+## 🚀 Key Features
 
-MonsterMQ can store unlimited amounts of retained messages. Also the message queue for message with QoS>0 and persistent offline sessions are unlimited because they are stored in PostgreSQL/CrateDB/MongoDB.
+### **Enterprise-Grade MQTT Broker**
+- **MQTT 3.1.1 Protocol Support** - Full compliance with MQTT 3.1.1 specification
+- **Unlimited Message Storage** - Store unlimited retained messages and persistent sessions
+- **QoS 0, 1, 2 Support** - Complete Quality of Service level implementation
+- **Persistent Sessions** - Offline message queuing for `cleanSession=false` clients
+- **WebSocket Support** - MQTT over WebSockets (WS/WSS) for web applications
+- **TLS/SSL Security** - Secure connections with certificate-based authentication
 
-Clustering is supported through Hazelcast, which allows you to run multiple instances of the broker in a cluster. With that you can scale the broker horizontally and have a high availability setup, and also you can build hierarchical clusters with multiple levels of brokers, like having a top server and multiple server for each product line or factory. If clients are connected to the top server, they can subscribe to topics of the lower servers and receive messages from them. This allows you to build a distributed system with multiple levels of brokers.
+### **Horizontal Scaling & High Availability**
+- **Hazelcast Clustering** - Native support for multi-node clusters
+- **Hierarchical Architecture** - Build distributed systems with multiple broker levels
+- **Cross-Cluster Messaging** - Clients can subscribe to topics across different cluster nodes
+- **Load Distribution** - Automatic load balancing across cluster members
+- **High Availability** - Automatic failover and redundancy
 
-## Limitations
+### **Multi-Database Backend Support**
+MonsterMQ supports multiple database backends for different storage needs:
 
-Currently the broker does not support MQTT5 features like shared subscriptions, message expiry, etc. It is planned to add these features in the future.
+| Database | Session Store | Retained Store | Message Archive | Message Store | Use Case |
+|----------|:-------------:|:--------------:|:---------------:|:-------------:|:---------|
+| **PostgreSQL** | ✅ | ✅ | ✅ | ✅ | Production, full SQL features |
+| **SQLite** | ✅ | ✅ | ✅ | ✅ | Development, single-instance |
+| **CrateDB** | ✅ | ✅ | ✅ | ✅ | Time-series, analytics |
+| **MongoDB** | ✅ | ✅ | ✅ | ✅ | Document-based, NoSQL |
+| **Memory** | ❌ | ✅ | ❌ | ✅ | High-speed, volatile |
+| **Hazelcast** | ❌ | ✅ | ❌ | ✅ | Distributed cache, clustering |
+| **Kafka** | ❌ | ❌ | ✅ | ❌ | Streaming, event sourcing |
 
-Because MonsterMQ uses databases like PostgreSQL or CrateDB for storage, its performance is limited by the database and the scalability options provided by those databases.
+**Advanced Features** (PostgreSQL & SQLite only):
+- Historical message queries with time filtering
+- Advanced topic search and discovery  
+- Raw SQL query execution for analytics
+- Configuration-based topic filtering
 
-Currenlty there are no ACL (Access Control Lists) implemented, so all clients can subscribe and publish to all topics. This is planned to be added in the future.
+### **AI Integration (MCP Server)**
+- **Model Context Protocol Support** - Built-in MCP server for AI model integration
+- **Real-time Data Access** - AI models can query current and historical MQTT data
+- **Topic Analytics** - Advanced search and filtering capabilities for AI applications
+- **RESTful API** - HTTP interface for external integrations
 
-## Docker Image
+### **SparkplugB Extension**
+- **Automatic Message Expansion** - Converts SparkplugB messages from `spBv1.0` to `spBv1.0e` topics
+- **Industrial IoT Support** - Native support for Sparkplug specification
+- **Metric Extraction** - Automatic parsing and expansion of Sparkplug payloads
 
-> docker run -v ./log:/app/log -v ./config.yaml:/app/config.yaml rocworks/monstermq [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
+## 🏗️ Architecture
 
-## Docker Compose
+MonsterMQ follows a modular architecture with pluggable storage backends:
+
 ```
+┌─────────────────┐    ┌──────────────┐    ┌─────────────────┐
+│   MQTT Clients  │───▶│   MonsterMQ  │───▶│   Databases     │
+│                 │    │   Broker     │    │                 │
+│ • TCP/TLS       │    │              │    │ • PostgreSQL    │
+│ • WebSocket     │    │ ┌──────────┐ │    │ • SQLite        │
+│ • QoS 0,1,2     │    │ │Clustering│ │    │ • CrateDB       │
+└─────────────────┘    │ │Hazelcast │ │    │ • MongoDB       │
+                       │ └──────────┘ │    └─────────────────┘
+┌─────────────────┐    │              │    
+│   MCP Server    │◀───┤ ┌──────────┐ │    ┌─────────────────┐
+│                 │    │ │ Message  │ │───▶│   Kafka         │
+│ • AI Models     │    │ │ Archive  │ │    │   (Archive)     │
+│ • Analytics     │    │ └──────────┘ │    └─────────────────┘
+│ • Port 3000     │    └──────────────┘    
+└─────────────────┘
+```
+
+## 📦 Quick Start
+
+### Docker Compose (Recommended)
+
+Create a `docker-compose.yml`:
+
+```yaml
 services:
-  timescale:
+  postgres:
     image: timescale/timescaledb:latest-pg16
-    container_name: timescale
+    container_name: postgres
     restart: unless-stopped
     ports:
       - 5432:5432
@@ -35,101 +92,337 @@ services:
     environment:
       POSTGRES_USER: system
       POSTGRES_PASSWORD: manager
+      POSTGRES_DB: monster
+
   monstermq:
     image: rocworks/monstermq:latest
     container_name: monstermq
     restart: unless-stopped
     ports:
-      - 1883:1883
-      - 8883:8883
-      - 9000:9000
-      - 9001:9001
-      - 3000:3000
+      - 1883:1883    # MQTT TCP
+      - 8883:8883    # MQTT TLS
+      - 9000:9000    # WebSocket
+      - 9001:9001    # WebSocket TLS
+      - 3000:3000    # MCP Server
     volumes:
       - ./config.yaml:/app/config.yaml
-      # optionally log to files with log rotation
-      #- ./log:/app/log      
-      #- ./logging-file.properties:/app/logging.properties # see broker/src/main/resources/*
-    command: ["-log INFO"]
+    command: ["-config", "config.yaml", "-log", "INFO"]
+    depends_on:
+      - postgres
 ```
 
-## Build Locally 
+Create a `config.yaml`:
 
-> cd broker  
-> mvn package  
-> java -classpath target/classes:target/dependencies/* at.rocworks.MainKt $@  
-
-## Configuration 
-
-Use the YAML schema "broker/yaml-json-schema.json" in your editor.
-
-```
-TCP: 1883 # TCP Port (0=Disabled)
-TCPS: 1884 # TCP Port with TLS (0=Disabled)
-
-WS: 9001 # Websockets Port (0=Disabled)
-WSS: 9002 # Websockets Port with TLS (0=Disabled)
-
+```yaml
+TCP: 1883
+WS: 9000
+TCPS: 8883
+WSS: 9001
 MaxMessageSizeKb: 512
-QueuedMessagesEnabled: true # if false the QoS>0 messages will not be queued for persistant sessions
 
-SessionStoreType: POSTGRES  # POSTGRES, CRATEDB
-RetainedStoreType: POSTGRES  # MEMORY, HAZELCAST, POSTGRES, CRATEDB
+SessionStoreType: POSTGRES
+RetainedStoreType: POSTGRES
 
-SparkplugMetricExpansion:
-  Enabled: true # Expand SparkplugB messages from spBv1.0 to spBv1.0e topic
+QueuedMessagesEnabled: true
 
 ArchiveGroups:
-  - Name: "group1"
+  - Name: MCP
     Enabled: true
-    TopicFilter: [ "test1/#" ] # list of topic filters 
-    RetainedOnly: false # Store only retained messages or all
-    LastValType: POSTGRES # NONE, MEMORY, HAZELCAST, POSTGRES, CRATEDB
-    ArchiveType: POSTGRES # NONE, POSTGRES, CRATEDB, KAFKA
-
-  - Name: "group2"
-    Enabled: true
-    TopicFilter: [ "test2/#" ]
+    TopicFilter: [ "#" ]
     RetainedOnly: false
     LastValType: POSTGRES
     ArchiveType: POSTGRES
 
-  - Name: MCP # Must be named MCP to be used by the MCP Server
-    Enabled: true
-    TopicFilter: [ "Original/#" ]
-    RetainedOnly: false
-    LastValType: POSTGRES # Lst value is needed to read current values for MCP
-    ArchiveType: POSTGRES # Optionally store the messages in the archive to be able to read them by MCP
-
-Kafka:
-  Servers: linux0:9092
-  Bus: # Use Kafka as the message bus
-    Enabled: false
-    Topic: monster
-
 Postgres:
-  Url: jdbc:postgresql://timescale:5432/monster
+  Url: jdbc:postgresql://postgres:5432/monster
   User: system
   Pass: manager
 
+MCP:
+  Enabled: true
+  Port: 3000
+```
+
+Start the services:
+
+```bash
+docker-compose up -d
+```
+
+### SQLite (Lightweight Setup)
+
+For development or single-instance deployments, use SQLite:
+
+```yaml
+TCP: 1883
+WS: 8080
+MaxMessageSizeKb: 8
+
+SessionStoreType: SQLITE
+RetainedStoreType: SQLITE
+QueuedMessagesEnabled: true
+
+ArchiveGroups:
+  - Name: MCP
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: SQLITE
+    ArchiveType: SQLITE
+
+SQLite:
+  Path: "monstermq.db"
+
+MCP:
+  Enabled: true
+  Port: 3000
+```
+
+### Build from Source
+
+```bash
+cd broker
+mvn clean package
+java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -config config.yaml
+```
+
+## ⚙️ Configuration Reference
+
+### YAML Schema Support
+
+MonsterMQ includes a comprehensive JSON schema for configuration validation and auto-completion:
+
+**VS Code Setup:**
+1. Install the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) by Red Hat
+2. Add this to your VS Code `settings.json`:
+   ```json
+   {
+     "yaml.schemas": {
+       "./broker/yaml-json-schema.json": "config*.yaml"
+     }
+   }
+   ```
+3. Open any `config*.yaml` file to get:
+   - ✅ Auto-completion for all configuration options
+   - ✅ Inline documentation and descriptions
+   - ✅ Real-time validation and error highlighting
+   - ✅ Type checking for values
+
+**Other Editors:**
+- The schema file is located at `broker/yaml-json-schema.json`
+- Most modern editors with YAML/JSON schema support can use this file
+- Provides complete documentation of all available configuration options
+
+### Network Ports
+```yaml
+TCP: 1883           # MQTT TCP port (0=disabled)
+TCPS: 8883          # MQTT TLS port (0=disabled)
+WS: 9000            # MQTT WebSocket port (0=disabled)
+WSS: 9001           # MQTT WebSocket TLS port (0=disabled)
+MaxMessageSizeKb: 512
+```
+
+### Storage Configuration
+```yaml
+SessionStoreType: POSTGRES     # POSTGRES, CRATEDB, MONGODB, SQLITE
+RetainedStoreType: POSTGRES    # MEMORY, HAZELCAST, POSTGRES, CRATEDB, SQLITE
+QueuedMessagesEnabled: true    # Enable QoS>0 message queuing
+```
+
+### Archive Groups
+Archive groups define how messages are stored for historical access and analytics:
+
+```yaml
+ArchiveGroups:
+  - Name: "production"
+    Enabled: true
+    TopicFilter: [ "sensors/#", "devices/#" ]
+    RetainedOnly: false
+    LastValType: POSTGRES      # Current value storage
+    ArchiveType: POSTGRES      # Historical message storage
+
+  - Name: MCP                  # Required for MCP server
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: POSTGRES      # Required for MCP
+    ArchiveType: POSTGRES      # Optional for MCP
+```
+
+### Database Connections
+
+**PostgreSQL:**
+```yaml
+Postgres:
+  Url: jdbc:postgresql://localhost:5432/monster
+  User: system
+  Pass: manager
+```
+
+**SQLite:**
+```yaml
+SQLite:
+  Path: "monstermq.db"  # File path (created automatically)
+```
+
+**CrateDB:**
+```yaml
 CrateDB:
   Url: jdbc:postgresql://cratedb:5432/monster
   User: crate
   Pass: ""
-
-MongoDB:
-  Url: mongodb://system:manager@mongodb:27017
-  Database: monster  
-
 ```
 
-# MCP Server
+**MongoDB:**
+```yaml
+MongoDB:
+  Url: mongodb://system:manager@mongodb:27017
+  Database: monster
+```
 
-The MCP Server is a Model Context Protocol server that allows you to integrate AI models with MonsterMQ. The MCP Server needs a ArchiveGroup named "MCP", which is used to store the message which can be used by the MCP Server. If the archive group also has history enabled, the MCP Server can also read the history of messages. Currently only PostgreSQL is supported as a storage for the MCP Server.
+### Clustering
+```yaml
+# Run with: java ... -cluster
+# Automatic Hazelcast clustering
+# Nodes discover each other automatically
+```
 
-The MCP Server is running on port 3000. 
+### Kafka Integration
+```yaml
+Kafka:
+  Servers: kafka:9092
+  Bus:                    # Use Kafka as message bus
+    Enabled: false
+    Topic: monster
+  # Archive groups can use ArchiveType: KAFKA
+```
+
+### Extensions
+```yaml
+SparkplugMetricExpansion:
+  Enabled: true          # Expand SparkplugB messages
+
+MCP:
+  Enabled: true
+  Port: 3000            # Model Context Protocol server
+```
+
+## 🔧 Advanced Features
+
+### Clustering Setup
+
+1. **Start first node:**
+   ```bash
+   java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -cluster -config config.yaml
+   ```
+
+2. **Start additional nodes:**
+   ```bash
+   # On different machines, same config
+   java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -cluster -config config.yaml
+   ```
+
+3. **Hierarchical clusters:**
+   - Configure different archive groups per level
+   - Use topic filters to route messages between levels
+   - Clients can subscribe across cluster boundaries
+
+### MCP Server Integration
+
+The MCP server provides AI models with access to MQTT data:
+
+```python
+# Example: Connect AI model to MonsterMQ MCP server
+import mcp_client
+
+client = mcp_client.connect("http://localhost:3000")
+
+# Query current values
+current_data = client.query_topics("sensors/#")
+
+# Get historical data
+history = client.get_history("sensors/temperature", 
+                           start_time="2024-01-01T00:00:00Z",
+                           limit=1000)
+
+# Execute custom queries (PostgreSQL/SQLite only)
+results = client.execute_query("""
+    SELECT topic, AVG(payload::float) as avg_value 
+    FROM mcparchive 
+    WHERE topic LIKE 'sensors/%' 
+    AND time > NOW() - INTERVAL '1 hour'
+    GROUP BY topic
+""")
+```
+
+### Performance Tuning
+
+**Database Optimization:**
+- Use connection pooling for high throughput
+- Configure appropriate indexes for your topic patterns  
+- Consider partitioning for large datasets (PostgreSQL/CrateDB)
+
+**Memory Settings:**
+```bash
+java -Xmx4g -Xms2g -classpath target/classes:target/dependencies/* at.rocworks.MainKt
+```
+
+**Hazelcast Tuning:**
+- Adjust cluster discovery timeouts
+- Configure network interfaces for multi-node setups
+- Monitor memory usage across cluster nodes
+
+## 🚨 Limitations
+
+- **MQTT Version:** Only MQTT 3.1.1 supported (MQTT 5.0 features planned)
+- **Authentication:** No built-in ACL system (planned for future release)
+- **Performance:** Limited by database backend performance and network latency
+- **Advanced Features:** Historical queries and topic search only available with PostgreSQL and SQLite
+
+## 📊 Monitoring
+
+### Health Endpoints
+- Basic health monitoring through log files
+- Database connection status in logs
+- Client connection metrics in `$SYS` topics
+
+### Logging Configuration
+```bash
+# Available log levels
+java ... -log FINEST    # Detailed debugging
+java ... -log FINE      # Debug information  
+java ... -log INFO      # General information
+java ... -log WARNING   # Warnings only
+java ... -log SEVERE    # Errors only
+```
+
+### Custom Logging
+```bash
+# Use custom logging configuration
+-Djava.util.logging.config.file=logging.properties
+```
+
+## 🔐 Security
+
+### TLS Configuration
+1. **Generate keystore:**
+   ```bash
+   keytool -genkeypair -alias monstermq -keyalg RSA -keysize 2048 -validity 365 \
+           -keystore server-keystore.jks -storepass password
+   ```
+
+2. **Configure TLS ports:**
+   ```yaml
+   TCPS: 8883     # MQTT over TLS
+   WSS: 9001      # MQTT over WebSocket TLS
+   ```
+
+### Database Security
+- Use encrypted connections to databases
+- Configure appropriate user permissions
+- Regular security updates for database systems
 
 
+---
 
-
-
+**MonsterMQ** - Powering the next generation of IoT and real-time messaging applications with enterprise-grade reliability and AI integration.
