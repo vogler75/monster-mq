@@ -327,6 +327,279 @@ MCP:
    - Use topic filters to route messages between levels
    - Clients can subscribe across cluster boundaries
 
+## 🌐 Hazelcast Clustering
+
+MonsterMQ uses **Hazelcast** as its clustering engine to provide high availability, horizontal scaling, and distributed caching across multiple broker instances. When running in cluster mode with the `-cluster` flag, MonsterMQ automatically forms a distributed cluster where:
+
+- **MQTT clients** can connect to any cluster node
+- **Messages are shared** across all cluster members in real-time  
+- **Retained messages** are distributed using Hazelcast distributed maps
+- **Session state** is synchronized across the cluster
+- **Automatic failover** ensures high availability
+
+### Cluster Configuration
+
+#### 1. Docker Setup with Hazelcast
+
+The `docker` directory contains a complete Hazelcast clustering setup. Here's how to use it:
+
+**File structure:**
+```
+docker/
+├── docker-compose.yml     # Container orchestration  
+├── hazelcast.xml         # Cluster network configuration
+├── entrypoint.sh         # Startup script with Hazelcast support
+├── config.yaml           # MonsterMQ broker configuration
+└── Dockerfile            # Container build instructions
+```
+
+**Starting a cluster with Docker:**
+
+```bash
+cd docker
+
+# Start first cluster node
+docker-compose up -d
+
+# Scale to multiple nodes
+docker-compose up -d --scale mqtt=3
+```
+
+The `docker-compose.yml` automatically configures clustering:
+
+```yaml
+services:
+  mqtt:
+    image: rocworks/monstermq:latest
+    restart: always
+    network_mode: host
+    environment:
+      - HAZELCAST_CONFIG=hazelcast.xml        # 👈 Key configuration
+      - PUBLIC_ADDRESS=192.168.1.10          # Optional: external IP
+    volumes:
+      - ./log:/app/log
+      - ./config.yaml:/app/config.yaml
+      - ./hazelcast.xml:/app/hazelcast.xml    # 👈 Mount cluster config
+    command: ["-cluster"]                     # 👈 Enable clustering
+```
+
+#### 2. Hazelcast Network Configuration
+
+The `docker/hazelcast.xml` file defines how cluster nodes discover each other:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<hazelcast xmlns="http://www.hazelcast.com/schema/config">
+    <network>
+        <port auto-increment="true" port-count="100">5701</port>
+        
+        <join>
+            <!-- Disable multicast for production -->
+            <multicast enabled="false"/>
+            
+            <!-- Manual TCP/IP discovery -->
+            <tcp-ip enabled="true">
+                <member>192.168.1.4:5701</member>   <!-- Node 1 -->
+                <member>192.168.1.31:5701</member>  <!-- Node 2 -->
+                <member>192.168.1.32:5701</member>  <!-- Node 3 -->
+            </tcp-ip>
+        </join>
+        
+        <!-- Restrict to specific network -->
+        <interfaces enabled="true">
+            <interface>192.168.1.*</interface>
+        </interfaces>
+    </network>
+</hazelcast>
+```
+
+**Key configuration options:**
+- **Port**: Hazelcast inter-node communication (default: 5701)
+- **TCP/IP Discovery**: Manually specify cluster member IPs
+- **Network Interfaces**: Restrict cluster traffic to specific networks
+- **Auto-increment**: Allow multiple nodes on same machine (testing only)
+
+#### 3. Environment Variables
+
+The `docker/entrypoint.sh` script supports these environment variables:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `HAZELCAST_CONFIG` | Path to hazelcast.xml config file | `hazelcast.xml` |
+| `PUBLIC_ADDRESS` | External IP for cluster communication | `192.168.1.10:5701` |
+
+**Setting environment variables:**
+
+```bash
+# Docker Compose
+environment:
+  - HAZELCAST_CONFIG=hazelcast.xml
+  - PUBLIC_ADDRESS=192.168.1.10
+
+# Docker Run  
+docker run -e HAZELCAST_CONFIG=hazelcast.xml \
+           -e PUBLIC_ADDRESS=192.168.1.10 \
+           rocworks/monstermq -cluster
+
+# Standalone Java
+java -Dvertx.hazelcast.config=hazelcast.xml \
+     -Dhazelcast.local.publicAddress=192.168.1.10 \
+     -classpath ... at.rocworks.MainKt -cluster
+```
+
+### Cluster Operations
+
+#### Distributed Message Stores
+
+When clustering is enabled, MonsterMQ automatically uses Hazelcast-backed stores:
+
+```yaml
+# Cluster-aware configuration
+RetainedStoreType: HAZELCAST   # Distributed retained messages
+# Note: SessionStore still requires database (PostgreSQL, etc.)
+```
+
+**How it works:**
+- **Retained messages** are stored in Hazelcast distributed maps
+- **All cluster nodes** have access to the same retained message state
+- **Automatic replication** ensures no data loss on node failures
+- **Memory efficient** - messages are partitioned across nodes
+
+#### Client Connection Balancing
+
+Clients can connect to any cluster node:
+
+```bash
+# Clients can connect to any node
+mqtt_client.connect("192.168.1.4:1883")   # Node 1
+mqtt_client.connect("192.168.1.31:1883")  # Node 2  
+mqtt_client.connect("192.168.1.32:1883")  # Node 3
+
+# All receive the same messages regardless of connection point
+```
+
+#### Cross-Node Message Routing
+
+Messages published to one node are automatically distributed:
+
+```
+Client A → Node 1 → [Message] → Hazelcast Cluster → Node 2 → Client B
+                              → Node 3 → Client C
+```
+
+### Monitoring Cluster Health
+
+#### Log Monitoring
+Cluster status appears in MonsterMQ logs:
+
+```bash
+# Successful cluster formation
+INFO: Hazelcast cluster formed with 3 members
+INFO: Local member: Node[192.168.1.4]:5701
+INFO: Cluster members: [192.168.1.4:5701, 192.168.1.31:5701, 192.168.1.32:5701]
+
+# Node joining cluster  
+INFO: Member added to cluster: Node[192.168.1.32]:5701
+```
+
+#### Health Handler Integration
+MonsterMQ includes a health handler that monitors cluster status:
+
+```kotlin
+// Accessible via MCP server or custom endpoints
+// Reports:
+// - Cluster member count
+// - Local node ID  
+// - Cluster health status
+// - Memory usage across nodes
+```
+
+### Production Deployment Best Practices
+
+#### 1. Network Topology
+```bash
+# Production setup - separate Hazelcast network
+# App Traffic: 1883 (MQTT), 9000 (WebSocket), 3000 (MCP)
+# Cluster Traffic: 5701 (Hazelcast)
+
+# Firewall rules
+iptables -A INPUT -p tcp --dport 5701 -s 192.168.1.0/24 -j ACCEPT
+iptables -A INPUT -p tcp --dport 1883 -s 0.0.0.0/0 -j ACCEPT
+```
+
+#### 2. Resource Planning
+```bash
+# Memory: Plan for distributed maps + local data
+# Network: Hazelcast uses significant bandwidth for replication  
+# Disk: Only for database backends (PostgreSQL, SQLite)
+
+# Example 3-node cluster
+Node 1: 4GB RAM, 2 CPUs
+Node 2: 4GB RAM, 2 CPUs  
+Node 3: 4GB RAM, 2 CPUs
+Database: 8GB RAM, 4 CPUs (separate server)
+```
+
+#### 3. Split-Brain Prevention
+```xml
+<!-- Add to hazelcast.xml for production -->
+<network>
+    <join>
+        <tcp-ip enabled="true">
+            <member-list>
+                <member>192.168.1.4:5701</member>
+                <member>192.168.1.31:5701</member>
+                <member>192.168.1.32:5701</member>
+            </member-list>
+        </tcp-ip>
+    </join>
+</network>
+
+<!-- Minimum cluster size -->
+<cluster-member-count>2</cluster-member-count>
+```
+
+### Troubleshooting Clustering
+
+#### Common Issues
+
+**1. Nodes not discovering each other:**
+```bash
+# Check network connectivity
+telnet 192.168.1.31 5701
+
+# Verify hazelcast.xml member list
+# Ensure firewall allows port 5701
+# Check HAZELCAST_CONFIG environment variable
+```
+
+**2. Split-brain scenarios:**
+```bash  
+# Symptoms: Multiple small clusters instead of one large cluster
+# Fix: Review member-list in hazelcast.xml
+# Fix: Ensure stable network connectivity
+# Fix: Add minimum cluster size requirement
+```
+
+**3. Memory issues:**
+```bash
+# Symptoms: OutOfMemoryError in cluster
+# Fix: Increase JVM heap size: -Xmx4g
+# Fix: Monitor Hazelcast memory usage
+# Fix: Optimize distributed map configurations
+```
+
+**4. Performance degradation:**
+```bash
+# Check network latency between nodes
+ping 192.168.1.31
+
+# Monitor Hazelcast metrics
+# Consider reducing cluster size or optimizing network
+```
+
+The Hazelcast clustering in MonsterMQ provides enterprise-grade scalability and reliability, making it suitable for high-availability IoT deployments and real-time messaging systems that require horizontal scaling.
+
 ### MCP Server Integration
 
 The MCP server provides AI models with access to MQTT data:
