@@ -158,8 +158,9 @@ class MqttClient(
             }
 
             // Set last will (with MQTT 5 properties if applicable)
-            val willMessage = if (endpoint.will() != null) {
-                MqttMessage(clientId, endpoint.will()!!, protocolVersion)
+            val will = endpoint.will()
+            val willMessage = if (will != null && will.isWillFlag && will.willTopic != null) {
+                MqttMessage(clientId, will, protocolVersion)
             } else null
             sessionHandler.setLastWill(clientId, willMessage)
 
