@@ -183,7 +183,16 @@ MCP:
 ```bash
 cd broker
 mvn clean package
+
+# Show help for available options
+java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -help
+
+# Start with configuration
 java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -config config.yaml
+
+# Or use the convenience script
+./run.sh -help
+./run.sh -config config.yaml
 ```
 
 ## ⚙️ Configuration Reference
@@ -502,18 +511,6 @@ INFO: Cluster members: [192.168.1.4:5701, 192.168.1.31:5701, 192.168.1.32:5701]
 INFO: Member added to cluster: Node[192.168.1.32]:5701
 ```
 
-#### Health Handler Integration
-MonsterMQ includes a health handler that monitors cluster status:
-
-```kotlin
-// Accessible via MCP server or custom endpoints
-// Reports:
-// - Cluster member count
-// - Local node ID  
-// - Cluster health status
-// - Memory usage across nodes
-```
-
 ### Production Deployment Best Practices
 
 #### 1. Network Topology
@@ -559,53 +556,14 @@ Database: 8GB RAM, 4 CPUs (separate server)
 <cluster-member-count>2</cluster-member-count>
 ```
 
-### Troubleshooting Clustering
-
-#### Common Issues
-
-**1. Nodes not discovering each other:**
-```bash
-# Check network connectivity
-telnet 192.168.1.31 5701
-
-# Verify hazelcast.xml member list
-# Ensure firewall allows port 5701
-# Check HAZELCAST_CONFIG environment variable
-```
-
-**2. Split-brain scenarios:**
-```bash  
-# Symptoms: Multiple small clusters instead of one large cluster
-# Fix: Review member-list in hazelcast.xml
-# Fix: Ensure stable network connectivity
-# Fix: Add minimum cluster size requirement
-```
-
-**3. Memory issues:**
-```bash
-# Symptoms: OutOfMemoryError in cluster
-# Fix: Increase JVM heap size: -Xmx4g
-# Fix: Monitor Hazelcast memory usage
-# Fix: Optimize distributed map configurations
-```
-
-**4. Performance degradation:**
-```bash
-# Check network latency between nodes
-ping 192.168.1.31
-
-# Monitor Hazelcast metrics
-# Consider reducing cluster size or optimizing network
-```
-
-The Hazelcast clustering in MonsterMQ provides enterprise-grade scalability and reliability, making it suitable for high-availability IoT deployments and real-time messaging systems that require horizontal scaling.
-
 ### MCP Server Integration
 
 The MCP server provides AI models with access to MQTT data:
+> pip install mcp
 
 ```python
 # Example: Connect AI model to MonsterMQ MCP server
+
 import mcp_client
 
 client = mcp_client.connect("http://localhost:3000")
@@ -627,23 +585,6 @@ results = client.execute_query("""
     GROUP BY topic
 """)
 ```
-
-### Performance Tuning
-
-**Database Optimization:**
-- Use connection pooling for high throughput
-- Configure appropriate indexes for your topic patterns  
-- Consider partitioning for large datasets (PostgreSQL/CrateDB)
-
-**Memory Settings:**
-```bash
-java -Xmx4g -Xms2g -classpath target/classes:target/dependencies/* at.rocworks.MainKt
-```
-
-**Hazelcast Tuning:**
-- Adjust cluster discovery timeouts
-- Configure network interfaces for multi-node setups
-- Monitor memory usage across cluster nodes
 
 ## 🚨 Limitations
 

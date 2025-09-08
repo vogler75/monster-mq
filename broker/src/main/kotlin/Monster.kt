@@ -121,6 +121,12 @@ class Monster(args: Array<String>) {
     init {
         Utils.initLogging()
 
+        // Check for help argument first
+        if (args.contains("-help") || args.contains("--help") || args.contains("-h")) {
+            printHelp()
+            exitProcess(0)
+        }
+
         if (singleton==null) singleton = this
         else throw Exception("Monster instance is already initialized.")
 
@@ -147,6 +153,56 @@ class Monster(args: Array<String>) {
             clusterSetup(builder)
         else
             localSetup(builder)
+    }
+
+    private fun printHelp() {
+        println("""
+MonsterMQ - High-Performance MQTT Broker
+Usage: java -classpath target/classes:target/dependencies/* at.rocworks.MainKt [OPTIONS]
+
+OPTIONS:
+  -help, --help, -h     Show this help message and exit
+  
+  -config <file>        Configuration file path (default: config.yaml)
+                        Environment: GATEWAY_CONFIG
+  
+  -cluster              Enable Hazelcast clustering mode for multi-node deployment
+                        
+  -log <level>          Set logging level
+                        Levels: ALL, FINEST, FINER, FINE, INFO, WARNING, SEVERE
+                        Default: INFO
+
+EXAMPLES:
+  # Start with default configuration
+  java -classpath target/classes:target/dependencies/* at.rocworks.MainKt
+  
+  # Start with custom config file
+  java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -config myconfig.yaml
+  
+  # Start in cluster mode with debug logging
+  java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -cluster -log FINE
+  
+  # Start with SQLite configuration and detailed logging  
+  java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -config config-sqlite.yaml -log FINEST
+
+FEATURES:
+  • MQTT 3.1.1 Protocol Support with QoS 0, 1, 2
+  • Multi-Database Support: PostgreSQL, SQLite, CrateDB, MongoDB
+  • WebSocket Support (WS/WSS) for web applications
+  • Hazelcast Clustering for horizontal scaling
+  • Model Context Protocol (MCP) Server for AI integration
+  • SparkplugB Extension for Industrial IoT
+  • Persistent Sessions and Message Queuing
+
+CONFIGURATION:
+  Configuration is done via YAML file. See config.yaml for examples.
+  Schema validation available at: broker/yaml-json-schema.json
+
+MORE INFO:
+  Documentation: README.md
+  Source: https://github.com/rocworks/monstermq
+  License: GNU General Public License v3.0
+        """.trimIndent())
     }
 
     private fun getConfigRetriever(vertx: Vertx): ConfigRetriever {
