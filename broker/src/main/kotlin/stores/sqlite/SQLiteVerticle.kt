@@ -52,7 +52,7 @@ class SQLiteVerticle : AbstractVerticle() {
             connections.forEach { (dbPath, connection) ->
                 try {
                     connection.close()
-                    logger.info("Closed SQLite connection for [$dbPath]")
+                    logger.fine("Closed SQLite connection for [$dbPath]")
                 } catch (e: Exception) {
                     logger.warning("Error closing connection for [$dbPath]: ${e.message}")
                 }
@@ -79,7 +79,7 @@ class SQLiteVerticle : AbstractVerticle() {
                 statement.executeUpdate("PRAGMA foreign_keys = ON")
             }
             
-            logger.info("Created SQLite connection for [$path] with WAL mode")
+            logger.fine("Created SQLite connection for [$path] with WAL mode")
             connection
         }
     }
@@ -110,7 +110,7 @@ class SQLiteVerticle : AbstractVerticle() {
         val params = request.getJsonArray("params", JsonArray())
         val useTransaction = request.getBoolean("transaction", true)
         
-        logger.info("SQL UPDATE: $sql with params: $params")
+        logger.finest("SQL UPDATE: $sql with params: $params")
         
         try {
             val connection = getOrCreateConnection(dbPath)
@@ -169,7 +169,7 @@ class SQLiteVerticle : AbstractVerticle() {
         val sql = request.getString("sql")
         val params = request.getJsonArray("params", JsonArray())
         
-        logger.info("SQL QUERY: $sql with params: $params")
+        logger.finest("SQL QUERY: $sql with params: $params")
         
         try {
             val connection = getOrCreateConnection(dbPath)
