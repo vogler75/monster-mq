@@ -175,7 +175,7 @@ RetainedStoreType: POSTGRES
 QueuedMessagesEnabled: true
 
 ArchiveGroups:
-  - Name: MCP
+  - Name: Default
     Enabled: true
     TopicFilter: [ "#" ]
     RetainedOnly: false
@@ -212,7 +212,7 @@ RetainedStoreType: SQLITE
 QueuedMessagesEnabled: true
 
 ArchiveGroups:
-  - Name: MCP
+  - Name: Default
     Enabled: true
     TopicFilter: [ "#" ]
     RetainedOnly: false
@@ -329,12 +329,12 @@ ArchiveGroups:
     LastValType: POSTGRES      # Current value storage
     ArchiveType: POSTGRES      # Historical message storage
 
-  - Name: MCP                  # Required for MCP server
+  - Name: Default              # Default archive group (used by MCP server)
     Enabled: true
     TopicFilter: [ "#" ]
     RetainedOnly: false
-    LastValType: POSTGRES      # Required for MCP
-    ArchiveType: POSTGRES      # Optional for MCP
+    LastValType: POSTGRES      # Required for MCP server
+    ArchiveType: POSTGRES      # Required for MCP historical queries
 ```
 
 ### Database Connections
@@ -564,6 +564,10 @@ SparkplugMetricExpansion:
 MCP:
   Enabled: true
   Port: 3000            # Model Context Protocol server
+
+GraphQL:
+  Enabled: true
+  Port: 8080            # GraphQL server with subscriptions
 ```
 
 ## 🔧 Advanced Features
@@ -816,6 +820,307 @@ Database: 8GB RAM, 4 CPUs (separate server)
 
 <!-- Minimum cluster size -->
 <cluster-member-count>2</cluster-member-count>
+```
+
+### GraphQL API Integration
+
+MonsterMQ includes a powerful GraphQL API for querying and subscribing to MQTT data in real-time. The GraphQL server provides a modern, flexible interface for web applications, analytics platforms, and third-party integrations.
+
+**Features:**
+- **Real-time Subscriptions** - Live MQTT message streams via GraphQL subscriptions
+- **Historical Queries** - Query archived messages with time filtering
+- **Current Values** - Get latest values from topics and retained messages  
+- **Multiple Archive Groups** - Query different storage backends
+- **WebSocket Support** - Real-time updates over WebSocket connections
+- **JSON & Binary Data** - Automatic format detection and Base64 encoding
+
+#### Configuration
+
+Enable GraphQL server in your config:
+
+```yaml
+# Basic GraphQL configuration
+GraphQL:
+  Enabled: true
+  Port: 8080
+
+# Required: At least one archive group for historical data
+ArchiveGroups:
+  - Name: "Default"          # Default archive group
+    Enabled: true
+    TopicFilter: [ "#" ]
+    LastValType: POSTGRES     # Required for current values
+    ArchiveType: POSTGRES     # Required for historical queries
+
+  - Name: "Sensors"          # Custom archive group
+    Enabled: true  
+    TopicFilter: [ "sensors/#", "devices/#" ]
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
+
+RetainedStoreType: POSTGRES   # Required for retained message queries
+```
+
+#### API Endpoints
+
+- **GraphQL Playground**: `http://localhost:8080/graphql` (web interface)
+- **GraphQL API**: `http://localhost:8080/graphql` (POST requests)
+- **WebSocket Subscriptions**: `ws://localhost:8080/graphql` (subscription endpoint)
+
+#### Query Examples
+
+**1. Get Current Topic Value**
+```graphql
+query {
+  currentValue(topic: "sensors/temperature/room1", archiveGroup: "Default") {
+    topic
+    payload
+    timestamp
+    qos
+  }
+}
+```
+
+**2. Query Multiple Current Values**
+```graphql
+query {
+  currentValues(topicFilter: "sensors/#", limit: 10, archiveGroup: "Sensors") {
+    topic
+    payload
+    format
+    timestamp
+    qos
+  }
+}
+```
+
+**3. Get Historical Messages**
+```graphql
+query {
+  archivedMessages(
+    topicFilter: "sensors/temperature/room1"
+    startTime: "2024-01-15T00:00:00Z"
+    endTime: "2024-01-15T23:59:59Z"
+    format: JSON
+    limit: 100
+    archiveGroup: "Default"
+  ) {
+    topic
+    payload
+    timestamp
+    qos
+    clientId
+  }
+}
+```
+
+**4. Get Retained Messages**
+```graphql
+query {
+  retainedMessages(topicFilter: "config/#", format: JSON) {
+    topic
+    payload
+    timestamp
+    qos
+  }
+}
+```
+
+**5. Real-time Message Subscription**
+```graphql
+subscription {
+  topicUpdates(topicFilter: "sensors/#", format: JSON) {
+    topic
+    payload
+    timestamp
+    qos
+    retained
+    clientId
+  }
+}
+```
+
+**6. Publish Messages**
+```graphql
+mutation {
+  publish(input: {
+    topic: "commands/device1/restart"
+    payload: "{\"action\":\"restart\",\"delay\":5}"
+    format: JSON
+    qos: 1
+    retained: false
+  }) {
+    success
+    topic
+    timestamp
+    error
+  }
+}
+```
+
+#### Data Format Handling
+
+The GraphQL API supports both JSON and Binary data formats:
+
+```graphql
+# Automatic format detection
+query {
+  currentValue(topic: "sensors/data") {
+    payload    # Returns JSON string or Base64 for binary
+    format     # AUTO-DETECTED: JSON or BINARY  
+  }
+}
+
+# Force specific format
+query {
+  currentValue(topic: "sensors/data", format: JSON) {
+    payload    # Always returns as JSON string
+    format     # Returns: JSON
+  }
+  
+  currentValue(topic: "image/camera1", format: BINARY) {
+    payload    # Returns Base64 encoded binary data
+    format     # Returns: BINARY
+  }
+}
+```
+
+#### Archive Group Selection
+
+Specify which archive group to query for different data sources:
+
+```graphql
+# Query default archive group
+query {
+  archivedMessages(topicFilter: "data/#", archiveGroup: "Default") {
+    topic
+    payload
+  }
+}
+
+# Query sensors archive group  
+query {
+  archivedMessages(topicFilter: "sensors/#", archiveGroup: "Sensors") {
+    topic
+    payload
+  }
+}
+
+# Query production archive group
+query {
+  currentValues(topicFilter: "production/#", archiveGroup: "Production") {
+    topic
+    payload
+  }
+}
+```
+
+#### JavaScript Client Example
+
+```javascript
+// Using Apollo Client for GraphQL subscriptions
+import { ApolloClient, InMemoryCache, split, HttpLink } from '@apollo/client';
+import { GraphQLWsLink } from '@apollo/client/link/subscriptions';
+import { createClient } from 'graphql-ws';
+import { getMainDefinition } from '@apollo/client/utilities';
+
+// HTTP connection for queries and mutations
+const httpLink = new HttpLink({
+  uri: 'http://localhost:8080/graphql'
+});
+
+// WebSocket connection for subscriptions  
+const wsLink = new GraphQLWsLink(createClient({
+  url: 'ws://localhost:8080/graphql'
+}));
+
+// Split based on operation type
+const splitLink = split(
+  ({ query }) => {
+    const definition = getMainDefinition(query);
+    return (
+      definition.kind === 'OperationDefinition' &&
+      definition.operation === 'subscription'
+    );
+  },
+  wsLink,
+  httpLink
+);
+
+const client = new ApolloClient({
+  link: splitLink,
+  cache: new InMemoryCache()
+});
+
+// Subscribe to real-time sensor data
+const SENSOR_SUBSCRIPTION = gql`
+  subscription {
+    topicUpdates(topicFilter: "sensors/#") {
+      topic
+      payload
+      timestamp
+    }
+  }
+`;
+
+const { data } = useSubscription(SENSOR_SUBSCRIPTION);
+```
+
+#### cURL Examples
+
+**Query current value:**
+```bash
+curl -X POST http://localhost:8080/graphql \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "query { currentValue(topic: \"sensors/temp1\") { topic payload timestamp } }"
+  }'
+```
+
+**Publish message:**
+```bash
+curl -X POST http://localhost:8080/graphql \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "mutation { publish(input: {topic: \"test/topic\", payload: \"hello\", qos: 1}) { success timestamp } }"
+  }'
+```
+
+#### WebSocket Subscription (Node.js)
+
+```javascript
+const WebSocket = require('ws');
+
+const ws = new WebSocket('ws://localhost:8080/graphql', 'graphql-ws');
+
+ws.on('open', () => {
+  // Connection init
+  ws.send(JSON.stringify({ type: 'connection_init' }));
+  
+  // Start subscription
+  ws.send(JSON.stringify({
+    id: '1',
+    type: 'start',
+    payload: {
+      query: `
+        subscription {
+          topicUpdates(topicFilter: "sensors/#") {
+            topic
+            payload
+            timestamp
+          }
+        }
+      `
+    }
+  }));
+});
+
+ws.on('message', (data) => {
+  const message = JSON.parse(data);
+  if (message.type === 'data') {
+    console.log('New sensor data:', message.payload.data.topicUpdates);
+  }
+});
 ```
 
 ### MCP Server Integration

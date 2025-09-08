@@ -11,7 +11,7 @@ QueuedMessagesEnabled: true
 
 # Archive configuration with SQLite
 ArchiveGroups:
-  - Name: MCP
+  - Name: Default
     Enabled: true
     TopicFilter: [ "#" ]
     RetainedOnly: false
@@ -26,3 +26,10 @@ SQLite:
 MCP:
   Enabled: true
   Port: 3000
+
+GraphQL:
+  Enabled: true
+  Port: 4000
+  Path: /graphql
+  CorsEnabled: false
+  CorsOrigin: "*"

@@ -9,7 +9,10 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
+import java.sql.DriverManager
 import java.time.Instant
+import java.util.Base64
+import java.util.concurrent.TimeUnit
 
 /**
  * Clean SQLiteVerticle-only implementation of MessageArchive
@@ -99,39 +102,92 @@ class MessageArchiveSQLite(
         endTime: Instant?,
         limit: Int
     ): JsonArray {
-        val sql = StringBuilder("SELECT time, payload_blob FROM $tableName WHERE topic = ?")
+        logger.info("getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
+        
+        val sql = StringBuilder("SELECT topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?")
         val params = JsonArray().add(topic)
 
         startTime?.let {
             sql.append(" AND time >= ?")
-            params.add(it.toString()) // ISO-8601 string comparison works in SQLite
+            // Use proper ISO-8601 format with proper precision
+            val timeStr = it.toString()
+            params.add(timeStr)
+            logger.info("Added startTime parameter: $timeStr")
         }
         endTime?.let {
             sql.append(" AND time <= ?")
-            params.add(it.toString())
+            val timeStr = it.toString()
+            params.add(timeStr)
+            logger.info("Added endTime parameter: $timeStr")
         }
         sql.append(" ORDER BY time DESC LIMIT ?")
         params.add(limit)
-
-        val messages = JsonArray().apply {
-            add(JsonArray().apply {
-                add("time")
-                add("payload")
-            })  // Header row
-        }
+        
+        logger.info("Executing SQL: ${sql.toString()}")
+        logger.info("With parameters: $params")
 
         return try {
-            val results = sqlClient.executeQuerySync(sql.toString(), params)
-            results.forEach { row ->
-                val rowObj = row as JsonObject
-                val timeStr = rowObj.getString("time")
-                val payloadBlob = rowObj.getBinary("payload_blob") ?: ByteArray(0)
-                messages.add(JsonArray().add(timeStr).add(payloadBlob.toString(Charsets.UTF_8)))
+            logger.info("Starting direct JDBC query at ${System.currentTimeMillis()}...")
+            val startTime = System.currentTimeMillis()
+            
+            // Use direct JDBC connection to bypass event bus issues
+            val connection = DriverManager.getConnection("jdbc:sqlite:$dbPath", "", "")
+            val messages = JsonArray()
+            
+            connection.use { conn ->
+                conn.prepareStatement(sql.toString()).use { preparedStatement ->
+                    // Use the same parameters that were already collected during SQL building
+                    for (i in 0 until params.size()) {
+                        val param = params.getValue(i)
+                        val paramIndex = i + 1
+                        logger.info("Setting parameter at index $paramIndex: $param (type: ${param?.javaClass?.simpleName})")
+                        when (param) {
+                            is String -> preparedStatement.setString(paramIndex, param)
+                            is Int -> preparedStatement.setInt(paramIndex, param)
+                            is Long -> preparedStatement.setLong(paramIndex, param)
+                            else -> preparedStatement.setString(paramIndex, param.toString())
+                        }
+                    }
+                    
+                    val resultSet = preparedStatement.executeQuery()
+                    val queryDuration = System.currentTimeMillis() - startTime
+                    logger.info("Direct JDBC query completed in ${queryDuration}ms")
+                    
+                    val processingStart = System.currentTimeMillis()
+                    var rowCount = 0
+                    while (resultSet.next()) {
+                        rowCount++
+                        val timeStr = resultSet.getString("time")
+                        val timestamp = if (timeStr != null) {
+                            try {
+                                Instant.parse(timeStr).toEpochMilli()
+                            } catch (e: Exception) {
+                                System.currentTimeMillis() // fallback
+                            }
+                        } else {
+                            System.currentTimeMillis()
+                        }
+                        
+                        val messageObj = JsonObject()
+                            .put("topic", resultSet.getString("topic") ?: topic)
+                            .put("timestamp", timestamp)
+                            .put("payload_base64", Base64.getEncoder().encodeToString(resultSet.getBytes("payload_blob") ?: ByteArray(0)))
+                            .put("payload_json", resultSet.getString("payload_json"))
+                            .put("qos", resultSet.getInt("qos"))
+                            .put("client_id", resultSet.getString("client_id") ?: "")
+                            
+                        messages.add(messageObj)
+                    }
+                    val processingDuration = System.currentTimeMillis() - processingStart
+                    logger.info("Data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages")
+                }
             }
+            
             messages
         } catch (e: Exception) {
             logger.severe("Error retrieving history for topic [$topic]: ${e.message}")
-            JsonArray().add(JsonArray().add("time").add("payload")) // Return header only on error
+            e.printStackTrace()
+            JsonArray() // Return empty array on error
         }
     }
 

@@ -28,7 +28,7 @@ Postgres:
 
 # Archive configuration with Hazelcast distributed memory
 ArchiveGroups:
-  - Name: MCP
+  - Name: Default
     Enabled: true
     TopicFilter: [ "#" ]
     RetainedOnly: false

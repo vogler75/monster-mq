@@ -7,6 +7,7 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
+import at.rocworks.extensions.GraphQLServer
 import at.rocworks.extensions.McpServer
 import at.rocworks.extensions.SparkplugExtension
 import at.rocworks.handlers.*
@@ -345,6 +346,24 @@ MORE INFO:
                         logger.warning("MCP archive group is not defined or is not an extended archive group. MCP server will not start.")
                     }
                     null
+                }
+
+                // GraphQL Server
+                val graphQLConfig = configJson.getJsonObject("GraphQL", JsonObject())
+                val graphQLEnabled = graphQLConfig.getBoolean("Enabled", false)
+                if (graphQLEnabled) {
+                    val archiveGroupsMap = archiveGroups.associateBy { it.name }
+                    val graphQLServer = GraphQLServer(
+                        vertx,
+                        graphQLConfig,
+                        messageBus,
+                        retainedStore,
+                        archiveGroupsMap
+                    )
+                    graphQLServer.start()
+                    logger.info("GraphQL server enabled")
+                } else {
+                    logger.info("GraphQL server is disabled in configuration")
                 }
 
                 // MQTT Servers

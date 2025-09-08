@@ -812,10 +812,12 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         vertx.executeBlocking(Callable {
             try {
                 val result = messageArchive.getHistory(topic, startTime, endTime, limit)
+                // Convert JsonArray of JsonObjects to JsonArray of JsonArrays for markdown conversion
+                val tableFormat = convertHistoryToTableFormat(result)
                 val answer = JsonArray().add(
                     JsonObject()
                         .put("type", "text")
-                        .put("text", convertJsonTableToMarkdown(result))
+                        .put("text", convertJsonTableToMarkdown(tableFormat))
                 )
                 promise.complete(answer)
             } catch (e: Exception) {
@@ -854,6 +856,45 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
             promise.fail(McpException(JSONRPC_INVALID_ARGUMENT, "Unsupported message archive type for SQL queries"))
         }
         return promise.future()
+    }
+
+    private fun convertHistoryToTableFormat(history: JsonArray): JsonArray {
+        val tableFormat = JsonArray()
+        
+        if (history.isEmpty) {
+            return tableFormat
+        }
+        
+        // Add header row
+        tableFormat.add(JsonArray().add("topic").add("timestamp").add("payload").add("qos").add("client_id"))
+        
+        // Add data rows
+        for (i in 0 until history.size()) {
+            val obj = history.getJsonObject(i)
+            val row = JsonArray()
+                .add(obj.getString("topic", ""))
+                .add(obj.getLong("timestamp", 0L).toString())
+                .add(if (obj.containsKey("payload_json") && obj.getString("payload_json") != null) {
+                    obj.getString("payload_json")
+                } else {
+                    // Decode base64 payload if no JSON payload available
+                    try {
+                        val base64 = obj.getString("payload_base64", "")
+                        if (base64.isNotEmpty()) {
+                            String(java.util.Base64.getDecoder().decode(base64), Charsets.UTF_8)
+                        } else {
+                            ""
+                        }
+                    } catch (e: Exception) {
+                        obj.getString("payload_base64", "")
+                    }
+                })
+                .add(obj.getInteger("qos", 0).toString())
+                .add(obj.getString("client_id", ""))
+            tableFormat.add(row)
+        }
+        
+        return tableFormat
     }
 
     private fun convertJsonTableToMarkdown(result: JsonArray): String {

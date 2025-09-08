@@ -1,0 +1,97 @@
+scalar Long
+scalar JSON
+
+enum DataFormat {
+    JSON
+    BINARY
+}
+
+type Query {
+    # Get current value of a topic from LastValueStore
+    currentValue(topic: String!, format: DataFormat = JSON, archiveGroup: String = "Default"): TopicValue
+    
+    # Get current values matching a topic filter
+    currentValues(topicFilter: String!, format: DataFormat = JSON, limit: Int = 100, archiveGroup: String = "Default"): [TopicValue!]!
+    
+    # Get retained message for a specific topic
+    retainedMessage(topic: String!, format: DataFormat = JSON): RetainedMessage
+    
+    # Get all retained messages matching a filter
+    retainedMessages(topicFilter: String, format: DataFormat = JSON, limit: Int = 100): [RetainedMessage!]!
+    
+    # Query historical messages from archive
+    archivedMessages(
+        topicFilter: String!
+        startTime: String
+        endTime: String
+        format: DataFormat = JSON
+        limit: Int = 100
+        archiveGroup: String = "Default"
+    ): [ArchivedMessage!]!
+}
+
+type Mutation {
+    # Publish a message to a topic
+    publish(input: PublishInput!): PublishResult!
+    
+    # Publish multiple messages
+    publishBatch(inputs: [PublishInput!]!): [PublishResult!]!
+}
+
+type Subscription {
+    # Subscribe to real-time topic updates
+    topicUpdates(topicFilter: String!, format: DataFormat = JSON): TopicUpdate!
+    
+    # Subscribe to multiple topic filters
+    multiTopicUpdates(topicFilters: [String!]!, format: DataFormat = JSON): TopicUpdate!
+}
+
+input PublishInput {
+    topic: String!
+    payload: String!
+    format: DataFormat = JSON
+    qos: Int = 0
+    retained: Boolean = false
+}
+
+type PublishResult {
+    success: Boolean!
+    topic: String!
+    timestamp: Long!
+    error: String
+}
+
+type TopicValue {
+    topic: String!
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
+    qos: Int!
+}
+
+type RetainedMessage {
+    topic: String!
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
+    qos: Int!
+}
+
+type ArchivedMessage {
+    topic: String!
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
+    qos: Int!
+    clientId: String
+}
+
+type TopicUpdate {
+    topic: String!
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
+    qos: Int!
+    retained: Boolean!
+    clientId: String
+}

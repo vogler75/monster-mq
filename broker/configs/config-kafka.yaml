@@ -58,14 +58,6 @@ ArchiveGroups:
     LastValType: NONE         # No current value caching needed
     ArchiveType: KAFKA        # Stream everything to Kafka
     
-  # MCP Server support with hybrid storage
-  - Name: MCP
-    Enabled: true
-    TopicFilter: [ "#" ]
-    RetainedOnly: false
-    LastValType: POSTGRES     # Required for MCP
-    ArchiveType: POSTGRES     # Keep historical data in PostgreSQL for MCP queries
-
 # Optional: SparkplugB Extension
 SparkplugMetricExpansion:
   Enabled: true    # Expand SparkplugB messages before streaming to Kafka

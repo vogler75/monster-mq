@@ -57,14 +57,6 @@ ArchiveGroups:
     LastValType: MEMORY
     ArchiveType: KAFKA         # Goes to Kafka topic "critical"
     
-  # MCP Server support
-  - Name: MCP
-    Enabled: true
-    TopicFilter: [ "#" ]
-    RetainedOnly: false
-    LastValType: POSTGRES      # Required for MCP
-    ArchiveType: NONE          # Already in Kafka bus, no need to duplicate
-
 # SparkplugB Extension
 SparkplugMetricExpansion:
   Enabled: true    # Expand messages before sending to Kafka

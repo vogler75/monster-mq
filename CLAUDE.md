@@ -78,7 +78,7 @@ Key configuration sections:
 - Archive groups with topic filters
 - Database connections (PostgreSQL, CrateDB, MongoDB)
 - Kafka configuration
-- MCP Server requires an ArchiveGroup named "MCP"
+- MCP Server requires an ArchiveGroup named "Default"
 
 ### Extension Points
 

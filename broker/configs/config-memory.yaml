@@ -25,7 +25,7 @@ SQLite:
 
 # Archive configuration with memory storage
 ArchiveGroups:
-  - Name: MCP
+  - Name: Default
     Enabled: true
     TopicFilter: [ "#" ]
     RetainedOnly: false

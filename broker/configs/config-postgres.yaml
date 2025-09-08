@@ -13,7 +13,7 @@ SparkplugMetricExpansion:
   Enabled: true
 
 ArchiveGroups:
-  - Name: MCP
+  - Name: Default
     Enabled: true
     TopicFilter: [ "#" ]
     RetainedOnly: false
@@ -24,3 +24,10 @@ Postgres:
   Url: jdbc:postgresql://linux5:5432/monster
   User: system
   Pass: manager
+
+GraphQL:
+  Enabled: true
+  Port: 4000
+  Path: /graphql
+  CorsEnabled: false
+  CorsOrigin: "*"

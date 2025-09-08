@@ -12,6 +12,7 @@ import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
+import io.vertx.core.json.JsonObject
 import java.sql.*
 import java.time.Instant
 import java.util.concurrent.Callable
@@ -121,29 +122,32 @@ class MessageArchivePostgres (
         endTime: Instant?,
         limit: Int
     ): JsonArray {
-        val sql = StringBuilder("SELECT time, payload_blob FROM $tableName WHERE topic = ?")
+        logger.info("PostgreSQL getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
+        
+        val sql = StringBuilder("SELECT topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?")
         val params = mutableListOf<Any>()
         params.add(topic)
 
         startTime?.let {
             sql.append(" AND time >= ?")
             params.add(Timestamp.from(it))
+            logger.info("Added startTime parameter: $it")
         }
         endTime?.let {
             sql.append(" AND time <= ?")
             params.add(Timestamp.from(it))
+            logger.info("Added endTime parameter: $it")
         }
         sql.append(" ORDER BY time DESC LIMIT ?")
         params.add(limit)
+        
+        logger.info("Executing PostgreSQL SQL: ${sql.toString()}")
+        logger.info("With parameters: $params")
 
-        val messages = JsonArray().apply {
-            add(JsonArray().apply {
-                add("time")
-                add("payload")
-            })  // Header row
-        }
+        val messages = JsonArray()
 
         try {
+            val startTime = System.currentTimeMillis()
             db.connection?.let { connection ->
                 connection.prepareStatement(sql.toString()).use { preparedStatement ->
                     for ((index, param) in params.withIndex()) {
@@ -155,15 +159,29 @@ class MessageArchivePostgres (
                         }
                     }
                     val resultSet = preparedStatement.executeQuery()
+                    val queryDuration = System.currentTimeMillis() - startTime
+                    logger.info("PostgreSQL query completed in ${queryDuration}ms")
+                    
+                    val processingStart = System.currentTimeMillis()
+                    var rowCount = 0
                     while (resultSet.next()) {
-                        val time = resultSet.getTimestamp("time").toInstant()
-                        val payloadBlob = resultSet.getBytes("payload_blob")
-                        messages.add(JsonArray().add(time.toString()).add(payloadBlob.toString(Charsets.UTF_8)))
+                        rowCount++
+                        val messageObj = JsonObject()
+                            .put("topic", resultSet.getString("topic") ?: topic)
+                            .put("timestamp", resultSet.getTimestamp("time").toInstant().toEpochMilli())
+                            .put("payload_base64", java.util.Base64.getEncoder().encodeToString(resultSet.getBytes("payload_blob") ?: ByteArray(0)))
+                            .put("qos", resultSet.getInt("qos"))
+                            .put("client_id", resultSet.getString("client_id") ?: "")
+                            
+                        messages.add(messageObj)
                     }
+                    val processingDuration = System.currentTimeMillis() - processingStart
+                    logger.info("PostgreSQL data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages")
                 }
             }
         } catch (e: SQLException) {
             logger.severe("Error retrieving history for topic [$topic]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            e.printStackTrace()
         }
         return messages
     }

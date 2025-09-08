@@ -22,7 +22,7 @@ object Const {
 
     const val SYS_TOPIC_NAME = "\$SYS"
 
-    const val MCP_ARCHIVE_GROUP = "MCP"
+    const val MCP_ARCHIVE_GROUP = "Default"
     const val MCP_CONFIG_TOPIC = "<config>"
 
     var DEBUG_LEVEL: Level = Level.INFO

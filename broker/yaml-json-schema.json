@@ -205,6 +205,34 @@
           "maximum": 65535
         }
       }
+    },
+    "GraphQL": {
+      "type": "object",
+      "description": "GraphQL server configuration",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Enable GraphQL server",
+          "default": false
+        },
+        "Port": {
+          "type": "integer",
+          "description": "Port for GraphQL HTTP endpoint",
+          "default": 8080,
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "Path": {
+          "type": "string",
+          "description": "Path for GraphQL endpoint",
+          "default": "/graphql"
+        },
+        "CorsEnabled": {
+          "type": "boolean",
+          "description": "Enable CORS for GraphQL endpoint",
+          "default": true
+        }
+      }
     }
   },
   "required": [
