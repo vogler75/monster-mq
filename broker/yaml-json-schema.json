@@ -187,6 +187,24 @@
           "default": "monstermq.db"
         }
       }
+    },
+    "MCP": {
+      "type": "object",
+      "description": "Model Context Protocol server configuration",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Enable MCP server for AI integration",
+          "default": true
+        },
+        "Port": {
+          "type": "integer",
+          "description": "Port for MCP server HTTP endpoint",
+          "default": 3000,
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
     }
   },
   "required": [

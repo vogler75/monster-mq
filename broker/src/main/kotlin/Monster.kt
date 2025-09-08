@@ -320,14 +320,23 @@ MORE INFO:
                 val healthHandler = HealthHandler(sessionHandler)
 
                 // MCP Server
+                val mcpConfig = configJson.getJsonObject("MCP", JsonObject())
+                val mcpEnabled = mcpConfig.getBoolean("Enabled", true)
+                val mcpPort = mcpConfig.getInteger("Port", 3000)
                 val mcpArchiveGroup = archiveGroups.find { it.name == Const.MCP_ARCHIVE_GROUP }
-                val mcpServer = if (mcpArchiveGroup != null &&
+                
+                val mcpServer = if (mcpEnabled && mcpArchiveGroup != null &&
                     retainedStore is IMessageStoreExtended &&
                     (mcpArchiveGroup.lastValStore != null && mcpArchiveGroup.lastValStore is IMessageStoreExtended) &&
                     (mcpArchiveGroup.archiveStore != null && mcpArchiveGroup.archiveStore is IMessageArchiveExtended)) {
-                    McpServer("0.0.0.0", 3001, retainedStore, mcpArchiveGroup.lastValStore, mcpArchiveGroup.archiveStore)
+                    logger.info("Starting MCP server on port $mcpPort")
+                    McpServer("0.0.0.0", mcpPort, retainedStore, mcpArchiveGroup.lastValStore, mcpArchiveGroup.archiveStore)
                 } else {
-                    logger.warning("Default archive group is not defined or is not an extended archive group. MCP server will not start.")
+                    if (!mcpEnabled) {
+                        logger.info("MCP server is disabled in configuration")
+                    } else {
+                        logger.warning("MCP archive group is not defined or is not an extended archive group. MCP server will not start.")
+                    }
                     null
                 }
 
