@@ -134,6 +134,7 @@ class GraphQLServer(
                     .dataFetcher("retainedMessage", queryResolver.retainedMessage())
                     .dataFetcher("retainedMessages", queryResolver.retainedMessages())
                     .dataFetcher("archivedMessages", queryResolver.archivedMessages())
+                    .dataFetcher("searchTopics", queryResolver.searchTopics())
             }
             // Register mutation resolvers
             .type("Mutation") { builder ->

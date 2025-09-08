@@ -28,6 +28,13 @@ type Query {
         limit: Int = 100
         archiveGroup: String = "Default"
     ): [ArchivedMessage!]!
+    
+    # Search for topics by name pattern
+    searchTopics(
+        pattern: String!
+        limit: Int = 100
+        archiveGroup: String = "Default"
+    ): [String!]!
 }
 
 type Mutation {

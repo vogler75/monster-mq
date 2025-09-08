@@ -328,4 +328,82 @@ class QueryResolver(
             future
         }
     }
+
+    fun searchTopics(): DataFetcher<CompletableFuture<List<String>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<String>>()
+            
+            val pattern = env.getArgument<String>("pattern") ?: return@DataFetcher future.apply { complete(emptyList()) }
+            val limit = env.getArgument<Int>("limit") ?: 100
+            val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
+
+            // Find the specified archive group with a LastValueStore
+            val lastValueStore = archiveGroups[archiveGroupName]?.lastValStore
+
+            if (lastValueStore == null) {
+                logger.warning("No LastValueStore configured for archive group '$archiveGroupName'")
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            val topicNames = mutableListOf<String>()
+            var count = 0
+            var completed = false
+            
+            // Convert pattern to topic filter format
+            val topicFilter = if (pattern.contains("*")) {
+                pattern.replace("*", "#")
+            } else if (!pattern.contains("#") && !pattern.contains("+")) {
+                "$pattern/#" // Search for topics starting with pattern
+            } else {
+                pattern
+            }
+            
+            lastValueStore.findMatchingMessages(topicFilter) { message ->
+                if (!completed && count < limit) {
+                    val topicName = message.topicName
+                    // Check if topic matches the search pattern
+                    if (matchesSearchPattern(topicName, pattern)) {
+                        if (!topicNames.contains(topicName)) { // Avoid duplicates
+                            topicNames.add(topicName)
+                            count++
+                        }
+                    }
+                    
+                    if (count >= limit) {
+                        completed = true
+                        future.complete(topicNames.sorted())
+                        false // stop processing
+                    } else {
+                        true // continue processing
+                    }
+                } else {
+                    false // stop processing
+                }
+            }
+            
+            // Complete with results after async search finishes
+            vertx.setTimer(100) {
+                if (!completed) {
+                    completed = true
+                    future.complete(topicNames.sorted())
+                }
+            }
+
+            future
+        }
+    }
+    
+    /**
+     * Check if a topic name matches a search pattern
+     * Supports * as wildcard (converted to regex)
+     */
+    private fun matchesSearchPattern(topicName: String, pattern: String): Boolean {
+        return if (pattern.contains("*")) {
+            val regex = pattern.replace("*", ".*").toRegex(RegexOption.IGNORE_CASE)
+            regex.matches(topicName)
+        } else {
+            topicName.contains(pattern, ignoreCase = true)
+        }
+    }
 }
