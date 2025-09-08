@@ -19,7 +19,7 @@ class MqttServer(
 
     private val options = MqttServerOptions().let { it ->
         it.isSsl = ssl
-        it.keyStoreOptions = JksOptions()
+        it.keyCertOptions = JksOptions()
             .setPath("server-keystore.jks")
             .setPassword("password")
         it.isUseWebSocket = this.useWebSocket
@@ -43,14 +43,14 @@ class MqttServer(
             MqttClient.deployEndpoint(vertx, endpoint, sessionHandler)
         }
 
-        mqttServer.listen(port) { ar ->
-            if (ar.succeeded()) {
-                logger.info("MQTT Server is listening on port [${ar.result().actualPort()}] SSL [$ssl] WS [$useWebSocket] [${deploymentID()}] [${Utils.getCurrentFunctionName()}]")
+        mqttServer.listen(port)
+            .onSuccess { server ->
+                logger.info("MQTT Server is listening on port [${server.actualPort()}] SSL [$ssl] WS [$useWebSocket] [${deploymentID()}] [${Utils.getCurrentFunctionName()}]")
                 startPromise.complete()
-            } else {
-                logger.severe("Error starting MQTT Server: ${ar.cause().message} [${Utils.getCurrentFunctionName()}]")
-                startPromise.fail(ar.cause())
             }
-        }
+            .onFailure { error ->
+                logger.severe("Error starting MQTT Server: ${error.message} [${Utils.getCurrentFunctionName()}]")
+                startPromise.fail(error)
+            }
     }
 }

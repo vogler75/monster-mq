@@ -8,7 +8,7 @@ import com.hazelcast.cluster.MembershipListener
 import com.hazelcast.map.IMap
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
-import io.vertx.core.impl.VertxInternal
+// VertxInternal removed in Vert.x 5 - using alternative approaches
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import java.util.concurrent.Callable
 import kotlin.system.exitProcess
@@ -52,8 +52,8 @@ class HealthHandler(
     }
 
     private fun clusterHealthCheck(startPromise: Promise<Void>) {
-        val clusterManager = (vertx as VertxInternal).clusterManager
-        if (clusterManager is HazelcastClusterManager) {
+        val clusterManager = Monster.getClusterManager()
+        if (clusterManager != null) {
             this.clusterManager = clusterManager
             val instance = clusterManager.hazelcastInstance
             val cluster = instance.cluster

@@ -144,14 +144,14 @@ class McpServer(
 
         vertx.createHttpServer(options)
             .requestHandler(router)
-            .listen { result ->
-                if (result.succeeded()) {
-                    logger.info("MCP Server started on port ${result.result().actualPort()}")
-                    startPromise.complete()
-                } else {
-                    logger.severe("MCP Server failed to start "+result.cause())
-                    startPromise.fail(result.cause())
-                }
+            .listen()
+            .onSuccess { server ->
+                logger.info("MCP Server started on port ${server.actualPort()}")
+                startPromise.complete()
+            }
+            .onFailure { error ->
+                logger.severe("MCP Server failed to start $error")
+                startPromise.fail(error)
             }
     }
 

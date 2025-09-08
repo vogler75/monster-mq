@@ -233,7 +233,7 @@ open class SessionHandler(
             val fx = Monster.getClusterNodeIds(vertx).map {
                 vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
             }
-            Future.all(listOf(f1)+fx).mapEmpty()
+            Future.all<Any>(listOf(f1)+fx as List<Future<*>>).mapEmpty()
 
         } else {
             val f2 = vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
@@ -247,7 +247,7 @@ open class SessionHandler(
             val fx = Monster.getClusterNodeIds(vertx).map {
                 vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
             }
-            Future.all(fx).mapEmpty()
+            Future.all<Any>(fx as List<Future<*>>).mapEmpty()
         } else {
             vertx.eventBus().request<Boolean>(clientStatusAddress, payload).mapEmpty()
         }
@@ -260,7 +260,7 @@ open class SessionHandler(
             val fx = Monster.getClusterNodeIds(vertx).map {
                 vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
             }
-            return Future.all(listOf(f1)+fx).mapEmpty()
+            return Future.all<Any>(listOf(f1)+fx as List<Future<*>>).mapEmpty()
         } else {
             val f2 = vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
             return Future.all(f1, f2).mapEmpty()
@@ -335,9 +335,10 @@ open class SessionHandler(
             return Future.succeededFuture(true)
         } else {
             val promise = Promise.promise<Boolean>()
-            vertx.eventBus().request<Boolean>(MqttClient.getMessagesAddress(clientId), message) {
-                promise.complete(!it.failed() && it.result().body())
-            }
+            vertx.eventBus().request<Boolean>(MqttClient.getMessagesAddress(clientId), message)
+                .onComplete { ar ->
+                    promise.complete(!ar.failed() && ar.result().body())
+                }
             return promise.future()
         }
     }
@@ -373,9 +374,10 @@ open class SessionHandler(
             .put(Const.TOPIC_KEY, topicName)
             .put(Const.CLIENT_KEY, client.clientId)
             .put(Const.QOS_KEY, qos.value())
-        vertx.eventBus().request<Boolean>(commandAddress(), request) {
-            if (!it.succeeded()) logger.severe("Subscribe request failed [${it.cause()}] [${Utils.getCurrentFunctionName()}]")
-        }
+        vertx.eventBus().request<Boolean>(commandAddress(), request)
+            .onFailure { error ->
+                logger.severe("Subscribe request failed [${error}] [${Utils.getCurrentFunctionName()}]")
+            }
     }
 
     private fun subscribeCommand(command: Message<JsonObject>) {
@@ -400,9 +402,10 @@ open class SessionHandler(
             .put(COMMAND_KEY, COMMAND_UNSUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
             .put(Const.CLIENT_KEY, client.clientId)
-        vertx.eventBus().request<Boolean>(commandAddress(), request) {
-            if (!it.succeeded()) logger.severe("Unsubscribe request failed [${it.cause()}] [${Utils.getCurrentFunctionName()}]")
-        }
+        vertx.eventBus().request<Boolean>(commandAddress(), request)
+            .onFailure { error ->
+                logger.severe("Unsubscribe request failed [${error}] [${Utils.getCurrentFunctionName()}]")
+            }
     }
 
     private fun unsubscribeCommand(command: Message<JsonObject>) {

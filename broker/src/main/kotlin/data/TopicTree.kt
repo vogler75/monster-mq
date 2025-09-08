@@ -2,7 +2,6 @@ package at.rocworks.data
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import io.vertx.core.impl.ConcurrentHashSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
 

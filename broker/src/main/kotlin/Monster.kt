@@ -29,7 +29,7 @@ import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
 import io.vertx.core.*
-import io.vertx.core.impl.VertxInternal
+// VertxInternal removed in Vert.x 5 - using alternative approaches
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
@@ -44,6 +44,9 @@ class Monster(args: Array<String>) {
 
     private val configFile: String
     private var configJson: JsonObject = JsonObject()
+
+    // Cluster manager reference for Vert.x 5 compatibility
+    private var clusterManager: HazelcastClusterManager? = null
 
     //private var sessionHandler: SessionHandler? = null
 
@@ -76,17 +79,21 @@ class Monster(args: Array<String>) {
         fun isClustered() = getInstance().isClustered
 
         fun getClusterNodeId(vertx: Vertx): String {
-            val clusterManager = (vertx as VertxInternal).clusterManager
+            val clusterManager = getInstance().clusterManager
             return if (clusterManager is HazelcastClusterManager) {
                 clusterManager.hazelcastInstance.cluster.localMember.uuid.toString()
             } else "N/A"
         }
 
         fun getClusterNodeIds(vertx: Vertx): List<String> {
-            val clusterManager = (vertx as VertxInternal).clusterManager
+            val clusterManager = getInstance().clusterManager
             return if (clusterManager is HazelcastClusterManager) {
                 clusterManager.hazelcastInstance.cluster.members.map { it.uuid.toString() }
             } else emptyList()
+        }
+
+        fun getClusterManager(): HazelcastClusterManager? {
+            return getInstance().clusterManager
         }
 
         fun getSparkplugExtension(): SparkplugExtension? {
@@ -254,13 +261,13 @@ MORE INFO:
     private fun clusterSetup(builder: VertxBuilder) {
         //val hazelcastConfig = ConfigUtil.loadConfig()
         //hazelcastConfig.setClusterName("MonsterMQ")
-        val clusterManager = HazelcastClusterManager()
+        this.clusterManager = HazelcastClusterManager()
 
         //val clusterManager = ZookeeperClusterManager()
         //val clusterManager = InfinispanClusterManager()
         //val clusterManager = IgniteClusterManager();
 
-        builder.withClusterManager(clusterManager)
+        builder.withClusterManager(this.clusterManager)
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
             if (res.succeeded() && res.result() != null) {
                 val vertx = res.result()!!
@@ -304,7 +311,7 @@ MORE INFO:
                     archiveGroup.archiveReady
                 }
             }
-            Future.all(archiveGroupsReady + listOf(retainedReady, messageBusReady)).onFailure {
+            Future.all<Any>(archiveGroupsReady + listOf(retainedReady, messageBusReady) as List<Future<*>>).onFailure { it ->
                 logger.severe("Initialization of bus or archive groups failed: ${it.message}")
                 exitProcess(-1)
             }.onComplete {
@@ -354,7 +361,7 @@ MORE INFO:
                     .compose { vertx.deployVerticle(messageHandler) }
                     .compose { vertx.deployVerticle(sessionHandler) }
                     .compose { vertx.deployVerticle(healthHandler) }
-                    .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
+                    .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) } as List<Future<String>>) }
                     .onFailure {
                         logger.severe("Startup error: ${it.message}")
                         exitProcess(-1)
@@ -479,8 +486,8 @@ MORE INFO:
                 store
             }
             MessageStoreType.HAZELCAST -> {
-                val clusterManager = (vertx as VertxInternal).clusterManager
-                if (clusterManager is HazelcastClusterManager) {
+                val clusterManager = this.clusterManager
+                if (clusterManager != null) {
                     val store = MessageStoreHazelcast(name, clusterManager.hazelcastInstance)
                     vertx.deployVerticle(store).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                     store

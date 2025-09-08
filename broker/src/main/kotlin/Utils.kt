@@ -7,7 +7,7 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.Vertx
 import io.vertx.core.buffer.Buffer
-import io.vertx.core.impl.VertxInternal
+// VertxInternal removed in Vert.x 5 - using alternative approaches
 import io.vertx.core.shareddata.AsyncMap
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import java.io.File
@@ -50,27 +50,17 @@ object Utils {
     fun getUuid(): String = UuidCreator.getTimeOrdered().toString()
 
     fun <K,V> getMap(vertx: Vertx, name: String): Future<AsyncMap<K, V>> {
-        val promise = Promise.promise<AsyncMap<K, V>>()
         val sharedData = vertx.sharedData()
-        if (vertx.isClustered) {
-            sharedData.getClusterWideMap<K, V>(name) {
-                if (it.succeeded()) {
-                    promise.complete(it.result())
-                } else {
-                    println("Failed to access the shared map [$name]: ${it.cause()}")
-                    promise.fail(it.cause())
+        return if (vertx.isClustered) {
+            sharedData.getClusterWideMap<K, V>(name)
+                .onFailure { error ->
+                    println("Failed to access the shared map [$name]: ${error}")
                 }
-            }
         } else {
-            sharedData.getAsyncMap<K, V>(name) {
-                if (it.succeeded()) {
-                    promise.complete(it.result())
-                } else {
-                    println("Failed to access the shared map [$name]: ${it.cause()}")
-                    promise.fail(it.cause())
+            sharedData.getAsyncMap<K, V>(name)
+                .onFailure { error ->
+                    println("Failed to access the shared map [$name]: ${error}")
                 }
-            }
         }
-        return promise.future()
     }
 }
