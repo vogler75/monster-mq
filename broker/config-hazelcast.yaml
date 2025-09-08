@@ -1,0 +1,53 @@
+# MonsterMQ Configuration - Hazelcast Clustering with PostgreSQL
+# This configuration uses Hazelcast for distributed in-memory storage
+# and PostgreSQL for persistent session storage (required for clustering)
+# Run with: ./run.sh -cluster -config config-hazelcast.yaml
+
+# Network Configuration
+TCP: 1883
+WS: 8080
+TCPS: 0     # Disabled
+WSS: 0      # Disabled
+MaxMessageSizeKb: 8
+
+# Storage configuration for clustering
+# IMPORTANT: Clustering requires a shared database (PostgreSQL, CrateDB, or MongoDB)
+# SQLite cannot be used in cluster mode as it's file-based and not shareable
+SessionStoreType: POSTGRES      # Required: Central database for session sharing
+RetainedStoreType: HAZELCAST   # Distributed memory across cluster nodes
+
+# Enable queued messages (stored in PostgreSQL)
+QueuedMessagesEnabled: true
+
+# PostgreSQL configuration (required for clustering)
+# All cluster nodes must connect to the same database
+Postgres:
+  Url: jdbc:postgresql://localhost:5432/monster
+  User: system
+  Pass: manager
+
+# Archive configuration with Hazelcast distributed memory
+ArchiveGroups:
+  - Name: MCP
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: HAZELCAST  # Distributed in-memory current values
+    ArchiveType: POSTGRES   # Optional: Use PostgreSQL for historical data
+
+# Optional: SparkplugB Extension
+SparkplugMetricExpansion:
+  Enabled: false
+
+# MCP Server configuration
+MCP:
+  Enabled: true
+  Port: 3000
+
+# Note: When using this configuration with -cluster:
+# - Sessions are persisted in PostgreSQL (shared by all nodes)
+# - Retained messages are distributed across cluster nodes via Hazelcast
+# - Current values are cached in Hazelcast distributed maps
+# - All nodes must connect to the same PostgreSQL database
+# - Hazelcast data survives individual node failures (replicated)
+# - Good for high-availability production deployments

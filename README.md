@@ -4,6 +4,50 @@ MonsterMQ is a high-performance, scalable MQTT broker built on Vert.X and Hazelc
 
 ![Logo](Logo.png)
 
+## 📑 Table of Contents
+
+- [🚀 Key Features](#-key-features)
+  - [Enterprise-Grade MQTT Broker](#enterprise-grade-mqtt-broker)
+  - [Horizontal Scaling & High Availability](#horizontal-scaling--high-availability)
+  - [Multi-Database Backend Support](#multi-database-backend-support)
+  - [AI Integration (MCP Server)](#ai-integration-mcp-server)
+  - [SparkplugB Extension](#sparkplugb-extension)
+- [🏗️ Architecture](#️-architecture)
+- [📦 Quick Start](#-quick-start)
+  - [Docker Compose (Recommended)](#docker-compose-recommended)
+  - [SQLite (Lightweight Setup)](#sqlite-lightweight-setup)
+  - [Build from Source](#build-from-source)
+  - [Example Configurations](#example-configurations)
+- [⚙️ Configuration Reference](#️-configuration-reference)
+  - [YAML Schema Support](#yaml-schema-support)
+  - [Network Ports](#network-ports)
+  - [Storage Configuration](#storage-configuration)
+  - [Archive Groups](#archive-groups)
+  - [Database Connections](#database-connections)
+  - [Clustering](#clustering)
+  - [Kafka Integration](#kafka-integration)
+    - [Archive Streaming](#1-archive-streaming-selective-export)
+    - [Kafka as Message Bus](#2-kafka-as-message-bus-complete-data-stream)
+  - [Extensions](#extensions)
+- [🔧 Advanced Features](#-advanced-features)
+  - [Clustering Setup](#clustering-setup)
+  - [MCP Server Integration](#mcp-server-integration)
+- [🌐 Hazelcast Clustering](#-hazelcast-clustering)
+  - [Cluster Configuration](#cluster-configuration)
+  - [Cluster Operations](#cluster-operations)
+  - [Monitoring Cluster Health](#monitoring-cluster-health)
+  - [Production Deployment Best Practices](#production-deployment-best-practices)
+- [🚨 Limitations](#-limitations)
+- [📊 Monitoring](#-monitoring)
+  - [Health Endpoints](#health-endpoints)
+  - [Logging Configuration](#logging-configuration)
+  - [Custom Logging](#custom-logging)
+- [🔐 Security](#-security)
+  - [TLS Configuration](#tls-configuration)
+  - [Database Security](#database-security)
+
+---
+
 ## 🚀 Key Features
 
 ### **Enterprise-Grade MQTT Broker**
@@ -24,15 +68,20 @@ MonsterMQ is a high-performance, scalable MQTT broker built on Vert.X and Hazelc
 ### **Multi-Database Backend Support**
 MonsterMQ supports multiple database backends for different storage needs:
 
-| Database | Session Store | Retained Store | Message Archive | Message Store | Use Case |
-|----------|:-------------:|:--------------:|:---------------:|:-------------:|:---------|
-| **PostgreSQL** | ✅ | ✅ | ✅ | ✅ | Production, full SQL features |
-| **SQLite** | ✅ | ✅ | ✅ | ✅ | Development, single-instance |
-| **CrateDB** | ✅ | ✅ | ✅ | ✅ | Time-series, analytics |
-| **MongoDB** | ✅ | ✅ | ✅ | ✅ | Document-based, NoSQL |
-| **Memory** | ❌ | ✅ | ❌ | ✅ | High-speed, volatile |
-| **Hazelcast** | ❌ | ✅ | ❌ | ✅ | Distributed cache, clustering |
-| **Kafka** | ❌ | ❌ | ✅ | ❌ | Streaming, event sourcing |
+| Database | Session Store | Retained Store | Message Archive | Message Store | Cluster Support | Use Case |
+|----------|:-------------:|:--------------:|:---------------:|:-------------:|:---------------:|:---------|
+| **PostgreSQL** | ✅ | ✅ | ✅ | ✅ | ✅ | Production, full SQL features |
+| **SQLite** | ✅ | ✅ | ✅ | ✅ | ❌ | Development, single-instance only |
+| **CrateDB** | ✅ | ✅ | ✅ | ✅ | ✅ | Time-series, analytics |
+| **MongoDB** | ✅ | ✅ | ✅ | ✅ | ✅ | Document-based, NoSQL |
+| **Memory** | ❌ | ✅ | ❌ | ✅ | ✅ | High-speed, volatile |
+| **Hazelcast** | ❌ | ✅ | ❌ | ✅ | ✅ | Distributed cache, clustering |
+| **Kafka** | ❌ | ❌ | ✅ | ❌ | ✅ | Streaming, event sourcing |
+
+**Important Clustering Note:**
+- **SQLite cannot be used in cluster mode** - it's file-based and not shareable between nodes
+- Clustering requires a central database: PostgreSQL, CrateDB, or MongoDB
+- All cluster nodes must connect to the same database instance
 
 **Advanced Features** (PostgreSQL & SQLite only):
 - Historical message queries with time filtering
@@ -195,6 +244,36 @@ java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -config 
 ./run.sh -config config.yaml
 ```
 
+### Example Configurations
+
+Several pre-configured examples are available:
+
+- **`config.yaml`** - Default configuration with PostgreSQL
+- **`config-postgres.yaml`** - PostgreSQL configuration example
+- **`config-sqlite.yaml`** - SQLite configuration (single-instance only)
+- **`config-memory.yaml`** - Memory-only configuration (no persistence)
+- **`config-hazelcast.yaml`** - Hazelcast clustering with PostgreSQL
+- **`config-kafka.yaml`** - Kafka streaming integration (selective topics)
+- **`config-kafka-bus.yaml`** - Kafka as message bus (ALL messages)
+- **`docker-compose-kafka.yaml`** - Complete Kafka stack with MonsterMQ
+
+```bash
+# Development with SQLite (single instance only)
+./run.sh -config config-sqlite.yaml
+
+# Production cluster with Hazelcast
+./run.sh -cluster -config config-hazelcast.yaml
+
+# Testing with memory-only storage
+./run.sh -config config-memory.yaml
+
+# Stream to Kafka
+./run.sh -config config-kafka.yaml
+
+# Full Kafka stack with Docker
+docker-compose -f docker-compose-kafka.yaml up -d
+```
+
 ## ⚙️ Configuration Reference
 
 ### YAML Schema Support
@@ -297,13 +376,184 @@ MongoDB:
 ```
 
 ### Kafka Integration
+
+MonsterMQ offers two powerful ways to integrate with Apache Kafka: **Archive Streaming** and **Kafka as Message Bus**.
+
+#### 1. Archive Streaming (Selective Export)
+
+Stream specific MQTT topics to Kafka for downstream processing:
+
+```yaml
+Kafka:
+  Servers: kafka:9092          # Kafka broker addresses
+
+# Stream specific topics to different Kafka topics
+ArchiveGroups:
+  - Name: sensors
+    TopicFilter: [ "sensors/#" ]
+    ArchiveType: KAFKA          # Stream to Kafka topic "sensors"
+    
+  - Name: events
+    TopicFilter: [ "events/#", "alerts/#" ]
+    ArchiveType: KAFKA          # Stream to Kafka topic "events"
+```
+
+#### 2. Kafka as Message Bus (Complete Data Stream)
+
+Replace Vert.x EventBus with Kafka for **ALL** internal message distribution:
+
 ```yaml
 Kafka:
   Servers: kafka:9092
-  Bus:                    # Use Kafka as message bus
-    Enabled: false
-    Topic: monster
-  # Archive groups can use ArchiveType: KAFKA
+  Bus:
+    Enabled: true               # 🔴 KAFKA AS MESSAGE BUS
+    Topic: monster-bus          # All MQTT messages flow through this topic
+```
+
+**Architecture Comparison:**
+
+```
+Standard Mode (Vert.x EventBus):
+Client → MonsterMQ → [Vert.x EventBus] → Subscribers
+                  ↓
+            Archive to Kafka (selective)
+
+Kafka Bus Mode:
+Client → MonsterMQ → [Kafka Topic] → MonsterMQ → Subscribers
+                          ↓
+                  ALL messages available in Kafka
+```
+
+**Why Use Kafka as Message Bus?**
+
+✅ **Complete Data Stream**
+- Every single MQTT message flows through Kafka
+- No need for separate archive configuration
+- Guaranteed capture of all broker traffic
+
+✅ **Universal Access**
+- Any Kafka client can tap into the message stream
+- Real-time analytics on ALL broker traffic
+- Debug and monitor everything happening in the broker
+
+✅ **Advanced Capabilities**
+- Kafka's built-in replay functionality
+- Time-travel debugging (replay from any point)
+- Automatic data retention and compaction
+- Stream processing with Kafka Streams/ksqlDB
+
+✅ **Integration Benefits**
+- Direct integration with data platforms (Spark, Flink)
+- Native CDC (Change Data Capture) capabilities
+- Easy data lake ingestion
+- Microservices can consume the raw stream
+
+⚠️ **Trade-offs:**
+- **Higher Latency**: Additional network hop through Kafka (typically 5-20ms)
+- **Dependency**: Kafka becomes critical infrastructure
+- **Throughput**: Limited by Kafka cluster capacity
+- **Complexity**: More components to manage
+
+**Configuration Example:**
+
+```yaml
+# config-kafka-bus.yaml
+TCP: 1883
+WS: 8080
+
+# Use Kafka as the internal message bus
+Kafka:
+  Servers: kafka1:9092,kafka2:9092,kafka3:9092
+  Bus:
+    Enabled: true               # Enable Kafka bus mode
+    Topic: monstermq-stream     # All messages flow here
+
+# Storage configuration
+SessionStoreType: POSTGRES
+RetainedStoreType: POSTGRES
+
+# No need for ArchiveGroups - everything is in Kafka!
+# But you can still add them for additional filtering if needed
+```
+
+**Monitoring the Complete Stream:**
+
+```bash
+# View ALL MQTT messages flowing through the broker
+kafka-console-consumer \
+  --topic monstermq-stream \
+  --from-beginning \
+  --bootstrap-server localhost:9092 | jq '.'
+
+# Count messages per topic
+kafka-console-consumer \
+  --topic monstermq-stream \
+  --from-beginning \
+  --bootstrap-server localhost:9092 | \
+  jq -r '.topic' | sort | uniq -c
+
+# Stream to analytics platform
+spark-submit \
+  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 \
+  analyze-mqtt-stream.py
+```
+
+**Use Cases for Kafka Bus Mode:**
+
+1. **Compliance & Auditing**: Capture every message for regulatory requirements
+2. **Analytics Platform**: Feed all data into a data lake or analytics system
+3. **Development/Testing**: Record and replay entire test scenarios
+4. **Debugging**: Time-travel debugging of production issues
+5. **Multi-System Integration**: Multiple systems consuming the same stream
+
+**Performance Considerations:**
+
+```yaml
+# Optimize for throughput (higher latency acceptable)
+Kafka:
+  Bus:
+    Enabled: true
+    Topic: monstermq-stream
+    ProducerConfig:           # Optional Kafka producer tuning
+      batch.size: 65536      # Larger batches
+      linger.ms: 10          # Wait up to 10ms to batch
+      compression.type: lz4   # Fast compression
+
+# Optimize for latency (lower throughput)
+Kafka:
+  Bus:
+    Enabled: true  
+    Topic: monstermq-stream
+    ProducerConfig:
+      batch.size: 0          # No batching
+      linger.ms: 0           # Send immediately
+      acks: 1                # Don't wait for all replicas
+```
+
+**Message Format:**
+```json
+{
+  "topic": "sensors/temperature/room1",
+  "payload": "23.5",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "qos": 1,
+  "retained": false,
+  "clientId": "sensor-001"
+}
+```
+
+**Quick Start with Docker:**
+```bash
+# Start complete stack with Kafka bus
+docker-compose -f docker-compose-kafka.yaml up -d
+
+# Monitor the complete message stream
+docker exec -it kafka kafka-console-consumer \
+  --topic monster-bus --from-beginning \
+  --bootstrap-server localhost:9092
+
+# View Kafka UI
+open http://localhost:8090
 ```
 
 ### Extensions
@@ -338,12 +588,18 @@ MCP:
 
 ## 🌐 Hazelcast Clustering
 
-MonsterMQ uses **Hazelcast** as its clustering engine to provide high availability, horizontal scaling, and distributed caching across multiple broker instances. When running in cluster mode with the `-cluster` flag, MonsterMQ automatically forms a distributed cluster where:
+MonsterMQ uses **Hazelcast** as its clustering engine to provide high availability, horizontal scaling, and distributed caching across multiple broker instances. When running in cluster mode with the `-cluster` flag, MonsterMQ automatically forms a distributed cluster.
 
+**Important Requirements:**
+- **Central Database Required**: Clustering requires PostgreSQL, CrateDB, or MongoDB for session storage
+- **SQLite Cannot Be Used**: SQLite is file-based and cannot be shared between cluster nodes
+- **All Nodes Must Share**: All cluster nodes must connect to the same database instance
+
+**Cluster Capabilities:**
 - **MQTT clients** can connect to any cluster node
 - **Messages are shared** across all cluster members in real-time  
 - **Retained messages** are distributed using Hazelcast distributed maps
-- **Session state** is synchronized across the cluster
+- **Session state** is synchronized via the shared database
 - **Automatic failover** ensures high availability
 
 ### Cluster Configuration
@@ -460,12 +716,18 @@ java -Dvertx.hazelcast.config=hazelcast.xml \
 
 #### Distributed Message Stores
 
-When clustering is enabled, MonsterMQ automatically uses Hazelcast-backed stores:
+When clustering is enabled, MonsterMQ requires both database and Hazelcast configuration:
 
 ```yaml
-# Cluster-aware configuration
+# Cluster-aware configuration (config-hazelcast.yaml)
+SessionStoreType: POSTGRES      # Required: Central database for sessions
 RetainedStoreType: HAZELCAST   # Distributed retained messages
-# Note: SessionStore still requires database (PostgreSQL, etc.)
+
+# Database configuration (required for clustering)
+Postgres:
+  Url: jdbc:postgresql://shared-db-server:5432/monster
+  User: system
+  Pass: manager
 ```
 
 **How it works:**
@@ -558,7 +820,7 @@ Database: 8GB RAM, 4 CPUs (separate server)
 
 ### MCP Server Integration
 
-The MCP server provides AI models with access to MQTT data:
+The MCP server provides tools with access to MQTT data:
 > pip install mcp
 
 ```python

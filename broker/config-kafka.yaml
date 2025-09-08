@@ -1,0 +1,103 @@
+# MonsterMQ Configuration - Kafka Streaming Integration
+# This configuration demonstrates streaming MQTT messages to Apache Kafka
+# Use cases: Event sourcing, data pipelines, analytics, microservices integration
+
+# Network Configuration
+TCP: 1883
+WS: 8080
+TCPS: 0     # Disabled for this example
+WSS: 0      # Disabled for this example
+MaxMessageSizeKb: 512
+
+# Storage Configuration
+SessionStoreType: POSTGRES      # Persistent sessions
+RetainedStoreType: POSTGRES     # Persistent retained messages
+QueuedMessagesEnabled: true     # Enable QoS message queuing
+
+# PostgreSQL Configuration (for sessions and retained messages)
+Postgres:
+  Url: jdbc:postgresql://localhost:5432/monster
+  User: system
+  Pass: manager
+
+# Kafka Configuration
+Kafka:
+  # Kafka broker addresses (comma-separated for multiple brokers)
+  Servers: localhost:9092
+  # Alternative for multiple brokers:
+  # Servers: kafka1:9092,kafka2:9092,kafka3:9092
+  
+  # Optional: Use Kafka as internal message bus between MonsterMQ nodes
+  Bus:
+    Enabled: false      # Set to true to use Kafka instead of Vert.x EventBus
+    Topic: monster-bus  # Topic for internal MonsterMQ communication
+
+# Archive Groups - Stream different topics to Kafka
+ArchiveGroups:
+  # Stream all sensor data to Kafka
+  - Name: sensors
+    Enabled: true
+    TopicFilter: [ "sensors/#", "devices/+/telemetry" ]
+    RetainedOnly: false
+    LastValType: POSTGRES      # Current values in PostgreSQL
+    ArchiveType: KAFKA         # Stream to Kafka
+    
+  # Stream critical events to Kafka
+  - Name: events
+    Enabled: true
+    TopicFilter: [ "events/#", "alerts/#", "alarms/#" ]
+    RetainedOnly: false
+    LastValType: MEMORY        # Fast in-memory access for current values
+    ArchiveType: KAFKA         # Stream to Kafka
+    
+  # Stream all messages for data lake ingestion
+  - Name: datalake
+    Enabled: true
+    TopicFilter: [ "#" ]      # All topics
+    RetainedOnly: false
+    LastValType: NONE         # No current value caching needed
+    ArchiveType: KAFKA        # Stream everything to Kafka
+    
+  # MCP Server support with hybrid storage
+  - Name: MCP
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: POSTGRES     # Required for MCP
+    ArchiveType: POSTGRES     # Keep historical data in PostgreSQL for MCP queries
+
+# Optional: SparkplugB Extension
+SparkplugMetricExpansion:
+  Enabled: true    # Expand SparkplugB messages before streaming to Kafka
+
+# MCP Server configuration
+MCP:
+  Enabled: true
+  Port: 3000
+
+# Usage Notes:
+# 1. Start Kafka first:
+#    docker-compose up -d kafka
+#    
+# 2. Create Kafka topics (optional, auto-created if enabled):
+#    kafka-topics --create --topic sensors --bootstrap-server localhost:9092
+#    kafka-topics --create --topic events --bootstrap-server localhost:9092
+#    kafka-topics --create --topic datalake --bootstrap-server localhost:9092
+#
+# 3. Start MonsterMQ:
+#    ./run.sh -config config-kafka.yaml
+#
+# 4. Consume from Kafka:
+#    kafka-console-consumer --topic sensors --from-beginning --bootstrap-server localhost:9092
+#
+# Kafka Message Format:
+# - Topic: The archive group name (sensors, events, datalake)
+# - Key: MQTT topic name
+# - Value: JSON with { topic, payload, timestamp, qos, retained, clientId }
+#
+# Integration Examples:
+# - Apache Spark: Stream processing of sensor data
+# - Apache Flink: Real-time analytics on event streams
+# - Elasticsearch: Index all messages via Kafka Connect
+# - Data Lake: Store raw messages in S3/HDFS via Kafka Connect
+# - Microservices: React to MQTT events via Kafka consumers

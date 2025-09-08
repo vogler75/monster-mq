@@ -1,0 +1,109 @@
+# MonsterMQ Configuration - Kafka as Message Bus
+# This configuration uses Kafka as the internal message bus instead of Vert.x EventBus
+# ALL MQTT messages flow through Kafka, providing complete observability and streaming capabilities
+
+# Network Configuration
+TCP: 1883
+WS: 8080
+TCPS: 8883
+WSS: 9001
+MaxMessageSizeKb: 512
+
+# Storage Configuration
+SessionStoreType: POSTGRES      # Persistent sessions
+RetainedStoreType: POSTGRES     # Persistent retained messages
+QueuedMessagesEnabled: true     # Enable QoS message queuing
+
+# PostgreSQL Configuration
+Postgres:
+  Url: jdbc:postgresql://localhost:5432/monster
+  User: system
+  Pass: manager
+
+# Kafka as Message Bus Configuration
+# IMPORTANT: This replaces the internal Vert.x EventBus
+# Every MQTT message will flow through Kafka
+Kafka:
+  # Kafka broker addresses (use multiple for redundancy)
+  Servers: localhost:9092
+  # For production clusters:
+  # Servers: kafka1:9092,kafka2:9092,kafka3:9092
+  
+  # Enable Kafka as the internal message bus
+  Bus:
+    Enabled: true                    # 🔴 ENABLE KAFKA BUS MODE
+    Topic: monstermq-stream          # Single topic for ALL messages
+    
+    # Optional: Kafka producer configuration for tuning
+    # ProducerConfig:
+    #   # Throughput optimized (higher latency)
+    #   batch.size: 65536            # Batch messages for efficiency
+    #   linger.ms: 10                # Wait up to 10ms to batch
+    #   compression.type: lz4         # Fast compression
+    #   
+    #   # Latency optimized (lower throughput)
+    #   # batch.size: 0               # No batching
+    #   # linger.ms: 0                # Send immediately
+    #   # acks: 1                     # Don't wait for all replicas
+
+# Optional: Additional Archive Groups
+# Even with Kafka bus, you can still filter specific topics to separate Kafka topics
+ArchiveGroups:
+  # High-priority events to separate topic for faster processing
+  - Name: critical
+    Enabled: true
+    TopicFilter: [ "alerts/critical/#", "alarms/emergency/#" ]
+    RetainedOnly: false
+    LastValType: MEMORY
+    ArchiveType: KAFKA         # Goes to Kafka topic "critical"
+    
+  # MCP Server support
+  - Name: MCP
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: POSTGRES      # Required for MCP
+    ArchiveType: NONE          # Already in Kafka bus, no need to duplicate
+
+# SparkplugB Extension
+SparkplugMetricExpansion:
+  Enabled: true    # Expand messages before sending to Kafka
+
+# MCP Server configuration
+MCP:
+  Enabled: true
+  Port: 3000
+
+# Benefits of this configuration:
+# ✅ Complete Data Stream: Every message is in Kafka
+# ✅ Observability: Monitor all broker traffic from Kafka
+# ✅ Replay: Time-travel debugging with Kafka replay
+# ✅ Integration: Any Kafka client can consume the stream
+# ✅ Analytics: Direct stream processing with Spark/Flink
+#
+# Trade-offs:
+# ⚠️ Latency: Additional 5-20ms per message
+# ⚠️ Dependency: Kafka must be running for broker to work
+# ⚠️ Complexity: More infrastructure to manage
+#
+# Usage:
+# 1. Ensure Kafka is running:
+#    docker-compose -f docker-compose-kafka.yaml up -d kafka
+#
+# 2. Create the topic (optional, auto-created if enabled):
+#    kafka-topics --create --topic monstermq-stream \
+#      --bootstrap-server localhost:9092 \
+#      --partitions 10 --replication-factor 1
+#
+# 3. Start MonsterMQ:
+#    ./run.sh -config config-kafka-bus.yaml
+#
+# 4. Monitor the stream:
+#    kafka-console-consumer --topic monstermq-stream \
+#      --from-beginning --bootstrap-server localhost:9092
+#
+# For production:
+# - Use multiple Kafka brokers for redundancy
+# - Increase replication factor for durability
+# - Tune producer config based on latency/throughput needs
+# - Consider partitioning strategy for scaling

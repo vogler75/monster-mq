@@ -1,0 +1,49 @@
+# MonsterMQ Configuration - Memory Only
+# This configuration uses only in-memory storage (no persistence)
+# Suitable for testing, development, or ephemeral deployments
+
+# Network Configuration
+TCP: 1883
+WS: 8080
+TCPS: 0     # Disabled
+WSS: 0      # Disabled
+MaxMessageSizeKb: 8
+
+# Memory-only storage configuration
+# Note: SessionStore requires a database, so we'll use SQLite with in-memory mode
+SessionStoreType: SQLITE
+RetainedStoreType: MEMORY
+
+# Enable queued messages (stored in memory via SQLite :memory:)
+QueuedMessagesEnabled: true
+
+# SQLite in-memory configuration
+# Using special :memory: path creates an in-memory SQLite database
+# Data is lost when the broker restarts
+SQLite:
+  Path: ":memory:"
+
+# Archive configuration with memory storage
+ArchiveGroups:
+  - Name: MCP
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: MEMORY     # In-memory current value storage
+    ArchiveType: NONE       # No historical archive (memory-only)
+
+# Optional: SparkplugB Extension
+SparkplugMetricExpansion:
+  Enabled: false
+
+# MCP Server configuration
+MCP:
+  Enabled: true
+  Port: 3000
+
+# Note: When using this configuration:
+# - All data is lost on broker restart
+# - No persistence across restarts
+# - Fast performance (no disk I/O)
+# - Suitable for testing and development
+# - Not recommended for production use
