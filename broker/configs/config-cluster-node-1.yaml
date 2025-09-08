@@ -1,0 +1,12 @@
+TCP: 1883
+
+MaxMessageSizeKb: 512
+QueuedMessagesEnabled: true
+
+SessionStoreType: POSTGRES
+RetainedStoreType: POSTGRES
+
+Postgres:
+  Url: jdbc:postgresql://linux5:5432/monster
+  User: system
+  Pass: manager
