@@ -1,0 +1,81 @@
+# MonsterMQ MongoDB Configuration
+# Enhanced MongoDB implementation with performance optimizations
+# - Connection pooling (10-50 connections)
+# - Time-series collections for message archives
+# - Optimized indexes for wildcard topic matching
+# - GraphQL and MCP support via IMessageArchiveExtended
+
+TCP: 1883
+TCPS: 8883
+WS: 9000
+WSS: 9001
+
+MaxMessageSizeKb: 512
+QueuedMessagesEnabled: true
+
+# MongoDB as primary storage backend
+SessionStoreType: MONGODB
+RetainedStoreType: MONGODB
+
+# Enable SparkplugB message expansion
+SparkplugMetricExpansion:
+  Enabled: true
+
+# Archive configuration with MongoDB
+ArchiveGroups:
+  - Name: Default
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: MONGODB
+    ArchiveType: MONGODB
+
+# MongoDB connection configuration
+MongoDB:
+  # Connection string with authentication
+  Url: mongodb://system:manager@linux5:27017
+  
+  # Database name
+  Database: monster
+  
+  # Optional: Advanced connection settings
+  # - Connection pooling is automatically configured in enhanced implementation
+  # - Time-series collections are created automatically for archives
+  # - Indexes are created automatically for optimal performance
+
+# GraphQL API server
+GraphQL:
+  Enabled: true
+  Port: 4000
+  Path: /graphql
+  CorsEnabled: false
+  CorsOrigin: "*"
+
+# MCP Server for AI integration
+MCP:
+  Enabled: true
+  Port: 3000
+  CorsEnabled: false
+  CorsOrigin: "*"
+
+# Example configurations for different MongoDB setups:
+# 
+# Local development:
+# MongoDB:
+#   Url: mongodb://localhost:27017
+#   Database: monster_dev
+#
+# MongoDB Atlas (cloud):
+# MongoDB:
+#   Url: mongodb+srv://username:password@cluster.mongodb.net
+#   Database: monster_prod
+#
+# Replica Set:
+# MongoDB:
+#   Url: mongodb://user:pass@host1:27017,host2:27017,host3:27017/monster?replicaSet=rs0
+#   Database: monster
+#
+# Authentication with specific database:
+# MongoDB:
+#   Url: mongodb://user:pass@localhost:27017/monster?authSource=admin
+#   Database: monster
