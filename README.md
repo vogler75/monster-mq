@@ -31,6 +31,7 @@ MonsterMQ is a high-performance, scalable MQTT broker built on Vert.X and Hazelc
   - [Extensions](#extensions)
 - [🔧 Advanced Features](#-advanced-features)
   - [Clustering Setup](#clustering-setup)
+  - [GraphQL API Integration](#graphql-api-integration)
   - [MCP Server Integration](#mcp-server-integration)
 - [🌐 Hazelcast Clustering](#-hazelcast-clustering)
   - [Cluster Configuration](#cluster-configuration)
