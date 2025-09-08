@@ -166,7 +166,7 @@ class MessageArchiveMongoDB(
         endTime: Instant?,
         limit: Int
     ): JsonArray {
-        logger.info("MongoDB getHistory: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
+        logger.fine("MongoDB getHistory: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
         
         val filters = mutableListOf<Bson>()
         
@@ -225,7 +225,7 @@ class MessageArchiveMongoDB(
                 }
             
             val queryDuration = System.currentTimeMillis() - startQuery
-            logger.info("MongoDB query completed in ${queryDuration}ms, returned ${messages.size()} messages")
+            logger.fine("MongoDB query completed in ${queryDuration}ms, returned ${messages.size()} messages")
             
         } catch (e: Exception) {
             logger.severe("Error retrieving history for topic [$topic]: ${e.message}")
@@ -255,7 +255,7 @@ class MessageArchiveMongoDB(
                 }
             
             val duration = System.currentTimeMillis() - startTime
-            logger.info("Aggregation completed in ${duration}ms with ${result.size()} results")
+            logger.fine("Aggregation completed in ${duration}ms with ${result.size()} results")
             
         } catch (e: Exception) {
             logger.severe("Error executing aggregation: ${e.message}")

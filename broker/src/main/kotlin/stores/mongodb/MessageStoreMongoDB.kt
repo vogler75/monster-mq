@@ -239,7 +239,7 @@ class MessageStoreMongoDB(
             }
 
             val duration = System.currentTimeMillis() - startTime
-            logger.info("Found $count messages in ${duration}ms for pattern [$topicName]")
+            logger.fine("Found $count messages in ${duration}ms for pattern [$topicName]")
             
         } catch (e: Exception) {
             logger.warning("Error finding messages for pattern [$topicName]: ${e.message}")
