@@ -6,8 +6,8 @@ WSS: 9001
 MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 
-SessionStoreType: POSTGRES
-RetainedStoreType: POSTGRES
+SessionStoreType: SQLITE
+RetainedStoreType: SQLITE
 
 SparkplugMetricExpansion:
   Enabled: true
@@ -17,8 +17,8 @@ ArchiveGroups:
     Enabled: true
     TopicFilter: [ "#" ]
     RetainedOnly: false
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
+    LastValType: SQLITE
+    ArchiveType: SQLITE
     LastValRetention: "10m"
     ArchiveRetention: "15m"
     PurgeInterval: "1m"

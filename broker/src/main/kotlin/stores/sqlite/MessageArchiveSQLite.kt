@@ -233,8 +233,26 @@ class MessageArchiveSQLite(
     }
 
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
-        logger.warning("purgeOldMessages not yet implemented for SQLite message archive [$name]")
-        // TODO: Implement message purging for SQLite archives
-        return PurgeResult(0, 0)
+        val startTime = System.currentTimeMillis()
+        
+        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        
+        val sql = "DELETE FROM $tableName WHERE time < ?"
+        val params = JsonArray().add(olderThan.toString())
+        
+        return try {
+            val future = sqlClient.executeUpdate(sql, params)
+            val deletedCount = future.toCompletionStage().toCompletableFuture().get(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
+            
+            val elapsedTimeMs = System.currentTimeMillis() - startTime
+            val purgeResult = PurgeResult(deletedCount, elapsedTimeMs)
+            
+            logger.fine("Purge completed for [$name]: deleted ${purgeResult.deletedCount} messages in ${purgeResult.elapsedTimeMs}ms")
+            purgeResult
+        } catch (e: Exception) {
+            logger.severe("Error purging old messages from [$name]: ${e.message}")
+            val elapsedTimeMs = System.currentTimeMillis() - startTime
+            PurgeResult(0, elapsedTimeMs)
+        }
     }
 }
