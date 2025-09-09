@@ -327,9 +327,25 @@ class MessageStoreMongoDB(
     override fun getType(): MessageStoreType = MessageStoreType.MONGODB
 
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
-        logger.warning("purgeOldMessages not yet implemented for MongoDB message store [$name]")
-        // TODO: Implement message purging for MongoDB stores
-        return PurgeResult(0, 0)
+        val startTime = System.currentTimeMillis()
+        var deletedCount = 0
+        
+        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        
+        try {
+            val filter = Filters.lt("time", Instant.ofEpochMilli(olderThan.toEpochMilli()))
+            val result = collection.deleteMany(filter)
+            deletedCount = result.deletedCount.toInt()
+        } catch (e: Exception) {
+            logger.severe("Error purging old messages from [$name]: ${e.message}")
+        }
+        
+        val elapsedTimeMs = System.currentTimeMillis() - startTime
+        val purgeResult = PurgeResult(deletedCount, elapsedTimeMs)
+        
+        logger.fine("Purge completed for [$name]: deleted ${purgeResult.deletedCount} messages in ${purgeResult.elapsedTimeMs}ms")
+        
+        return purgeResult
     }
 
     override fun stop() {

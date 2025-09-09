@@ -295,9 +295,26 @@ class MessageArchiveMongoDB(
     override fun getType(): MessageArchiveType = MessageArchiveType.MONGODB
 
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
-        logger.warning("purgeOldMessages not yet implemented for MongoDB message archive [$name]")
-        // TODO: Implement message purging for MongoDB archives
-        return PurgeResult(0, 0)
+        val startTime = System.currentTimeMillis()
+        var deletedCount = 0
+        
+        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        
+        try {
+            // For time-series collections, use Date format for filtering
+            val filter = Filters.lt("time", Date.from(olderThan))
+            val result = collection.deleteMany(filter)
+            deletedCount = result.deletedCount.toInt()
+        } catch (e: Exception) {
+            logger.severe("Error purging old messages from [$name]: ${e.message}")
+        }
+        
+        val elapsedTimeMs = System.currentTimeMillis() - startTime
+        val purgeResult = PurgeResult(deletedCount, elapsedTimeMs)
+        
+        logger.fine("Purge completed for [$name]: deleted ${purgeResult.deletedCount} messages in ${purgeResult.elapsedTimeMs}ms")
+        
+        return purgeResult
     }
 
     override fun stop() {
