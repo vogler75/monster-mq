@@ -6,11 +6,13 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.PurgeResult
 import at.rocworks.stores.cratedb.MessageStoreCrateDB
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import java.sql.*
+import java.time.Instant
 
 class MessageStorePostgres(
     private val name: String,
@@ -43,6 +45,7 @@ class MessageStorePostgres(
         override fun init(connection: Connection): Future<Void> {
             val promise = Promise.promise<Void>()
             try {
+                connection.autoCommit = false
                 connection.createStatement().use { statement ->
                     val pkColumnsString = ALL_PK_COLUMNS.joinToString(", ")
                     val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it text NOT NULL" }
@@ -65,6 +68,7 @@ class MessageStorePostgres(
                     statement.executeUpdate("""
                     CREATE INDEX IF NOT EXISTS ${tableName}_topic ON $tableName ($pkColumnsString)
                     """.trimIndent())
+                    connection.commit()
                     logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
                     promise.complete()
                 }
@@ -152,6 +156,7 @@ class MessageStorePostgres(
                     }
                     preparedStatement.executeBatch()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.severe("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -169,6 +174,7 @@ class MessageStorePostgres(
                     }
                     preparedStatement.executeBatch()
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.severe("Error deleting batch data [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -295,5 +301,32 @@ class MessageStorePostgres(
 
         logger.fine("findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
         return resultTopics
+    }
+    
+    override fun purgeOldMessages(olderThan: Instant): PurgeResult {
+        val startTime = System.currentTimeMillis()
+        var deletedCount = 0
+        
+        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        
+        try {
+            db.connection?.let { connection ->
+                val sql = "DELETE FROM $tableName WHERE time < ?"
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setTimestamp(1, Timestamp.from(olderThan))
+                    deletedCount = preparedStatement.executeUpdate()
+                }
+                connection.commit()
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error purging old messages from [$name]: ${e.message}")
+        }
+        
+        val elapsedTimeMs = System.currentTimeMillis() - startTime
+        val result = PurgeResult(deletedCount, elapsedTimeMs)
+        
+        logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
+        
+        return result
     }
 }

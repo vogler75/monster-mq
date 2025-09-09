@@ -6,10 +6,12 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import java.sql.*
+import java.time.Instant
 
 class MessageStoreCrateDB(
     private val name: String,
@@ -260,5 +262,11 @@ class MessageStoreCrateDB(
                 lastFetchError = e.errorCode
             }
         }
+    }
+
+    override fun purgeOldMessages(olderThan: Instant): PurgeResult {
+        logger.warning("purgeOldMessages not yet implemented for CrateDB message store [$name]")
+        // TODO: Implement message purging for CrateDB stores
+        return PurgeResult(0, 0)
     }
 }

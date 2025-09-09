@@ -5,6 +5,7 @@ import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.PurgeResult
 import com.mongodb.ConnectionString
 import com.mongodb.MongoClientSettings
 import com.mongodb.WriteConcern
@@ -324,6 +325,12 @@ class MessageStoreMongoDB(
 
     override fun getName(): String = name
     override fun getType(): MessageStoreType = MessageStoreType.MONGODB
+
+    override fun purgeOldMessages(olderThan: Instant): PurgeResult {
+        logger.warning("purgeOldMessages not yet implemented for MongoDB message store [$name]")
+        // TODO: Implement message purging for MongoDB stores
+        return PurgeResult(0, 0)
+    }
 
     override fun stop() {
         mongoClient.close()

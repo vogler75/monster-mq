@@ -6,8 +6,8 @@ WSS: 9001
 MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 
-SessionStoreType: SQLITE
-RetainedStoreType: SQLITE
+SessionStoreType: POSTGRES
+RetainedStoreType: POSTGRES
 
 SparkplugMetricExpansion:
   Enabled: true
@@ -17,8 +17,11 @@ ArchiveGroups:
     Enabled: true
     TopicFilter: [ "#" ]
     RetainedOnly: false
-    LastValType: SQLITE
-    ArchiveType: SQLITE
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
+    LastValRetention: "10m"
+    ArchiveRetention: "15m"
+    PurgeInterval: "1m"
 
 # SQLite configuration
 SQLite:
@@ -26,19 +29,19 @@ SQLite:
 
 # PostgreSQL configuration
 Postgres:
-  Url: jdbc:postgresql://linux0:5432/monster
+  Url: jdbc:postgresql://linux5:5432/monster
   User: system
   Pass: manager
 
 # CrateDB configuration
 CrateDB:
-  Url: jdbc:postgresql://linux0:5432/monster
+  Url: jdbc:postgresql://linux5:5432/monster
   User: crate
   Pass: ""
 
 # MongoDB configuration
 MongoDB:
-  Url: mongodb://system:manager@scada:27017
+  Url: mongodb://system:manager@linux5:27017
   Database: monster
 
 # Kafka configuration

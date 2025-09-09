@@ -5,10 +5,12 @@ import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
+import java.time.Instant
 
 /**
  * Clean SQLiteVerticle-only implementation of MessageStore
@@ -306,5 +308,11 @@ class MessageStoreSQLite(
 
         logger.fine("findTopicsByConfig result: ${resultTopics.size} topics found")
         return resultTopics
+    }
+
+    override fun purgeOldMessages(olderThan: Instant): PurgeResult {
+        logger.warning("purgeOldMessages not yet implemented for SQLite message store [$name]")
+        // TODO: Implement message purging for SQLite stores
+        return PurgeResult(0, 0)
     }
 }

@@ -3,6 +3,7 @@ package at.rocworks.stores
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
+import at.rocworks.stores.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
@@ -46,5 +47,11 @@ class MessageArchiveKafka(
             codec.encodeToWire(buffer, message)
             kafkaProducer?.write(KafkaProducerRecord.create(topicName, message.topicName, buffer.bytes))
         }
+    }
+
+    override fun purgeOldMessages(olderThan: Instant): PurgeResult {
+        logger.warning("purgeOldMessages not yet implemented for Kafka message archive [$name]")
+        // TODO: Implement message purging for Kafka archives
+        return PurgeResult(0, 0)
     }
 }

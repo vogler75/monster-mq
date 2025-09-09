@@ -4,6 +4,7 @@ import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.TopicTree
 import com.hazelcast.core.HazelcastInstance
+import com.hazelcast.query.Predicates
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
@@ -65,5 +66,38 @@ class MessageStoreHazelcast(
             if (message != null) callback(message)
             else true
         }
+    }
+    
+    override fun purgeOldMessages(olderThan: Instant): PurgeResult {
+        val startTime = System.currentTimeMillis()
+        
+        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        
+        // Use Hazelcast predicates for efficient distributed filtering
+        val predicate = Predicates.lessThan<String, MqttMessage>("time", olderThan)
+        val entriesToDelete = store.entrySet(predicate)
+        
+        val topicsToDelete = entriesToDelete.map { it.key }
+        val deleteCount = topicsToDelete.size
+        
+        logger.fine { "Found $deleteCount messages to delete in [$name]" }
+        
+        // Delete in batches to avoid overwhelming the cluster
+        if (topicsToDelete.isNotEmpty()) {
+            val batchSize = 1000
+            topicsToDelete.chunked(batchSize).forEachIndexed { index, batch ->
+                delAll(batch)
+                if ((index + 1) * batchSize % 10000 == 0) {
+                    logger.fine { "Purge progress for [$name]: deleted ${(index + 1) * batchSize} messages" }
+                }
+            }
+        }
+        
+        val elapsedTimeMs = System.currentTimeMillis() - startTime
+        val result = PurgeResult(deleteCount, elapsedTimeMs)
+        
+        logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
+        
+        return result
     }
 }

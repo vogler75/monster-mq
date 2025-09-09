@@ -6,6 +6,7 @@ import at.rocworks.data.TopicTree
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
+import java.time.Instant
 import java.util.concurrent.Callable
 
 class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessageStore {
@@ -56,5 +57,42 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
             if (message != null) callback(message)
             else true
         }
+    }
+    
+    override fun purgeOldMessages(olderThan: Instant): PurgeResult {
+        val startTime = System.currentTimeMillis()
+        val topicsToDelete = mutableListOf<String>()
+        var checkedCount = 0
+        
+        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        
+        // Iterate through all messages and collect topics to delete
+        // Process in batches to avoid blocking for too long
+        val iterator = store.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            checkedCount++
+            
+            if (entry.value.time.isBefore(olderThan)) {
+                topicsToDelete.add(entry.key)
+            }
+            
+            // Log progress every 100,000 items
+            if (checkedCount % 100000 == 0) {
+                logger.fine { "Purge progress for [$name]: checked $checkedCount items, found ${topicsToDelete.size} to delete" }
+            }
+        }
+        
+        // Delete the collected topics
+        if (topicsToDelete.isNotEmpty()) {
+            delAll(topicsToDelete)
+        }
+        
+        val elapsedTimeMs = System.currentTimeMillis() - startTime
+        val result = PurgeResult(topicsToDelete.size, elapsedTimeMs)
+        
+        logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} of $checkedCount messages in ${result.elapsedTimeMs}ms")
+        
+        return result
     }
 }

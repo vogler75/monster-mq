@@ -7,6 +7,7 @@ import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageArchive
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.MessageArchiveType
+import at.rocworks.stores.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future
@@ -223,5 +224,32 @@ class MessageArchivePostgres (
             logger.severe("Error executing query: ${e.message} [${Utils.getCurrentFunctionName()}]")
             JsonArray().add("Error executing query: ${e.message}")
         }
+    }
+    
+    override fun purgeOldMessages(olderThan: Instant): PurgeResult {
+        val startTime = System.currentTimeMillis()
+        var deletedCount = 0
+        
+        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        
+        try {
+            db.connection?.let { connection ->
+                val sql = "DELETE FROM $tableName WHERE time < ?"
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setTimestamp(1, Timestamp.from(olderThan))
+                    deletedCount = preparedStatement.executeUpdate()
+                }
+                connection.commit()
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error purging old messages from [$name]: ${e.message}")
+        }
+        
+        val elapsedTimeMs = System.currentTimeMillis() - startTime
+        val result = PurgeResult(deletedCount, elapsedTimeMs)
+        
+        logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
+        
+        return result
     }
 }

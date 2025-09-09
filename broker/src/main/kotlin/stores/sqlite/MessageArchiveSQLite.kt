@@ -5,6 +5,7 @@ import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.MessageArchiveType
+import at.rocworks.stores.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
@@ -229,5 +230,11 @@ class MessageArchiveSQLite(
             logger.severe("Error executing SQLite query [$sql]: ${e.message}")
             JsonArray()
         }
+    }
+
+    override fun purgeOldMessages(olderThan: Instant): PurgeResult {
+        logger.warning("purgeOldMessages not yet implemented for SQLite message archive [$name]")
+        // TODO: Implement message purging for SQLite archives
+        return PurgeResult(0, 0)
     }
 }

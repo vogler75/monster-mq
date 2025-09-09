@@ -19,6 +19,8 @@ interface IMessageArchive {
     fun getName(): String
     fun getType(): MessageArchiveType
     fun addHistory(messages: List<MqttMessage>)
+    
+    fun purgeOldMessages(olderThan: Instant): PurgeResult
 }
 
 interface IMessageArchiveExtended: IMessageArchive {

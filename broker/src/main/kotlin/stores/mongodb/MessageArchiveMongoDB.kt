@@ -5,6 +5,7 @@ import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.MessageArchiveType
+import at.rocworks.stores.PurgeResult
 import com.mongodb.ConnectionString
 import com.mongodb.MongoClientSettings
 import com.mongodb.client.MongoClient
@@ -292,6 +293,12 @@ class MessageArchiveMongoDB(
 
     override fun getName(): String = name
     override fun getType(): MessageArchiveType = MessageArchiveType.MONGODB
+
+    override fun purgeOldMessages(olderThan: Instant): PurgeResult {
+        logger.warning("purgeOldMessages not yet implemented for MongoDB message archive [$name]")
+        // TODO: Implement message purging for MongoDB archives
+        return PurgeResult(0, 0)
+    }
 
     override fun stop() {
         mongoClient.close()

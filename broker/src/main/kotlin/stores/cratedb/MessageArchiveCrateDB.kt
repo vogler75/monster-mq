@@ -6,6 +6,7 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageArchive
 import at.rocworks.stores.MessageArchiveType
+import at.rocworks.stores.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -100,5 +101,11 @@ class MessageArchiveCrateDB (
                 lastAddAllHistoryError = e.errorCode
             }
         }
+    }
+
+    override fun purgeOldMessages(olderThan: Instant): PurgeResult {
+        logger.warning("purgeOldMessages not yet implemented for CrateDB message archive [$name]")
+        // TODO: Implement message purging for CrateDB archives
+        return PurgeResult(0, 0)
     }
 }

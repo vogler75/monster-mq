@@ -26,6 +26,7 @@ import at.rocworks.stores.sqlite.MessageArchiveSQLite
 import at.rocworks.stores.sqlite.MessageStoreSQLite
 import at.rocworks.stores.sqlite.SessionStoreSQLite
 import at.rocworks.stores.sqlite.SQLiteVerticle
+import at.rocworks.utils.DurationParser
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
@@ -304,19 +305,15 @@ MORE INFO:
             val (retainedStore, retainedReady) = getMessageStore(vertx, "RetainedMessages", retainedStoreType)
 
             // Archive groups
-            val archiveGroups = getArchiveGroups(vertx)
+            val archiveGroupsFuture = deployArchiveGroups(vertx)
 
             // Wait for all stores to be ready
-            val archiveGroupsReady = archiveGroups.map { archiveGroup ->
-                archiveGroup.lastValReady.compose {
-                    archiveGroup.archiveReady
-                }
-            }
-            Future.all<Any>(archiveGroupsReady + listOf(retainedReady, messageBusReady) as List<Future<*>>).onFailure { it ->
+            Future.all<Any>(listOf(archiveGroupsFuture, retainedReady, messageBusReady) as List<Future<*>>).onFailure { it ->
                 logger.severe("Initialization of bus or archive groups failed: ${it.message}")
                 exitProcess(-1)
             }.onComplete {
                 logger.info("Initialization of bus and archive groups completed.")
+                val archiveGroups = archiveGroupsFuture.result()
 
                 // Message handler
                 val messageHandler = MessageHandler(retainedStore!!, archiveGroups)
@@ -333,12 +330,14 @@ MORE INFO:
                 val mcpPort = mcpConfig.getInteger("Port", 3000)
                 val mcpArchiveGroup = archiveGroups.find { it.name == Const.MCP_ARCHIVE_GROUP }
                 
+                val lastValStore = mcpArchiveGroup?.lastValStore
+                val archiveStore = mcpArchiveGroup?.archiveStore
                 val mcpServer = if (mcpEnabled && mcpArchiveGroup != null &&
                     retainedStore is IMessageStoreExtended &&
-                    (mcpArchiveGroup.lastValStore != null && mcpArchiveGroup.lastValStore is IMessageStoreExtended) &&
-                    (mcpArchiveGroup.archiveStore != null && mcpArchiveGroup.archiveStore is IMessageArchiveExtended)) {
+                    (lastValStore != null && lastValStore is IMessageStoreExtended) &&
+                    (archiveStore != null && archiveStore is IMessageArchiveExtended)) {
                     logger.info("Starting MCP server on port $mcpPort")
-                    McpServer("0.0.0.0", mcpPort, retainedStore, mcpArchiveGroup.lastValStore, mcpArchiveGroup.archiveStore)
+                    McpServer("0.0.0.0", mcpPort, retainedStore, lastValStore, archiveStore)
                 } else {
                     if (!mcpEnabled) {
                         logger.info("MCP server is disabled in configuration")
@@ -413,26 +412,50 @@ MORE INFO:
         }
     }
 
-    private fun getArchiveGroups(vertx: Vertx)
-    = configJson.getJsonArray("ArchiveGroups", JsonArray())
-        .filterIsInstance<JsonObject>().filter { it.getBoolean("Enabled") }.map { c ->
-            val name = c.getString("Name", "ArchiveGroup")
-            val topicFilter = c.getJsonArray("TopicFilter", JsonArray()).toList().map { it as String }
-            val retainedOnly = c.getBoolean("RetainedOnly", false)
-
-            val lastValType = MessageStoreType.valueOf(c.getString("LastValType", "NONE"))
-            val archiveType = MessageArchiveType.valueOf(c.getString("ArchiveType", "NONE"))
-
-            val (lastValStore, lastValReady) = getMessageStore(vertx, name + "Lastval", lastValType)
-            val (archiveStore, archiveReady) = getMessageArchive(vertx, name + "Archive", archiveType)
-
-            ArchiveGroup(
-                name,
-                topicFilter, retainedOnly,
-                lastValStore, lastValReady,
-                archiveStore, archiveReady
-            )
+    private fun deployArchiveGroups(vertx: Vertx): Future<List<ArchiveGroup>> {
+        val promise = Promise.promise<List<ArchiveGroup>>()
+        
+        val archiveGroupConfigs = configJson.getJsonArray("ArchiveGroups", JsonArray())
+            .filterIsInstance<JsonObject>()
+            .filter { it.getBoolean("Enabled") }
+        
+        if (archiveGroupConfigs.isEmpty()) {
+            promise.complete(emptyList())
+            return promise.future()
         }
+        
+        // Create database configuration object with all database configs
+        val databaseConfig = JsonObject()
+        configJson.getJsonObject("Postgres")?.let { databaseConfig.put("Postgres", it) }
+        configJson.getJsonObject("CrateDB")?.let { databaseConfig.put("CrateDB", it) }
+        configJson.getJsonObject("MongoDB")?.let { databaseConfig.put("MongoDB", it) }
+        configJson.getJsonObject("SQLite")?.let { databaseConfig.put("SQLite", it) }
+        configJson.getJsonObject("Kafka")?.let { databaseConfig.put("Kafka", it) }
+        
+        val deploymentFutures: List<Future<ArchiveGroup>> = archiveGroupConfigs.map { config ->
+            val archiveGroup = ArchiveGroup.fromConfig(config, databaseConfig)
+            val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+            
+            vertx.deployVerticle(archiveGroup, options).map { _ -> 
+                logger.info("ArchiveGroup [${archiveGroup.name}] deployed successfully")
+                archiveGroup 
+            }
+        }
+        
+        @Suppress("UNCHECKED_CAST")
+        Future.all<Any>(deploymentFutures as List<Future<Any>>).onComplete { result ->
+            if (result.succeeded()) {
+                val archiveGroups = deploymentFutures.mapNotNull { 
+                    if (it.succeeded()) it.result() else null
+                }
+                promise.complete(archiveGroups)
+            } else {
+                promise.fail(result.cause())
+            }
+        }
+        
+        return promise.future()
+    }
 
     private fun getSessionStore(vertx: Vertx): Future<ISessionStoreAsync> {
         val promise = Promise.promise<ISessionStoreAsync>()

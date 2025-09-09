@@ -1,6 +1,7 @@
 package at.rocworks.stores
 
 import at.rocworks.data.MqttMessage
+import java.time.Instant
 
 enum class MessageStoreType {
     NONE,
@@ -21,6 +22,8 @@ interface IMessageStore {
     fun addAll(messages: List<MqttMessage>)
     fun delAll(topics: List<String>)
     fun findMatchingMessages(topicName: String, callback: (MqttMessage)->Boolean)
+    
+    fun purgeOldMessages(olderThan: Instant): PurgeResult
 }
 
 interface IMessageStoreExtended : IMessageStore {
