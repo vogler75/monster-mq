@@ -41,34 +41,57 @@ class QueryResolver(
                 return@DataFetcher future
             }
 
-            // Use findMatchingMessages to get the exact topic (works async)
-            var found = false
-            lastValueStore.findMatchingMessages(topic) { message ->
-                if (!found && message.topicName == topic) {
-                    found = true
+            // Handle SQLite stores asynchronously
+            if (lastValueStore.getType().name == "SQLITE") {
+                handleSQLiteCurrentValue(lastValueStore, topic, format, future)
+            } else {
+                // Try direct get first (more efficient for exact matches)
+                val directMessage = lastValueStore.get(topic)
+                if (directMessage != null) {
                     val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
-                        message.payload, 
+                        directMessage.payload, 
                         format
                     )
                     future.complete(
                         TopicValue(
-                            topic = message.topicName,
+                            topic = directMessage.topicName,
                             payload = payload,
                             format = actualFormat,
-                            timestamp = message.time.toEpochMilli(),
-                            qos = message.qosLevel
+                            timestamp = directMessage.time.toEpochMilli(),
+                            qos = directMessage.qosLevel
                         )
                     )
-                    true // stop processing
                 } else {
-                    false // continue searching
+                // Fallback to findMatchingMessages for wildcard-capable stores
+                var found = false
+                lastValueStore.findMatchingMessages(topic) { message ->
+                    if (!found && message.topicName == topic) {
+                        found = true
+                        val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
+                            message.payload, 
+                            format
+                        )
+                        future.complete(
+                            TopicValue(
+                                topic = message.topicName,
+                                payload = payload,
+                                format = actualFormat,
+                                timestamp = message.time.toEpochMilli(),
+                                qos = message.qosLevel
+                            )
+                        )
+                        true // stop processing
+                    } else {
+                        false // continue searching
+                    }
                 }
-            }
-            
-            // If not found after async search, complete with null
-            vertx.setTimer(100) {
-                if (!found) {
-                    future.complete(null)
+                
+                // If not found after async search, complete with null
+                vertx.setTimer(100) {
+                    if (!found) {
+                        future.complete(null)
+                    }
+                }
                 }
             }
 
@@ -404,6 +427,40 @@ class QueryResolver(
             regex.matches(topicName)
         } else {
             topicName.contains(pattern, ignoreCase = true)
+        }
+    }
+
+    /**
+     * Handle SQLite currentValue queries asynchronously to avoid blocking
+     */
+    private fun handleSQLiteCurrentValue(
+        lastValueStore: IMessageStore,
+        topic: String, 
+        format: DataFormat,
+        future: CompletableFuture<TopicValue?>
+    ) {
+        // Cast to SQLite store to access async methods
+        val sqliteStore = lastValueStore as at.rocworks.stores.sqlite.MessageStoreSQLite
+        
+        // Use the new async getAsync method
+        sqliteStore.getAsync(topic) { message ->
+            if (message != null) {
+                val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
+                    message.payload, 
+                    format
+                )
+                future.complete(
+                    TopicValue(
+                        topic = message.topicName,
+                        payload = payload,
+                        format = actualFormat,
+                        timestamp = message.time.toEpochMilli(),
+                        qos = message.qosLevel
+                    )
+                )
+            } else {
+                future.complete(null)
+            }
         }
     }
 }

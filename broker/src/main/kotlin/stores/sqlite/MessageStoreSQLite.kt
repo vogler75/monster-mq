@@ -116,6 +116,52 @@ class MessageStoreSQLite(
         }
     }
 
+    /**
+     * Async version of get() for better performance with GraphQL queries
+     */
+    fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
+        val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
+                     WHERE topic = ?"""
+        val params = JsonArray().add(topicName)
+        
+        sqlClient.executeQuery(sql, params).onComplete { result ->
+            if (result.succeeded()) {
+                val results = result.result()
+                if (results.size() > 0) {
+                    try {
+                        val row = results.getJsonObject(0)
+                        val payload = row.getBinary("payload_blob") ?: ByteArray(0)
+                        val qos = row.getInteger("qos", 0)
+                        val retained = row.getBoolean("retained", false)
+                        val clientId = row.getString("client_id") ?: ""
+                        val messageUuid = row.getString("message_uuid") ?: ""
+
+                        val message = MqttMessage(
+                            messageUuid = messageUuid,
+                            messageId = 0,
+                            topicName = topicName,
+                            payload = payload,
+                            qosLevel = qos,
+                            isRetain = retained,
+                            isQueued = false,
+                            clientId = clientId,
+                            isDup = false
+                        )
+                        callback(message)
+                    } catch (e: Exception) {
+                        logger.severe("Error parsing SQLite result for topic [$topicName]: ${e.message}")
+                        callback(null)
+                    }
+                } else {
+                    callback(null)
+                }
+            } else {
+                logger.severe("Error fetching data for topic [$topicName]: ${result.cause()?.message} [getAsync]")
+                callback(null)
+            }
+        }
+    }
+
     override fun addAll(messages: List<MqttMessage>) {
         if (messages.isEmpty()) return
         
