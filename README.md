@@ -1,6 +1,6 @@
 # MonsterMQ
 
-MonsterMQ is a high-performance, scalable MQTT broker built on Vert.X and Hazelcast with persistent data storage through PostgreSQL, CrateDB, MongoDB, or SQLite. It features built-in clustering, unlimited message storage, and AI integration through a Model Context Protocol (MCP) server.
+MonsterMQ is a high-performance, scalable MQTT broker built on Vert.X and Hazelcast with persistent data storage through PostgreSQL, CrateDB, MongoDB, or SQLite. It features built-in clustering, unlimited message storage, comprehensive user authentication with ACL support, automatic message retention, and AI integration through a Model Context Protocol (MCP) server.
 
 ![Logo](Logo.png)
 
@@ -12,6 +12,8 @@ MonsterMQ is a high-performance, scalable MQTT broker built on Vert.X and Hazelc
   - [Multi-Database Backend Support](#multi-database-backend-support)
   - [AI Integration (MCP Server)](#ai-integration-mcp-server)
   - [SparkplugB Extension](#sparkplugb-extension)
+  - [User Authentication & ACL System](#user-authentication--acl-system)
+  - [Message Retention & Purging](#message-retention--purging)
 - [🏗️ Architecture](#️-architecture)
 - [📦 Quick Start](#-quick-start)
   - [Docker Compose (Recommended)](#docker-compose-recommended)
@@ -100,6 +102,23 @@ MonsterMQ supports multiple database backends for different storage needs:
 - **Automatic Message Expansion** - Converts SparkplugB messages from `spBv1.0` to `spBv1.0e` topics
 - **Industrial IoT Support** - Native support for Sparkplug specification
 - **Metric Extraction** - Automatic parsing and expansion of Sparkplug payloads
+
+### **User Authentication & ACL System**
+- **Multi-Database User Storage** - PostgreSQL, SQLite, CrateDB, MongoDB support for user data
+- **BCrypt Password Security** - Industry-standard password hashing with configurable work factor
+- **Fine-Grained ACL Rules** - Topic-level permissions with MQTT wildcard support (`+`, `#`)
+- **Anonymous User Support** - Configurable anonymous access for unauthenticated clients
+- **GraphQL User Management API** - Complete CRUD operations for users and ACL rules
+- **High-Performance Caching** - In-memory ACL cache with automatic refresh and topic tree optimization
+- **Multi-Tenant Support** - Isolated user namespaces with hierarchical permission model
+
+### **Message Retention & Purging**
+- **Automatic Message Cleanup** - Configurable retention policies per ArchiveGroup
+- **Flexible Time Periods** - Support for seconds, minutes, hours, days, weeks, months, years
+- **Cluster-Aware Purging** - Distributed locks prevent duplicate cleanup operations
+- **Performance Optimized** - Backend-specific implementations for maximum efficiency
+- **Dual Retention Policies** - Separate retention for current values and historical archives
+- **Real-Time Monitoring** - Detailed logging of purge operations with performance metrics
 
 ## 🏗️ Architecture
 
