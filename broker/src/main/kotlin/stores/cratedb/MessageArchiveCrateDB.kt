@@ -4,13 +4,14 @@ import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.stores.DatabaseConnection
-import at.rocworks.stores.IMessageArchive
+import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.MessageArchiveType
 import at.rocworks.stores.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
+import io.vertx.core.json.JsonObject
 import java.sql.*
 import java.time.Instant
 
@@ -19,7 +20,7 @@ class MessageArchiveCrateDB (
     private val url: String,
     private val username: String,
     private val password: String
-): AbstractVerticle(), IMessageArchive {
+): AbstractVerticle(), IMessageArchiveExtended {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
     private var lastAddAllHistoryError: Int = 0
@@ -100,6 +101,115 @@ class MessageArchiveCrateDB (
                 logger.warning("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
                 lastAddAllHistoryError = e.errorCode
             }
+        }
+    }
+
+    override fun getHistory(
+        topic: String,
+        startTime: Instant?,
+        endTime: Instant?,
+        limit: Int
+    ): JsonArray {
+        logger.fine("CrateDB getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
+        
+        val sql = StringBuilder("SELECT topic, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?")
+        val params = mutableListOf<Any>(topic)
+
+        startTime?.let {
+            sql.append(" AND time >= ?")
+            params.add(Timestamp.from(it))
+            logger.fine("Added startTime parameter: $it")
+        }
+        endTime?.let {
+            sql.append(" AND time <= ?")
+            params.add(Timestamp.from(it))
+            logger.fine("Added endTime parameter: $it")
+        }
+        sql.append(" ORDER BY time DESC LIMIT ?")
+        params.add(limit)
+        
+        logger.fine("Executing CrateDB SQL: ${sql.toString()}")
+        logger.fine("With parameters: $params")
+
+        val messages = JsonArray()
+
+        try {
+            val startTime = System.currentTimeMillis()
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql.toString()).use { preparedStatement ->
+                    for ((index, param) in params.withIndex()) {
+                        when (param) {
+                            is String -> preparedStatement.setString(index + 1, param)
+                            is Timestamp -> preparedStatement.setTimestamp(index + 1, param)
+                            is Int -> preparedStatement.setInt(index + 1, param)
+                            else -> preparedStatement.setObject(index + 1, param)
+                        }
+                    }
+                    val resultSet = preparedStatement.executeQuery()
+                    val queryDuration = System.currentTimeMillis() - startTime
+                    logger.fine("CrateDB query completed in ${queryDuration}ms")
+                    
+                    val processingStart = System.currentTimeMillis()
+                    var rowCount = 0
+                    while (resultSet.next()) {
+                        rowCount++
+                        val messageObj = JsonObject()
+                            .put("topic", resultSet.getString("topic") ?: topic)
+                            .put("timestamp", resultSet.getTimestamp("time").toInstant().toEpochMilli())
+                            .put("payload_base64", resultSet.getString("payload_b64") ?: "")
+                            .put("payload_json", resultSet.getString("payload_obj"))
+                            .put("qos", resultSet.getInt("qos"))
+                            .put("client_id", resultSet.getString("client_id") ?: "")
+                            
+                        messages.add(messageObj)
+                    }
+                    val processingDuration = System.currentTimeMillis() - processingStart
+                    logger.fine("CrateDB data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages")
+                }
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error retrieving history for topic [$topic]: ${e.message}")
+            e.printStackTrace()
+        }
+        return messages
+    }
+
+    override fun executeQuery(sql: String): JsonArray {
+        return try {
+            logger.fine("Executing CrateDB query: $sql")
+            db.connection?.let { connection ->
+                connection.createStatement().use { statement ->
+                    statement.executeQuery(sql).use { resultSet ->
+                        val metaData = resultSet.metaData
+                        val columnCount = metaData.columnCount
+                        val result = JsonArray()
+
+                        // Add header row
+                        val header = JsonArray()
+                        for (i in 1..columnCount) {
+                            header.add(metaData.getColumnName(i))
+                        }
+                        result.add(header)
+
+                        // Add data rows
+                        while (resultSet.next()) {
+                            val row = JsonArray()
+                            for (i in 1..columnCount) {
+                                row.add(resultSet.getObject(i))
+                            }
+                            result.add(row)
+                        }
+                        logger.fine("CrateDB query executed successfully with ${result.size()} rows")
+                        result
+                    }
+                }
+            } ?: run {
+                logger.warning("No database connection available")
+                JsonArray().add("No database connection available.")
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error executing CrateDB query: ${e.message}")
+            JsonArray().add("Error executing query: ${e.message}")
         }
     }
 
