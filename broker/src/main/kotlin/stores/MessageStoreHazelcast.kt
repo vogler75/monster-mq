@@ -2,6 +2,7 @@ package at.rocworks.stores
 
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
+import at.rocworks.data.PurgeResult
 import at.rocworks.data.TopicTree
 import com.hazelcast.core.HazelcastInstance
 import com.hazelcast.query.Predicates

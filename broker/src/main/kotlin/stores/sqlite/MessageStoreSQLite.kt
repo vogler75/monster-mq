@@ -5,7 +5,7 @@ import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
-import at.rocworks.stores.PurgeResult
+import at.rocworks.data.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray

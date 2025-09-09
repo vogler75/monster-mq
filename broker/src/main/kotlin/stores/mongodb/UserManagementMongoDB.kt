@@ -5,13 +5,12 @@ import at.rocworks.Utils
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
 import at.rocworks.stores.AuthStoreType
-import at.rocworks.stores.IUserManagementStore
+import at.rocworks.stores.IUserManagement
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.MongoDatabase
 import com.mongodb.client.model.Filters
-import com.mongodb.client.model.IndexOptions
 import com.mongodb.client.model.Indexes
 import com.mongodb.client.model.ReplaceOptions
 import io.vertx.core.Promise
@@ -24,7 +23,7 @@ import java.util.*
 class UserManagementMongoDB(
     private val url: String,
     private val database: String
-): IUserManagementStore {
+): IUserManagement {
     private val logger = Utils.getLogger(this::class.java)
 
     private val usersCollectionName = "users"
@@ -231,6 +230,17 @@ class UserManagementMongoDB(
         } catch (e: Exception) {
             logger.warning("Error deleting ACL rule [$id]: ${e.message} [${Utils.getCurrentFunctionName()}]")
             false
+        }
+    }
+
+    override suspend fun getAclRule(id: String): AclRule? {
+        return try {
+            usersAclCollection?.find(Filters.eq("_id", id))
+                ?.first()
+                ?.let { documentToAclRule(it) }
+        } catch (e: Exception) {
+            logger.warning("Error getting ACL rule [$id]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            null
         }
     }
 

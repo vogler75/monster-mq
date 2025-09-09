@@ -1,4 +1,4 @@
-package at.rocworks.stores
+package at.rocworks.data
 
 data class PurgeResult(
     val deletedCount: Int,

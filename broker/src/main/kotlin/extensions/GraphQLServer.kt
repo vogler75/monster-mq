@@ -1,6 +1,7 @@
 package at.rocworks.extensions
 
 import at.rocworks.Monster
+import at.rocworks.auth.UserManager
 import at.rocworks.bus.IMessageBus
 import at.rocworks.data.MqttMessage
 import at.rocworks.extensions.graphql.*
@@ -27,7 +28,8 @@ class GraphQLServer(
     private val config: JsonObject,
     private val messageBus: IMessageBus,
     private val retainedStore: IMessageStore?,
-    private val archiveGroups: Map<String, ArchiveGroup>
+    private val archiveGroups: Map<String, ArchiveGroup>,
+    private val userManager: UserManager
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(GraphQLServer::class.java.name)
@@ -117,6 +119,7 @@ class GraphQLServer(
         val queryResolver = QueryResolver(vertx, retainedStore, archiveGroups)
         val mutationResolver = MutationResolver(vertx, messageBus)
         val subscriptionResolver = SubscriptionResolver(vertx, messageBus)
+        val userManagementResolver = UserManagementResolver(vertx, userManager)
 
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
@@ -135,12 +138,25 @@ class GraphQLServer(
                     .dataFetcher("retainedMessages", queryResolver.retainedMessages())
                     .dataFetcher("archivedMessages", queryResolver.archivedMessages())
                     .dataFetcher("searchTopics", queryResolver.searchTopics())
+                    // User management queries
+                    .dataFetcher("getAllUsers", userManagementResolver.getAllUsers())
+                    .dataFetcher("getUser", userManagementResolver.getUser())
+                    .dataFetcher("getUserAclRules", userManagementResolver.getUserAclRules())
+                    .dataFetcher("getAllAclRules", userManagementResolver.getAllAclRules())
             }
             // Register mutation resolvers
             .type("Mutation") { builder ->
                 builder
                     .dataFetcher("publish", mutationResolver.publish())
                     .dataFetcher("publishBatch", mutationResolver.publishBatch())
+                    // User management mutations
+                    .dataFetcher("createUser", userManagementResolver.createUser())
+                    .dataFetcher("updateUser", userManagementResolver.updateUser())
+                    .dataFetcher("deleteUser", userManagementResolver.deleteUser())
+                    .dataFetcher("setPassword", userManagementResolver.setPassword())
+                    .dataFetcher("createAclRule", userManagementResolver.createAclRule())
+                    .dataFetcher("updateAclRule", userManagementResolver.updateAclRule())
+                    .dataFetcher("deleteAclRule", userManagementResolver.deleteAclRule())
             }
             // Register subscription resolvers
             .type("Subscription") { builder ->

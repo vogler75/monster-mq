@@ -7,7 +7,7 @@ import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageArchive
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.MessageArchiveType
-import at.rocworks.stores.PurgeResult
+import at.rocworks.data.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.AsyncResult
 import io.vertx.core.Future

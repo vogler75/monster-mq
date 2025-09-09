@@ -360,7 +360,8 @@ MORE INFO:
                         graphQLConfig,
                         messageBus,
                         retainedStore,
-                        archiveGroupsMap
+                        archiveGroupsMap,
+                        userManager
                     )
                     graphQLServer.start()
                     logger.info("GraphQL server enabled")

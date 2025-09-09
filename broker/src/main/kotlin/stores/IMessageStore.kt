@@ -1,6 +1,7 @@
 package at.rocworks.stores
 
 import at.rocworks.data.MqttMessage
+import at.rocworks.data.PurgeResult
 import java.time.Instant
 
 enum class MessageStoreType {

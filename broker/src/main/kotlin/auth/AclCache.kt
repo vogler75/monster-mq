@@ -5,9 +5,8 @@ import at.rocworks.Utils
 import at.rocworks.data.AclRule
 import at.rocworks.data.TopicTree
 import at.rocworks.data.User
-import at.rocworks.stores.IUserManagementStore
+import at.rocworks.stores.IUserManagement
 import java.util.concurrent.ConcurrentHashMap
-import java.util.logging.Logger
 
 class AclCache {
     private val logger = Utils.getLogger(this::class.java)
@@ -33,7 +32,7 @@ class AclCache {
     /**
      * Load all users and ACL rules from the store into memory
      */
-    suspend fun loadFromStore(store: IUserManagementStore) {
+    suspend fun loadFromStore(store: IUserManagement) {
         val startTime = System.currentTimeMillis()
         logger.info("Loading users and ACL rules into memory cache...")
         

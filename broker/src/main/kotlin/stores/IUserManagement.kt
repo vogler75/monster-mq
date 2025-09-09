@@ -3,7 +3,7 @@ package at.rocworks.stores
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
 
-interface IUserManagementStore {
+interface IUserManagement {
     fun getType(): AuthStoreType
 
     // User operations
@@ -18,6 +18,7 @@ interface IUserManagementStore {
     suspend fun createAclRule(rule: AclRule): Boolean
     suspend fun updateAclRule(rule: AclRule): Boolean
     suspend fun deleteAclRule(id: String): Boolean
+    suspend fun getAclRule(id: String): AclRule?
     suspend fun getUserAclRules(username: String): List<AclRule>
     suspend fun getAllAclRules(): List<AclRule>
     

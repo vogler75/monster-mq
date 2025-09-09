@@ -1,6 +1,7 @@
 package at.rocworks.stores
 
 import at.rocworks.data.MqttMessage
+import at.rocworks.data.PurgeResult
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray

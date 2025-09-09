@@ -2,6 +2,7 @@ package at.rocworks.stores
 
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
+import at.rocworks.data.PurgeResult
 import at.rocworks.data.TopicTree
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise

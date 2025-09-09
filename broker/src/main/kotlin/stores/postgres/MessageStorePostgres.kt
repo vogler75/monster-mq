@@ -6,7 +6,7 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
-import at.rocworks.stores.PurgeResult
+import at.rocworks.data.PurgeResult
 import at.rocworks.stores.cratedb.MessageStoreCrateDB
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future

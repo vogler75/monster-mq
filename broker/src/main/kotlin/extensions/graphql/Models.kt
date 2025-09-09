@@ -57,6 +57,73 @@ data class PublishResult(
     val error: String? = null
 )
 
+// User Management Models
+data class UserInfo(
+    val username: String,
+    val enabled: Boolean,
+    val canSubscribe: Boolean,
+    val canPublish: Boolean,
+    val isAdmin: Boolean,
+    val createdAt: String?,
+    val updatedAt: String?
+)
+
+data class AclRuleInfo(
+    val id: String,
+    val username: String,
+    val topicPattern: String,
+    val canSubscribe: Boolean,
+    val canPublish: Boolean,
+    val priority: Int,
+    val createdAt: String?
+)
+
+data class CreateUserInput(
+    val username: String,
+    val password: String,
+    val enabled: Boolean = true,
+    val canSubscribe: Boolean = true,
+    val canPublish: Boolean = true,
+    val isAdmin: Boolean = false
+)
+
+data class UpdateUserInput(
+    val username: String,
+    val enabled: Boolean? = null,
+    val canSubscribe: Boolean? = null,
+    val canPublish: Boolean? = null,
+    val isAdmin: Boolean? = null
+)
+
+data class SetPasswordInput(
+    val username: String,
+    val password: String
+)
+
+data class CreateAclRuleInput(
+    val username: String,
+    val topicPattern: String,
+    val canSubscribe: Boolean = false,
+    val canPublish: Boolean = false,
+    val priority: Int = 0
+)
+
+data class UpdateAclRuleInput(
+    val id: String,
+    val username: String? = null,
+    val topicPattern: String? = null,
+    val canSubscribe: Boolean? = null,
+    val canPublish: Boolean? = null,
+    val priority: Int? = null
+)
+
+data class UserManagementResult(
+    val success: Boolean,
+    val message: String? = null,
+    val user: UserInfo? = null,
+    val aclRule: AclRuleInfo? = null
+)
+
 object PayloadConverter {
     fun encode(payload: ByteArray, format: DataFormat): String {
         return when (format) {

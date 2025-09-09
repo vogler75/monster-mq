@@ -5,8 +5,8 @@ import at.rocworks.Utils
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
 import at.rocworks.stores.AuthStoreType
-import at.rocworks.stores.IUserManagementStore
-import at.rocworks.stores.UserManagementStoreFactory
+import at.rocworks.stores.IUserManagement
+import at.rocworks.stores.UserManagementFactory
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
@@ -19,7 +19,7 @@ class UserManager(
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
     
-    private var userStore: IUserManagementStore? = null
+    private var userStore: IUserManagement? = null
     private val aclCache = AclCache()
     private var scheduler: ScheduledExecutorService? = null
     
@@ -58,7 +58,7 @@ class UserManager(
         
         try {
             // Create user store
-            userStore = UserManagementStoreFactory.create(authStoreType, config)
+            userStore = UserManagementFactory.create(authStoreType, config)
             
             // Initialize store and load cache
             vertx.executeBlocking(java.util.concurrent.Callable<Void> {
@@ -249,6 +249,133 @@ class UserManager(
             mapOf("enabled" to false)
         }
     }
+
+    /**
+     * Get all users
+     */
+    suspend fun getAllUsers(): List<User> {
+        return if (isEnabled) {
+            userStore?.getAllUsers() ?: emptyList()
+        } else {
+            emptyList()
+        }
+    }
+
+    /**
+     * Update user
+     */
+    suspend fun updateUser(user: User): Boolean {
+        return if (isEnabled) {
+            val result = userStore?.updateUser(user) ?: false
+            if (result) {
+                refreshCache()
+            }
+            result
+        } else {
+            false
+        }
+    }
+
+    /**
+     * Delete user
+     */
+    suspend fun deleteUser(username: String): Boolean {
+        return if (isEnabled) {
+            val result = userStore?.deleteUser(username) ?: false
+            if (result) {
+                refreshCache()
+            }
+            result
+        } else {
+            false
+        }
+    }
+
+    /**
+     * Set user password
+     */
+    suspend fun setUserPassword(username: String, newPassword: String): Boolean {
+        return if (isEnabled) {
+            val user = userStore?.getUser(username)
+            if (user != null) {
+                val hashedPassword = PasswordEncoder.hash(newPassword)
+                val updatedUser = user.copy(passwordHash = hashedPassword)
+                updateUser(updatedUser)
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    /**
+     * Get ACL rule by ID
+     */
+    suspend fun getAclRule(id: String): AclRule? {
+        return if (isEnabled) {
+            userStore?.getAclRule(id)
+        } else {
+            null
+        }
+    }
+
+    /**
+     * Get all ACL rules
+     */
+    suspend fun getAllAclRules(): List<AclRule> {
+        return if (isEnabled) {
+            userStore?.getAllAclRules() ?: emptyList()
+        } else {
+            emptyList()
+        }
+    }
+
+    /**
+     * Get ACL rules for a specific user
+     */
+    suspend fun getUserAclRules(username: String): List<AclRule> {
+        return if (isEnabled) {
+            userStore?.getUserAclRules(username) ?: emptyList()
+        } else {
+            emptyList()
+        }
+    }
+
+    /**
+     * Update ACL rule
+     */
+    suspend fun updateAclRule(rule: AclRule): Boolean {
+        return if (isEnabled) {
+            val result = userStore?.updateAclRule(rule) ?: false
+            if (result) {
+                refreshCache()
+            }
+            result
+        } else {
+            false
+        }
+    }
+
+    /**
+     * Delete ACL rule
+     */
+    suspend fun deleteAclRule(id: String): Boolean {
+        return if (isEnabled) {
+            val result = userStore?.deleteAclRule(id) ?: false
+            if (result) {
+                refreshCache()
+            }
+            result
+        } else {
+            false
+        }
+    }
+
+    /**
+     * Get user store for direct access (used by GraphQL resolver)
+     */
+    fun getUserStore(): IUserManagement? = userStore
     
     /**
      * Ensure Anonymous user exists in the system

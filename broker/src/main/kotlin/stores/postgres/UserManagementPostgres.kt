@@ -5,19 +5,16 @@ import at.rocworks.Utils
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
 import at.rocworks.stores.AuthStoreType
-import at.rocworks.stores.IUserManagementStore
-import io.vertx.core.Future
+import at.rocworks.stores.IUserManagement
 import io.vertx.core.Promise
 import org.mindrot.jbcrypt.BCrypt
-import java.sql.Connection
 import java.sql.SQLException
-import java.time.LocalDateTime
 
 class UserManagementPostgres(
     private val url: String,
     private val username: String,
     private val password: String
-): IUserManagementStore {
+): IUserManagement {
     private val logger = Utils.getLogger(this::class.java)
 
     private val usersTableName = "users"
@@ -295,6 +292,32 @@ class UserManagementPostgres(
         } catch (e: SQLException) {
             logger.warning("Error deleting ACL rule [$id]: ${e.message} [${Utils.getCurrentFunctionName()}]")
             false
+        }
+    }
+
+    override suspend fun getAclRule(id: String): AclRule? {
+        val sql = "SELECT id, username, topic_pattern, can_subscribe, can_publish, priority, created_at FROM $usersAclTableName WHERE id = ?"
+        return try {
+            connection?.let { connection ->
+                connection.prepareStatement(sql).use { stmt ->
+                    stmt.setString(1, id)
+                    val rs = stmt.executeQuery()
+                    if (rs.next()) {
+                        AclRule(
+                            id = rs.getString("id"),
+                            username = rs.getString("username"),
+                            topicPattern = rs.getString("topic_pattern"),
+                            canSubscribe = rs.getBoolean("can_subscribe"),
+                            canPublish = rs.getBoolean("can_publish"),
+                            priority = rs.getInt("priority"),
+                            createdAt = rs.getTimestamp("created_at")?.toLocalDateTime()
+                        )
+                    } else null
+                }
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error getting ACL rule [$id]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            null
         }
     }
 

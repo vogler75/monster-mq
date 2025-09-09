@@ -35,6 +35,12 @@ type Query {
         limit: Int = 100
         archiveGroup: String = "Default"
     ): [String!]!
+    
+    # User Management
+    getAllUsers: [UserInfo!]!
+    getUser(username: String!): UserInfo
+    getUserAclRules(username: String!): [AclRuleInfo!]!
+    getAllAclRules: [AclRuleInfo!]!
 }
 
 type Mutation {
@@ -43,6 +49,17 @@ type Mutation {
     
     # Publish multiple messages
     publishBatch(inputs: [PublishInput!]!): [PublishResult!]!
+    
+    # User Management
+    createUser(input: CreateUserInput!): UserManagementResult!
+    updateUser(input: UpdateUserInput!): UserManagementResult!
+    deleteUser(username: String!): UserManagementResult!
+    setPassword(input: SetPasswordInput!): UserManagementResult!
+    
+    # ACL Rule Management
+    createAclRule(input: CreateAclRuleInput!): UserManagementResult!
+    updateAclRule(input: UpdateAclRuleInput!): UserManagementResult!
+    deleteAclRule(id: String!): UserManagementResult!
 }
 
 type Subscription {
@@ -101,4 +118,72 @@ type TopicUpdate {
     qos: Int!
     retained: Boolean!
     clientId: String
+}
+
+# User Management Types
+
+type UserInfo {
+    username: String!
+    enabled: Boolean!
+    canSubscribe: Boolean!
+    canPublish: Boolean!
+    isAdmin: Boolean!
+    createdAt: String
+    updatedAt: String
+}
+
+type AclRuleInfo {
+    id: String!
+    username: String!
+    topicPattern: String!
+    canSubscribe: Boolean!
+    canPublish: Boolean!
+    priority: Int!
+    createdAt: String
+}
+
+input CreateUserInput {
+    username: String!
+    password: String!
+    enabled: Boolean = true
+    canSubscribe: Boolean = true
+    canPublish: Boolean = true
+    isAdmin: Boolean = false
+}
+
+input UpdateUserInput {
+    username: String!
+    enabled: Boolean
+    canSubscribe: Boolean
+    canPublish: Boolean
+    isAdmin: Boolean
+}
+
+input SetPasswordInput {
+    username: String!
+    password: String!
+}
+
+input CreateAclRuleInput {
+    username: String!
+    topicPattern: String!
+    canSubscribe: Boolean = false
+    canPublish: Boolean = false
+    priority: Int = 0
+}
+
+input UpdateAclRuleInput {
+    id: String!
+    username: String
+    topicPattern: String
+    canSubscribe: Boolean
+    canPublish: Boolean
+    priority: Int
+}
+
+type UserManagementResult {
+    success: Boolean!
+    message: String
+    user: UserInfo
+    aclRule: AclRuleInfo
 }

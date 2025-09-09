@@ -6,12 +6,12 @@ import at.rocworks.stores.postgres.UserManagementPostgres
 import at.rocworks.stores.sqlite.UserManagementSqlite
 import io.vertx.core.json.JsonObject
 
-object UserManagementStoreFactory {
+object UserManagementFactory {
     
     fun create(
         authStoreType: AuthStoreType,
         config: JsonObject
-    ): IUserManagementStore {
+    ): IUserManagement {
         return when (authStoreType) {
             AuthStoreType.POSTGRES -> {
                 val postgresConfig = config.getJsonObject("Postgres")

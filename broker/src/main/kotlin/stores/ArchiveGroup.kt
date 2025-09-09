@@ -1,6 +1,7 @@
 package at.rocworks.stores
 
 import at.rocworks.Utils
+import at.rocworks.data.PurgeResult
 import at.rocworks.data.TopicTree
 import at.rocworks.stores.cratedb.MessageArchiveCrateDB
 import at.rocworks.stores.cratedb.MessageStoreCrateDB
