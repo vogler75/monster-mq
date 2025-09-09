@@ -1,18 +1,47 @@
 # MonsterMQ MQTT Broker
 
-A high-performance MQTT broker built with Kotlin, Vert.x, and Hazelcast, featuring multiple storage backends and advanced message management capabilities.
+A high-performance MQTT broker built with Kotlin, Vert.x, and Hazelcast, featuring multiple storage backends, advanced message management capabilities, and comprehensive user authentication with ACL support.
 
-## Build
+## Quick Start
 
-> mvn clean package
+### Build
+```bash
+mvn clean package
+```
 
-## Copy dependencies to a directory
+### Copy dependencies to a directory
+```bash
+mvn dependency:copy-dependencies
+```
 
-> mvn dependency:copy-dependencies
+### Generate a keystore
+```bash
+keytool -genkeypair -alias monstermq -keyalg RSA -keysize 2048 -validity 365 -keystore server-keystore.jks -storepass password
+```
 
-## Generate a keystore 
+## Features
 
-> keytool -genkeypair -alias monstermq -keyalg RSA -keysize 2048 -validity 365 -keystore server-keystore.jks -storepass password
+- **High Performance**: Built on Vert.x reactive framework with Hazelcast clustering
+- **Multi-Database Support**: PostgreSQL, SQLite, CrateDB, MongoDB backends
+- **Message Retention**: Automatic cleanup with configurable retention policies
+- **User Authentication**: BCrypt password hashing with multi-database user storage
+- **Access Control Lists (ACLs)**: Fine-grained topic-level permissions with MQTT wildcards
+- **GraphQL API**: Complete user and ACL management interface
+- **Real-time Caching**: High-performance in-memory ACL cache with automatic refresh
+- **Cluster Support**: Distributed operations with automatic coordination
+
+## User Management & ACL System
+
+MonsterMQ includes a comprehensive user authentication and authorization system. For complete documentation on:
+
+- User authentication and management
+- ACL rule configuration and topic patterns
+- GraphQL API for user/ACL operations
+- Security best practices
+- Multi-tenant configurations
+- Performance optimization
+
+See: **[README_ACL.md](README_ACL.md)**
 
 ## Message Retention and Purging
 
