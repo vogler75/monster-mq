@@ -330,7 +330,7 @@ class MessageStoreMongoDB(
             .into(mutableListOf())
     }
 
-    override fun findTopicsByConfig(configName: String, configValue: String, ignoreCase: Boolean, namespace: String): List<Pair<String, String>> {
+    override fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean, namespace: String): List<Pair<String, String>> {
         // This would require a separate config collection
         // For now, return empty list
         logger.warning("findTopicsByConfig not fully implemented for MongoDB")
