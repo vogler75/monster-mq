@@ -284,26 +284,43 @@ class ArchiveGroup(
         val retentionMs = lastValRetentionMs ?: return
         val messageStore = lastValStore ?: return
         
-        vertx.executeBlocking(Callable<PurgeResult> {
-            val olderThan = Instant.now().minusMillis(retentionMs)
-            logger.fine { "Starting LastVal purge for [$name] - removing messages older than $olderThan" }
-            
-            messageStore.purgeOldMessages(olderThan)
-        }).onComplete { asyncResult ->
-            if (asyncResult.succeeded()) {
-                val result = asyncResult.result()
-                if (result.deletedCount > 0 || result.elapsedTimeMs > 30000) {
-                    logger.info("LastVal purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
-                } else {
-                    logger.fine { "LastVal purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
-                }
+        // Use cluster-wide distributed lock to ensure only one node performs purging
+        val lockName = "purge-lock-$name-LastVal"
+        val sharedData = vertx.sharedData()
+        
+        sharedData.getLockWithTimeout(lockName, 30000).onComplete { lockResult ->
+            if (lockResult.succeeded()) {
+                val lock = lockResult.result()
+                logger.fine { "Acquired purge lock for LastVal store [$name] - starting purge" }
                 
-                // Warn if purge takes too long
-                if (result.elapsedTimeMs > 30000) {
-                    logger.warning("LastVal purge for [$name] took ${result.elapsedTimeMs}ms - consider adjusting purge interval or retention period")
+                vertx.executeBlocking(Callable<PurgeResult> {
+                    val olderThan = Instant.now().minusMillis(retentionMs)
+                    logger.fine { "Starting LastVal purge for [$name] - removing messages older than $olderThan" }
+                    
+                    messageStore.purgeOldMessages(olderThan)
+                }).onComplete { asyncResult ->
+                    // Always release the lock
+                    lock.release()
+                    
+                    if (asyncResult.succeeded()) {
+                        val result = asyncResult.result()
+                        if (result.deletedCount > 0 || result.elapsedTimeMs > 30000) {
+                            logger.info("LastVal purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
+                        } else {
+                            logger.fine { "LastVal purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
+                        }
+                        
+                        // Warn if purge takes too long
+                        if (result.elapsedTimeMs > 30000) {
+                            logger.warning("LastVal purge for [$name] took ${result.elapsedTimeMs}ms - consider adjusting purge interval or retention period")
+                        }
+                    } else {
+                        logger.severe("Error during LastVal purge for [$name]: ${asyncResult.cause()?.message}")
+                    }
                 }
             } else {
-                logger.severe("Error during LastVal purge for [$name]: ${asyncResult.cause()?.message}")
+                // Lock acquisition failed - another node is likely purging or lock timed out
+                logger.fine { "Could not acquire purge lock for LastVal store [$name] - skipping purge (likely another cluster node is purging)" }
             }
         }
     }
@@ -312,26 +329,43 @@ class ArchiveGroup(
         val retentionMs = archiveRetentionMs ?: return
         val messageArchive = archiveStore ?: return
         
-        vertx.executeBlocking(Callable<PurgeResult> {
-            val olderThan = Instant.now().minusMillis(retentionMs)
-            logger.fine { "Starting Archive purge for [$name] - removing messages older than $olderThan" }
-            
-            messageArchive.purgeOldMessages(olderThan)
-        }).onComplete { asyncResult ->
-            if (asyncResult.succeeded()) {
-                val result = asyncResult.result()
-                if (result.deletedCount > 0 || result.elapsedTimeMs > 30000) {
-                    logger.info("Archive purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
-                } else {
-                    logger.fine { "Archive purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
-                }
+        // Use cluster-wide distributed lock to ensure only one node performs purging
+        val lockName = "purge-lock-$name-Archive"
+        val sharedData = vertx.sharedData()
+        
+        sharedData.getLockWithTimeout(lockName, 30000).onComplete { lockResult ->
+            if (lockResult.succeeded()) {
+                val lock = lockResult.result()
+                logger.fine { "Acquired purge lock for Archive store [$name] - starting purge" }
                 
-                // Warn if purge takes too long
-                if (result.elapsedTimeMs > 30000) {
-                    logger.warning("Archive purge for [$name] took ${result.elapsedTimeMs}ms - consider adjusting purge interval or retention period")
+                vertx.executeBlocking(Callable<PurgeResult> {
+                    val olderThan = Instant.now().minusMillis(retentionMs)
+                    logger.fine { "Starting Archive purge for [$name] - removing messages older than $olderThan" }
+                    
+                    messageArchive.purgeOldMessages(olderThan)
+                }).onComplete { asyncResult ->
+                    // Always release the lock
+                    lock.release()
+                    
+                    if (asyncResult.succeeded()) {
+                        val result = asyncResult.result()
+                        if (result.deletedCount > 0 || result.elapsedTimeMs > 30000) {
+                            logger.info("Archive purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
+                        } else {
+                            logger.fine { "Archive purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
+                        }
+                        
+                        // Warn if purge takes too long
+                        if (result.elapsedTimeMs > 30000) {
+                            logger.warning("Archive purge for [$name] took ${result.elapsedTimeMs}ms - consider adjusting purge interval or retention period")
+                        }
+                    } else {
+                        logger.severe("Error during Archive purge for [$name]: ${asyncResult.cause()?.message}")
+                    }
                 }
             } else {
-                logger.severe("Error during Archive purge for [$name]: ${asyncResult.cause()?.message}")
+                // Lock acquisition failed - another node is likely purging or lock timed out
+                logger.fine { "Could not acquire purge lock for Archive store [$name] - skipping purge (likely another cluster node is purging)" }
             }
         }
     }

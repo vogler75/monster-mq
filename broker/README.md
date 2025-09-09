@@ -73,10 +73,33 @@ All storage backends support message purging with optimized implementations:
 ### Purge Process
 
 1. **Scheduled Execution**: Based on `PurgeInterval` setting
-2. **LastVal Purging**: Removes outdated current values older than `LastValRetention`
-3. **Archive Purging**: Removes historical messages older than `ArchiveRetention`  
-4. **Performance Logging**: Tracks deletion counts and execution time
-5. **Error Handling**: Graceful handling of database connectivity issues
+2. **Cluster Coordination**: Uses distributed locks to ensure only one node performs purging
+3. **LastVal Purging**: Removes outdated current values older than `LastValRetention`
+4. **Archive Purging**: Removes historical messages older than `ArchiveRetention`  
+5. **Performance Logging**: Tracks deletion counts and execution time
+6. **Error Handling**: Graceful handling of database connectivity issues
+
+### Cluster-Aware Purging
+
+In clustered deployments, MonsterMQ automatically coordinates purging operations across all nodes:
+
+#### **Distributed Locking**
+- Each ArchiveGroup uses cluster-wide distributed locks (`purge-lock-{ArchiveGroupName}-{StoreType}`)
+- Only one node in the cluster can acquire the lock and perform purging
+- Lock timeout of 30 seconds prevents deadlocks
+- Other nodes skip purging with informational logging
+
+#### **Lock Behavior**
+```
+[FINE] Acquired purge lock for LastVal store [Default] - starting purge
+[FINE] Could not acquire purge lock for Archive store [Default] - skipping purge (likely another cluster node is purging)
+```
+
+#### **Benefits**
+- **No Duplicate Work**: Prevents multiple nodes from purging the same data
+- **Resource Efficiency**: Only one node uses resources for purging operations  
+- **Data Safety**: Eliminates race conditions and potential corruption
+- **Automatic Failover**: If the purging node fails, another node can acquire the lock
 
 ### Monitoring
 
