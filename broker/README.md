@@ -68,7 +68,7 @@ All storage backends support message purging with optimized implementations:
 - **PostgreSQL**: SQL DELETE operations with proper transaction handling
 - **CrateDB**: Optimized for time-series data with batch deletions
 - **SQLite**: Async operations via event bus to prevent blocking
-- **MongoDB**: Native MongoDB deleteMany() operations with time-based filters
+- **MongoDB**: Native MongoDB deleteMany() operations with time-based filters (uses time-series collections with optimized indexes)
 
 ### Purge Process
 

@@ -114,10 +114,16 @@ class MessageArchiveMongoDB(
             )
 
             // Text index for topic pattern matching (better than regex)
+            // NOTE: Commented out because MongoDB time-series collections do not support text indexes
+            // Error: "Text indexes are not supported on time-series collections" (code 72)
+            // Topic pattern matching will fall back to regex queries which are less efficient
+            // but still functional for the archive use case
+            /*
             collection.createIndex(
                 Indexes.text("meta.topic"),
                 IndexOptions().name("topic_text_idx")
             )
+            */
 
             // Index for client_id queries
             collection.createIndex(
