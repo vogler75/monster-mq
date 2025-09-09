@@ -131,8 +131,11 @@ class TopicTree<K, V> : ITopicTree<K, V> {
                     when (current) {
                         "#" -> if (!find(child.value, "#", listOf(), check)) return false
                         "+", child.key -> {
-                            if (rest.isNotEmpty()) if (!find(child.value, rest.first(), rest.drop(1), check)) return false
-                            else return callback(check)
+                            if (rest.isNotEmpty()) {
+                                if (!find(child.value, rest.first(), rest.drop(1), check)) return false
+                            } else {
+                                if (!callback(check)) return false
+                            }
                         }
                     }
                 }
