@@ -294,6 +294,383 @@ Several pre-configured examples are available:
 docker-compose -f docker-compose-kafka.yaml up -d
 ```
 
+## 🔐 User Management & ACL System
+
+MonsterMQ includes a comprehensive user authentication and authorization system that provides fine-grained control over who can connect to the broker and what topics they can access.
+
+### Quick Configuration
+
+Enable user management in your `config.yaml`:
+
+```yaml
+UserManagement:
+  Enabled: true
+  AuthStoreType: SQLITE           # SQLITE, POSTGRES, CRATEDB, MONGODB
+  PasswordAlgorithm: bcrypt       # Industry-standard password hashing
+  CacheRefreshInterval: 60        # Seconds between automatic cache refreshes
+  DisconnectOnUnauthorized: true  # Disconnect clients on unauthorized actions
+
+# Database configuration (example with SQLite)
+SQLite:
+  Path: "./users.db"             # User database (created automatically)
+
+# Optional: GraphQL API for user management
+GraphQL:
+  Enabled: true
+  Port: 8080                     # GraphQL API endpoint
+```
+
+### Key Features
+
+#### **Multi-Database User Storage**
+Store users and ACL rules in your choice of database:
+
+| Database | Authentication | ACL Rules | Performance | Use Case |
+|----------|:-------------:|:---------:|:-----------:|:---------|
+| **SQLite** | ✅ | ✅ | Fast | Development, single instance |
+| **PostgreSQL** | ✅ | ✅ | Excellent | Production, clustering |
+| **CrateDB** | ✅ | ✅ | Excellent | Time-series, analytics |
+| **MongoDB** | ✅ | ✅ | Excellent | NoSQL, document-based |
+
+#### **Permission Model**
+
+MonsterMQ uses a hierarchical permission system:
+
+1. **Admin Override**: Admin users bypass all ACL checks
+2. **Global Permissions**: User-level `canSubscribe`/`canPublish` settings
+3. **ACL Rules**: Topic-specific permissions with wildcard support
+4. **Anonymous Access**: Configurable anonymous user for unauthenticated clients
+
+#### **MQTT Topic Wildcards**
+
+ACL rules support full MQTT wildcard syntax:
+
+```yaml
+# Examples of ACL topic patterns:
+- "sensors/+/temperature"      # Single-level wildcard (+)
+- "sensors/#"                  # Multi-level wildcard (#)  
+- "building/+/sensor/#"        # Combined wildcards
+- "user/alice/devices/+"       # User-specific namespace
+```
+
+### GraphQL User Management API
+
+Complete user and ACL management via GraphQL:
+
+**API Endpoint**: `http://localhost:8080/graphql`
+
+#### Quick Examples
+
+**Create a user:**
+```graphql
+mutation {
+  createUser(input: {
+    username: "sensor_device"
+    password: "secure_password_123"
+    canSubscribe: false
+    canPublish: true
+  }) {
+    success
+    message
+    user { username }
+  }
+}
+```
+
+**Create ACL rule:**
+```graphql
+mutation {
+  createAclRule(input: {
+    username: "sensor_device"
+    topicPattern: "sensors/+/data"
+    canPublish: true
+    canSubscribe: false
+    priority: 1
+  }) {
+    success
+    message
+  }
+}
+```
+
+**Get all users:**
+```graphql
+query {
+  getAllUsers {
+    username
+    enabled
+    canSubscribe
+    canPublish
+    isAdmin
+  }
+}
+```
+
+### Real-World Examples
+
+#### **IoT Sensor Network**
+```graphql
+# Sensor devices (publish-only)
+mutation {
+  createUser(input: {
+    username: "sensor_network"
+    password: "sensors_secret_key"
+    canSubscribe: false
+    canPublish: false
+  }) { success }
+}
+
+mutation {
+  createAclRule(input: {
+    username: "sensor_network"
+    topicPattern: "sensors/+/data"
+    canPublish: true
+    priority: 1
+  }) { success }
+}
+
+# Dashboard (subscribe-only)  
+mutation {
+  createUser(input: {
+    username: "dashboard"
+    password: "dashboard_secret"
+    canSubscribe: false
+    canPublish: false
+  }) { success }
+}
+
+mutation {
+  createAclRule(input: {
+    username: "dashboard"
+    topicPattern: "sensors/#"
+    canSubscribe: true
+    priority: 1
+  }) { success }
+}
+```
+
+#### **Multi-Tenant System**
+```graphql
+# Tenant A - isolated namespace
+mutation {
+  createUser(input: {
+    username: "tenant_a_user"
+    password: "tenant_a_secret"
+  }) { success }
+}
+
+mutation {
+  createAclRule(input: {
+    username: "tenant_a_user"
+    topicPattern: "tenant_a/#"
+    canSubscribe: true
+    canPublish: true
+    priority: 1
+  }) { success }
+}
+```
+
+### Security Features
+
+- **BCrypt Hashing**: Industry-standard password security with configurable work factor
+- **In-Memory Caching**: High-performance ACL lookup with automatic cache refresh
+- **Topic Tree Optimization**: Efficient wildcard matching for MQTT topic patterns
+- **Admin User Support**: Admin users bypass all ACL restrictions
+- **Anonymous Users**: Configurable access for unauthenticated connections
+
+### Complete Documentation
+
+For comprehensive documentation including:
+- Database schema details
+- Advanced ACL configuration
+- Permission resolution algorithm
+- Command-line tools
+- Performance optimization
+- Security best practices
+- Troubleshooting guide
+
+See: **[📖 Complete ACL Documentation](broker/README_ACL.md)**
+
+## 🗄️ Message Retention & Purging
+
+MonsterMQ provides automatic message cleanup with configurable retention policies, ensuring optimal storage usage while maintaining data availability for the required time periods.
+
+### Configuration
+
+Configure retention per ArchiveGroup in your `config.yaml`:
+
+```yaml
+ArchiveGroups:
+  - Name: "Production"
+    Enabled: true
+    TopicFilter: [ "sensors/#", "devices/#" ]
+    
+    # Retention settings
+    LastValRetention: "7d"      # Keep current values for 7 days
+    ArchiveRetention: "30d"     # Keep historical messages for 30 days
+    PurgeInterval: "1h"         # Check for old messages every hour
+    
+    # Storage backends
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
+
+  - Name: "Development"
+    Enabled: true
+    TopicFilter: [ "test/#" ]
+    
+    # Shorter retention for testing
+    LastValRetention: "2h"      # Keep current values for 2 hours
+    ArchiveRetention: "24h"     # Keep historical messages for 1 day
+    PurgeInterval: "15m"        # Clean up every 15 minutes
+    
+    LastValType: MEMORY
+    ArchiveType: SQLITE
+```
+
+### Retention Period Format
+
+Supports flexible time units:
+
+| Unit | Description | Example |
+|------|-------------|---------|
+| `s` | Seconds | `30s` = 30 seconds |
+| `m` | Minutes | `15m` = 15 minutes |
+| `h` | Hours | `2h` = 2 hours |
+| `d` | Days | `7d` = 7 days |
+| `w` | Weeks | `2w` = 2 weeks |
+| `M` | Months | `3M` = 3 months |
+| `y` | Years | `1y` = 1 year |
+
+**Examples:**
+```yaml
+LastValRetention: "5m"         # 5 minutes
+ArchiveRetention: "12h"        # 12 hours  
+PurgeInterval: "30d"           # 30 days
+LastValRetention: "6M"         # 6 months
+ArchiveRetention: "1y"         # 1 year
+```
+
+### Storage Backend Support
+
+All storage backends include optimized purging implementations:
+
+#### **Database Stores**
+- **PostgreSQL**: SQL DELETE with proper transaction handling and batch optimization
+- **CrateDB**: Time-series optimized with efficient batch deletions
+- **SQLite**: Async operations via event bus to prevent blocking
+- **MongoDB**: Native `deleteMany()` with time-based filters and index utilization
+
+#### **Memory Stores**
+- **Memory**: Direct HashMap operations with progress logging
+- **Hazelcast**: Distributed predicates for cluster-wide efficient purging
+
+### Cluster-Aware Purging
+
+In clustered deployments, MonsterMQ automatically coordinates purging operations:
+
+#### **Distributed Locking**
+- Each ArchiveGroup uses cluster-wide distributed locks
+- Lock format: `purge-lock-{ArchiveGroupName}-{StoreType}`
+- Only one node in cluster can acquire lock and perform purging
+- 30-second lock timeout prevents deadlocks
+- Other nodes skip with informational logging
+
+#### **Example Log Output**
+```bash
+# Node 1 (acquired lock)
+[FINE] Acquired purge lock for LastVal store [Production] - starting purge
+[FINE] Purge completed for [ProductionLastval]: deleted 1,247 messages in 234ms
+
+# Node 2 (lock unavailable)  
+[FINE] Could not acquire purge lock for Archive store [Production] - skipping purge (likely another cluster node is purging)
+```
+
+### Purge Process
+
+1. **Scheduled Execution**: Based on `PurgeInterval` setting per ArchiveGroup
+2. **Cluster Coordination**: Distributed locks ensure only one node purges per store
+3. **LastVal Purging**: Removes current values older than `LastValRetention`
+4. **Archive Purging**: Removes historical messages older than `ArchiveRetention`
+5. **Performance Logging**: Tracks deletion counts and execution time
+6. **Error Handling**: Graceful handling of database connectivity issues
+
+### Monitoring
+
+Monitor purge operations through detailed logging:
+
+```bash
+# Successful purge operation
+[FINE] Starting purge for [ProductionArchive] - removing messages older than 2024-08-01T00:00:00Z
+[FINE] Purge completed for [ProductionArchive]: deleted 5,432 messages in 1,247ms
+
+# Cluster coordination
+[FINE] Acquired purge lock for Archive store [Production] - starting purge
+[FINE] Could not acquire purge lock for LastVal store [Development] - skipping (another node purging)
+
+# Error handling
+[WARNING] Failed to acquire purge lock for store [Production] - will retry next interval
+[SEVERE] Error during purge operation: Database connection timeout - skipping this cycle
+```
+
+### Best Practices
+
+#### **Retention Planning**
+- **Balance storage costs** with data requirements
+- **Consider query patterns** - frequently accessed data needs longer retention
+- **Plan for compliance** - regulatory requirements may mandate minimum retention
+- **Monitor growth rates** - adjust retention based on data volume trends
+
+#### **Performance Optimization**
+- **Frequent purging** reduces batch sizes but increases overhead
+- **Database choice matters**:
+  - Use Memory/Hazelcast for high-performance current values
+  - Use PostgreSQL/CrateDB for reliable long-term archiving  
+  - Use MongoDB for flexible schema and time-series optimization
+- **Monitor purge logs** to ensure proper operation and performance
+
+#### **Cluster Considerations**
+- **Central database required** for clustered deployments
+- **Network bandwidth** - purging generates database traffic
+- **Timing coordination** - ensure all nodes use synchronized time (NTP)
+
+### Configuration Examples
+
+#### **High-Volume IoT System**
+```yaml
+ArchiveGroups:
+  - Name: "HighVolume"
+    TopicFilter: [ "sensors/#" ]
+    LastValRetention: "24h"     # Keep current readings for 1 day
+    ArchiveRetention: "7d"      # Keep history for 1 week  
+    PurgeInterval: "1h"         # Clean up hourly
+    LastValType: HAZELCAST      # Fast access
+    ArchiveType: POSTGRES       # Reliable storage
+```
+
+#### **Long-Term Analytics**
+```yaml
+ArchiveGroups:
+  - Name: "Analytics"  
+    TopicFilter: [ "metrics/#", "events/#" ]
+    LastValRetention: "30d"     # Keep current state for 30 days
+    ArchiveRetention: "2y"      # Keep history for 2 years
+    PurgeInterval: "24h"        # Clean up daily
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
+```
+
+#### **Development Environment**
+```yaml
+ArchiveGroups:
+  - Name: "Testing"
+    TopicFilter: [ "test/#" ]
+    LastValRetention: "1h"      # Keep current for 1 hour
+    ArchiveRetention: "6h"      # Keep history for 6 hours
+    PurgeInterval: "15m"        # Clean up every 15 minutes
+    LastValType: MEMORY         # Fast, volatile
+    ArchiveType: MEMORY         # No persistence needed
+```
+
 ## ⚙️ Configuration Reference
 
 ### YAML Schema Support
@@ -1176,7 +1553,6 @@ results = client.execute_query("""
 ## 🚨 Limitations
 
 - **MQTT Version:** Only MQTT 3.1.1 supported (MQTT 5.0 features planned)
-- **Authentication:** No built-in ACL system (planned for future release)
 - **Performance:** Limited by database backend performance and network latency
 - **Advanced Features:** Historical queries and topic search only available with PostgreSQL and SQLite
 
