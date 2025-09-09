@@ -109,8 +109,6 @@ MonsterMQ supports multiple database backends for different storage needs:
 - **Fine-Grained ACL Rules** - Topic-level permissions with MQTT wildcard support (`+`, `#`)
 - **Anonymous User Support** - Configurable anonymous access for unauthenticated clients
 - **GraphQL User Management API** - Complete CRUD operations for users and ACL rules
-- **High-Performance Caching** - In-memory ACL cache with automatic refresh and topic tree optimization
-- **Multi-Tenant Support** - Isolated user namespaces with hierarchical permission model
 
 ### **Message Retention & Purging**
 - **Automatic Message Cleanup** - Configurable retention policies per ArchiveGroup
