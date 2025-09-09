@@ -1,5 +1,6 @@
 package at.rocworks
 
+import at.rocworks.auth.UserManager
 import at.rocworks.handlers.SessionHandler
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
@@ -13,7 +14,8 @@ class MqttServer(
     private val ssl: Boolean,
     private val useWebSocket: Boolean,
     private val maxMessageSize: Int,
-    private val sessionHandler: SessionHandler
+    private val sessionHandler: SessionHandler,
+    private val userManager: UserManager
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -40,7 +42,7 @@ class MqttServer(
         }
 
         mqttServer.endpointHandler { endpoint ->
-            MqttClient.deployEndpoint(vertx, endpoint, sessionHandler)
+            MqttClient.deployEndpoint(vertx, endpoint, sessionHandler, userManager)
         }
 
         mqttServer.listen(port)

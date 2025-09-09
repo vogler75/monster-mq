@@ -1,5 +1,6 @@
 package at.rocworks
 
+import at.rocworks.auth.UserManager
 import at.rocworks.data.MqttMessage
 import at.rocworks.handlers.SessionHandler
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
@@ -22,6 +23,7 @@ import java.util.concurrent.ConcurrentLinkedDeque
 class MqttClient(
     private val endpoint: MqttEndpoint,
     private val sessionHandler: SessionHandler,
+    private val userManager: UserManager
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -48,6 +50,9 @@ class MqttClient(
     private val inFlightMessagesSnd : ConcurrentLinkedDeque<InFlightMessage> = ConcurrentLinkedDeque() // TODO: is concurrent needed?
 
     private val busConsumers = mutableListOf<MessageConsumer<*>>()
+    
+    // Authenticated user (null if not authenticated or auth disabled)
+    private var authenticatedUser: at.rocworks.data.User? = null
 
     // create a getter for the client id
     val clientId: String
@@ -62,11 +67,11 @@ class MqttClient(
 
         private val logger = Utils.getLogger(this::class.java)
 
-        fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler) {
+        fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler, userManager: UserManager) {
             val clientId = endpoint.clientIdentifier()
             logger.fine("Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]")
             // TODO: check if the client is already connected (cluster wide)
-            val client = MqttClient(endpoint, sessionHandler)
+            val client = MqttClient(endpoint, sessionHandler, userManager)
             vertx.deployVerticle(client).onComplete {
                 client.startEndpoint()
             }
@@ -160,22 +165,87 @@ class MqttClient(
                 }
             }
 
-            // Accept connection
-            if (endpoint.isCleanSession) {
-                sessionHandler.delClient(clientId).onComplete { // Clean and remove any existing session state
-                    finishClientStartup(false) // false... session not present because of clean session requested
-                }.onFailure {
-                    logger.severe("Client [$clientId] Error: ${it.message} [${Utils.getCurrentFunctionName()}]")
-                    rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_SERVER_UNAVAILABLE)
+            // Authentication check
+            if (userManager.isUserManagementEnabled()) {
+                val username = endpoint.auth()?.username
+                val password = endpoint.auth()?.password
+                
+                if (username == null || password == null) {
+                    // No credentials provided - treat as anonymous user
+                    logger.info("Client [$clientId] No credentials provided, using anonymous access")
+                    proceedWithConnection()
+                    return
+                }
+                
+                vertx.executeBlocking(java.util.concurrent.Callable<at.rocworks.data.User?> {
+                    try {
+                        kotlinx.coroutines.runBlocking {
+                            userManager.authenticate(username, password)
+                        }
+                    } catch (e: Exception) {
+                        logger.warning("Client [$clientId] Authentication error: ${e.message}")
+                        throw e
+                    }
+                }).onComplete { result ->
+                    if (result.succeeded() && result.result() != null) {
+                        authenticatedUser = result.result()
+                        logger.info("Client [$clientId] Authentication successful for user [$username]")
+                        proceedWithConnection()
+                    } else {
+                        logger.warning("Client [$clientId] Authentication failed for user [$username]")
+                        rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_NOT_AUTHORIZED)
+                    }
                 }
             } else {
-                // Check if session was already present or if it was the first connect
-                sessionHandler.isPresent(clientId).onComplete { present ->
-                    finishClientStartup(present.result())
-                }.onFailure {
-                    logger.severe("Client [$clientId] Error: ${it.message} [${Utils.getCurrentFunctionName()}]")
-                    rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_SERVER_UNAVAILABLE)
+                // Authentication disabled, proceed normally
+                proceedWithConnection()
+            }
+        }
+    }
+
+    private fun proceedWithConnection() {
+        fun finishClientStartup(present: Boolean) {
+            // Accept connection
+            endpoint.accept(present)
+
+            // Set client to connected
+            val information = JsonObject()
+            information.put("RemoteAddress", endpoint.remoteAddress().toString())
+            information.put("LocalAddress", endpoint.localAddress().toString())
+            information.put("ProtocolVersion", endpoint.protocolVersion())
+            information.put("SSL", endpoint.isSsl)
+            information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
+            information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
+            sessionHandler.setClient(clientId, endpoint.isCleanSession, information).onComplete {
+                logger.fine("Dequeue messages for client [$clientId] [${Utils.getCurrentFunctionName()}]")
+                sessionHandler.dequeueMessages(clientId) { m ->
+                    logger.finest { "Client [$clientId] Dequeued message [${m.messageId}] for topic [${m.topicName}] [${Utils.getCurrentFunctionName()}]" }
+                    publishMessage(m.cloneWithNewMessageId(getNextMessageId())) // TODO: if qos is >0 then all messages are put in the inflight queue
+                    endpoint.isConnected // continue as long as the client is connected
+                }.onComplete {
+                    if (endpoint.isConnected) { // if the client is still connected after the message queue
+                        ready = true
+                        sessionHandler.onlineClient(clientId)
+                    }
                 }
+            }
+        }
+
+        // Accept connection
+        if (endpoint.isCleanSession) {
+            sessionHandler.delClient(clientId).onComplete { // Clean and remove any existing session state
+                finishClientStartup(false) // false... session not present because of clean session requested
+            }.onFailure {
+                logger.severe("Client [$clientId] Error: ${it.message} [${Utils.getCurrentFunctionName()}]")
+                rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_SERVER_UNAVAILABLE)
+            }
+        } else {
+            // Check if session was already present or if it was the first connect
+            sessionHandler.isPresent(clientId).onComplete { present ->
+                finishClientStartup(present.result())
+            }.onFailure {
+                logger.severe("Client [$clientId] Error: ${it.message} [${Utils.getCurrentFunctionName()}]")
+                rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_SERVER_UNAVAILABLE)
             }
         }
     }
@@ -209,14 +279,50 @@ class MqttClient(
     }
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
-        // Acknowledge the subscriptions
-        val acknowledge = subscribe.topicSubscriptions().map { it.qualityOfService() }
+        // Check ACL permissions for each subscription
+        val allowedSubscriptions = mutableListOf<io.vertx.mqtt.MqttTopicSubscription>()
+        val deniedTopics = mutableListOf<String>()
+        
+        subscribe.topicSubscriptions().forEach { subscription ->
+            val topicName = subscription.topicName()
+            val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
+            
+            val canSubscribe = if (userManager.isUserManagementEnabled()) {
+                userManager.canSubscribe(username, topicName)
+            } else {
+                true // Allow all if user management is disabled
+            }
+            
+            if (canSubscribe) {
+                allowedSubscriptions.add(subscription)
+                logger.fine("Client [$clientId] Subscription ALLOWED for [$topicName] with QoS ${subscription.qualityOfService()}")
+            } else {
+                deniedTopics.add(topicName)
+                logger.warning("Client [$clientId] Subscription DENIED for [$topicName] - user [$username] lacks permission")
+            }
+        }
+
+        // Acknowledge the subscriptions (with appropriate QoS or failure codes)
+        val acknowledge = subscribe.topicSubscriptions().map { subscription ->
+            val canSubscribe = if (userManager.isUserManagementEnabled()) {
+                val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
+                userManager.canSubscribe(username, subscription.topicName())
+            } else {
+                true
+            }
+            if (canSubscribe) subscription.qualityOfService() else MqttQoS.FAILURE
+        }
         endpoint.subscribeAcknowledge(subscribe.messageId(), acknowledge)
 
-        // Subscribe
-        subscribe.topicSubscriptions().forEach { subscription ->
-            logger.fine("Client [$clientId] Subscription for [${subscription.topicName()}] with QoS ${subscription.qualityOfService()} [${Utils.getCurrentFunctionName()}]")
+        // Process allowed subscriptions
+        allowedSubscriptions.forEach { subscription ->
             sessionHandler.subscribeRequest(this, subscription.topicName(), subscription.qualityOfService())
+        }
+        
+        // Disconnect client if configured and any subscription was denied
+        if (deniedTopics.isNotEmpty() && userManager.shouldDisconnectOnUnauthorized()) {
+            logger.warning("Client [$clientId] Disconnecting due to unauthorized subscription attempts: $deniedTopics")
+            closeConnection()
         }
     }
 
@@ -267,11 +373,40 @@ class MqttClient(
 
     private fun publishHandler(message: MqttPublishMessage) {
         logger.finest { "Client [$clientId] Publish: message [${message.messageId()}] for [${message.topicName()}] with QoS ${message.qosLevel()} [${Utils.getCurrentFunctionName()}]" }
-        // Handle QoS levels
-        if (message.topicName().startsWith(Const.SYS_TOPIC_NAME)) {
-            logger.warning { "Client [$clientId] Publish: message for system topic [${message.topicName()}] not allowed! [${Utils.getCurrentFunctionName()}]" }
+        
+        val topicName = message.topicName()
+        
+        // Check system topic restrictions
+        if (topicName.startsWith(Const.SYS_TOPIC_NAME)) {
+            logger.warning { "Client [$clientId] Publish: message for system topic [$topicName] not allowed! [${Utils.getCurrentFunctionName()}]" }
+            return
         }
-        else
+        
+        // Check ACL permissions
+        val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
+        val canPublish = if (userManager.isUserManagementEnabled()) {
+            userManager.canPublish(username, topicName)
+        } else {
+            true // Allow all if user management is disabled
+        }
+        
+        if (!canPublish) {
+            logger.warning("Client [$clientId] Publish DENIED for [$topicName] - user [$username] lacks permission")
+            
+            // Disconnect client if configured
+            if (userManager.shouldDisconnectOnUnauthorized()) {
+                logger.warning("Client [$clientId] Disconnecting due to unauthorized publish attempt: $topicName")
+                closeConnection()
+                return
+            }
+            
+            // Otherwise, just ignore the message (silent drop)
+            return
+        }
+        
+        logger.finest { "Client [$clientId] Publish ALLOWED for [$topicName] - user [$username]" }
+        
+        // Handle QoS levels
         when (message.qosLevel()) {
             MqttQoS.AT_MOST_ONCE -> { // Level 0
                 logger.finest { "Client [$clientId] Publish: no acknowledge needed [${Utils.getCurrentFunctionName()}]" }

@@ -9,6 +9,14 @@ QueuedMessagesEnabled: true
 SessionStoreType: SQLITE
 RetainedStoreType: SQLITE
 
+# User Management configuration
+UserManagement:
+  Enabled: false  # Set to true to enable user authentication and ACL
+  AuthStoreType: SQLITE  # POSTGRES, SQLITE, CRATEDB, MONGODB
+  PasswordAlgorithm: bcrypt
+  CacheRefreshInterval: 60  # seconds
+  DisconnectOnUnauthorized: true
+
 SparkplugMetricExpansion:
   Enabled: true
 

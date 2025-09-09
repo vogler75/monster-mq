@@ -321,6 +321,9 @@ MORE INFO:
                 // Session handler
                 val sessionHandler = SessionHandler(sessionStore, messageBus, messageHandler, queuedMessagesEnabled)
 
+                // User management
+                val userManager = at.rocworks.auth.UserManager(configJson)
+
                 // Health handler
                 val healthHandler = HealthHandler(sessionHandler)
 
@@ -367,10 +370,10 @@ MORE INFO:
 
                 // MQTT Servers
                 val servers = listOfNotNull(
-                    if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, sessionHandler) else null,
-                    if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, sessionHandler) else null,
-                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, sessionHandler) else null,
-                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, sessionHandler) else null,
+                    if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, sessionHandler, userManager) else null,
+                    if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, sessionHandler, userManager) else null,
+                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, sessionHandler, userManager) else null,
+                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, sessionHandler, userManager) else null,
                     mcpServer
                 )
 
@@ -378,6 +381,7 @@ MORE INFO:
                 Future.succeededFuture<String>()
                     .compose { vertx.deployVerticle(messageHandler) }
                     .compose { vertx.deployVerticle(sessionHandler) }
+                    .compose { vertx.deployVerticle(userManager) }
                     .compose { vertx.deployVerticle(healthHandler) }
                     .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) } as List<Future<String>>) }
                     .onFailure {

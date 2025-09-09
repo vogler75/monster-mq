@@ -24,6 +24,8 @@ object Const {
 
     const val MCP_ARCHIVE_GROUP = "Default"
     const val MCP_CONFIG_TOPIC = "<config>"
+    
+    const val ANONYMOUS_USER = "Anonymous"
 
     var DEBUG_LEVEL: Level = Level.INFO
 }
