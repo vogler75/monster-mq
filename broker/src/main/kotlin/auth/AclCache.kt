@@ -162,7 +162,13 @@ class AclCache {
         if (!hasGeneralPermission) return false
         
         // Get user's ACL rules
-        val rules = userAcls[username] ?: return false
+        val rules = userAcls[username]
+        
+        // If no ACL rules exist for this user, allow access based on general permissions
+        if (rules == null || rules.isEmpty()) {
+            logger.finest { "No ACL rules for user=$username, allowing based on general permissions: ${if (isSubscribe) "subscribe" else "publish"}=$hasGeneralPermission" }
+            return hasGeneralPermission
+        }
         
         // Check rules in priority order (highest priority first)
         for (rule in rules) {
@@ -175,7 +181,7 @@ class AclCache {
             }
         }
         
-        // No matching allow rule found
+        // No matching allow rule found among existing rules
         logger.finest { "No ACL rule match: user=$username, topic=$topic, operation=${if (isSubscribe) "subscribe" else "publish"}" }
         return false
     }

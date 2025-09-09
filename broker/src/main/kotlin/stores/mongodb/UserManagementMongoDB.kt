@@ -14,7 +14,6 @@ import com.mongodb.client.model.Filters
 import com.mongodb.client.model.IndexOptions
 import com.mongodb.client.model.Indexes
 import com.mongodb.client.model.ReplaceOptions
-import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import org.bson.Document
 import org.mindrot.jbcrypt.BCrypt
@@ -25,7 +24,7 @@ import java.util.*
 class UserManagementMongoDB(
     private val url: String,
     private val database: String
-): AbstractVerticle(), IUserManagementStore {
+): IUserManagementStore {
     private val logger = Utils.getLogger(this::class.java)
 
     private val usersCollectionName = "users"
@@ -42,7 +41,7 @@ class UserManagementMongoDB(
 
     override fun getType(): AuthStoreType = AuthStoreType.MONGODB
 
-    override fun start(startPromise: Promise<Void>) {
+    fun start(startPromise: Promise<Void>) {
         try {
             mongoClient = MongoClients.create(url)
             mongoDatabase = mongoClient!!.getDatabase(database)

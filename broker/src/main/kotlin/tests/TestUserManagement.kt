@@ -229,13 +229,22 @@ fun testUserManager() {
             assert(noAuthResult == null) { "Authentication should fail for wrong password" }
             println("✓ Authentication through manager works")
             
-            // Create ACL rule
+            // First test permissions without ACL rules - should allow all based on general permissions
+            assert(userManager.canSubscribe("testuser", "any/topic/here")) {
+                "User should be able to subscribe to any topic (no ACL rules, general permission true)"
+            }
+            assert(userManager.canPublish("testuser", "any/topic/here")) {
+                "User should be able to publish to any topic (no ACL rules, general permission true)"
+            }
+            println("✓ Permission checking without ACL rules works (allows all based on general permissions)")
+            
+            // Now add ACL rule and test specific permissions
             assert(userManager.createAclRule("testuser", "sensors/+/temp", true, false, 10)) {
                 "ACL rule creation through manager failed"
             }
             println("✓ ACL rule creation through manager works")
             
-            // Test permissions
+            // Test permissions with ACL rules - should restrict to specific patterns
             assert(userManager.canSubscribe("testuser", "sensors/room1/temp")) {
                 "User should be able to subscribe to sensors/room1/temp"
             }
@@ -245,7 +254,7 @@ fun testUserManager() {
             assert(!userManager.canPublish("testuser", "sensors/room1/temp")) {
                 "User should not be able to publish to sensors/room1/temp"
             }
-            println("✓ Permission checking through manager works")
+            println("✓ Permission checking with ACL rules works (restricts to specific patterns)")
             
             // Test cache refresh
             userManager.refreshCache()
@@ -264,7 +273,7 @@ fun testUserManager() {
             assert(retrievedUser!!.username == "testuser") { "Retrieved user mismatch" }
             println("✓ User retrieval through manager works")
             
-            // Test Anonymous user creation (wait a bit for async creation to complete)
+            // Test Anonymous user creation and permissions
             try {
                 val anonymousUser = userManager.getUser("Anonymous")
                 if (anonymousUser != null) {
@@ -272,6 +281,16 @@ fun testUserManager() {
                     assert(anonymousUser.canSubscribe) { "Anonymous user should be able to subscribe" }
                     assert(!anonymousUser.canPublish) { "Anonymous user should not be able to publish by default" }
                     assert(!anonymousUser.isAdmin) { "Anonymous user should not be admin" }
+                    
+                    // Test Anonymous user can subscribe to any topic (no ACL rules)
+                    assert(userManager.canSubscribe("Anonymous", "any/topic")) {
+                        "Anonymous user should be able to subscribe to any topic (no ACL rules, general permission true)"
+                    }
+                    // Test Anonymous user cannot publish to any topic (no ACL rules but general permission false)
+                    assert(!userManager.canPublish("Anonymous", "any/topic")) {
+                        "Anonymous user should not be able to publish to any topic (no ACL rules, general permission false)"
+                    }
+                    
                     println("✓ Anonymous user creation and permissions work")
                 } else {
                     println("! Anonymous user not found - may still be creating asynchronously")

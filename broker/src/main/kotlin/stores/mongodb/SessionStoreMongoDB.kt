@@ -44,10 +44,10 @@ class SessionStoreMongoDB(
             database = mongoClient.getDatabase(databaseName)
 
             // Initialize collections
-            sessionsCollection = database.getCollection("Sessions")
-            subscriptionsCollection = database.getCollection("Subscriptions")
-            queuedMessagesCollection = database.getCollection("QueuedMessages")
-            queuedMessagesClientsCollection = database.getCollection("QueuedMessagesClients")
+            sessionsCollection = database.getCollection("sessions")
+            subscriptionsCollection = database.getCollection("subscriptions")
+            queuedMessagesCollection = database.getCollection("queuedmessages")
+            queuedMessagesClientsCollection = database.getCollection("queuedmessagesclients")
 
             // Create indexes for faster queries
             sessionsCollection.createIndex(Document("client_id", 1))

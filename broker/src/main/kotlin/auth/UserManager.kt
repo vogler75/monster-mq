@@ -263,7 +263,7 @@ class UserManager(
                     passwordHash = "", // No password for anonymous user
                     enabled = true,
                     canSubscribe = true,
-                    canPublish = false, // Anonymous users typically can't publish
+                    canPublish = true, 
                     isAdmin = false
                 )
                 

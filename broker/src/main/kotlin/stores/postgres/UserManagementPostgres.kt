@@ -5,9 +5,7 @@ import at.rocworks.Utils
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
 import at.rocworks.stores.AuthStoreType
-import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IUserManagementStore
-import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import org.mindrot.jbcrypt.BCrypt
@@ -19,7 +17,7 @@ class UserManagementPostgres(
     private val url: String,
     private val username: String,
     private val password: String
-): AbstractVerticle(), IUserManagementStore {
+): IUserManagementStore {
     private val logger = Utils.getLogger(this::class.java)
 
     private val usersTableName = "users"
@@ -31,13 +29,28 @@ class UserManagementPostgres(
 
     override fun getType(): AuthStoreType = AuthStoreType.POSTGRES
 
-    private val db = object : DatabaseConnection(logger, url, username, password) {
-        override fun init(connection: Connection): Future<Void> {
-            val promise = Promise.promise<Void>()
-            try {
-                connection.autoCommit = false
+    private var connection: java.sql.Connection? = null
 
-                val createTableSQL = listOf("""
+    fun start(startPromise: Promise<Void>) {
+        try {
+            // Initialize database connection directly
+            connection = java.sql.DriverManager.getConnection(url, username, password)
+            connection?.autoCommit = false
+            
+            // Create tables
+            createTablesSync(connection!!)
+            
+            logger.info("PostgreSQL user management store initialized")
+            startPromise.complete()
+        } catch (e: Exception) {
+            logger.severe("Failed to initialize PostgreSQL user management store: ${e.message}")
+            startPromise.fail(e)
+        }
+    }
+    
+    private fun createTablesSync(connection: java.sql.Connection): Boolean {
+        return try {
+            val createTableSQL = listOf("""
                 CREATE TABLE IF NOT EXISTS $usersTableName (
                     username VARCHAR(255) PRIMARY KEY,
                     password_hash VARCHAR(255) NOT NULL,
@@ -60,28 +73,22 @@ class UserManagementPostgres(
                 );
                 """.trimIndent())
 
-                val createIndexesSQL = listOf(
-                    "CREATE INDEX IF NOT EXISTS ${usersAclTableName}_username_idx ON $usersAclTableName (username);",
-                    "CREATE INDEX IF NOT EXISTS ${usersAclTableName}_priority_idx ON $usersAclTableName (priority);"
-                )
+            val createIndexesSQL = listOf(
+                "CREATE INDEX IF NOT EXISTS ${usersAclTableName}_username_idx ON $usersAclTableName (username)",
+                "CREATE INDEX IF NOT EXISTS ${usersAclTableName}_priority_idx ON $usersAclTableName (priority)"
+            )
 
-                connection.createStatement().use { statement ->
-                    createTableSQL.forEach(statement::executeUpdate)
-                    createIndexesSQL.forEach(statement::executeUpdate)
-                }
-                connection.commit()
-                logger.info("User management tables are ready [${Utils.getCurrentFunctionName()}]")
-                promise.complete()
-            } catch (e: Exception) {
-                logger.severe("Error creating user management tables: ${e.message} [${Utils.getCurrentFunctionName()}]")
-                promise.fail(e)
+            connection.createStatement().use { stmt ->
+                createTableSQL.forEach(stmt::executeUpdate)
+                createIndexesSQL.forEach(stmt::executeUpdate)
             }
-            return promise.future()
+            connection.commit()
+            logger.info("PostgreSQL user management tables created")
+            true
+        } catch (e: java.sql.SQLException) {
+            logger.severe("Error creating PostgreSQL user management tables: ${e.message}")
+            false
         }
-    }
-
-    override fun start(startPromise: Promise<Void>) {
-        db.start(vertx, startPromise)
     }
 
     override suspend fun init(): Boolean {
@@ -101,13 +108,17 @@ class UserManagementPostgres(
     }
 
     override suspend fun close() {
-        // Database connection is managed by the parent class
+        try {
+            connection?.close()
+        } catch (e: java.sql.SQLException) {
+            logger.warning("Error closing PostgreSQL connection: ${e.message}")
+        }
     }
 
     override suspend fun createUser(user: User): Boolean {
         val sql = "INSERT INTO $usersTableName (username, password_hash, enabled, can_subscribe, can_publish, is_admin) VALUES (?, ?, ?, ?, ?, ?)"
         return try {
-            db.connection?.let { connection ->
+            connection?.let { connection ->
                 connection.prepareStatement(sql).use { stmt ->
                     stmt.setString(1, user.username)
                     stmt.setString(2, user.passwordHash)
@@ -129,7 +140,7 @@ class UserManagementPostgres(
     override suspend fun updateUser(user: User): Boolean {
         val sql = "UPDATE $usersTableName SET password_hash = ?, enabled = ?, can_subscribe = ?, can_publish = ?, is_admin = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?"
         return try {
-            db.connection?.let { connection ->
+            connection?.let { connection ->
                 connection.prepareStatement(sql).use { stmt ->
                     stmt.setString(1, user.passwordHash)
                     stmt.setBoolean(2, user.enabled)
@@ -151,7 +162,7 @@ class UserManagementPostgres(
     override suspend fun deleteUser(username: String): Boolean {
         val sql = "DELETE FROM $usersTableName WHERE username = ?"
         return try {
-            db.connection?.let { connection ->
+            connection?.let { connection ->
                 connection.prepareStatement(sql).use { stmt ->
                     stmt.setString(1, username)
                     val result = stmt.executeUpdate() > 0
@@ -168,7 +179,7 @@ class UserManagementPostgres(
     override suspend fun getUser(username: String): User? {
         val sql = "SELECT username, password_hash, enabled, can_subscribe, can_publish, is_admin, created_at, updated_at FROM $usersTableName WHERE username = ?"
         return try {
-            db.connection?.let { connection ->
+            connection?.let { connection ->
                 connection.prepareStatement(sql).use { stmt ->
                     stmt.setString(1, username)
                     val rs = stmt.executeQuery()
@@ -195,7 +206,7 @@ class UserManagementPostgres(
     override suspend fun getAllUsers(): List<User> {
         val sql = "SELECT username, password_hash, enabled, can_subscribe, can_publish, is_admin, created_at, updated_at FROM $usersTableName"
         return try {
-            db.connection?.let { connection ->
+            connection?.let { connection ->
                 connection.prepareStatement(sql).use { stmt ->
                     val rs = stmt.executeQuery()
                     val users = mutableListOf<User>()
@@ -230,7 +241,7 @@ class UserManagementPostgres(
     override suspend fun createAclRule(rule: AclRule): Boolean {
         val sql = "INSERT INTO $usersAclTableName (username, topic_pattern, can_subscribe, can_publish, priority) VALUES (?, ?, ?, ?, ?)"
         return try {
-            db.connection?.let { connection ->
+            connection?.let { connection ->
                 connection.prepareStatement(sql).use { stmt ->
                     stmt.setString(1, rule.username)
                     stmt.setString(2, rule.topicPattern)
@@ -251,7 +262,7 @@ class UserManagementPostgres(
     override suspend fun updateAclRule(rule: AclRule): Boolean {
         val sql = "UPDATE $usersAclTableName SET username = ?, topic_pattern = ?, can_subscribe = ?, can_publish = ?, priority = ? WHERE id = ?"
         return try {
-            db.connection?.let { connection ->
+            connection?.let { connection ->
                 connection.prepareStatement(sql).use { stmt ->
                     stmt.setString(1, rule.username)
                     stmt.setString(2, rule.topicPattern)
@@ -273,7 +284,7 @@ class UserManagementPostgres(
     override suspend fun deleteAclRule(id: String): Boolean {
         val sql = "DELETE FROM $usersAclTableName WHERE id = ?"
         return try {
-            db.connection?.let { connection ->
+            connection?.let { connection ->
                 connection.prepareStatement(sql).use { stmt ->
                     stmt.setString(1, id)
                     val result = stmt.executeUpdate() > 0
@@ -290,7 +301,7 @@ class UserManagementPostgres(
     override suspend fun getUserAclRules(username: String): List<AclRule> {
         val sql = "SELECT id, username, topic_pattern, can_subscribe, can_publish, priority, created_at FROM $usersAclTableName WHERE username = ? ORDER BY priority DESC"
         return try {
-            db.connection?.let { connection ->
+            connection?.let { connection ->
                 connection.prepareStatement(sql).use { stmt ->
                     stmt.setString(1, username)
                     val rs = stmt.executeQuery()
@@ -318,7 +329,7 @@ class UserManagementPostgres(
     override suspend fun getAllAclRules(): List<AclRule> {
         val sql = "SELECT id, username, topic_pattern, can_subscribe, can_publish, priority, created_at FROM $usersAclTableName ORDER BY priority DESC"
         return try {
-            db.connection?.let { connection ->
+            connection?.let { connection ->
                 connection.prepareStatement(sql).use { stmt ->
                     val rs = stmt.executeQuery()
                     val rules = mutableListOf<AclRule>()

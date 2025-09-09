@@ -21,10 +21,10 @@ class SessionStorePostgres(
 ): AbstractVerticle(), ISessionStore {
     private val logger = Utils.getLogger(this::class.java)
 
-    private val sessionsTableName = "Sessions"
-    private val subscriptionsTableName = "Subscriptions"
-    private val queuedMessagesTableName = "QueuedMessages"
-    private val queuedMessagesClientsTableName = "QueuedMessagesClients"
+    private val sessionsTableName = "sessions"
+    private val subscriptionsTableName = "subscriptions"
+    private val queuedMessagesTableName = "queuedmessages"
+    private val queuedMessagesClientsTableName = "queuedmessagesclients"
 
     //private var queuedMessageId = 0L
 

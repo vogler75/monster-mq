@@ -1,27 +1,25 @@
-# MonsterMQ MongoDB Configuration
-# Enhanced MongoDB implementation with performance optimizations
-# - Connection pooling (10-50 connections)
-# - Time-series collections for message archives
-# - Optimized indexes for wildcard topic matching
-# - GraphQL and MCP support via IMessageArchiveExtended
-
 TCP: 1883
-TCPS: 8883
+TPCS: 8883
 WS: 9000
 WSS: 9001
 
 MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 
-# MongoDB as primary storage backend
 SessionStoreType: MONGODB
 RetainedStoreType: MONGODB
 
-# Enable SparkplugB message expansion
+# User Management configuration
+UserManagement:
+  Enabled: true  # Set to true to enable user authentication and ACL
+  AuthStoreType: MONGODB  # POSTGRES, SQLITE, CRATEDB, MONGODB
+  PasswordAlgorithm: bcrypt
+  CacheRefreshInterval: 60  # seconds
+  DisconnectOnUnauthorized: true
+
 SparkplugMetricExpansion:
   Enabled: true
 
-# Archive configuration with MongoDB
 ArchiveGroups:
   - Name: Default
     Enabled: true
@@ -29,6 +27,10 @@ ArchiveGroups:
     RetainedOnly: false
     LastValType: MONGODB
     ArchiveType: MONGODB
+    LastValRetention: "10m"
+    ArchiveRetention: "60m"
+    PurgeInterval: "1m"  
+
 
 # MongoDB connection configuration
 MongoDB:
