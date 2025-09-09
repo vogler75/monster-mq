@@ -22,7 +22,7 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.*
 
-class UserManagementStoreMongoDB(
+class UserManagementMongoDB(
     private val url: String,
     private val database: String
 ): AbstractVerticle(), IUserManagementStore {

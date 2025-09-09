@@ -5,7 +5,7 @@ import at.rocworks.auth.PasswordEncoder
 import at.rocworks.auth.UserManager
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
-import at.rocworks.stores.sqlite.UserManagementStoreSqlite
+import at.rocworks.stores.sqlite.UserManagementSqlite
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
@@ -61,7 +61,7 @@ fun testAclCache() {
     val cache = AclCache()
     
     runBlocking {
-        val store = UserManagementStoreSqlite(tempDbFile.absolutePath)
+        val store = UserManagementSqlite(tempDbFile.absolutePath)
         store.init()
         
         // Create test users
@@ -130,7 +130,7 @@ fun testSqliteStore() {
     tempDbFile.deleteOnExit()
     
     runBlocking {
-        val store = UserManagementStoreSqlite(tempDbFile.absolutePath)
+        val store = UserManagementSqlite(tempDbFile.absolutePath)
         
         // Initialize store
         assert(store.init()) { "Store initialization failed" }

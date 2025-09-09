@@ -1,4 +1,4 @@
-package at.rocworks.stores.postgres
+package at.rocworks.stores.cratedb
 
 import at.rocworks.Const
 import at.rocworks.Utils
@@ -14,8 +14,9 @@ import org.mindrot.jbcrypt.BCrypt
 import java.sql.Connection
 import java.sql.SQLException
 import java.time.LocalDateTime
+import java.util.*
 
-class UserManagementStorePostgres(
+class UserManagementCrateDb(
     private val url: String,
     private val username: String,
     private val password: String
@@ -29,7 +30,7 @@ class UserManagementStorePostgres(
         logger.level = Const.DEBUG_LEVEL
     }
 
-    override fun getType(): AuthStoreType = AuthStoreType.POSTGRES
+    override fun getType(): AuthStoreType = AuthStoreType.CRATEDB
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun init(connection: Connection): Future<Void> {
@@ -39,41 +40,35 @@ class UserManagementStorePostgres(
 
                 val createTableSQL = listOf("""
                 CREATE TABLE IF NOT EXISTS $usersTableName (
-                    username VARCHAR(255) PRIMARY KEY,
-                    password_hash VARCHAR(255) NOT NULL,
-                    enabled BOOLEAN DEFAULT true,
-                    can_subscribe BOOLEAN DEFAULT true,
-                    can_publish BOOLEAN DEFAULT true,
-                    is_admin BOOLEAN DEFAULT false,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
+                    username TEXT PRIMARY KEY,
+                    password_hash TEXT,
+                    enabled BOOLEAN,
+                    can_subscribe BOOLEAN,
+                    can_publish BOOLEAN,
+                    is_admin BOOLEAN,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                ) CLUSTERED INTO 2 SHARDS
                 """.trimIndent(), """
                 CREATE TABLE IF NOT EXISTS $usersAclTableName (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(255) REFERENCES $usersTableName(username) ON DELETE CASCADE,
-                    topic_pattern VARCHAR(1024) NOT NULL,
-                    can_subscribe BOOLEAN DEFAULT false,
-                    can_publish BOOLEAN DEFAULT false,
-                    priority INTEGER DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
+                    id TEXT PRIMARY KEY,
+                    username TEXT,
+                    topic_pattern TEXT,
+                    can_subscribe BOOLEAN,
+                    can_publish BOOLEAN,
+                    priority INTEGER,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                ) CLUSTERED INTO 2 SHARDS
                 """.trimIndent())
-
-                val createIndexesSQL = listOf(
-                    "CREATE INDEX IF NOT EXISTS ${usersAclTableName}_username_idx ON $usersAclTableName (username);",
-                    "CREATE INDEX IF NOT EXISTS ${usersAclTableName}_priority_idx ON $usersAclTableName (priority);"
-                )
 
                 connection.createStatement().use { statement ->
                     createTableSQL.forEach(statement::executeUpdate)
-                    createIndexesSQL.forEach(statement::executeUpdate)
                 }
                 connection.commit()
-                logger.info("User management tables are ready [${Utils.getCurrentFunctionName()}]")
+                logger.info("CrateDB user management tables are ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
             } catch (e: Exception) {
-                logger.severe("Error creating user management tables: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                logger.severe("Error creating CrateDB user management tables: ${e.message} [${Utils.getCurrentFunctionName()}]")
                 promise.fail(e)
             }
             return promise.future()
@@ -228,15 +223,18 @@ class UserManagementStorePostgres(
     }
 
     override suspend fun createAclRule(rule: AclRule): Boolean {
-        val sql = "INSERT INTO $usersAclTableName (username, topic_pattern, can_subscribe, can_publish, priority) VALUES (?, ?, ?, ?, ?)"
+        val sql = "INSERT INTO $usersAclTableName (id, username, topic_pattern, can_subscribe, can_publish, priority) VALUES (?, ?, ?, ?, ?, ?)"
         return try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { stmt ->
-                    stmt.setString(1, rule.username)
-                    stmt.setString(2, rule.topicPattern)
-                    stmt.setBoolean(3, rule.canSubscribe)
-                    stmt.setBoolean(4, rule.canPublish)
-                    stmt.setInt(5, rule.priority)
+                    // Generate UUID for CrateDB
+                    val id = rule.id.ifEmpty { UUID.randomUUID().toString() }
+                    stmt.setString(1, id)
+                    stmt.setString(2, rule.username)
+                    stmt.setString(3, rule.topicPattern)
+                    stmt.setBoolean(4, rule.canSubscribe)
+                    stmt.setBoolean(5, rule.canPublish)
+                    stmt.setInt(6, rule.priority)
                     val result = stmt.executeUpdate() > 0
                     connection.commit()
                     result
