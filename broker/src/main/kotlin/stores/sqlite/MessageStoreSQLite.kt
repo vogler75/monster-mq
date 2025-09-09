@@ -119,7 +119,7 @@ class MessageStoreSQLite(
     /**
      * Async version of get() for better performance with GraphQL queries
      */
-    fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
+    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
         val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
                      WHERE topic = ?"""
         val params = JsonArray().add(topicName)

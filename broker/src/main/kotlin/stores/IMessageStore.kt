@@ -18,6 +18,7 @@ interface IMessageStore {
     fun getType(): MessageStoreType
 
     operator fun get(topicName: String): MqttMessage?
+    fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit)
 
     fun addAll(messages: List<MqttMessage>)
     fun delAll(topics: List<String>)

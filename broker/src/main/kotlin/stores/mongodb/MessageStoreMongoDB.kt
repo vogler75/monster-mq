@@ -160,6 +160,20 @@ class MessageStoreMongoDB(
         return null
     }
 
+    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
+        // Use Vertx to execute MongoDB query asynchronously
+        vertx.executeBlocking<MqttMessage?> {
+            get(topicName)
+        }.onComplete { result ->
+            if (result.succeeded()) {
+                callback(result.result())
+            } else {
+                logger.warning("Error in async get for topic [$topicName]: ${result.cause()?.message}")
+                callback(null)
+            }
+        }
+    }
+
     override fun addAll(messages: List<MqttMessage>) {
         if (messages.isEmpty()) return
 

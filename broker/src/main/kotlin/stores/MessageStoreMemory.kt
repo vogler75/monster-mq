@@ -39,6 +39,11 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
     private fun getStore(): MutableMap<String, MqttMessage> = mutableMapOf<String, MqttMessage>()
 
     override fun get(topicName: String): MqttMessage? = store[topicName]
+    
+    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
+        // Memory store can respond immediately
+        callback(store[topicName])
+    }
 
     override fun addAll(messages: List<MqttMessage>) {
         val topics = messages.map { it.topicName }.distinct()

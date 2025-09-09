@@ -122,6 +122,20 @@ class MessageStorePostgres(
         return null
     }
 
+    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
+        // Use Vertx to execute database query asynchronously
+        vertx.executeBlocking<MqttMessage?> {
+            get(topicName)
+        }.onComplete { result ->
+            if (result.succeeded()) {
+                callback(result.result())
+            } else {
+                logger.severe("Error in async get for topic [$topicName]: ${result.cause()?.message}")
+                callback(null)
+            }
+        }
+    }
+
     override fun addAll(messages: List<MqttMessage>) {
         val sql = """INSERT INTO $tableName (topic, ${FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")}, topic_r, topic_l,
                    time, payload_blob, payload_json, qos, retained, client_id, message_uuid) 

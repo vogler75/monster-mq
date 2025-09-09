@@ -43,6 +43,11 @@ class MessageStoreHazelcast(
     }
 
     override fun get(topicName: String): MqttMessage? = store[topicName]
+    
+    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
+        // Hazelcast store can respond immediately
+        callback(store[topicName])
+    }
 
     override fun addAll(messages: List<MqttMessage>) {
         val startTime = Instant.now()

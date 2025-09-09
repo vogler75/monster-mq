@@ -41,57 +41,24 @@ class QueryResolver(
                 return@DataFetcher future
             }
 
-            // Handle SQLite stores asynchronously
-            if (lastValueStore.getType().name == "SQLITE") {
-                handleSQLiteCurrentValue(lastValueStore, topic, format, future)
-            } else {
-                // Try direct get first (more efficient for exact matches)
-                val directMessage = lastValueStore.get(topic)
-                if (directMessage != null) {
+            // Use getAsync for all stores (now available in all implementations)
+            lastValueStore.getAsync(topic) { message ->
+                if (message != null) {
                     val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
-                        directMessage.payload, 
+                        message.payload, 
                         format
                     )
                     future.complete(
                         TopicValue(
-                            topic = directMessage.topicName,
+                            topic = message.topicName,
                             payload = payload,
                             format = actualFormat,
-                            timestamp = directMessage.time.toEpochMilli(),
-                            qos = directMessage.qosLevel
+                            timestamp = message.time.toEpochMilli(),
+                            qos = message.qosLevel
                         )
                     )
                 } else {
-                // Fallback to findMatchingMessages for wildcard-capable stores
-                var found = false
-                lastValueStore.findMatchingMessages(topic) { message ->
-                    if (!found && message.topicName == topic) {
-                        found = true
-                        val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
-                            message.payload, 
-                            format
-                        )
-                        future.complete(
-                            TopicValue(
-                                topic = message.topicName,
-                                payload = payload,
-                                format = actualFormat,
-                                timestamp = message.time.toEpochMilli(),
-                                qos = message.qosLevel
-                            )
-                        )
-                        true // stop processing
-                    } else {
-                        false // continue searching
-                    }
-                }
-                
-                // If not found after async search, complete with null
-                vertx.setTimer(100) {
-                    if (!found) {
-                        future.complete(null)
-                    }
-                }
+                    future.complete(null)
                 }
             }
 
@@ -430,37 +397,4 @@ class QueryResolver(
         }
     }
 
-    /**
-     * Handle SQLite currentValue queries asynchronously to avoid blocking
-     */
-    private fun handleSQLiteCurrentValue(
-        lastValueStore: IMessageStore,
-        topic: String, 
-        format: DataFormat,
-        future: CompletableFuture<TopicValue?>
-    ) {
-        // Cast to SQLite store to access async methods
-        val sqliteStore = lastValueStore as at.rocworks.stores.sqlite.MessageStoreSQLite
-        
-        // Use the new async getAsync method
-        sqliteStore.getAsync(topic) { message ->
-            if (message != null) {
-                val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
-                    message.payload, 
-                    format
-                )
-                future.complete(
-                    TopicValue(
-                        topic = message.topicName,
-                        payload = payload,
-                        format = actualFormat,
-                        timestamp = message.time.toEpochMilli(),
-                        qos = message.qosLevel
-                    )
-                )
-            } else {
-                future.complete(null)
-            }
-        }
-    }
 }

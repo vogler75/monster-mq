@@ -8,6 +8,7 @@ object MessageStoreNone : IMessageStore {
     override fun getType(): MessageStoreType = MessageStoreType.NONE
     
     override fun get(topicName: String): MqttMessage? = null
+    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) = callback(null)
     
     override fun addAll(messages: List<MqttMessage>) {}
     
