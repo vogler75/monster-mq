@@ -265,8 +265,28 @@ class MessageStoreCrateDB(
     }
 
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
-        logger.warning("purgeOldMessages not yet implemented for CrateDB message store [$name]")
-        // TODO: Implement message purging for CrateDB stores
-        return PurgeResult(0, 0)
+        val startTime = System.currentTimeMillis()
+        var deletedCount = 0
+        
+        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        
+        try {
+            db.connection?.let { connection ->
+                val sql = "DELETE FROM $tableName WHERE time < ?"
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setTimestamp(1, Timestamp.from(olderThan))
+                    deletedCount = preparedStatement.executeUpdate()
+                }
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error purging old messages from [$name]: ${e.message}")
+        }
+        
+        val elapsedTimeMs = System.currentTimeMillis() - startTime
+        val result = PurgeResult(deletedCount, elapsedTimeMs)
+        
+        logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
+        
+        return result
     }
 }
