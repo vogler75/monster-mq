@@ -27,6 +27,7 @@ class GraphQLServer(
     private val vertx: Vertx,
     private val config: JsonObject,
     private val messageBus: IMessageBus,
+    private val messageHandler: at.rocworks.handlers.MessageHandler,
     private val retainedStore: IMessageStore?,
     private val archiveGroups: Map<String, ArchiveGroup>,
     private val userManager: UserManager
@@ -38,6 +39,7 @@ class GraphQLServer(
     private val port = config.getInteger("Port", 8080)
     private val corsEnabled = config.getBoolean("CorsEnabled", true)
     private val path = config.getString("Path", "/graphql")
+    private val authContext = GraphQLAuthContext(userManager)
 
     fun start() {
         logger.info("Starting GraphQL server on port $port")
@@ -65,14 +67,33 @@ class GraphQLServer(
         // Create GraphQL handler
         val graphQLHandler = GraphQLHandler.create(
             graphQL,
-            GraphQLHandlerOptions().setRequestBatchingEnabled(true)
+            GraphQLHandlerOptions()
+                .setRequestBatchingEnabled(true)
         )
 
         // Create WebSocket handler for subscriptions
         val wsHandler = GraphQLWSHandler.create(graphQL)
 
-        // Setup routes
-        router.route(path).handler(graphQLHandler)
+        // Setup routes with auth injection middleware and GraphQL handler
+        router.route(path).handler { ctx ->
+            try {
+                // Extract auth context and set it in thread-local for resolvers
+                val authCtx = authContext.extractAuthContext(ctx)
+                AuthContextService.setAuthContext(authCtx)
+                ctx.next()
+            } catch (e: Exception) {
+                logger.severe("Error setting auth context: ${e.message}")
+                ctx.fail(500, e)
+            }
+        }.handler(graphQLHandler).handler { ctx ->
+            // Clear auth context after GraphQL execution to prevent memory leaks
+            try {
+                AuthContextService.clearAuthContext()
+            } catch (e: Exception) {
+                logger.warning("Error clearing auth context: ${e.message}")
+            }
+            // Continue with response
+        }
         router.route("${path}ws").handler(wsHandler)
 
         // Health check endpoint
@@ -114,12 +135,15 @@ class GraphQLServer(
 
         return GraphQL.newGraphQL(graphQLSchema).build()
     }
+    
+    
 
     private fun buildRuntimeWiring(): RuntimeWiring {
-        val queryResolver = QueryResolver(vertx, retainedStore, archiveGroups)
-        val mutationResolver = MutationResolver(vertx, messageBus)
+        val queryResolver = QueryResolver(vertx, retainedStore, archiveGroups, authContext)
+        val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, authContext)
         val subscriptionResolver = SubscriptionResolver(vertx, messageBus)
-        val userManagementResolver = UserManagementResolver(vertx, userManager)
+        val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
+        val authenticationResolver = AuthenticationResolver(vertx, userManager)
 
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
@@ -147,9 +171,12 @@ class GraphQLServer(
             // Register mutation resolvers
             .type("Mutation") { builder ->
                 builder
+                    // Authentication (no token required)
+                    .dataFetcher("login", authenticationResolver.login())
+                    // Publishing (requires token + ACL check)
                     .dataFetcher("publish", mutationResolver.publish())
                     .dataFetcher("publishBatch", mutationResolver.publishBatch())
-                    // User management mutations
+                    // User management mutations (requires admin token)
                     .dataFetcher("createUser", userManagementResolver.createUser())
                     .dataFetcher("updateUser", userManagementResolver.updateUser())
                     .dataFetcher("deleteUser", userManagementResolver.deleteUser())

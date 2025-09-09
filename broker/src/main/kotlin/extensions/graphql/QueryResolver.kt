@@ -6,6 +6,7 @@ import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.IMessageStore
 import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironment
+import graphql.GraphQLException
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -18,7 +19,8 @@ import java.util.logging.Logger
 class QueryResolver(
     private val vertx: Vertx,
     private val retainedStore: IMessageStore?,
-    private val archiveGroups: Map<String, ArchiveGroup>
+    private val archiveGroups: Map<String, ArchiveGroup>,
+    private val authContext: GraphQLAuthContext
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(QueryResolver::class.java.name)
@@ -29,6 +31,15 @@ class QueryResolver(
             val future = CompletableFuture<TopicValue?>()
             
             val topic = env.getArgument<String>("topic") ?: return@DataFetcher future.apply { complete(null) }
+            
+            // Get auth context from thread-local service (may be null for anonymous users)
+            val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
+            
+            // Check subscribe permission for this specific topic (works with anonymous users)
+            if (!authContext.canSubscribeToTopic(userAuthContext, topic)) {
+                future.completeExceptionally(GraphQLException("No subscribe permission for topic: $topic"))
+                return@DataFetcher future
+            }
             val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
             val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
 
@@ -71,6 +82,15 @@ class QueryResolver(
             val future = CompletableFuture<List<TopicValue>>()
             
             val topicFilter = env.getArgument<String>("topicFilter") ?: "#"
+            
+            // Get auth context from thread-local service (may be null for anonymous users)
+            val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
+            
+            // Check subscribe permission for the topic filter (works with anonymous users)
+            if (!authContext.canSubscribeToTopic(userAuthContext, topicFilter)) {
+                future.completeExceptionally(GraphQLException("No subscribe permission for topic filter: $topicFilter"))
+                return@DataFetcher future
+            }
             val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
             val limit = env.getArgument<Int>("limit") ?: 100
             val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
@@ -132,6 +152,14 @@ class QueryResolver(
             val future = CompletableFuture<RetainedMessage?>()
             
             val topic = env.getArgument<String>("topic") ?: return@DataFetcher future.apply { complete(null) }
+            // Get auth context from thread-local service
+            val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
+            
+            // Check subscribe permission for this specific topic
+            if (!authContext.canSubscribeToTopic(userAuthContext, topic)) {
+                future.completeExceptionally(GraphQLException("No subscribe permission for topic: $topic"))
+                return@DataFetcher future
+            }
             val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
 
             if (retainedStore == null) {
@@ -180,6 +208,14 @@ class QueryResolver(
             val future = CompletableFuture<List<RetainedMessage>>()
             
             val topicFilter = env.getArgument<String>("topicFilter") ?: "#"
+            // Get auth context from thread-local service
+            val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
+            
+            // Check subscribe permission for the topic filter
+            if (!authContext.canSubscribeToTopic(userAuthContext, topicFilter)) {
+                future.completeExceptionally(GraphQLException("No subscribe permission for topic filter: $topicFilter"))
+                return@DataFetcher future
+            }
             val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
             val limit = env.getArgument<Int>("limit") ?: 100
 
@@ -237,6 +273,14 @@ class QueryResolver(
             val future = CompletableFuture<List<ArchivedMessage>>()
             
             val topicFilter = env.getArgument<String>("topicFilter") ?: "#"
+            // Get auth context from thread-local service
+            val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
+            
+            // Check subscribe permission for the topic filter
+            if (!authContext.canSubscribeToTopic(userAuthContext, topicFilter)) {
+                future.completeExceptionally(GraphQLException("No subscribe permission for topic filter: $topicFilter"))
+                return@DataFetcher future
+            }
             val startTimeStr = env.getArgument<String>("startTime")
             val endTimeStr = env.getArgument<String>("endTime")
             val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
@@ -322,6 +366,15 @@ class QueryResolver(
     fun searchTopics(): DataFetcher<CompletableFuture<List<String>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<String>>()
+            
+            // Get auth context from thread-local service (may be null for anonymous users)
+            val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
+            
+            // Check if user has global subscribe permission (as specified by the user)
+            if (!authContext.hasGlobalSubscribePermission(userAuthContext)) {
+                future.completeExceptionally(GraphQLException("No global subscribe permission required for searchTopics"))
+                return@DataFetcher future
+            }
             
             val pattern = env.getArgument<String>("pattern") ?: return@DataFetcher future.apply { complete(emptyList()) }
             val limit = env.getArgument<Int>("limit") ?: 100

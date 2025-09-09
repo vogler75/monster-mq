@@ -124,6 +124,20 @@ data class UserManagementResult(
     val aclRule: AclRuleInfo? = null
 )
 
+// Authentication Models
+data class LoginInput(
+    val username: String,
+    val password: String
+)
+
+data class LoginResult(
+    val success: Boolean,
+    val token: String? = null,
+    val message: String? = null,
+    val username: String? = null,
+    val isAdmin: Boolean = false
+)
+
 object PayloadConverter {
     fun encode(payload: ByteArray, format: DataFormat): String {
         return when (format) {

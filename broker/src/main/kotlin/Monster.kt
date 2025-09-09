@@ -359,6 +359,7 @@ MORE INFO:
                         vertx,
                         graphQLConfig,
                         messageBus,
+                        messageHandler,
                         retainedStore,
                         archiveGroupsMap,
                         userManager

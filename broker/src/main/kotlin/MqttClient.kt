@@ -173,7 +173,44 @@ class MqttClient(
                 if (username == null || password == null) {
                     // No credentials provided - treat as anonymous user
                     logger.info("Client [$clientId] No credentials provided, using anonymous access")
-                    proceedWithConnection()
+                    
+                    // Retrieve the Anonymous user from UserManager to ensure proper permissions
+                    vertx.executeBlocking(java.util.concurrent.Callable<at.rocworks.data.User?> {
+                        try {
+                            kotlinx.coroutines.runBlocking {
+                                userManager.getUser(at.rocworks.Const.ANONYMOUS_USER)
+                            }
+                        } catch (e: Exception) {
+                            logger.warning("Client [$clientId] Error getting Anonymous user: ${e.message}")
+                            // Create a default Anonymous user if retrieval fails
+                            at.rocworks.data.User(
+                                username = at.rocworks.Const.ANONYMOUS_USER,
+                                passwordHash = "",
+                                enabled = true,
+                                canSubscribe = true,
+                                canPublish = true,
+                                isAdmin = false
+                            )
+                        }
+                    }).onComplete { result ->
+                        if (result.succeeded() && result.result() != null) {
+                            authenticatedUser = result.result()
+                            logger.fine("Client [$clientId] Using Anonymous user for unauthenticated access")
+                            proceedWithConnection()
+                        } else {
+                            // If we can't get the Anonymous user, create a default one
+                            authenticatedUser = at.rocworks.data.User(
+                                username = at.rocworks.Const.ANONYMOUS_USER,
+                                passwordHash = "",
+                                enabled = true,
+                                canSubscribe = true,
+                                canPublish = true,
+                                isAdmin = false
+                            )
+                            logger.warning("Client [$clientId] Using default Anonymous user (could not retrieve from store)")
+                            proceedWithConnection()
+                        }
+                    }
                     return
                 }
                 

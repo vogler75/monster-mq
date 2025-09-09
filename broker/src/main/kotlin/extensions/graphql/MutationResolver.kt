@@ -3,13 +3,16 @@ package at.rocworks.extensions.graphql
 import at.rocworks.bus.IMessageBus
 import at.rocworks.data.MqttMessage
 import graphql.schema.DataFetcher
+import graphql.GraphQLException
 import io.vertx.core.Vertx
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 
 class MutationResolver(
     private val vertx: Vertx,
-    private val messageBus: IMessageBus
+    private val messageBus: IMessageBus,
+    private val messageHandler: at.rocworks.handlers.MessageHandler,
+    private val authContext: GraphQLAuthContext
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(MutationResolver::class.java.name)
@@ -22,6 +25,22 @@ class MutationResolver(
             
             val input = env.getArgument<Map<String, Any>>("input") ?: throw IllegalArgumentException("Input is required")
             val topic = input["topic"] as? String ?: throw IllegalArgumentException("Topic is required")
+            
+            // Get auth context from thread-local service (may be null for anonymous users)
+            val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
+            
+            // Check publish permission for this specific topic
+            if (!authContext.canPublishToTopic(userAuthContext, topic)) {
+                future.complete(
+                    PublishResult(
+                        success = false,
+                        topic = topic,
+                        timestamp = System.currentTimeMillis(),
+                        error = "No publish permission for topic: $topic"
+                    )
+                )
+                return@DataFetcher future
+            }
             val payloadStr = input["payload"] as? String ?: throw IllegalArgumentException("Payload is required")
             val format = DataFormat.valueOf(input["format"]?.toString() ?: "JSON")
             val qos = (input["qos"] as? Int) ?: 0
@@ -46,6 +65,8 @@ class MutationResolver(
 
                 // Publish message through message bus
                 messageBus.publishMessageToBus(message)
+                // Save message to LastValueStore and Archive (just like MQTT does)
+                messageHandler.saveMessage(message)
                 future.complete(
                     PublishResult(
                         success = true,
@@ -74,6 +95,9 @@ class MutationResolver(
             val future = CompletableFuture<List<PublishResult>>()
             
             val inputs = env.getArgument<List<Map<String, Any>>>("inputs") ?: emptyList()
+            
+            // Get auth context from thread-local service (may be null for anonymous users)
+            val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
             val results = mutableListOf<PublishResult>()
             val futures = mutableListOf<CompletableFuture<PublishResult>>()
 
@@ -86,6 +110,19 @@ class MutationResolver(
 
                 val itemFuture = CompletableFuture<PublishResult>()
                 futures.add(itemFuture)
+
+                // Check publish permission for this specific topic
+                if (!authContext.canPublishToTopic(userAuthContext, topic)) {
+                    itemFuture.complete(
+                        PublishResult(
+                            success = false,
+                            topic = topic,
+                            timestamp = System.currentTimeMillis(),
+                            error = "No publish permission for topic: $topic"
+                        )
+                    )
+                    return@forEach
+                }
 
                 try {
                     // Decode payload based on format
@@ -106,6 +143,8 @@ class MutationResolver(
 
                     // Publish message through message bus
                     messageBus.publishMessageToBus(message)
+                    // Save message to LastValueStore and Archive (just like MQTT does)
+                    messageHandler.saveMessage(message)
                     itemFuture.complete(
                         PublishResult(
                             success = true,

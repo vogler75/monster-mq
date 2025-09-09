@@ -5,6 +5,7 @@ import at.rocworks.auth.PasswordEncoder
 import at.rocworks.data.User
 import at.rocworks.data.AclRule
 import graphql.schema.DataFetcher
+import graphql.GraphQLException
 import io.vertx.core.Vertx
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
@@ -12,7 +13,8 @@ import kotlinx.coroutines.runBlocking
 
 class UserManagementResolver(
     private val vertx: Vertx,
-    private val userManager: UserManager
+    private val userManager: UserManager,
+    private val authContext: GraphQLAuthContext
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(UserManagementResolver::class.java.name)
@@ -40,10 +42,23 @@ class UserManagementResolver(
         createdAt = this.createdAt?.toString()
     )
 
+    // Helper function to check authorization
+    private fun checkAuthorization(env: graphql.schema.DataFetchingEnvironment, future: CompletableFuture<*>): Boolean {
+        val authResult = authContext.validateFieldAccess(env)
+        if (!authResult.allowed) {
+            future.completeExceptionally(GraphQLException(authResult.errorMessage ?: "Unauthorized"))
+            return false
+        }
+        return true
+    }
+
     // Query Resolvers
     fun getAllUsers(): DataFetcher<CompletableFuture<List<UserInfo>>> {
-        return DataFetcher { _ ->
+        return DataFetcher { env ->
             val future = CompletableFuture<List<UserInfo>>()
+            
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
             
             try {
                 if (!userManager.isUserManagementEnabled()) {
@@ -81,6 +96,10 @@ class UserManagementResolver(
     fun getUser(): DataFetcher<CompletableFuture<UserInfo?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<UserInfo?>()
+            
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+            
             val username = env.getArgument<String>("username")
             
             try {
@@ -115,8 +134,11 @@ class UserManagementResolver(
     }
 
     fun getAllAclRules(): DataFetcher<CompletableFuture<List<AclRuleInfo>>> {
-        return DataFetcher { _ ->
+        return DataFetcher { env ->
             val future = CompletableFuture<List<AclRuleInfo>>()
+            
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
             
             try {
                 if (!userManager.isUserManagementEnabled()) {
@@ -154,6 +176,10 @@ class UserManagementResolver(
     fun getUserAclRules(): DataFetcher<CompletableFuture<List<AclRuleInfo>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<AclRuleInfo>>()
+            
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+            
             val username = env.getArgument<String>("username")
             
             try {
@@ -193,6 +219,9 @@ class UserManagementResolver(
     fun createUser(): DataFetcher<CompletableFuture<UserManagementResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<UserManagementResult>()
+            
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
             
             try {
                 if (!userManager.isUserManagementEnabled()) {
@@ -276,7 +305,10 @@ class UserManagementResolver(
         return DataFetcher { env ->
             val future = CompletableFuture<UserManagementResult>()
             
-            try {
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+            
+            try{
                 if (!userManager.isUserManagementEnabled()) {
                     future.complete(UserManagementResult(
                         success = false,
@@ -358,6 +390,10 @@ class UserManagementResolver(
     fun deleteUser(): DataFetcher<CompletableFuture<UserManagementResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<UserManagementResult>()
+            
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+            
             val username = env.getArgument<String>("username")
             
             try {
@@ -421,6 +457,9 @@ class UserManagementResolver(
     fun setPassword(): DataFetcher<CompletableFuture<UserManagementResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<UserManagementResult>()
+            
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
             
             try {
                 if (!userManager.isUserManagementEnabled()) {
@@ -496,6 +535,9 @@ class UserManagementResolver(
         return DataFetcher { env ->
             val future = CompletableFuture<UserManagementResult>()
             
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+            
             try {
                 if (!userManager.isUserManagementEnabled()) {
                     future.complete(UserManagementResult(
@@ -567,6 +609,9 @@ class UserManagementResolver(
     fun updateAclRule(): DataFetcher<CompletableFuture<UserManagementResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<UserManagementResult>()
+            
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
             
             try {
                 if (!userManager.isUserManagementEnabled()) {
@@ -652,6 +697,10 @@ class UserManagementResolver(
     fun deleteAclRule(): DataFetcher<CompletableFuture<UserManagementResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<UserManagementResult>()
+            
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+            
             val id = env.getArgument<String>("id")
             
             try {

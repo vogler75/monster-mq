@@ -44,19 +44,22 @@ type Query {
 }
 
 type Mutation {
-    # Publish a message to a topic
+    # Authentication (no token required)
+    login(input: LoginInput!): LoginResult!
+    
+    # Publish a message to a topic (requires token + ACL check)
     publish(input: PublishInput!): PublishResult!
     
-    # Publish multiple messages
+    # Publish multiple messages (requires token + ACL check)
     publishBatch(inputs: [PublishInput!]!): [PublishResult!]!
     
-    # User Management
+    # User Management (requires admin token)
     createUser(input: CreateUserInput!): UserManagementResult!
     updateUser(input: UpdateUserInput!): UserManagementResult!
     deleteUser(username: String!): UserManagementResult!
     setPassword(input: SetPasswordInput!): UserManagementResult!
     
-    # ACL Rule Management
+    # ACL Rule Management (requires admin token)
     createAclRule(input: CreateAclRuleInput!): UserManagementResult!
     updateAclRule(input: UpdateAclRuleInput!): UserManagementResult!
     deleteAclRule(id: String!): UserManagementResult!
@@ -179,6 +182,20 @@ input UpdateAclRuleInput {
     canSubscribe: Boolean
     canPublish: Boolean
     priority: Int
+}
+
+# Authentication Types
+input LoginInput {
+    username: String!
+    password: String!
+}
+
+type LoginResult {
+    success: Boolean!
+    token: String
+    message: String
+    username: String
+    isAdmin: Boolean!
 }
 
 type UserManagementResult {

@@ -65,6 +65,7 @@ class UserManager(
                 kotlinx.coroutines.runBlocking {
                     userStore!!.init()
                     ensureAnonymousUser()
+                    ensureDefaultAdminUser()
                     aclCache.loadFromStore(userStore!!)
                 }
                 null
@@ -389,8 +390,8 @@ class UserManager(
                     username = Const.ANONYMOUS_USER,
                     passwordHash = "", // No password for anonymous user
                     enabled = true,
-                    canSubscribe = true,
-                    canPublish = true, 
+                    canSubscribe = false,
+                    canPublish = false, 
                     isAdmin = false
                 )
                 
@@ -405,6 +406,38 @@ class UserManager(
             }
         } catch (e: Exception) {
             logger.warning("Error ensuring Anonymous user exists: ${e.message}")
+        }
+    }
+    
+    /**
+     * Ensure default admin user exists in the system
+     */
+    private suspend fun ensureDefaultAdminUser() {
+        try {
+            val adminUsername = "admin"
+            val existingAdmin = userStore?.getUser(adminUsername)
+            if (existingAdmin == null) {
+                // Create default admin user
+                val adminUser = User(
+                    username = adminUsername,
+                    passwordHash = PasswordEncoder.hash("changeme"),
+                    enabled = true,
+                    canSubscribe = true,
+                    canPublish = true, 
+                    isAdmin = true
+                )
+                
+                val created = userStore?.createUser(adminUser) ?: false
+                if (created) {
+                    logger.info("Created default admin user 'admin' with password 'changeme' - PLEASE CHANGE PASSWORD!")
+                } else {
+                    logger.warning("Failed to create default admin user")
+                }
+            } else {
+                logger.fine("Default admin user already exists")
+            }
+        } catch (e: Exception) {
+            logger.warning("Error ensuring default admin user exists: ${e.message}")
         }
     }
     
