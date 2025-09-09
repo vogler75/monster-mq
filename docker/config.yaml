@@ -3,57 +3,40 @@ TPCS: 8883
 WS: 9000
 WSS: 9001
 
-SessionStoreType: CRATEDB
-RetainedStoreType: CRATEDB
+MaxMessageSizeKb: 512
+QueuedMessagesEnabled: true
+
+SessionStoreType: POSTGRES
+RetainedStoreType: POSTGRES
 
 SparkplugMetricExpansion:
   Enabled: true
 
 ArchiveGroups:
-  - Name: "awattar"
+  - Name: Default
     Enabled: true
-    TopicFilter: [ "Awattar/#" ]
+    TopicFilter: [ "#" ]
     RetainedOnly: false
-    LastValType: CRATEDB
-    ArchiveType: CRATEDB
-  - Name: "Original"
-    Enabled: true
-    TopicFilter: [ "Original/#" ]
-    RetainedOnly: false
-    LastValType: CRATEDB
-    ArchiveType: CRATEDB
-  - Name: "Sparkplug"
-    Enabled: true
-    TopicFilter: [ "spBv1.0e/#" ]
-    RetainedOnly: false
-    LastValType: CRATEDB
-    ArchiveType: CRATEDB
-  - Name: "Charger"
-    Enabled: true
-    TopicFilter: [ "go-eCharger/#" ]
-    RetainedOnly: false
-    LastValType: CRATEDB
-    ArchiveType: CRATEDB
-  - Name: "Test"
-    Enabled: true
-    TopicFilter: [ "test/#" ]
-    RetainedOnly: false
-    LastValType: NONE
-    ArchiveType: CRATEDB
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
+    LastValRetention: "60m"
+    ArchiveRetention: "30d"
+    PurgeInterval: "1m"
 
-Kafka:
-  Servers: linux0:9092
-  Bus: # Use Kafka as the message bus
-    Enabled: false
-    Topic: monster
-
+# PostgreSQL configuration
 Postgres:
-  Url: jdbc:postgresql://192.168.1.30:5432/postgres
+  Url: jdbc:postgresql://database:5432/monster
   User: system
   Pass: manager
 
-CrateDB:
-  Url: jdbc:postgresql://192.168.1.31:5432/doc
-  User: crate
-  Pass: ""
+# MCP Server configuration
+MCP:
+  Enabled: true
+  Port: 3000
 
+GraphQL:
+  Enabled: true
+  Port: 4000
+  Path: /graphql
+  CorsEnabled: false
+  CorsOrigin: "*"

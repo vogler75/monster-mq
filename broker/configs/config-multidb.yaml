@@ -21,7 +21,42 @@ ArchiveGroups:
     ArchiveType: SQLITE
     LastValRetention: "10m"
     ArchiveRetention: "60m"
-    PurgeInterval: "1m"  
+    PurgeInterval: "1m"
+  - Name: Memory
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: MEMORY
+    ArchiveType: NONE
+    LastValRetention: "3m"
+    PurgeInterval: "1m"
+  - Name: Postgres
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
+    LastValRetention: "10m"
+    ArchiveRetention: "60m"
+    PurgeInterval: "1m"
+  - Name: CrateDB
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: CRATEDB
+    ArchiveType: CRATEDB
+    LastValRetention: "10m"
+    ArchiveRetention: "60m"
+    PurgeInterval: "1m"
+  - Name: MongoDB
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: MONGODB
+    ArchiveType: MONGODB
+    LastValRetention: "10m"
+    ArchiveRetention: "60m"
+    PurgeInterval: "1m"
 
 # SQLite configuration
 SQLite:
