@@ -88,8 +88,7 @@ class MessageStoreCrateDB(
             db.connection?.let { connection ->
                 val sql = "SELECT payload_b64, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?"
                 connection.prepareStatement(sql).use { preparedStatement ->
-                    val topicLevels = Utils.getTopicLevels(topicName).toTypedArray()
-                    preparedStatement.setArray(1, connection.createArrayOf("varchar", topicLevels))
+                    preparedStatement.setString(1, topicName)
 
                     val resultSet = preparedStatement.executeQuery()
 
