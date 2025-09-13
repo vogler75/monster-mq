@@ -32,6 +32,9 @@ open class SessionHandler(
     private val topicIndex = TopicTree<String, Int>() // Topic index with client and QoS
     private val clientStatus = ConcurrentHashMap<String, ClientStatus>() // ClientId + Status
 
+    // Distributed client-to-node mapping (clientId -> nodeId)
+    private val clientNodeMapping = ConcurrentHashMap<String, String>() // ClientId -> NodeId
+
     // Metrics tracking
     private val clientMetrics = ConcurrentHashMap<String, SessionMetrics>() // ClientId -> Metrics
     private val clientDetails = ConcurrentHashMap<String, ClientDetails>() // ClientId -> Session details
@@ -47,6 +50,7 @@ open class SessionHandler(
     private val subscriptionDelAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/D"
 
     private val clientStatusAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/C"
+    private val clientMappingAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/M"
 
     private val sparkplugHandler = Monster.getSparkplugExtension()
 
@@ -85,12 +89,39 @@ open class SessionHandler(
     override fun start(startPromise: Promise<Void>) {
         logger.info("Start session handler...")
 
+        // Register codec for client-node mapping
+        vertx.eventBus().registerDefaultCodec(ClientNodeMapping::class.java, ClientNodeMappingCodec())
+
         vertx.eventBus().consumer<MqttSubscription>(subscriptionAddAddress) {
             topicIndex.add(it.body().topicName, it.body().clientId, it.body().qos.value())
         }
 
         vertx.eventBus().consumer<MqttSubscription>(subscriptionDelAddress) {
             topicIndex.del(it.body().topicName, it.body().clientId)
+        }
+
+        // Client-to-node mapping event handler
+        vertx.eventBus().consumer<ClientNodeMapping>(clientMappingAddress) { message ->
+            val mapping = message.body()
+            logger.fine("Client mapping event [${mapping}]")
+
+            when (mapping.eventType) {
+                ClientNodeMapping.EventType.CLIENT_CONNECTED -> {
+                    clientNodeMapping[mapping.clientId] = mapping.nodeId
+                    logger.fine("Client [${mapping.clientId}] mapped to node [${mapping.nodeId}]")
+                }
+                ClientNodeMapping.EventType.CLIENT_DISCONNECTED -> {
+                    clientNodeMapping.remove(mapping.clientId)
+                    logger.fine("Client [${mapping.clientId}] removed from mapping")
+                }
+                ClientNodeMapping.EventType.NODE_FAILURE -> {
+                    // Remove all clients belonging to failed node
+                    val removedClients = clientNodeMapping.entries.removeAll { it.value == mapping.nodeId }
+                    if (removedClients) {
+                        logger.info("Removed clients from failed node [${mapping.nodeId}]")
+                    }
+                }
+            }
         }
 
         vertx.eventBus().consumer<JsonObject>(clientStatusAddress) { message ->
@@ -283,15 +314,20 @@ open class SessionHandler(
 
         // Initialize metrics and client details
         clientMetrics[clientId] = SessionMetrics()
+        val nodeId = Monster.getClusterNodeId(vertx)
         clientDetails[clientId] = ClientDetails(
-            nodeId = Monster.getClusterNodeId(vertx),
+            nodeId = nodeId,
             clientAddress = information.getString("clientAddress"),
             cleanSession = cleanSession,
             sessionExpiryInterval = information.getInteger("sessionExpiryInterval")
         )
 
+        // Propagate client connection mapping to all nodes
+        val mappingEvent = ClientNodeMapping(clientId, nodeId, ClientNodeMapping.EventType.CLIENT_CONNECTED)
+        vertx.eventBus().publish(clientMappingAddress, mappingEvent)
+
         val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.CREATED)
-        val f1 = sessionStore.setClient(clientId, Monster.getClusterNodeId(vertx), cleanSession, true, information)
+        val f1 = sessionStore.setClient(clientId, nodeId, cleanSession, true, information)
         return if (Monster.isClustered()) {
             val fx = Monster.getClusterNodeIds(vertx).map {
                 vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
@@ -333,7 +369,13 @@ open class SessionHandler(
     fun delClient(clientId: String): Future<Void> {
         // Clean up metrics and client details
         clientMetrics.remove(clientId)
-        clientDetails.remove(clientId)
+        val clientDetail = clientDetails.remove(clientId)
+
+        // Propagate client disconnection mapping to all nodes
+        clientDetail?.let {
+            val mappingEvent = ClientNodeMapping(clientId, it.nodeId, ClientNodeMapping.EventType.CLIENT_DISCONNECTED)
+            vertx.eventBus().publish(clientMappingAddress, mappingEvent)
+        }
 
         val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.DELETE)
         vertx.eventBus().publish(clientStatusAddress, payload)
@@ -503,16 +545,27 @@ open class SessionHandler(
     }
 
     private fun consumeMessageFromBus(message: MqttMessage) {
-        findClients(message.topicName).groupBy { (a, subscriptionQos) ->
+        val localNodeId = Monster.getClusterNodeId(vertx)
+
+        findClients(message.topicName).groupBy { (clientId, subscriptionQos) ->
             if (subscriptionQos < message.qosLevel) subscriptionQos else message.qosLevel // Potentially downgrade QoS
         }.forEach { (qos, clients) ->
             val m = messageWithQos(message, qos) // Potentially downgrade QoS
+
+            // Group clients by their node - only process clients on this node
+            val localClients = clients.filter { (clientId, _) ->
+                val clientNodeId = clientNodeMapping[clientId]
+                clientNodeId == null || clientNodeId == localNodeId // null means client not yet mapped or local
+            }
+
+            logger.finest { "Processing [${localClients.size}] local clients out of [${clients.size}] total clients [${Utils.getCurrentFunctionName()}]" }
+
             when (qos) {
-                0 -> clients.forEach { (clientId, _) ->
+                0 -> localClients.forEach { (clientId, _) ->
                     sendMessageToClient(clientId, m)
                 }
                 1, 2 -> {
-                    val (online, others) = clients.partition { (clientId, _) ->
+                    val (online, others) = localClients.partition { (clientId, _) ->
                         clientStatus[clientId] == ClientStatus.ONLINE
                     }
                     logger.finest { "Online [${online.size}] Other [${others.size}] [${Utils.getCurrentFunctionName()}]" }
