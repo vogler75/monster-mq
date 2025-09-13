@@ -1,0 +1,11 @@
+Release v1.4.1
+Built from commit: 70218f3
+Date: 2025-09-13 09:46:42
+
+Changes since v1.4.0:
+---
+70218f3 Reorganize and add new logo image assets
+f56f16c Disable user authentication and ACL in config
+a518010 Add homepage and update default admin credentials
+8de727e Update release.sh
+aff18c5 Add release automation script and improve Docker build
