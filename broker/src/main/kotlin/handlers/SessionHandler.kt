@@ -35,6 +35,9 @@ open class SessionHandler(
     // Distributed client-to-node mapping (clientId -> nodeId)
     private val clientNodeMapping = ConcurrentHashMap<String, String>() // ClientId -> NodeId
 
+    // Track which nodes have subscriptions for each topic (for targeted publishing)
+    private val topicNodeMapping = ConcurrentHashMap<String, MutableSet<String>>() // TopicFilter -> Set<NodeId>
+
     // Metrics tracking
     private val clientMetrics = ConcurrentHashMap<String, SessionMetrics>() // ClientId -> Metrics
     private val clientDetails = ConcurrentHashMap<String, ClientDetails>() // ClientId -> Session details
@@ -51,6 +54,8 @@ open class SessionHandler(
 
     private val clientStatusAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/C"
     private val clientMappingAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/M"
+    private fun nodeMessageAddress(nodeId: String) = "${Const.GLOBAL_EVENT_NAMESPACE}/node/$nodeId/messages"
+    private fun localNodeMessageAddress() = nodeMessageAddress(Monster.getClusterNodeId(vertx))
 
     private val sparkplugHandler = Monster.getSparkplugExtension()
 
@@ -92,12 +97,29 @@ open class SessionHandler(
         // Register codec for client-node mapping
         vertx.eventBus().registerDefaultCodec(ClientNodeMapping::class.java, ClientNodeMappingCodec())
 
-        vertx.eventBus().consumer<MqttSubscription>(subscriptionAddAddress) {
-            topicIndex.add(it.body().topicName, it.body().clientId, it.body().qos.value())
+        vertx.eventBus().consumer<MqttSubscription>(subscriptionAddAddress) { message ->
+            val subscription = message.body()
+            topicIndex.add(subscription.topicName, subscription.clientId, subscription.qos.value())
+
+            // Track topic subscriptions by node for targeted publishing
+            val nodeId = clientNodeMapping[subscription.clientId] ?: Monster.getClusterNodeId(vertx)
+            topicNodeMapping.getOrPut(subscription.topicName) { ConcurrentHashMap.newKeySet() }.add(nodeId)
+            logger.finest { "Added topic subscription [${subscription.topicName}] for node [${nodeId}]" }
         }
 
-        vertx.eventBus().consumer<MqttSubscription>(subscriptionDelAddress) {
-            topicIndex.del(it.body().topicName, it.body().clientId)
+        vertx.eventBus().consumer<MqttSubscription>(subscriptionDelAddress) { message ->
+            val subscription = message.body()
+            topicIndex.del(subscription.topicName, subscription.clientId)
+
+            // Clean up topic-node mapping if no more clients on this node for this topic
+            val nodeId = clientNodeMapping[subscription.clientId] ?: Monster.getClusterNodeId(vertx)
+            val remainingClientsOnNode = topicIndex.findDataOfTopicName(subscription.topicName)
+                .any { (clientId, _) -> clientNodeMapping[clientId] == nodeId }
+
+            if (!remainingClientsOnNode) {
+                topicNodeMapping[subscription.topicName]?.remove(nodeId)
+                logger.finest { "Removed topic subscription [${subscription.topicName}] for node [${nodeId}]" }
+            }
         }
 
         // Client-to-node mapping event handler
@@ -208,6 +230,14 @@ open class SessionHandler(
 
         logger.info("Subscribing to message bus [${Utils.getCurrentFunctionName()}]")
         val f0 = messageBus.subscribeToMessageBus(::consumeMessageFromBus)
+
+        // Subscribe to node-specific message address for targeted messages
+        vertx.eventBus().consumer<MqttMessage>(localNodeMessageAddress()) { message ->
+            message.body()?.let { payload ->
+                logger.finest { "Received targeted message [${payload.topicName}] [${Utils.getCurrentFunctionName()}]" }
+                processMessageForLocalClients(payload)
+            }
+        }
 
         logger.info("Indexing subscription table [${Utils.getCurrentFunctionName()}]")
         val f1 = sessionStore.iterateSubscriptions(topicIndex::add)
@@ -527,12 +557,27 @@ open class SessionHandler(
     //----------------------------------------------------------------------------------------------------
 
     fun publishMessage(message: MqttMessage) {
-        messageBus.publishMessageToBus(message)
+        // Determine which nodes need this message based on topic subscriptions
+        val targetNodes = getTargetNodesForTopic(message.topicName)
+        val localNodeId = Monster.getClusterNodeId(vertx)
+
+        logger.finest { "Publishing message [${message.topicName}] to nodes [${targetNodes.joinToString(",")}]" }
+
+        // Send to local clients if this node has subscriptions
+        if (targetNodes.contains(localNodeId)) {
+            processMessageForLocalClients(message)
+        }
+
+        // Send to remote nodes that have subscriptions (excluding local node)
+        targetNodes.filter { it != localNodeId }.forEach { nodeId ->
+            vertx.eventBus().send(nodeMessageAddress(nodeId), message)
+        }
+
+        // Still save to archive and handle Sparkplug expansion
         messageHandler.saveMessage(message)
         sparkplugHandler?.metricExpansion(message) { spbMessage ->
             logger.finest { "Publishing Sparkplug message [${spbMessage.topicName}] [${Utils.getCurrentFunctionName()}]" }
-            messageBus.publishMessageToBus(spbMessage)
-            messageHandler.saveMessage(spbMessage)
+            publishMessage(spbMessage) // Recursive call for Sparkplug messages
         }
     }
 
@@ -544,7 +589,15 @@ open class SessionHandler(
         }
     }
 
+    // For messages from external message bus (Kafka, etc.) - still broadcast to all nodes
     private fun consumeMessageFromBus(message: MqttMessage) {
+        // For external messages, use the old logic to ensure all nodes get them
+        // This handles cases where messages come from external systems
+        processMessageForLocalClients(message)
+    }
+
+    // Process messages for local clients only (used for both external and targeted internal messages)
+    private fun processMessageForLocalClients(message: MqttMessage) {
         val localNodeId = Monster.getClusterNodeId(vertx)
 
         findClients(message.topicName).groupBy { (clientId, subscriptionQos) ->
@@ -592,5 +645,33 @@ open class SessionHandler(
                 }
             }
         }
+    }
+
+    // Helper function to determine target nodes for a topic
+    private fun getTargetNodesForTopic(topicName: String): Set<String> {
+        val targetNodes = mutableSetOf<String>()
+
+        // Check all topic filters to see which nodes have matching subscriptions
+        topicNodeMapping.keys.forEach { topicFilter ->
+            if (matchesTopicFilter(topicName, topicFilter)) {
+                topicNodeMapping[topicFilter]?.let { nodes ->
+                    targetNodes.addAll(nodes)
+                }
+            }
+        }
+
+        return targetNodes
+    }
+
+    // Simple topic filter matching (supports + and # wildcards)
+    private fun matchesTopicFilter(topicName: String, topicFilter: String): Boolean {
+        if (topicFilter == topicName) return true
+        if (topicFilter.contains('#') || topicFilter.contains('+')) {
+            // Create a temporary topic tree with the filter to test matching
+            val tempTree = TopicTree<String, String>()
+            tempTree.add(topicFilter, "test", "value")
+            return tempTree.isTopicNameMatching(topicName)
+        }
+        return false
     }
 }
