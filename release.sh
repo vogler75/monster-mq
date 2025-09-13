@@ -7,7 +7,6 @@
 # 3. Adds git SHA for tracking
 # 4. Creates a git tag
 # 5. Builds the release JAR
-# 6. Optionally builds and pushes Docker image
 
 set -e  # Exit on error
 
@@ -124,35 +123,6 @@ else
     exit 1
 fi
 
-# Copy JAR to docker directory for Docker build
-echo -e "${YELLOW}Copying JAR and dependencies to docker directory...${NC}"
-mkdir -p docker/target
-cp -r broker/target/broker-1.0-SNAPSHOT.jar docker/target/
-cp -r broker/target/dependencies docker/target/
-echo -e "${GREEN}✓ Files copied to docker/target${NC}"
-
-# Ask if user wants to build Docker image
-echo ""
-read -p "Do you want to build the Docker image? (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo -e "${YELLOW}Building Docker image...${NC}"
-    cd docker
-    ./build
-    cd ..
-
-    # Ask if user wants to push Docker image
-    echo ""
-    read -p "Do you want to push the Docker image to Docker Hub? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${YELLOW}Pushing Docker image...${NC}"
-        cd docker
-        ./push
-        cd ..
-        echo -e "${GREEN}✓ Docker image pushed${NC}"
-    fi
-fi
 
 echo ""
 echo -e "${GREEN}=== Release Complete ===${NC}"
