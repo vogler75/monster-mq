@@ -24,17 +24,10 @@ class AuthenticationResolver(
             val future = CompletableFuture<LoginResult>()
             
             try {
-                val input = env.getArgument<Map<String, Any>>("input") 
-                    ?: return@DataFetcher future.apply { 
-                        complete(LoginResult(success = false, message = "Input is required")) 
-                    }
-                
-                val loginInput = LoginInput(
-                    username = input["username"] as? String ?: "",
-                    password = input["password"] as? String ?: ""
-                )
-                
-                if (loginInput.username.isEmpty() || loginInput.password.isEmpty()) {
+                val username = env.getArgument<String>("username") ?: ""
+                val password = env.getArgument<String>("password") ?: ""
+
+                if (username.isEmpty() || password.isEmpty()) {
                     future.complete(LoginResult(
                         success = false,
                         message = "Username and password are required"
@@ -55,7 +48,7 @@ class AuthenticationResolver(
                     runBlocking {
                         try {
                             // Authenticate user
-                            val user = userManager.authenticate(loginInput.username, loginInput.password)
+                            val user = userManager.authenticate(username, password)
                             
                             if (user != null && user.enabled) {
                                 // Generate JWT token

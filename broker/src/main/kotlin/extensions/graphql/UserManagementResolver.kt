@@ -21,14 +21,15 @@ class UserManagementResolver(
     }
 
     // Helper function to convert User to UserInfo
-    private fun User.toUserInfo() = UserInfo(
+    private fun User.toUserInfo(aclRules: List<AclRuleInfo> = emptyList()) = UserInfo(
         username = this.username,
         enabled = this.enabled,
         canSubscribe = this.canSubscribe,
         canPublish = this.canPublish,
         isAdmin = this.isAdmin,
         createdAt = this.createdAt?.toString(),
-        updatedAt = this.updatedAt?.toString()
+        updatedAt = this.updatedAt?.toString(),
+        aclRules = aclRules
     )
 
     // Helper function to convert AclRule to AclRuleInfo
@@ -53,6 +54,63 @@ class UserManagementResolver(
     }
 
     // Query Resolvers
+    fun users(): DataFetcher<CompletableFuture<List<UserInfo>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<UserInfo>>()
+
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+
+            val username = env.getArgument<String?>("username")
+
+            try {
+                if (!userManager.isUserManagementEnabled()) {
+                    future.complete(emptyList())
+                    return@DataFetcher future
+                }
+
+                vertx.executeBlocking<List<UserInfo>> {
+                    runBlocking {
+                        try {
+                            if (username != null) {
+                                // Get specific user with ACL rules
+                                val user = userManager.getUser(username)
+                                if (user != null) {
+                                    val aclRules = userManager.getUserAclRules(username).map { it.toAclRuleInfo() }
+                                    listOf(user.toUserInfo(aclRules))
+                                } else {
+                                    emptyList()
+                                }
+                            } else {
+                                // Get all users with their ACL rules
+                                val users = userManager.getAllUsers()
+                                users.map { user ->
+                                    val aclRules = userManager.getUserAclRules(user.username).map { it.toAclRuleInfo() }
+                                    user.toUserInfo(aclRules)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            logger.severe("Error getting users: ${e.message}")
+                            emptyList()
+                        }
+                    }
+                }.onComplete { result ->
+                    if (result.succeeded()) {
+                        future.complete(result.result())
+                    } else {
+                        logger.severe("Error getting users: ${result.cause()?.message}")
+                        future.completeExceptionally(result.cause())
+                    }
+                }
+            } catch (e: Exception) {
+                logger.severe("Error getting users: ${e.message}")
+                future.completeExceptionally(e)
+            }
+
+            future
+        }
+    }
+
     fun getAllUsers(): DataFetcher<CompletableFuture<List<UserInfo>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<UserInfo>>()

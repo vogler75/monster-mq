@@ -6,13 +6,13 @@ WSS: 9001
 MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 
-SessionStoreType: SQLITE
-RetainedStoreType: SQLITE
+SessionStoreType: POSTGRES
+RetainedStoreType: POSTGRES
 
 # User Management configuration
 UserManagement:
   Enabled: false  # Set to true to enable user authentication and ACL
-  AuthStoreType: SQLITE  # POSTGRES, SQLITE, CRATEDB, MONGODB
+  AuthStoreType: POSTGRES  # POSTGRES, SQLITE, CRATEDB, MONGODB
   PasswordAlgorithm: bcrypt
   CacheRefreshInterval: 60  # seconds
   DisconnectOnUnauthorized: true
@@ -25,8 +25,8 @@ ArchiveGroups:
     Enabled: true
     TopicFilter: [ "#" ]
     RetainedOnly: false
-    LastValType: SQLITE
-    ArchiveType: SQLITE
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
     LastValRetention: "10m"
     ArchiveRetention: "60m"
     PurgeInterval: "1m"  

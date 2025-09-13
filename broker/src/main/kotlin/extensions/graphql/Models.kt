@@ -65,7 +65,8 @@ data class UserInfo(
     val canPublish: Boolean,
     val isAdmin: Boolean,
     val createdAt: String?,
-    val updatedAt: String?
+    val updatedAt: String?,
+    val aclRules: List<AclRuleInfo>
 )
 
 data class AclRuleInfo(
@@ -125,11 +126,6 @@ data class UserManagementResult(
 )
 
 // Authentication Models
-data class LoginInput(
-    val username: String,
-    val password: String
-)
-
 data class LoginResult(
     val success: Boolean,
     val token: String? = null,

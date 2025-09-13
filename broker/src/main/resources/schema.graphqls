@@ -102,15 +102,12 @@ type Query {
     session(clientId: String!, nodeId: String): Session
 
     # User Management
-    getAllUsers: [UserInfo!]!
-    getUser(username: String!): UserInfo
-    getUserAclRules(username: String!): [AclRuleInfo!]!
-    getAllAclRules: [AclRuleInfo!]!
+    users(username: String): [UserInfo!]!
 }
 
 type Mutation {
     # Authentication (no token required)
-    login(input: LoginInput!): LoginResult!
+    login(username: String!, password: String!): LoginResult!
     
     # Publish a message to a topic (requires token + ACL check)
     publish(input: PublishInput!): PublishResult!
@@ -198,6 +195,7 @@ type UserInfo {
     isAdmin: Boolean!
     createdAt: String
     updatedAt: String
+    aclRules: [AclRuleInfo!]!
 }
 
 type AclRuleInfo {
@@ -250,11 +248,6 @@ input UpdateAclRuleInput {
 }
 
 # Authentication Types
-input LoginInput {
-    username: String!
-    password: String!
-}
-
 type LoginResult {
     success: Boolean!
     token: String

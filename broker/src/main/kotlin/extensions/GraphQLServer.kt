@@ -181,10 +181,7 @@ class GraphQLServer(
                     .dataFetcher("sessions", metricsResolver.sessions())
                     .dataFetcher("session", metricsResolver.session())
                     // User management queries
-                    .dataFetcher("getAllUsers", userManagementResolver.getAllUsers())
-                    .dataFetcher("getUser", userManagementResolver.getUser())
-                    .dataFetcher("getUserAclRules", userManagementResolver.getUserAclRules())
-                    .dataFetcher("getAllAclRules", userManagementResolver.getAllAclRules())
+                    .dataFetcher("users", userManagementResolver.users())
             }
             // Register mutation resolvers
             .type("Mutation") { builder ->
