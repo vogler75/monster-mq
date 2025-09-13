@@ -7,26 +7,23 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Read version from version.txt
-version=`cat ../version.txt`
+version=`cat ../version.txt | cut -d'+' -f1`
 
 echo -e "${YELLOW}Building Docker image for MonsterMQ v${version}...${NC}"
 
-# Check if broker JAR exists
-if [ ! -f "../broker/target/broker-1.0-SNAPSHOT.jar" ]; then
-    echo -e "${RED}Error: broker/target/broker-1.0-SNAPSHOT.jar not found${NC}"
-    echo -e "${YELLOW}Please run 'mvn clean package' in the broker directory first${NC}"
+# Build the broker with Maven
+echo -e "${YELLOW}Running mvn clean package in broker directory...${NC}"
+cd ../broker
+mvn clean package
+if [ $? -ne 0 ]; then
+    echo -e "${RED}✗ Maven build failed${NC}"
     exit 1
 fi
-
-# Check if dependencies exist
-if [ ! -d "../broker/target/dependencies" ]; then
-    echo -e "${RED}Error: broker/target/dependencies directory not found${NC}"
-    echo -e "${YELLOW}Please run 'mvn clean package' in the broker directory first${NC}"
-    exit 1
-fi
+cd ../docker
 
 # Copy files from broker/target to docker/target for Docker build
 echo -e "${YELLOW}Copying JAR and dependencies from broker/target...${NC}"
+rm -rf target
 mkdir -p target
 cp ../broker/target/broker-1.0-SNAPSHOT.jar target/
 cp -r ../broker/target/dependencies target/

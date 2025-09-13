@@ -6,8 +6,8 @@ WSS: 9001
 MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 
-SessionStoreType: POSTGRES
-RetainedStoreType: POSTGRES
+SessionStoreType: SQLITE
+RetainedStoreType: SQLITE
 
 SparkplugMetricExpansion:
   Enabled: true
@@ -17,19 +17,15 @@ ArchiveGroups:
     Enabled: true
     TopicFilter: [ "#" ]
     RetainedOnly: false
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
+    LastValType: SQLITE
+    ArchiveType: SQLITE
     LastValRetention: "60m"
     ArchiveRetention: "30d"
     PurgeInterval: "1m"
 
-# PostgreSQL configuration
-Postgres:
-  Url: jdbc:postgresql://database:5432/monster
-  User: system
-  Pass: manager
-
-# MCP Server configuration
+SQLite:
+  Path: "monstermq.db"      
+  
 MCP:
   Enabled: true
   Port: 3000
