@@ -20,6 +20,8 @@ import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import com.hazelcast.replicatedmap.ReplicatedMap
+import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 
 open class SessionHandler(
     private val sessionStore: ISessionStoreAsync,
@@ -30,13 +32,25 @@ open class SessionHandler(
     private val logger = Utils.getLogger(this::class.java)
 
     private val topicIndex = TopicTree<String, Int>() // Topic index with client and QoS
-    private val clientStatus = ConcurrentHashMap<String, ClientStatus>() // ClientId + Status
 
-    // Distributed client-to-node mapping (clientId -> nodeId)
-    private val clientNodeMapping = ConcurrentHashMap<String, String>() // ClientId -> NodeId
+    // Cluster detection
+    private val isClusteredMode = Monster.isClustered()
 
-    // Track which nodes have subscriptions for each topic (for targeted publishing)
-    private val topicNodeMapping = ConcurrentHashMap<String, MutableSet<String>>() // TopicFilter -> Set<NodeId>
+    // Cluster mode: Hazelcast ReplicatedMaps (automatically replicated across all nodes)
+    private val clusterClientStatus: ReplicatedMap<String, ClientStatus>? = if (isClusteredMode) {
+        (Monster.getClusterManager() as? HazelcastClusterManager)?.hazelcastInstance?.getReplicatedMap("client-status")
+    } else null
+
+    private val clusterClientNodeMapping: ReplicatedMap<String, String>? = if (isClusteredMode) {
+        (Monster.getClusterManager() as? HazelcastClusterManager)?.hazelcastInstance?.getReplicatedMap("client-node-mapping")
+    } else null
+
+    private val clusterTopicNodeMapping: ReplicatedMap<String, Set<String>>? = if (isClusteredMode) {
+        (Monster.getClusterManager() as? HazelcastClusterManager)?.hazelcastInstance?.getReplicatedMap("topic-node-mapping")
+    } else null
+
+    // Non-cluster mode: Local ConcurrentHashMap (only for client status, no node mapping needed)
+    private val localClientStatus = ConcurrentHashMap<String, ClientStatus>()
 
     // Metrics tracking
     private val clientMetrics = ConcurrentHashMap<String, SessionMetrics>() // ClientId -> Metrics
@@ -51,9 +65,6 @@ open class SessionHandler(
 
     private val subscriptionAddAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/A"
     private val subscriptionDelAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/D"
-
-    private val clientStatusAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/C"
-    private val clientMappingAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/M"
     private fun nodeMessageAddress(nodeId: String) = "${Const.GLOBAL_EVENT_NAMESPACE}/node/$nodeId/messages"
     private fun localNodeMessageAddress() = nodeMessageAddress(Monster.getClusterNodeId(vertx))
 
@@ -67,6 +78,89 @@ open class SessionHandler(
 
     init {
         logger.level = Const.DEBUG_LEVEL
+    }
+
+    // Unified accessor methods for client status
+    private fun getClientStatusInternal(clientId: String): ClientStatus? {
+        return if (isClusteredMode) {
+            clusterClientStatus?.get(clientId)
+        } else {
+            localClientStatus[clientId]
+        }
+    }
+
+    private fun setClientStatus(clientId: String, status: ClientStatus) {
+        if (isClusteredMode) {
+            clusterClientStatus?.put(clientId, status)
+        } else {
+            localClientStatus[clientId] = status
+        }
+    }
+
+    private fun removeClientStatus(clientId: String) {
+        if (isClusteredMode) {
+            clusterClientStatus?.remove(clientId)
+        } else {
+            localClientStatus.remove(clientId)
+        }
+    }
+
+    // Unified accessor methods for client-node mapping (cluster-only feature)
+    private fun getClientNode(clientId: String): String? {
+        return if (isClusteredMode) {
+            clusterClientNodeMapping?.get(clientId)
+        } else {
+            // Non-cluster mode: client is always on local node
+            Monster.getClusterNodeId(vertx)
+        }
+    }
+
+    private fun setClientNode(clientId: String, nodeId: String) {
+        if (isClusteredMode) {
+            clusterClientNodeMapping?.put(clientId, nodeId)
+        }
+        // Non-cluster mode: no-op, no need to track node mapping
+    }
+
+    private fun removeClientNode(clientId: String) {
+        if (isClusteredMode) {
+            clusterClientNodeMapping?.remove(clientId)
+        }
+        // Non-cluster mode: no-op, no need to track node mapping
+    }
+
+    // Unified accessor methods for topic-node mapping (cluster-only feature)
+    private fun getTopicNodes(topic: String): Set<String>? {
+        return if (isClusteredMode) {
+            clusterTopicNodeMapping?.get(topic)
+        } else {
+            // Non-cluster mode: all topics are on local node
+            setOf(Monster.getClusterNodeId(vertx))
+        }
+    }
+
+    private fun addTopicNode(topic: String, nodeId: String) {
+        if (isClusteredMode) {
+            val currentNodes = clusterTopicNodeMapping?.get(topic)?.toMutableSet() ?: mutableSetOf()
+            currentNodes.add(nodeId)
+            clusterTopicNodeMapping?.put(topic, currentNodes)
+        }
+        // Non-cluster mode: no-op, all topics are implicitly on local node
+    }
+
+    private fun removeTopicNode(topic: String, nodeId: String) {
+        if (isClusteredMode) {
+            val currentNodes = clusterTopicNodeMapping?.get(topic)?.toMutableSet()
+            if (currentNodes != null) {
+                currentNodes.remove(nodeId)
+                if (currentNodes.isEmpty()) {
+                    clusterTopicNodeMapping?.remove(topic)
+                } else {
+                    clusterTopicNodeMapping?.put(topic, currentNodes)
+                }
+            }
+        }
+        // Non-cluster mode: no-op, no need to track topic-node mapping
     }
 
     companion object {
@@ -102,8 +196,8 @@ open class SessionHandler(
             topicIndex.add(subscription.topicName, subscription.clientId, subscription.qos.value())
 
             // Track topic subscriptions by node for targeted publishing
-            val nodeId = clientNodeMapping[subscription.clientId] ?: Monster.getClusterNodeId(vertx)
-            topicNodeMapping.getOrPut(subscription.topicName) { ConcurrentHashMap.newKeySet() }.add(nodeId)
+            val nodeId = getClientNode(subscription.clientId) ?: Monster.getClusterNodeId(vertx)
+            addTopicNode(subscription.topicName, nodeId)
             logger.finest { "Added topic subscription [${subscription.topicName}] for node [${nodeId}]" }
         }
 
@@ -112,97 +206,19 @@ open class SessionHandler(
             topicIndex.del(subscription.topicName, subscription.clientId)
 
             // Clean up topic-node mapping if no more clients on this node for this topic
-            val nodeId = clientNodeMapping[subscription.clientId] ?: Monster.getClusterNodeId(vertx)
+            val nodeId = getClientNode(subscription.clientId) ?: Monster.getClusterNodeId(vertx)
             val remainingClientsOnNode = topicIndex.findDataOfTopicName(subscription.topicName)
-                .any { (clientId, _) -> clientNodeMapping[clientId] == nodeId }
+                .any { (clientId, _) -> getClientNode(clientId) == nodeId }
 
             if (!remainingClientsOnNode) {
-                topicNodeMapping[subscription.topicName]?.remove(nodeId)
+                removeTopicNode(subscription.topicName, nodeId)
                 logger.finest { "Removed topic subscription [${subscription.topicName}] for node [${nodeId}]" }
             }
         }
 
         // Client-to-node mapping event handler
-        vertx.eventBus().consumer<ClientNodeMapping>(clientMappingAddress) { message ->
-            val mapping = message.body()
-            logger.fine("Client mapping event [${mapping}]")
-
-            when (mapping.eventType) {
-                ClientNodeMapping.EventType.CLIENT_CONNECTED -> {
-                    clientNodeMapping[mapping.clientId] = mapping.nodeId
-                    logger.fine("Client [${mapping.clientId}] mapped to node [${mapping.nodeId}]")
-                }
-                ClientNodeMapping.EventType.CLIENT_DISCONNECTED -> {
-                    clientNodeMapping.remove(mapping.clientId)
-                    logger.fine("Client [${mapping.clientId}] removed from mapping")
-                }
-                ClientNodeMapping.EventType.NODE_FAILURE -> {
-                    if (mapping.clientId.isEmpty()) {
-                        // Node-wide failure event - remove ALL clients from this node
-                        val removedClients = clientNodeMapping.entries.removeIf { it.value == mapping.nodeId }
-                        if (removedClients) {
-                            logger.info("Removed all clients from failed node [${mapping.nodeId}]")
-                        }
-                        // Also clean up topic-node mappings for this node
-                        topicNodeMapping.values.forEach { nodeSet ->
-                            nodeSet.remove(mapping.nodeId)
-                        }
-                        logger.info("Cleaned up topic mappings for failed node [${mapping.nodeId}]")
-                    } else {
-                        // Individual client failure event
-                        clientNodeMapping.remove(mapping.clientId)
-                        logger.fine("Removed client [${mapping.clientId}] from failed node [${mapping.nodeId}]")
-                    }
-                }
-            }
-        }
-
-        vertx.eventBus().consumer<JsonObject>(clientStatusAddress) { message ->
-            logger.fine("Client status [${message.body()}]")
-            val clientId = message.body().getString("ClientId", "")
-            val status = ClientStatus.valueOf(message.body().getString("Status", ""))
-            val deliveryOptions = DeliveryOptions(JsonObject().put("NodeId", Monster.getClusterNodeId(vertx)))
-
-            fun flushFinished() {
-                logger.fine("Flushed messages finished")
-                message.reply(true, deliveryOptions)
-            }
-
-            when (status) {
-                ClientStatus.CREATED -> {
-                    clientStatus[clientId] = ClientStatus.CREATED
-                    waitForFlush?.let { promise ->
-                        logger.fine("Existing wait for flush...")
-                        promise.future().onComplete { flushFinished() }
-                    } ?: Promise.promise<Void>().let { promise ->
-                        logger.fine("New wait for flush...")
-                        waitForFlush = promise
-                        promise.future().onComplete { flushFinished() }
-                    }
-                }
-                ClientStatus.ONLINE -> {
-                    inFlightMessages[clientId]?.let { messages ->
-                        logger.fine("Publishing [${messages.count()}] in-flight messages to client [${clientId}] [${Utils.getCurrentFunctionName()}]")
-                        messages.forEach { message -> sendMessageToClient(clientId, message)}
-                    }
-                    inFlightMessages.remove(clientId)
-                    clientStatus[clientId] = ClientStatus.ONLINE
-                    message.reply(true, deliveryOptions)
-                }
-                ClientStatus.PAUSED -> {
-                    clientStatus[clientId] = ClientStatus.PAUSED
-                    message.reply(true, deliveryOptions)
-                }
-                ClientStatus.DELETE -> {
-                    clientStatus.remove(clientId)
-                    message.reply(true, deliveryOptions)
-                }
-                else -> {
-                    logger.warning("Unknown client status [${message.body()}] [${Utils.getCurrentFunctionName()}]")
-                    message.reply(false, deliveryOptions)
-                }
-            }
-        }
+        // NOTE: EventBus consumers for client mapping and status removed
+        // - now using Hazelcast ReplicatedMaps for automatic cluster synchronization
 
         vertx.eventBus().consumer<JsonObject>(commandAddress()) { message ->
             message.body()?.let { payload ->
@@ -250,44 +266,14 @@ open class SessionHandler(
             }
         }
 
-        logger.info("Loading all sessions and their subscriptions [${Utils.getCurrentFunctionName()}]")
-        val f1 = sessionStore.iterateAllSessions { clientId, nodeId, connected, cleanSession ->
-            val localNodeId = Monster.getClusterNodeId(vertx)
-
-            if (connected) {
-                if (nodeId != localNodeId) {
-                    // Client connected to another node - add to cluster mapping
-                    clientNodeMapping[clientId] = nodeId
-                    logger.finest { "Loaded connected client [${clientId}] on node [${nodeId}]" }
-                } else {
-                    // Client connected to this node but we're restarting - mark as paused for now
-                    // It will reconnect and update the status properly
-                    clientStatus[clientId] = ClientStatus.PAUSED
-                    logger.finest { "Loaded local client [${clientId}] as paused (node restart)" }
-                }
-            } else {
-                // Client is offline
-                if (!cleanSession) {
-                    // Persistent session - mark as paused so messages can be queued
-                    clientStatus[clientId] = ClientStatus.PAUSED
-                    logger.finest { "Loaded offline persistent client [${clientId}]" }
-                }
-                // Clean sessions that are offline are ignored (will be cleaned up by purge)
-            }
-        }
-
-        logger.info("Loading all subscriptions [${Utils.getCurrentFunctionName()}]")
+        logger.info("Loading subscriptions for topic index [${Utils.getCurrentFunctionName()}]")
         val f2 = sessionStore.iterateSubscriptions { topicName, clientId, qos ->
-            // Add to topic index
+            // Add to topic index (local only - not replicated)
             topicIndex.add(topicName, clientId, qos)
-
-            // Build topic-to-node mapping based on where client is located
-            val nodeId = clientNodeMapping[clientId] ?: Monster.getClusterNodeId(vertx)
-            topicNodeMapping.getOrPut(topicName) { ConcurrentHashMap.newKeySet() }.add(nodeId)
-            logger.finest { "Loaded subscription [${topicName}] for client [${clientId}] on node [${nodeId}]" }
+            logger.finest { "Loaded subscription [${topicName}] for client [${clientId}]" }
         }
 
-        Future.all(f0, f1, f2).onComplete {
+        Future.all(f0, f2).onComplete {
             if (it.succeeded()) {
                 logger.info("Session handler ready [${Utils.getCurrentFunctionName()}]")
                 startPromise.complete()
@@ -360,7 +346,7 @@ open class SessionHandler(
         loop()
     }
 
-    fun getClientStatus(clientId: String): ClientStatus = clientStatus[clientId] ?: ClientStatus.UNKNOWN
+    fun getClientStatus(clientId: String): ClientStatus = getClientStatusInternal(clientId) ?: ClientStatus.UNKNOWN
 
     // Metrics tracking methods
     fun incrementMessagesIn(clientId: String) {
@@ -392,63 +378,37 @@ open class SessionHandler(
             sessionExpiryInterval = information.getInteger("sessionExpiryInterval")
         )
 
-        // Propagate client connection mapping to all nodes
-        val mappingEvent = ClientNodeMapping(clientId, nodeId, ClientNodeMapping.EventType.CLIENT_CONNECTED)
-        vertx.eventBus().publish(clientMappingAddress, mappingEvent)
+        // Update cluster state directly (ReplicatedMaps auto-replicate)
+        setClientNode(clientId, nodeId)
+        setClientStatus(clientId, ClientStatus.CREATED)
 
-        val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.CREATED)
-        val f1 = sessionStore.setClient(clientId, nodeId, cleanSession, true, information)
-        return if (Monster.isClustered()) {
-            val fx = Monster.getClusterNodeIds(vertx).map {
-                vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
-            }
-            Future.all<Any>(listOf(f1)+fx as List<Future<*>>).mapEmpty()
-
-        } else {
-            val f2 = vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
-            Future.all(f1, f2).mapEmpty()
-        }
+        // Only update database
+        return sessionStore.setClient(clientId, nodeId, cleanSession, true, information)
     }
 
     fun onlineClient(clientId: String): Future<Void> {
-        val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.ONLINE)
-        return if (Monster.isClustered()) {
-            val fx = Monster.getClusterNodeIds(vertx).map {
-                vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
-            }
-            Future.all<Any>(fx as List<Future<*>>).mapEmpty()
-        } else {
-            vertx.eventBus().request<Boolean>(clientStatusAddress, payload).mapEmpty()
-        }
+        // Update cluster state directly (ReplicatedMaps auto-replicate)
+        setClientStatus(clientId, ClientStatus.ONLINE)
+        return Future.succeededFuture()
     }
 
     fun pauseClient(clientId: String): Future<Void> {
-        val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.PAUSED)
-        val f1 = sessionStore.setConnected(clientId, false)
-        if (Monster.isClustered()) {
-            val fx = Monster.getClusterNodeIds(vertx).map {
-                vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
-            }
-            return Future.all<Any>(listOf(f1)+fx as List<Future<*>>).mapEmpty()
-        } else {
-            val f2 = vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
-            return Future.all(f1, f2).mapEmpty()
-        }
+        // Update cluster state directly (ReplicatedMaps auto-replicate)
+        setClientStatus(clientId, ClientStatus.PAUSED)
+
+        // Only update database
+        return sessionStore.setConnected(clientId, false)
     }
 
     fun delClient(clientId: String): Future<Void> {
         // Clean up metrics and client details
         clientMetrics.remove(clientId)
-        val clientDetail = clientDetails.remove(clientId)
+        clientDetails.remove(clientId)
 
-        // Propagate client disconnection mapping to all nodes
-        clientDetail?.let {
-            val mappingEvent = ClientNodeMapping(clientId, it.nodeId, ClientNodeMapping.EventType.CLIENT_DISCONNECTED)
-            vertx.eventBus().publish(clientMappingAddress, mappingEvent)
-        }
+        // Update cluster state directly (ReplicatedMaps auto-replicate)
+        removeClientNode(clientId)
+        setClientStatus(clientId, ClientStatus.DELETE)
 
-        val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.DELETE)
-        vertx.eventBus().publish(clientStatusAddress, payload)
         return sessionStore.delClient(clientId) { subscription ->
             logger.finest { "Delete subscription [$subscription]" }
             vertx.eventBus().publish(subscriptionDelAddress, subscription)
@@ -650,7 +610,7 @@ open class SessionHandler(
 
             // Group clients by their node - only process clients on this node
             val localClients = clients.filter { (clientId, _) ->
-                val clientNodeId = clientNodeMapping[clientId]
+                val clientNodeId = getClientNode(clientId)
                 clientNodeId == null || clientNodeId == localNodeId // null means client not yet mapped or local
             }
 
@@ -662,7 +622,7 @@ open class SessionHandler(
                 }
                 1, 2 -> {
                     val (online, others) = localClients.partition { (clientId, _) ->
-                        clientStatus[clientId] == ClientStatus.ONLINE
+                        getClientStatusInternal(clientId) == ClientStatus.ONLINE
                     }
                     logger.finest { "Online [${online.size}] Other [${others.size}] [${Utils.getCurrentFunctionName()}]" }
                     online.forEach { (clientId, _) ->
@@ -675,7 +635,7 @@ open class SessionHandler(
                     }
                     if (others.isNotEmpty()) {
                         val (created, offline) = others.partition { (clientId, _) ->
-                            clientStatus[clientId] == ClientStatus.CREATED
+                            getClientStatusInternal(clientId) == ClientStatus.CREATED
                         }
                         logger.finest { "Created [${created.size}] Offline [${offline.size}] [${Utils.getCurrentFunctionName()}]" }
                         created.forEach { (clientId, _) ->
@@ -695,9 +655,16 @@ open class SessionHandler(
         val targetNodes = mutableSetOf<String>()
 
         // Check all topic filters to see which nodes have matching subscriptions
-        topicNodeMapping.keys.forEach { topicFilter ->
+        val allTopicFilters = if (isClusteredMode) {
+            clusterTopicNodeMapping?.keys ?: emptySet()
+        } else {
+            // Non-cluster mode: no topic filters needed, everything is on local node
+            emptySet()
+        }
+
+        allTopicFilters.forEach { topicFilter ->
             if (matchesTopicFilter(topicName, topicFilter)) {
-                topicNodeMapping[topicFilter]?.let { nodes ->
+                getTopicNodes(topicFilter)?.let { nodes ->
                     targetNodes.addAll(nodes)
                 }
             }
