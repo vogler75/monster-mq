@@ -1,8 +1,6 @@
 # MonsterMQ
 
-MonsterMQ is a high-performance, scalable MQTT broker built on Vert.X and Hazelcast with persistent data storage through PostgreSQL, CrateDB, MongoDB, or SQLite. It features built-in clustering, unlimited message storage, comprehensive user authentication with ACL support, automatic message retention, and AI integration through a Model Context Protocol (MCP) server.
-
-![Logo](Logo.png)
+MonsterMQ is a high-performance, scalable MQTT broker built on Vert.X and Hazelcast with persistent data storage through PostgreSQL, CrateDB, MongoDB, or SQLite. It features built-in clustering, unlimited message storage, comprehensive user authentication with ACL support, automatic message retention, and AI integration through a Model Context Protocol (MCP) server. 
 
 ## 📑 Table of Contents
 
@@ -317,6 +315,15 @@ GraphQL:
   Enabled: true
   Port: 8080                     # GraphQL API endpoint
 ```
+
+### Default Admin User
+
+When user management is enabled, MonsterMQ automatically creates a default admin user on first startup:
+
+- **Username:** `Admin`
+- **Password:** `Admin`
+
+⚠️ **Important:** Change the default password immediately after first login for security reasons.
 
 ### Key Features
 

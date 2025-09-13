@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Enterprise MQTT Broker with Database Backends</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <img src="logo-small.png" alt="MonsterMQ Logo" class="logo-img">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#databases">Databases</a>
+                <a href="#clustering">Clustering</a>
+                <a href="#integrations">Integrations</a>
+                <a href="https://github.com/vogler75/monster-mq" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="container">
+            <h1 class="hero-title">MQTT Broker for<br><span class="highlight">Factory Automation</span></h1>
+            <p class="hero-subtitle">
+                High-performance, database-backed MQTT broker built on Vert.X and Hazelcast.<br>
+                Store unlimited messages, scale horizontally, and integrate with AI models.
+            </p>
+            <div class="hero-buttons">
+                <a href="https://github.com/vogler75/monster-mq#-quick-start" class="btn btn-primary">Get Started</a>
+                <a href="https://github.com/vogler75/monster-mq" class="btn btn-secondary">View on GitHub</a>
+            </div>
+            <div class="hero-features">
+                <div class="feature-badge">✓ MQTT 3.1.1</div>
+                <div class="feature-badge">✓ Multi-Database</div>
+                <div class="feature-badge">✓ Clustering</div>
+                <div class="feature-badge">✓ AI Ready</div>
+            </div>
+        </div>
+    </header>
+
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">Enterprise Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🗄️</div>
+                    <h3>Multi-Database Backend</h3>
+                    <p>Choose from PostgreSQL, MongoDB, CrateDB, or SQLite. Store unlimited retained messages and persistent sessions with enterprise-grade reliability.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔄</div>
+                    <h3>Horizontal Scaling</h3>
+                    <p>Built-in Hazelcast clustering enables seamless horizontal scaling. Deploy from production line to enterprise with automatic failover and load balancing.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3>AI Integration Ready</h3>
+                    <p>Integrated MCP (Model Context Protocol) server allows AI models to query real-time and historical MQTT data directly.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>GraphQL API</h3>
+                    <p>Query current topic states and historical data through a modern GraphQL interface with real-time subscriptions support.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <h3>SQL Query Interface</h3>
+                    <p>All data stored in central databases can be queried with standard SQL, enabling powerful analytics and reporting.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔐</div>
+                    <h3>Enterprise Security</h3>
+                    <p>TLS/SSL support, user authentication with BCrypt, fine-grained ACL rules, and database-level security.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="databases" class="databases">
+        <div class="container">
+            <h2 class="section-title">Flexible Database Backends</h2>
+            <p class="section-subtitle">
+                MonsterMQ adapts to your infrastructure. Choose the database that fits your needs,<br>
+                from lightweight SQLite for development to distributed CrateDB for time-series analytics.
+            </p>
+
+            <div class="database-grid">
+                <div class="database-card">
+                    <div class="db-header postgresql">
+                        <img src="https://www.postgresql.org/media/img/about/press/elephant.png" alt="PostgreSQL" class="db-logo">
+                        <h3>PostgreSQL</h3>
+                    </div>
+                    <div class="db-features">
+                        <div class="db-feature">✓ Full SQL capabilities</div>
+                        <div class="db-feature">✓ Production proven</div>
+                        <div class="db-feature">✓ Cluster support</div>
+                        <div class="db-feature">✓ Advanced analytics</div>
+                    </div>
+                    <p class="db-usecase">Best for: Production deployments with full SQL requirements</p>
+                </div>
+
+                <div class="database-card">
+                    <div class="db-header mongodb">
+                        <img src="https://www.mongodb.com/assets/images/global/favicon.ico" alt="MongoDB" class="db-logo">
+                        <h3>MongoDB</h3>
+                    </div>
+                    <div class="db-features">
+                        <div class="db-feature">✓ Document store</div>
+                        <div class="db-feature">✓ Flexible schema</div>
+                        <div class="db-feature">✓ Horizontal scaling</div>
+                        <div class="db-feature">✓ High throughput</div>
+                    </div>
+                    <p class="db-usecase">Best for: NoSQL workloads and flexible data models</p>
+                </div>
+
+                <div class="database-card">
+                    <div class="db-header cratedb">
+                        <div class="db-logo-text">CrateDB</div>
+                        <h3>CrateDB</h3>
+                    </div>
+                    <div class="db-features">
+                        <div class="db-feature">✓ Time-series optimized</div>
+                        <div class="db-feature">✓ Distributed SQL</div>
+                        <div class="db-feature">✓ Real-time analytics</div>
+                        <div class="db-feature">✓ IoT scale</div>
+                    </div>
+                    <p class="db-usecase">Best for: Time-series data and IoT analytics</p>
+                </div>
+
+                <div class="database-card">
+                    <div class="db-header sqlite">
+                        <div class="db-logo-text">SQLite</div>
+                        <h3>SQLite</h3>
+                    </div>
+                    <div class="db-features">
+                        <div class="db-feature">✓ Zero configuration</div>
+                        <div class="db-feature">✓ Embedded database</div>
+                        <div class="db-feature">✓ Single file</div>
+                        <div class="db-feature">✓ Fast performance</div>
+                    </div>
+                    <p class="db-usecase">Best for: Development and single-instance deployments</p>
+                </div>
+            </div>
+
+            <div class="database-comparison">
+                <h3>Database Capability Matrix</h3>
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Database</th>
+                            <th>Session Store</th>
+                            <th>Retained Store</th>
+                            <th>Message Archive</th>
+                            <th>Clustering</th>
+                            <th>SQL Queries</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>PostgreSQL</strong></td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                        </tr>
+                        <tr>
+                            <td><strong>MongoDB</strong></td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="no">✗</td>
+                        </tr>
+                        <tr>
+                            <td><strong>CrateDB</strong></td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                        </tr>
+                        <tr>
+                            <td><strong>SQLite</strong></td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="no">✗</td>
+                            <td class="yes">✓</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section id="clustering" class="clustering">
+        <div class="container">
+            <h2 class="section-title">Intelligent Clustering Architecture</h2>
+            <p class="section-subtitle">
+                Build hierarchical MQTT infrastructures from edge to cloud. MonsterMQ's Hazelcast-based<br>
+                clustering ensures data flows efficiently without duplication or unnecessary replication.
+            </p>
+
+            <div class="architecture-diagram">
+                <div class="arch-level enterprise">
+                    <h3>Enterprise Level</h3>
+                    <div class="arch-nodes">
+                        <div class="arch-node">Enterprise Dashboard</div>
+                    </div>
+                    <p>Central data lake, AI/ML processing, business intelligence</p>
+                    <div class="arch-topic-filter">Topic Filter: Enterprise/+/OEE/+</div>
+                </div>
+                <div class="arch-flow">↑ Aggregated Metrics ↑</div>
+                <div class="arch-level mid">
+                    <h3>Regional Level</h3>
+                    <div class="arch-nodes">
+                        <div class="arch-node">Line 1 MonsterMQ</div>
+                        <div class="arch-node">Line 2 MonsterMQ</div>
+                        <div class="arch-node">Line 3 MonsterMQ</div>
+                    </div>
+                    <p>Hazelcast Cluster - Aggregation, regional analytics, load balancing</p>
+                    <div class="arch-topic-filter">Topic Filter: Enterprise/Line1/#, Enterprise/Line2/#</div>
+                </div>
+                <div class="arch-flow">↑ Selected Data ↑</div>
+                <div class="arch-level edge">
+                    <h3>Edge Level</h3>
+                    <div class="arch-nodes">
+                        <div class="arch-node">Machine 1</div>
+                        <div class="arch-node">Machine 2</div>
+                        <div class="arch-node">Machine 3</div>
+                        <div class="arch-node">Machine 4</div>
+                        <div class="arch-node">Machine 5</div>
+                        <div class="arch-node">Machine 6</div>
+                        <div class="arch-node">Machine 7</div>
+                        <div class="arch-node">...</div>
+                    </div>
+                    <p>Production machines, sensors, PLCs - Local message processing</p>
+                </div>
+            </div>
+
+            <div class="clustering-features">
+                <div class="cluster-feature">
+                    <h4>Smart Data Flow</h4>
+                    <p>Topic filters ensure only relevant data moves between levels, reducing bandwidth and storage costs.</p>
+                </div>
+                <div class="cluster-feature">
+                    <h4>Automatic Failover</h4>
+                    <p>Hazelcast clustering provides automatic failover and session migration between cluster nodes.</p>
+                </div>
+                <div class="cluster-feature">
+                    <h4>Central Database</h4>
+                    <p>All cluster nodes share a central database, ensuring consistent state and enabling SQL analytics.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="integrations" class="integrations">
+        <div class="container">
+            <h2 class="section-title">Modern Integration Capabilities</h2>
+
+            <div class="integration-grid">
+                <div class="integration-card mcp">
+                    <div class="integration-header">
+                        <div class="integration-icon">🤖</div>
+                        <h3>MCP Server (AI Ready)</h3>
+                    </div>
+                    <p>Built-in Model Context Protocol server on port 3000 enables AI models to directly query MQTT data.</p>
+                    <div class="code-snippet">
+<pre><code>import mcp_client
+
+client = mcp_client.connect("http://localhost:3000")
+data = client.query_topics("sensors/#")
+history = client.get_history("sensors/temp")</code></pre>
+                    </div>
+                </div>
+
+                <div class="integration-card graphql">
+                    <div class="integration-header">
+                        <div class="integration-icon">📊</div>
+                        <h3>GraphQL API</h3>
+                    </div>
+                    <p>Query current states and historical data with GraphQL. Real-time subscriptions for live data streams.</p>
+                    <div class="code-snippet">
+<pre><code>query {
+  currentValue(topic: "sensors/temperature") {
+    payload
+    timestamp
+  }
+}</code></pre>
+                    </div>
+                </div>
+
+                <div class="integration-card sql">
+                    <div class="integration-header">
+                        <div class="integration-icon">🔍</div>
+                        <h3>SQL Analytics</h3>
+                    </div>
+                    <p>Direct SQL access to all stored messages enables powerful analytics and reporting capabilities.</p>
+                    <div class="code-snippet">
+<pre><code>SELECT topic, AVG(payload::float) as avg_temp
+FROM messages
+WHERE topic LIKE 'sensors/temp%'
+GROUP BY topic</code></pre>
+                    </div>
+                </div>
+
+                <div class="integration-card kafka">
+                    <div class="integration-header">
+                        <div class="integration-icon">📡</div>
+                        <h3>Kafka Streaming</h3>
+                    </div>
+                    <p>Stream MQTT messages to Kafka for event sourcing, or use Kafka as the internal message bus.</p>
+                    <div class="code-snippet">
+<pre><code>ArchiveGroups:
+  - Name: events
+    TopicFilter: ["events/#"]
+    ArchiveType: KAFKA</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>MonsterMQ</h4>
+                    <p>Enterprise MQTT Broker with unlimited scale and database flexibility.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="https://github.com/vogler75/monster-mq">GitHub Repository</a></li>
+                        <li><a href="https://github.com/vogler75/monster-mq/blob/main/README.md">Documentation</a></li>
+                        <li><a href="https://github.com/vogler75/monster-mq/issues">Issue Tracker</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Technology</h4>
+                    <ul>
+                        <li>Built with Kotlin & Vert.X</li>
+                        <li>Hazelcast Clustering</li>
+                        <li>MQTT 3.1.1 Protocol</li>
+                        <li>JVM 21+</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 MonsterMQ - Open Source MQTT Broker</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function copyCode(button) {
+            const codeBlock = button.previousElementSibling.querySelector('code');
+            const text = codeBlock.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                button.textContent = 'Copied!';
+                setTimeout(() => {
+                    button.textContent = 'Copy';
+                }, 2000);
+            });
+        }
+
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

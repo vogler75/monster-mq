@@ -414,22 +414,22 @@ class UserManager(
      */
     private suspend fun ensureDefaultAdminUser() {
         try {
-            val adminUsername = "admin"
+            val adminUsername = "Admin"
             val existingAdmin = userStore?.getUser(adminUsername)
             if (existingAdmin == null) {
                 // Create default admin user
                 val adminUser = User(
                     username = adminUsername,
-                    passwordHash = PasswordEncoder.hash("changeme"),
+                    passwordHash = PasswordEncoder.hash("Admin"),
                     enabled = true,
                     canSubscribe = true,
-                    canPublish = true, 
+                    canPublish = true,
                     isAdmin = true
                 )
-                
+
                 val created = userStore?.createUser(adminUser) ?: false
                 if (created) {
-                    logger.info("Created default admin user 'admin' with password 'changeme' - PLEASE CHANGE PASSWORD!")
+                    logger.info("Created default admin user 'Admin' with password 'Admin' - PLEASE CHANGE PASSWORD!")
                 } else {
                     logger.warning("Failed to create default admin user")
                 }
