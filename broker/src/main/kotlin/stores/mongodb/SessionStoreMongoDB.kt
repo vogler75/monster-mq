@@ -88,6 +88,25 @@ class SessionStoreMongoDB(
         }
     }
 
+    override fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit) {
+        logger.warning("iterateConnectedClients feature not implemented yet for MongoDB [${Utils.getCurrentFunctionName()}]")
+    }
+
+    override fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit) {
+        try {
+            val sessions = sessionsCollection.find()
+            for (doc in sessions) {
+                val clientId = doc.getString("client_id")
+                val nodeId = doc.getString("node_id") ?: ""
+                val connected = doc.getBoolean("connected") ?: false
+                val cleanSession = doc.getBoolean("clean_session") ?: true
+                callback(clientId, nodeId, connected, cleanSession)
+            }
+        } catch (e: Exception) {
+            logger.warning("Error while retrieving all sessions: ${e.message}")
+        }
+    }
+
     override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit) {
         try {
             val clients = sessionsCollection.find(eq("node_id", nodeId))

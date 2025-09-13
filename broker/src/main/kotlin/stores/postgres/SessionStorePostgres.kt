@@ -148,6 +148,50 @@ class SessionStorePostgres(
         }
     }
 
+    override fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit) {
+        try {
+            db.connection?.let { connection ->
+                "SELECT client_id, node_id FROM $sessionsTableName WHERE connected = TRUE".let { sql ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        val resultSet = preparedStatement.executeQuery()
+                        while (resultSet.next()) {
+                            val clientId = resultSet.getString(1)
+                            val nodeId = resultSet.getString(2) ?: ""
+                            callback(clientId, nodeId)
+                        }
+                    }
+                }
+            } ?: run {
+                logger.severe("Iterating connected clients not possible without database connection! [${Utils.getCurrentFunctionName()}]")
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error at fetching connected clients [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
+    override fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit) {
+        try {
+            db.connection?.let { connection ->
+                "SELECT client_id, node_id, connected, clean_session FROM $sessionsTableName".let { sql ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        val resultSet = preparedStatement.executeQuery()
+                        while (resultSet.next()) {
+                            val clientId = resultSet.getString(1)
+                            val nodeId = resultSet.getString(2) ?: ""
+                            val connected = resultSet.getBoolean(3)
+                            val cleanSession = resultSet.getBoolean(4)
+                            callback(clientId, nodeId, connected, cleanSession)
+                        }
+                    }
+                }
+            } ?: run {
+                logger.severe("Iterating all sessions not possible without database connection! [${Utils.getCurrentFunctionName()}]")
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error at fetching all sessions [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
     override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit) {
         try {
             db.connection?.let { connection ->

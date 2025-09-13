@@ -11,6 +11,8 @@ interface ISessionStoreAsync {
     val sync: ISessionStore
 
     fun iterateOfflineClients(callback: (clientId: String) -> Unit): Future<Void>
+    fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit): Future<Void>
+    fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit): Future<Void>
     fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit): Future<Void>
     fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int) -> Unit): Future<Void>
 

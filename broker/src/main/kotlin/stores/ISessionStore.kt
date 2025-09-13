@@ -16,6 +16,8 @@ interface ISessionStore {
     fun getType(): SessionStoreType
 
     fun iterateOfflineClients(callback: (clientId: String) -> Unit)
+    fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit)
+    fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit)
     fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit)
     fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int) -> Unit)
 

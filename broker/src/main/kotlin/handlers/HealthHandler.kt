@@ -97,14 +97,8 @@ class HealthHandler(
                     tryToBecomeLeader(map)
                 }
                 if (areWeTheLeader(map)) {
-                    logger.info("We are still the leader")
-                    sessionHandler.iterateNodeClients(nodeId) { clientId, cleanSession, will ->
-                        sessionHandler.publishMessage(will)
-                        if (cleanSession)
-                            sessionHandler.delClient(clientId)
-                        else
-                            sessionHandler.pauseClient(clientId)
-                    }
+                    logger.info("We are the leader - handling dead node [$nodeId] session cleanup")
+                    handleDeadNodeCleanup(nodeId)
                 }
             }
         }
@@ -137,5 +131,47 @@ class HealthHandler(
         val leaderId = map[LEADER_KEY]
         logger.info("Checking if we are the leader: $nodeId == $leaderId")
         return nodeId == map[LEADER_KEY]
+    }
+
+    private fun handleDeadNodeCleanup(deadNodeId: String) {
+        logger.info("Processing dead node [$deadNodeId] - cleaning up sessions")
+
+        sessionHandler.iterateNodeClients(deadNodeId) { clientId, cleanSession, will ->
+            logger.fine("Processing client [$clientId] from dead node [$deadNodeId], cleanSession=[$cleanSession]")
+
+            // Publish last will message if present
+            if (will.topicName.isNotEmpty()) {
+                logger.info("Publishing last will for client [$clientId]: [${will.topicName}]")
+                sessionHandler.publishMessage(will)
+            }
+
+            if (cleanSession) {
+                // Clean sessions: Remove from database completely
+                logger.info("Removing clean session client [$clientId] from dead node [$deadNodeId]")
+                sessionHandler.delClient(clientId)
+            } else {
+                // Persistent sessions: Mark as offline in database (connected=false)
+                logger.info("Marking persistent session client [$clientId] as offline from dead node [$deadNodeId]")
+                sessionHandler.pauseClient(clientId)
+
+                // Also propagate CLIENT_DISCONNECTED event to update client mappings
+                val mappingEvent = at.rocworks.data.ClientNodeMapping(
+                    clientId,
+                    deadNodeId,
+                    at.rocworks.data.ClientNodeMapping.EventType.NODE_FAILURE
+                )
+                vertx.eventBus().publish("${at.rocworks.Const.GLOBAL_CLIENT_TABLE_NAMESPACE}/M", mappingEvent)
+            }
+        }
+
+        // Also send a general node failure event to clean up any remaining mappings
+        val nodeFailureEvent = at.rocworks.data.ClientNodeMapping(
+            "", // empty clientId for node-wide event
+            deadNodeId,
+            at.rocworks.data.ClientNodeMapping.EventType.NODE_FAILURE
+        )
+        vertx.eventBus().publish("${at.rocworks.Const.GLOBAL_CLIENT_TABLE_NAMESPACE}/M", nodeFailureEvent)
+
+        logger.info("Completed dead node [$deadNodeId] cleanup")
     }
 }

@@ -137,10 +137,21 @@ open class SessionHandler(
                     logger.fine("Client [${mapping.clientId}] removed from mapping")
                 }
                 ClientNodeMapping.EventType.NODE_FAILURE -> {
-                    // Remove all clients belonging to failed node
-                    val removedClients = clientNodeMapping.entries.removeAll { it.value == mapping.nodeId }
-                    if (removedClients) {
-                        logger.info("Removed clients from failed node [${mapping.nodeId}]")
+                    if (mapping.clientId.isEmpty()) {
+                        // Node-wide failure event - remove ALL clients from this node
+                        val removedClients = clientNodeMapping.entries.removeIf { it.value == mapping.nodeId }
+                        if (removedClients) {
+                            logger.info("Removed all clients from failed node [${mapping.nodeId}]")
+                        }
+                        // Also clean up topic-node mappings for this node
+                        topicNodeMapping.values.forEach { nodeSet ->
+                            nodeSet.remove(mapping.nodeId)
+                        }
+                        logger.info("Cleaned up topic mappings for failed node [${mapping.nodeId}]")
+                    } else {
+                        // Individual client failure event
+                        clientNodeMapping.remove(mapping.clientId)
+                        logger.fine("Removed client [${mapping.clientId}] from failed node [${mapping.nodeId}]")
                     }
                 }
             }
@@ -239,12 +250,41 @@ open class SessionHandler(
             }
         }
 
-        logger.info("Indexing subscription table [${Utils.getCurrentFunctionName()}]")
-        val f1 = sessionStore.iterateSubscriptions(topicIndex::add)
+        logger.info("Loading all sessions and their subscriptions [${Utils.getCurrentFunctionName()}]")
+        val f1 = sessionStore.iterateAllSessions { clientId, nodeId, connected, cleanSession ->
+            val localNodeId = Monster.getClusterNodeId(vertx)
 
-        logger.info("Indexing offline clients [${Utils.getCurrentFunctionName()}]")
-        val f2 = sessionStore.iterateOfflineClients { clientId ->
-            clientStatus[clientId] = ClientStatus.PAUSED
+            if (connected) {
+                if (nodeId != localNodeId) {
+                    // Client connected to another node - add to cluster mapping
+                    clientNodeMapping[clientId] = nodeId
+                    logger.finest { "Loaded connected client [${clientId}] on node [${nodeId}]" }
+                } else {
+                    // Client connected to this node but we're restarting - mark as paused for now
+                    // It will reconnect and update the status properly
+                    clientStatus[clientId] = ClientStatus.PAUSED
+                    logger.finest { "Loaded local client [${clientId}] as paused (node restart)" }
+                }
+            } else {
+                // Client is offline
+                if (!cleanSession) {
+                    // Persistent session - mark as paused so messages can be queued
+                    clientStatus[clientId] = ClientStatus.PAUSED
+                    logger.finest { "Loaded offline persistent client [${clientId}]" }
+                }
+                // Clean sessions that are offline are ignored (will be cleaned up by purge)
+            }
+        }
+
+        logger.info("Loading all subscriptions [${Utils.getCurrentFunctionName()}]")
+        val f2 = sessionStore.iterateSubscriptions { topicName, clientId, qos ->
+            // Add to topic index
+            topicIndex.add(topicName, clientId, qos)
+
+            // Build topic-to-node mapping based on where client is located
+            val nodeId = clientNodeMapping[clientId] ?: Monster.getClusterNodeId(vertx)
+            topicNodeMapping.getOrPut(topicName) { ConcurrentHashMap.newKeySet() }.add(nodeId)
+            logger.finest { "Loaded subscription [${topicName}] for client [${clientId}] on node [${nodeId}]" }
         }
 
         Future.all(f0, f1, f2).onComplete {
@@ -572,6 +612,9 @@ open class SessionHandler(
         targetNodes.filter { it != localNodeId }.forEach { nodeId ->
             vertx.eventBus().send(nodeMessageAddress(nodeId), message)
         }
+
+        // Note: Offline persistent client queuing is now handled automatically by
+        // node failure detection in HealthHandler when nodes die
 
         // Still save to archive and handle Sparkplug expansion
         messageHandler.saveMessage(message)

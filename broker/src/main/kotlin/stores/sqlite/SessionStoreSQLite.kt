@@ -128,6 +128,29 @@ class SessionStoreSQLite(
         }
     }
 
+    override fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit) {
+        logger.warning("iterateConnectedClients feature not implemented yet for SQLite [${Utils.getCurrentFunctionName()}]")
+    }
+
+    override fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit) {
+        val sql = "SELECT client_id, node_id, connected, clean_session FROM $sessionsTableName"
+        sqlClient.executeQuery(sql).onComplete { result ->
+            if (result.succeeded()) {
+                val results = result.result()
+                results.forEach { row ->
+                    val rowObj = row as JsonObject
+                    val clientId = rowObj.getString("client_id")
+                    val nodeId = rowObj.getString("node_id") ?: ""
+                    val connected = rowObj.getBoolean("connected") ?: false
+                    val cleanSession = rowObj.getBoolean("clean_session") ?: true
+                    callback(clientId, nodeId, connected, cleanSession)
+                }
+            } else {
+                logger.warning("Error at fetching all sessions [${result.cause()?.message}] [${Utils.getCurrentFunctionName()}]")
+            }
+        }
+    }
+
     override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit) {
         val sql = "SELECT client_id, clean_session, last_will_topic, last_will_message, last_will_qos, last_will_retain FROM $sessionsTableName WHERE node_id = ?"
         val params = JsonArray().add(nodeId)

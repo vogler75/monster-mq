@@ -26,6 +26,24 @@ class SessionStoreAsync(private val store: ISessionStore): AbstractVerticle(), I
         return promise.future()
     }
 
+    override fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit): Future<Void> {
+        val promise = Promise.promise<Void>()
+        vertx.executeBlocking(Callable {
+            store.iterateConnectedClients(callback)
+            promise.complete()
+        })
+        return promise.future()
+    }
+
+    override fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit): Future<Void> {
+        val promise = Promise.promise<Void>()
+        vertx.executeBlocking(Callable {
+            store.iterateAllSessions(callback)
+            promise.complete()
+        })
+        return promise.future()
+    }
+
     override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit): Future<Void> {
         val promise = Promise.promise<Void>()
         vertx.executeBlocking(Callable {
