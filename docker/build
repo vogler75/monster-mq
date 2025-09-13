@@ -1,2 +1,64 @@
-version=`cat version.txt`
+#!/bin/bash
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Read version from version.txt
+version=`cat ../version.txt`
+
+echo -e "${YELLOW}Building Docker image for MonsterMQ v${version}...${NC}"
+
+# Check if broker JAR exists
+if [ ! -f "../broker/target/broker-1.0-SNAPSHOT.jar" ]; then
+    echo -e "${RED}Error: broker/target/broker-1.0-SNAPSHOT.jar not found${NC}"
+    echo -e "${YELLOW}Please run 'mvn clean package' in the broker directory first${NC}"
+    exit 1
+fi
+
+# Check if dependencies exist
+if [ ! -d "../broker/target/dependencies" ]; then
+    echo -e "${RED}Error: broker/target/dependencies directory not found${NC}"
+    echo -e "${YELLOW}Please run 'mvn clean package' in the broker directory first${NC}"
+    exit 1
+fi
+
+# Copy files from broker/target to docker/target for Docker build
+echo -e "${YELLOW}Copying JAR and dependencies from broker/target...${NC}"
+mkdir -p target
+cp ../broker/target/broker-1.0-SNAPSHOT.jar target/
+cp -r ../broker/target/dependencies target/
+
+# Build Docker image
 docker build -t rocworks/monstermq:$version -t rocworks/monstermq:latest .
+
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✓ Docker image built successfully${NC}"
+    echo -e "${GREEN}  - rocworks/monstermq:${version}${NC}"
+    echo -e "${GREEN}  - rocworks/monstermq:latest${NC}"
+
+    # Ask if user wants to push the image
+    echo ""
+    read -p "Do you want to push the Docker image to Docker Hub? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}Pushing Docker image to Docker Hub...${NC}"
+        docker push rocworks/monstermq:latest
+        docker push rocworks/monstermq:$version
+        echo -e "${GREEN}✓ Docker image pushed successfully${NC}"
+    else
+        echo -e "${YELLOW}Docker image not pushed. To push later, run:${NC}"
+        echo "  docker push rocworks/monstermq:latest"
+        echo "  docker push rocworks/monstermq:$version"
+    fi
+else
+    echo -e "${RED}✗ Docker build failed${NC}"
+    exit 1
+fi
+
+# Clean up temporary files
+echo -e "${YELLOW}Cleaning up temporary files...${NC}"
+rm -rf target/
+echo -e "${GREEN}✓ Cleanup complete${NC}"
