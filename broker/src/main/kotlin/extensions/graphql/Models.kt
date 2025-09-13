@@ -125,6 +125,12 @@ data class UserManagementResult(
     val aclRule: AclRuleInfo? = null
 )
 
+data class PurgeResult(
+    val success: Boolean,
+    val message: String? = null,
+    val deletedCount: Long
+)
+
 // Authentication Models
 data class LoginResult(
     val success: Boolean,
@@ -165,7 +171,8 @@ data class Session(
     val subscriptions: List<MqttSubscription>,
     val cleanSession: Boolean,
     val sessionExpiryInterval: Long,
-    val clientAddress: String?
+    val clientAddress: String?,
+    val connected: Boolean
 )
 
 object PayloadConverter {

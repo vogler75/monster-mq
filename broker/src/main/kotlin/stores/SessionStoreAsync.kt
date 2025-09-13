@@ -158,4 +158,22 @@ class SessionStoreAsync(private val store: ISessionStore): AbstractVerticle(), I
         })
         return promise.future()
     }
+
+    override fun countQueuedMessages(): Future<Long> {
+        val promise = Promise.promise<Long>()
+        vertx.executeBlocking(Callable {
+            val count = store.countQueuedMessages()
+            promise.complete(count)
+        })
+        return promise.future()
+    }
+
+    override fun countQueuedMessagesForClient(clientId: String): Future<Long> {
+        val promise = Promise.promise<Long>()
+        vertx.executeBlocking(Callable {
+            val count = store.countQueuedMessagesForClient(clientId)
+            promise.complete(count)
+        })
+        return promise.future()
+    }
 }

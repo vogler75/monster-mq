@@ -153,7 +153,7 @@ class GraphQLServer(
     private fun buildRuntimeWiring(): RuntimeWiring {
         val queryResolver = QueryResolver(vertx, retainedStore, archiveGroups, authContext)
         val metricsResolver = MetricsResolver(vertx, sessionStore, sessionHandler)
-        val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, authContext)
+        val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, sessionStore, sessionHandler, authContext)
         val subscriptionResolver = SubscriptionResolver(vertx, messageBus)
         val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
         val authenticationResolver = AuthenticationResolver(vertx, userManager)
@@ -199,12 +199,19 @@ class GraphQLServer(
                     .dataFetcher("createAclRule", userManagementResolver.createAclRule())
                     .dataFetcher("updateAclRule", userManagementResolver.updateAclRule())
                     .dataFetcher("deleteAclRule", userManagementResolver.deleteAclRule())
+                    // Queued messages management (requires admin token)
+                    .dataFetcher("purgeQueuedMessages", mutationResolver.purgeQueuedMessages())
             }
             // Register subscription resolvers
             .type("Subscription") { builder ->
                 builder
                     .dataFetcher("topicUpdates", subscriptionResolver.topicUpdates())
                     .dataFetcher("multiTopicUpdates", subscriptionResolver.multiTopicUpdates())
+            }
+            // Register field resolvers for types
+            .type("Session") { builder ->
+                builder
+                    .dataFetcher("queuedMessageCount", metricsResolver.sessionQueuedMessageCount())
             }
             .build()
     }

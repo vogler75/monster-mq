@@ -401,4 +401,22 @@ class SessionStoreMongoDB(
         mongoClient.close()
         logger.info("MongoDB connection closed.")
     }
+
+    override fun countQueuedMessages(): Long {
+        return try {
+            queuedMessagesCollection.countDocuments()
+        } catch (e: Exception) {
+            logger.warning("Error counting queued messages: ${e.message}")
+            0L
+        }
+    }
+
+    override fun countQueuedMessagesForClient(clientId: String): Long {
+        return try {
+            queuedMessagesClientsCollection.countDocuments(eq("client_id", clientId))
+        } catch (e: Exception) {
+            logger.warning("Error counting queued messages for client $clientId: ${e.message}")
+            0L
+        }
+    }
 }

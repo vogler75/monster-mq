@@ -36,4 +36,7 @@ interface ISessionStore {
 
     fun purgeQueuedMessages()
     fun purgeSessions()
+
+    fun countQueuedMessages(): Long
+    fun countQueuedMessagesForClient(clientId: String): Long
 }

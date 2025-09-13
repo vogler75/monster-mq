@@ -44,6 +44,10 @@ type Session {
     sessionExpiryInterval: Long!
     # The client's address
     clientAddress: String
+    # Whether the client is currently connected
+    connected: Boolean!
+    # Number of queued messages for this session
+    queuedMessageCount: Long!
 }
 
 # Metrics for a single session
@@ -97,7 +101,7 @@ type Query {
     # Get all brokers in the cluster
     brokers: [Broker!]!
     # Get active sessions. If nodeId is omitted, returns sessions from all nodes.
-    sessions(nodeId: String): [Session!]!
+    sessions(nodeId: String, cleanSession: Boolean, connected: Boolean): [Session!]!
     # Get a specific session by client ID. If nodeId is omitted, it will be looked up.
     session(clientId: String!, nodeId: String): Session
 
@@ -125,6 +129,9 @@ type Mutation {
     createAclRule(input: CreateAclRuleInput!): UserManagementResult!
     updateAclRule(input: UpdateAclRuleInput!): UserManagementResult!
     deleteAclRule(id: String!): UserManagementResult!
+
+    # Queued Messages Management (requires admin token)
+    purgeQueuedMessages(clientId: String): PurgeResult!
 }
 
 type Subscription {
@@ -261,4 +268,10 @@ type UserManagementResult {
     message: String
     user: UserInfo
     aclRule: AclRuleInfo
+}
+
+type PurgeResult {
+    success: Boolean!
+    message: String
+    deletedCount: Long!
 }

@@ -32,4 +32,7 @@ interface ISessionStoreAsync {
     fun purgeQueuedMessages(): Future<Void>
     fun purgeSessions(): Future<Void>
 
+    fun countQueuedMessages(): Future<Long>
+    fun countQueuedMessagesForClient(clientId: String): Future<Long>
+
 }

@@ -512,4 +512,45 @@ class SessionStorePostgres(
             logger.warning("Error at purging sessions [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
+
+    override fun countQueuedMessages(): Long {
+        val sql = "SELECT COUNT(*) FROM $queuedMessagesTableName"
+        return try {
+            DriverManager.getConnection(url, username, password).use { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.executeQuery().use { resultSet ->
+                        if (resultSet.next()) {
+                            resultSet.getLong(1)
+                        } else {
+                            0L
+                        }
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error counting queued messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            0L
+        }
+    }
+
+    override fun countQueuedMessagesForClient(clientId: String): Long {
+        val sql = "SELECT COUNT(*) FROM $queuedMessagesClientsTableName WHERE client_id = ?"
+        return try {
+            DriverManager.getConnection(url, username, password).use { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, clientId)
+                    preparedStatement.executeQuery().use { resultSet ->
+                        if (resultSet.next()) {
+                            resultSet.getLong(1)
+                        } else {
+                            0L
+                        }
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error counting queued messages for client $clientId [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            0L
+        }
+    }
 }

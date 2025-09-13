@@ -2,6 +2,7 @@ package at.rocworks.extensions.graphql
 
 import at.rocworks.bus.IMessageBus
 import at.rocworks.data.MqttMessage
+import at.rocworks.stores.ISessionStoreAsync
 import graphql.schema.DataFetcher
 import graphql.GraphQLException
 import io.vertx.core.Vertx
@@ -12,6 +13,8 @@ class MutationResolver(
     private val vertx: Vertx,
     private val messageBus: IMessageBus,
     private val messageHandler: at.rocworks.handlers.MessageHandler,
+    private val sessionStore: ISessionStoreAsync,
+    private val sessionHandler: at.rocworks.handlers.SessionHandler,
     private val authContext: GraphQLAuthContext
 ) {
     companion object {
@@ -171,6 +174,68 @@ class MutationResolver(
                     results.add(f.get())
                 }
                 future.complete(results)
+            }
+
+            future
+        }
+    }
+
+    fun purgeQueuedMessages(): DataFetcher<CompletableFuture<PurgeResult>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<PurgeResult>()
+            val clientId = env.getArgument<String?>("clientId")
+
+            // Check authorization - requires admin privileges
+            val authResult = authContext.validateFieldAccess(env)
+            if (!authResult.allowed) {
+                future.complete(
+                    PurgeResult(
+                        success = false,
+                        message = authResult.errorMessage ?: "Admin privileges required",
+                        deletedCount = 0L
+                    )
+                )
+                return@DataFetcher future
+            }
+
+            try {
+                if (clientId != null) {
+                    // Purge queued messages for specific client using delClient
+                    // Get count before deleting
+                    val deletedCount = sessionStore.sync.countQueuedMessagesForClient(clientId)
+                    sessionStore.sync.delClient(clientId) { subscription ->
+                        // We don't need the subscription callback but it's required
+                    }
+
+                    future.complete(
+                        PurgeResult(
+                            success = true,
+                            message = "Successfully purged queued messages for client: $clientId",
+                            deletedCount = deletedCount
+                        )
+                    )
+                } else {
+                    // Purge all queued messages using existing purgeQueuedMessages function
+                    val countBefore = sessionStore.sync.countQueuedMessages()
+                    sessionStore.sync.purgeQueuedMessages()
+
+                    future.complete(
+                        PurgeResult(
+                            success = true,
+                            message = "Successfully purged all queued messages",
+                            deletedCount = countBefore
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                logger.severe("Error purging queued messages: ${e.message}")
+                future.complete(
+                    PurgeResult(
+                        success = false,
+                        message = "Error: ${e.message}",
+                        deletedCount = 0L
+                    )
+                )
             }
 
             future

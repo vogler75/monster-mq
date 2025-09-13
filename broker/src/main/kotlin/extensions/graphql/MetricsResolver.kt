@@ -128,13 +128,15 @@ class MetricsResolver(
         return DataFetcher { env ->
             val future = CompletableFuture<List<Session>>()
             val nodeId = env.getArgument<String?>("nodeId")
+            val cleanSessionFilter = env.getArgument<Boolean?>("cleanSession")
+            val connectedFilter = env.getArgument<Boolean?>("connected")
 
             if (nodeId != null) {
                 // Get sessions for specific node
-                getSessionsForNode(nodeId, future)
+                getSessionsForNode(nodeId, cleanSessionFilter, connectedFilter, future)
             } else {
                 // Get sessions for all nodes
-                getAllSessions(future)
+                getAllSessions(cleanSessionFilter, connectedFilter, future)
             }
 
             future
@@ -169,7 +171,8 @@ class MetricsResolver(
                         subscriptions = subscriptions,
                         cleanSession = clientDetails.cleanSession,
                         sessionExpiryInterval = clientDetails.sessionExpiryInterval?.toLong() ?: 0L,
-                        clientAddress = clientDetails.clientAddress
+                        clientAddress = clientDetails.clientAddress,
+                        connected = sessionHandler.getClientStatus(clientId) == at.rocworks.handlers.SessionHandler.ClientStatus.ONLINE
                     )
                 }).onComplete { result ->
                     if (result.succeeded()) {
@@ -187,10 +190,10 @@ class MetricsResolver(
         }
     }
 
-    private fun getSessionsForNode(nodeId: String, future: CompletableFuture<List<Session>>) {
+    private fun getSessionsForNode(nodeId: String, cleanSessionFilter: Boolean?, connectedFilter: Boolean?, future: CompletableFuture<List<Session>>) {
         if (nodeId == Monster.getClusterNodeId(vertx)) {
             // Local node - get from registry
-            getAllSessions(future)
+            getAllSessions(cleanSessionFilter, connectedFilter, future)
         } else {
             // Remote node - would need to query via EventBus
             // For now, return empty list
@@ -198,14 +201,15 @@ class MetricsResolver(
         }
     }
 
-    private fun getAllSessions(future: CompletableFuture<List<Session>>) {
+    private fun getAllSessions(cleanSessionFilter: Boolean?, connectedFilter: Boolean?, future: CompletableFuture<List<Session>>) {
         vertx.executeBlocking<List<Session>>(java.util.concurrent.Callable {
             val allMetrics = sessionHandler.getAllClientMetrics()
             allMetrics.entries.mapNotNull { (clientId, metrics) ->
                 val clientDetails = sessionHandler.getClientDetails(clientId)
                 if (clientDetails != null) {
                     val subscriptions = getSubscriptionsForClient(clientId)
-                    Session(
+                    val connected = sessionHandler.getClientStatus(clientId) == at.rocworks.handlers.SessionHandler.ClientStatus.ONLINE
+                    val session = Session(
                         clientId = clientId,
                         nodeId = clientDetails.nodeId,
                         metrics = SessionMetrics(
@@ -215,8 +219,19 @@ class MetricsResolver(
                         subscriptions = subscriptions,
                         cleanSession = clientDetails.cleanSession,
                         sessionExpiryInterval = clientDetails.sessionExpiryInterval?.toLong() ?: 0L,
-                        clientAddress = clientDetails.clientAddress
+                        clientAddress = clientDetails.clientAddress,
+                        connected = connected
                     )
+
+                    // Apply filters
+                    val passesCleanSessionFilter = cleanSessionFilter?.let { it == session.cleanSession } ?: true
+                    val passesConnectedFilter = connectedFilter?.let { it == session.connected } ?: true
+
+                    if (passesCleanSessionFilter && passesConnectedFilter) {
+                        session
+                    } else {
+                        null
+                    }
                 } else null
             }
         }).onComplete { result ->
@@ -264,7 +279,32 @@ class MetricsResolver(
     }
 
     private fun getQueuedMessagesCount(): Long {
-        // For now, return 0
-        return 0L
+        return sessionStore.sync.countQueuedMessages()
+    }
+
+    fun sessionQueuedMessageCount(): DataFetcher<CompletableFuture<Long>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Long>()
+
+            // Get the parent Session object from the DataFetchingEnvironment
+            val session = env.getSource<Session>()
+            val clientId = session?.clientId
+
+            if (clientId != null) {
+                sessionStore.countQueuedMessagesForClient(clientId).onComplete { result ->
+                    if (result.succeeded()) {
+                        future.complete(result.result())
+                    } else {
+                        logger.warning("Failed to get queued message count for client $clientId: ${result.cause()?.message}")
+                        future.complete(0L)
+                    }
+                }
+            } else {
+                logger.warning("No clientId found in session context")
+                future.complete(0L)
+            }
+
+            future
+        }
     }
 }
