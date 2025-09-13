@@ -19,6 +19,7 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 open class SessionHandler(
     private val sessionStore: ISessionStoreAsync,
@@ -30,6 +31,10 @@ open class SessionHandler(
 
     private val topicIndex = TopicTree<String, Int>() // Topic index with client and QoS
     private val clientStatus = ConcurrentHashMap<String, ClientStatus>() // ClientId + Status
+
+    // Metrics tracking
+    private val clientMetrics = ConcurrentHashMap<String, SessionMetrics>() // ClientId -> Metrics
+    private val clientDetails = ConcurrentHashMap<String, ClientDetails>() // ClientId -> Session details
 
     private val subAddQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
     private val subDelQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
@@ -48,6 +53,7 @@ open class SessionHandler(
     private val inFlightMessages = HashMap<String, ArrayBlockingQueue<MqttMessage>>()
 
     private fun commandAddress() = "${Const.GLOBAL_EVENT_NAMESPACE}/${deploymentID()}/C"
+    private fun metricsAddress() = "monstermq.node.metrics.${Monster.getClusterNodeId(vertx)}"
     //private fun messageAddress() = "${Const.GLOBAL_EVENT_NAMESPACE}/${deploymentID()}/M"
 
     init {
@@ -63,6 +69,18 @@ open class SessionHandler(
     enum class ClientStatus {
         UNKNOWN, CREATED, ONLINE, PAUSED, DELETE
     }
+
+    data class SessionMetrics(
+        val messagesIn: AtomicLong = AtomicLong(0),
+        val messagesOut: AtomicLong = AtomicLong(0)
+    )
+
+    data class ClientDetails(
+        val nodeId: String,
+        val clientAddress: String?,
+        val cleanSession: Boolean,
+        val sessionExpiryInterval: Int?
+    )
 
     override fun start(startPromise: Promise<Void>) {
         logger.info("Start session handler...")
@@ -131,6 +149,24 @@ open class SessionHandler(
                     else -> logger.warning("Unknown command [${payload}] [${Utils.getCurrentFunctionName()}]")
                 }
             }
+        }
+
+        // Metrics query handler
+        vertx.eventBus().consumer<JsonObject>(metricsAddress()) { message ->
+            val metrics = JsonObject()
+            var totalMessagesIn = 0L
+            var totalMessagesOut = 0L
+
+            clientMetrics.values.forEach { sessionMetrics ->
+                totalMessagesIn += sessionMetrics.messagesIn.get()
+                totalMessagesOut += sessionMetrics.messagesOut.get()
+            }
+
+            metrics.put("messagesIn", totalMessagesIn)
+                   .put("messagesOut", totalMessagesOut)
+                   .put("nodeSessionCount", clientMetrics.size)
+
+            message.reply(metrics)
         }
 
         queueWorkerThread("SubAddQueue", subAddQueue, 1000, sessionStore::addSubscriptions)
@@ -225,8 +261,35 @@ open class SessionHandler(
 
     fun getClientStatus(clientId: String): ClientStatus = clientStatus[clientId] ?: ClientStatus.UNKNOWN
 
+    // Metrics tracking methods
+    fun incrementMessagesIn(clientId: String) {
+        clientMetrics[clientId]?.messagesIn?.incrementAndGet()
+    }
+
+    fun incrementMessagesOut(clientId: String) {
+        clientMetrics[clientId]?.messagesOut?.incrementAndGet()
+    }
+
+    fun getClientMetrics(clientId: String): SessionMetrics? = clientMetrics[clientId]
+
+    fun getAllClientMetrics(): Map<String, SessionMetrics> = clientMetrics.toMap()
+
+    fun getClientDetails(clientId: String): ClientDetails? = clientDetails[clientId]
+
+    fun getSessionCount(): Int = clientMetrics.size
+
     fun setClient(clientId: String, cleanSession: Boolean, information: JsonObject): Future<Void> {
         logger.fine("Set client [$clientId] clean session [$cleanSession] information [$information]")
+
+        // Initialize metrics and client details
+        clientMetrics[clientId] = SessionMetrics()
+        clientDetails[clientId] = ClientDetails(
+            nodeId = Monster.getClusterNodeId(vertx),
+            clientAddress = information.getString("clientAddress"),
+            cleanSession = cleanSession,
+            sessionExpiryInterval = information.getInteger("sessionExpiryInterval")
+        )
+
         val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.CREATED)
         val f1 = sessionStore.setClient(clientId, Monster.getClusterNodeId(vertx), cleanSession, true, information)
         return if (Monster.isClustered()) {
@@ -268,6 +331,10 @@ open class SessionHandler(
     }
 
     fun delClient(clientId: String): Future<Void> {
+        // Clean up metrics and client details
+        clientMetrics.remove(clientId)
+        clientDetails.remove(clientId)
+
         val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.DELETE)
         vertx.eventBus().publish(clientStatusAddress, payload)
         return sessionStore.delClient(clientId) { subscription ->
@@ -443,6 +510,7 @@ open class SessionHandler(
             when (qos) {
                 0 -> clients.forEach { (clientId, _) ->
                     sendMessageToClient(clientId, m)
+                    incrementMessagesOut(clientId)
                 }
                 1, 2 -> {
                     val (online, others) = clients.partition { (clientId, _) ->
@@ -454,6 +522,8 @@ open class SessionHandler(
                             if (it.failed() || !it.result()) {
                                 logger.warning("Message sent to online client failed [${clientId}]")
                                 enqueueMessage(m, listOf(clientId))
+                            } else {
+                                incrementMessagesOut(clientId)
                             }
                         }
                     }

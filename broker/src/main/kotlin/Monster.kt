@@ -325,11 +325,6 @@ MORE INFO:
                 // Session handler
                 val sessionHandler = SessionHandler(sessionStore, messageBus, messageHandler, queuedMessagesEnabled)
 
-                // Metrics handler
-                val metricsHandler = MetricsHandler()
-                vertx.deployVerticle(metricsHandler).onComplete {
-                    logger.info("MetricsHandler deployed successfully")
-                }
 
                 // User management
                 val userManager = at.rocworks.auth.UserManager(configJson)
@@ -373,7 +368,8 @@ MORE INFO:
                         retainedStore,
                         archiveGroupsMap,
                         userManager,
-                        sessionStore
+                        sessionStore,
+                        sessionHandler
                     )
                     graphQLServer.start()
                     logger.info("GraphQL server enabled")

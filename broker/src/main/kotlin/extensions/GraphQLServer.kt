@@ -31,7 +31,8 @@ class GraphQLServer(
     private val retainedStore: IMessageStore?,
     private val archiveGroups: Map<String, ArchiveGroup>,
     private val userManager: UserManager,
-    private val sessionStore: ISessionStoreAsync
+    private val sessionStore: ISessionStoreAsync,
+    private val sessionHandler: at.rocworks.handlers.SessionHandler
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(GraphQLServer::class.java.name)
@@ -151,7 +152,7 @@ class GraphQLServer(
 
     private fun buildRuntimeWiring(): RuntimeWiring {
         val queryResolver = QueryResolver(vertx, retainedStore, archiveGroups, authContext)
-        val metricsResolver = MetricsResolver(vertx, sessionStore)
+        val metricsResolver = MetricsResolver(vertx, sessionStore, sessionHandler)
         val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, authContext)
         val subscriptionResolver = SubscriptionResolver(vertx, messageBus)
         val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)

@@ -1,8 +1,6 @@
 package at.rocworks.extensions.graphql
 
 import at.rocworks.Monster
-import at.rocworks.MqttClient
-import at.rocworks.handlers.MetricsHandler
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IMessageStore
 import graphql.schema.DataFetcher
@@ -13,10 +11,15 @@ import java.util.logging.Logger
 
 class MetricsResolver(
     private val vertx: Vertx,
-    private val sessionStore: ISessionStoreAsync
+    private val sessionStore: ISessionStoreAsync,
+    private val sessionHandler: at.rocworks.handlers.SessionHandler
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(MetricsResolver::class.java.name)
+
+        private fun getMetricsAddress(nodeId: String): String {
+            return "monstermq.node.metrics.$nodeId"
+        }
     }
 
     fun broker(): DataFetcher<CompletableFuture<Broker?>> {
@@ -25,7 +28,7 @@ class MetricsResolver(
             val nodeId = env.getArgument<String?>("nodeId") ?: Monster.getClusterNodeId(vertx)
 
             // Query the specific node for its metrics via EventBus
-            val metricsAddress = MetricsHandler.getMetricsAddress(nodeId)
+            val metricsAddress = getMetricsAddress(nodeId)
 
             vertx.eventBus().request<JsonObject>(metricsAddress, JsonObject()).onComplete { reply ->
                 if (reply.succeeded()) {
@@ -74,7 +77,7 @@ class MetricsResolver(
             val brokerFutures = nodeIds.map { nodeId ->
                 val brokerFuture = CompletableFuture<Broker?>()
 
-                val metricsAddress = MetricsHandler.getMetricsAddress(nodeId)
+                val metricsAddress = getMetricsAddress(nodeId)
                 vertx.eventBus().request<JsonObject>(metricsAddress, JsonObject()).onComplete { reply ->
                     if (reply.succeeded()) {
                         val nodeMetrics = reply.result().body()
@@ -148,25 +151,25 @@ class MetricsResolver(
                 return@DataFetcher future
             }
 
-            // Get session from local registry
-            val sessionRegistry = MqttClient.getSessionRegistry()
-            val mqttSession = sessionRegistry[clientId]
+            // Get session from SessionHandler
+            val clientMetrics = sessionHandler.getClientMetrics(clientId)
+            val clientDetails = sessionHandler.getClientDetails(clientId)
 
-            if (mqttSession != null) {
-                // Found in local registry - use blocking approach for subscriptions
+            if (clientMetrics != null && clientDetails != null) {
+                // Found in SessionHandler - use blocking approach for subscriptions
                 vertx.executeBlocking<Session>(java.util.concurrent.Callable {
                     val subscriptions = getSubscriptionsForClient(clientId)
                     Session(
-                        clientId = mqttSession.clientId,
-                        nodeId = mqttSession.nodeId ?: Monster.getClusterNodeId(vertx),
+                        clientId = clientId,
+                        nodeId = clientDetails.nodeId,
                         metrics = SessionMetrics(
-                            messagesIn = mqttSession.messagesIn.get(),
-                            messagesOut = mqttSession.messagesOut.get()
+                            messagesIn = clientMetrics.messagesIn.get(),
+                            messagesOut = clientMetrics.messagesOut.get()
                         ),
                         subscriptions = subscriptions,
-                        cleanSession = mqttSession.cleanSession,
-                        sessionExpiryInterval = mqttSession.sessionExpiryInterval,
-                        clientAddress = mqttSession.clientAddress
+                        cleanSession = clientDetails.cleanSession,
+                        sessionExpiryInterval = clientDetails.sessionExpiryInterval?.toLong() ?: 0L,
+                        clientAddress = clientDetails.clientAddress
                     )
                 }).onComplete { result ->
                     if (result.succeeded()) {
@@ -176,7 +179,7 @@ class MetricsResolver(
                     }
                 }
             } else {
-                // Not in local registry, might be on another node or offline
+                // Not in SessionHandler, might be on another node or offline
                 future.complete(null)
             }
 
@@ -197,21 +200,24 @@ class MetricsResolver(
 
     private fun getAllSessions(future: CompletableFuture<List<Session>>) {
         vertx.executeBlocking<List<Session>>(java.util.concurrent.Callable {
-            val sessionRegistry = MqttClient.getSessionRegistry()
-            sessionRegistry.values.map { mqttSession ->
-                val subscriptions = getSubscriptionsForClient(mqttSession.clientId)
-                Session(
-                    clientId = mqttSession.clientId,
-                    nodeId = mqttSession.nodeId ?: Monster.getClusterNodeId(vertx),
-                    metrics = SessionMetrics(
-                        messagesIn = mqttSession.messagesIn.get(),
-                        messagesOut = mqttSession.messagesOut.get()
-                    ),
-                    subscriptions = subscriptions,
-                    cleanSession = mqttSession.cleanSession,
-                    sessionExpiryInterval = mqttSession.sessionExpiryInterval,
-                    clientAddress = mqttSession.clientAddress
-                )
+            val allMetrics = sessionHandler.getAllClientMetrics()
+            allMetrics.entries.mapNotNull { (clientId, metrics) ->
+                val clientDetails = sessionHandler.getClientDetails(clientId)
+                if (clientDetails != null) {
+                    val subscriptions = getSubscriptionsForClient(clientId)
+                    Session(
+                        clientId = clientId,
+                        nodeId = clientDetails.nodeId,
+                        metrics = SessionMetrics(
+                            messagesIn = metrics.messagesIn.get(),
+                            messagesOut = metrics.messagesOut.get()
+                        ),
+                        subscriptions = subscriptions,
+                        cleanSession = clientDetails.cleanSession,
+                        sessionExpiryInterval = clientDetails.sessionExpiryInterval?.toLong() ?: 0L,
+                        clientAddress = clientDetails.clientAddress
+                    )
+                } else null
             }
         }).onComplete { result ->
             if (result.succeeded()) {
@@ -253,8 +259,8 @@ class MetricsResolver(
     }
 
     private fun getClusterSessionCount(): Int {
-        // For now, return local count
-        return MqttClient.getSessionRegistry().size
+        // For now, return local count from SessionHandler
+        return sessionHandler.getSessionCount()
     }
 
     private fun getQueuedMessagesCount(): Long {
