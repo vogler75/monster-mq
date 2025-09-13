@@ -26,6 +26,8 @@ type Broker {
     nodeId: String!
     # Metrics for this broker node
     metrics: BrokerMetrics!
+    # Sessions on this broker node with optional filters
+    sessions(cleanSession: Boolean, connected: Boolean): [Session!]!
 }
 
 # Represents a client session

@@ -307,4 +307,27 @@ class MetricsResolver(
             future
         }
     }
+
+    fun brokerSessions(): DataFetcher<CompletableFuture<List<Session>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Session>>()
+
+            // Get the parent Broker object from the DataFetchingEnvironment
+            val broker = env.getSource<Broker>()
+            val nodeId = broker?.nodeId
+
+            if (nodeId == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            val cleanSessionFilter = env.getArgument<Boolean?>("cleanSession")
+            val connectedFilter = env.getArgument<Boolean?>("connected")
+
+            // Use existing getSessionsForNode method to get sessions for this specific broker node
+            getSessionsForNode(nodeId, cleanSessionFilter, connectedFilter, future)
+
+            future
+        }
+    }
 }

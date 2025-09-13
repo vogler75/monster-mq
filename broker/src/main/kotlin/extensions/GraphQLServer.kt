@@ -209,6 +209,10 @@ class GraphQLServer(
                     .dataFetcher("multiTopicUpdates", subscriptionResolver.multiTopicUpdates())
             }
             // Register field resolvers for types
+            .type("Broker") { builder ->
+                builder
+                    .dataFetcher("sessions", metricsResolver.brokerSessions())
+            }
             .type("Session") { builder ->
                 builder
                     .dataFetcher("queuedMessageCount", metricsResolver.sessionQueuedMessageCount())
