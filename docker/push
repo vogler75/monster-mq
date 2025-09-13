@@ -1,4 +1,4 @@
-version=`cat ../version.txt`
+version=`cat ../version.txt | cut -d'+' -f1`
 docker push rocworks/monstermq:latest 
 docker push rocworks/monstermq:$version
 
