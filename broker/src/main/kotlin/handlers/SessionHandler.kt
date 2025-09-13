@@ -510,7 +510,6 @@ open class SessionHandler(
             when (qos) {
                 0 -> clients.forEach { (clientId, _) ->
                     sendMessageToClient(clientId, m)
-                    incrementMessagesOut(clientId)
                 }
                 1, 2 -> {
                     val (online, others) = clients.partition { (clientId, _) ->
@@ -522,8 +521,6 @@ open class SessionHandler(
                             if (it.failed() || !it.result()) {
                                 logger.warning("Message sent to online client failed [${clientId}]")
                                 enqueueMessage(m, listOf(clientId))
-                            } else {
-                                incrementMessagesOut(clientId)
                             }
                         }
                     }
