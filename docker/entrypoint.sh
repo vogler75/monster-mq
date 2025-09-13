@@ -25,4 +25,4 @@ echo CLASSPATH=$CLASSPATH
 mkdir -p log
 
 # Run the Java command with the conditional argument
-java -XX:+UseNUMA -classpath $CLASSPATH $HZ_CONFIG $HZ_PUBLIC_ADDRESS at.rocworks.MainKt config.yaml $@
+exec java -XX:+UseNUMA -classpath $CLASSPATH $HZ_CONFIG $HZ_PUBLIC_ADDRESS at.rocworks.MainKt config.yaml $@
