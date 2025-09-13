@@ -2,6 +2,7 @@ package at.rocworks
 
 import at.rocworks.auth.UserManager
 import at.rocworks.data.MqttMessage
+import at.rocworks.data.MqttSession
 import at.rocworks.handlers.SessionHandler
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
 import io.netty.handler.codec.mqtt.MqttQoS
@@ -54,6 +55,9 @@ class MqttClient(
     // Authenticated user (null if not authenticated or auth disabled)
     private var authenticatedUser: at.rocworks.data.User? = null
 
+    // Session with metrics (initialized later with proper node ID)
+    private lateinit var session: MqttSession
+
     // create a getter for the client id
     val clientId: String
         get() = endpoint.clientIdentifier()
@@ -66,6 +70,9 @@ class MqttClient(
         const val MAX_IN_FLIGHT_MESSAGES = 100_000 // TODO make this configurable
 
         private val logger = Utils.getLogger(this::class.java)
+
+        // Global session registry for metrics
+        private val sessionRegistry = ConcurrentHashMap<String, MqttSession>()
 
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler, userManager: UserManager) {
             val clientId = endpoint.clientIdentifier()
@@ -84,6 +91,10 @@ class MqttClient(
             }
         }
 
+        fun getSessionRegistry(): Map<String, MqttSession> {
+            return sessionRegistry
+        }
+
         private fun getBaseAddress(clientId: String) = "${Const.GLOBAL_CLIENT_NAMESPACE}/${clientId}"
 
         fun getCommandAddress(clientId: String) = "${getBaseAddress(clientId)}/C"
@@ -91,6 +102,17 @@ class MqttClient(
     }
 
     override fun start() {
+        // Initialize session with proper node ID
+        session = MqttSession(
+            clientId = endpoint.clientIdentifier(),
+            cleanSession = endpoint.isCleanSession,
+            nodeId = Monster.getClusterNodeId(vertx),
+            clientAddress = endpoint.remoteAddress().toString()
+        )
+
+        // Register session in global registry
+        sessionRegistry[clientId] = session
+
         vertx.setPeriodic(1000) { receivingInFlightMessagesPeriodicCheck() }
         vertx.setPeriodic(1000) { sendingInFlightMessagesPeriodicCheck() }
         vertx.setPeriodic(1000) { publishStatistics() }
@@ -99,6 +121,9 @@ class MqttClient(
     override fun stop() {
         logger.fine("Client [${clientId}] Stop [${Utils.getCurrentFunctionName()}] ")
         busConsumers.forEach { it.unregister() }
+
+        // Remove session from global registry
+        sessionRegistry.remove(clientId)
     }
 
     fun startEndpoint() {
@@ -410,6 +435,9 @@ class MqttClient(
 
     private fun publishHandler(message: MqttPublishMessage) {
         logger.finest { "Client [$clientId] Publish: message [${message.messageId()}] for [${message.topicName()}] with QoS ${message.qosLevel()} [${Utils.getCurrentFunctionName()}]" }
+
+        // Increment messages received from client
+        session.messagesIn.incrementAndGet()
         
         val topicName = message.topicName()
         
@@ -525,6 +553,9 @@ class MqttClient(
         if (!endpoint.isConnected) {
             logger.finest("Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]")
         } else {
+            // Increment messages sent to client
+            session.messagesOut.incrementAndGet()
+
             if (message.qosLevel == 0) {
                 message.publishToEndpoint(endpoint)
             } else {

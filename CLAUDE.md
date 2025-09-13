@@ -18,7 +18,7 @@ mvn clean package
 ```bash
 cd broker
 # Run the broker
-java -classpath target/classes:target/dependencies/* at.rocworks.MainKt [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
+java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
 # Or use the convenience script
 ./run.sh [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
 ```

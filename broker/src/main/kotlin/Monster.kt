@@ -39,6 +39,10 @@ import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
 
+fun main(args: Array<String>) {
+    Monster(args)
+}
+
 class Monster(args: Array<String>) {
     private val logger: Logger = Logger.getLogger("Monster")
 
@@ -84,14 +88,14 @@ class Monster(args: Array<String>) {
             val clusterManager = getInstance().clusterManager
             return if (clusterManager is HazelcastClusterManager) {
                 clusterManager.hazelcastInstance.cluster.localMember.uuid.toString()
-            } else "N/A"
+            } else "local"
         }
 
         fun getClusterNodeIds(vertx: Vertx): List<String> {
             val clusterManager = getInstance().clusterManager
             return if (clusterManager is HazelcastClusterManager) {
                 clusterManager.hazelcastInstance.cluster.members.map { it.uuid.toString() }
-            } else emptyList()
+            } else listOf("local")
         }
 
         fun getClusterManager(): HazelcastClusterManager? {
@@ -167,7 +171,7 @@ class Monster(args: Array<String>) {
     private fun printHelp() {
         println("""
 MonsterMQ - High-Performance MQTT Broker
-Usage: java -classpath target/classes:target/dependencies/* at.rocworks.MainKt [OPTIONS]
+Usage: java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt [OPTIONS]
 
 OPTIONS:
   -help, --help, -h     Show this help message and exit
@@ -183,16 +187,16 @@ OPTIONS:
 
 EXAMPLES:
   # Start with default configuration
-  java -classpath target/classes:target/dependencies/* at.rocworks.MainKt
+  java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt
   
   # Start with custom config file
-  java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -config myconfig.yaml
+  java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -config myconfig.yaml
   
   # Start in cluster mode with debug logging
-  java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -cluster -log FINE
+  java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -cluster -log FINE
   
   # Start with SQLite configuration and detailed logging  
-  java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -config config-sqlite.yaml -log FINEST
+  java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -config config-sqlite.yaml -log FINEST
 
 FEATURES:
   • MQTT 3.1.1 Protocol Support with QoS 0, 1, 2
@@ -321,6 +325,12 @@ MORE INFO:
                 // Session handler
                 val sessionHandler = SessionHandler(sessionStore, messageBus, messageHandler, queuedMessagesEnabled)
 
+                // Metrics handler
+                val metricsHandler = MetricsHandler()
+                vertx.deployVerticle(metricsHandler).onComplete {
+                    logger.info("MetricsHandler deployed successfully")
+                }
+
                 // User management
                 val userManager = at.rocworks.auth.UserManager(configJson)
 
@@ -362,7 +372,8 @@ MORE INFO:
                         messageHandler,
                         retainedStore,
                         archiveGroupsMap,
-                        userManager
+                        userManager,
+                        sessionStore
                     )
                     graphQLServer.start()
                     logger.info("GraphQL server enabled")

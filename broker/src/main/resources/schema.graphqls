@@ -6,6 +6,62 @@ enum DataFormat {
     BINARY
 }
 
+# Metrics for the broker
+type BrokerMetrics {
+    # Total messages received from clients on this node
+    messagesIn: Long!
+    # Total messages sent to clients on this node
+    messagesOut: Long!
+    # Number of sessions on this node
+    nodeSessionCount: Int!
+    # Total number of sessions in the cluster
+    clusterSessionCount: Int!
+    # Total number of queued messages in the cluster
+    queuedMessagesCount: Long!
+}
+
+# Represents a broker node in the cluster
+type Broker {
+    # The ID of the node
+    nodeId: String!
+    # Metrics for this broker node
+    metrics: BrokerMetrics!
+}
+
+# Represents a client session
+type Session {
+    # The client ID
+    clientId: String!
+    # The ID of the node this session is connected to
+    nodeId: String!
+    # The session's metrics
+    metrics: SessionMetrics!
+    # The subscriptions for this session
+    subscriptions: [MqttSubscription!]!
+    # Is the session clean
+    cleanSession: Boolean!
+    # The session expiry interval
+    sessionExpiryInterval: Long!
+    # The client's address
+    clientAddress: String
+}
+
+# Metrics for a single session
+type SessionMetrics {
+    # Messages received from this client
+    messagesIn: Long!
+    # Messages sent to this client
+    messagesOut: Long!
+}
+
+# Represents an MQTT subscription
+type MqttSubscription {
+    # The topic filter
+    topicFilter: String!
+    # The Quality of Service level
+    qos: Int!
+}
+
 type Query {
     # Get current value of a topic from LastValueStore
     currentValue(topic: String!, format: DataFormat = JSON, archiveGroup: String = "Default"): TopicValue
@@ -36,6 +92,15 @@ type Query {
         archiveGroup: String = "Default"
     ): [String!]!
     
+    # Get a specific broker by its node ID. If nodeId is omitted, returns the current node.
+    broker(nodeId: String): Broker
+    # Get all brokers in the cluster
+    brokers: [Broker!]!
+    # Get active sessions. If nodeId is omitted, returns sessions from all nodes.
+    sessions(nodeId: String): [Session!]!
+    # Get a specific session by client ID. If nodeId is omitted, it will be looked up.
+    session(clientId: String!, nodeId: String): Session
+
     # User Management
     getAllUsers: [UserInfo!]!
     getUser(username: String!): UserInfo

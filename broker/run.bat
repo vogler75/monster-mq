@@ -1,2 +1,2 @@
-java -classpath target/classes;target/dependency/* at.rocworks.MainKt %*
+java -classpath target/classes;target/dependency/* at.rocworks.MonsterKt %*
 

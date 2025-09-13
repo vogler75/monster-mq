@@ -30,7 +30,8 @@ class GraphQLServer(
     private val messageHandler: at.rocworks.handlers.MessageHandler,
     private val retainedStore: IMessageStore?,
     private val archiveGroups: Map<String, ArchiveGroup>,
-    private val userManager: UserManager
+    private val userManager: UserManager,
+    private val sessionStore: ISessionStoreAsync
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(GraphQLServer::class.java.name)
@@ -77,6 +78,16 @@ class GraphQLServer(
         // Setup routes with auth injection middleware and GraphQL handler
         router.route(path).handler { ctx ->
             try {
+                // Check if request has a query
+                val body = ctx.body()?.asJsonObject()
+                if (body == null || (!body.containsKey("query") && !body.containsKey("variables"))) {
+                    ctx.response()
+                        .setStatusCode(400)
+                        .putHeader("content-type", "application/json")
+                        .end(JsonObject().put("error", "Query is missing").encode())
+                    return@handler
+                }
+
                 // Extract auth context and set it in thread-local for resolvers
                 val authCtx = authContext.extractAuthContext(ctx)
                 AuthContextService.setAuthContext(authCtx)
@@ -140,6 +151,7 @@ class GraphQLServer(
 
     private fun buildRuntimeWiring(): RuntimeWiring {
         val queryResolver = QueryResolver(vertx, retainedStore, archiveGroups, authContext)
+        val metricsResolver = MetricsResolver(vertx, sessionStore)
         val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, authContext)
         val subscriptionResolver = SubscriptionResolver(vertx, messageBus)
         val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
@@ -162,6 +174,11 @@ class GraphQLServer(
                     .dataFetcher("retainedMessages", queryResolver.retainedMessages())
                     .dataFetcher("archivedMessages", queryResolver.archivedMessages())
                     .dataFetcher("searchTopics", queryResolver.searchTopics())
+                    // Metrics queries
+                    .dataFetcher("broker", metricsResolver.broker())
+                    .dataFetcher("brokers", metricsResolver.brokers())
+                    .dataFetcher("sessions", metricsResolver.sessions())
+                    .dataFetcher("session", metricsResolver.session())
                     // User management queries
                     .dataFetcher("getAllUsers", userManagementResolver.getAllUsers())
                     .dataFetcher("getUser", userManagementResolver.getUser())

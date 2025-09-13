@@ -250,10 +250,10 @@ cd broker
 mvn clean package
 
 # Show help for available options
-java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -help
+java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -help
 
 # Start with configuration
-java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -config config.yaml
+java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -config config.yaml
 
 # Or use the convenience script
 ./run.sh -help
@@ -978,13 +978,13 @@ GraphQL:
 
 1. **Start first node:**
    ```bash
-   java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -cluster -config config.yaml
+   java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -cluster -config config.yaml
    ```
 
 2. **Start additional nodes:**
    ```bash
    # On different machines, same config
-   java -classpath target/classes:target/dependencies/* at.rocworks.MainKt -cluster -config config.yaml
+   java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -cluster -config config.yaml
    ```
 
 3. **Hierarchical clusters:**
@@ -1115,7 +1115,7 @@ docker run -e HAZELCAST_CONFIG=hazelcast.xml \
 # Standalone Java
 java -Dvertx.hazelcast.config=hazelcast.xml \
      -Dhazelcast.local.publicAddress=192.168.1.10 \
-     -classpath ... at.rocworks.MainKt -cluster
+     -classpath ... at.rocworks.MonsterKt -cluster
 ```
 
 ### Cluster Operations

@@ -138,6 +138,40 @@ data class LoginResult(
     val isAdmin: Boolean = false
 )
 
+// Metrics data classes
+data class BrokerMetrics(
+    val messagesIn: Long,
+    val messagesOut: Long,
+    val nodeSessionCount: Int,
+    val clusterSessionCount: Int,
+    val queuedMessagesCount: Long
+)
+
+data class Broker(
+    val nodeId: String,
+    val metrics: BrokerMetrics
+)
+
+data class SessionMetrics(
+    val messagesIn: Long,
+    val messagesOut: Long
+)
+
+data class MqttSubscription(
+    val topicFilter: String,
+    val qos: Int
+)
+
+data class Session(
+    val clientId: String,
+    val nodeId: String,
+    val metrics: SessionMetrics,
+    val subscriptions: List<MqttSubscription>,
+    val cleanSession: Boolean,
+    val sessionExpiryInterval: Long,
+    val clientAddress: String?
+)
+
 object PayloadConverter {
     fun encode(payload: ByteArray, format: DataFormat): String {
         return when (format) {
