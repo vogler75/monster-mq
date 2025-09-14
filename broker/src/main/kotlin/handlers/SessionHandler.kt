@@ -5,6 +5,8 @@ import at.rocworks.Monster
 import at.rocworks.MqttClient
 import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
+import at.rocworks.cluster.DataReplicator
+import at.rocworks.cluster.SetMapReplicator
 import at.rocworks.data.*
 import at.rocworks.stores.ISessionStoreAsync
 import io.netty.handler.codec.mqtt.MqttQoS
@@ -36,7 +38,7 @@ open class SessionHandler(
     private lateinit var clientNodeMapping: DataReplicator<String> // ClientId -> NodeId
 
     // Track which nodes have subscriptions for each topic using ClusterSetMapReplicator
-    private lateinit var topicNodeMapping: ClusterSetMapReplicator // TopicFilter -> Set<NodeId>
+    private lateinit var topicNodeMapping: SetMapReplicator // TopicFilter -> Set<NodeId>
 
     // Metrics tracking
     private val clientMetrics = ConcurrentHashMap<String, SessionMetrics>() // ClientId -> Metrics
@@ -97,7 +99,7 @@ open class SessionHandler(
 
         // Initialize cluster data replicators
         clientNodeMapping = DataReplicator(vertx, clientMappingAddress, null, "ClientNodeMapping")
-        topicNodeMapping = ClusterSetMapReplicator(vertx, topicMappingAddress, "TopicNodeMapping")
+        topicNodeMapping = SetMapReplicator(vertx, topicMappingAddress, "TopicNodeMapping")
 
         // Register codec for client-node mapping (still needed for compatibility with HealthHandler if needed)
         vertx.eventBus().registerDefaultCodec(ClientNodeMapping::class.java, ClientNodeMappingCodec())
