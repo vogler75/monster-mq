@@ -150,6 +150,17 @@ class TopicTree<K, V> : ITopicTree<K, V> {
         logger.fine { "Found matching topics in [$elapsedTime]ms." }
     }
 
+    fun size(): Int {
+        fun countNodes(node: Node<K, V>): Int {
+            var count = node.dataset.size
+            node.children.values.forEach { child ->
+                count += countNodes(child)
+            }
+            return count
+        }
+        return countNodes(root)
+    }
+
     override fun toString(): String {
         return "TopicTree dump: \n" + printTreeNode("", root).joinToString("\n")
     }

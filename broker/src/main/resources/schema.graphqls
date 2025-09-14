@@ -18,6 +18,12 @@ type BrokerMetrics {
     clusterSessionCount: Int!
     # Total number of queued messages in the cluster
     queuedMessagesCount: Long!
+    # Size of the topic index (TopicTree)
+    topicIndexSize: Int!
+    # Size of the client-to-node mapping
+    clientNodeMappingSize: Int!
+    # Total size of topic-to-node mapping sets
+    topicNodeMappingSize: Int!
 }
 
 # Represents a broker node in the cluster

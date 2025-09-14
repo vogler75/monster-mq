@@ -188,4 +188,11 @@ class SetMapReplicator(
             }
         }
     }
+
+    /**
+     * Get the total size of all sets in the map
+     */
+    fun size(): Int {
+        return localData.values.sumOf { it.size }
+    }
 }

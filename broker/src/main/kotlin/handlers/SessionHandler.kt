@@ -359,6 +359,12 @@ open class SessionHandler(
 
     fun getSessionCount(): Int = clientMetrics.size
 
+    fun getTopicIndexSize(): Int = topicIndex.size()
+
+    fun getClientNodeMappingSize(): Int = clientNodeMapping.size()
+
+    fun getTopicNodeMappingSize(): Int = topicNodeMapping.size()
+
     fun setClient(clientId: String, cleanSession: Boolean, information: JsonObject): Future<Void> {
         logger.fine("Set client [$clientId] clean session [$cleanSession] information [$information]")
 

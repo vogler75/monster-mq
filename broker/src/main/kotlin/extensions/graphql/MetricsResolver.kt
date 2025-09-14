@@ -40,13 +40,19 @@ class MetricsResolver(
                         try {
                             val clusterSessionCount = getClusterSessionCount()
                             val queuedMessagesCount = getQueuedMessagesCount()
+                            val topicIndexSize = sessionHandler.getTopicIndexSize()
+                            val clientNodeMappingSize = sessionHandler.getClientNodeMappingSize()
+                            val topicNodeMappingSize = sessionHandler.getTopicNodeMappingSize()
 
                             BrokerMetrics(
                                 messagesIn = nodeMetrics.getLong("messagesIn", 0L),
                                 messagesOut = nodeMetrics.getLong("messagesOut", 0L),
                                 nodeSessionCount = nodeMetrics.getInteger("nodeSessionCount", 0),
                                 clusterSessionCount = clusterSessionCount,
-                                queuedMessagesCount = queuedMessagesCount
+                                queuedMessagesCount = queuedMessagesCount,
+                                topicIndexSize = topicIndexSize,
+                                clientNodeMappingSize = clientNodeMappingSize,
+                                topicNodeMappingSize = topicNodeMappingSize
                             )
                         } catch (e: Exception) {
                             logger.severe("Error getting cluster metrics: ${e.message}")
@@ -87,13 +93,19 @@ class MetricsResolver(
                             try {
                                 val clusterSessionCount = getClusterSessionCount()
                                 val queuedMessagesCount = getQueuedMessagesCount()
+                                val topicIndexSize = sessionHandler.getTopicIndexSize()
+                                val clientNodeMappingSize = sessionHandler.getClientNodeMappingSize()
+                                val topicNodeMappingSize = sessionHandler.getTopicNodeMappingSize()
 
                                 BrokerMetrics(
                                     messagesIn = nodeMetrics.getLong("messagesIn", 0L),
                                     messagesOut = nodeMetrics.getLong("messagesOut", 0L),
                                     nodeSessionCount = nodeMetrics.getInteger("nodeSessionCount", 0),
                                     clusterSessionCount = clusterSessionCount,
-                                    queuedMessagesCount = queuedMessagesCount
+                                    queuedMessagesCount = queuedMessagesCount,
+                                    topicIndexSize = topicIndexSize,
+                                    clientNodeMappingSize = clientNodeMappingSize,
+                                    topicNodeMappingSize = topicNodeMappingSize
                                 )
                             } catch (e: Exception) {
                                 logger.severe("Error getting cluster metrics: ${e.message}")
