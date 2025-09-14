@@ -7,6 +7,8 @@ import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
 import at.rocworks.data.*
 import at.rocworks.stores.ISessionStoreAsync
+import com.hazelcast.core.HazelcastInstance
+import com.hazelcast.replicatedmap.ReplicatedMap
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -32,8 +34,9 @@ open class SessionHandler(
     private val topicIndex = TopicTree<String, Int>() // Topic index with client and QoS
     private val clientStatus = ConcurrentHashMap<String, ClientStatus>() // ClientId + Status
 
-    // Distributed client-to-node mapping (clientId -> nodeId)
-    private val clientNodeMapping = ConcurrentHashMap<String, String>() // ClientId -> NodeId
+    // Client-to-node mapping storage - Hazelcast ReplicatedMap for cluster mode, ConcurrentHashMap for local mode
+    private val clientNodeMappingLocal: ConcurrentHashMap<String, String> = ConcurrentHashMap()
+    private var clientNodeMappingCluster: ReplicatedMap<String, String>? = null
 
     // Track which nodes have subscriptions for each topic (for targeted publishing)
     private val topicNodeMapping = ConcurrentHashMap<String, MutableSet<String>>() // TopicFilter -> Set<NodeId>
@@ -53,7 +56,6 @@ open class SessionHandler(
     private val subscriptionDelAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/D"
 
     private val clientStatusAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/C"
-    private val clientMappingAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/M"
     private fun nodeMessageAddress(nodeId: String) = "${Const.GLOBAL_EVENT_NAMESPACE}/node/$nodeId/messages"
     private fun localNodeMessageAddress() = nodeMessageAddress(Monster.getClusterNodeId(vertx))
 
@@ -102,7 +104,7 @@ open class SessionHandler(
             topicIndex.add(subscription.topicName, subscription.clientId, subscription.qos.value())
 
             // Track topic subscriptions by node for targeted publishing
-            val nodeId = clientNodeMapping[subscription.clientId] ?: Monster.getClusterNodeId(vertx)
+            val nodeId = getClientNodeMapping(subscription.clientId) ?: Monster.getClusterNodeId(vertx)
             topicNodeMapping.getOrPut(subscription.topicName) { ConcurrentHashMap.newKeySet() }.add(nodeId)
             logger.finest { "Added topic subscription [${subscription.topicName}] for node [${nodeId}]" }
         }
@@ -112,9 +114,9 @@ open class SessionHandler(
             topicIndex.del(subscription.topicName, subscription.clientId)
 
             // Clean up topic-node mapping if no more clients on this node for this topic
-            val nodeId = clientNodeMapping[subscription.clientId] ?: Monster.getClusterNodeId(vertx)
+            val nodeId = getClientNodeMapping(subscription.clientId) ?: Monster.getClusterNodeId(vertx)
             val remainingClientsOnNode = topicIndex.findDataOfTopicName(subscription.topicName)
-                .any { (clientId, _) -> clientNodeMapping[clientId] == nodeId }
+                .any { (clientId, _) -> getClientNodeMapping(clientId) == nodeId }
 
             if (!remainingClientsOnNode) {
                 topicNodeMapping[subscription.topicName]?.remove(nodeId)
@@ -122,39 +124,17 @@ open class SessionHandler(
             }
         }
 
-        // Client-to-node mapping event handler
-        vertx.eventBus().consumer<ClientNodeMapping>(clientMappingAddress) { message ->
-            val mapping = message.body()
-            logger.fine("Client mapping event [${mapping}]")
-
-            when (mapping.eventType) {
-                ClientNodeMapping.EventType.CLIENT_CONNECTED -> {
-                    clientNodeMapping[mapping.clientId] = mapping.nodeId
-                    logger.fine("Client [${mapping.clientId}] mapped to node [${mapping.nodeId}]")
-                }
-                ClientNodeMapping.EventType.CLIENT_DISCONNECTED -> {
-                    clientNodeMapping.remove(mapping.clientId)
-                    logger.fine("Client [${mapping.clientId}] removed from mapping")
-                }
-                ClientNodeMapping.EventType.NODE_FAILURE -> {
-                    if (mapping.clientId.isEmpty()) {
-                        // Node-wide failure event - remove ALL clients from this node
-                        val removedClients = clientNodeMapping.entries.removeIf { it.value == mapping.nodeId }
-                        if (removedClients) {
-                            logger.info("Removed all clients from failed node [${mapping.nodeId}]")
-                        }
-                        // Also clean up topic-node mappings for this node
-                        topicNodeMapping.values.forEach { nodeSet ->
-                            nodeSet.remove(mapping.nodeId)
-                        }
-                        logger.info("Cleaned up topic mappings for failed node [${mapping.nodeId}]")
-                    } else {
-                        // Individual client failure event
-                        clientNodeMapping.remove(mapping.clientId)
-                        logger.fine("Removed client [${mapping.clientId}] from failed node [${mapping.nodeId}]")
-                    }
-                }
+        // Initialize Hazelcast ReplicatedMap for client-node mapping in cluster mode
+        if (Monster.isClustered()) {
+            val clusterManager = Monster.getClusterManager()
+            if (clusterManager != null) {
+                clientNodeMappingCluster = clusterManager.hazelcastInstance.getReplicatedMap<String, String>("clientNodeMapping")
+                logger.info("Using Hazelcast ReplicatedMap for client-node mapping in cluster mode")
+            } else {
+                logger.severe("Cluster mode enabled but no cluster manager available for client-node mapping")
             }
+        } else {
+            logger.info("Using ConcurrentHashMap for client-node mapping in local mode")
         }
 
         vertx.eventBus().consumer<JsonObject>(clientStatusAddress) { message ->
@@ -257,7 +237,7 @@ open class SessionHandler(
             if (connected) {
                 if (nodeId != localNodeId) {
                     // Client connected to another node - add to cluster mapping
-                    clientNodeMapping[clientId] = nodeId
+                    setClientNodeMapping(clientId, nodeId)
                     logger.finest { "Loaded connected client [${clientId}] on node [${nodeId}]" }
                 } else {
                     // Client connected to this node but we're restarting - mark as paused for now
@@ -282,7 +262,7 @@ open class SessionHandler(
             topicIndex.add(topicName, clientId, qos)
 
             // Build topic-to-node mapping based on where client is located
-            val nodeId = clientNodeMapping[clientId] ?: Monster.getClusterNodeId(vertx)
+            val nodeId = getClientNodeMapping(clientId) ?: Monster.getClusterNodeId(vertx)
             topicNodeMapping.getOrPut(topicName) { ConcurrentHashMap.newKeySet() }.add(nodeId)
             logger.finest { "Loaded subscription [${topicName}] for client [${clientId}] on node [${nodeId}]" }
         }
@@ -362,6 +342,58 @@ open class SessionHandler(
 
     fun getClientStatus(clientId: String): ClientStatus = clientStatus[clientId] ?: ClientStatus.UNKNOWN
 
+    // Client-to-node mapping accessor methods
+    private fun getClientNodeMapping(clientId: String): String? {
+        return if (Monster.isClustered()) {
+            clientNodeMappingCluster?.get(clientId)
+        } else {
+            clientNodeMappingLocal[clientId]
+        }
+    }
+
+    private fun setClientNodeMapping(clientId: String, nodeId: String) {
+        if (Monster.isClustered()) {
+            clientNodeMappingCluster?.put(clientId, nodeId)
+        } else {
+            clientNodeMappingLocal[clientId] = nodeId
+        }
+        logger.fine("Client [${clientId}] mapped to node [${nodeId}]")
+    }
+
+    private fun removeClientNodeMapping(clientId: String) {
+        if (Monster.isClustered()) {
+            clientNodeMappingCluster?.remove(clientId)
+        } else {
+            clientNodeMappingLocal.remove(clientId)
+        }
+        logger.fine("Client [${clientId}] removed from node mapping")
+    }
+
+    private fun removeAllClientsFromNode(nodeId: String) {
+        if (Monster.isClustered()) {
+            // For cluster mode, we need to iterate and remove
+            clientNodeMappingCluster?.let { map ->
+                val clientsToRemove = map.entries.filter { it.value == nodeId }.map { it.key }
+                clientsToRemove.forEach { clientId -> map.remove(clientId) }
+                if (clientsToRemove.isNotEmpty()) {
+                    logger.info("Removed ${clientsToRemove.size} clients from failed node [${nodeId}]")
+                }
+            }
+        } else {
+            // For local mode, use removeIf
+            val removedClients = clientNodeMappingLocal.entries.removeIf { it.value == nodeId }
+            if (removedClients) {
+                logger.info("Removed all clients from failed node [${nodeId}]")
+            }
+        }
+
+        // Also clean up topic-node mappings for this node
+        topicNodeMapping.values.forEach { nodeSet ->
+            nodeSet.remove(nodeId)
+        }
+        logger.info("Cleaned up topic mappings for failed node [${nodeId}]")
+    }
+
     // Metrics tracking methods
     fun incrementMessagesIn(clientId: String) {
         clientMetrics[clientId]?.messagesIn?.incrementAndGet()
@@ -392,9 +424,8 @@ open class SessionHandler(
             sessionExpiryInterval = information.getInteger("sessionExpiryInterval")
         )
 
-        // Propagate client connection mapping to all nodes
-        val mappingEvent = ClientNodeMapping(clientId, nodeId, ClientNodeMapping.EventType.CLIENT_CONNECTED)
-        vertx.eventBus().publish(clientMappingAddress, mappingEvent)
+        // Set client-to-node mapping directly in distributed storage
+        setClientNodeMapping(clientId, nodeId)
 
         val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.CREATED)
         val f1 = sessionStore.setClient(clientId, nodeId, cleanSession, true, information)
@@ -441,11 +472,8 @@ open class SessionHandler(
         clientMetrics.remove(clientId)
         val clientDetail = clientDetails.remove(clientId)
 
-        // Propagate client disconnection mapping to all nodes
-        clientDetail?.let {
-            val mappingEvent = ClientNodeMapping(clientId, it.nodeId, ClientNodeMapping.EventType.CLIENT_DISCONNECTED)
-            vertx.eventBus().publish(clientMappingAddress, mappingEvent)
-        }
+        // Remove client from node mapping
+        removeClientNodeMapping(clientId)
 
         val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.DELETE)
         vertx.eventBus().publish(clientStatusAddress, payload)
@@ -506,6 +534,12 @@ open class SessionHandler(
 
     fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit)
     = sessionStore.iterateNodeClients(nodeId, callback)
+
+    // Public method for node failure handling
+    fun handleNodeFailure(deadNodeId: String) {
+        logger.info("Handling node failure for node [${deadNodeId}]")
+        removeAllClientsFromNode(deadNodeId)
+    }
 
 
     private fun sendMessageToClient(clientId: String, message: MqttMessage): Future<Boolean> {
@@ -650,7 +684,7 @@ open class SessionHandler(
 
             // Group clients by their node - only process clients on this node
             val localClients = clients.filter { (clientId, _) ->
-                val clientNodeId = clientNodeMapping[clientId]
+                val clientNodeId = getClientNodeMapping(clientId)
                 clientNodeId == null || clientNodeId == localNodeId // null means client not yet mapped or local
             }
 

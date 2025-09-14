@@ -154,23 +154,12 @@ class HealthHandler(
                 logger.info("Marking persistent session client [$clientId] as offline from dead node [$deadNodeId]")
                 sessionHandler.pauseClient(clientId)
 
-                // Also propagate CLIENT_DISCONNECTED event to update client mappings
-                val mappingEvent = at.rocworks.data.ClientNodeMapping(
-                    clientId,
-                    deadNodeId,
-                    at.rocworks.data.ClientNodeMapping.EventType.NODE_FAILURE
-                )
-                vertx.eventBus().publish("${at.rocworks.Const.GLOBAL_CLIENT_TABLE_NAMESPACE}/M", mappingEvent)
+                // Client mapping will be cleaned up by handleNodeFailure call below
             }
         }
 
-        // Also send a general node failure event to clean up any remaining mappings
-        val nodeFailureEvent = at.rocworks.data.ClientNodeMapping(
-            "", // empty clientId for node-wide event
-            deadNodeId,
-            at.rocworks.data.ClientNodeMapping.EventType.NODE_FAILURE
-        )
-        vertx.eventBus().publish("${at.rocworks.Const.GLOBAL_CLIENT_TABLE_NAMESPACE}/M", nodeFailureEvent)
+        // Clean up all client-node mappings for the failed node
+        sessionHandler.handleNodeFailure(deadNodeId)
 
         logger.info("Completed dead node [$deadNodeId] cleanup")
     }
