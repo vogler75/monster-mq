@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Sessions API</title>
+</head>
+<body>
+    <h1>Test Sessions API</h1>
+    <div id="message"></div>
+    <button onclick="testSessions()">Test Sessions</button>
+    <button onclick="testSpecificSession()">Test Specific Session</button>
+
+    <script>
+        async function testSessions() {
+            const token = localStorage.getItem('monstermq_token');
+            const headers = { 'Content-Type': 'application/json' };
+
+            if (token && token !== 'null') {
+                headers.Authorization = `Bearer ${token}`;
+            }
+
+            console.log('Testing sessions API...');
+            document.getElementById('message').textContent = 'Testing sessions...';
+
+            try {
+                const response = await fetch('/api/sessions', { headers });
+                const result = await response.json();
+
+                console.log('Sessions result:', result);
+                document.getElementById('message').innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('message').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function testSpecificSession() {
+            const token = localStorage.getItem('monstermq_token');
+            const headers = { 'Content-Type': 'application/json' };
+
+            if (token && token !== 'null') {
+                headers.Authorization = `Bearer ${token}`;
+            }
+
+            const clientId = prompt('Enter client ID to test:', 'test-client');
+            if (!clientId) return;
+
+            console.log('Testing session API for:', clientId);
+            document.getElementById('message').textContent = 'Testing session...';
+
+            try {
+                const response = await fetch(`/api/session/${encodeURIComponent(clientId)}`, { headers });
+                const result = await response.json();
+
+                console.log('Session result:', result);
+                document.getElementById('message').innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('message').textContent = 'Error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

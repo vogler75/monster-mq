@@ -24,6 +24,13 @@ class AuthenticationResolver(
             val future = CompletableFuture<LoginResult>()
             
             try {
+                // Check if user management is enabled first
+                if (!userManager.isUserManagementEnabled()) {
+                    // Authentication is disabled, return null to indicate no auth required
+                    future.complete(null)
+                    return@DataFetcher future
+                }
+
                 val username = env.getArgument<String>("username") ?: ""
                 val password = env.getArgument<String>("password") ?: ""
 
@@ -31,15 +38,6 @@ class AuthenticationResolver(
                     future.complete(LoginResult(
                         success = false,
                         message = "Username and password are required"
-                    ))
-                    return@DataFetcher future
-                }
-                
-                // Check if user management is enabled
-                if (!userManager.isUserManagementEnabled()) {
-                    future.complete(LoginResult(
-                        success = false,
-                        message = "Authentication is not enabled"
                     ))
                     return@DataFetcher future
                 }

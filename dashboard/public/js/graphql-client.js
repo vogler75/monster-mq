@@ -1,0 +1,297 @@
+class GraphQLDashboardClient {
+    constructor(endpoint = 'http://localhost:4000/graphql') {
+        this.endpoint = endpoint;
+    }
+
+    async query(query, variables = {}) {
+        const token = localStorage.getItem('monstermq_token');
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+
+        // Only add Authorization header if token exists and is not 'null' string
+        if (token && token !== 'null') {
+            headers.Authorization = `Bearer ${token}`;
+        }
+
+        // Extract query/mutation name for better debugging
+        const queryMatch = query.match(/(?:query|mutation|subscription)\s+(\w+)/);
+        const queryName = queryMatch ? queryMatch[1] : query.substring(0, 50) + '...';
+
+        // Clean up query for display (remove extra whitespace)
+        const cleanQuery = query.trim().replace(/\s+/g, ' ').replace(/\n/g, ' ');
+
+        // Debug logging
+        console.log('=== GraphQL Request ===');
+        console.log('Endpoint:', this.endpoint);
+        console.log('Operation:', queryName);
+        console.log('Query:', cleanQuery);
+        console.log('Variables:', JSON.stringify(variables));
+        console.log('Headers:', {
+            'Content-Type': headers['Content-Type'],
+            'Authorization': headers.Authorization ? '[Token Present]' : '[No Token]'
+        });
+        console.log('Token Status:', token === 'null' ? 'null (auth disabled)' : token ? `JWT token present (${token.substring(0, 20)}...)` : 'no token');
+
+        const requestBody = JSON.stringify({ query, variables });
+        console.log('Request Body:', requestBody);
+
+        try {
+            const response = await fetch(this.endpoint, {
+                method: 'POST',
+                headers,
+                body: requestBody
+            });
+
+            console.log('=== GraphQL Response ===');
+            console.log('Status:', response.status, response.statusText);
+            console.log('Headers:', Object.fromEntries(response.headers.entries()));
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('=== GraphQL HTTP Error ===');
+                console.error('Status:', response.status, response.statusText);
+                console.error('Response Body:', errorText);
+                console.error('========================');
+                throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+            }
+
+            const responseText = await response.text();
+            console.log('Raw Response:', responseText);
+
+            let result;
+            try {
+                result = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error('Failed to parse GraphQL response as JSON:', parseError);
+                console.error('Response was:', responseText);
+                throw new Error('Invalid JSON response from GraphQL server');
+            }
+
+            console.log('Parsed Response:', result);
+
+            if (result.errors) {
+                console.error('=== GraphQL Query Errors ===');
+                result.errors.forEach((error, index) => {
+                    console.error(`Error ${index + 1}:`, error);
+                });
+                console.error('===========================');
+                throw new Error(result.errors[0].message);
+            }
+
+            console.log('=== GraphQL Success ===');
+            console.log('Data:', result.data);
+            console.log('=======================');
+
+            return result.data;
+        } catch (error) {
+            console.error('=== GraphQL Exception ===');
+            console.error('Error:', error.message);
+            console.error('Stack:', error.stack);
+            console.error('========================');
+            throw error;
+        }
+    }
+
+    async getBrokers() {
+        const query = `
+            query GetBrokers {
+                brokers {
+                    nodeId
+                    metrics {
+                        messagesIn
+                        messagesOut
+                        nodeSessionCount
+                        clusterSessionCount
+                        queuedMessagesCount
+                        topicIndexSize
+                        clientNodeMappingSize
+                        topicNodeMappingSize
+                        messageBusIn
+                        messageBusOut
+                    }
+                }
+            }
+        `;
+
+        const result = await this.query(query);
+        return result.brokers;
+    }
+
+    async getSessions(nodeId = null, connected = null) {
+        const query = `
+            query GetSessions($nodeId: String, $connected: Boolean) {
+                sessions(nodeId: $nodeId, connected: $connected) {
+                    clientId
+                    nodeId
+                    metrics {
+                        messagesIn
+                        messagesOut
+                    }
+                    subscriptions {
+                        topicFilter
+                        qos
+                    }
+                    cleanSession
+                    sessionExpiryInterval
+                    clientAddress
+                    connected
+                    queuedMessageCount
+                }
+            }
+        `;
+
+        const result = await this.query(query, { nodeId, connected });
+        return result.sessions;
+    }
+
+    async getSession(clientId, nodeId = null) {
+        const query = `
+            query GetSession($clientId: String!, $nodeId: String) {
+                session(clientId: $clientId, nodeId: $nodeId) {
+                    clientId
+                    nodeId
+                    metrics {
+                        messagesIn
+                        messagesOut
+                    }
+                    subscriptions {
+                        topicFilter
+                        qos
+                    }
+                    cleanSession
+                    sessionExpiryInterval
+                    clientAddress
+                    connected
+                    queuedMessageCount
+                }
+            }
+        `;
+
+        const result = await this.query(query, { clientId, nodeId });
+        return result.session;
+    }
+
+    async getUsers() {
+        const query = `
+            query GetUsers {
+                users {
+                    username
+                    enabled
+                    canSubscribe
+                    canPublish
+                    isAdmin
+                    createdAt
+                    updatedAt
+                    aclRules {
+                        id
+                        topicPattern
+                        canSubscribe
+                        canPublish
+                        priority
+                        createdAt
+                    }
+                }
+            }
+        `;
+
+        const result = await this.query(query);
+        return result.users;
+    }
+
+    async createUser(userData) {
+        const mutation = `
+            mutation CreateUser($input: CreateUserInput!) {
+                createUser(input: $input) {
+                    success
+                    message
+                    user {
+                        username
+                        enabled
+                        canSubscribe
+                        canPublish
+                        isAdmin
+                        createdAt
+                    }
+                }
+            }
+        `;
+
+        const result = await this.query(mutation, { input: userData });
+        return result.createUser;
+    }
+
+    async updateUser(userData) {
+        const mutation = `
+            mutation UpdateUser($input: UpdateUserInput!) {
+                updateUser(input: $input) {
+                    success
+                    message
+                    user {
+                        username
+                        enabled
+                        canSubscribe
+                        canPublish
+                        isAdmin
+                        updatedAt
+                    }
+                }
+            }
+        `;
+
+        const result = await this.query(mutation, { input: userData });
+        return result.updateUser;
+    }
+
+    async deleteUser(username) {
+        const mutation = `
+            mutation DeleteUser($username: String!) {
+                deleteUser(username: $username) {
+                    success
+                    message
+                }
+            }
+        `;
+
+        const result = await this.query(mutation, { username });
+        return result.deleteUser;
+    }
+}
+
+// Global instance
+window.graphqlClient = new GraphQLDashboardClient();
+
+// Debug function to check localStorage
+window.debugAuth = function() {
+    const token = localStorage.getItem('monstermq_token');
+    const username = localStorage.getItem('monstermq_username');
+    const isAdmin = localStorage.getItem('monstermq_isAdmin');
+
+    console.log('=== Authentication Debug ===');
+    console.log('Token:', token);
+    console.log('Token type:', typeof token);
+    console.log('Token === "null":', token === 'null');
+    console.log('Token === null:', token === null);
+    console.log('Username:', username);
+    console.log('Is Admin:', isAdmin);
+    console.log('==========================');
+
+    if (token && token !== 'null') {
+        try {
+            // Try to decode JWT
+            const parts = token.split('.');
+            if (parts.length === 3) {
+                const decoded = JSON.parse(atob(parts[1]));
+                console.log('JWT Decoded:', decoded);
+                const now = Date.now() / 1000;
+                console.log('Token expired:', decoded.exp < now);
+            }
+        } catch (e) {
+            console.log('Failed to decode token as JWT:', e.message);
+        }
+    }
+};
+
+// Auto-run debug on load
+console.log('GraphQL Client loaded. Run debugAuth() to check authentication status.');
+window.debugAuth();

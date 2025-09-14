@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <script src="/js/graphql-client.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ Dashboard</span>
+            </div>
+            <div class="nav-links">
+                <a href="/pages/dashboard.html" class="active">Dashboard</a>
+                <a href="/pages/sessions.html">Sessions</a>
+                <a href="/pages/users.html" id="users-link" style="display: none;">Users</a>
+                <a href="#" id="logout-link">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">MonsterMQ Broker Dashboard</h1>
+                <p class="page-subtitle">Real-time monitoring of your MQTT broker cluster</p>
+            </div>
+
+            <div id="cluster-overview" class="metrics-grid">
+                <!-- Cluster overview metrics will be populated here -->
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h2 class="chart-title">Message Traffic Trends</h2>
+                    <div class="chart-controls">
+                        <button class="active" data-timeframe="5m">5min</button>
+                        <button data-timeframe="1h">1hour</button>
+                        <button data-timeframe="24h">24hours</button>
+                    </div>
+                </div>
+                <canvas id="trafficChart" width="400" height="200"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h2 class="chart-title">Message Bus Communication</h2>
+                </div>
+                <canvas id="messageBusChart" width="400" height="200"></canvas>
+            </div>
+
+            <div id="broker-details" class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Node ID</th>
+                            <th>Status</th>
+                            <th>Messages In</th>
+                            <th>Messages Out</th>
+                            <th>Sessions</th>
+                            <th>Queue Depth</th>
+                            <th>Message Bus I/O</th>
+                        </tr>
+                    </thead>
+                    <tbody id="broker-table-body">
+                        <!-- Broker details will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/dashboard.js"></script>
+</body>
+</html>

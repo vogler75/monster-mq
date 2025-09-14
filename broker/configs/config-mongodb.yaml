@@ -50,15 +50,11 @@ GraphQL:
   Enabled: true
   Port: 4000
   Path: /graphql
-  CorsEnabled: false
-  CorsOrigin: "*"
 
 # MCP Server for AI integration
 MCP:
   Enabled: true
   Port: 3000
-  CorsEnabled: false
-  CorsOrigin: "*"
 
 # Example configurations for different MongoDB setups:
 # 

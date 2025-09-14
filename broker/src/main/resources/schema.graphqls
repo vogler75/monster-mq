@@ -122,8 +122,8 @@ type Query {
 }
 
 type Mutation {
-    # Authentication (no token required)
-    login(username: String!, password: String!): LoginResult!
+    # Authentication (no token required) - returns null when authentication is disabled
+    login(username: String!, password: String!): LoginResult
     
     # Publish a message to a topic (requires token + ACL check)
     publish(input: PublishInput!): PublishResult!

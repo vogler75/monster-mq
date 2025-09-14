@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Login</title>
+</head>
+<body>
+    <h1>Test Login</h1>
+    <div id="message"></div>
+
+    <form id="test-form">
+        <input type="text" id="test-username" placeholder="Username (optional)">
+        <input type="password" id="test-password" placeholder="Password (optional)">
+        <button type="submit">Test Login</button>
+    </form>
+
+    <script>
+        document.getElementById('test-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const username = document.getElementById('test-username').value.trim();
+            const password = document.getElementById('test-password').value;
+
+            console.log('Test login attempt:', { username: username || '(empty)', password: password ? '***' : '(empty)' });
+            document.getElementById('message').textContent = 'Attempting login...';
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: username || '', password: password || '' })
+                });
+
+                const result = await response.json();
+                console.log('Login result:', result);
+                document.getElementById('message').textContent = JSON.stringify(result, null, 2);
+
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('message').textContent = 'Error: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>

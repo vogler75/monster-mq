@@ -68,5 +68,3 @@ GraphQL:
   Enabled: true
   Port: 4000
   Path: /graphql
-  CorsEnabled: false
-  CorsOrigin: "*"

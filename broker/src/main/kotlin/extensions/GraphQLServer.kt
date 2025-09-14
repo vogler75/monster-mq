@@ -17,7 +17,6 @@ import io.vertx.core.http.HttpServerOptions
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.handler.BodyHandler
-import io.vertx.ext.web.handler.CorsHandler
 import io.vertx.ext.web.handler.graphql.GraphQLHandler
 import io.vertx.ext.web.handler.graphql.GraphQLHandlerOptions
 import io.vertx.ext.web.handler.graphql.ws.GraphQLWSHandler
@@ -40,7 +39,6 @@ class GraphQLServer(
     }
 
     private val port = config.getInteger("Port", 8080)
-    private val corsEnabled = config.getBoolean("CorsEnabled", true)
     private val path = config.getString("Path", "/graphql")
     private val authContext = GraphQLAuthContext(userManager)
 
@@ -52,16 +50,27 @@ class GraphQLServer(
 
         val router = Router.router(vertx)
 
-        // Add CORS handler if enabled
-        if (corsEnabled) {
-            router.route().handler(
-                CorsHandler.create()
-                    .addOrigin("*")
-                    .allowedHeader("*")
-                    .allowedMethod(io.vertx.core.http.HttpMethod.GET)
-                    .allowedMethod(io.vertx.core.http.HttpMethod.POST)
-                    .allowedMethod(io.vertx.core.http.HttpMethod.OPTIONS)
-            )
+        // Smart CORS handler that works with both browsers and API clients
+        router.route().handler { ctx ->
+            val origin = ctx.request().getHeader("Origin")
+
+            // If there's an Origin header (browser request), add CORS headers
+            if (origin != null) {
+                ctx.response()
+                    .putHeader("Access-Control-Allow-Origin", origin)  // Echo back the origin
+                    .putHeader("Access-Control-Allow-Credentials", "true")
+                    .putHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, HEAD")
+                    .putHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Origin, X-Requested-With")
+                    .putHeader("Access-Control-Max-Age", "3600")
+
+                // Handle preflight OPTIONS request
+                if (ctx.request().method() == io.vertx.core.http.HttpMethod.OPTIONS) {
+                    ctx.response().setStatusCode(204).end()
+                    return@handler
+                }
+            }
+
+            ctx.next()
         }
 
         // Add body handler for POST requests
@@ -80,14 +89,22 @@ class GraphQLServer(
         // Setup routes with auth injection middleware and GraphQL handler
         router.route(path).handler { ctx ->
             try {
-                // Check if request has a query
-                val body = ctx.body()?.asJsonObject()
-                if (body == null || (!body.containsKey("query") && !body.containsKey("variables"))) {
-                    ctx.response()
-                        .setStatusCode(400)
-                        .putHeader("content-type", "application/json")
-                        .end(JsonObject().put("error", "Query is missing").encode())
+                // Skip validation for OPTIONS requests (CORS preflight)
+                if (ctx.request().method() == io.vertx.core.http.HttpMethod.OPTIONS) {
+                    ctx.next()
                     return@handler
+                }
+
+                // Check if request has a query (only for POST requests)
+                if (ctx.request().method() == io.vertx.core.http.HttpMethod.POST) {
+                    val body = ctx.body()?.asJsonObject()
+                    if (body == null || (!body.containsKey("query") && !body.containsKey("variables"))) {
+                        ctx.response()
+                            .setStatusCode(400)
+                            .putHeader("content-type", "application/json")
+                            .end(JsonObject().put("error", "Query is missing").encode())
+                        return@handler
+                    }
                 }
 
                 // Extract auth context and set it in thread-local for resolvers

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ Dashboard - User Management</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ Dashboard</span>
+            </div>
+            <div class="nav-links">
+                <a href="/pages/dashboard.html">Dashboard</a>
+                <a href="/pages/sessions.html">Sessions</a>
+                <a href="/pages/users.html" class="active">Users</a>
+                <a href="#" id="logout-link">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">User Management</h1>
+                <p class="page-subtitle">Manage MQTT users and their access control rules</p>
+            </div>
+
+            <div class="metrics-grid" style="margin-bottom: 2rem;">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Users</span>
+                        <div class="metric-icon">👤</div>
+                    </div>
+                    <div class="metric-value" id="total-users">0</div>
+                    <div class="metric-label">System Users</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Active Users</span>
+                        <div class="metric-icon">🟢</div>
+                    </div>
+                    <div class="metric-value" id="active-users">0</div>
+                    <div class="metric-label">Enabled Accounts</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Admin Users</span>
+                        <div class="metric-icon">⚡</div>
+                    </div>
+                    <div class="metric-value" id="admin-users">0</div>
+                    <div class="metric-label">Administrator Access</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">ACL Rules</span>
+                        <div class="metric-icon">🔐</div>
+                    </div>
+                    <div class="metric-value" id="total-acl-rules">0</div>
+                    <div class="metric-label">Access Control Rules</div>
+                </div>
+            </div>
+
+            <div id="alert-container" style="margin-bottom: 2rem;"></div>
+
+            <div class="data-table">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
+                    <div>
+                        <h3 style="margin: 0; color: var(--text-primary);">System Users</h3>
+                    </div>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <button id="add-user-btn" class="btn btn-primary">
+                            Add New User
+                        </button>
+                        <button id="refresh-users" class="btn btn-secondary">
+                            <span id="refresh-text">Refresh</span>
+                            <span id="refresh-spinner" class="loading-spinner" style="display: none;"></span>
+                        </button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Status</th>
+                            <th>Permissions</th>
+                            <th>Admin</th>
+                            <th>ACL Rules</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table-body">
+                        <!-- Users will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Create/Edit Modal -->
+    <div id="user-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 2000; padding: 2rem;">
+        <div style="max-width: 600px; margin: 0 auto; background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="margin: 0; color: var(--text-primary);" id="user-modal-title">Add New User</h2>
+                <button id="close-user-modal" class="btn btn-secondary">Cancel</button>
+            </div>
+            <div style="padding: 2rem;">
+                <form id="user-form">
+                    <div class="form-group">
+                        <label for="user-username">Username</label>
+                        <input type="text" id="user-username" name="username" class="form-control" required>
+                    </div>
+
+                    <div class="form-group" id="password-group">
+                        <label for="user-password">Password</label>
+                        <input type="password" id="user-password" name="password" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="user-enabled" name="enabled" checked>
+                            <span>Enabled</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="user-can-subscribe" name="canSubscribe" checked>
+                            <span>Can Subscribe</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="user-can-publish" name="canPublish" checked>
+                            <span>Can Publish</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="user-is-admin" name="isAdmin">
+                            <span>Administrator</span>
+                        </label>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                        <button type="button" id="cancel-user-btn" class="btn btn-secondary">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="save-user-btn">
+                            <span id="save-user-text">Save User</span>
+                            <span id="save-user-spinner" class="loading-spinner" style="display: none;"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ACL Rules Modal -->
+    <div id="acl-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 2000; padding: 2rem;">
+        <div style="max-width: 800px; margin: 0 auto; background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="margin: 0; color: var(--text-primary);" id="acl-modal-title">ACL Rules</h2>
+                <button id="close-acl-modal" class="btn btn-secondary">Close</button>
+            </div>
+            <div style="padding: 2rem;">
+                <div id="acl-rules-content">
+                    <!-- ACL rules will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/users.js"></script>
+</body>
+</html>
