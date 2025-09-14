@@ -38,8 +38,9 @@ open class SessionHandler(
     private val clientNodeMappingLocal: ConcurrentHashMap<String, String> = ConcurrentHashMap()
     private var clientNodeMappingCluster: ReplicatedMap<String, String>? = null
 
-    // Track which nodes have subscriptions for each topic (for targeted publishing)
-    private val topicNodeMapping = ConcurrentHashMap<String, MutableSet<String>>() // TopicFilter -> Set<NodeId>
+    // Topic-to-node mapping storage - Hazelcast ReplicatedMap for cluster mode, ConcurrentHashMap for local mode
+    private val topicNodeMappingLocal: ConcurrentHashMap<String, MutableSet<String>> = ConcurrentHashMap() // TopicFilter -> Set<NodeId>
+    private var topicNodeMappingCluster: ReplicatedMap<String, MutableSet<String>>? = null
 
     // Metrics tracking
     private val clientMetrics = ConcurrentHashMap<String, SessionMetrics>() // ClientId -> Metrics
@@ -105,7 +106,7 @@ open class SessionHandler(
 
             // Track topic subscriptions by node for targeted publishing
             val nodeId = getClientNodeMapping(subscription.clientId) ?: Monster.getClusterNodeId(vertx)
-            topicNodeMapping.getOrPut(subscription.topicName) { ConcurrentHashMap.newKeySet() }.add(nodeId)
+            addTopicNodeMapping(subscription.topicName, nodeId)
             logger.finest { "Added topic subscription [${subscription.topicName}] for node [${nodeId}]" }
         }
 
@@ -119,7 +120,7 @@ open class SessionHandler(
                 .any { (clientId, _) -> getClientNodeMapping(clientId) == nodeId }
 
             if (!remainingClientsOnNode) {
-                topicNodeMapping[subscription.topicName]?.remove(nodeId)
+                removeTopicNodeMapping(subscription.topicName, nodeId)
                 logger.finest { "Removed topic subscription [${subscription.topicName}] for node [${nodeId}]" }
             }
         }
@@ -129,12 +130,13 @@ open class SessionHandler(
             val clusterManager = Monster.getClusterManager()
             if (clusterManager != null) {
                 clientNodeMappingCluster = clusterManager.hazelcastInstance.getReplicatedMap<String, String>("clientNodeMapping")
-                logger.info("Using Hazelcast ReplicatedMap for client-node mapping in cluster mode")
+                topicNodeMappingCluster = clusterManager.hazelcastInstance.getReplicatedMap<String, MutableSet<String>>("topicNodeMapping")
+                logger.info("Using Hazelcast ReplicatedMap for client-node and topic-node mapping in cluster mode")
             } else {
-                logger.severe("Cluster mode enabled but no cluster manager available for client-node mapping")
+                logger.severe("Cluster mode enabled but no cluster manager available for mappings")
             }
         } else {
-            logger.info("Using ConcurrentHashMap for client-node mapping in local mode")
+            logger.info("Using ConcurrentHashMap for client-node and topic-node mapping in local mode")
         }
 
         vertx.eventBus().consumer<JsonObject>(clientStatusAddress) { message ->
@@ -263,7 +265,7 @@ open class SessionHandler(
 
             // Build topic-to-node mapping based on where client is located
             val nodeId = getClientNodeMapping(clientId) ?: Monster.getClusterNodeId(vertx)
-            topicNodeMapping.getOrPut(topicName) { ConcurrentHashMap.newKeySet() }.add(nodeId)
+            addTopicNodeMapping(topicName, nodeId)
             logger.finest { "Loaded subscription [${topicName}] for client [${clientId}] on node [${nodeId}]" }
         }
 
@@ -388,9 +390,7 @@ open class SessionHandler(
         }
 
         // Also clean up topic-node mappings for this node
-        topicNodeMapping.values.forEach { nodeSet ->
-            nodeSet.remove(nodeId)
-        }
+        removeAllTopicMappingsForNode(nodeId)
         logger.info("Cleaned up topic mappings for failed node [${nodeId}]")
     }
 
@@ -539,6 +539,89 @@ open class SessionHandler(
     fun handleNodeFailure(deadNodeId: String) {
         logger.info("Handling node failure for node [${deadNodeId}]")
         removeAllClientsFromNode(deadNodeId)
+    }
+
+    // Topic-to-node mapping accessor methods
+    private fun addTopicNodeMapping(topicName: String, nodeId: String) {
+        if (Monster.isClustered()) {
+            topicNodeMappingCluster?.let { map ->
+                val existingNodes = map[topicName] ?: ConcurrentHashMap.newKeySet<String>()
+                existingNodes.add(nodeId)
+                map.put(topicName, existingNodes)
+            }
+        } else {
+            topicNodeMappingLocal.getOrPut(topicName) { ConcurrentHashMap.newKeySet() }.add(nodeId)
+        }
+    }
+
+    private fun removeTopicNodeMapping(topicName: String, nodeId: String) {
+        if (Monster.isClustered()) {
+            topicNodeMappingCluster?.let { map ->
+                val existingNodes = map[topicName]
+                if (existingNodes != null) {
+                    existingNodes.remove(nodeId)
+                    if (existingNodes.isEmpty()) {
+                        map.remove(topicName)
+                    } else {
+                        map.put(topicName, existingNodes)
+                    }
+                }
+            }
+        } else {
+            topicNodeMappingLocal[topicName]?.remove(nodeId)
+            if (topicNodeMappingLocal[topicName]?.isEmpty() == true) {
+                topicNodeMappingLocal.remove(topicName)
+            }
+        }
+    }
+
+    private fun removeAllTopicMappingsForNode(nodeId: String) {
+        if (Monster.isClustered()) {
+            topicNodeMappingCluster?.let { map ->
+                val topicsToUpdate = mutableListOf<String>()
+                val topicsToRemove = mutableListOf<String>()
+
+                map.forEach { (topicName, nodeSet) ->
+                    if (nodeSet.remove(nodeId)) {
+                        if (nodeSet.isEmpty()) {
+                            topicsToRemove.add(topicName)
+                        } else {
+                            topicsToUpdate.add(topicName)
+                        }
+                    }
+                }
+
+                topicsToRemove.forEach { map.remove(it) }
+                topicsToUpdate.forEach { topicName ->
+                    val nodeSet = map[topicName]
+                    if (nodeSet != null) {
+                        map.put(topicName, nodeSet)
+                    }
+                }
+            }
+        } else {
+            topicNodeMappingLocal.values.forEach { nodeSet ->
+                nodeSet.remove(nodeId)
+            }
+            // Remove empty entries
+            topicNodeMappingLocal.entries.removeIf { it.value.isEmpty() }
+        }
+    }
+
+    private fun getTopicFilters(): Set<String> {
+        return if (Monster.isClustered()) {
+            topicNodeMappingCluster?.keys?.toSet() ?: emptySet()
+        } else {
+            topicNodeMappingLocal.keys.toSet()
+        }
+    }
+
+    private fun getNodesForTopic(topicFilter: String): Set<String>? {
+        return if (Monster.isClustered()) {
+            topicNodeMappingCluster?.get(topicFilter)?.toSet()
+        } else {
+            topicNodeMappingLocal[topicFilter]?.toSet()
+        }
     }
 
 
@@ -729,9 +812,9 @@ open class SessionHandler(
         val targetNodes = mutableSetOf<String>()
 
         // Check all topic filters to see which nodes have matching subscriptions
-        topicNodeMapping.keys.forEach { topicFilter ->
+        getTopicFilters().forEach { topicFilter ->
             if (matchesTopicFilter(topicName, topicFilter)) {
-                topicNodeMapping[topicFilter]?.let { nodes ->
+                getNodesForTopic(topicFilter)?.let { nodes ->
                     targetNodes.addAll(nodes)
                 }
             }
