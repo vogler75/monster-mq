@@ -1,0 +1,9 @@
+Release v1.4.3
+Built from commit: 57822d3
+Date: 2025-09-14 20:17:49
+
+Changes since v1.4.2:
+---
+57822d3 Make metrics collection interval configurable
+7bd9df6 Add metrics reset functionality to metrics collection
+32c0b49 Add pluggable metrics collection and storage
