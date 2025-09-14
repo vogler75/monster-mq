@@ -222,6 +222,30 @@ open class SessionHandler(
             message.reply(metrics)
         }
 
+        // Metrics and reset handler - returns current values and resets counters to 0
+        vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Node.metricsAndReset(Monster.getClusterNodeId(vertx))) { message ->
+            val metrics = JsonObject()
+            var totalMessagesIn = 0L
+            var totalMessagesOut = 0L
+
+            // Get and reset session metrics
+            clientMetrics.values.forEach { sessionMetrics ->
+                totalMessagesIn += sessionMetrics.messagesIn.getAndSet(0)
+                totalMessagesOut += sessionMetrics.messagesOut.getAndSet(0)
+            }
+
+            metrics.put("messagesIn", totalMessagesIn)
+                   .put("messagesOut", totalMessagesOut)
+                   .put("nodeSessionCount", clientMetrics.size)
+                   .put("messageBusIn", messageBusIn.getAndSet(0))
+                   .put("messageBusOut", messageBusOut.getAndSet(0))
+                   .put("topicIndexSize", topicIndex.size())
+                   .put("clientNodeMappingSize", clientNodeMapping.size())
+                   .put("topicNodeMappingSize", topicNodeMapping.size())
+
+            message.reply(metrics)
+        }
+
         queueWorkerThread("SubAddQueue", subAddQueue, 1000, sessionStore::addSubscriptions)
         queueWorkerThread("SubDelQueue", subDelQueue, 1000, sessionStore::delSubscriptions)
 
@@ -359,6 +383,15 @@ open class SessionHandler(
     fun getClientMetrics(clientId: String): SessionMetrics? = clientMetrics[clientId]
 
     fun getAllClientMetrics(): Map<String, SessionMetrics> = clientMetrics.toMap()
+
+    fun getAllClientMetricsAndReset(): Map<String, at.rocworks.extensions.graphql.SessionMetrics> {
+        return clientMetrics.mapValues { (_, sessionMetrics) ->
+            at.rocworks.extensions.graphql.SessionMetrics(
+                messagesIn = sessionMetrics.messagesIn.getAndSet(0),
+                messagesOut = sessionMetrics.messagesOut.getAndSet(0)
+            )
+        }
+    }
 
     fun getClientDetails(clientId: String): ClientDetails? = clientDetails[clientId]
 

@@ -59,15 +59,15 @@ class MetricsCollector(
 
     private fun collectBrokerMetrics(timestamp: Instant, nodeId: String) {
         try {
-            // Get current broker metrics via EventBus
-            val metricsAddress = EventBusAddresses.Node.metrics(nodeId)
+            // Get current broker metrics via EventBus and reset counters
+            val metricsAddress = EventBusAddresses.Node.metricsAndReset(nodeId)
 
-            logger.fine("Requesting broker metrics from address: $metricsAddress")
+            logger.fine("Requesting broker metrics with reset from address: $metricsAddress")
 
             vertx.eventBus().request<JsonObject>(metricsAddress, JsonObject()).onComplete { reply ->
                 if (reply.succeeded()) {
                     val nodeMetrics = reply.result().body()
-                    logger.fine("Received broker metrics: $nodeMetrics")
+                    logger.fine("Received broker metrics (and reset): $nodeMetrics")
 
                     try {
                         val brokerMetrics = BrokerMetrics(
@@ -106,17 +106,12 @@ class MetricsCollector(
 
     private fun collectSessionMetrics(timestamp: Instant) {
         try {
-            // Get all active clients from session handler
-            val allClientMetrics = sessionHandler.getAllClientMetrics()
+            // Get all active clients from session handler and reset their counters
+            val allClientMetrics = sessionHandler.getAllClientMetricsAndReset()
 
-            logger.fine("Collecting session metrics for ${allClientMetrics.size} clients")
+            logger.fine("Collecting session metrics for ${allClientMetrics.size} clients (with reset)")
 
-            allClientMetrics.forEach { (clientId, clientMetrics) ->
-                val sessionMetrics = SessionMetrics(
-                    messagesIn = clientMetrics.messagesIn.get(),
-                    messagesOut = clientMetrics.messagesOut.get()
-                )
-
+            allClientMetrics.forEach { (clientId, sessionMetrics) ->
                 logger.finest("Storing session metrics for client $clientId: $sessionMetrics")
 
                 metricsStore.storeSessionMetrics(timestamp, clientId, sessionMetrics).onComplete { result ->
