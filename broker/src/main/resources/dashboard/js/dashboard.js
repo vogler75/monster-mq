@@ -1,12 +1,13 @@
 class DashboardManager {
     constructor() {
-        this.socket = null;
+        this.pollingInterval = null;
         this.trafficChart = null;
         this.messageBusChart = null;
         this.trafficData = [];
         this.messageBusData = [];
         this.maxDataPoints = 50;
         this.currentTimeframe = '5m';
+        this.pollingIntervalMs = 5000; // Poll every 5 seconds
 
         this.init();
     }
@@ -19,7 +20,7 @@ class DashboardManager {
 
         this.setupUI();
         this.setupCharts();
-        this.connectWebSocket();
+        this.startPolling();
         this.loadInitialData();
     }
 
@@ -176,21 +177,21 @@ class DashboardManager {
         });
     }
 
-    connectWebSocket() {
-        this.socket = io();
+    startPolling() {
+        console.log('Starting metrics polling every', this.pollingIntervalMs, 'ms');
 
-        this.socket.on('connect', () => {
-            console.log('Connected to WebSocket');
-            this.socket.emit('subscribe-metrics');
-        });
+        // Start polling immediately, then continue at intervals
+        this.pollingInterval = setInterval(() => {
+            this.loadInitialData();
+        }, this.pollingIntervalMs);
+    }
 
-        this.socket.on('metrics-update', (brokers) => {
-            this.updateMetrics(brokers);
-        });
-
-        this.socket.on('disconnect', () => {
-            console.log('Disconnected from WebSocket');
-        });
+    stopPolling() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+            console.log('Stopped metrics polling');
+        }
     }
 
     async loadInitialData() {

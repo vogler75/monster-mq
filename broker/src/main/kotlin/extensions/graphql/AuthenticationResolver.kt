@@ -26,8 +26,14 @@ class AuthenticationResolver(
             try {
                 // Check if user management is enabled first
                 if (!userManager.isUserManagementEnabled()) {
-                    // Authentication is disabled, return null to indicate no auth required
-                    future.complete(null)
+                    // Authentication is disabled, return success with null token
+                    future.complete(LoginResult(
+                        success = true,
+                        token = null,
+                        message = "Authentication disabled",
+                        username = "anonymous",
+                        isAdmin = true
+                    ))
                     return@DataFetcher future
                 }
 
