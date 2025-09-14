@@ -35,7 +35,7 @@ type Broker {
     # The ID of the node
     nodeId: String!
     # Metrics for this broker node
-    metrics: BrokerMetrics!
+    metrics(from: String, to: String, lastMinutes: Int): BrokerMetrics!
     # Sessions on this broker node with optional filters
     sessions(cleanSession: Boolean, connected: Boolean): [Session!]!
 }
@@ -47,7 +47,7 @@ type Session {
     # The ID of the node this session is connected to
     nodeId: String!
     # The session's metrics
-    metrics: SessionMetrics!
+    metrics(from: String, to: String, lastMinutes: Int): SessionMetrics!
     # The subscriptions for this session
     subscriptions: [MqttSubscription!]!
     # Is the session clean

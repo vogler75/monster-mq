@@ -412,11 +412,40 @@ MORE INFO:
                     null
                 }
 
+                // Metrics Collector and Store
+                val metricsConfig = configJson.getJsonObject("Metrics", JsonObject())
+                val metricsEnabled = metricsConfig.getBoolean("Enabled", false)
+
+                val (metricsStore, metricsCollector) = if (metricsEnabled) {
+                    try {
+                        val storeTypeStr = metricsConfig.getString("StoreType", "POSTGRES")
+                        val storeType = try {
+                            at.rocworks.stores.MetricsStoreType.valueOf(storeTypeStr.uppercase())
+                        } catch (e: IllegalArgumentException) {
+                            logger.warning("Invalid metrics store type: $storeTypeStr. Defaulting to POSTGRES")
+                            at.rocworks.stores.MetricsStoreType.POSTGRES
+                        }
+
+                        val store = at.rocworks.stores.MetricsStoreFactory.create(storeType, configJson, "metrics")
+                        logger.info("Starting Metrics Store: ${store.getName()} (${store.getType()})")
+                        val collector = MetricsCollector(sessionHandler, store)
+                        store to collector
+                    } catch (e: Exception) {
+                        logger.warning("Failed to create metrics store: ${e.message}")
+                        e.printStackTrace()
+                        null to null
+                    }
+                } else {
+                    logger.info("Metrics collection is disabled in configuration")
+                    null to null
+                }
+
                 // GraphQL Server
                 val graphQLConfig = configJson.getJsonObject("GraphQL", JsonObject())
                 val graphQLEnabled = graphQLConfig.getBoolean("Enabled", false)
                 if (graphQLEnabled) {
                     val archiveGroupsMap = archiveGroups.associateBy { it.name }
+
                     val graphQLServer = GraphQLServer(
                         vertx,
                         graphQLConfig,
@@ -426,8 +455,10 @@ MORE INFO:
                         archiveGroupsMap,
                         userManager,
                         sessionStore,
-                        sessionHandler
+                        sessionHandler,
+                        metricsStore
                     )
+
                     graphQLServer.start()
                     logger.info("GraphQL server enabled")
                 } else {
@@ -449,6 +480,13 @@ MORE INFO:
                     .compose { vertx.deployVerticle(sessionHandler) }
                     .compose { vertx.deployVerticle(userManager) }
                     .compose { vertx.deployVerticle(healthHandler) }
+                    .compose {
+                        if (metricsCollector != null) {
+                            vertx.deployVerticle(metricsCollector)
+                        } else {
+                            Future.succeededFuture<String>()
+                        }
+                    }
                     .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) } as List<Future<String>>) }
                     .onFailure {
                         logger.severe("Startup error: ${it.message}")

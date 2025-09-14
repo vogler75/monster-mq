@@ -4,6 +4,7 @@ import at.rocworks.EventBusAddresses
 import at.rocworks.Monster
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IMessageStore
+import at.rocworks.stores.IMetricsStore
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
@@ -13,7 +14,8 @@ import java.util.logging.Logger
 class MetricsResolver(
     private val vertx: Vertx,
     private val sessionStore: ISessionStoreAsync,
-    private val sessionHandler: at.rocworks.handlers.SessionHandler
+    private val sessionHandler: at.rocworks.handlers.SessionHandler,
+    private val metricsStore: IMetricsStore?
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(MetricsResolver::class.java.name)
@@ -412,6 +414,124 @@ class MetricsResolver(
             getAllSessions(cleanSessionFilter, connectedFilter, future, nodeId)
 
             future
+        }
+    }
+
+    fun brokerMetrics(): DataFetcher<CompletableFuture<BrokerMetrics>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<BrokerMetrics>()
+
+            // Get the parent Broker object from the DataFetchingEnvironment
+            val broker = env.getSource<Broker>()
+            val nodeId = broker?.nodeId ?: Monster.getClusterNodeId(vertx)
+
+            val from = env.getArgument<String?>("from")
+            val to = env.getArgument<String?>("to")
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+
+            // Check if this is a historical query
+            if ((from != null || to != null || lastMinutes != null) && metricsStore != null) {
+                // Historical query - convert strings to Instants
+                val fromInstant = from?.let { java.time.Instant.parse(it) }
+                val toInstant = to?.let { java.time.Instant.parse(it) }
+
+                metricsStore.getBrokerMetrics(nodeId, fromInstant, toInstant, lastMinutes).onComplete { result ->
+                    if (result.succeeded()) {
+                        future.complete(result.result())
+                    } else {
+                        logger.warning("Failed to get historical broker metrics: ${result.cause()?.message}")
+                        future.completeExceptionally(result.cause())
+                    }
+                }
+            } else {
+                // Current/live query - use the existing logic from broker() method
+                getCurrentBrokerMetrics(nodeId, future)
+            }
+
+            future
+        }
+    }
+
+    fun sessionMetrics(): DataFetcher<CompletableFuture<SessionMetrics>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<SessionMetrics>()
+
+            // Get the parent Session object from the DataFetchingEnvironment
+            val session = env.getSource<Session>()
+            val clientId = session?.clientId
+
+            if (clientId == null) {
+                future.complete(SessionMetrics(0, 0))
+                return@DataFetcher future
+            }
+
+            val from = env.getArgument<String?>("from")
+            val to = env.getArgument<String?>("to")
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+
+            // Check if this is a historical query
+            if ((from != null || to != null || lastMinutes != null) && metricsStore != null) {
+                // Historical query - convert strings to Instants
+                val fromInstant = from?.let { java.time.Instant.parse(it) }
+                val toInstant = to?.let { java.time.Instant.parse(it) }
+
+                metricsStore.getSessionMetrics(clientId, fromInstant, toInstant, lastMinutes).onComplete { result ->
+                    if (result.succeeded()) {
+                        future.complete(result.result())
+                    } else {
+                        logger.warning("Failed to get historical session metrics: ${result.cause()?.message}")
+                        future.completeExceptionally(result.cause())
+                    }
+                }
+            } else {
+                // Current/live query - return current metrics from session
+                future.complete(session.metrics)
+            }
+
+            future
+        }
+    }
+
+    private fun getCurrentBrokerMetrics(nodeId: String, future: CompletableFuture<BrokerMetrics>) {
+        val metricsAddress = getMetricsAddress(nodeId)
+
+        vertx.eventBus().request<JsonObject>(metricsAddress, JsonObject()).onComplete { reply ->
+            if (reply.succeeded()) {
+                val nodeMetrics = reply.result().body()
+
+                // Get cluster-wide metrics from database
+                vertx.executeBlocking<BrokerMetrics>(java.util.concurrent.Callable {
+                    try {
+                        val clusterSessionCount = getClusterSessionCount()
+                        val queuedMessagesCount = getQueuedMessagesCount()
+
+                        BrokerMetrics(
+                            messagesIn = nodeMetrics.getLong("messagesIn", 0L),
+                            messagesOut = nodeMetrics.getLong("messagesOut", 0L),
+                            nodeSessionCount = nodeMetrics.getInteger("nodeSessionCount", 0),
+                            clusterSessionCount = clusterSessionCount,
+                            queuedMessagesCount = queuedMessagesCount,
+                            topicIndexSize = nodeMetrics.getInteger("topicIndexSize", 0),
+                            clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
+                            topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
+                            messageBusIn = nodeMetrics.getLong("messageBusIn", 0L),
+                            messageBusOut = nodeMetrics.getLong("messageBusOut", 0L)
+                        )
+                    } catch (e: Exception) {
+                        logger.severe("Error getting cluster metrics: ${e.message}")
+                        throw e
+                    }
+                }).onComplete { result ->
+                    if (result.succeeded()) {
+                        future.complete(result.result())
+                    } else {
+                        future.completeExceptionally(result.cause())
+                    }
+                }
+            } else {
+                logger.warning("Failed to get metrics from node $nodeId: ${reply.cause().message}")
+                future.completeExceptionally(reply.cause())
+            }
         }
     }
 }

@@ -44,6 +44,7 @@ class DataReplicator<T>(
         // Register codec if provided
         codec?.let {
             try {
+                @Suppress("UNCHECKED_CAST")
                 vertx.eventBus().registerDefaultCodec(it.javaClass as Class<T>, it)
             } catch (e: IllegalStateException) {
                 // Codec might already be registered

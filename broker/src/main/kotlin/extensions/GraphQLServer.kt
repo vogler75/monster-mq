@@ -32,7 +32,8 @@ class GraphQLServer(
     private val archiveGroups: Map<String, ArchiveGroup>,
     private val userManager: UserManager,
     private val sessionStore: ISessionStoreAsync,
-    private val sessionHandler: at.rocworks.handlers.SessionHandler
+    private val sessionHandler: at.rocworks.handlers.SessionHandler,
+    private val metricsStore: at.rocworks.stores.IMetricsStore?
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(GraphQLServer::class.java.name)
@@ -152,7 +153,7 @@ class GraphQLServer(
 
     private fun buildRuntimeWiring(): RuntimeWiring {
         val queryResolver = QueryResolver(vertx, retainedStore, archiveGroups, authContext)
-        val metricsResolver = MetricsResolver(vertx, sessionStore, sessionHandler)
+        val metricsResolver = MetricsResolver(vertx, sessionStore, sessionHandler, metricsStore)
         val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, sessionStore, sessionHandler, authContext)
         val subscriptionResolver = SubscriptionResolver(vertx, messageBus)
         val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
@@ -212,10 +213,12 @@ class GraphQLServer(
             .type("Broker") { builder ->
                 builder
                     .dataFetcher("sessions", metricsResolver.brokerSessions())
+                    .dataFetcher("metrics", metricsResolver.brokerMetrics())
             }
             .type("Session") { builder ->
                 builder
                     .dataFetcher("queuedMessageCount", metricsResolver.sessionQueuedMessageCount())
+                    .dataFetcher("metrics", metricsResolver.sessionMetrics())
             }
             .build()
     }
