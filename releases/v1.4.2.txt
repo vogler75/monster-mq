@@ -1,0 +1,32 @@
+Release v1.4.2
+Built from commit: 90c7704
+Date: 2025-09-14 17:30:04
+
+Changes since v1.4.1:
+---
+90c7704 Add message bus metrics and refactor message publishing
+d6af316 Add broker metrics for topic and mapping sizes
+a554a03 Refactor session and subscription retrieval to async
+2f89903 Add custom node name support for cluster nodes
+80b4a00 Refactor to use unified EventBusAddresses scheme
+78e6824 Refactor and move ClusterSetMapReplicator to cluster package
+6c25502 Replace Hazelcast maps with cluster data replicators
+201ca49 Refactor topic-node mapping for cluster and local modes
+ffa54b1 Refactor client-node mapping to use Hazelcast ReplicatedMap
+ad94551 Revert "Refactor session state to support cluster mode with Hazelcast"
+2f88af6 Refactor session state to support cluster mode with Hazelcast
+044fbfd Improve session recovery and node failure handling
+6794052 Add targeted message publishing by topic subscriptions
+a189563 Add distributed client-to-node mapping for clustering
+0512fc4 Update .gitignore
+e52279e Rename config files to example templates
+f638bad Added hazelcast.xml for cluster
+4dfeb1b Add sessions field to Broker GraphQL type
+66354a1 Add queued message count and purge features to sessions
+c1b0aea Refactor user management GraphQL API and config to use Postgres
+b95c6d4 Remove incrementMessagesOut calls after sending messages
+5e4c439 Refactor metrics handling to SessionHandler and remove MetricsHandler
+fbf7db0 Add broker and session metrics via GraphQL API
+786dbbd Use correct version number from version.txt
+0cf8171 Use exec in entrypoint.sh so that SIGTERM works.
+ab96504 Modified docker build scripts
