@@ -1,0 +1,8 @@
+Release v1.5.2
+Built from commit: 6dc2329
+Date: 2025-09-14 23:57:33
+
+Changes since v1.5.1:
+---
+6dc2329 Merge branch 'dev-dashboard'
+f2dd42d Move dashboard static files to broker resources
