@@ -13,23 +13,25 @@ import java.util.logging.Logger
 
 class MetricsCollector(
     private val sessionHandler: SessionHandler,
-    private val metricsStore: IMetricsStoreAsync
+    private val metricsStore: IMetricsStoreAsync,
+    private val collectionIntervalSeconds: Int = 1
 ) : AbstractVerticle() {
     companion object {
         private val logger: Logger = Logger.getLogger(MetricsCollector::class.java.name)
-        private const val COLLECTION_INTERVAL = 1000L // 1 second
     }
+
+    private val collectionIntervalMs = collectionIntervalSeconds * 1000L
 
 
     override fun start(startPromise: Promise<Void>) {
         metricsStore.startStore(vertx).onComplete { storeResult ->
             if (storeResult.succeeded()) {
                 // Start periodic metrics collection
-                vertx.setPeriodic(COLLECTION_INTERVAL) { _ ->
+                vertx.setPeriodic(collectionIntervalMs) { _ ->
                     collectAndStoreMetrics()
                 }
 
-                logger.info("MetricsCollector started with ${COLLECTION_INTERVAL}ms interval")
+                logger.info("MetricsCollector started with ${collectionIntervalSeconds}s (${collectionIntervalMs}ms) interval")
                 startPromise.complete()
             } else {
                 logger.severe("Failed to start metrics collector: ${storeResult.cause()?.message}")
