@@ -84,7 +84,7 @@ class LoginManager {
 
         try {
             // Use GraphQL directly for login
-            const graphqlEndpoint = 'http://localhost:4000/graphql';
+            const graphqlEndpoint = '/graphql';
             const response = await fetch(graphqlEndpoint, {
                 method: 'POST',
                 headers: {

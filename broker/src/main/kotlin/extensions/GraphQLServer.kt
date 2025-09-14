@@ -17,6 +17,7 @@ import io.vertx.core.http.HttpServerOptions
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.handler.BodyHandler
+import io.vertx.ext.web.handler.StaticHandler
 import io.vertx.ext.web.handler.graphql.GraphQLHandler
 import io.vertx.ext.web.handler.graphql.GraphQLHandlerOptions
 import io.vertx.ext.web.handler.graphql.ws.GraphQLWSHandler
@@ -132,6 +133,13 @@ class GraphQLServer(
                 .putHeader("content-type", "application/json")
                 .end(JsonObject().put("status", "healthy").encode())
         }
+
+        // Serve dashboard static files
+        router.route("/*").handler(
+            StaticHandler.create("dashboard")
+                .setIndexPage("pages/login.html")  // Default to login page
+                .setCachingEnabled(false)  // Disable caching for development
+        )
 
         // Create HTTP server
         val options = HttpServerOptions()

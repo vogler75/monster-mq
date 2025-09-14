@@ -1,5 +1,5 @@
 class GraphQLDashboardClient {
-    constructor(endpoint = 'http://localhost:4000/graphql') {
+    constructor(endpoint = '/graphql') {
         this.endpoint = endpoint;
     }
 
