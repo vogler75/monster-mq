@@ -169,6 +169,7 @@ services:
       - 9000:9000    # WebSocket
       - 9001:9001    # WebSocket TLS
       - 3000:3000    # MCP Server
+      - 4000:4000    # GraphQL Server
     volumes:
       - ./config.yaml:/app/config.yaml
     command: ["-config", "config.yaml", "-log", "INFO"]
@@ -206,6 +207,10 @@ Postgres:
 MCP:
   Enabled: true
   Port: 3000
+
+GraphQL:
+  Enabled: true
+  Port: 4000
 ```
 
 Start the services:
