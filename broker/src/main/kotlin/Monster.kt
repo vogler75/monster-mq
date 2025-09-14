@@ -35,6 +35,7 @@ import io.vertx.core.*
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
+import com.hazelcast.config.Config
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
@@ -53,6 +54,7 @@ class Monster(args: Array<String>) {
 
     // Cluster manager reference for Vert.x 5 compatibility
     private var clusterManager: HazelcastClusterManager? = null
+    private var nodeName: String = ""
 
     //private var sessionHandler: SessionHandler? = null
 
@@ -85,16 +87,20 @@ class Monster(args: Array<String>) {
         fun isClustered() = getInstance().isClustered
 
         fun getClusterNodeId(vertx: Vertx): String {
-            val clusterManager = getInstance().clusterManager
-            return if (clusterManager is HazelcastClusterManager) {
-                clusterManager.hazelcastInstance.cluster.localMember.uuid.toString()
+            val instance = getInstance()
+            return if (instance.isClustered && instance.clusterManager is HazelcastClusterManager) {
+                // Use custom node name if available, fallback to member attribute or UUID
+                val localMember = instance.clusterManager!!.hazelcastInstance.cluster.localMember
+                localMember.getAttribute("nodeName") ?: instance.nodeName.ifEmpty { localMember.uuid.toString() }
             } else "local"
         }
 
         fun getClusterNodeIds(vertx: Vertx): List<String> {
-            val clusterManager = getInstance().clusterManager
-            return if (clusterManager is HazelcastClusterManager) {
-                clusterManager.hazelcastInstance.cluster.members.map { it.uuid.toString() }
+            val instance = getInstance()
+            return if (instance.isClustered && instance.clusterManager is HazelcastClusterManager) {
+                instance.clusterManager!!.hazelcastInstance.cluster.members.map { member ->
+                    member.getAttribute("nodeName") ?: member.uuid.toString()
+                }
             } else listOf("local")
         }
 
@@ -259,19 +265,70 @@ MORE INFO:
         }
     }
 
+    private fun loadConfigSync() {
+        try {
+            val configFileObj = java.io.File(configFile)
+            if (configFileObj.exists()) {
+                val yamlContent = configFileObj.readText()
+                // Simple YAML to JSON conversion for basic properties
+                val lines = yamlContent.split('\n')
+                val jsonObj = JsonObject()
+
+                lines.forEach { line ->
+                    val trimmed = line.trim()
+                    if (trimmed.isNotEmpty() && !trimmed.startsWith("#") && trimmed.contains(":")) {
+                        val parts = trimmed.split(":", limit = 2)
+                        if (parts.size == 2) {
+                            val key = parts[0].trim()
+                            val value = parts[1].trim().removePrefix("\"").removeSuffix("\"")
+                            when {
+                                value.equals("true", ignoreCase = true) -> jsonObj.put(key, true)
+                                value.equals("false", ignoreCase = true) -> jsonObj.put(key, false)
+                                value.toIntOrNull() != null -> jsonObj.put(key, value.toInt())
+                                else -> jsonObj.put(key, value)
+                            }
+                        }
+                    }
+                }
+
+                this.configJson = jsonObj
+                logger.info("Config loaded synchronously for cluster setup")
+            }
+        } catch (e: Exception) {
+            logger.warning("Failed to load config synchronously: ${e.message}")
+            this.configJson = JsonObject()
+        }
+    }
+
     private fun localSetup(builder: VertxBuilder) {
         val vertx = builder.build()
         getConfigAndStart(vertx)
     }
 
     private fun clusterSetup(builder: VertxBuilder) {
-        //val hazelcastConfig = ConfigUtil.loadConfig()
-        //hazelcastConfig.setClusterName("MonsterMQ")
-        this.clusterManager = HazelcastClusterManager()
+        // Load config synchronously for cluster setup
+        loadConfigSync()
 
-        //val clusterManager = ZookeeperClusterManager()
-        //val clusterManager = InfinispanClusterManager()
-        //val clusterManager = IgniteClusterManager();
+        // Get node name from config, fallback to hostname
+        this.nodeName = configJson.getString("NodeName",
+            try {
+                java.net.InetAddress.getLocalHost().hostName
+            } catch (e: Exception) {
+                "node-${System.currentTimeMillis()}"
+            }
+        )
+
+        // Configure Hazelcast with custom node name
+        val hazelcastConfig = Config()
+        hazelcastConfig.clusterName = "MonsterMQ"
+        hazelcastConfig.memberAttributeConfig.setAttribute("nodeName", this.nodeName)
+
+        // Set instance name to the node name for easier identification
+        hazelcastConfig.instanceName = this.nodeName
+
+        this.clusterManager = HazelcastClusterManager(hazelcastConfig)
+
+        logger.info("Cluster setup with node name: ${this.nodeName}")
 
         builder.withClusterManager(this.clusterManager)
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
