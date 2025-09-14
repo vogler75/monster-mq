@@ -24,6 +24,10 @@ type BrokerMetrics {
     clientNodeMappingSize: Int!
     # Total size of topic-to-node mapping sets
     topicNodeMappingSize: Int!
+    # Messages received from other nodes via message bus
+    messageBusIn: Long!
+    # Messages sent to other nodes via message bus
+    messageBusOut: Long!
 }
 
 # Represents a broker node in the cluster

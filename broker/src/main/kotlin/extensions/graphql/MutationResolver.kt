@@ -66,10 +66,8 @@ class MutationResolver(
                     clientId = GRAPHQL_CLIENT_ID
                 )
 
-                // Publish message through message bus
-                messageBus.publishMessageToBus(message)
-                // Save message to LastValueStore and Archive (just like MQTT does)
-                messageHandler.saveMessage(message)
+                // Publish message through session handler (uses targeted messaging)
+                sessionHandler.publishMessage(message)
                 future.complete(
                     PublishResult(
                         success = true,
@@ -144,10 +142,8 @@ class MutationResolver(
                         clientId = GRAPHQL_CLIENT_ID
                     )
 
-                    // Publish message through message bus
-                    messageBus.publishMessageToBus(message)
-                    // Save message to LastValueStore and Archive (just like MQTT does)
-                    messageHandler.saveMessage(message)
+                    // Publish message through session handler (uses targeted messaging)
+                    sessionHandler.publishMessage(message)
                     itemFuture.complete(
                         PublishResult(
                             success = true,

@@ -45,6 +45,10 @@ open class SessionHandler(
     private val clientMetrics = ConcurrentHashMap<String, SessionMetrics>() // ClientId -> Metrics
     private val clientDetails = ConcurrentHashMap<String, ClientDetails>() // ClientId -> Session details
 
+    // Message bus metrics (inter-node communication)
+    private val messageBusOut = AtomicLong(0) // Messages sent to other nodes
+    private val messageBusIn = AtomicLong(0)  // Messages received from other nodes
+
     private val subAddQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
     private val subDelQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
 
@@ -67,7 +71,7 @@ open class SessionHandler(
 
     private fun commandAddress() = EventBusAddresses.Node.commands(deploymentID())
     private fun metricsAddress() = EventBusAddresses.Node.metrics(Monster.getClusterNodeId(vertx))
-    private fun messageAddress() = EventBusAddresses.Node.messageBus(deploymentID())
+    // REMOVED: messageAddress() - no longer using broadcast message bus
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -209,6 +213,11 @@ open class SessionHandler(
             metrics.put("messagesIn", totalMessagesIn)
                    .put("messagesOut", totalMessagesOut)
                    .put("nodeSessionCount", clientMetrics.size)
+                   .put("messageBusIn", messageBusIn.get())
+                   .put("messageBusOut", messageBusOut.get())
+                   .put("topicIndexSize", topicIndex.size())
+                   .put("clientNodeMappingSize", clientNodeMapping.size())
+                   .put("topicNodeMappingSize", topicNodeMapping.size())
 
             message.reply(metrics)
         }
@@ -219,12 +228,23 @@ open class SessionHandler(
         queueWorkerThread("MsgAddQueue", msgAddQueue, 1000, sessionStore::enqueueMessages)
         queueWorkerThread("MsgDelQueue", msgDelQueue, 1000, sessionStore::removeMessages)
 
-        logger.info("Subscribing to message bus [${Utils.getCurrentFunctionName()}]")
-        val f0 = messageBus.subscribeToMessageBus(::consumeMessageFromBus)
+        // Only subscribe to message bus if it's Kafka (external source)
+        // Internal Vert.x message bus broadcast is no longer used - we use targeted messaging
+        val f0 = if (messageBus is at.rocworks.bus.MessageBusKafka) {
+            logger.info("Subscribing to Kafka message bus for external messages [${Utils.getCurrentFunctionName()}]")
+            messageBus.subscribeToMessageBus { message ->
+                // Messages from Kafka should use targeted distribution
+                publishMessage(message)
+            }
+        } else {
+            logger.info("Skipping internal message bus subscription - using targeted messaging only [${Utils.getCurrentFunctionName()}]")
+            Future.succeededFuture()
+        }
 
         // Subscribe to node-specific message address for targeted messages
         vertx.eventBus().consumer<MqttMessage>(localNodeMessageAddress()) { message ->
             message.body()?.let { payload ->
+                messageBusIn.incrementAndGet()
                 logger.finest { "Received targeted message [${payload.topicName}] [${Utils.getCurrentFunctionName()}]" }
                 processMessageForLocalClients(payload)
             }
@@ -277,21 +297,6 @@ open class SessionHandler(
         }
     }
 
-    /*
-    protected open fun publishMessageToBus(message: MqttMessage) {
-        vertx.eventBus().publish(messageAddress(), message)
-    }
-
-    protected open fun subscribeToMessageBus(): Future<Void> {
-        vertx.eventBus().consumer<MqttMessage>(messageAddress()) { message ->
-            message.body()?.let { payload ->
-                logger.finest { "Received message [${payload.topicName}] retained [${payload.isRetain}] [${Utils.getCurrentFunctionName()}]" }
-                consumeMessageFromBus(payload)
-            }
-        }
-        return Future.succeededFuture()
-    }
-     */
 
     private fun <T> queueWorkerThread(
         name: String,
@@ -364,6 +369,10 @@ open class SessionHandler(
     fun getClientNodeMappingSize(): Int = clientNodeMapping.size()
 
     fun getTopicNodeMappingSize(): Int = topicNodeMapping.size()
+
+    fun getMessageBusOutCount(): Long = messageBusOut.get()
+
+    fun getMessageBusInCount(): Long = messageBusIn.get()
 
     fun setClient(clientId: String, cleanSession: Boolean, information: JsonObject): Future<Void> {
         logger.fine("Set client [$clientId] clean session [$cleanSession] information [$information]")
@@ -596,6 +605,7 @@ open class SessionHandler(
         val targetNodes = getTargetNodesForTopic(message.topicName)
         val localNodeId = Monster.getClusterNodeId(vertx)
 
+        val remoteNodes = targetNodes.filter { it != localNodeId }
         logger.finest { "Publishing message [${message.topicName}] to nodes [${targetNodes.joinToString(",")}]" }
 
         // Send to local clients if this node has subscriptions
@@ -604,8 +614,9 @@ open class SessionHandler(
         }
 
         // Send to remote nodes that have subscriptions (excluding local node)
-        targetNodes.filter { it != localNodeId }.forEach { nodeId ->
+        remoteNodes.forEach { nodeId ->
             vertx.eventBus().send(nodeMessageAddress(nodeId), message)
+            messageBusOut.incrementAndGet()
         }
 
         // Note: Offline persistent client queuing is now handled automatically by
@@ -627,12 +638,8 @@ open class SessionHandler(
         }
     }
 
-    // For messages from external message bus (Kafka, etc.) - still broadcast to all nodes
-    private fun consumeMessageFromBus(message: MqttMessage) {
-        // For external messages, use the old logic to ensure all nodes get them
-        // This handles cases where messages come from external systems
-        processMessageForLocalClients(message)
-    }
+    // REMOVED: consumeMessageFromBus - no longer needed
+    // External messages from Kafka now go through publishMessage() for targeted distribution
 
     // Process messages for local clients only (used for both external and targeted internal messages)
     private fun processMessageForLocalClients(message: MqttMessage) {
