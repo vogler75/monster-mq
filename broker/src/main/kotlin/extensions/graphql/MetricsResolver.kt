@@ -132,13 +132,8 @@ class MetricsResolver(
             val cleanSessionFilter = env.getArgument<Boolean?>("cleanSession")
             val connectedFilter = env.getArgument<Boolean?>("connected")
 
-            if (nodeId != null) {
-                // Get sessions for specific node
-                getSessionsForNode(nodeId, cleanSessionFilter, connectedFilter, future)
-            } else {
-                // Get sessions for all nodes
-                getAllSessions(cleanSessionFilter, connectedFilter, future)
-            }
+            // Always use getAllSessions and filter by nodeId if needed
+            getAllSessions(cleanSessionFilter, connectedFilter, future, nodeId)
 
             future
         }
@@ -159,10 +154,9 @@ class MetricsResolver(
             val clientDetails = sessionHandler.getClientDetails(clientId)
 
             if (clientMetrics != null && clientDetails != null) {
-                // Found in SessionHandler - use blocking approach for subscriptions
-                vertx.executeBlocking<Session>(java.util.concurrent.Callable {
-                    val subscriptions = getSubscriptionsForClient(clientId)
-                    Session(
+                // Found in SessionHandler - use async approach for subscriptions
+                getSubscriptionsForClientAsync(clientId).thenAccept { subscriptions ->
+                    val session = Session(
                         clientId = clientId,
                         nodeId = clientDetails.nodeId,
                         metrics = SessionMetrics(
@@ -175,12 +169,11 @@ class MetricsResolver(
                         clientAddress = clientDetails.clientAddress,
                         connected = sessionHandler.getClientStatus(clientId) == at.rocworks.handlers.SessionHandler.ClientStatus.ONLINE
                     )
-                }).onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
-                    } else {
-                        future.completeExceptionally(result.cause())
-                    }
+                    future.complete(session)
+                }.exceptionally { e ->
+                    logger.warning("Error getting subscriptions for single session $clientId: ${e.message}")
+                    future.completeExceptionally(e)
+                    null
                 }
             } else {
                 // Not in SessionHandler, might be on another node or offline
@@ -191,54 +184,92 @@ class MetricsResolver(
         }
     }
 
-    private fun getSessionsForNode(nodeId: String, cleanSessionFilter: Boolean?, connectedFilter: Boolean?, future: CompletableFuture<List<Session>>) {
-        if (nodeId == Monster.getClusterNodeId(vertx)) {
-            // Local node - get from registry
-            getAllSessions(cleanSessionFilter, connectedFilter, future)
-        } else {
-            // Remote node - would need to query via EventBus
-            // For now, return empty list
-            future.complete(emptyList())
-        }
-    }
 
-    private fun getAllSessions(cleanSessionFilter: Boolean?, connectedFilter: Boolean?, future: CompletableFuture<List<Session>>) {
-        vertx.executeBlocking<List<Session>>(java.util.concurrent.Callable {
-            val allMetrics = sessionHandler.getAllClientMetrics()
-            allMetrics.entries.mapNotNull { (clientId, metrics) ->
-                val clientDetails = sessionHandler.getClientDetails(clientId)
-                if (clientDetails != null) {
-                    val subscriptions = getSubscriptionsForClient(clientId)
-                    val connected = sessionHandler.getClientStatus(clientId) == at.rocworks.handlers.SessionHandler.ClientStatus.ONLINE
-                    val session = Session(
-                        clientId = clientId,
-                        nodeId = clientDetails.nodeId,
-                        metrics = SessionMetrics(
-                            messagesIn = metrics.messagesIn.get(),
-                            messagesOut = metrics.messagesOut.get()
-                        ),
-                        subscriptions = subscriptions,
-                        cleanSession = clientDetails.cleanSession,
-                        sessionExpiryInterval = clientDetails.sessionExpiryInterval?.toLong() ?: 0L,
-                        clientAddress = clientDetails.clientAddress,
-                        connected = connected
-                    )
+    private fun getAllSessions(cleanSessionFilter: Boolean?, connectedFilter: Boolean?, future: CompletableFuture<List<Session>>, nodeIdFilter: String? = null) {
+        val sessions = mutableListOf<Session>()
+        val sessionProcessingQueue = mutableListOf<CompletableFuture<Session?>>()
 
-                    // Apply filters
-                    val passesCleanSessionFilter = cleanSessionFilter?.let { it == session.cleanSession } ?: true
-                    val passesConnectedFilter = connectedFilter?.let { it == session.connected } ?: true
+        // Use async database access
+        sessionStore.iterateAllSessions { clientId, nodeId, connected, cleanSession ->
+            try {
+                // Apply filters early to avoid unnecessary processing
+                val passesNodeIdFilter = nodeIdFilter?.let { it == nodeId } ?: true
+                val passesCleanSessionFilter = cleanSessionFilter?.let { it == cleanSession } ?: true
+                val passesConnectedFilter = connectedFilter?.let { it == connected } ?: true
 
-                    if (passesCleanSessionFilter && passesConnectedFilter) {
-                        session
+                if (passesNodeIdFilter && passesCleanSessionFilter && passesConnectedFilter) {
+                    // Create a future for processing this session
+                    val sessionFuture = CompletableFuture<Session?>()
+                    sessionProcessingQueue.add(sessionFuture)
+
+                    // Get metrics from local session handler if this client is on current node
+                    val metrics = if (nodeId == Monster.getClusterNodeId(vertx)) {
+                        sessionHandler.getClientMetrics(clientId)?.let { clientMetrics ->
+                            SessionMetrics(
+                                messagesIn = clientMetrics.messagesIn.get(),
+                                messagesOut = clientMetrics.messagesOut.get()
+                            )
+                        } ?: SessionMetrics(messagesIn = 0, messagesOut = 0)
                     } else {
+                        // For remote nodes, we don't have access to metrics
+                        SessionMetrics(messagesIn = 0, messagesOut = 0)
+                    }
+
+                    // Get client details from local session handler if available, otherwise use defaults
+                    val clientDetails = if (nodeId == Monster.getClusterNodeId(vertx)) {
+                        sessionHandler.getClientDetails(clientId)
+                    } else null
+
+                    // Get subscriptions asynchronously
+                    getSubscriptionsForClientAsync(clientId).thenAccept { subscriptions ->
+                        try {
+                            val session = Session(
+                                clientId = clientId,
+                                nodeId = nodeId,
+                                metrics = metrics,
+                                subscriptions = subscriptions,
+                                cleanSession = cleanSession,
+                                sessionExpiryInterval = clientDetails?.sessionExpiryInterval?.toLong() ?: 0L,
+                                clientAddress = clientDetails?.clientAddress,
+                                connected = connected
+                            )
+                            sessionFuture.complete(session)
+                        } catch (e: Exception) {
+                            logger.warning("Error creating session $clientId: ${e.message}")
+                            sessionFuture.complete(null)
+                        }
+                    }.exceptionally { e ->
+                        logger.warning("Error getting subscriptions for session $clientId: ${e.message}")
+                        sessionFuture.complete(null)
                         null
                     }
-                } else null
+                }
+            } catch (e: Exception) {
+                logger.warning("Error processing session $clientId: ${e.message}")
             }
-        }).onComplete { result ->
+        }.onComplete { result ->
             if (result.succeeded()) {
-                future.complete(result.result())
+                // Wait for all session processing to complete
+                val allSessionsFuture = CompletableFuture.allOf(*sessionProcessingQueue.toTypedArray())
+                allSessionsFuture.thenAccept {
+                    val completedSessions = sessionProcessingQueue.mapNotNull {
+                        try {
+                            it.get()
+                        } catch (e: Exception) {
+                            logger.warning("Error getting session result: ${e.message}")
+                            null
+                        }
+                    }
+                    future.complete(completedSessions)
+                }.exceptionally { e ->
+                    logger.severe("Error completing session processing: ${e.message}")
+                    e.printStackTrace()
+                    future.completeExceptionally(e)
+                    null
+                }
             } else {
+                logger.severe("Error iterating sessions from database: ${result.cause()?.message}")
+                result.cause()?.printStackTrace()
                 future.completeExceptionally(result.cause())
             }
         }
@@ -247,25 +278,41 @@ class MetricsResolver(
     private fun getSubscriptionsForClient(clientId: String): List<MqttSubscription> {
         val subscriptions = mutableListOf<MqttSubscription>()
 
-        // Direct SQLite query approach - more reliable for now
         try {
-            // Using the Java SQLite driver directly since we know it's SQLite
-            val dbFile = java.io.File("monstermq.db")
-            if (dbFile.exists()) {
-                val connection = java.sql.DriverManager.getConnection("jdbc:sqlite:monstermq.db")
-                val statement = connection.prepareStatement("SELECT topic, qos FROM subscriptions WHERE client_id = ?")
-                statement.setString(1, clientId)
-                val resultSet = statement.executeQuery()
+            // Use the session store to get subscriptions from database
+            val future = java.util.concurrent.CompletableFuture<Void>()
 
-                while (resultSet.next()) {
-                    val topic = resultSet.getString("topic")
-                    val qos = resultSet.getInt("qos")
+            sessionStore.iterateSubscriptions { topic, subscriptionClientId, qos ->
+                if (subscriptionClientId == clientId) {
                     subscriptions.add(MqttSubscription(topicFilter = topic, qos = qos))
                 }
+            }.onComplete { result ->
+                if (result.succeeded()) {
+                    future.complete(null)
+                } else {
+                    logger.warning("Error iterating subscriptions for client $clientId: ${result.cause()?.message}")
+                    future.complete(null)
+                }
+            }
 
-                resultSet.close()
-                statement.close()
-                connection.close()
+            // Wait for completion (blocking operation, but necessary for synchronous GraphQL resolver)
+            future.get(5, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (e: Exception) {
+            logger.warning("Error getting subscriptions for client $clientId: ${e.message}")
+        }
+
+        return subscriptions
+    }
+
+    private fun getSubscriptionsForClientSync(clientId: String): List<MqttSubscription> {
+        val subscriptions = mutableListOf<MqttSubscription>()
+
+        try {
+            // Use the synchronous store to get subscriptions
+            sessionStore.sync.iterateSubscriptions { topic, subscriptionClientId, qos ->
+                if (subscriptionClientId == clientId) {
+                    subscriptions.add(MqttSubscription(topicFilter = topic, qos = qos))
+                }
             }
         } catch (e: Exception) {
             logger.warning("Error getting subscriptions for client $clientId: ${e.message}")
@@ -274,13 +321,39 @@ class MetricsResolver(
         return subscriptions
     }
 
+    private fun getSubscriptionsForClientAsync(clientId: String): CompletableFuture<List<MqttSubscription>> {
+        val future = CompletableFuture<List<MqttSubscription>>()
+        val subscriptions = mutableListOf<MqttSubscription>()
+
+        sessionStore.iterateSubscriptions { topic, subscriptionClientId, qos ->
+            if (subscriptionClientId == clientId) {
+                subscriptions.add(MqttSubscription(topicFilter = topic, qos = qos))
+            }
+        }.onComplete { result ->
+            if (result.succeeded()) {
+                future.complete(subscriptions)
+            } else {
+                logger.warning("Error getting subscriptions for client $clientId: ${result.cause()?.message}")
+                future.complete(emptyList()) // Return empty list on error instead of failing
+            }
+        }
+
+        return future
+    }
+
     private fun getClusterSessionCount(): Int {
         // For now, return local count from SessionHandler
         return sessionHandler.getSessionCount()
     }
 
     private fun getQueuedMessagesCount(): Long {
-        return sessionStore.sync.countQueuedMessages()
+        // This method is used synchronously in broker metrics, but ideally should be async too
+        return try {
+            sessionStore.sync.countQueuedMessages()
+        } catch (e: Exception) {
+            logger.warning("Error getting queued messages count: ${e.message}")
+            0L
+        }
     }
 
     fun sessionQueuedMessageCount(): DataFetcher<CompletableFuture<Long>> {
@@ -325,8 +398,8 @@ class MetricsResolver(
             val cleanSessionFilter = env.getArgument<Boolean?>("cleanSession")
             val connectedFilter = env.getArgument<Boolean?>("connected")
 
-            // Use existing getSessionsForNode method to get sessions for this specific broker node
-            getSessionsForNode(nodeId, cleanSessionFilter, connectedFilter, future)
+            // Use getAllSessions with nodeId filter for this specific broker node
+            getAllSessions(cleanSessionFilter, connectedFilter, future, nodeId)
 
             future
         }
