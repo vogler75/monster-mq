@@ -1,5 +1,6 @@
 package at.rocworks.stores.sqlite
 
+import at.rocworks.EventBusAddresses
 import at.rocworks.Utils
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -23,11 +24,12 @@ class SQLiteVerticle : AbstractVerticle() {
     
     companion object {
         // Event bus addresses for different operations
+        // Legacy constants - use EventBusAddresses instead
         const val EB_ADDRESS_PREFIX = "sqlite."
-        const val EB_EXECUTE_UPDATE = "${EB_ADDRESS_PREFIX}execute.update"
-        const val EB_EXECUTE_QUERY = "${EB_ADDRESS_PREFIX}execute.query"
-        const val EB_EXECUTE_BATCH = "${EB_ADDRESS_PREFIX}execute.batch"
-        const val EB_INIT_DB = "${EB_ADDRESS_PREFIX}init.db"
+        const val EB_EXECUTE_UPDATE = EventBusAddresses.Store.SQLITE_UPDATE
+        const val EB_EXECUTE_QUERY = EventBusAddresses.Store.SQLITE_QUERY
+        const val EB_EXECUTE_BATCH = EventBusAddresses.Store.SQLITE_BATCH
+        const val EB_INIT_DB = EventBusAddresses.Store.SQLITE_INIT
     }
     
     override fun start(startPromise: Promise<Void>) {

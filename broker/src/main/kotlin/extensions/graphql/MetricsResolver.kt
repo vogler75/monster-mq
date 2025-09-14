@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.EventBusAddresses
 import at.rocworks.Monster
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IMessageStore
@@ -18,7 +19,7 @@ class MetricsResolver(
         private val logger: Logger = Logger.getLogger(MetricsResolver::class.java.name)
 
         private fun getMetricsAddress(nodeId: String): String {
-            return "monstermq.node.metrics.$nodeId"
+            return EventBusAddresses.Node.metrics(nodeId)
         }
     }
 

@@ -1,5 +1,6 @@
 package at.rocworks.stores
 
+import at.rocworks.EventBusAddresses
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.PurgeResult
@@ -16,8 +17,8 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
     private val index = TopicTree<Void, Void>()
     private val store = getStore()
 
-    private val addAddress = "$name/A"
-    private val delAddress = "$name/D"
+    private val addAddress = EventBusAddresses.Store.add(name)
+    private val delAddress = EventBusAddresses.Store.delete(name)
 
     override fun getName(): String = name
     override fun getType(): MessageStoreType = MessageStoreType.MEMORY

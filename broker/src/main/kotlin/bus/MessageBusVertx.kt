@@ -1,6 +1,6 @@
 package at.rocworks.bus
 
-import at.rocworks.Const
+import at.rocworks.EventBusAddresses
 import at.rocworks.data.MqttMessage
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -8,7 +8,7 @@ import io.vertx.core.Promise
 import io.vertx.core.Vertx
 
 class MessageBusVertx(): AbstractVerticle(), IMessageBus {
-    private fun messageAddress() = "${Const.GLOBAL_EVENT_NAMESPACE}/${deploymentID()}/M"
+    private fun messageAddress() = EventBusAddresses.Node.messageBus(deploymentID())
 
     override fun start(startPromise: Promise<Void>) {
         startPromise.complete()

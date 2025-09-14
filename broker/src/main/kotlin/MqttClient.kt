@@ -1,5 +1,6 @@
 package at.rocworks
 
+import at.rocworks.EventBusAddresses
 import at.rocworks.auth.UserManager
 import at.rocworks.data.MqttMessage
 import at.rocworks.handlers.SessionHandler
@@ -87,10 +88,8 @@ class MqttClient(
         }
 
 
-        private fun getBaseAddress(clientId: String) = "${Const.GLOBAL_CLIENT_NAMESPACE}/${clientId}"
-
-        fun getCommandAddress(clientId: String) = "${getBaseAddress(clientId)}/C"
-        fun getMessagesAddress(clientId: String) = "${getBaseAddress(clientId)}/M"
+        fun getCommandAddress(clientId: String) = EventBusAddresses.Client.commands(clientId)
+        fun getMessagesAddress(clientId: String) = EventBusAddresses.Client.messages(clientId)
     }
 
     override fun start() {

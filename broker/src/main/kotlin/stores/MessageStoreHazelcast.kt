@@ -1,5 +1,6 @@
 package at.rocworks.stores
 
+import at.rocworks.EventBusAddresses
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.PurgeResult
@@ -22,8 +23,8 @@ class MessageStoreHazelcast(
     private val index = TopicTree<Void, Void>()
     private val store = hazelcast.getMap<String, MqttMessage>(name)
 
-    private val addAddress = "$name/A"
-    private val delAddress = "$name/D"
+    private val addAddress = EventBusAddresses.Store.add(name)
+    private val delAddress = EventBusAddresses.Store.delete(name)
 
     override fun getName(): String = name
     override fun getType(): MessageStoreType = MessageStoreType.HAZELCAST

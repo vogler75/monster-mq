@@ -1,6 +1,7 @@
 package at.rocworks.handlers
 
 import at.rocworks.Const
+import at.rocworks.EventBusAddresses
 import at.rocworks.Monster
 import at.rocworks.MqttClient
 import at.rocworks.Utils
@@ -51,22 +52,22 @@ open class SessionHandler(
     private val msgDelQueue: ArrayBlockingQueue<Pair<String, String>> = ArrayBlockingQueue(10_000) // TODO: configurable
     private var waitForFlush: Promise<Void>? = null
 
-    private val subscriptionAddAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/A"
-    private val subscriptionDelAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/D"
-
-    private val clientStatusAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/C"
-    private val clientMappingAddress = Const.GLOBAL_CLIENT_TABLE_NAMESPACE+"/M"
-    private val topicMappingAddress = Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE+"/T"
-    private fun nodeMessageAddress(nodeId: String) = "${Const.GLOBAL_EVENT_NAMESPACE}/node/$nodeId/messages"
+    // Use unified EventBus addresses
+    private val subscriptionAddAddress = EventBusAddresses.Cluster.SUBSCRIPTION_ADD
+    private val subscriptionDelAddress = EventBusAddresses.Cluster.SUBSCRIPTION_DELETE
+    private val clientStatusAddress = EventBusAddresses.Cluster.CLIENT_STATUS
+    private val clientMappingAddress = EventBusAddresses.Cluster.CLIENT_NODE_MAPPING
+    private val topicMappingAddress = EventBusAddresses.Cluster.TOPIC_NODE_MAPPING
+    private fun nodeMessageAddress(nodeId: String) = EventBusAddresses.Node.messages(nodeId)
     private fun localNodeMessageAddress() = nodeMessageAddress(Monster.getClusterNodeId(vertx))
 
     private val sparkplugHandler = Monster.getSparkplugExtension()
 
     private val inFlightMessages = HashMap<String, ArrayBlockingQueue<MqttMessage>>()
 
-    private fun commandAddress() = "${Const.GLOBAL_EVENT_NAMESPACE}/${deploymentID()}/C"
-    private fun metricsAddress() = "monstermq.node.metrics.${Monster.getClusterNodeId(vertx)}"
-    //private fun messageAddress() = "${Const.GLOBAL_EVENT_NAMESPACE}/${deploymentID()}/M"
+    private fun commandAddress() = EventBusAddresses.Node.commands(deploymentID())
+    private fun metricsAddress() = EventBusAddresses.Node.metrics(Monster.getClusterNodeId(vertx))
+    private fun messageAddress() = EventBusAddresses.Node.messageBus(deploymentID())
 
     init {
         logger.level = Const.DEBUG_LEVEL
