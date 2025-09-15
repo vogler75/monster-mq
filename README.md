@@ -108,6 +108,14 @@ MonsterMQ supports multiple database backends for different storage needs:
 - **Anonymous User Support** - Configurable anonymous access for unauthenticated clients
 - **GraphQL User Management API** - Complete CRUD operations for users and ACL rules
 
+### **Archive Configuration Management**
+- **Dynamic Archive Groups** - Create, modify, and delete archive groups via GraphQL API without restarts
+- **Database-Stored Configuration** - Archive group configurations persisted in database instead of YAML files
+- **Real-Time Configuration Updates** - Enable/disable archive groups instantly with automatic message routing
+- **Storage Lifecycle Management** - Automatic creation and cleanup of database tables/collections
+- **Web-Based Management** - Full-featured dashboard for archive group administration
+- **Multi-Database Support** - Configuration storage across PostgreSQL, SQLite, CrateDB, MongoDB
+
 ### **Message Retention & Purging**
 - **Automatic Message Cleanup** - Configurable retention policies per ArchiveGroup
 - **Flexible Time Periods** - Support for seconds, minutes, hours, days, weeks, months, years
@@ -500,6 +508,276 @@ For comprehensive documentation including:
 - Troubleshooting guide
 
 See: **[📖 Complete ACL Documentation](broker/README_ACL.md)**
+
+## 🗂️ Archive Configuration Management
+
+MonsterMQ now supports dynamic archive group configuration through a comprehensive management system that stores configurations in the database and provides real-time updates without requiring broker restarts.
+
+### Key Features
+
+- **Database-Stored Configuration**: Archive groups are now stored in the database instead of YAML files
+- **GraphQL API Management**: Complete CRUD operations for archive groups via GraphQL
+- **Real-Time Updates**: Enable/disable archive groups instantly with automatic message routing updates
+- **Storage Lifecycle Management**: Automatic database table/collection creation and cleanup
+- **Web Dashboard**: Full-featured browser-based management interface
+- **Multi-Database Support**: Configuration storage works with PostgreSQL, SQLite, CrateDB, MongoDB
+
+### Configuration Migration
+
+Archive groups can now be managed dynamically. The YAML configuration is still supported for initial setup:
+
+```yaml
+# Initial configuration (optional - can be managed via API)
+ArchiveGroups:
+  - Name: "Default"
+    Enabled: true
+    TopicFilter: [ "#" ]
+    RetainedOnly: false
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
+    LastValRetention: "30d"
+    ArchiveRetention: "1y"
+    PurgeInterval: "1h"
+
+# Required: Enable configuration storage
+ConfigStoreType: POSTGRES  # POSTGRES, SQLITE, CRATEDB, MONGODB
+
+# Database connection
+Postgres:
+  Url: jdbc:postgresql://localhost:5432/monster
+  User: system
+  Pass: manager
+```
+
+### GraphQL Archive Management API
+
+Complete archive group management through GraphQL:
+
+**API Endpoint**: `http://localhost:4000/graphql`
+
+#### Create Archive Group
+```graphql
+mutation {
+  createArchiveGroup(input: {
+    name: "ProductionSensors"
+    enabled: true
+    topicFilter: ["sensors/#", "devices/#"]
+    retainedOnly: false
+    lastValType: POSTGRES
+    archiveType: POSTGRES
+    lastValRetention: "7d"
+    archiveRetention: "30d"
+    purgeInterval: "1h"
+  }) {
+    success
+    message
+    archiveGroup {
+      name
+      enabled
+      deployed
+    }
+  }
+}
+```
+
+#### Update Archive Group
+```graphql
+mutation {
+  updateArchiveGroup(
+    name: "ProductionSensors"
+    input: {
+      topicFilter: ["sensors/#", "devices/#", "alerts/#"]
+      archiveRetention: "60d"
+    }
+  ) {
+    success
+    message
+    archiveGroup {
+      name
+      archiveRetention
+    }
+  }
+}
+```
+
+#### Enable/Disable Archive Group
+```graphql
+mutation {
+  enableArchiveGroup(name: "ProductionSensors") {
+    success
+    message
+    archiveGroup {
+      name
+      enabled
+      deployed
+    }
+  }
+}
+
+mutation {
+  disableArchiveGroup(name: "ProductionSensors") {
+    success
+    message
+  }
+}
+```
+
+#### Delete Archive Group
+```graphql
+mutation {
+  deleteArchiveGroup(name: "ProductionSensors") {
+    success
+    message
+  }
+}
+```
+
+#### Query Archive Groups
+```graphql
+query {
+  archiveGroups {
+    name
+    enabled
+    deployed
+    topicFilter
+    retainedOnly
+    lastValType
+    archiveType
+    lastValRetention
+    archiveRetention
+    purgeInterval
+    createdAt
+    updatedAt
+  }
+}
+
+query {
+  archiveGroup(name: "ProductionSensors") {
+    name
+    enabled
+    deployed
+    topicFilter
+  }
+}
+```
+
+### Web Dashboard Management
+
+Access the archive management dashboard at: `http://localhost:4000/archives`
+
+**Dashboard Features:**
+- **Visual Archive Group Overview** - Table view with status indicators
+- **Create/Edit Archive Groups** - Modal forms with validation
+- **Enable/Disable Toggle** - One-click archive group activation
+- **Real-Time Status Updates** - Live deployment status monitoring
+- **Bulk Operations** - Manage multiple archive groups efficiently
+- **Search and Filtering** - Find archive groups quickly
+- **Storage Cleanup** - Automatic table/collection cleanup on deletion
+
+### Storage Lifecycle Management
+
+The system automatically manages database storage:
+
+#### Automatic Table/Collection Creation
+When an archive group is enabled, MonsterMQ automatically creates the required database tables/collections:
+
+```bash
+# PostgreSQL
+CREATE TABLE productionsensorslastval (topic VARCHAR, time TIMESTAMPTZ, payload_b64 VARCHAR, ...);
+CREATE TABLE productionsensorsarchive (topic VARCHAR, time TIMESTAMPTZ, payload_b64 VARCHAR, ...);
+
+# MongoDB
+db.createCollection("productionsensorslastval");
+db.createCollection("productionsensorsarchive");
+
+# CrateDB
+CREATE TABLE productionsensorslastval (topic VARCHAR, time TIMESTAMPTZ, payload_b64 VARCHAR, ...);
+```
+
+#### Automatic Storage Cleanup
+When an archive group is deleted, the system automatically drops associated storage:
+
+```bash
+# PostgreSQL
+DROP TABLE IF EXISTS productionsensorslastval CASCADE;
+DROP TABLE IF EXISTS productionsensorsarchive CASCADE;
+
+# MongoDB
+db.productionsensorslastval.drop();
+db.productionsensorsarchive.drop();
+
+# CrateDB
+DROP TABLE IF EXISTS productionsensorslastval;
+DROP TABLE IF EXISTS productionsensorsarchive;
+```
+
+### Configuration Database Schema
+
+Archive group configurations are stored in a dedicated table:
+
+```sql
+CREATE TABLE archive_groups (
+    name VARCHAR(255) PRIMARY KEY,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    topic_filter TEXT[] NOT NULL,
+    retained_only BOOLEAN NOT NULL DEFAULT false,
+    last_val_type VARCHAR(50) NOT NULL,
+    archive_type VARCHAR(50) NOT NULL,
+    last_val_retention VARCHAR(50),
+    archive_retention VARCHAR(50),
+    purge_interval VARCHAR(50),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Real-Time Message Routing
+
+The system includes dynamic message routing that automatically updates when archive groups are enabled/disabled:
+
+```kotlin
+// Automatic registration of new archive groups
+archiveHandler.registerArchiveGroup(archiveGroup)
+
+// Dynamic message routing updates
+messageHandler.registerArchiveGroup(archiveGroup)
+messageHandler.unregisterArchiveGroup(archiveGroupName)
+```
+
+**Benefits:**
+- **No Broker Restart Required** - Changes take effect immediately
+- **Zero Downtime** - Existing connections remain active during configuration changes
+- **Instant Message Routing** - New archive groups start receiving messages immediately
+- **Automatic Cleanup** - Disabled archive groups stop processing messages instantly
+
+### Migration from YAML Configuration
+
+Existing YAML-based archive groups can be migrated to database storage:
+
+1. **Keep YAML Configuration** - Initial archive groups are loaded from YAML on startup
+2. **Use GraphQL API** - Create equivalent database entries via GraphQL mutations
+3. **Remove YAML Entries** - Once migrated, YAML entries can be removed
+4. **Dynamic Management** - All future changes handled via GraphQL/Dashboard
+
+### Best Practices
+
+#### Configuration Management
+- **Use Descriptive Names** - Archive group names should reflect their purpose
+- **Plan Topic Filters** - Use specific patterns to avoid message duplication
+- **Monitor Storage Growth** - Set appropriate retention policies to manage disk usage
+- **Test Before Production** - Use development archive groups for testing configurations
+
+#### Performance Optimization
+- **Separate Storage Types** - Use MEMORY/HAZELCAST for current values, POSTGRES/MONGODB for archives
+- **Appropriate Retention** - Balance storage costs with data requirements
+- **Purge Interval Tuning** - Frequent purging reduces batch sizes but increases overhead
+- **Database Indexing** - Ensure proper indexes on topic and time columns
+
+#### Security Considerations
+- **Database Access Control** - Secure configuration database with appropriate permissions
+- **GraphQL Authentication** - Implement authentication for GraphQL management endpoints
+- **Audit Trail** - Monitor configuration changes through database logs
+- **Backup Strategy** - Include configuration database in backup procedures
 
 ## 🗄️ Message Retention & Purging
 
