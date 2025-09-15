@@ -130,7 +130,7 @@ class MetricsResolver(
             }
 
             CompletableFuture.allOf(*brokerFutures.toTypedArray()).thenApply {
-                val brokers = brokerFutures.mapNotNull { it.get() }
+                val brokers = brokerFutures.mapNotNull { it.get() }.sortedBy { it.nodeId }
                 future.complete(brokers)
                 brokers
             }
