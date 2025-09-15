@@ -1,0 +1,14 @@
+Release v1.5.4
+Built from commit: 9b73285
+Date: 2025-09-15 23:25:11
+
+Changes since v1.5.3:
+---
+9b73285 Add ConfigStoreType to configs and document archive import
+4c510bb Remove static ArchiveGroups from YAML configs and schema
+cd12631 Update README.md
+c37a277 Improve modal button layout in archive groups page
+449db2a Add archive group management and storage cleanup
+cbdb00c Add MongoDB, CrateDB, and SQLite config store support
+305c911 Add GraphQL API for archive group management
+9a7bcb6 Add ArchiveGroup config import and runtime management
