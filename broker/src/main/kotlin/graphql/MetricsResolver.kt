@@ -1,6 +1,6 @@
 package at.rocworks.extensions.graphql
 
-import at.rocworks.EventBusAddresses
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.Monster
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IMessageStore

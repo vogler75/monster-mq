@@ -7,7 +7,7 @@ import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
-import at.rocworks.extensions.GraphQLServer
+import at.rocworks.extensions.graphql.GraphQLServer
 import at.rocworks.extensions.McpServer
 import at.rocworks.extensions.SparkplugExtension
 import at.rocworks.handlers.*

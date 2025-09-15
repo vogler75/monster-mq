@@ -1,18 +1,20 @@
-package at.rocworks.extensions
+package at.rocworks.extensions.graphql
 
-import at.rocworks.Monster
 import at.rocworks.auth.UserManager
 import at.rocworks.bus.IMessageBus
-import at.rocworks.data.MqttMessage
-import at.rocworks.extensions.graphql.*
-import at.rocworks.stores.*
+import at.rocworks.handlers.MessageHandler
+import at.rocworks.handlers.SessionHandler
+import at.rocworks.stores.ArchiveGroup
+import at.rocworks.stores.IMessageStore
+import at.rocworks.stores.IMetricsStore
+import at.rocworks.stores.ISessionStoreAsync
 import graphql.GraphQL
 import graphql.scalars.ExtendedScalars
 import graphql.schema.idl.RuntimeWiring
 import graphql.schema.idl.SchemaGenerator
 import graphql.schema.idl.SchemaParser
-import graphql.schema.idl.TypeDefinitionRegistry
 import io.vertx.core.Vertx
+import io.vertx.core.http.HttpMethod
 import io.vertx.core.http.HttpServerOptions
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.Router
@@ -27,13 +29,13 @@ class GraphQLServer(
     private val vertx: Vertx,
     private val config: JsonObject,
     private val messageBus: IMessageBus,
-    private val messageHandler: at.rocworks.handlers.MessageHandler,
+    private val messageHandler: MessageHandler,
     private val retainedStore: IMessageStore?,
     private val archiveGroups: Map<String, ArchiveGroup>,
     private val userManager: UserManager,
     private val sessionStore: ISessionStoreAsync,
-    private val sessionHandler: at.rocworks.handlers.SessionHandler,
-    private val metricsStore: at.rocworks.stores.IMetricsStore?
+    private val sessionHandler: SessionHandler,
+    private val metricsStore: IMetricsStore?
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(GraphQLServer::class.java.name)
@@ -65,7 +67,7 @@ class GraphQLServer(
                     .putHeader("Access-Control-Max-Age", "3600")
 
                 // Handle preflight OPTIONS request
-                if (ctx.request().method() == io.vertx.core.http.HttpMethod.OPTIONS) {
+                if (ctx.request().method() == HttpMethod.OPTIONS) {
                     ctx.response().setStatusCode(204).end()
                     return@handler
                 }
@@ -91,13 +93,13 @@ class GraphQLServer(
         router.route(path).handler { ctx ->
             try {
                 // Skip validation for OPTIONS requests (CORS preflight)
-                if (ctx.request().method() == io.vertx.core.http.HttpMethod.OPTIONS) {
+                if (ctx.request().method() == HttpMethod.OPTIONS) {
                     ctx.next()
                     return@handler
                 }
 
                 // Check if request has a query (only for POST requests)
-                if (ctx.request().method() == io.vertx.core.http.HttpMethod.POST) {
+                if (ctx.request().method() == HttpMethod.POST) {
                     val body = ctx.body()?.asJsonObject()
                     if (body == null || (!body.containsKey("query") && !body.containsKey("variables"))) {
                         ctx.response()
@@ -173,8 +175,8 @@ class GraphQLServer(
 
         return GraphQL.newGraphQL(graphQLSchema).build()
     }
-    
-    
+
+
 
     private fun buildRuntimeWiring(): RuntimeWiring {
         val queryResolver = QueryResolver(vertx, retainedStore, archiveGroups, authContext)

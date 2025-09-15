@@ -1,12 +1,11 @@
-package at.rocworks
+package at.rocworks.stores
 
+import at.rocworks.Monster
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.extensions.graphql.BrokerMetrics
-import at.rocworks.extensions.graphql.SessionMetrics
 import at.rocworks.handlers.SessionHandler
-import at.rocworks.stores.IMetricsStoreAsync
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
-import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import java.time.Instant
 import java.util.logging.Logger
@@ -43,7 +42,7 @@ class MetricsCollector(
     private fun collectAndStoreMetrics() {
         try {
             val timestamp = Instant.now()
-            val nodeId = Monster.getClusterNodeId(vertx)
+            val nodeId = Monster.Companion.getClusterNodeId(vertx)
 
             logger.fine("Collecting metrics at $timestamp for nodeId: $nodeId")
 

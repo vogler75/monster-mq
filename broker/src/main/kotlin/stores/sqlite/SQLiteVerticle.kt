@@ -1,6 +1,6 @@
 package at.rocworks.stores.sqlite
 
-import at.rocworks.EventBusAddresses
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.Utils
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future

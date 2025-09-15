@@ -1,6 +1,6 @@
 package at.rocworks
 
-import at.rocworks.EventBusAddresses
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.auth.UserManager
 import at.rocworks.data.MqttMessage
 import at.rocworks.handlers.SessionHandler

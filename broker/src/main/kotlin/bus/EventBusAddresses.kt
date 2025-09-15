@@ -1,4 +1,6 @@
-package at.rocworks
+package at.rocworks.bus
+
+import at.rocworks.Const
 
 /**
  * Unified EventBus addressing scheme for MonsterMQ

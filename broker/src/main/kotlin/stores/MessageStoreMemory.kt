@@ -1,6 +1,6 @@
 package at.rocworks.stores
 
-import at.rocworks.EventBusAddresses
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.PurgeResult

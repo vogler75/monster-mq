@@ -1,7 +1,7 @@
 package at.rocworks.handlers
 
 import at.rocworks.Const
-import at.rocworks.EventBusAddresses
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.Monster
 import at.rocworks.MqttClient
 import at.rocworks.Utils

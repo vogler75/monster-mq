@@ -1,6 +1,6 @@
 package at.rocworks.bus
 
-import at.rocworks.EventBusAddresses
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.MqttMessage
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
