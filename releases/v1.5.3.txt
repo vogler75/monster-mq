@@ -1,0 +1,12 @@
+Release v1.5.3
+Built from commit: 555974c
+Date: 2025-09-15 13:10:16
+
+Changes since v1.5.2:
+---
+555974c Add remote session metrics and details retrieval
+24fa7be Sort brokers by nodeId in metrics resolver
+4630184 Add per-node config examples and dashboard history support
+a8ea528 Refactor metrics to support historical queries and timestamps
+275c929 Refactor EventBusAddresses and GraphQL modules structure
+24bc55d Add GraphQL server configuration to README
