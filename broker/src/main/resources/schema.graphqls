@@ -28,14 +28,25 @@ type BrokerMetrics {
     messageBusIn: Long!
     # Messages sent to other nodes via message bus
     messageBusOut: Long!
+    # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
+    timestamp: String!
 }
 
 # Represents a broker node in the cluster
 type Broker {
     # The ID of the node
     nodeId: String!
-    # Metrics for this broker node
-    metrics(from: String, to: String, lastMinutes: Int): BrokerMetrics!
+    # Current metrics for this broker node (single most recent entry)
+    metrics: [BrokerMetrics!]!
+    # Historical metrics data for this broker node
+    metricsHistory(
+        # ISO 8601 timestamp for start of time range (e.g., "2024-01-15T10:00:00Z")
+        from: String
+        # ISO 8601 timestamp for end of time range (e.g., "2024-01-15T11:00:00Z")
+        to: String
+        # Alternative to from/to: get metrics from the last N minutes
+        lastMinutes: Int
+    ): [BrokerMetrics!]!
     # Sessions on this broker node with optional filters
     sessions(cleanSession: Boolean, connected: Boolean): [Session!]!
 }
@@ -46,8 +57,17 @@ type Session {
     clientId: String!
     # The ID of the node this session is connected to
     nodeId: String!
-    # The session's metrics
-    metrics(from: String, to: String, lastMinutes: Int): SessionMetrics!
+    # Current metrics for this session (single most recent entry)
+    metrics: [SessionMetrics!]!
+    # Historical metrics data for this session
+    metricsHistory(
+        # ISO 8601 timestamp for start of time range (e.g., "2024-01-15T10:00:00Z")
+        from: String
+        # ISO 8601 timestamp for end of time range (e.g., "2024-01-15T11:00:00Z")
+        to: String
+        # Alternative to from/to: get metrics from the last N minutes
+        lastMinutes: Int
+    ): [SessionMetrics!]!
     # The subscriptions for this session
     subscriptions: [MqttSubscription!]!
     # Is the session clean
@@ -68,6 +88,8 @@ type SessionMetrics {
     messagesIn: Long!
     # Messages sent to this client
     messagesOut: Long!
+    # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
+    timestamp: String!
 }
 
 # Represents an MQTT subscription

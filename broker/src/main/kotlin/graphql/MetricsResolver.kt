@@ -53,7 +53,8 @@ class MetricsResolver(
                                 clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
                                 topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
                                 messageBusIn = nodeMetrics.getLong("messageBusIn", 0L),
-                                messageBusOut = nodeMetrics.getLong("messageBusOut", 0L)
+                                messageBusOut = nodeMetrics.getLong("messageBusOut", 0L),
+                                timestamp = TimestampConverter.currentTimeIsoString()
                             )
                         } catch (e: Exception) {
                             logger.severe("Error getting cluster metrics: ${e.message}")
@@ -61,7 +62,7 @@ class MetricsResolver(
                         }
                     }).onComplete { result ->
                         if (result.succeeded()) {
-                            future.complete(Broker(nodeId, result.result()))
+                            future.complete(Broker(nodeId))
                         } else {
                             future.completeExceptionally(result.cause())
                         }
@@ -105,7 +106,8 @@ class MetricsResolver(
                                     clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
                                     topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
                                     messageBusIn = nodeMetrics.getLong("messageBusIn", 0L),
-                                    messageBusOut = nodeMetrics.getLong("messageBusOut", 0L)
+                                    messageBusOut = nodeMetrics.getLong("messageBusOut", 0L),
+                                    timestamp = TimestampConverter.currentTimeIsoString()
                                 )
                             } catch (e: Exception) {
                                 logger.severe("Error getting cluster metrics: ${e.message}")
@@ -113,7 +115,7 @@ class MetricsResolver(
                             }
                         }).onComplete { result ->
                             if (result.succeeded()) {
-                                brokerFuture.complete(Broker(nodeId, result.result()))
+                                brokerFuture.complete(Broker(nodeId))
                             } else {
                                 brokerFuture.complete(null)
                             }
@@ -171,10 +173,6 @@ class MetricsResolver(
                     val session = Session(
                         clientId = clientId,
                         nodeId = clientDetails.nodeId,
-                        metrics = SessionMetrics(
-                            messagesIn = clientMetrics.messagesIn.get(),
-                            messagesOut = clientMetrics.messagesOut.get()
-                        ),
                         subscriptions = subscriptions,
                         cleanSession = clientDetails.cleanSession,
                         sessionExpiryInterval = clientDetails.sessionExpiryInterval?.toLong() ?: 0L,
@@ -214,18 +212,7 @@ class MetricsResolver(
                     val sessionFuture = CompletableFuture<Session?>()
                     sessionProcessingQueue.add(sessionFuture)
 
-                    // Get metrics from local session handler if this client is on current node
-                    val metrics = if (nodeId == Monster.getClusterNodeId(vertx)) {
-                        sessionHandler.getClientMetrics(clientId)?.let { clientMetrics ->
-                            SessionMetrics(
-                                messagesIn = clientMetrics.messagesIn.get(),
-                                messagesOut = clientMetrics.messagesOut.get()
-                            )
-                        } ?: SessionMetrics(messagesIn = 0, messagesOut = 0)
-                    } else {
-                        // For remote nodes, we don't have access to metrics
-                        SessionMetrics(messagesIn = 0, messagesOut = 0)
-                    }
+                    // Skip metrics embedding since they're now handled by separate resolvers
 
                     // Get client details from local session handler if available, otherwise use defaults
                     val clientDetails = if (nodeId == Monster.getClusterNodeId(vertx)) {
@@ -238,7 +225,6 @@ class MetricsResolver(
                             val session = Session(
                                 clientId = clientId,
                                 nodeId = nodeId,
-                                metrics = metrics,
                                 subscriptions = subscriptions,
                                 cleanSession = cleanSession,
                                 sessionExpiryInterval = clientDetails?.sessionExpiryInterval?.toLong() ?: 0L,
@@ -417,9 +403,26 @@ class MetricsResolver(
         }
     }
 
-    fun brokerMetrics(): DataFetcher<CompletableFuture<BrokerMetrics>> {
+    fun brokerMetrics(): DataFetcher<CompletableFuture<List<BrokerMetrics>>> {
         return DataFetcher { env ->
-            val future = CompletableFuture<BrokerMetrics>()
+            val future = CompletableFuture<List<BrokerMetrics>>()
+
+            // Get the parent Broker object from the DataFetchingEnvironment
+            val broker = env.getSource<Broker>()
+            val nodeId = broker?.nodeId ?: Monster.getClusterNodeId(vertx)
+
+            // Current metrics only - return single most recent entry as array
+            getCurrentBrokerMetrics(nodeId) { metrics ->
+                future.complete(listOf(metrics))
+            }
+
+            future
+        }
+    }
+
+    fun brokerMetricsHistory(): DataFetcher<CompletableFuture<List<BrokerMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<BrokerMetrics>>()
 
             // Get the parent Broker object from the DataFetchingEnvironment
             val broker = env.getSource<Broker>()
@@ -429,39 +432,69 @@ class MetricsResolver(
             val to = env.getArgument<String?>("to")
             val lastMinutes = env.getArgument<Int?>("lastMinutes")
 
-            // Check if this is a historical query
-            if ((from != null || to != null || lastMinutes != null) && metricsStore != null) {
+            if (metricsStore != null) {
                 // Historical query - convert strings to Instants
                 val fromInstant = from?.let { java.time.Instant.parse(it) }
                 val toInstant = to?.let { java.time.Instant.parse(it) }
 
-                metricsStore.getBrokerMetrics(nodeId, fromInstant, toInstant, lastMinutes).onComplete { result ->
+                metricsStore.getBrokerMetricsList(nodeId, fromInstant, toInstant, lastMinutes).onComplete { result ->
                     if (result.succeeded()) {
                         future.complete(result.result())
                     } else {
                         logger.warning("Failed to get historical broker metrics: ${result.cause()?.message}")
-                        future.completeExceptionally(result.cause())
+                        future.complete(emptyList())
                     }
                 }
             } else {
-                // Current/live query - use the existing logic from broker() method
-                getCurrentBrokerMetrics(nodeId, future)
+                // No metrics store - return empty list
+                future.complete(emptyList())
             }
 
             future
         }
     }
 
-    fun sessionMetrics(): DataFetcher<CompletableFuture<SessionMetrics>> {
+    fun sessionMetrics(): DataFetcher<CompletableFuture<List<SessionMetrics>>> {
         return DataFetcher { env ->
-            val future = CompletableFuture<SessionMetrics>()
+            val future = CompletableFuture<List<SessionMetrics>>()
 
             // Get the parent Session object from the DataFetchingEnvironment
             val session = env.getSource<Session>()
             val clientId = session?.clientId
 
             if (clientId == null) {
-                future.complete(SessionMetrics(0, 0))
+                future.complete(listOf(SessionMetrics(0, 0, TimestampConverter.currentTimeIsoString())))
+                return@DataFetcher future
+            }
+
+            // Get current metrics from session handler
+            val clientMetrics = sessionHandler.getClientMetrics(clientId)
+            val metrics = if (clientMetrics != null) {
+                SessionMetrics(
+                    messagesIn = clientMetrics.messagesIn.get(),
+                    messagesOut = clientMetrics.messagesOut.get(),
+                    timestamp = TimestampConverter.currentTimeIsoString()
+                )
+            } else {
+                SessionMetrics(0, 0, TimestampConverter.currentTimeIsoString())
+            }
+
+            future.complete(listOf(metrics))
+
+            future
+        }
+    }
+
+    fun sessionMetricsHistory(): DataFetcher<CompletableFuture<List<SessionMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<SessionMetrics>>()
+
+            // Get the parent Session object from the DataFetchingEnvironment
+            val session = env.getSource<Session>()
+            val clientId = session?.clientId
+
+            if (clientId == null) {
+                future.complete(emptyList())
                 return@DataFetcher future
             }
 
@@ -469,30 +502,29 @@ class MetricsResolver(
             val to = env.getArgument<String?>("to")
             val lastMinutes = env.getArgument<Int?>("lastMinutes")
 
-            // Check if this is a historical query
-            if ((from != null || to != null || lastMinutes != null) && metricsStore != null) {
+            if (metricsStore != null) {
                 // Historical query - convert strings to Instants
                 val fromInstant = from?.let { java.time.Instant.parse(it) }
                 val toInstant = to?.let { java.time.Instant.parse(it) }
 
-                metricsStore.getSessionMetrics(clientId, fromInstant, toInstant, lastMinutes).onComplete { result ->
+                metricsStore.getSessionMetricsList(clientId, fromInstant, toInstant, lastMinutes).onComplete { result ->
                     if (result.succeeded()) {
                         future.complete(result.result())
                     } else {
                         logger.warning("Failed to get historical session metrics: ${result.cause()?.message}")
-                        future.completeExceptionally(result.cause())
+                        future.complete(emptyList())
                     }
                 }
             } else {
-                // Current/live query - return current metrics from session
-                future.complete(session.metrics)
+                // No metrics store - return empty list
+                future.complete(emptyList())
             }
 
             future
         }
     }
 
-    private fun getCurrentBrokerMetrics(nodeId: String, future: CompletableFuture<BrokerMetrics>) {
+    private fun getCurrentBrokerMetrics(nodeId: String, callback: (BrokerMetrics) -> Unit) {
         val metricsAddress = getMetricsAddress(nodeId)
 
         vertx.eventBus().request<JsonObject>(metricsAddress, JsonObject()).onComplete { reply ->
@@ -515,7 +547,8 @@ class MetricsResolver(
                             clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
                             topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
                             messageBusIn = nodeMetrics.getLong("messageBusIn", 0L),
-                            messageBusOut = nodeMetrics.getLong("messageBusOut", 0L)
+                            messageBusOut = nodeMetrics.getLong("messageBusOut", 0L),
+                            timestamp = TimestampConverter.currentTimeIsoString()
                         )
                     } catch (e: Exception) {
                         logger.severe("Error getting cluster metrics: ${e.message}")
@@ -523,14 +556,15 @@ class MetricsResolver(
                     }
                 }).onComplete { result ->
                     if (result.succeeded()) {
-                        future.complete(result.result())
+                        callback(result.result())
                     } else {
-                        future.completeExceptionally(result.cause())
+                        logger.warning("Failed to get cluster metrics: ${result.cause()?.message}")
+                        callback(BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, TimestampConverter.currentTimeIsoString()))
                     }
                 }
             } else {
                 logger.warning("Failed to get metrics from node $nodeId: ${reply.cause().message}")
-                future.completeExceptionally(reply.cause())
+                callback(BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, TimestampConverter.currentTimeIsoString()))
             }
         }
     }

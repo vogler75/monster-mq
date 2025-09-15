@@ -81,7 +81,8 @@ class MetricsCollector(
                             clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
                             topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
                             messageBusIn = nodeMetrics.getLong("messageBusIn", 0L),
-                            messageBusOut = nodeMetrics.getLong("messageBusOut", 0L)
+                            messageBusOut = nodeMetrics.getLong("messageBusOut", 0L),
+                            timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(timestamp)
                         )
 
                         logger.fine("Storing broker metrics: $brokerMetrics")

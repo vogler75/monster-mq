@@ -125,6 +125,7 @@ class MetricsStoreMongoDB(
                     .append("topicNodeMappingSize", metrics.topicNodeMappingSize)
                     .append("messageBusIn", metrics.messageBusIn)
                     .append("messageBusOut", metrics.messageBusOut)
+                    .append("timestamp", metrics.timestamp)
 
                 val document = Document()
                     .append("timestamp", Date.from(timestamp))
@@ -158,6 +159,7 @@ class MetricsStoreMongoDB(
                 val metricsDoc = Document()
                     .append("messagesIn", metrics.messagesIn)
                     .append("messagesOut", metrics.messagesOut)
+                    .append("timestamp", metrics.timestamp)
 
                 val document = Document()
                     .append("timestamp", Date.from(timestamp))
@@ -229,11 +231,12 @@ class MetricsStoreMongoDB(
                     clientNodeMappingSize = metricsDoc.getInteger("clientNodeMappingSize") ?: 0,
                     topicNodeMappingSize = metricsDoc.getInteger("topicNodeMappingSize") ?: 0,
                     messageBusIn = metricsDoc.getLong("messageBusIn") ?: 0L,
-                    messageBusOut = metricsDoc.getLong("messageBusOut") ?: 0L
+                    messageBusOut = metricsDoc.getLong("messageBusOut") ?: 0L,
+                    timestamp = metricsDoc.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                 )
             } else {
                 // No historical data found, return zero metrics
-                BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+                BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
             }
         })
     }
@@ -274,11 +277,12 @@ class MetricsStoreMongoDB(
                 val metricsDoc = document.get("metrics", Document::class.java)
                 SessionMetrics(
                     messagesIn = metricsDoc.getLong("messagesIn") ?: 0L,
-                    messagesOut = metricsDoc.getLong("messagesOut") ?: 0L
+                    messagesOut = metricsDoc.getLong("messagesOut") ?: 0L,
+                    timestamp = metricsDoc.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                 )
             } else {
                 // No historical data found, return zero metrics
-                SessionMetrics(0, 0)
+                SessionMetrics(0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
             }
         })
     }
@@ -329,7 +333,8 @@ class MetricsStoreMongoDB(
                     clientNodeMappingSize = metricsDoc.getInteger("clientNodeMappingSize") ?: 0,
                     topicNodeMappingSize = metricsDoc.getInteger("topicNodeMappingSize") ?: 0,
                     messageBusIn = metricsDoc.getLong("messageBusIn") ?: 0L,
-                    messageBusOut = metricsDoc.getLong("messageBusOut") ?: 0L
+                    messageBusOut = metricsDoc.getLong("messageBusOut") ?: 0L,
+                    timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(document.getDate("timestamp").toInstant())
                 )
                 timestamp to metrics
             }
@@ -374,11 +379,34 @@ class MetricsStoreMongoDB(
                 val metricsDoc = document.get("metrics", Document::class.java)
                 val metrics = SessionMetrics(
                     messagesIn = metricsDoc.getLong("messagesIn") ?: 0L,
-                    messagesOut = metricsDoc.getLong("messagesOut") ?: 0L
+                    messagesOut = metricsDoc.getLong("messagesOut") ?: 0L,
+                    timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(document.getDate("timestamp").toInstant())
                 )
                 timestamp to metrics
             }
         })
+    }
+
+    override fun getBrokerMetricsList(
+        nodeId: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<BrokerMetrics>> {
+        return getBrokerMetricsHistory(nodeId, from, to, lastMinutes, Int.MAX_VALUE).map { history ->
+            history.map { it.second }
+        }
+    }
+
+    override fun getSessionMetricsList(
+        clientId: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<SessionMetrics>> {
+        return getSessionMetricsHistory(clientId, from, to, lastMinutes, Int.MAX_VALUE).map { history ->
+            history.map { it.second }
+        }
     }
 
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {

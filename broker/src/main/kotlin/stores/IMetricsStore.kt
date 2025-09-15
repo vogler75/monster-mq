@@ -25,12 +25,26 @@ interface IMetricsStore {
         lastMinutes: Int?
     ): Future<BrokerMetrics>
 
+    fun getBrokerMetricsList(
+        nodeId: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<BrokerMetrics>>
+
     fun getSessionMetrics(
         clientId: String,
         from: Instant?,
         to: Instant?,
         lastMinutes: Int?
     ): Future<SessionMetrics>
+
+    fun getSessionMetricsList(
+        clientId: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<SessionMetrics>>
 
     fun getBrokerMetricsHistory(
         nodeId: String,

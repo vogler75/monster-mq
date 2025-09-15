@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import java.time.Instant
 import java.util.Base64
 
 enum class DataFormat {
@@ -151,17 +152,18 @@ data class BrokerMetrics(
     val clientNodeMappingSize: Int,
     val topicNodeMappingSize: Int,
     val messageBusIn: Long,
-    val messageBusOut: Long
+    val messageBusOut: Long,
+    val timestamp: String
 )
 
 data class Broker(
-    val nodeId: String,
-    val metrics: BrokerMetrics
+    val nodeId: String
 )
 
 data class SessionMetrics(
     val messagesIn: Long,
-    val messagesOut: Long
+    val messagesOut: Long,
+    val timestamp: String
 )
 
 data class MqttSubscription(
@@ -172,7 +174,6 @@ data class MqttSubscription(
 data class Session(
     val clientId: String,
     val nodeId: String,
-    val metrics: SessionMetrics,
     val subscriptions: List<MqttSubscription>,
     val cleanSession: Boolean,
     val sessionExpiryInterval: Long,
@@ -225,5 +226,19 @@ object PayloadConverter {
                 Base64.getEncoder().encodeToString(payload) to DataFormat.BINARY
             }
         }
+    }
+}
+
+object TimestampConverter {
+    fun instantToIsoString(instant: Instant): String {
+        return instant.toString()
+    }
+
+    fun milliToIsoString(millis: Long): String {
+        return Instant.ofEpochMilli(millis).toString()
+    }
+
+    fun currentTimeIsoString(): String {
+        return Instant.now().toString()
     }
 }

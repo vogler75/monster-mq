@@ -388,7 +388,8 @@ open class SessionHandler(
         return clientMetrics.mapValues { (_, sessionMetrics) ->
             at.rocworks.extensions.graphql.SessionMetrics(
                 messagesIn = sessionMetrics.messagesIn.getAndSet(0),
-                messagesOut = sessionMetrics.messagesOut.getAndSet(0)
+                messagesOut = sessionMetrics.messagesOut.getAndSet(0),
+                timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
             )
         }
     }

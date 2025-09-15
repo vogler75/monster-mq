@@ -228,7 +228,7 @@ class SessionManager {
         }
 
         tableBody.innerHTML = sessionsToRender.map(session => {
-            const metrics = session.metrics || { messagesIn: 0, messagesOut: 0 };
+            const metrics = session.metrics && session.metrics.length > 0 ? session.metrics[0] : { messagesIn: 0, messagesOut: 0 };
 
             return `
                 <tr>
@@ -278,7 +278,7 @@ class SessionManager {
     }
 
     renderSessionModal(session) {
-        const metrics = session.metrics || { messagesIn: 0, messagesOut: 0 };
+        const metrics = session.metrics && session.metrics.length > 0 ? session.metrics[0] : { messagesIn: 0, messagesOut: 0 };
         const subscriptions = session.subscriptions || [];
 
         document.getElementById('modal-title').textContent = `Session: ${session.clientId}`;

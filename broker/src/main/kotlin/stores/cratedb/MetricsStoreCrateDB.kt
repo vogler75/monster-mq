@@ -98,6 +98,7 @@ class MetricsStoreCrateDB(
                     .put("topicNodeMappingSize", metrics.topicNodeMappingSize)
                     .put("messageBusIn", metrics.messageBusIn)
                     .put("messageBusOut", metrics.messageBusOut)
+                    .put("timestamp", metrics.timestamp)
 
                 // CrateDB uses INSERT with ON DUPLICATE KEY UPDATE for upsert
                 val insertSQL = """
@@ -136,6 +137,7 @@ class MetricsStoreCrateDB(
                 val metricsJson = JsonObject()
                     .put("messagesIn", metrics.messagesIn)
                     .put("messagesOut", metrics.messagesOut)
+                    .put("timestamp", metrics.timestamp)
 
                 val insertSQL = """
                     INSERT INTO "metrics" ("timestamp", "metric_type", "identifier", "metrics")
@@ -223,11 +225,12 @@ class MetricsStoreCrateDB(
                         clientNodeMappingSize = (metricsMap["clientNodeMappingSize"] as? Number)?.toInt() ?: 0,
                         topicNodeMappingSize = (metricsMap["topicNodeMappingSize"] as? Number)?.toInt() ?: 0,
                         messageBusIn = (metricsMap["messageBusIn"] as? Number)?.toLong() ?: 0L,
-                        messageBusOut = (metricsMap["messageBusOut"] as? Number)?.toLong() ?: 0L
+                        messageBusOut = (metricsMap["messageBusOut"] as? Number)?.toLong() ?: 0L,
+                        timestamp = (metricsMap["timestamp"] as? String) ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                     )
                 } else {
                     // No historical data found, return zero metrics
-                    BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+                    BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
                 }
             }
         })
@@ -283,11 +286,12 @@ class MetricsStoreCrateDB(
                     val metricsMap = resultSet.getObject("metrics") as? Map<String, Any> ?: emptyMap()
                     SessionMetrics(
                         messagesIn = (metricsMap["messagesIn"] as? Number)?.toLong() ?: 0L,
-                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toLong() ?: 0L
+                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toLong() ?: 0L,
+                        timestamp = (metricsMap["timestamp"] as? String) ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                     )
                 } else {
                     // No historical data found, return zero metrics
-                    SessionMetrics(0, 0)
+                    SessionMetrics(0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
                 }
             }
         })
@@ -358,7 +362,8 @@ class MetricsStoreCrateDB(
                         clientNodeMappingSize = (metricsMap["clientNodeMappingSize"] as? Number)?.toInt() ?: 0,
                         topicNodeMappingSize = (metricsMap["topicNodeMappingSize"] as? Number)?.toInt() ?: 0,
                         messageBusIn = (metricsMap["messageBusIn"] as? Number)?.toLong() ?: 0L,
-                        messageBusOut = (metricsMap["messageBusOut"] as? Number)?.toLong() ?: 0L
+                        messageBusOut = (metricsMap["messageBusOut"] as? Number)?.toLong() ?: 0L,
+                        timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(resultSet.getTimestamp("timestamp").toInstant())
                     )
                     results.add(timestamp to metrics)
                 }
@@ -425,7 +430,8 @@ class MetricsStoreCrateDB(
                     val metricsMap = resultSet.getObject("metrics") as? Map<String, Any> ?: emptyMap()
                     val metrics = SessionMetrics(
                         messagesIn = (metricsMap["messagesIn"] as? Number)?.toLong() ?: 0L,
-                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toLong() ?: 0L
+                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toLong() ?: 0L,
+                        timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(resultSet.getTimestamp("timestamp").toInstant())
                     )
                     results.add(timestamp to metrics)
                 }
@@ -433,6 +439,28 @@ class MetricsStoreCrateDB(
                 results
             }
         })
+    }
+
+    override fun getBrokerMetricsList(
+        nodeId: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<BrokerMetrics>> {
+        return getBrokerMetricsHistory(nodeId, from, to, lastMinutes, Int.MAX_VALUE).map { history ->
+            history.map { it.second }
+        }
+    }
+
+    override fun getSessionMetricsList(
+        clientId: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<SessionMetrics>> {
+        return getSessionMetricsHistory(clientId, from, to, lastMinutes, Int.MAX_VALUE).map { history ->
+            history.map { it.second }
+        }
     }
 
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {

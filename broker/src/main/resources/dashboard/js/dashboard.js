@@ -212,7 +212,7 @@ class DashboardManager {
 
     updateOverviewCards(brokers) {
         const clusterTotals = brokers.reduce((acc, broker) => {
-            const metrics = broker.metrics;
+            const metrics = broker.metrics && broker.metrics.length > 0 ? broker.metrics[0] : {};
             return {
                 messagesIn: acc.messagesIn + (metrics.messagesIn || 0),
                 messagesOut: acc.messagesOut + (metrics.messagesOut || 0),
@@ -291,7 +291,7 @@ class DashboardManager {
     updateBrokerTable(brokers) {
         const tableBody = document.getElementById('broker-table-body');
         tableBody.innerHTML = brokers.map(broker => {
-            const metrics = broker.metrics;
+            const metrics = broker.metrics && broker.metrics.length > 0 ? broker.metrics[0] : {};
             const isHealthy = metrics.nodeSessionCount >= 0; // Simple health check
 
             return `
@@ -321,7 +321,7 @@ class DashboardManager {
         const timeLabel = now.toLocaleTimeString();
 
         const clusterTotals = brokers.reduce((acc, broker) => {
-            const metrics = broker.metrics;
+            const metrics = broker.metrics && broker.metrics.length > 0 ? broker.metrics[0] : {};
             return {
                 messagesIn: acc.messagesIn + (metrics.messagesIn || 0),
                 messagesOut: acc.messagesOut + (metrics.messagesOut || 0),
@@ -342,8 +342,14 @@ class DashboardManager {
         this.trafficChart.update('none');
 
         this.messageBusChart.data.labels = brokers.map(b => b.nodeId);
-        this.messageBusChart.data.datasets[0].data = brokers.map(b => b.metrics.messageBusIn || 0);
-        this.messageBusChart.data.datasets[1].data = brokers.map(b => b.metrics.messageBusOut || 0);
+        this.messageBusChart.data.datasets[0].data = brokers.map(b => {
+            const metrics = b.metrics && b.metrics.length > 0 ? b.metrics[0] : {};
+            return metrics.messageBusIn || 0;
+        });
+        this.messageBusChart.data.datasets[1].data = brokers.map(b => {
+            const metrics = b.metrics && b.metrics.length > 0 ? b.metrics[0] : {};
+            return metrics.messageBusOut || 0;
+        });
         this.messageBusChart.update('none');
     }
 

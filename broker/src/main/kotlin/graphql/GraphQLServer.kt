@@ -241,11 +241,13 @@ class GraphQLServer(
                 builder
                     .dataFetcher("sessions", metricsResolver.brokerSessions())
                     .dataFetcher("metrics", metricsResolver.brokerMetrics())
+                    .dataFetcher("metricsHistory", metricsResolver.brokerMetricsHistory())
             }
             .type("Session") { builder ->
                 builder
                     .dataFetcher("queuedMessageCount", metricsResolver.sessionQueuedMessageCount())
                     .dataFetcher("metrics", metricsResolver.sessionMetrics())
+                    .dataFetcher("metricsHistory", metricsResolver.sessionMetricsHistory())
             }
             .build()
     }

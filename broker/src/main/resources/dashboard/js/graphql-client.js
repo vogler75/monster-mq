@@ -109,6 +109,7 @@ class GraphQLDashboardClient {
                         topicNodeMappingSize
                         messageBusIn
                         messageBusOut
+                        timestamp
                     }
                 }
             }
@@ -127,6 +128,7 @@ class GraphQLDashboardClient {
                     metrics {
                         messagesIn
                         messagesOut
+                        timestamp
                     }
                     subscriptions {
                         topicFilter
@@ -154,6 +156,7 @@ class GraphQLDashboardClient {
                     metrics {
                         messagesIn
                         messagesOut
+                        timestamp
                     }
                     subscriptions {
                         topicFilter

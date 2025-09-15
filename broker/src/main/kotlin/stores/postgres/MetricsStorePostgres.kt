@@ -110,6 +110,7 @@ class MetricsStorePostgres(
                     .put("topicNodeMappingSize", metrics.topicNodeMappingSize)
                     .put("messageBusIn", metrics.messageBusIn)
                     .put("messageBusOut", metrics.messageBusOut)
+                    .put("timestamp", metrics.timestamp)
 
                 val insertSQL = """
                     INSERT INTO public.metrics ("timestamp", metric_type, identifier, metrics)
@@ -147,6 +148,7 @@ class MetricsStorePostgres(
                 val metricsJson = JsonObject()
                     .put("messagesIn", metrics.messagesIn)
                     .put("messagesOut", metrics.messagesOut)
+                    .put("timestamp", metrics.timestamp)
 
                 val insertSQL = """
                     INSERT INTO public.metrics ("timestamp", metric_type, identifier, metrics)
@@ -233,11 +235,12 @@ class MetricsStorePostgres(
                         clientNodeMappingSize = metricsJson.getInteger("clientNodeMappingSize", 0),
                         topicNodeMappingSize = metricsJson.getInteger("topicNodeMappingSize", 0),
                         messageBusIn = metricsJson.getLong("messageBusIn", 0L),
-                        messageBusOut = metricsJson.getLong("messageBusOut", 0L)
+                        messageBusOut = metricsJson.getLong("messageBusOut", 0L),
+                        timestamp = metricsJson.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                     )
                 } else {
                     // No historical data found, return zero metrics
-                    BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+                    BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
                 }
             }
         })
@@ -292,11 +295,12 @@ class MetricsStorePostgres(
                     val metricsJson = JsonObject(resultSet.getString("metrics"))
                     SessionMetrics(
                         messagesIn = metricsJson.getLong("messagesIn", 0L),
-                        messagesOut = metricsJson.getLong("messagesOut", 0L)
+                        messagesOut = metricsJson.getLong("messagesOut", 0L),
+                        timestamp = metricsJson.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                     )
                 } else {
                     // No historical data found, return zero metrics
-                    SessionMetrics(0, 0)
+                    SessionMetrics(0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
                 }
             }
         })
@@ -366,7 +370,8 @@ class MetricsStorePostgres(
                         clientNodeMappingSize = metricsJson.getInteger("clientNodeMappingSize", 0),
                         topicNodeMappingSize = metricsJson.getInteger("topicNodeMappingSize", 0),
                         messageBusIn = metricsJson.getLong("messageBusIn", 0L),
-                        messageBusOut = metricsJson.getLong("messageBusOut", 0L)
+                        messageBusOut = metricsJson.getLong("messageBusOut", 0L),
+                        timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(resultSet.getTimestamp("timestamp").toInstant())
                     )
                     results.add(timestamp to metrics)
                 }
@@ -432,7 +437,8 @@ class MetricsStorePostgres(
                     val metricsJson = JsonObject(resultSet.getString("metrics"))
                     val metrics = SessionMetrics(
                         messagesIn = metricsJson.getLong("messagesIn", 0L),
-                        messagesOut = metricsJson.getLong("messagesOut", 0L)
+                        messagesOut = metricsJson.getLong("messagesOut", 0L),
+                        timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(resultSet.getTimestamp("timestamp").toInstant())
                     )
                     results.add(timestamp to metrics)
                 }
@@ -440,6 +446,28 @@ class MetricsStorePostgres(
                 results
             }
         })
+    }
+
+    override fun getBrokerMetricsList(
+        nodeId: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<BrokerMetrics>> {
+        return getBrokerMetricsHistory(nodeId, from, to, lastMinutes, Int.MAX_VALUE).map { history ->
+            history.map { it.second }
+        }
+    }
+
+    override fun getSessionMetricsList(
+        clientId: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<SessionMetrics>> {
+        return getSessionMetricsHistory(clientId, from, to, lastMinutes, Int.MAX_VALUE).map { history ->
+            history.map { it.second }
+        }
     }
 
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {
