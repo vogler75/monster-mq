@@ -1,0 +1,497 @@
+class ArchiveGroupsManager {
+    constructor() {
+        this.isEditing = false;
+        this.editingName = null;
+        this.archiveGroups = [];
+
+        this.init();
+    }
+
+    init() {
+        if (!this.isLoggedIn()) {
+            window.location.href = '/pages/login.html';
+            return;
+        }
+
+        this.setupUI();
+        this.setupEventListeners();
+        this.loadArchiveGroups();
+    }
+
+    isLoggedIn() {
+        const token = localStorage.getItem('monstermq_token');
+        if (!token) return false;
+
+        // If token is 'null', authentication is disabled
+        if (token === 'null') return true;
+
+        try {
+            const decoded = JSON.parse(atob(token.split('.')[1]));
+            const now = Date.now() / 1000;
+            return decoded.exp > now;
+        } catch {
+            return false;
+        }
+    }
+
+    setupUI() {
+        const isAdmin = localStorage.getItem('monstermq_isAdmin');
+
+        // Show users link if admin
+        if (isAdmin === 'true') {
+            const usersLink = document.getElementById('users-link');
+            if (usersLink) {
+                usersLink.style.display = '';
+            }
+        }
+
+        // Setup logout
+        document.getElementById('logout-link').addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.removeItem('monstermq_token');
+            localStorage.removeItem('monstermq_username');
+            localStorage.removeItem('monstermq_isAdmin');
+            window.location.href = '/pages/login.html';
+        });
+    }
+
+    setupEventListeners() {
+        // Modal close on outside click
+        window.onclick = (event) => {
+            const modal = document.getElementById('archiveGroupModal');
+            if (event.target === modal) {
+                this.closeModal();
+            }
+        };
+
+        // Form submission
+        document.getElementById('archiveGroupForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveArchiveGroup();
+        });
+    }
+
+    async loadArchiveGroups() {
+        try {
+            console.log('Loading archive groups...');
+            const result = await window.graphqlClient.query(`
+                query GetArchiveGroups {
+                    archiveGroups {
+                        name
+                        enabled
+                        deployed
+                        deploymentId
+                        topicFilter
+                        retainedOnly
+                        lastValType
+                        archiveType
+                        lastValRetention
+                        archiveRetention
+                        purgeInterval
+                        createdAt
+                        updatedAt
+                    }
+                }
+            `);
+
+            this.archiveGroups = result.archiveGroups || [];
+            this.renderArchiveGroups();
+        } catch (error) {
+            console.error('Error loading archive groups:', error);
+            this.showError('Failed to load archive groups: ' + error.message);
+        }
+    }
+
+    renderArchiveGroups() {
+        const tbody = document.getElementById('archive-groups-tbody');
+
+        if (this.archiveGroups.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        No archive groups found. Create your first archive group to get started.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = this.archiveGroups.map(group => `
+            <tr>
+                <td>
+                    <strong>${this.escapeHtml(group.name)}</strong>
+                    ${group.deployed ? '<br><small style="color: var(--text-secondary);">Deployed</small>' : ''}
+                </td>
+                <td>
+                    <span class="status-badge ${group.enabled ? 'status-enabled' : 'status-disabled'}">
+                        <span class="status-indicator"></span>
+                        ${group.enabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                </td>
+                <td>
+                    <div class="topic-filters">
+                        ${group.topicFilter.slice(0, 3).map(filter =>
+                            `<span class="topic-filter-tag">${this.escapeHtml(filter)}</span>`
+                        ).join('')}
+                        ${group.topicFilter.length > 3 ?
+                            `<span class="topic-filter-tag" style="background: var(--accent-blue); color: white;">+${group.topicFilter.length - 3} more</span>` :
+                            ''
+                        }
+                    </div>
+                </td>
+                <td>${this.escapeHtml(group.lastValType)}</td>
+                <td>${this.escapeHtml(group.archiveType)}</td>
+                <td>${group.retainedOnly ? 'Yes' : 'No'}</td>
+                <td>
+                    <div class="action-buttons">
+                        ${group.enabled ?
+                            `<button class="btn-action btn-disable" onclick="archiveGroupsManager.toggleArchiveGroup('${this.escapeHtml(group.name)}', false)">
+                                Disable
+                            </button>` :
+                            `<button class="btn-action btn-enable" onclick="archiveGroupsManager.toggleArchiveGroup('${this.escapeHtml(group.name)}', true)">
+                                Enable
+                            </button>`
+                        }
+                        <button class="btn-action btn-edit"
+                                onclick="archiveGroupsManager.editArchiveGroup('${this.escapeHtml(group.name)}')"
+                                ${group.enabled ? 'disabled title="Disable the archive group first to edit"' : ''}>
+                            Edit
+                        </button>
+                        <button class="btn-action btn-delete"
+                                onclick="archiveGroupsManager.deleteArchiveGroup('${this.escapeHtml(group.name)}')"
+                                ${group.enabled ? 'disabled title="Disable the archive group first to delete"' : ''}>
+                            Delete
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async toggleArchiveGroup(name, enable) {
+        try {
+            console.log(`${enable ? 'Enabling' : 'Disabling'} archive group:`, name);
+
+            const mutation = enable ? 'enableArchiveGroup' : 'disableArchiveGroup';
+            const result = await window.graphqlClient.query(`
+                mutation ${enable ? 'EnableArchiveGroup' : 'DisableArchiveGroup'}($name: String!) {
+                    ${mutation}(name: $name) {
+                        success
+                        message
+                    }
+                }
+            `, { name });
+
+            if (result[mutation].success) {
+                console.log(`Archive group ${enable ? 'enabled' : 'disabled'} successfully`);
+                await this.loadArchiveGroups(); // Reload to update UI
+            } else {
+                this.showError(result[mutation].message || `Failed to ${enable ? 'enable' : 'disable'} archive group`);
+            }
+        } catch (error) {
+            console.error(`Error ${enable ? 'enabling' : 'disabling'} archive group:`, error);
+            this.showError(`Failed to ${enable ? 'enable' : 'disable'} archive group: ` + error.message);
+        }
+    }
+
+    async deleteArchiveGroup(name) {
+        if (!confirm(`Are you sure you want to delete the archive group "${name}"?\n\nThis action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            console.log('Deleting archive group:', name);
+
+            const result = await window.graphqlClient.query(`
+                mutation DeleteArchiveGroup($name: String!) {
+                    deleteArchiveGroup(name: $name) {
+                        success
+                        message
+                    }
+                }
+            `, { name });
+
+            if (result.deleteArchiveGroup.success) {
+                console.log('Archive group deleted successfully');
+                await this.loadArchiveGroups(); // Reload to update UI
+            } else {
+                this.showError(result.deleteArchiveGroup.message || 'Failed to delete archive group');
+            }
+        } catch (error) {
+            console.error('Error deleting archive group:', error);
+            this.showError('Failed to delete archive group: ' + error.message);
+        }
+    }
+
+    openCreateModal() {
+        this.isEditing = false;
+        this.editingName = null;
+
+        document.getElementById('modalTitle').textContent = 'Create Archive Group';
+        document.getElementById('archiveGroupForm').reset();
+        document.getElementById('name').disabled = false;
+
+        document.getElementById('archiveGroupModal').style.display = 'block';
+    }
+
+    async editArchiveGroup(name) {
+        this.isEditing = true;
+        this.editingName = name;
+
+        // Find the archive group
+        const group = this.archiveGroups.find(g => g.name === name);
+        if (!group) {
+            this.showError('Archive group not found');
+            return;
+        }
+
+        document.getElementById('modalTitle').textContent = 'Edit Archive Group';
+
+        // Populate form
+        document.getElementById('name').value = group.name;
+        document.getElementById('name').disabled = true; // Can't change name
+        document.getElementById('topicFilter').value = group.topicFilter.join('\n');
+        document.getElementById('lastValType').value = group.lastValType;
+        document.getElementById('archiveType').value = group.archiveType;
+        document.getElementById('retainedOnly').checked = group.retainedOnly;
+        document.getElementById('lastValRetention').value = group.lastValRetention || '';
+        document.getElementById('archiveRetention').value = group.archiveRetention || '';
+        document.getElementById('purgeInterval').value = group.purgeInterval || '';
+
+        document.getElementById('archiveGroupModal').style.display = 'block';
+    }
+
+    closeModal() {
+        document.getElementById('archiveGroupModal').style.display = 'none';
+        document.getElementById('archiveGroupForm').reset();
+        this.isEditing = false;
+        this.editingName = null;
+    }
+
+    async saveArchiveGroup() {
+        const form = document.getElementById('archiveGroupForm');
+        const formData = new FormData(form);
+
+        // Validate required fields
+        const name = formData.get('name').trim();
+        const topicFilterText = formData.get('topicFilter').trim();
+        const lastValType = formData.get('lastValType');
+        const archiveType = formData.get('archiveType');
+
+        if (!name || !topicFilterText || !lastValType || !archiveType) {
+            this.showError('Please fill in all required fields');
+            return;
+        }
+
+        // Parse topic filters
+        const topicFilter = topicFilterText.split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0);
+
+        if (topicFilter.length === 0) {
+            this.showError('At least one topic filter is required');
+            return;
+        }
+
+        try {
+            const input = {
+                name,
+                topicFilter,
+                lastValType,
+                archiveType,
+                retainedOnly: formData.has('retainedOnly'),
+                lastValRetention: formData.get('lastValRetention').trim() || null,
+                archiveRetention: formData.get('archiveRetention').trim() || null,
+                purgeInterval: formData.get('purgeInterval').trim() || null
+            };
+
+            console.log('Saving archive group:', input);
+
+            let result;
+            if (this.isEditing) {
+                // For update, we need to merge with the original name and modify the input structure
+                const updateInput = { ...input, name: this.editingName };
+                result = await window.graphqlClient.query(`
+                    mutation UpdateArchiveGroup($input: UpdateArchiveGroupInput!) {
+                        updateArchiveGroup(input: $input) {
+                            success
+                            message
+                        }
+                    }
+                `, { input: updateInput });
+
+                if (result.updateArchiveGroup.success) {
+                    console.log('Archive group updated successfully');
+                    this.closeModal();
+                    await this.loadArchiveGroups();
+                } else {
+                    this.showError(result.updateArchiveGroup.message || 'Failed to update archive group');
+                }
+            } else {
+                result = await window.graphqlClient.query(`
+                    mutation CreateArchiveGroup($input: CreateArchiveGroupInput!) {
+                        createArchiveGroup(input: $input) {
+                            success
+                            message
+                        }
+                    }
+                `, { input });
+
+                if (result.createArchiveGroup.success) {
+                    console.log('Archive group created successfully');
+                    this.closeModal();
+                    await this.loadArchiveGroups();
+                } else {
+                    this.showError(result.createArchiveGroup.message || 'Failed to create archive group');
+                }
+            }
+        } catch (error) {
+            console.error('Error saving archive group:', error);
+            this.showError('Failed to save archive group: ' + error.message);
+        }
+    }
+
+    showError(message) {
+        // Simple error display - could be enhanced with a proper notification system
+        alert('Error: ' + message);
+    }
+
+    escapeHtml(unsafe) {
+        if (typeof unsafe !== 'string') return unsafe;
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+}
+
+// Global functions for onclick handlers
+window.openCreateModal = () => archiveGroupsManager.openCreateModal();
+window.closeModal = () => archiveGroupsManager.closeModal();
+window.saveArchiveGroup = () => archiveGroupsManager.saveArchiveGroup();
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    window.archiveGroupsManager = new ArchiveGroupsManager();
+});
+
+// Also add GraphQL client extensions for archive groups
+if (window.graphqlClient) {
+    // Add archive group methods to the existing GraphQL client
+    window.graphqlClient.getArchiveGroups = async function() {
+        const query = `
+            query GetArchiveGroups {
+                archiveGroups {
+                    name
+                    enabled
+                    deployed
+                    deploymentId
+                    topicFilter
+                    retainedOnly
+                    lastValType
+                    archiveType
+                    lastValRetention
+                    archiveRetention
+                    purgeInterval
+                    createdAt
+                    updatedAt
+                }
+            }
+        `;
+
+        const result = await this.query(query);
+        return result.archiveGroups;
+    };
+
+    window.graphqlClient.createArchiveGroup = async function(input) {
+        const mutation = `
+            mutation CreateArchiveGroup($input: CreateArchiveGroupInput!) {
+                createArchiveGroup(input: $input) {
+                    success
+                    message
+                    archiveGroup {
+                        name
+                        enabled
+                        deployed
+                    }
+                }
+            }
+        `;
+
+        const result = await this.query(mutation, { input });
+        return result.createArchiveGroup;
+    };
+
+    window.graphqlClient.updateArchiveGroup = async function(input) {
+        const mutation = `
+            mutation UpdateArchiveGroup($input: UpdateArchiveGroupInput!) {
+                updateArchiveGroup(input: $input) {
+                    success
+                    message
+                    archiveGroup {
+                        name
+                        enabled
+                        deployed
+                    }
+                }
+            }
+        `;
+
+        const result = await this.query(mutation, { input });
+        return result.updateArchiveGroup;
+    };
+
+    window.graphqlClient.deleteArchiveGroup = async function(name) {
+        const mutation = `
+            mutation DeleteArchiveGroup($name: String!) {
+                deleteArchiveGroup(name: $name) {
+                    success
+                    message
+                }
+            }
+        `;
+
+        const result = await this.query(mutation, { name });
+        return result.deleteArchiveGroup;
+    };
+
+    window.graphqlClient.enableArchiveGroup = async function(name) {
+        const mutation = `
+            mutation EnableArchiveGroup($name: String!) {
+                enableArchiveGroup(name: $name) {
+                    success
+                    message
+                    archiveGroup {
+                        name
+                        enabled
+                        deployed
+                    }
+                }
+            }
+        `;
+
+        const result = await this.query(mutation, { name });
+        return result.enableArchiveGroup;
+    };
+
+    window.graphqlClient.disableArchiveGroup = async function(name) {
+        const mutation = `
+            mutation DisableArchiveGroup($name: String!) {
+                disableArchiveGroup(name: $name) {
+                    success
+                    message
+                    archiveGroup {
+                        name
+                        enabled
+                        deployed
+                    }
+                }
+            }
+        `;
+
+        const result = await this.query(mutation, { name });
+        return result.disableArchiveGroup;
+    };
+}

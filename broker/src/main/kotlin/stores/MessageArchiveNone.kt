@@ -11,4 +11,6 @@ object MessageArchiveNone : IMessageArchive {
     override fun addHistory(messages: List<MqttMessage>) {}
     
     override fun purgeOldMessages(olderThan: Instant): PurgeResult = PurgeResult(0, 0)
+
+    override fun dropStorage(): Boolean = true
 }

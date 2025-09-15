@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Archive Groups - MonsterMQ Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <style>
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-enabled {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+        }
+
+        .status-disabled {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+
+        .status-indicator {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .topic-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            max-width: 200px;
+        }
+
+        .topic-filter-tag {
+            background: var(--background-secondary);
+            color: var(--text-secondary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-action {
+            padding: 0.4rem 0.8rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 60px;
+        }
+
+        .btn-enable {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        .btn-disable {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-edit {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-delete {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-action:hover:not(:disabled) {
+            transform: translateY(-1px);
+            opacity: 0.9;
+        }
+
+        .btn-action:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Enhanced Modal Styles - matching sessions page */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 2rem;
+        }
+
+        .modal-content {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            padding: 2rem;
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .close:hover {
+            color: var(--text-primary);
+            background: var(--background-hover);
+        }
+
+        .modal-body {
+            padding: 2rem;
+        }
+
+        .form-grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 0;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--dark-border);
+            border-radius: 6px;
+            background: var(--dark-bg);
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            background: var(--dark-surface);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--dark-bg);
+            border-radius: 6px;
+            border: 1px solid var(--dark-border);
+            transition: all 0.2s ease;
+        }
+
+        .checkbox-group:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .form-checkbox {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: var(--accent-blue);
+        }
+
+        .checkbox-label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: 400;
+            color: var(--text-primary);
+        }
+
+
+
+        .help-text {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+            line-height: 1.4;
+        }
+
+        /* Override the 100% width for modal buttons to match users page */
+        .btn {
+            width: auto;
+        }
+
+        .required-indicator {
+            color: #ef4444;
+            margin-left: 0.25rem;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .archive-groups-header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 1rem;
+            }
+
+            .archive-cards-container {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .modal-content {
+                margin: 5% auto;
+                width: 95%;
+            }
+
+            .archive-card-actions {
+                flex-direction: column;
+            }
+
+            .btn-action {
+                flex: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ Dashboard</span>
+            </div>
+            <div class="nav-links">
+                <a href="/pages/dashboard.html">Dashboard</a>
+                <a href="/pages/sessions.html">Sessions</a>
+                <a href="/pages/archive-groups.html" class="active">Archives</a>
+                <a href="/pages/users.html" id="users-link" style="display: none;">Users</a>
+                <a href="#" id="logout-link">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">Archive Management</h1>
+                <p class="page-subtitle">Manage MQTT message archiving configurations</p>
+            </div>
+
+            <div class="data-table">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
+                    <div>
+                        <h3 style="margin: 0; color: var(--text-primary);">Archive Groups</h3>
+                    </div>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <button class="btn btn-primary" onclick="openCreateModal()">
+                            <span>+ Create Archive Group</span>
+                        </button>
+                        <button id="refresh-archives" class="btn btn-secondary" onclick="archiveGroupsManager.loadArchiveGroups()">
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Topic Filters</th>
+                            <th>Last Val Type</th>
+                            <th>Archive Type</th>
+                            <th>Retained Only</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="archive-groups-tbody">
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 2rem;">
+                                Loading archive groups...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Modal -->
+    <div id="archiveGroupModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 2000; padding: 2rem;">
+        <div style="max-width: 800px; margin: 0 auto; background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-height: 90vh; overflow-y: auto;">
+            <div style="padding: 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="margin: 0; color: var(--text-primary);" id="modalTitle">Create Archive Group</h2>
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+            <div style="padding: 2rem;">
+                <form id="archiveGroupForm">
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <label class="form-label" for="name">Name<span class="required-indicator">*</span></label>
+                            <input type="text" id="name" name="name" class="form-input" required>
+                            <div class="help-text">Unique identifier for the archive group</div>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label class="form-label" for="topicFilter">Topic Filters<span class="required-indicator">*</span></label>
+                            <textarea id="topicFilter" name="topicFilter" class="form-textarea" required placeholder="home/sensors/+/temperature&#10;office/+/status&#10;data/#"></textarea>
+                            <div class="help-text">One topic filter per line. Use + for single-level wildcards, # for multi-level wildcards</div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label" for="lastValType">Last Value Type<span class="required-indicator">*</span></label>
+                                <select id="lastValType" name="lastValType" class="form-select" required>
+                                    <option value="">Select type...</option>
+                                    <option value="NONE">None</option>
+                                    <option value="MEMORY">Memory</option>
+                                    <option value="HAZELCAST">Hazelcast</option>
+                                    <option value="POSTGRES">PostgreSQL</option>
+                                    <option value="CRATEDB">CrateDB</option>
+                                    <option value="MONGODB">MongoDB</option>
+                                    <option value="SQLITE">SQLite</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="archiveType">Archive Type<span class="required-indicator">*</span></label>
+                                <select id="archiveType" name="archiveType" class="form-select" required>
+                                    <option value="">Select type...</option>
+                                    <option value="NONE">None</option>
+                                    <option value="POSTGRES">PostgreSQL</option>
+                                    <option value="CRATEDB">CrateDB</option>
+                                    <option value="MONGODB">MongoDB</option>
+                                    <option value="KAFKA">Kafka</option>
+                                    <option value="SQLITE">SQLite</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="retainedOnly" name="retainedOnly" class="form-checkbox">
+                                <label class="checkbox-label" for="retainedOnly">Archive only retained messages</label>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label" for="lastValRetention">Last Value Retention</label>
+                                <input type="text" id="lastValRetention" name="lastValRetention" class="form-input" placeholder="30d">
+                                <div class="help-text">Format: 30d, 7d, 24h, 60m</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="archiveRetention">Archive Retention</label>
+                                <input type="text" id="archiveRetention" name="archiveRetention" class="form-input" placeholder="1y">
+                                <div class="help-text">Format: 1y, 365d, 8760h</div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="purgeInterval">Purge Interval</label>
+                            <input type="text" id="purgeInterval" name="purgeInterval" class="form-input" placeholder="1h">
+                            <div class="help-text">Format: 1h, 60m, 3600s</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                        <button type="button" class="btn btn-primary" onclick="saveArchiveGroup()">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/archive-groups.js"></script>
+</body>
+</html>

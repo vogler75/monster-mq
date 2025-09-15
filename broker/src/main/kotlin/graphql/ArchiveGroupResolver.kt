@@ -1,9 +1,12 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Utils
 import at.rocworks.handlers.ArchiveHandler
-import at.rocworks.stores.ArchiveGroup
-import at.rocworks.stores.MessageStoreType
-import at.rocworks.stores.MessageArchiveType
+import at.rocworks.stores.*
+import at.rocworks.stores.postgres.*
+import at.rocworks.stores.cratedb.*
+import at.rocworks.stores.mongodb.*
+import at.rocworks.stores.sqlite.*
 import at.rocworks.utils.DurationParser
 import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironment
@@ -11,12 +14,16 @@ import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.CompletableFuture
+import java.sql.DriverManager
+import com.mongodb.client.MongoClients
+import com.mongodb.ConnectionString
 
 class ArchiveGroupResolver(
     private val vertx: Vertx,
     private val archiveHandler: ArchiveHandler,
     private val authContext: GraphQLAuthContext
 ) {
+    private val logger = Utils.getLogger(this::class.java)
 
     // Query Resolvers
 
@@ -507,6 +514,39 @@ class ArchiveGroupResolver(
                             )
                         }
 
+                        // Drop storage for this archive group
+                        val archiveGroup = existingGroup.archiveGroup
+                        val databaseConfig = archiveHandler.createDatabaseConfig()
+                        var storageCleanupErrors = mutableListOf<String>()
+
+                        // Drop last value storage if not NONE
+                        if (archiveGroup.getLastValType() != MessageStoreType.NONE) {
+                            try {
+                                if (!dropTable(archiveGroup.getLastValType().name, "${name}Lastval", databaseConfig)) {
+                                    storageCleanupErrors.add("Failed to drop last value storage (${archiveGroup.getLastValType()})")
+                                }
+                            } catch (e: Exception) {
+                                storageCleanupErrors.add("Error dropping last value storage: ${e.message}")
+                            }
+                        }
+
+                        // Drop archive storage if not NONE
+                        if (archiveGroup.getArchiveType() != MessageArchiveType.NONE) {
+                            try {
+                                if (!dropTable(archiveGroup.getArchiveType().name, "${name}Archive", databaseConfig)) {
+                                    storageCleanupErrors.add("Failed to drop archive storage (${archiveGroup.getArchiveType()})")
+                                }
+                            } catch (e: Exception) {
+                                storageCleanupErrors.add("Error dropping archive storage: ${e.message}")
+                            }
+                        }
+
+                        if (storageCleanupErrors.isNotEmpty()) {
+                            logger.warning("Archive group '$name' deleted from database but storage cleanup had issues: ${storageCleanupErrors.joinToString(", ")}")
+                        } else {
+                            logger.info("Archive group '$name' deleted successfully including storage cleanup")
+                        }
+
                         mapOf(
                             "success" to true,
                             "message" to "Archive group '$name' deleted successfully",
@@ -700,6 +740,202 @@ class ArchiveGroupResolver(
     }
 
     // Helper methods
+
+    private fun createMessageStore(storeType: MessageStoreType, storeName: String, databaseConfig: JsonObject): IMessageStore? {
+        return when (storeType) {
+            MessageStoreType.NONE -> MessageStoreNone
+            MessageStoreType.MEMORY -> MessageStoreMemory(storeName)
+            MessageStoreType.HAZELCAST -> null // Cannot create without Hazelcast instance
+            MessageStoreType.POSTGRES -> {
+                val postgres = databaseConfig.getJsonObject("Postgres")
+                MessageStorePostgres(
+                    storeName,
+                    postgres.getString("Url"),
+                    postgres.getString("User"),
+                    postgres.getString("Pass")
+                )
+            }
+            MessageStoreType.CRATEDB -> {
+                val cratedb = databaseConfig.getJsonObject("CrateDB")
+                MessageStoreCrateDB(
+                    storeName,
+                    cratedb.getString("Url"),
+                    cratedb.getString("User"),
+                    cratedb.getString("Pass")
+                )
+            }
+            MessageStoreType.MONGODB -> {
+                val mongodb = databaseConfig.getJsonObject("MongoDB")
+                MessageStoreMongoDB(
+                    storeName,
+                    mongodb.getString("Url"),
+                    mongodb.getString("Database", "monstermq")
+                )
+            }
+            MessageStoreType.SQLITE -> {
+                val sqlite = databaseConfig.getJsonObject("SQLite")
+                MessageStoreSQLite(
+                    storeName,
+                    sqlite.getString("Path", "monstermq.db")
+                )
+            }
+        }
+    }
+
+    private fun createMessageArchive(archiveType: MessageArchiveType, archiveName: String, databaseConfig: JsonObject): IMessageArchive? {
+        return when (archiveType) {
+            MessageArchiveType.NONE -> MessageArchiveNone
+            MessageArchiveType.POSTGRES -> {
+                val postgres = databaseConfig.getJsonObject("Postgres")
+                MessageArchivePostgres(
+                    archiveName,
+                    postgres.getString("Url"),
+                    postgres.getString("User"),
+                    postgres.getString("Pass")
+                )
+            }
+            MessageArchiveType.CRATEDB -> {
+                val cratedb = databaseConfig.getJsonObject("CrateDB")
+                MessageArchiveCrateDB(
+                    archiveName,
+                    cratedb.getString("Url"),
+                    cratedb.getString("User"),
+                    cratedb.getString("Pass")
+                )
+            }
+            MessageArchiveType.MONGODB -> {
+                val mongodb = databaseConfig.getJsonObject("MongoDB")
+                MessageArchiveMongoDB(
+                    archiveName,
+                    mongodb.getString("Url"),
+                    mongodb.getString("Database", "monstermq")
+                )
+            }
+            MessageArchiveType.KAFKA -> {
+                val kafka = databaseConfig.getJsonObject("Kafka")
+                val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
+                MessageArchiveKafka(archiveName, bootstrapServers)
+            }
+            MessageArchiveType.SQLITE -> {
+                val sqlite = databaseConfig.getJsonObject("SQLite")
+                MessageArchiveSQLite(
+                    archiveName,
+                    sqlite.getString("Path", "monstermq.db")
+                )
+            }
+        }
+    }
+
+    private fun dropTable(storageType: String, tableName: String, databaseConfig: JsonObject): Boolean {
+        val lowercaseTableName = tableName.lowercase()
+        return when (storageType) {
+            "NONE", "MEMORY", "HAZELCAST", "KAFKA" -> true
+            "POSTGRES" -> {
+                val postgres = databaseConfig.getJsonObject("Postgres")
+                dropPostgresTable(lowercaseTableName, postgres)
+            }
+            "CRATEDB" -> {
+                val cratedb = databaseConfig.getJsonObject("CrateDB")
+                dropCrateTable(lowercaseTableName, cratedb)
+            }
+            "MONGODB" -> {
+                val mongodb = databaseConfig.getJsonObject("MongoDB")
+                dropMongoCollection(lowercaseTableName, mongodb)
+            }
+            "SQLITE" -> {
+                val sqlite = databaseConfig.getJsonObject("SQLite")
+                dropSQLiteTable(lowercaseTableName, sqlite)
+            }
+            else -> {
+                logger.warning("Unknown storage type: $storageType")
+                false
+            }
+        }
+    }
+
+    private fun dropPostgresTable(tableName: String, config: JsonObject): Boolean {
+        return try {
+            val url = config.getString("Url")
+            val user = config.getString("User")
+            val pass = config.getString("Pass")
+
+            DriverManager.getConnection(url, user, pass).use { connection ->
+                connection.autoCommit = false
+                val sql = "DROP TABLE IF EXISTS $tableName CASCADE"
+                connection.prepareStatement(sql).use { statement ->
+                    statement.executeUpdate()
+                }
+                connection.commit()
+                logger.info("Dropped PostgreSQL table [$tableName]")
+                true
+            }
+        } catch (e: Exception) {
+            logger.severe("Error dropping PostgreSQL table [$tableName]: ${e.message}")
+            false
+        }
+    }
+
+    private fun dropCrateTable(tableName: String, config: JsonObject): Boolean {
+        return try {
+            val url = config.getString("Url")
+            val user = config.getString("User")
+            val pass = config.getString("Pass")
+
+            DriverManager.getConnection(url, user, pass).use { connection ->
+                connection.autoCommit = false
+                val sql = "DROP TABLE IF EXISTS $tableName"
+                connection.prepareStatement(sql).use { statement ->
+                    statement.executeUpdate()
+                }
+                connection.commit()
+                logger.info("Dropped CrateDB table [$tableName]")
+                true
+            }
+        } catch (e: Exception) {
+            logger.severe("Error dropping CrateDB table [$tableName]: ${e.message}")
+            false
+        }
+    }
+
+    private fun dropMongoCollection(collectionName: String, config: JsonObject): Boolean {
+        return try {
+            val url = config.getString("Url")
+            val database = config.getString("Database", "monstermq")
+
+            val client = MongoClients.create(ConnectionString(url))
+            try {
+                val db = client.getDatabase(database)
+                val collection = db.getCollection(collectionName)
+                collection.drop()
+                logger.info("Dropped MongoDB collection [$collectionName]")
+                true
+            } finally {
+                client.close()
+            }
+        } catch (e: Exception) {
+            logger.severe("Error dropping MongoDB collection [$collectionName]: ${e.message}")
+            false
+        }
+    }
+
+    private fun dropSQLiteTable(tableName: String, config: JsonObject): Boolean {
+        return try {
+            val path = config.getString("Path", "monstermq.db")
+            val url = "jdbc:sqlite:$path"
+
+            DriverManager.getConnection(url).use { connection ->
+                val sql = "DROP TABLE IF EXISTS $tableName"
+                connection.prepareStatement(sql).use { statement ->
+                    statement.executeUpdate()
+                }
+                logger.info("Dropped SQLite table [$tableName]")
+                true
+            }
+        } catch (e: Exception) {
+            logger.severe("Error dropping SQLite table [$tableName]: ${e.message}")
+            false
+        }
+    }
 
     // Helper function to check authorization
     private fun checkAuthorization(env: DataFetchingEnvironment, future: CompletableFuture<*>): Boolean {

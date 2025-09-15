@@ -379,4 +379,16 @@ class MessageStoreSQLite(
             PurgeResult(0, elapsedTimeMs)
         }
     }
+
+    override fun dropStorage(): Boolean {
+        return try {
+            val sql = "DROP TABLE IF EXISTS $tableName"
+            sqlClient.executeUpdate(sql).toCompletionStage().toCompletableFuture().get(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
+            logger.info("Dropped table [$tableName] for message store [$name]")
+            true
+        } catch (e: Exception) {
+            logger.severe("Error dropping table [$tableName] for message store [$name]: ${e.message}")
+            false
+        }
+    }
 }

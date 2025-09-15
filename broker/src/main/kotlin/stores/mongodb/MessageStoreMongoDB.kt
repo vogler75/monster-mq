@@ -362,6 +362,17 @@ class MessageStoreMongoDB(
         return purgeResult
     }
 
+    override fun dropStorage(): Boolean {
+        return try {
+            collection.drop()
+            logger.info("Dropped collection [$collectionName] for message store [$name]")
+            true
+        } catch (e: Exception) {
+            logger.severe("Error dropping collection [$collectionName] for message store [$name]: ${e.message}")
+            false
+        }
+    }
+
     override fun stop() {
         mongoClient.close()
         logger.info("MongoDB connection closed.")

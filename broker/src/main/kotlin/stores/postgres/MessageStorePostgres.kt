@@ -343,4 +343,21 @@ class MessageStorePostgres(
         
         return result
     }
+
+    override fun dropStorage(): Boolean {
+        return try {
+            db.connection?.let { connection ->
+                val sql = "DROP TABLE IF EXISTS $tableName CASCADE"
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.executeUpdate()
+                }
+                connection.commit()
+                logger.info("Dropped table [$tableName] for message store [$name]")
+                true
+            } ?: false
+        } catch (e: SQLException) {
+            logger.severe("Error dropping table [$tableName] for message store [$name]: ${e.message}")
+            false
+        }
+    }
 }

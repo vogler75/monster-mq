@@ -24,8 +24,10 @@ interface IMessageStore {
     fun addAll(messages: List<MqttMessage>)
     fun delAll(topics: List<String>)
     fun findMatchingMessages(topicName: String, callback: (MqttMessage)->Boolean)
-    
+
     fun purgeOldMessages(olderThan: Instant): PurgeResult
+
+    fun dropStorage(): Boolean
 }
 
 interface IMessageStoreExtended : IMessageStore {

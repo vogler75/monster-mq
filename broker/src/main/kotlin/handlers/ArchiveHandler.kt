@@ -350,7 +350,7 @@ class ArchiveHandler(
         }
     }
 
-    private fun createDatabaseConfig(): JsonObject {
+    fun createDatabaseConfig(): JsonObject {
         val databaseConfig = JsonObject()
         configJson.getJsonObject("Postgres")?.let { databaseConfig.put("Postgres", it) }
         configJson.getJsonObject("CrateDB")?.let { databaseConfig.put("CrateDB", it) }

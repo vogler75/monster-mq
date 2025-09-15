@@ -54,4 +54,11 @@ class MessageArchiveKafka(
         // TODO: Implement message purging for Kafka archives
         return PurgeResult(0, 0)
     }
+
+    override fun dropStorage(): Boolean {
+        logger.warning("dropStorage not implemented for Kafka message archive [$name] - Kafka topics are managed externally")
+        // Note: Kafka topics should be managed through Kafka administration tools
+        // We cannot drop Kafka topics from within the application safely
+        return true
+    }
 }

@@ -15,7 +15,7 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
     private val logger = Utils.getLogger(this::class.java, name)
 
     private val index = TopicTree<Void, Void>()
-    private val store = getStore()
+    private val store = mutableMapOf<String, MqttMessage>()
 
     private val addAddress = EventBusAddresses.Store.add(name)
     private val delAddress = EventBusAddresses.Store.delete(name)
@@ -38,7 +38,6 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
         })
     }
 
-    private fun getStore(): MutableMap<String, MqttMessage> = mutableMapOf<String, MqttMessage>()
 
     override fun get(topicName: String): MqttMessage? = store[topicName]
     
@@ -101,5 +100,16 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
         logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} of $checkedCount messages in ${result.elapsedTimeMs}ms")
         
         return result
+    }
+
+    override fun dropStorage(): Boolean {
+        return try {
+            store.clear()
+            logger.info("Cleared in-memory storage for message store [$name]")
+            true
+        } catch (e: Exception) {
+            logger.severe("Error clearing in-memory storage for message store [$name]: ${e.message}")
+            false
+        }
     }
 }

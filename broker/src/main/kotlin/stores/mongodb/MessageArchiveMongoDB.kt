@@ -323,6 +323,17 @@ class MessageArchiveMongoDB(
         return purgeResult
     }
 
+    override fun dropStorage(): Boolean {
+        return try {
+            collection.drop()
+            logger.info("Dropped collection [$collectionName] for message archive [$name]")
+            true
+        } catch (e: Exception) {
+            logger.severe("Error dropping collection [$collectionName] for message archive [$name]: ${e.message}")
+            false
+        }
+    }
+
     override fun stop() {
         mongoClient.close()
         logger.info("MongoDB connection closed.")

@@ -255,4 +255,18 @@ class MessageArchiveSQLite(
             PurgeResult(0, elapsedTimeMs)
         }
     }
+
+    override fun dropStorage(): Boolean {
+        return try {
+            val sql = "DROP TABLE IF EXISTS $tableName"
+            val params = JsonArray()
+            val future = sqlClient.executeUpdate(sql, params)
+            val result = future.toCompletionStage().toCompletableFuture().get(5000, TimeUnit.MILLISECONDS)
+            logger.info("Dropped table [$tableName] for message archive [$name]")
+            true
+        } catch (e: Exception) {
+            logger.severe("Error dropping table [$tableName] for message archive [$name]: ${e.message}")
+            false
+        }
+    }
 }

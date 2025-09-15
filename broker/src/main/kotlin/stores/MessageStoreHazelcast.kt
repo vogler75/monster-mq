@@ -107,4 +107,15 @@ class MessageStoreHazelcast(
         
         return result
     }
+
+    override fun dropStorage(): Boolean {
+        return try {
+            store.clear()
+            logger.info("Cleared Hazelcast storage for message store [$name]")
+            true
+        } catch (e: Exception) {
+            logger.severe("Error clearing Hazelcast storage for message store [$name]: ${e.message}")
+            false
+        }
+    }
 }
