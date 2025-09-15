@@ -267,6 +267,16 @@
             width: auto;
         }
 
+        /* Button layout like Create User modal */
+        .modal-buttons .btn-secondary {
+            flex-shrink: 0;
+            min-width: 120px;
+        }
+
+        .modal-buttons .btn-primary {
+            flex-grow: 1;
+        }
+
         .required-indicator {
             color: #ef4444;
             margin-left: 0.25rem;
@@ -443,7 +453,7 @@
                             <div class="help-text">Format: 1h, 60m, 3600s</div>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
+                    <div class="modal-buttons" style="display: flex; gap: 1rem; margin-top: 2rem;">
                         <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
                         <button type="button" class="btn btn-primary" onclick="saveArchiveGroup()">
                             <span>Save</span>
