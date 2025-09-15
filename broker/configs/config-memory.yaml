@@ -13,6 +13,7 @@ MaxMessageSizeKb: 8
 # Note: SessionStore requires a database, so we'll use SQLite with in-memory mode
 SessionStoreType: SQLITE
 RetainedStoreType: MEMORY
+ConfigStoreType: SQLITE
 
 # Enable queued messages (stored in memory via SQLite :memory:)
 QueuedMessagesEnabled: true

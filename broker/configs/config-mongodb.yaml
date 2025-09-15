@@ -8,6 +8,7 @@ QueuedMessagesEnabled: true
 
 SessionStoreType: MONGODB
 RetainedStoreType: MONGODB
+ConfigStoreType: MONGODB
 
 # User Management configuration
 UserManagement:

@@ -6,6 +6,7 @@ MaxMessageSizeKb: 8
 # Use SQLite for all storage needs
 SessionStoreType: SQLITE
 RetainedStoreType: SQLITE
+ConfigStoreType: SQLITE
 
 QueuedMessagesEnabled: true
 

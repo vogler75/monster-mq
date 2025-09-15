@@ -15,6 +15,7 @@ MaxMessageSizeKb: 8
 # SQLite cannot be used in cluster mode as it's file-based and not shareable
 SessionStoreType: POSTGRES      # Required: Central database for session sharing
 RetainedStoreType: HAZELCAST   # Distributed memory across cluster nodes
+ConfigStoreType: POSTGRES
 
 # Enable queued messages (stored in PostgreSQL)
 QueuedMessagesEnabled: true

@@ -5,6 +5,7 @@ QueuedMessagesEnabled: true
 
 SessionStoreType: POSTGRES
 RetainedStoreType: POSTGRES
+ConfigStoreType: POSTGRES
 
 Postgres:
   Url: jdbc:postgresql://linux5:5432/monster

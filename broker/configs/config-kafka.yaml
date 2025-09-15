@@ -12,6 +12,7 @@ MaxMessageSizeKb: 512
 # Storage Configuration
 SessionStoreType: POSTGRES      # Persistent sessions
 RetainedStoreType: POSTGRES     # Persistent retained messages
+ConfigStoreType: POSTGRES
 QueuedMessagesEnabled: true     # Enable QoS message queuing
 
 # PostgreSQL Configuration (for sessions and retained messages)

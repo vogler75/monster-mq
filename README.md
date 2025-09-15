@@ -535,6 +535,68 @@ GraphQL:
   Port: 4000
 ```
 
+### Bulk Import with -archiveConfig
+
+For initial setup or bulk configuration updates, you can use the `-archiveConfig` parameter to import archive groups from a separate YAML file:
+
+```bash
+# Import archive groups from YAML file into database
+java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -archiveConfig archive-setup.yaml
+```
+
+**Example archive-setup.yaml:**
+```yaml
+ArchiveGroups:
+  - Name: "ProductionSensors"
+    Enabled: true
+    TopicFilter: ["production/sensors/+/data", "production/alerts/#"]
+    RetainedOnly: false
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
+    LastValRetention: "7d"
+    ArchiveRetention: "30d"
+    PurgeInterval: "6h"
+
+  - Name: "DebugData"
+    Enabled: false
+    TopicFilter: ["debug/+/+", "test/+/data"]
+    RetainedOnly: false
+    LastValType: MEMORY
+    ArchiveType: POSTGRES
+    LastValRetention: "1h"
+    ArchiveRetention: "24h"
+    PurgeInterval: "1h"
+
+  - Name: "CriticalAlarms"
+    Enabled: true
+    TopicFilter: ["alarms/critical/+", "system/errors/#"]
+    RetainedOnly: true
+    LastValType: HAZELCAST
+    ArchiveType: POSTGRES
+    LastValRetention: "90d"
+    ArchiveRetention: "1y"
+    PurgeInterval: "12h"
+```
+
+**How -archiveConfig Works:**
+
+1. **With ConfigStoreType configured**: Archive groups are imported into the database and can be managed via GraphQL/dashboard
+2. **Without ConfigStoreType**: Archive groups are loaded into memory (legacy YAML mode)
+3. **Automatic Detection**: System automatically detects if database storage is available
+4. **Migration Tool**: Perfect for migrating from YAML-based configurations to database storage
+
+**Import Process:**
+```bash
+# Set ConfigStoreType in your main config.yaml
+ConfigStoreType: POSTGRES
+
+# Import archive groups into database
+./run.sh -archiveConfig my-archive-config.yaml
+
+# After import, manage via GraphQL API or dashboard
+# The YAML file is no longer needed for runtime
+```
+
 ### GraphQL Archive Management API
 
 Complete archive group management through GraphQL:
