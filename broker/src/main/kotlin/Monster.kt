@@ -12,17 +12,14 @@ import at.rocworks.extensions.McpServer
 import at.rocworks.extensions.SparkplugExtension
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
+import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.*
-import at.rocworks.stores.cratedb.MessageArchiveCrateDB
 import at.rocworks.stores.cratedb.MessageStoreCrateDB
 import at.rocworks.stores.cratedb.SessionStoreCrateDB
-import at.rocworks.stores.mongodb.MessageArchiveMongoDB
 import at.rocworks.stores.mongodb.MessageStoreMongoDB
 import at.rocworks.stores.mongodb.SessionStoreMongoDB
-import at.rocworks.stores.postgres.MessageArchivePostgres
 import at.rocworks.stores.postgres.MessageStorePostgres
 import at.rocworks.stores.postgres.SessionStorePostgres
-import at.rocworks.stores.sqlite.MessageArchiveSQLite
 import at.rocworks.stores.sqlite.MessageStoreSQLite
 import at.rocworks.stores.sqlite.SessionStoreSQLite
 import at.rocworks.stores.sqlite.SQLiteVerticle
@@ -51,6 +48,8 @@ class Monster(args: Array<String>) {
 
     private val configFile: String
     private var configJson: JsonObject = JsonObject()
+    private val archiveConfigFile: String?
+    var archiveHandler: ArchiveHandler? = null
 
     // Cluster manager reference for Vert.x 5 compatibility
     private var clusterManager: HazelcastClusterManager? = null
@@ -157,6 +156,14 @@ class Monster(args: Array<String>) {
             System.getenv("GATEWAY_CONFIG") ?: "config.yaml"
         }
 
+        // Archive config file (optional)
+        val archiveConfigIndex = args.indexOf("-archiveConfig")
+        archiveConfigFile = if (archiveConfigIndex != -1 && archiveConfigIndex + 1 < args.size) {
+            args[archiveConfigIndex + 1]
+        } else {
+            null
+        }
+
         args.indexOf("-log").let {
             if (it != -1) {
                 val level = Level.parse(args[it + 1])
@@ -184,7 +191,11 @@ OPTIONS:
   
   -config <file>        Configuration file path (default: config.yaml)
                         Environment: GATEWAY_CONFIG
-  
+
+  -archiveConfig <file> Load ArchiveGroups from separate YAML file
+                        If ConfigStoreType is set: imports to database
+                        Otherwise: merges with main config in memory
+
   -cluster              Enable Hazelcast clustering mode for multi-node deployment
                         
   -log <level>          Set logging level
@@ -241,6 +252,8 @@ MORE INFO:
         getConfigRetriever(vertx).config.onComplete { it ->
             if (it.succeeded()) {
                 this.configJson = it.result()
+
+
                 configJson.getJsonObject("Postgres", JsonObject()).let { pg ->
                     postgresConfig.url = pg.getString("Url", "jdbc:postgresql://localhost:5432/postgres")
                     postgresConfig.user = pg.getString("User", "system")
@@ -264,6 +277,7 @@ MORE INFO:
             }
         }
     }
+
 
     private fun loadConfigSync() {
         try {
@@ -366,7 +380,8 @@ MORE INFO:
             val (retainedStore, retainedReady) = getMessageStore(vertx, "RetainedMessages", retainedStoreType)
 
             // Archive groups
-            val archiveGroupsFuture = deployArchiveGroups(vertx)
+            val archiveHandler = ArchiveHandler(vertx, configJson, archiveConfigFile)
+            val archiveGroupsFuture = archiveHandler.initialize()
 
             // Wait for all stores to be ready
             Future.all<Any>(listOf(archiveGroupsFuture, retainedReady, messageBusReady) as List<Future<*>>).onFailure { it ->
@@ -381,6 +396,11 @@ MORE INFO:
 
                 // Session handler
                 val sessionHandler = SessionHandler(sessionStore, messageBus, messageHandler, queuedMessagesEnabled)
+
+                // Store ArchiveHandler for later access
+                singleton?.let { instance ->
+                    instance.archiveHandler = archiveHandler
+                }
 
 
                 // User management
@@ -521,50 +541,6 @@ MORE INFO:
         }
     }
 
-    private fun deployArchiveGroups(vertx: Vertx): Future<List<ArchiveGroup>> {
-        val promise = Promise.promise<List<ArchiveGroup>>()
-        
-        val archiveGroupConfigs = configJson.getJsonArray("ArchiveGroups", JsonArray())
-            .filterIsInstance<JsonObject>()
-            .filter { it.getBoolean("Enabled") }
-        
-        if (archiveGroupConfigs.isEmpty()) {
-            promise.complete(emptyList())
-            return promise.future()
-        }
-        
-        // Create database configuration object with all database configs
-        val databaseConfig = JsonObject()
-        configJson.getJsonObject("Postgres")?.let { databaseConfig.put("Postgres", it) }
-        configJson.getJsonObject("CrateDB")?.let { databaseConfig.put("CrateDB", it) }
-        configJson.getJsonObject("MongoDB")?.let { databaseConfig.put("MongoDB", it) }
-        configJson.getJsonObject("SQLite")?.let { databaseConfig.put("SQLite", it) }
-        configJson.getJsonObject("Kafka")?.let { databaseConfig.put("Kafka", it) }
-        
-        val deploymentFutures: List<Future<ArchiveGroup>> = archiveGroupConfigs.map { config ->
-            val archiveGroup = ArchiveGroup.fromConfig(config, databaseConfig)
-            val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-            
-            vertx.deployVerticle(archiveGroup, options).map { _ -> 
-                logger.info("ArchiveGroup [${archiveGroup.name}] deployed successfully")
-                archiveGroup 
-            }
-        }
-        
-        @Suppress("UNCHECKED_CAST")
-        Future.all<Any>(deploymentFutures as List<Future<Any>>).onComplete { result ->
-            if (result.succeeded()) {
-                val archiveGroups = deploymentFutures.mapNotNull { 
-                    if (it.succeeded()) it.result() else null
-                }
-                promise.complete(archiveGroups)
-            } else {
-                promise.fail(result.cause())
-            }
-        }
-        
-        return promise.future()
-    }
 
     private fun getSessionStore(vertx: Vertx): Future<ISessionStoreAsync> {
         val promise = Promise.promise<ISessionStoreAsync>()
@@ -665,67 +641,4 @@ MORE INFO:
         return store to promise.future()
     }
 
-    private fun getMessageArchive(vertx: Vertx,
-                                  name: String,
-                                  storeType: MessageArchiveType): Pair<IMessageArchive?, Future<Void>> {
-        val promise = Promise.promise<Void>()
-        val archive = when (storeType) {
-            MessageArchiveType.NONE -> {
-                promise.complete()
-                null
-            }
-            MessageArchiveType.POSTGRES -> {
-                val store = MessageArchivePostgres(
-                    name = name,
-                    url = postgresConfig.url,
-                    username = postgresConfig.user,
-                    password = postgresConfig.pass
-                )
-                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
-                store
-            }
-            MessageArchiveType.CRATEDB -> {
-                val store = MessageArchiveCrateDB(
-                    name = name,
-                    url = crateDbConfig.url,
-                    username = crateDbConfig.user,
-                    password = crateDbConfig.pass
-                )
-                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
-                store
-            }
-            MessageArchiveType.MONGODB -> {
-                val store = MessageArchiveMongoDB(
-                    name = name,
-                    connectionString = mongoDbConfig.url,
-                    databaseName = mongoDbConfig.database
-                )
-                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
-                store
-            }
-            MessageArchiveType.SQLITE -> {
-                val store = MessageArchiveSQLite(
-                    name = name,
-                    dbPath = sqliteConfig.path
-                )
-                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                ensureSQLiteVerticleDeployed(vertx).compose { _ ->
-                    vertx.deployVerticle(store, options)
-                }.onSuccess { promise.complete() }.onFailure { promise.fail(it) }
-                store
-            }
-            MessageArchiveType.KAFKA -> {
-                val kafka = configJson.getJsonObject("Kafka", JsonObject())
-                val bootstrapServers = kafka.getString("Servers", "localhost:9092")
-                val store = MessageArchiveKafka(name, bootstrapServers)
-                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
-                store
-            }
-        }
-        return archive to promise.future()
-    }
 }

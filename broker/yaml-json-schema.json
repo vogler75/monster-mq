@@ -76,6 +76,16 @@
       "type": "boolean",
       "default": true
     },
+    "ConfigStoreType": {
+      "type": "string",
+      "enum": [
+        "POSTGRES",
+        "CRATEDB",
+        "MONGODB",
+        "SQLITE"
+      ],
+      "description": "Database type for storing archive configuration"
+    },
     "ArchiveGroups": {
       "type": "array",
       "items": {
