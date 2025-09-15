@@ -2,8 +2,11 @@ package at.rocworks.handlers
 
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
+import at.rocworks.handlers.MessageHandler
 import at.rocworks.stores.*
 import at.rocworks.stores.ConfigStoreFactory
+import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.MessageArchiveType
 import at.rocworks.stores.cratedb.MessageArchiveCrateDB
 import at.rocworks.stores.mongodb.MessageArchiveMongoDB
 import at.rocworks.stores.postgres.MessageArchivePostgres
@@ -34,6 +37,12 @@ class ArchiveHandler(
 
     // Track all deployed ArchiveGroups with their deployment IDs
     private val deployedArchiveGroups = ConcurrentHashMap<String, ArchiveGroupInfo>()
+
+    // Keep reference to deployed ConfigStore if using database
+    private var deployedConfigStore: IConfigStore? = null
+
+    // Reference to MessageHandler for dynamic registration
+    private var messageHandler: MessageHandler? = null
 
     companion object {
         // Event bus addresses for ArchiveGroup management
@@ -162,6 +171,8 @@ class ArchiveHandler(
         vertx.deployVerticle(configStore as AbstractVerticle, options).onComplete { deployResult ->
             if (deployResult.succeeded()) {
                 logger.info("ConfigStore deployed for import")
+                // Store reference to deployed ConfigStore
+                deployedConfigStore = configStore
 
                 // Create database configuration object
                 val databaseConfig = createDatabaseConfig()
@@ -237,6 +248,8 @@ class ArchiveHandler(
         vertx.deployVerticle(configStore as AbstractVerticle, options).onComplete { deployResult ->
             if (deployResult.succeeded()) {
                 logger.info("ConfigStore deployed successfully")
+                // Store reference to deployed ConfigStore
+                deployedConfigStore = configStore
 
                 // Create database configuration object first
                 val databaseConfig = createDatabaseConfig()
@@ -474,6 +487,10 @@ class ArchiveHandler(
             if (result.succeeded()) {
                 deployedArchiveGroups.remove(name)
                 logger.info("ArchiveGroup [$name] stopped successfully")
+
+                // Unregister from MessageHandler
+                messageHandler?.unregisterArchiveGroup(name)
+
                 promise.complete(true)
                 // Broadcast to cluster
                 broadcastArchiveGroupEvent("STOPPED", name)
@@ -500,6 +517,20 @@ class ArchiveHandler(
         }
     }
 
+    fun getConfigStore(): IConfigStore? {
+        // Return the deployed ConfigStore instance if available
+        // Otherwise return null (no database configuration)
+        return deployedConfigStore
+    }
+
+    /**
+     * Set the MessageHandler reference for dynamic archive group registration
+     */
+    fun setMessageHandler(messageHandler: MessageHandler) {
+        this.messageHandler = messageHandler
+        logger.info("MessageHandler reference set for dynamic archive group registration")
+    }
+
     fun listArchiveGroups(): JsonArray {
         val result = JsonArray()
         deployedArchiveGroups.values.forEach { archiveInfo ->
@@ -507,8 +538,14 @@ class ArchiveHandler(
                 put("name", archiveInfo.archiveGroup.name)
                 put("deploymentId", archiveInfo.deploymentId)
                 put("enabled", archiveInfo.enabled)
+                put("deployed", true)
                 put("topicFilter", JsonArray(archiveInfo.archiveGroup.topicFilter))
                 put("retainedOnly", archiveInfo.archiveGroup.retainedOnly)
+                put("lastValType", archiveInfo.archiveGroup.getLastValType().name)
+                put("archiveType", archiveInfo.archiveGroup.getArchiveType().name)
+                put("lastValRetention", archiveInfo.archiveGroup.getLastValRetentionMs()?.toString())
+                put("archiveRetention", archiveInfo.archiveGroup.getArchiveRetentionMs()?.toString())
+                put("purgeInterval", archiveInfo.archiveGroup.getPurgeIntervalMs()?.toString())
             })
         }
         return result
@@ -571,6 +608,11 @@ class ArchiveHandler(
                 val archiveInfo = ArchiveGroupInfo(archiveGroup, deploymentId, true)
                 deployedArchiveGroups[archiveGroup.name] = archiveInfo
                 logger.info("ArchiveGroup [${archiveGroup.name}] deployed at runtime with ID: $deploymentId")
+
+                // Register with MessageHandler for message routing
+                messageHandler?.registerArchiveGroup(archiveGroup)
+                    ?: logger.warning("MessageHandler not available - archive group [${archiveGroup.name}] won't receive messages")
+
                 promise.complete(deploymentId)
             } else {
                 logger.severe("Failed to deploy ArchiveGroup [${archiveGroup.name}] at runtime: ${result.cause()?.message}")
@@ -583,26 +625,56 @@ class ArchiveHandler(
 
     private fun loadArchiveGroupFromDatabase(name: String, configStoreType: String): Future<ArchiveGroup?> {
         val promise = Promise.promise<ArchiveGroup?>()
-        val configStore = ConfigStoreFactory.createConfigStore(configJson, configStoreType)
 
-        if (configStore == null) {
+        // Use the deployed ConfigStore if available
+        val configStore = deployedConfigStore
+        if (configStore != null) {
+            // ConfigStore is already deployed, use it directly
+            val archiveGroupConfig = configStore.getArchiveGroup(name)
+            if (archiveGroupConfig != null) {
+                // Don't check enabled flag here - we want to load it regardless
+                val databaseConfig = createDatabaseConfig()
+                val ag = archiveGroupConfig.archiveGroup
+                val archiveGroup = ArchiveGroup(
+                    name = ag.name,
+                    topicFilter = ag.topicFilter,
+                    retainedOnly = ag.retainedOnly,
+                    lastValType = ag.getLastValType(),
+                    archiveType = ag.getArchiveType(),
+                    lastValRetentionMs = ag.getLastValRetentionMs(),
+                    archiveRetentionMs = ag.getArchiveRetentionMs(),
+                    purgeIntervalMs = ag.getPurgeIntervalMs(),
+                    databaseConfig = databaseConfig
+                )
+                promise.complete(archiveGroup)
+            } else {
+                promise.complete(null)
+            }
+            return promise.future()
+        }
+
+        // Fallback: create a new ConfigStore (shouldn't normally happen)
+        val newConfigStore = ConfigStoreFactory.createConfigStore(configJson, configStoreType)
+
+        if (newConfigStore == null) {
             promise.fail("Failed to create ConfigStore of type $configStoreType")
             return promise.future()
         }
 
         val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-        vertx.deployVerticle(configStore as AbstractVerticle, options).onComplete { deployResult ->
+        vertx.deployVerticle(newConfigStore as AbstractVerticle, options).onComplete { deployResult ->
             if (deployResult.succeeded()) {
-                val archiveGroupConfig = configStore.getArchiveGroup(name)
-                if (archiveGroupConfig != null && archiveGroupConfig.enabled) {
+                val archiveGroupConfig = newConfigStore.getArchiveGroup(name)
+                if (archiveGroupConfig != null) {
+                    // Don't check enabled flag here - we want to load it regardless
                     val databaseConfig = createDatabaseConfig()
                     val ag = archiveGroupConfig.archiveGroup
                     val archiveGroup = ArchiveGroup(
                         name = ag.name,
                         topicFilter = ag.topicFilter,
                         retainedOnly = ag.retainedOnly,
-                        lastValType = MessageStoreType.POSTGRES, // Hard-coded for now
-                        archiveType = MessageArchiveType.POSTGRES, // Hard-coded for now
+                        lastValType = ag.getLastValType(),
+                        archiveType = ag.getArchiveType(),
                         lastValRetentionMs = ag.getLastValRetentionMs(),
                         archiveRetentionMs = ag.getArchiveRetentionMs(),
                         purgeIntervalMs = ag.getPurgeIntervalMs(),

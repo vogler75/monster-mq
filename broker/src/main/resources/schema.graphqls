@@ -6,6 +6,25 @@ enum DataFormat {
     BINARY
 }
 
+enum MessageStoreType {
+    NONE
+    MEMORY
+    HAZELCAST
+    POSTGRES
+    CRATEDB
+    MONGODB
+    SQLITE
+}
+
+enum MessageArchiveType {
+    NONE
+    POSTGRES
+    CRATEDB
+    MONGODB
+    KAFKA
+    SQLITE
+}
+
 # Metrics for the broker
 type BrokerMetrics {
     # Total messages received from clients on this node
@@ -141,6 +160,10 @@ type Query {
 
     # User Management
     users(username: String): [UserInfo!]!
+
+    # ArchiveGroup Management
+    archiveGroups: [ArchiveGroupInfo!]!
+    archiveGroup(name: String!): ArchiveGroupInfo
 }
 
 type Mutation {
@@ -166,6 +189,13 @@ type Mutation {
 
     # Queued Messages Management (requires admin token)
     purgeQueuedMessages(clientId: String): PurgeResult!
+
+    # ArchiveGroup Management (requires admin token)
+    createArchiveGroup(input: CreateArchiveGroupInput!): ArchiveGroupResult!
+    updateArchiveGroup(input: UpdateArchiveGroupInput!): ArchiveGroupResult!
+    deleteArchiveGroup(name: String!): ArchiveGroupResult!
+    enableArchiveGroup(name: String!): ArchiveGroupResult!
+    disableArchiveGroup(name: String!): ArchiveGroupResult!
 }
 
 type Subscription {
@@ -286,6 +316,52 @@ input UpdateAclRuleInput {
     canSubscribe: Boolean
     canPublish: Boolean
     priority: Int
+}
+
+# ArchiveGroup Management Types
+
+type ArchiveGroupInfo {
+    name: String!
+    enabled: Boolean!
+    deployed: Boolean!
+    deploymentId: String
+    topicFilter: [String!]!
+    retainedOnly: Boolean!
+    lastValType: MessageStoreType!
+    archiveType: MessageArchiveType!
+    lastValRetention: String
+    archiveRetention: String
+    purgeInterval: String
+    createdAt: String
+    updatedAt: String
+}
+
+input CreateArchiveGroupInput {
+    name: String!
+    topicFilter: [String!]!
+    retainedOnly: Boolean = false
+    lastValType: MessageStoreType!
+    archiveType: MessageArchiveType!
+    lastValRetention: String
+    archiveRetention: String
+    purgeInterval: String
+}
+
+input UpdateArchiveGroupInput {
+    name: String!
+    topicFilter: [String!]
+    retainedOnly: Boolean
+    lastValType: MessageStoreType
+    archiveType: MessageArchiveType
+    lastValRetention: String
+    archiveRetention: String
+    purgeInterval: String
+}
+
+type ArchiveGroupResult {
+    success: Boolean!
+    message: String
+    archiveGroup: ArchiveGroupInfo
 }
 
 # Authentication Types

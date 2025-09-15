@@ -82,8 +82,10 @@ class ArchiveGroup(
     }
     
     fun getLastValRetentionMs(): Long? = lastValRetentionMs
-    fun getArchiveRetentionMs(): Long? = archiveRetentionMs  
+    fun getArchiveRetentionMs(): Long? = archiveRetentionMs
     fun getPurgeIntervalMs(): Long? = purgeIntervalMs
+    fun getLastValType(): MessageStoreType = lastValType
+    fun getArchiveType(): MessageArchiveType = archiveType
     
     private fun createMessageStore(storeType: MessageStoreType, storeName: String): Future<Void> {
         val promise = Promise.promise<Void>()

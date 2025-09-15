@@ -23,6 +23,9 @@ class MessageHandler(
 
     private val archiveQueues = mutableMapOf<String, ArrayBlockingQueue<MqttMessage>>()
 
+    // Runtime list of active archive groups (includes both startup and dynamically added ones)
+    private val activeArchiveGroups = mutableMapOf<String, ArchiveGroup>()
+
     private val maxWriteBlockSize = 4000 // TODO: configurable
 
     init {
@@ -33,13 +36,45 @@ class MessageHandler(
         logger.info("Start message handler [${Utils.getCurrentFunctionName()}]")
         writerThread("RM", retainedQueueStore, ::retainedQueueWriter)
         archiveGroups.forEach { group ->
-            val queue = ArrayBlockingQueue<MqttMessage>(100_000) // TODO: configurable
-            archiveQueues[group.name] = queue
-            writerThread("AG-${group.name}", queue) { list ->
-                group.lastValStore?.addAll(getLastMessages(list))
-                group.archiveStore?.addHistory(list)
-            }
+            registerArchiveGroup(group)
         }
+    }
+
+    /**
+     * Register an archive group for message routing (both startup and runtime)
+     */
+    fun registerArchiveGroup(archiveGroup: ArchiveGroup) {
+        logger.info("Registering archive group [${archiveGroup.name}] with MessageHandler")
+
+        // Add to active groups
+        activeArchiveGroups[archiveGroup.name] = archiveGroup
+
+        // Create queue for this archive group
+        val queue = ArrayBlockingQueue<MqttMessage>(100_000) // TODO: configurable
+        archiveQueues[archiveGroup.name] = queue
+
+        // Start writer thread for this archive group
+        writerThread("AG-${archiveGroup.name}", queue) { list ->
+            archiveGroup.lastValStore?.addAll(getLastMessages(list))
+            archiveGroup.archiveStore?.addHistory(list)
+        }
+
+        logger.info("Archive group [${archiveGroup.name}] registered successfully")
+    }
+
+    /**
+     * Unregister an archive group from message routing
+     */
+    fun unregisterArchiveGroup(archiveGroupName: String) {
+        logger.info("Unregistering archive group [$archiveGroupName] from MessageHandler")
+
+        // Remove from active groups
+        activeArchiveGroups.remove(archiveGroupName)
+
+        // Remove queue (the writer thread will terminate when queue is empty and not used)
+        archiveQueues.remove(archiveGroupName)
+
+        logger.info("Archive group [$archiveGroupName] unregistered successfully")
     }
 
     private fun retainedQueueWriter(list: List<MqttMessage>) {
@@ -107,10 +142,10 @@ class MessageHandler(
             }
         }
 
-        archiveGroups.forEach {
-            val queue = archiveQueues[it.name] ?: return@forEach
-            if ((!it.retainedOnly || message.isRetain) &&
-                (it.topicFilter.isEmpty() || it.filterTree.isTopicNameMatching(message.topicName))) {
+        activeArchiveGroups.values.forEach { archiveGroup ->
+            val queue = archiveQueues[archiveGroup.name] ?: return@forEach
+            if ((!archiveGroup.retainedOnly || message.isRetain) &&
+                (archiveGroup.topicFilter.isEmpty() || archiveGroup.filterTree.isTopicNameMatching(message.topicName))) {
                 try {
                     queue.add(message)
                 } catch (e: IllegalStateException) {

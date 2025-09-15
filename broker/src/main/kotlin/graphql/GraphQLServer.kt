@@ -2,6 +2,7 @@ package at.rocworks.extensions.graphql
 
 import at.rocworks.auth.UserManager
 import at.rocworks.bus.IMessageBus
+import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.handlers.SessionHandler
 import at.rocworks.stores.ArchiveGroup
@@ -35,7 +36,8 @@ class GraphQLServer(
     private val userManager: UserManager,
     private val sessionStore: ISessionStoreAsync,
     private val sessionHandler: SessionHandler,
-    private val metricsStore: IMetricsStore?
+    private val metricsStore: IMetricsStore?,
+    private val archiveHandler: ArchiveHandler?
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(GraphQLServer::class.java.name)
@@ -185,14 +187,21 @@ class GraphQLServer(
         val subscriptionResolver = SubscriptionResolver(vertx, messageBus)
         val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
         val authenticationResolver = AuthenticationResolver(vertx, userManager)
+        val archiveGroupResolver = archiveHandler?.let { ArchiveGroupResolver(vertx, it, authContext) }
 
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
             .scalar(ExtendedScalars.GraphQLLong)
             .scalar(ExtendedScalars.Json)
-            // Register custom enum type resolver
+            // Register custom enum type resolvers
             .type("DataFormat") { builder ->
                 builder.enumValues { name -> DataFormat.valueOf(name) }
+            }
+            .type("MessageStoreType") { builder ->
+                builder.enumValues { name -> name }
+            }
+            .type("MessageArchiveType") { builder ->
+                builder.enumValues { name -> name }
             }
             // Register query resolvers
             .type("Query") { builder ->
@@ -210,6 +219,13 @@ class GraphQLServer(
                     .dataFetcher("session", metricsResolver.session())
                     // User management queries
                     .dataFetcher("users", userManagementResolver.users())
+                    // ArchiveGroup queries
+                    .apply {
+                        archiveGroupResolver?.let { resolver ->
+                            dataFetcher("archiveGroups", resolver.archiveGroups())
+                            dataFetcher("archiveGroup", resolver.archiveGroup())
+                        }
+                    }
             }
             // Register mutation resolvers
             .type("Mutation") { builder ->
@@ -229,6 +245,16 @@ class GraphQLServer(
                     .dataFetcher("deleteAclRule", userManagementResolver.deleteAclRule())
                     // Queued messages management (requires admin token)
                     .dataFetcher("purgeQueuedMessages", mutationResolver.purgeQueuedMessages())
+                    // ArchiveGroup mutations
+                    .apply {
+                        archiveGroupResolver?.let { resolver ->
+                            dataFetcher("createArchiveGroup", resolver.createArchiveGroup())
+                            dataFetcher("updateArchiveGroup", resolver.updateArchiveGroup())
+                            dataFetcher("deleteArchiveGroup", resolver.deleteArchiveGroup())
+                            dataFetcher("enableArchiveGroup", resolver.enableArchiveGroup())
+                            dataFetcher("disableArchiveGroup", resolver.disableArchiveGroup())
+                        }
+                    }
             }
             // Register subscription resolvers
             .type("Subscription") { builder ->

@@ -145,6 +145,35 @@ class Monster(args: Array<String>) {
             exitProcess(0)
         }
 
+        // Validate command-line arguments
+        val validArguments = setOf("-cluster", "-config", "-archiveConfig", "-log", "-help", "--help", "-h")
+        var i = 0
+        while (i < args.size) {
+            val arg = args[i]
+            if (arg.startsWith("-")) {
+                if (!validArguments.contains(arg)) {
+                    println("ERROR: Unknown argument: $arg")
+                    println("Use -help to see available options")
+                    exitProcess(1)
+                }
+                // Check if argument expects a value
+                if (arg in setOf("-config", "-archiveConfig", "-log")) {
+                    if (i + 1 >= args.size || args[i + 1].startsWith("-")) {
+                        println("ERROR: Argument $arg requires a value")
+                        exitProcess(1)
+                    }
+                    i += 2 // Skip the argument and its value
+                } else {
+                    i += 1 // Skip just the argument
+                }
+            } else {
+                // This shouldn't happen if arguments are properly paired
+                println("ERROR: Unexpected value without argument: $arg")
+                println("Use -help to see available options")
+                exitProcess(1)
+            }
+        }
+
         if (singleton==null) singleton = this
         else throw Exception("Monster instance is already initialized.")
 
@@ -397,9 +426,10 @@ MORE INFO:
                 // Session handler
                 val sessionHandler = SessionHandler(sessionStore, messageBus, messageHandler, queuedMessagesEnabled)
 
-                // Store ArchiveHandler for later access
+                // Store ArchiveHandler for later access and set MessageHandler reference
                 singleton?.let { instance ->
                     instance.archiveHandler = archiveHandler
+                    archiveHandler.setMessageHandler(messageHandler)
                 }
 
 
@@ -477,7 +507,8 @@ MORE INFO:
                         userManager,
                         sessionStore,
                         sessionHandler,
-                        metricsStore
+                        metricsStore,
+                        this.archiveHandler
                     )
 
                     graphQLServer.start()
