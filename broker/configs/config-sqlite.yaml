@@ -9,15 +9,6 @@ RetainedStoreType: SQLITE
 
 QueuedMessagesEnabled: true
 
-# Archive configuration with SQLite
-ArchiveGroups:
-  - Name: Default
-    Enabled: true
-    TopicFilter: [ "#" ]
-    RetainedOnly: false
-    LastValType: SQLITE
-    ArchiveType: SQLITE
-
 # SQLite configuration
 SQLite:
   Path: "monstermq.db"

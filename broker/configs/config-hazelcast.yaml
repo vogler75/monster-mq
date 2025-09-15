@@ -26,15 +26,6 @@ Postgres:
   User: system
   Pass: manager
 
-# Archive configuration with Hazelcast distributed memory
-ArchiveGroups:
-  - Name: Default
-    Enabled: true
-    TopicFilter: [ "#" ]
-    RetainedOnly: false
-    LastValType: HAZELCAST  # Distributed in-memory current values
-    ArchiveType: POSTGRES   # Optional: Use PostgreSQL for historical data
-
 # Optional: SparkplugB Extension
 SparkplugMetricExpansion:
   Enabled: false

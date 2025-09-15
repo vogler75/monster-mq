@@ -45,18 +45,7 @@ Kafka:
     #   # batch.size: 0               # No batching
     #   # linger.ms: 0                # Send immediately
     #   # acks: 1                     # Don't wait for all replicas
-
-# Optional: Additional Archive Groups
-# Even with Kafka bus, you can still filter specific topics to separate Kafka topics
-ArchiveGroups:
-  # High-priority events to separate topic for faster processing
-  - Name: critical
-    Enabled: true
-    TopicFilter: [ "alerts/critical/#", "alarms/emergency/#" ]
-    RetainedOnly: false
-    LastValType: MEMORY
-    ArchiveType: KAFKA         # Goes to Kafka topic "critical"
-    
+  
 # SparkplugB Extension
 SparkplugMetricExpansion:
   Enabled: true    # Expand messages before sending to Kafka

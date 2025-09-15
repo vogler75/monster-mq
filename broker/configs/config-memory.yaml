@@ -23,15 +23,6 @@ QueuedMessagesEnabled: true
 SQLite:
   Path: ":memory:"
 
-# Archive configuration with memory storage
-ArchiveGroups:
-  - Name: Default
-    Enabled: true
-    TopicFilter: [ "#" ]
-    RetainedOnly: false
-    LastValType: MEMORY     # In-memory current value storage
-    ArchiveType: NONE       # No historical archive (memory-only)
-
 # Optional: SparkplugB Extension
 SparkplugMetricExpansion:
   Enabled: false

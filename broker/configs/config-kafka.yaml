@@ -31,33 +31,7 @@ Kafka:
   Bus:
     Enabled: false      # Set to true to use Kafka instead of Vert.x EventBus
     Topic: monster-bus  # Topic for internal MonsterMQ communication
-
-# Archive Groups - Stream different topics to Kafka
-ArchiveGroups:
-  # Stream all sensor data to Kafka
-  - Name: sensors
-    Enabled: true
-    TopicFilter: [ "sensors/#", "devices/+/telemetry" ]
-    RetainedOnly: false
-    LastValType: POSTGRES      # Current values in PostgreSQL
-    ArchiveType: KAFKA         # Stream to Kafka
-    
-  # Stream critical events to Kafka
-  - Name: events
-    Enabled: true
-    TopicFilter: [ "events/#", "alerts/#", "alarms/#" ]
-    RetainedOnly: false
-    LastValType: MEMORY        # Fast in-memory access for current values
-    ArchiveType: KAFKA         # Stream to Kafka
-    
-  # Stream all messages for data lake ingestion
-  - Name: datalake
-    Enabled: true
-    TopicFilter: [ "#" ]      # All topics
-    RetainedOnly: false
-    LastValType: NONE         # No current value caching needed
-    ArchiveType: KAFKA        # Stream everything to Kafka
-    
+   
 # Optional: SparkplugB Extension
 SparkplugMetricExpansion:
   Enabled: true    # Expand SparkplugB messages before streaming to Kafka

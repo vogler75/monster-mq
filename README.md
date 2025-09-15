@@ -196,16 +196,9 @@ MaxMessageSizeKb: 512
 
 SessionStoreType: POSTGRES
 RetainedStoreType: POSTGRES
+ConfigStoreType: POSTGRES
 
 QueuedMessagesEnabled: true
-
-ArchiveGroups:
-  - Name: Default
-    Enabled: true
-    TopicFilter: [ "#" ]
-    RetainedOnly: false
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
 
 Postgres:
   Url: jdbc:postgresql://postgres:5432/monster
@@ -238,15 +231,8 @@ MaxMessageSizeKb: 8
 
 SessionStoreType: SQLITE
 RetainedStoreType: SQLITE
+ConfigStoreType: SQLITE
 QueuedMessagesEnabled: true
-
-ArchiveGroups:
-  - Name: Default
-    Enabled: true
-    TopicFilter: [ "#" ]
-    RetainedOnly: false
-    LastValType: SQLITE
-    ArchiveType: SQLITE
 
 SQLite:
   Path: "monstermq.db"
@@ -527,17 +513,8 @@ MonsterMQ now supports dynamic archive group configuration through a comprehensi
 Archive groups can now be managed dynamically. The YAML configuration is still supported for initial setup:
 
 ```yaml
-# Initial configuration (optional - can be managed via API)
-ArchiveGroups:
-  - Name: "Default"
-    Enabled: true
-    TopicFilter: [ "#" ]
-    RetainedOnly: false
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
-    LastValRetention: "30d"
-    ArchiveRetention: "1y"
-    PurgeInterval: "1h"
+# Archive groups are now managed via GraphQL API and dashboard
+# No YAML configuration needed for archive groups
 
 # Required: Enable configuration storage
 ConfigStoreType: POSTGRES  # POSTGRES, SQLITE, CRATEDB, MONGODB
@@ -547,6 +524,15 @@ Postgres:
   Url: jdbc:postgresql://localhost:5432/monster
   User: system
   Pass: manager
+
+# Other required settings
+SessionStoreType: POSTGRES
+RetainedStoreType: POSTGRES
+TCP: 1883
+
+GraphQL:
+  Enabled: true
+  Port: 4000
 ```
 
 ### GraphQL Archive Management API
@@ -785,34 +771,25 @@ MonsterMQ provides automatic message cleanup with configurable retention policie
 
 ### Configuration
 
-Configure retention per ArchiveGroup in your `config.yaml`:
+Configure retention per ArchiveGroup via GraphQL API or dashboard:
 
-```yaml
-ArchiveGroups:
-  - Name: "Production"
-    Enabled: true
-    TopicFilter: [ "sensors/#", "devices/#" ]
-    
-    # Retention settings
-    LastValRetention: "7d"      # Keep current values for 7 days
-    ArchiveRetention: "30d"     # Keep historical messages for 30 days
-    PurgeInterval: "1h"         # Check for old messages every hour
-    
-    # Storage backends
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
-
-  - Name: "Development"
-    Enabled: true
-    TopicFilter: [ "test/#" ]
-    
-    # Shorter retention for testing
-    LastValRetention: "2h"      # Keep current values for 2 hours
-    ArchiveRetention: "24h"     # Keep historical messages for 1 day
-    PurgeInterval: "15m"        # Clean up every 15 minutes
-    
-    LastValType: MEMORY
-    ArchiveType: SQLITE
+```graphql
+# Create archive group with retention settings
+mutation {
+  createArchiveGroup(input: {
+    name: "Production"
+    enabled: true
+    topicFilter: ["sensors/#", "devices/#"]
+    lastValRetention: "7d"      # Keep current values for 7 days
+    archiveRetention: "30d"     # Keep historical messages for 30 days
+    purgeInterval: "1h"         # Check for old messages every hour
+    lastValType: POSTGRES       # Storage backends
+    archiveType: POSTGRES
+  }) {
+    success
+    message
+  }
+}
 ```
 
 ### Retention Period Format
@@ -924,39 +901,48 @@ Monitor purge operations through detailed logging:
 ### Configuration Examples
 
 #### **High-Volume IoT System**
-```yaml
-ArchiveGroups:
-  - Name: "HighVolume"
-    TopicFilter: [ "sensors/#" ]
-    LastValRetention: "24h"     # Keep current readings for 1 day
-    ArchiveRetention: "7d"      # Keep history for 1 week  
-    PurgeInterval: "1h"         # Clean up hourly
-    LastValType: HAZELCAST      # Fast access
-    ArchiveType: POSTGRES       # Reliable storage
+```graphql
+mutation {
+  createArchiveGroup(input: {
+    name: "HighVolume"
+    topicFilter: ["sensors/#"]
+    lastValRetention: "24h"     # Keep current readings for 1 day
+    archiveRetention: "7d"      # Keep history for 1 week
+    purgeInterval: "1h"         # Clean up hourly
+    lastValType: HAZELCAST      # Fast access
+    archiveType: POSTGRES       # Reliable storage
+  }) { success }
+}
 ```
 
 #### **Long-Term Analytics**
-```yaml
-ArchiveGroups:
-  - Name: "Analytics"  
-    TopicFilter: [ "metrics/#", "events/#" ]
-    LastValRetention: "30d"     # Keep current state for 30 days
-    ArchiveRetention: "2y"      # Keep history for 2 years
-    PurgeInterval: "24h"        # Clean up daily
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
+```graphql
+mutation {
+  createArchiveGroup(input: {
+    name: "Analytics"
+    topicFilter: ["metrics/#", "events/#"]
+    lastValRetention: "30d"     # Keep current state for 30 days
+    archiveRetention: "2y"      # Keep history for 2 years
+    purgeInterval: "24h"        # Clean up daily
+    lastValType: POSTGRES
+    archiveType: POSTGRES
+  }) { success }
+}
 ```
 
 #### **Development Environment**
-```yaml
-ArchiveGroups:
-  - Name: "Testing"
-    TopicFilter: [ "test/#" ]
-    LastValRetention: "1h"      # Keep current for 1 hour
-    ArchiveRetention: "6h"      # Keep history for 6 hours
-    PurgeInterval: "15m"        # Clean up every 15 minutes
-    LastValType: MEMORY         # Fast, volatile
-    ArchiveType: MEMORY         # No persistence needed
+```graphql
+mutation {
+  createArchiveGroup(input: {
+    name: "Testing"
+    topicFilter: ["test/#"]
+    lastValRetention: "1h"      # Keep current for 1 hour
+    archiveRetention: "6h"      # Keep history for 6 hours
+    purgeInterval: "15m"        # Clean up every 15 minutes
+    lastValType: MEMORY         # Fast, volatile
+    archiveType: MEMORY         # No persistence needed
+  }) { success }
+}
 ```
 
 ## ⚙️ Configuration Reference
@@ -1003,23 +989,32 @@ QueuedMessagesEnabled: true    # Enable QoS>0 message queuing
 ```
 
 ### Archive Groups
-Archive groups define how messages are stored for historical access and analytics:
+Archive groups are now managed dynamically via GraphQL API and web dashboard:
 
-```yaml
-ArchiveGroups:
-  - Name: "production"
-    Enabled: true
-    TopicFilter: [ "sensors/#", "devices/#" ]
-    RetainedOnly: false
-    LastValType: POSTGRES      # Current value storage
-    ArchiveType: POSTGRES      # Historical message storage
+```graphql
+# Create archive groups via GraphQL API
+mutation {
+  createArchiveGroup(input: {
+    name: "production"
+    enabled: true
+    topicFilter: ["sensors/#", "devices/#"]
+    retainedOnly: false
+    lastValType: POSTGRES      # Current value storage
+    archiveType: POSTGRES      # Historical message storage
+  }) { success }
+}
 
-  - Name: Default              # Default archive group (used by MCP server)
-    Enabled: true
-    TopicFilter: [ "#" ]
-    RetainedOnly: false
-    LastValType: POSTGRES      # Required for MCP server
-    ArchiveType: POSTGRES      # Required for MCP historical queries
+# Default archive group for MCP server
+mutation {
+  createArchiveGroup(input: {
+    name: "Default"
+    enabled: true
+    topicFilter: ["#"]
+    retainedOnly: false
+    lastValType: POSTGRES      # Required for MCP server
+    archiveType: POSTGRES      # Required for MCP historical queries
+  }) { success }
+}
 ```
 
 ### Database Connections
@@ -1072,15 +1067,23 @@ Stream specific MQTT topics to Kafka for downstream processing:
 Kafka:
   Servers: kafka:9092          # Kafka broker addresses
 
+# Create archive groups for Kafka streaming via GraphQL
 # Stream specific topics to different Kafka topics
-ArchiveGroups:
-  - Name: sensors
-    TopicFilter: [ "sensors/#" ]
-    ArchiveType: KAFKA          # Stream to Kafka topic "sensors"
-    
-  - Name: events
-    TopicFilter: [ "events/#", "alerts/#" ]
-    ArchiveType: KAFKA          # Stream to Kafka topic "events"
+mutation {
+  createArchiveGroup(input: {
+    name: "sensors"
+    topicFilter: ["sensors/#"]
+    archiveType: KAFKA          # Stream to Kafka topic "sensors"
+  }) { success }
+}
+
+mutation {
+  createArchiveGroup(input: {
+    name: "events"
+    topicFilter: ["events/#", "alerts/#"]
+    archiveType: KAFKA          # Stream to Kafka topic "events"
+  }) { success }
+}
 ```
 
 #### 2. Kafka as Message Bus (Complete Data Stream)
@@ -1157,8 +1160,7 @@ Kafka:
 SessionStoreType: POSTGRES
 RetainedStoreType: POSTGRES
 
-# No need for ArchiveGroups - everything is in Kafka!
-# But you can still add them for additional filtering if needed
+# Archive groups can still be created via GraphQL for additional filtering if needed
 ```
 
 **Monitoring the Complete Stream:**
@@ -1529,19 +1531,27 @@ GraphQL:
   Enabled: true
   Port: 8080
 
-# Required: At least one archive group for historical data
-ArchiveGroups:
-  - Name: "Default"          # Default archive group
-    Enabled: true
-    TopicFilter: [ "#" ]
-    LastValType: POSTGRES     # Required for current values
-    ArchiveType: POSTGRES     # Required for historical queries
+# Create required archive groups via GraphQL API
+# At least one archive group needed for historical data
+mutation {
+  createArchiveGroup(input: {
+    name: "Default"          # Default archive group
+    enabled: true
+    topicFilter: ["#"]
+    lastValType: POSTGRES     # Required for current values
+    archiveType: POSTGRES     # Required for historical queries
+  }) { success }
+}
 
-  - Name: "Sensors"          # Custom archive group
-    Enabled: true  
-    TopicFilter: [ "sensors/#", "devices/#" ]
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
+mutation {
+  createArchiveGroup(input: {
+    name: "Sensors"          # Custom archive group
+    enabled: true
+    topicFilter: ["sensors/#", "devices/#"]
+    lastValType: POSTGRES
+    archiveType: POSTGRES
+  }) { success }
+}
 
 RetainedStoreType: POSTGRES   # Required for retained message queries
 ```

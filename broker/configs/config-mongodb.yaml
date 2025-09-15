@@ -20,18 +20,6 @@ UserManagement:
 SparkplugMetricExpansion:
   Enabled: true
 
-ArchiveGroups:
-  - Name: Default
-    Enabled: true
-    TopicFilter: [ "#" ]
-    RetainedOnly: false
-    LastValType: MONGODB
-    ArchiveType: MONGODB
-    LastValRetention: "10m"
-    ArchiveRetention: "60m"
-    PurgeInterval: "1m"  
-
-
 # MongoDB connection configuration
 MongoDB:
   # Connection string with authentication

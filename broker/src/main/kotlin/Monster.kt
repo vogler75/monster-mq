@@ -193,6 +193,7 @@ class Monster(args: Array<String>) {
             null
         }
 
+
         args.indexOf("-log").let {
             if (it != -1) {
                 val level = Level.parse(args[it + 1])

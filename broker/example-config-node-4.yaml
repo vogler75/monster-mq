@@ -7,6 +7,7 @@ QueuedMessagesEnabled: true
 
 SessionStoreType: POSTGRES
 RetainedStoreType: POSTGRES
+ConfigStoreType: POSTGRES
 
 # User Management configuration
 UserManagement:
@@ -24,17 +25,6 @@ Metrics:
 
 SparkplugMetricExpansion:
   Enabled: true
-
-ArchiveGroups:
-  - Name: Default
-    Enabled: true
-    TopicFilter: [ "#" ]
-    RetainedOnly: false
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
-    LastValRetention: "10m"
-    ArchiveRetention: "60m"
-    PurgeInterval: "1m"  
 
 # SQLite configuration
 SQLite:
