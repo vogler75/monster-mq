@@ -39,5 +39,5 @@ build/
 
 log/*
 monstermq.db*
-config.yaml
+config*.yaml
 hazelcast.xml

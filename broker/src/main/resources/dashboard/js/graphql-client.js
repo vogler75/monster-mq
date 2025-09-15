@@ -119,6 +119,45 @@ class GraphQLDashboardClient {
         return result.brokers;
     }
 
+    async getBrokersWithHistory(lastMinutes = null, from = null, to = null) {
+        const query = `
+            query GetBrokersWithHistory($lastMinutes: Int, $from: String, $to: String) {
+                brokers {
+                    nodeId
+                    metrics {
+                        messagesIn
+                        messagesOut
+                        nodeSessionCount
+                        clusterSessionCount
+                        queuedMessagesCount
+                        topicIndexSize
+                        clientNodeMappingSize
+                        topicNodeMappingSize
+                        messageBusIn
+                        messageBusOut
+                        timestamp
+                    }
+                    metricsHistory(lastMinutes: $lastMinutes, from: $from, to: $to) {
+                        messagesIn
+                        messagesOut
+                        nodeSessionCount
+                        clusterSessionCount
+                        queuedMessagesCount
+                        topicIndexSize
+                        clientNodeMappingSize
+                        topicNodeMappingSize
+                        messageBusIn
+                        messageBusOut
+                        timestamp
+                    }
+                }
+            }
+        `;
+
+        const result = await this.query(query, { lastMinutes, from, to });
+        return result.brokers;
+    }
+
     async getSessions(nodeId = null, connected = null) {
         const query = `
             query GetSessions($nodeId: String, $connected: Boolean) {

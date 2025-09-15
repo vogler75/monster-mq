@@ -46,11 +46,8 @@ class MetricsCollector(
 
             logger.fine("Collecting metrics at $timestamp for nodeId: $nodeId")
 
-            // Collect broker metrics
+            // Collect broker metrics (includes session metrics in the same call to avoid double reset)
             collectBrokerMetrics(timestamp, nodeId)
-
-            // Collect session metrics
-            collectSessionMetrics(timestamp)
 
         } catch (e: Exception) {
             logger.warning("Error collecting metrics: ${e.message}")
@@ -68,8 +65,6 @@ class MetricsCollector(
             vertx.eventBus().request<JsonObject>(metricsAddress, JsonObject()).onComplete { reply ->
                 if (reply.succeeded()) {
                     val nodeMetrics = reply.result().body()
-                    logger.fine("Received broker metrics (and reset): $nodeMetrics")
-
                     try {
                         val brokerMetrics = BrokerMetrics(
                             messagesIn = nodeMetrics.getLong("messagesIn", 0L),
@@ -85,13 +80,36 @@ class MetricsCollector(
                             timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(timestamp)
                         )
 
-                        logger.fine("Storing broker metrics: $brokerMetrics")
-
                         metricsStore.storeBrokerMetrics(timestamp, nodeId, brokerMetrics).onComplete { result ->
                             if (result.succeeded()) {
                                 logger.fine("Successfully stored broker metrics for nodeId: $nodeId")
                             } else {
                                 logger.warning("Error storing broker metrics: ${result.cause()?.message}")
+                            }
+                        }
+
+                        // Process individual session metrics from the same response
+                        val sessionMetricsArray = nodeMetrics.getJsonArray("sessionMetrics")
+                        if (sessionMetricsArray != null) {
+                            sessionMetricsArray.forEach { sessionMetricObj ->
+                                val sessionMetric = sessionMetricObj as JsonObject
+                                val clientId = sessionMetric.getString("clientId")
+                                val messagesIn = sessionMetric.getLong("messagesIn", 0L)
+                                val messagesOut = sessionMetric.getLong("messagesOut", 0L)
+
+                                val sessionMetrics = at.rocworks.extensions.graphql.SessionMetrics(
+                                    messagesIn = messagesIn,
+                                    messagesOut = messagesOut,
+                                    timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(timestamp)
+                                )
+
+                                metricsStore.storeSessionMetrics(timestamp, clientId, sessionMetrics).onComplete { result ->
+                                    if (result.succeeded()) {
+                                        logger.fine("Successfully stored session metrics for client: $clientId")
+                                    } else {
+                                        logger.warning("Error storing session metrics for client $clientId: ${result.cause()?.message}")
+                                    }
+                                }
                             }
                         }
                     } catch (e: Exception) {

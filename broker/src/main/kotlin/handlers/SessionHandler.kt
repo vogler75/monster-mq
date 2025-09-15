@@ -227,11 +227,21 @@ open class SessionHandler(
             val metrics = JsonObject()
             var totalMessagesIn = 0L
             var totalMessagesOut = 0L
+            val sessionMetricsArray = io.vertx.core.json.JsonArray()
 
             // Get and reset session metrics
-            clientMetrics.values.forEach { sessionMetrics ->
-                totalMessagesIn += sessionMetrics.messagesIn.getAndSet(0)
-                totalMessagesOut += sessionMetrics.messagesOut.getAndSet(0)
+            clientMetrics.forEach { (clientId, sessionMetrics) ->
+                val inCount = sessionMetrics.messagesIn.getAndSet(0)
+                val outCount = sessionMetrics.messagesOut.getAndSet(0)
+                totalMessagesIn += inCount
+                totalMessagesOut += outCount
+
+                // Add individual client metrics to the response
+                sessionMetricsArray.add(JsonObject()
+                    .put("clientId", clientId)
+                    .put("messagesIn", inCount)
+                    .put("messagesOut", outCount)
+                )
             }
 
             metrics.put("messagesIn", totalMessagesIn)
@@ -242,7 +252,7 @@ open class SessionHandler(
                    .put("topicIndexSize", topicIndex.size())
                    .put("clientNodeMappingSize", clientNodeMapping.size())
                    .put("topicNodeMappingSize", topicNodeMapping.size())
-
+                   .put("sessionMetrics", sessionMetricsArray)
             message.reply(metrics)
         }
 
