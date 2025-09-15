@@ -53,6 +53,8 @@ object EventBusAddresses {
         fun commands(deploymentId: String) = "$NODE_NS.cmd.$deploymentId"
         fun metrics(nodeId: String) = "$NODE_NS.metrics.$nodeId"
         fun metricsAndReset(nodeId: String) = "$NODE_NS.metrics.reset.$nodeId"
+        fun sessionMetrics(nodeId: String, clientId: String) = "$NODE_NS.session.metrics.$nodeId.$clientId"
+        fun sessionDetails(nodeId: String, clientId: String) = "$NODE_NS.session.details.$nodeId.$clientId"
         fun messageBus(deploymentId: String) = "$NODE_NS.bus.$deploymentId"
     }
 

@@ -163,12 +163,12 @@ class MetricsResolver(
                 return@DataFetcher future
             }
 
-            // Get session from SessionHandler
+            // First try local SessionHandler
             val clientMetrics = sessionHandler.getClientMetrics(clientId)
             val clientDetails = sessionHandler.getClientDetails(clientId)
 
             if (clientMetrics != null && clientDetails != null) {
-                // Found in SessionHandler - use async approach for subscriptions
+                // Found locally - use async approach for subscriptions
                 getSubscriptionsForClientAsync(clientId).thenAccept { subscriptions ->
                     val session = Session(
                         clientId = clientId,
@@ -181,16 +181,78 @@ class MetricsResolver(
                     )
                     future.complete(session)
                 }.exceptionally { e ->
-                    logger.warning("Error getting subscriptions for single session $clientId: ${e.message}")
+                    logger.warning("Error getting subscriptions for local session $clientId: ${e.message}")
                     future.completeExceptionally(e)
                     null
                 }
             } else {
-                // Not in SessionHandler, might be on another node or offline
-                future.complete(null)
+                // Not found locally - search all nodes via sessionStore
+                searchSessionOnRemoteNodes(clientId, future)
             }
 
             future
+        }
+    }
+
+    private fun searchSessionOnRemoteNodes(clientId: String, future: CompletableFuture<Session?>) {
+        // Use sessionStore to find which node has this session
+        var sessionNodeId: String? = null
+        var sessionConnected = false
+        var sessionCleanSession = false
+
+        sessionStore.iterateAllSessions { iterClientId, nodeId, connected, cleanSession ->
+            if (iterClientId == clientId) {
+                sessionNodeId = nodeId
+                sessionConnected = connected
+                sessionCleanSession = cleanSession
+            }
+        }.onComplete { result ->
+            if (result.succeeded()) {
+                if (sessionNodeId != null) {
+                    // Found the session on a remote node - request details via message bus
+                    val sessionDetailsAddress = EventBusAddresses.Node.sessionDetails(sessionNodeId!!, "*")
+                    val request = JsonObject()
+                    val deliveryOptions = io.vertx.core.eventbus.DeliveryOptions().addHeader("clientId", clientId)
+
+                    vertx.eventBus().request<JsonObject>(sessionDetailsAddress, request, deliveryOptions).onComplete { reply ->
+                        if (reply.succeeded()) {
+                            val response = reply.result().body()
+                            val found = response.getBoolean("found", false)
+
+                            if (found) {
+                                // Get subscriptions for this session
+                                getSubscriptionsForClientAsync(clientId).thenAccept { subscriptions ->
+                                    val session = Session(
+                                        clientId = clientId,
+                                        nodeId = response.getString("nodeId"),
+                                        subscriptions = subscriptions,
+                                        cleanSession = response.getBoolean("cleanSession", sessionCleanSession),
+                                        sessionExpiryInterval = response.getLong("sessionExpiryInterval", 0L),
+                                        clientAddress = response.getString("clientAddress"),
+                                        connected = response.getBoolean("connected", sessionConnected)
+                                    )
+                                    future.complete(session)
+                                }.exceptionally { e ->
+                                    logger.warning("Error getting subscriptions for remote session $clientId: ${e.message}")
+                                    future.complete(null)
+                                    null
+                                }
+                            } else {
+                                future.complete(null)
+                            }
+                        } else {
+                            logger.warning("Failed to get session details for client $clientId from node $sessionNodeId: ${reply.cause().message}")
+                            future.complete(null)
+                        }
+                    }
+                } else {
+                    // Session not found in any node
+                    future.complete(null)
+                }
+            } else {
+                logger.warning("Error iterating sessions to find client $clientId: ${result.cause()?.message}")
+                future.complete(null)
+            }
         }
     }
 
@@ -461,25 +523,55 @@ class MetricsResolver(
             // Get the parent Session object from the DataFetchingEnvironment
             val session = env.getSource<Session>()
             val clientId = session?.clientId
+            val nodeId = session?.nodeId
 
-            if (clientId == null) {
+            if (clientId == null || nodeId == null) {
                 future.complete(listOf(SessionMetrics(0, 0, TimestampConverter.currentTimeIsoString())))
                 return@DataFetcher future
             }
 
-            // Get current metrics from session handler
-            val clientMetrics = sessionHandler.getClientMetrics(clientId)
-            val metrics = if (clientMetrics != null) {
-                SessionMetrics(
-                    messagesIn = clientMetrics.messagesIn.get(),
-                    messagesOut = clientMetrics.messagesOut.get(),
-                    timestamp = TimestampConverter.currentTimeIsoString()
-                )
-            } else {
-                SessionMetrics(0, 0, TimestampConverter.currentTimeIsoString())
-            }
+            val currentNodeId = Monster.getClusterNodeId(vertx)
 
-            future.complete(listOf(metrics))
+            if (nodeId == currentNodeId) {
+                // Local node - get directly from session handler
+                val clientMetrics = sessionHandler.getClientMetrics(clientId)
+                val metrics = if (clientMetrics != null) {
+                    SessionMetrics(
+                        messagesIn = clientMetrics.messagesIn.get(),
+                        messagesOut = clientMetrics.messagesOut.get(),
+                        timestamp = TimestampConverter.currentTimeIsoString()
+                    )
+                } else {
+                    SessionMetrics(0, 0, TimestampConverter.currentTimeIsoString())
+                }
+                future.complete(listOf(metrics))
+            } else {
+                // Remote node - request via message bus
+                val sessionMetricsAddress = EventBusAddresses.Node.sessionMetrics(nodeId, "*")
+                val request = JsonObject()
+                val deliveryOptions = io.vertx.core.eventbus.DeliveryOptions().addHeader("clientId", clientId)
+
+                vertx.eventBus().request<JsonObject>(sessionMetricsAddress, request, deliveryOptions).onComplete { reply ->
+                    if (reply.succeeded()) {
+                        val response = reply.result().body()
+                        val found = response.getBoolean("found", false)
+
+                        val metrics = if (found) {
+                            SessionMetrics(
+                                messagesIn = response.getLong("messagesIn", 0L),
+                                messagesOut = response.getLong("messagesOut", 0L),
+                                timestamp = TimestampConverter.currentTimeIsoString()
+                            )
+                        } else {
+                            SessionMetrics(0, 0, TimestampConverter.currentTimeIsoString())
+                        }
+                        future.complete(listOf(metrics))
+                    } else {
+                        logger.warning("Failed to get session metrics for client $clientId from node $nodeId: ${reply.cause().message}")
+                        future.complete(listOf(SessionMetrics(0, 0, TimestampConverter.currentTimeIsoString())))
+                    }
+                }
+            }
 
             future
         }

@@ -256,6 +256,54 @@ open class SessionHandler(
             message.reply(metrics)
         }
 
+        // Individual session metrics handler - non-destructive
+        vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Node.sessionMetrics(Monster.getClusterNodeId(vertx), "*")) { message ->
+            val requestedClientId = message.headers().get("clientId")
+
+            if (requestedClientId != null) {
+                val sessionMetrics = clientMetrics[requestedClientId]
+                if (sessionMetrics != null) {
+                    val response = JsonObject()
+                        .put("clientId", requestedClientId)
+                        .put("messagesIn", sessionMetrics.messagesIn.get())
+                        .put("messagesOut", sessionMetrics.messagesOut.get())
+                        .put("found", true)
+                    message.reply(response)
+                } else {
+                    message.reply(JsonObject().put("found", false))
+                }
+            } else {
+                message.fail(400, "Missing clientId header")
+            }
+        }
+
+        // Individual session details handler - non-destructive
+        vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Node.sessionDetails(Monster.getClusterNodeId(vertx), "*")) { message ->
+            val requestedClientId = message.headers().get("clientId")
+
+            if (requestedClientId != null) {
+                val clientDetails = getClientDetails(requestedClientId)
+                val clientMetrics = getClientMetrics(requestedClientId)
+                val clientStatus = getClientStatus(requestedClientId)
+
+                if (clientDetails != null) {
+                    val response = JsonObject()
+                        .put("clientId", requestedClientId)
+                        .put("nodeId", clientDetails.nodeId)
+                        .put("clientAddress", clientDetails.clientAddress)
+                        .put("cleanSession", clientDetails.cleanSession)
+                        .put("sessionExpiryInterval", clientDetails.sessionExpiryInterval ?: 0)
+                        .put("connected", clientStatus == ClientStatus.ONLINE)
+                        .put("found", true)
+                    message.reply(response)
+                } else {
+                    message.reply(JsonObject().put("found", false))
+                }
+            } else {
+                message.fail(400, "Missing clientId header")
+            }
+        }
+
         queueWorkerThread("SubAddQueue", subAddQueue, 1000, sessionStore::addSubscriptions)
         queueWorkerThread("SubDelQueue", subDelQueue, 1000, sessionStore::delSubscriptions)
 
