@@ -1,0 +1,13 @@
+Release v1.5.5
+Built from commit: d00730c
+Date: 2025-09-16 12:23:14
+
+Changes since v1.5.4:
+---
+d00730c Simplify connection status check in SQLite stores
+45bbaed Improve Kafka archive startup and connectivity handling
+dc48a7e Add connection status indicators to archive groups UI
+1d7fc4b Add SQLite metrics store and improve archive group validation
+852b5a4 Add async store deployment and connection status checks
+d2d89db Refactor archive group enable/disable to async handling
+d8a948c Preserve original retention strings for archive groups
