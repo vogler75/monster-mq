@@ -268,6 +268,9 @@ class ArchiveHandler(
                         lastValRetentionMs = ag.getLastValRetentionMs(),
                         archiveRetentionMs = ag.getArchiveRetentionMs(),
                         purgeIntervalMs = ag.getPurgeIntervalMs(),
+                        lastValRetentionStr = ag.getLastValRetention(),
+                        archiveRetentionStr = ag.getArchiveRetention(),
+                        purgeIntervalStr = ag.getPurgeInterval(),
                         databaseConfig = databaseConfig
                     )
                 }
@@ -644,6 +647,9 @@ class ArchiveHandler(
                     lastValRetentionMs = ag.getLastValRetentionMs(),
                     archiveRetentionMs = ag.getArchiveRetentionMs(),
                     purgeIntervalMs = ag.getPurgeIntervalMs(),
+                    lastValRetentionStr = ag.getLastValRetention(),
+                    archiveRetentionStr = ag.getArchiveRetention(),
+                    purgeIntervalStr = ag.getPurgeInterval(),
                     databaseConfig = databaseConfig
                 )
                 promise.complete(archiveGroup)
@@ -678,6 +684,9 @@ class ArchiveHandler(
                         lastValRetentionMs = ag.getLastValRetentionMs(),
                         archiveRetentionMs = ag.getArchiveRetentionMs(),
                         purgeIntervalMs = ag.getPurgeIntervalMs(),
+                        lastValRetentionStr = ag.getLastValRetention(),
+                        archiveRetentionStr = ag.getArchiveRetention(),
+                        purgeIntervalStr = ag.getPurgeInterval(),
                         databaseConfig = databaseConfig
                     )
                     promise.complete(archiveGroup)

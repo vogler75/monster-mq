@@ -30,6 +30,9 @@ class ArchiveGroup(
     private val lastValRetentionMs: Long? = null,
     private val archiveRetentionMs: Long? = null,
     private val purgeIntervalMs: Long? = null,
+    private val lastValRetentionStr: String? = null,
+    private val archiveRetentionStr: String? = null,
+    private val purgeIntervalStr: String? = null,
     private val databaseConfig: JsonObject
 ) : AbstractVerticle() {
     
@@ -84,6 +87,10 @@ class ArchiveGroup(
     fun getLastValRetentionMs(): Long? = lastValRetentionMs
     fun getArchiveRetentionMs(): Long? = archiveRetentionMs
     fun getPurgeIntervalMs(): Long? = purgeIntervalMs
+
+    fun getLastValRetention(): String? = lastValRetentionStr
+    fun getArchiveRetention(): String? = archiveRetentionStr
+    fun getPurgeInterval(): String? = purgeIntervalStr
     fun getLastValType(): MessageStoreType = lastValType
     fun getArchiveType(): MessageArchiveType = archiveType
     
@@ -383,14 +390,19 @@ class ArchiveGroup(
             val archiveType = MessageArchiveType.valueOf(config.getString("ArchiveType", "NONE"))
             
             // Parse retention configuration
-            val lastValRetentionMs = DurationParser.parse(config.getString("LastValRetention"))
-            val archiveRetentionMs = DurationParser.parse(config.getString("ArchiveRetention"))
-            val purgeIntervalMs = DurationParser.parse(config.getString("PurgeInterval"))
-            
+            val lastValRetentionStr = config.getString("LastValRetention")
+            val archiveRetentionStr = config.getString("ArchiveRetention")
+            val purgeIntervalStr = config.getString("PurgeInterval")
+
+            val lastValRetentionMs = DurationParser.parse(lastValRetentionStr)
+            val archiveRetentionMs = DurationParser.parse(archiveRetentionStr)
+            val purgeIntervalMs = DurationParser.parse(purgeIntervalStr)
+
             return ArchiveGroup(
                 name, topicFilter, retainedOnly,
                 lastValType, archiveType,
                 lastValRetentionMs, archiveRetentionMs, purgeIntervalMs,
+                lastValRetentionStr, archiveRetentionStr, purgeIntervalStr,
                 databaseConfig
             )
         }

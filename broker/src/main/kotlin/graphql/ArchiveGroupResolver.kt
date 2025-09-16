@@ -72,9 +72,9 @@ class ArchiveGroupResolver(
                                     "retainedOnly" to config.archiveGroup.retainedOnly,
                                     "lastValType" to config.archiveGroup.getLastValType().name,
                                     "archiveType" to config.archiveGroup.getArchiveType().name,
-                                    "lastValRetention" to config.archiveGroup.getLastValRetentionMs()?.toString(),
-                                    "archiveRetention" to config.archiveGroup.getArchiveRetentionMs()?.toString(),
-                                    "purgeInterval" to config.archiveGroup.getPurgeIntervalMs()?.toString()
+                                    "lastValRetention" to config.archiveGroup.getLastValRetention(),
+                                    "archiveRetention" to config.archiveGroup.getArchiveRetention(),
+                                    "purgeInterval" to config.archiveGroup.getPurgeInterval()
                                 )
                             }
                         }
@@ -141,9 +141,9 @@ class ArchiveGroupResolver(
                                     "retainedOnly" to archiveGroup.archiveGroup.retainedOnly,
                                     "lastValType" to archiveGroup.archiveGroup.getLastValType().name,
                                     "archiveType" to archiveGroup.archiveGroup.getArchiveType().name,
-                                    "lastValRetention" to archiveGroup.archiveGroup.getLastValRetentionMs()?.toString(),
-                                    "archiveRetention" to archiveGroup.archiveGroup.getArchiveRetentionMs()?.toString(),
-                                    "purgeInterval" to archiveGroup.archiveGroup.getPurgeIntervalMs()?.toString()
+                                    "lastValRetention" to archiveGroup.archiveGroup.getLastValRetention(),
+                                    "archiveRetention" to archiveGroup.archiveGroup.getArchiveRetention(),
+                                    "purgeInterval" to archiveGroup.archiveGroup.getPurgeInterval()
                                 )
                             } else {
                                 null
@@ -236,6 +236,9 @@ class ArchiveGroupResolver(
                             lastValRetentionMs = lastValRetentionMs,
                             archiveRetentionMs = archiveRetentionMs,
                             purgeIntervalMs = purgeIntervalMs,
+                            lastValRetentionStr = lastValRetention,
+                            archiveRetentionStr = archiveRetention,
+                            purgeIntervalStr = purgeInterval,
                             databaseConfig = JsonObject() // Will be populated from config
                         )
 
@@ -300,6 +303,7 @@ class ArchiveGroupResolver(
             if (!checkAuthorization(env, future)) return@DataFetcher future
 
             val input = env.getArgument<Map<String, Any?>>("input") ?: mapOf()
+
 
             vertx.executeBlocking<Map<String, Any?>> {
                 runBlocking {
@@ -403,6 +407,9 @@ class ArchiveGroupResolver(
                             lastValRetentionMs = lastValRetentionMs,
                             archiveRetentionMs = archiveRetentionMs,
                             purgeIntervalMs = purgeIntervalMs,
+                            lastValRetentionStr = lastValRetention ?: existingArchiveGroup.getLastValRetention(),
+                            archiveRetentionStr = archiveRetention ?: existingArchiveGroup.getArchiveRetention(),
+                            purgeIntervalStr = purgeInterval ?: existingArchiveGroup.getPurgeInterval(),
                             databaseConfig = JsonObject() // Will be populated from config
                         )
 

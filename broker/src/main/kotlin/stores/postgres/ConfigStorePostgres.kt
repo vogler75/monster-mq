@@ -107,6 +107,9 @@ class ConfigStorePostgres(
                             lastValRetentionMs = DurationParser.parse(lastValRetention),
                             archiveRetentionMs = DurationParser.parse(archiveRetention),
                             purgeIntervalMs = DurationParser.parse(purgeInterval),
+                            lastValRetentionStr = lastValRetention,
+                            archiveRetentionStr = archiveRetention,
+                            purgeIntervalStr = purgeInterval,
                             databaseConfig = JsonObject()
                         )
                         archiveGroups.add(ArchiveGroupConfig(archiveGroup, enabled))
@@ -157,6 +160,9 @@ class ConfigStorePostgres(
                             lastValRetentionMs = DurationParser.parse(lastValRetention),
                             archiveRetentionMs = DurationParser.parse(archiveRetention),
                             purgeIntervalMs = DurationParser.parse(purgeInterval),
+                            lastValRetentionStr = lastValRetention,
+                            archiveRetentionStr = archiveRetention,
+                            purgeIntervalStr = purgeInterval,
                             databaseConfig = JsonObject()
                         )
                         return ArchiveGroupConfig(archiveGroup, enabled)
@@ -194,17 +200,17 @@ class ConfigStorePostgres(
                 connection.prepareStatement(sql).use { preparedStatement ->
                     val topicFilterJson = JsonArray(archiveGroup.topicFilter).encode()
 
-                    // Use the provided enabled parameter
-                    val lastValRetention = archiveGroup.getLastValRetentionMs()?.let { DurationParser.formatDuration(it) }
-                    val archiveRetention = archiveGroup.getArchiveRetentionMs()?.let { DurationParser.formatDuration(it) }
-                    val purgeInterval = archiveGroup.getPurgeIntervalMs()?.let { DurationParser.formatDuration(it) }
+                    // Use the string retention values directly to preserve original format
+                    val lastValRetention = archiveGroup.getLastValRetention()
+                    val archiveRetention = archiveGroup.getArchiveRetention()
+                    val purgeInterval = archiveGroup.getPurgeInterval()
 
                     preparedStatement.setString(1, archiveGroup.name)
                     preparedStatement.setBoolean(2, enabled)
                     preparedStatement.setString(3, topicFilterJson)
                     preparedStatement.setBoolean(4, archiveGroup.retainedOnly)
-                    preparedStatement.setString(5, "POSTGRES") // For now, hardcode to POSTGRES
-                    preparedStatement.setString(6, "POSTGRES") // For now, hardcode to POSTGRES
+                    preparedStatement.setString(5, archiveGroup.getLastValType().name)
+                    preparedStatement.setString(6, archiveGroup.getArchiveType().name)
                     preparedStatement.setString(7, lastValRetention)
                     preparedStatement.setString(8, archiveRetention)
                     preparedStatement.setString(9, purgeInterval)

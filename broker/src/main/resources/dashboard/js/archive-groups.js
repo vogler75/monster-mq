@@ -269,14 +269,16 @@ class ArchiveGroupsManager {
     }
 
     async saveArchiveGroup() {
-        const form = document.getElementById('archiveGroupForm');
-        const formData = new FormData(form);
+        // Get values directly from DOM elements instead of using FormData
+        const name = document.getElementById('name').value.trim();
+        const topicFilterText = document.getElementById('topicFilter').value.trim();
+        const lastValType = document.getElementById('lastValType').value;
+        const archiveType = document.getElementById('archiveType').value;
+        const retainedOnly = document.getElementById('retainedOnly').checked;
+        const lastValRetention = document.getElementById('lastValRetention').value.trim();
+        const archiveRetention = document.getElementById('archiveRetention').value.trim();
+        const purgeInterval = document.getElementById('purgeInterval').value.trim();
 
-        // Validate required fields
-        const name = formData.get('name').trim();
-        const topicFilterText = formData.get('topicFilter').trim();
-        const lastValType = formData.get('lastValType');
-        const archiveType = formData.get('archiveType');
 
         if (!name || !topicFilterText || !lastValType || !archiveType) {
             this.showError('Please fill in all required fields');
@@ -299,18 +301,37 @@ class ArchiveGroupsManager {
                 topicFilter,
                 lastValType,
                 archiveType,
-                retainedOnly: formData.has('retainedOnly'),
-                lastValRetention: formData.get('lastValRetention').trim() || null,
-                archiveRetention: formData.get('archiveRetention').trim() || null,
-                purgeInterval: formData.get('purgeInterval').trim() || null
+                retainedOnly
             };
 
-            console.log('Saving archive group:', input);
+            // Always include retention fields when editing (could be empty to clear them)
+            if (this.isEditing) {
+                input.lastValRetention = lastValRetention || null;
+                input.archiveRetention = archiveRetention || null;
+                input.purgeInterval = purgeInterval || null;
+            } else {
+                // Only include retention fields if they have values when creating
+                if (lastValRetention) input.lastValRetention = lastValRetention;
+                if (archiveRetention) input.archiveRetention = archiveRetention;
+                if (purgeInterval) input.purgeInterval = purgeInterval;
+            }
+
 
             let result;
             if (this.isEditing) {
-                // For update, we need to merge with the original name and modify the input structure
-                const updateInput = { ...input, name: this.editingName };
+                // For update, use the original name to identify the archive group
+                const updateInput = {
+                    name: this.editingName, // Original name to identify the archive group
+                    topicFilter: input.topicFilter,
+                    lastValType: input.lastValType,
+                    archiveType: input.archiveType,
+                    retainedOnly: input.retainedOnly,
+                    lastValRetention: input.lastValRetention,
+                    archiveRetention: input.archiveRetention,
+                    purgeInterval: input.purgeInterval
+                };
+
+
                 result = await window.graphqlClient.query(`
                     mutation UpdateArchiveGroup($input: UpdateArchiveGroupInput!) {
                         updateArchiveGroup(input: $input) {
