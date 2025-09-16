@@ -282,6 +282,43 @@
             margin-left: 0.25rem;
         }
 
+        /* Connection Status Indicators */
+        .connection-indicators {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .connection-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .connection-dot.connected {
+            background-color: var(--accent-green);
+            box-shadow: 0 0 4px rgba(16, 185, 129, 0.5);
+        }
+
+        .connection-dot.disconnected {
+            background-color: #ef4444;
+            box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
+        }
+
+        .connection-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
         /* Responsive Design */
         @media (max-width: 768px) {
             .archive-groups-header {

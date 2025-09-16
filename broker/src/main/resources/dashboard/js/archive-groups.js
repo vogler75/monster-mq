@@ -90,6 +90,11 @@ class ArchiveGroupsManager {
                         purgeInterval
                         createdAt
                         updatedAt
+                        connectionStatus {
+                            nodeId
+                            messageArchive
+                            lastValueStore
+                        }
                     }
                 }
             `);
@@ -100,6 +105,36 @@ class ArchiveGroupsManager {
             console.error('Error loading archive groups:', error);
             this.showError('Failed to load archive groups: ' + error.message);
         }
+    }
+
+    getConnectionStatus(group) {
+        // Helper function to check if stores are connected across nodes
+        const hasArchive = group.archiveType && group.archiveType !== 'NONE';
+        const hasLastVal = group.lastValType && group.lastValType !== 'NONE';
+
+        let archiveConnected = true;
+        let lastValConnected = true;
+
+        // Check connection status across all nodes for this specific group
+        if (group.connectionStatus && Array.isArray(group.connectionStatus)) {
+            group.connectionStatus.forEach(nodeStatus => {
+                if (hasArchive && !nodeStatus.messageArchive) {
+                    archiveConnected = false;
+                }
+                if (hasLastVal && !nodeStatus.lastValueStore) {
+                    lastValConnected = false;
+                }
+            });
+        } else {
+            // If no connection status data available, assume disconnected for safety
+            archiveConnected = false;
+            lastValConnected = false;
+        }
+
+        return {
+            archive: hasArchive ? archiveConnected : null,
+            lastVal: hasLastVal ? lastValConnected : null
+        };
     }
 
     renderArchiveGroups() {
@@ -116,7 +151,9 @@ class ArchiveGroupsManager {
             return;
         }
 
-        tbody.innerHTML = this.archiveGroups.map(group => `
+        tbody.innerHTML = this.archiveGroups.map(group => {
+            const connectionStatus = this.getConnectionStatus(group);
+            return `
             <tr>
                 <td>
                     <strong>${this.escapeHtml(group.name)}</strong>
@@ -127,6 +164,20 @@ class ArchiveGroupsManager {
                         <span class="status-indicator"></span>
                         ${group.enabled ? 'Enabled' : 'Disabled'}
                     </span>
+                    <div class="connection-indicators">
+                        ${connectionStatus.archive !== null ? `
+                            <div class="connection-item">
+                                <span class="connection-dot ${connectionStatus.archive ? 'connected' : 'disconnected'}"></span>
+                                <span class="connection-label">Archive</span>
+                            </div>
+                        ` : ''}
+                        ${connectionStatus.lastVal !== null ? `
+                            <div class="connection-item">
+                                <span class="connection-dot ${connectionStatus.lastVal ? 'connected' : 'disconnected'}"></span>
+                                <span class="connection-label">Last Val</span>
+                            </div>
+                        ` : ''}
+                    </div>
                 </td>
                 <td>
                     <div class="topic-filters">
@@ -164,8 +215,8 @@ class ArchiveGroupsManager {
                         </button>
                     </div>
                 </td>
-            </tr>
-        `).join('');
+            </tr>`;
+        }).join('');
     }
 
     async toggleArchiveGroup(name, enable) {
