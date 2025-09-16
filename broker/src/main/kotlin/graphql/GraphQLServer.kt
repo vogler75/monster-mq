@@ -9,6 +9,9 @@ import at.rocworks.stores.ArchiveGroup
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.IMetricsStore
 import at.rocworks.stores.ISessionStoreAsync
+import at.rocworks.devices.opcua.graphql.DeviceConfigMutations
+import at.rocworks.devices.opcua.graphql.DeviceConfigQueries
+import at.rocworks.devices.opcua.stores.DeviceConfigStoreFactory
 import graphql.GraphQL
 import graphql.scalars.ExtendedScalars
 import graphql.schema.idl.RuntimeWiring
@@ -43,8 +46,9 @@ class GraphQLServer(
         private val logger: Logger = Logger.getLogger(GraphQLServer::class.java.name)
     }
 
-    private val port = config.getInteger("Port", 8080)
-    private val path = config.getString("Path", "/graphql")
+    private val graphQLConfig = config.getJsonObject("GraphQL", JsonObject())
+    private val port = graphQLConfig.getInteger("Port", 8080)
+    private val path = graphQLConfig.getString("Path", "/graphql")
     private val authContext = GraphQLAuthContext(userManager)
 
     fun start() {
@@ -189,6 +193,30 @@ class GraphQLServer(
         val authenticationResolver = AuthenticationResolver(vertx, userManager)
         val archiveGroupResolver = archiveHandler?.let { ArchiveGroupResolver(vertx, it, authContext) }
 
+        // Initialize OPC UA resolvers
+        val configStoreType = config.getString("ConfigStoreType")
+
+        val deviceStore = try {
+            val store = DeviceConfigStoreFactory.create(configStoreType, config, vertx)
+            store?.initialize()?.onComplete { result ->
+                if (result.failed()) {
+                    logger.warning("Failed to initialize OPC UA device store: ${result.cause()?.message}")
+                } else {
+                    logger.info("OPC UA device store initialized successfully")
+                }
+            }
+            store
+        } catch (e: NotImplementedError) {
+            logger.warning("OPC UA device store not implemented for $configStoreType, OPC UA features will be disabled")
+            null
+        } catch (e: Exception) {
+            logger.warning("Failed to create OPC UA device store: ${e.message}")
+            null
+        }
+
+        val opcUaQueries = deviceStore?.let { DeviceConfigQueries(vertx, it) }
+        val opcUaMutations = deviceStore?.let { DeviceConfigMutations(vertx, it) }
+
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
             .scalar(ExtendedScalars.GraphQLLong)
@@ -226,6 +254,15 @@ class GraphQLServer(
                             dataFetcher("archiveGroup", resolver.archiveGroup())
                         }
                     }
+                    // OPC UA queries
+                    .apply {
+                        opcUaQueries?.let { resolver ->
+                            dataFetcher("opcUaDevices", resolver.opcUaDevices())
+                            dataFetcher("opcUaDevice", resolver.opcUaDevice())
+                            dataFetcher("opcUaDevicesByNode", resolver.opcUaDevicesByNode())
+                            dataFetcher("clusterNodes", resolver.clusterNodes())
+                        }
+                    }
             }
             // Register mutation resolvers
             .type("Mutation") { builder ->
@@ -253,6 +290,18 @@ class GraphQLServer(
                             dataFetcher("deleteArchiveGroup", resolver.deleteArchiveGroup())
                             dataFetcher("enableArchiveGroup", resolver.enableArchiveGroup())
                             dataFetcher("disableArchiveGroup", resolver.disableArchiveGroup())
+                        }
+                    }
+                    // OPC UA mutations
+                    .apply {
+                        opcUaMutations?.let { resolver ->
+                            dataFetcher("addOpcUaDevice", resolver.addOpcUaDevice())
+                            dataFetcher("updateOpcUaDevice", resolver.updateOpcUaDevice())
+                            dataFetcher("deleteOpcUaDevice", resolver.deleteOpcUaDevice())
+                            dataFetcher("toggleOpcUaDevice", resolver.toggleOpcUaDevice())
+                            dataFetcher("reassignOpcUaDevice", resolver.reassignOpcUaDevice())
+                            dataFetcher("addOpcUaAddress", resolver.addOpcUaAddress())
+                            dataFetcher("deleteOpcUaAddress", resolver.deleteOpcUaAddress())
                         }
                     }
             }

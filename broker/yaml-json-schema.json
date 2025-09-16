@@ -145,6 +145,11 @@
           "type": "string",
           "description": "Path to SQLite database file",
           "default": "monstermq.db"
+        },
+        "EnableWAL": {
+          "type": "boolean",
+          "description": "Enable WAL (Write-Ahead Logging) mode for better performance. Set to false for easier multi-client access.",
+          "default": true
         }
       }
     },

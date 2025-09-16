@@ -433,6 +433,9 @@ MORE INFO:
                     archiveHandler.setMessageHandler(messageHandler)
                 }
 
+                // OPC UA Extension
+                val opcUaExtension = at.rocworks.devices.opcua.OpcUaExtension()
+
 
                 // User management
                 val userManager = at.rocworks.auth.UserManager(configJson)
@@ -500,7 +503,7 @@ MORE INFO:
 
                     val graphQLServer = GraphQLServer(
                         vertx,
-                        graphQLConfig,
+                        configJson,
                         messageBus,
                         messageHandler,
                         retainedStore,
@@ -533,6 +536,10 @@ MORE INFO:
                     .compose { vertx.deployVerticle(sessionHandler) }
                     .compose { vertx.deployVerticle(userManager) }
                     .compose { vertx.deployVerticle(healthHandler) }
+                    .compose {
+                        val opcUaDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(opcUaExtension, opcUaDeploymentOptions)
+                    }
                     .compose {
                         if (metricsCollector != null) {
                             vertx.deployVerticle(metricsCollector)

@@ -487,55 +487,35 @@ class SessionStoreSQLite(
 
     override fun countQueuedMessages(): Long {
         val sql = "SELECT COUNT(*) FROM $queuedMessagesTableName"
+
         return try {
-            vertx.executeBlocking<Long>(java.util.concurrent.Callable {
-                try {
-                    java.sql.DriverManager.getConnection("jdbc:sqlite:monstermq.db").use { connection ->
-                        connection.prepareStatement(sql).use { preparedStatement ->
-                            preparedStatement.executeQuery().use { resultSet ->
-                                if (resultSet.next()) {
-                                    resultSet.getLong(1)
-                                } else {
-                                    0L
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    logger.warning("Error counting queued messages: ${e.message}")
-                    0L
-                }
-            }).result()
+            val results = sqlClient.executeQuerySync(sql)
+            if (results.size() > 0) {
+                val row = results.getJsonObject(0)
+                row.getLong("COUNT(*)") ?: 0L
+            } else {
+                0L
+            }
         } catch (e: Exception) {
-            logger.warning("Error counting queued messages: ${e.message}")
+            logger.fine("Error counting queued messages: ${e.message}")
             0L
         }
     }
 
     override fun countQueuedMessagesForClient(clientId: String): Long {
         val sql = "SELECT COUNT(*) FROM $queuedMessagesClientsTableName WHERE client_id = ?"
+        val params = JsonArray().add(clientId)
+
         return try {
-            vertx.executeBlocking<Long>(java.util.concurrent.Callable {
-                try {
-                    java.sql.DriverManager.getConnection("jdbc:sqlite:monstermq.db").use { connection ->
-                        connection.prepareStatement(sql).use { preparedStatement ->
-                            preparedStatement.setString(1, clientId)
-                            preparedStatement.executeQuery().use { resultSet ->
-                                if (resultSet.next()) {
-                                    resultSet.getLong(1)
-                                } else {
-                                    0L
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    logger.warning("Error counting queued messages for client $clientId: ${e.message}")
-                    0L
-                }
-            }).result()
+            val results = sqlClient.executeQuerySync(sql, params)
+            if (results.size() > 0) {
+                val row = results.getJsonObject(0)
+                row.getLong("COUNT(*)") ?: 0L
+            } else {
+                0L
+            }
         } catch (e: Exception) {
-            logger.warning("Error counting queued messages for client $clientId: ${e.message}")
+            logger.fine("Error counting queued messages for client $clientId: ${e.message}")
             0L
         }
     }

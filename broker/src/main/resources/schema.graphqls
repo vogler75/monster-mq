@@ -398,3 +398,127 @@ type PurgeResult {
     message: String
     deletedCount: Long!
 }
+
+# OPC UA Device Configuration Types
+
+enum OpcUaPublishMode {
+    SINGLE
+    SEPARATE
+}
+
+type OpcUaAddress {
+    address: String!
+    topic: String!
+    publishMode: OpcUaPublishMode!
+    removePath: Boolean!
+}
+
+type MonitoringParameters {
+    bufferSize: Int!
+    samplingInterval: Float!
+    discardOldest: Boolean!
+}
+
+type OpcUaConnectionConfig {
+    endpointUrl: String!
+    securityPolicy: String!
+    username: String
+    subscriptionSamplingInterval: Float!
+    keepAliveFailuresAllowed: Int!
+    reconnectDelay: Long!
+    connectionTimeout: Long!
+    requestTimeout: Long!
+    monitoringParameters: MonitoringParameters!
+    addresses: [OpcUaAddress!]!
+}
+
+type OpcUaDevice {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    backupNodeId: String
+    config: OpcUaConnectionConfig!
+    enabled: Boolean!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+}
+
+type ClusterNode {
+    nodeId: String!
+    isCurrent: Boolean!
+}
+
+type OpcUaDeviceResult {
+    success: Boolean!
+    device: OpcUaDevice
+    errors: [String!]!
+}
+
+
+input MonitoringParametersInput {
+    bufferSize: Int = 100
+    samplingInterval: Float = 0.0
+    discardOldest: Boolean = false
+}
+
+input OpcUaConnectionConfigInput {
+    endpointUrl: String!
+    securityPolicy: String = "None"
+    username: String
+    password: String
+    subscriptionSamplingInterval: Float = 0.0
+    keepAliveFailuresAllowed: Int = 3
+    reconnectDelay: Long = 5000
+    connectionTimeout: Long = 10000
+    requestTimeout: Long = 5000
+    monitoringParameters: MonitoringParametersInput
+}
+
+input OpcUaDeviceInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    backupNodeId: String
+    config: OpcUaConnectionConfigInput!
+    enabled: Boolean = true
+}
+
+# Extend existing Query type
+extend type Query {
+    # Get all OPC UA device configurations
+    opcUaDevices: [OpcUaDevice!]!
+
+    # Get a specific OPC UA device configuration by name
+    opcUaDevice(name: String!): OpcUaDevice
+
+    # Get OPC UA devices assigned to a specific cluster node
+    opcUaDevicesByNode(nodeId: String!): [OpcUaDevice!]!
+
+    # Get list of available cluster nodes
+    clusterNodes: [ClusterNode!]!
+}
+
+# Extend existing Mutation type
+extend type Mutation {
+    # Add a new OPC UA device configuration
+    addOpcUaDevice(input: OpcUaDeviceInput!): OpcUaDeviceResult!
+
+    # Update an existing OPC UA device configuration
+    updateOpcUaDevice(name: String!, input: OpcUaDeviceInput!): OpcUaDeviceResult!
+
+    # Delete an OPC UA device configuration
+    deleteOpcUaDevice(name: String!): Boolean!
+
+    # Enable or disable an OPC UA device
+    toggleOpcUaDevice(name: String!, enabled: Boolean!): OpcUaDeviceResult!
+
+    # Reassign an OPC UA device to a different cluster node
+    reassignOpcUaDevice(name: String!, nodeId: String!): OpcUaDeviceResult!
+
+    # Add an address to an OPC UA device
+    addOpcUaAddress(deviceName: String!, address: String!, topic: String!, publishMode: OpcUaPublishMode = SINGLE, removePath: Boolean = true): OpcUaDeviceResult!
+
+    # Delete an address from an OPC UA device
+    deleteOpcUaAddress(deviceName: String!, address: String!): OpcUaDeviceResult!
+}

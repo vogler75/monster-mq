@@ -3,6 +3,8 @@ package at.rocworks.stores
 import at.rocworks.Monster
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.extensions.graphql.BrokerMetrics
+import at.rocworks.extensions.graphql.SessionMetrics
+import at.rocworks.extensions.graphql.TimestampConverter
 import at.rocworks.handlers.SessionHandler
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
@@ -77,7 +79,7 @@ class MetricsCollector(
                             topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
                             messageBusIn = nodeMetrics.getLong("messageBusIn", 0L),
                             messageBusOut = nodeMetrics.getLong("messageBusOut", 0L),
-                            timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(timestamp)
+                            timestamp = TimestampConverter.instantToIsoString(timestamp)
                         )
 
                         metricsStore.storeBrokerMetrics(timestamp, nodeId, brokerMetrics).onComplete { result ->
@@ -97,10 +99,10 @@ class MetricsCollector(
                                 val messagesIn = sessionMetric.getLong("messagesIn", 0L)
                                 val messagesOut = sessionMetric.getLong("messagesOut", 0L)
 
-                                val sessionMetrics = at.rocworks.extensions.graphql.SessionMetrics(
+                                val sessionMetrics = SessionMetrics(
                                     messagesIn = messagesIn,
                                     messagesOut = messagesOut,
-                                    timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(timestamp)
+                                    timestamp = TimestampConverter.instantToIsoString(timestamp)
                                 )
 
                                 metricsStore.storeSessionMetrics(timestamp, clientId, sessionMetrics).onComplete { result ->

@@ -1,0 +1,494 @@
+package at.rocworks.devices.opcua.stores
+
+import at.rocworks.devices.opcua.DeviceConfig
+import at.rocworks.devices.opcua.DeviceConfigException
+import at.rocworks.devices.opcua.DeviceConfigStore
+import at.rocworks.devices.opcua.OpcUaConnectionConfig
+import at.rocworks.stores.sqlite.SQLiteClient
+import io.vertx.core.Future
+import io.vertx.core.Promise
+import io.vertx.core.Vertx
+import io.vertx.core.json.JsonArray
+import io.vertx.core.json.JsonObject
+import java.time.Instant
+import java.util.logging.Logger
+
+/**
+ * SQLite implementation of DeviceConfigStore using the shared SQLiteVerticle
+ */
+class DeviceConfigStoreSQLite(
+    private val vertx: Vertx,
+    private val dbPath: String
+) : DeviceConfigStore {
+
+    private val logger: Logger = Logger.getLogger(DeviceConfigStoreSQLite::class.java.name)
+    private lateinit var sqliteClient: SQLiteClient
+
+    companion object {
+        private const val TABLE_NAME = "deviceconfigs"
+
+        private const val CREATE_TABLE = """
+            CREATE TABLE IF NOT EXISTS $TABLE_NAME (
+                name TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL UNIQUE,
+                node_id TEXT NOT NULL,
+                backup_node_id TEXT,
+                config TEXT NOT NULL,
+                enabled INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """
+
+        private const val CREATE_INDEX_NODE_ID = """
+            CREATE INDEX IF NOT EXISTS idx_deviceconfigs_node_id ON $TABLE_NAME (node_id)
+        """
+
+        private const val CREATE_INDEX_ENABLED = """
+            CREATE INDEX IF NOT EXISTS idx_deviceconfigs_enabled ON $TABLE_NAME (enabled)
+        """
+
+        private const val CREATE_INDEX_NAMESPACE = """
+            CREATE INDEX IF NOT EXISTS idx_deviceconfigs_namespace ON $TABLE_NAME (namespace)
+        """
+
+        private const val SELECT_ALL = """
+            SELECT name, namespace, node_id, backup_node_id, config, enabled, created_at, updated_at
+            FROM $TABLE_NAME
+            ORDER BY name
+        """
+
+        private const val SELECT_BY_NODE = """
+            SELECT name, namespace, node_id, backup_node_id, config, enabled, created_at, updated_at
+            FROM $TABLE_NAME
+            WHERE node_id = ?
+            ORDER BY name
+        """
+
+        private const val SELECT_ENABLED_BY_NODE = """
+            SELECT name, namespace, node_id, backup_node_id, config, enabled, created_at, updated_at
+            FROM $TABLE_NAME
+            WHERE node_id = ? AND enabled = 1
+            ORDER BY name
+        """
+
+        private const val SELECT_BY_NAME = """
+            SELECT name, namespace, node_id, backup_node_id, config, enabled, created_at, updated_at
+            FROM $TABLE_NAME
+            WHERE name = ?
+        """
+
+        private const val INSERT_DEVICE = """
+            INSERT INTO $TABLE_NAME (name, namespace, node_id, backup_node_id, config, enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        """
+
+        private const val UPDATE_DEVICE = """
+            UPDATE $TABLE_NAME SET namespace = ?, node_id = ?, backup_node_id = ?, config = ?, enabled = ?, updated_at = datetime('now')
+            WHERE name = ?
+        """
+
+        private const val DELETE_DEVICE = """
+            DELETE FROM $TABLE_NAME WHERE name = ?
+        """
+
+        private const val UPDATE_ENABLED = """
+            UPDATE $TABLE_NAME SET enabled = ?, updated_at = datetime('now') WHERE name = ?
+        """
+
+        private const val UPDATE_NODE_ID = """
+            UPDATE $TABLE_NAME SET node_id = ?, updated_at = datetime('now') WHERE name = ?
+        """
+
+        private const val COUNT_NAMESPACE = """
+            SELECT COUNT(*) as count FROM $TABLE_NAME WHERE namespace = ?
+        """
+
+        private const val COUNT_NAMESPACE_EXCLUDE = """
+            SELECT COUNT(*) as count FROM $TABLE_NAME WHERE namespace = ? AND name != ?
+        """
+    }
+
+    override fun initialize(): Future<Void> {
+        val promise = Promise.promise<Void>()
+
+        try {
+            sqliteClient = SQLiteClient(vertx, dbPath)
+
+            // Initialize database with table creation and indexes
+            val initSql = JsonArray()
+                .add(CREATE_TABLE)
+                .add(CREATE_INDEX_NODE_ID)
+                .add(CREATE_INDEX_ENABLED)
+                .add(CREATE_INDEX_NAMESPACE)
+
+            sqliteClient.initDatabase(initSql)
+                .onSuccess {
+                    logger.info("DeviceConfigStoreSQLite initialized successfully")
+                    promise.complete()
+                }
+                .onFailure { error ->
+                    logger.severe("Failed to initialize DeviceConfigStoreSQLite: ${error.message}")
+                    promise.fail(DeviceConfigException("Failed to initialize database", error))
+                }
+        } catch (e: Exception) {
+            logger.severe("Failed to create SQLiteClient: ${e.message}")
+            promise.fail(DeviceConfigException("Failed to initialize database", e))
+        }
+
+        return promise.future()
+    }
+
+    override fun getAllDevices(): Future<List<DeviceConfig>> {
+        val promise = Promise.promise<List<DeviceConfig>>()
+
+        sqliteClient.executeQuery(SELECT_ALL)
+            .onSuccess { results ->
+                try {
+                    val devices = results.map { row ->
+                        mapJsonToDeviceConfig(row as JsonObject)
+                    }
+                    promise.complete(devices)
+                } catch (e: Exception) {
+                    logger.severe("Failed to map results: ${e.message}")
+                    promise.fail(DeviceConfigException("Failed to process results", e))
+                }
+            }
+            .onFailure { error ->
+                logger.severe("Failed to get all devices: ${error.message}")
+                promise.fail(DeviceConfigException("Failed to retrieve devices", error))
+            }
+
+        return promise.future()
+    }
+
+    override fun getDevicesByNode(nodeId: String): Future<List<DeviceConfig>> {
+        val promise = Promise.promise<List<DeviceConfig>>()
+
+        sqliteClient.executeQuery(SELECT_BY_NODE, JsonArray().add(nodeId))
+            .onSuccess { results ->
+                try {
+                    val devices = results.map { row ->
+                        mapJsonToDeviceConfig(row as JsonObject)
+                    }
+                    promise.complete(devices)
+                } catch (e: Exception) {
+                    logger.severe("Failed to map results: ${e.message}")
+                    promise.fail(DeviceConfigException("Failed to process results", e))
+                }
+            }
+            .onFailure { error ->
+                logger.severe("Failed to get devices by node $nodeId: ${error.message}")
+                promise.fail(DeviceConfigException("Failed to retrieve devices for node", error))
+            }
+
+        return promise.future()
+    }
+
+    override fun getEnabledDevicesByNode(nodeId: String): Future<List<DeviceConfig>> {
+        val promise = Promise.promise<List<DeviceConfig>>()
+
+        sqliteClient.executeQuery(SELECT_ENABLED_BY_NODE, JsonArray().add(nodeId))
+            .onSuccess { results ->
+                try {
+                    val devices = results.map { row ->
+                        mapJsonToDeviceConfig(row as JsonObject)
+                    }
+                    promise.complete(devices)
+                } catch (e: Exception) {
+                    logger.severe("Failed to map results: ${e.message}")
+                    promise.fail(DeviceConfigException("Failed to process results", e))
+                }
+            }
+            .onFailure { error ->
+                logger.severe("Failed to get enabled devices by node $nodeId: ${error.message}")
+                promise.fail(DeviceConfigException("Failed to retrieve enabled devices for node", error))
+            }
+
+        return promise.future()
+    }
+
+    override fun getDevice(name: String): Future<DeviceConfig?> {
+        val promise = Promise.promise<DeviceConfig?>()
+
+        sqliteClient.executeQuery(SELECT_BY_NAME, JsonArray().add(name))
+            .onSuccess { results ->
+                try {
+                    if (results.size() > 0) {
+                        val device = mapJsonToDeviceConfig(results.getJsonObject(0))
+                        promise.complete(device)
+                    } else {
+                        promise.complete(null)
+                    }
+                } catch (e: Exception) {
+                    logger.severe("Failed to map result: ${e.message}")
+                    promise.fail(DeviceConfigException("Failed to process result", e))
+                }
+            }
+            .onFailure { error ->
+                logger.severe("Failed to get device $name: ${error.message}")
+                promise.fail(DeviceConfigException("Failed to retrieve device", error))
+            }
+
+        return promise.future()
+    }
+
+    override fun saveDevice(device: DeviceConfig): Future<DeviceConfig> {
+        val promise = Promise.promise<DeviceConfig>()
+
+        // Check if device exists first
+        getDevice(device.name).onComplete { result ->
+            if (result.succeeded()) {
+                val exists = result.result() != null
+
+                try {
+                    val addressesArray = JsonArray()
+                    device.config.addresses.forEach { address ->
+                        addressesArray.add(JsonObject()
+                            .put("address", address.address)
+                            .put("topic", address.topic)
+                            .put("publishMode", address.publishMode))
+                    }
+
+                    val configJson = JsonObject()
+                        .put("endpointUrl", device.config.endpointUrl)
+                        .put("securityPolicy", device.config.securityPolicy)
+                        .put("username", device.config.username)
+                        .put("password", device.config.password)
+                        .put("subscriptionSamplingInterval", device.config.subscriptionSamplingInterval)
+                        .put("keepAliveFailuresAllowed", device.config.keepAliveFailuresAllowed)
+                        .put("reconnectDelay", device.config.reconnectDelay)
+                        .put("connectionTimeout", device.config.connectionTimeout)
+                        .put("requestTimeout", device.config.requestTimeout)
+                        .put("addresses", addressesArray)
+
+                    val sql = if (exists) UPDATE_DEVICE else INSERT_DEVICE
+                    val params = if (exists) {
+                        // UPDATE: namespace, node_id, backup_node_id, config, enabled WHERE name
+                        JsonArray()
+                            .add(device.namespace)
+                            .add(device.nodeId)
+                            .add(device.backupNodeId)
+                            .add(configJson.encode())
+                            .add(if (device.enabled) 1 else 0)
+                            .add(device.name)
+                    } else {
+                        // INSERT: name, namespace, node_id, backup_node_id, config, enabled
+                        JsonArray()
+                            .add(device.name)
+                            .add(device.namespace)
+                            .add(device.nodeId)
+                            .add(device.backupNodeId)
+                            .add(configJson.encode())
+                            .add(if (device.enabled) 1 else 0)
+                    }
+
+                    sqliteClient.executeUpdate(sql, params)
+                        .onSuccess {
+                            logger.info("${if (exists) "Updated" else "Created"} device: ${device.name}")
+                            val updatedDevice = device.copy(updatedAt = Instant.now())
+                            promise.complete(updatedDevice)
+                        }
+                        .onFailure { error ->
+                            logger.severe("Failed to save device ${device.name}: ${error.message}")
+                            promise.fail(DeviceConfigException("Failed to save device", error))
+                        }
+                } catch (e: Exception) {
+                    logger.severe("Failed to prepare device save ${device.name}: ${e.message}")
+                    promise.fail(DeviceConfigException("Failed to save device", e))
+                }
+            } else {
+                promise.fail(result.cause())
+            }
+        }
+
+        return promise.future()
+    }
+
+    override fun deleteDevice(name: String): Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
+
+        sqliteClient.executeUpdate(DELETE_DEVICE, JsonArray().add(name))
+            .onSuccess { rowsAffected ->
+                if (rowsAffected > 0) {
+                    logger.info("Deleted device: $name")
+                    promise.complete(true)
+                } else {
+                    logger.warning("Device not found for deletion: $name")
+                    promise.complete(false)
+                }
+            }
+            .onFailure { error ->
+                logger.severe("Failed to delete device $name: ${error.message}")
+                promise.fail(DeviceConfigException("Failed to delete device", error))
+            }
+
+        return promise.future()
+    }
+
+    override fun isNamespaceInUse(namespace: String, excludeName: String?): Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
+
+        val sql = if (excludeName != null) COUNT_NAMESPACE_EXCLUDE else COUNT_NAMESPACE
+        val params = if (excludeName != null) {
+            JsonArray().add(namespace).add(excludeName)
+        } else {
+            JsonArray().add(namespace)
+        }
+
+        sqliteClient.executeQuery(sql, params)
+            .onSuccess { results ->
+                try {
+                    if (results.size() > 0) {
+                        val count = results.getJsonObject(0).getInteger("count", 0)
+                        promise.complete(count > 0)
+                    } else {
+                        promise.complete(false)
+                    }
+                } catch (e: Exception) {
+                    logger.severe("Failed to process namespace check: ${e.message}")
+                    promise.fail(DeviceConfigException("Failed to check namespace", e))
+                }
+            }
+            .onFailure { error ->
+                logger.severe("Failed to check namespace usage: ${error.message}")
+                promise.fail(DeviceConfigException("Failed to check namespace", error))
+            }
+
+        return promise.future()
+    }
+
+    override fun toggleDevice(name: String, enabled: Boolean): Future<DeviceConfig?> {
+        val promise = Promise.promise<DeviceConfig?>()
+
+        sqliteClient.executeUpdate(UPDATE_ENABLED, JsonArray().add(if (enabled) 1 else 0).add(name))
+            .onSuccess { rowsAffected ->
+                if (rowsAffected > 0) {
+                    logger.info("Updated device $name enabled status to $enabled")
+                    // Retrieve and return the updated device
+                    getDevice(name).onComplete { result ->
+                        if (result.succeeded()) {
+                            promise.complete(result.result())
+                        } else {
+                            promise.fail(result.cause())
+                        }
+                    }
+                } else {
+                    logger.warning("Device not found for enabled update: $name")
+                    promise.complete(null)
+                }
+            }
+            .onFailure { error ->
+                logger.severe("Failed to toggle device $name: ${error.message}")
+                promise.fail(DeviceConfigException("Failed to toggle device", error))
+            }
+
+        return promise.future()
+    }
+
+    override fun reassignDevice(name: String, nodeId: String): Future<DeviceConfig?> {
+        val promise = Promise.promise<DeviceConfig?>()
+
+        sqliteClient.executeUpdate(UPDATE_NODE_ID, JsonArray().add(nodeId).add(name))
+            .onSuccess { rowsAffected ->
+                if (rowsAffected > 0) {
+                    logger.info("Updated device $name nodeId to $nodeId")
+                    // Retrieve and return the updated device
+                    getDevice(name).onComplete { result ->
+                        if (result.succeeded()) {
+                            promise.complete(result.result())
+                        } else {
+                            promise.fail(result.cause())
+                        }
+                    }
+                } else {
+                    logger.warning("Device not found for nodeId update: $name")
+                    promise.complete(null)
+                }
+            }
+            .onFailure { error ->
+                logger.severe("Failed to reassign device $name: ${error.message}")
+                promise.fail(DeviceConfigException("Failed to reassign device", error))
+            }
+
+        return promise.future()
+    }
+
+    override fun close(): Future<Void> {
+        val promise = Promise.promise<Void>()
+        // SQLiteClient doesn't need explicit closing - the SQLiteVerticle manages connections
+        logger.info("DeviceConfigStoreSQLite closed")
+        promise.complete()
+        return promise.future()
+    }
+
+    private fun mapJsonToDeviceConfig(row: JsonObject): DeviceConfig {
+        val configJson = JsonObject(row.getString("config"))
+
+        // Parse addresses array from JSON
+        val addresses = mutableListOf<at.rocworks.devices.opcua.OpcUaAddress>()
+        val addressesArray = configJson.getJsonArray("addresses")
+        if (addressesArray != null) {
+            addressesArray.forEach { addressObj ->
+                val addressJson = addressObj as JsonObject
+                addresses.add(at.rocworks.devices.opcua.OpcUaAddress(
+                    address = addressJson.getString("address"),
+                    topic = addressJson.getString("topic"),
+                    publishMode = addressJson.getString("publishMode", "SINGLE")?.uppercase() ?: "SINGLE"
+                ))
+            }
+        }
+
+        val config = OpcUaConnectionConfig(
+            endpointUrl = configJson.getString("endpointUrl"),
+            securityPolicy = configJson.getString("securityPolicy", "None"),
+            username = configJson.getString("username"),
+            password = configJson.getString("password"),
+            subscriptionSamplingInterval = configJson.getDouble("subscriptionSamplingInterval", 1000.0),
+            keepAliveFailuresAllowed = configJson.getInteger("keepAliveFailuresAllowed", 3),
+            reconnectDelay = configJson.getLong("reconnectDelay", 5000L),
+            connectionTimeout = configJson.getLong("connectionTimeout", 10000L),
+            requestTimeout = configJson.getLong("requestTimeout", 5000L),
+            addresses = addresses
+        )
+
+        // Parse SQLite datetime strings to Instant
+        val createdAtStr = row.getString("created_at")
+        val updatedAtStr = row.getString("updated_at")
+
+        val createdAt = try {
+            if (createdAtStr != null) {
+                // Convert SQLite datetime to ISO format and parse
+                val isoFormat = "${createdAtStr.replace(' ', 'T')}Z"
+                Instant.parse(isoFormat)
+            } else {
+                Instant.now()
+            }
+        } catch (e: Exception) {
+            Instant.now()
+        }
+
+        val updatedAt = try {
+            if (updatedAtStr != null) {
+                // Convert SQLite datetime to ISO format and parse
+                val isoFormat = "${updatedAtStr.replace(' ', 'T')}Z"
+                Instant.parse(isoFormat)
+            } else {
+                Instant.now()
+            }
+        } catch (e: Exception) {
+            Instant.now()
+        }
+
+        return DeviceConfig(
+            name = row.getString("name"),
+            namespace = row.getString("namespace"),
+            nodeId = row.getString("node_id"),
+            backupNodeId = row.getString("backup_node_id"),
+            config = config,
+            enabled = row.getInteger("enabled") == 1,
+            createdAt = createdAt,
+            updatedAt = updatedAt
+        )
+    }
+}
