@@ -272,7 +272,7 @@ class MessageArchiveSQLite(
 
     override fun getConnectionStatus(): Boolean {
         return try {
-            ::sqlClient.isInitialized && sqlClient != null
+            ::sqlClient.isInitialized
         } catch (e: Exception) {
             false
         }
