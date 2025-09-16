@@ -8,7 +8,8 @@ import java.time.Instant
 enum class MetricsStoreType {
     POSTGRES,
     CRATEDB,
-    MONGODB
+    MONGODB,
+    SQLITE
 }
 
 interface IMetricsStore {

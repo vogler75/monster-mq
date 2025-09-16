@@ -20,6 +20,7 @@ import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Callable
 import java.util.logging.Logger
 
 data class ArchiveGroupInfo(
@@ -31,7 +32,8 @@ data class ArchiveGroupInfo(
 class ArchiveHandler(
     private val vertx: Vertx,
     private val configJson: JsonObject,
-    private val archiveConfigFile: String?
+    private val archiveConfigFile: String?,
+    private val isClustered: Boolean = false
 ) {
     private val logger: Logger = Utils.getLogger(this::class.java)
 
@@ -187,7 +189,7 @@ class ArchiveHandler(
                 var importedCount = 0
                 archiveGroups.filterIsInstance<JsonObject>().forEach { config ->
                     try {
-                        val archiveGroup = ArchiveGroup.fromConfig(config, databaseConfig)
+                        val archiveGroup = ArchiveGroup.fromConfig(config, databaseConfig, isClustered)
                         val enabled = config.getBoolean("Enabled", true)
 
                         val success = configStore.saveArchiveGroup(archiveGroup, enabled)
@@ -269,8 +271,8 @@ class ArchiveHandler(
                         name = ag.name,
                         topicFilter = ag.topicFilter,
                         retainedOnly = ag.retainedOnly,
-                        lastValType = MessageStoreType.POSTGRES, // Hard-coded for now
-                        archiveType = MessageArchiveType.POSTGRES, // Hard-coded for now
+                        lastValType = ag.getLastValType(), // Use actual store type from database
+                        archiveType = ag.getArchiveType(), // Use actual store type from database
                         lastValRetentionMs = ag.getLastValRetentionMs(),
                         archiveRetentionMs = ag.getArchiveRetentionMs(),
                         purgeIntervalMs = ag.getPurgeIntervalMs(),
@@ -333,7 +335,7 @@ class ArchiveHandler(
         val databaseConfig = createDatabaseConfig()
 
         val deploymentFutures: List<Future<ArchiveGroup>> = archiveGroupConfigs.map { config ->
-            val archiveGroup = ArchiveGroup.fromConfig(config, databaseConfig)
+            val archiveGroup = ArchiveGroup.fromConfig(config, databaseConfig, isClustered)
             val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
 
             vertx.deployVerticle(archiveGroup, options).map { deploymentId ->
@@ -634,13 +636,25 @@ class ArchiveHandler(
 
     private fun handleArchiveConnectionStatus(message: Message<JsonObject>) {
         val name = message.body().getString("name")
-        if (name != null) {
-            val connectionStatus = getArchiveGroupConnectionStatus(name)
-            message.reply(connectionStatus)
-        } else {
-            // Get connection status for all deployed archive groups
-            val allConnectionStatus = getAllArchiveGroupConnectionStatus()
-            message.reply(JsonObject().put("connectionStatus", allConnectionStatus))
+
+        // Execute connection status checks asynchronously to avoid blocking the event loop
+        vertx.executeBlocking(Callable {
+            if (name != null) {
+                getArchiveGroupConnectionStatus(name)
+            } else {
+                // Get connection status for all deployed archive groups
+                val allConnectionStatus = getAllArchiveGroupConnectionStatus()
+                JsonObject().put("connectionStatus", allConnectionStatus)
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                message.reply(result.result())
+            } else {
+                logger.warning("Error getting connection status: ${result.cause()?.message}")
+                message.reply(JsonObject()
+                    .put("success", false)
+                    .put("error", "Failed to get connection status: ${result.cause()?.message}"))
+            }
         }
     }
 
@@ -759,7 +773,7 @@ class ArchiveHandler(
         if (archiveGroupConfigs.isNotEmpty()) {
             val config = archiveGroupConfigs.first()
             val databaseConfig = createDatabaseConfig()
-            val archiveGroup = ArchiveGroup.fromConfig(config, databaseConfig)
+            val archiveGroup = ArchiveGroup.fromConfig(config, databaseConfig, isClustered)
             promise.complete(archiveGroup)
         } else {
             promise.complete(null)
@@ -780,7 +794,7 @@ class ArchiveHandler(
         logger.info("Broadcasted archive event: $event for ArchiveGroup [$archiveGroupName]")
     }
 
-    private fun getArchiveGroupConnectionStatus(name: String): JsonObject {
+    fun getArchiveGroupConnectionStatus(name: String): JsonObject {
         val archiveInfo = deployedArchiveGroups[name]
         if (archiveInfo == null) {
             return JsonObject()

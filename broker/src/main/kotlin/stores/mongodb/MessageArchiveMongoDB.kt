@@ -40,66 +40,146 @@ class MessageArchiveMongoDB(
     private val logger = Utils.getLogger(this::class.java, name)
     private val collectionName = name.lowercase()
 
-    private lateinit var mongoClient: MongoClient
-    private lateinit var database: MongoDatabase
-    private lateinit var collection: MongoCollection<Document>
+    @Volatile
+    private var mongoClient: MongoClient? = null
+    @Volatile
+    private var database: MongoDatabase? = null
+    @Volatile
+    private var collection: MongoCollection<Document>? = null
+    @Volatile
+    private var isConnected: Boolean = false
+    @Volatile
+    private var lastConnectionAttempt: Long = 0
+
+    private val connectionRetryInterval = 30_000L // 30 seconds
+    private val healthCheckInterval = 10_000L // 10 seconds for more responsive detection
 
     init {
         logger.level = Const.DEBUG_LEVEL
     }
 
     override fun start(startPromise: Promise<Void>) {
-        try {
-            // Enhanced connection settings with pooling
-            val settings = MongoClientSettings.builder()
-                .applyConnectionString(ConnectionString(connectionString))
-                .applyToConnectionPoolSettings { builder ->
-                    builder.maxSize(50)              // Max connections in pool
-                    builder.minSize(10)              // Min connections to maintain
-                    builder.maxWaitTime(2, TimeUnit.SECONDS)
-                    builder.maxConnectionLifeTime(30, TimeUnit.MINUTES)
-                    builder.maxConnectionIdleTime(10, TimeUnit.MINUTES)
-                }
-                .applyToSocketSettings { builder ->
-                    builder.connectTimeout(5, TimeUnit.SECONDS)
-                    builder.readTimeout(10, TimeUnit.SECONDS)
-                }
-                .build()
+        logger.info("Starting MongoDB Message Archive [$name] with async connection management")
 
-            mongoClient = MongoClients.create(settings)
-            database = mongoClient.getDatabase(databaseName)
+        // Start connection establishment in background
+        initiateConnection()
 
-            // Create time-series collection if not exists
-            if (!database.listCollectionNames().into(mutableListOf()).contains(collectionName)) {
-                val timeSeriesOptions = TimeSeriesOptions("time")
-                    .metaField("meta")
-                    .granularity(TimeSeriesGranularity.SECONDS) // Better for MQTT
-                
-                val createCollectionOptions = CreateCollectionOptions()
-                    .timeSeriesOptions(timeSeriesOptions)
-                    .expireAfter(365, TimeUnit.DAYS) // Optional: auto-expire old data
-                
-                database.createCollection(collectionName, createCollectionOptions)
-                logger.info("Created time-series collection: $collectionName")
-            }
-
-            collection = database.getCollection(collectionName)
-            
-            // Create optimized indexes for queries
-            createIndexes()
-            
-            logger.info("MongoDB Message Archive [$name] started with enhanced configuration")
-            startPromise.complete()
-        } catch (e: Exception) {
-            logger.severe("Error starting MongoDB message archive: ${e.message}")
-            startPromise.fail(e)
+        // Set up periodic health check and reconnection
+        vertx.setPeriodic(healthCheckInterval) {
+            performHealthCheck()
         }
+
+        // Complete startup immediately - connections will be established asynchronously
+        startPromise.complete()
+        logger.info("MongoDB Message Archive [$name] startup completed - connections will be established in background")
     }
 
-    private fun createIndexes() {
+    /**
+     * Initiates MongoDB connection in background thread
+     */
+    private fun initiateConnection() {
+        if (System.currentTimeMillis() - lastConnectionAttempt < connectionRetryInterval) {
+            return // Too soon to retry
+        }
+
+        lastConnectionAttempt = System.currentTimeMillis()
+
+        vertx.executeBlocking(java.util.concurrent.Callable {
+            try {
+                logger.info("Attempting to connect to MongoDB for archive [$name]...")
+
+                // Enhanced connection settings with pooling
+                val settings = MongoClientSettings.builder()
+                    .applyConnectionString(ConnectionString(connectionString))
+                    .applyToConnectionPoolSettings { builder ->
+                        builder.maxSize(50)              // Max connections in pool
+                        builder.minSize(10)              // Min connections to maintain
+                        builder.maxWaitTime(2, TimeUnit.SECONDS)
+                        builder.maxConnectionLifeTime(30, TimeUnit.MINUTES)
+                        builder.maxConnectionIdleTime(10, TimeUnit.MINUTES)
+                    }
+                    .applyToSocketSettings { builder ->
+                        builder.connectTimeout(5, TimeUnit.SECONDS)
+                        builder.readTimeout(10, TimeUnit.SECONDS)
+                    }
+                    .build()
+
+                val newClient = MongoClients.create(settings)
+                val newDatabase = newClient.getDatabase(databaseName)
+
+                // Test connection with ping
+                newDatabase.runCommand(Document("ping", 1))
+
+                // Create time-series collection if not exists
+                if (!newDatabase.listCollectionNames().into(mutableListOf()).contains(collectionName)) {
+                    val timeSeriesOptions = TimeSeriesOptions("time")
+                        .metaField("meta")
+                        .granularity(TimeSeriesGranularity.SECONDS) // Better for MQTT
+
+                    val createCollectionOptions = CreateCollectionOptions()
+                        .timeSeriesOptions(timeSeriesOptions)
+                        .expireAfter(365, TimeUnit.DAYS) // Optional: auto-expire old data
+
+                    newDatabase.createCollection(collectionName, createCollectionOptions)
+                    logger.info("Created time-series collection: $collectionName")
+                }
+
+                val newCollection = newDatabase.getCollection(collectionName)
+
+                // Create optimized indexes for queries
+                createIndexes(newCollection)
+
+                // Update connection state atomically
+                synchronized(this) {
+                    // Close old connection if exists
+                    mongoClient?.close()
+
+                    mongoClient = newClient
+                    database = newDatabase
+                    collection = newCollection
+                    isConnected = true
+                }
+
+                logger.info("MongoDB Message Archive [$name] connected successfully")
+
+            } catch (e: Exception) {
+                logger.warning("Failed to connect to MongoDB for archive [$name]: ${e.message}")
+                synchronized(this) {
+                    isConnected = false
+                }
+            }
+        })
+    }
+
+    /**
+     * Performs periodic health check and reconnection if needed
+     */
+    private fun performHealthCheck() {
+        if (!isConnected) {
+            logger.fine("MongoDB archive [$name] not connected, attempting reconnection...")
+            initiateConnection()
+            return
+        }
+
+        // Test existing connection
+        vertx.executeBlocking(java.util.concurrent.Callable {
+            try {
+                database?.runCommand(Document("ping", 1))
+                // Connection is healthy
+            } catch (e: Exception) {
+                logger.warning("MongoDB archive [$name] health check failed: ${e.message}")
+                synchronized(this) {
+                    isConnected = false
+                }
+                // Will reconnect on next health check
+            }
+        })
+    }
+
+    private fun createIndexes(targetCollection: MongoCollection<Document>) {
         try {
             // Compound index for topic + time queries (most common)
-            collection.createIndex(
+            targetCollection.createIndex(
                 Document(mapOf(
                     "meta.topic" to 1,
                     "time" to -1
@@ -108,7 +188,7 @@ class MessageArchiveMongoDB(
             )
 
             // Index for time-range queries
-            collection.createIndex(
+            targetCollection.createIndex(
                 Indexes.descending("time"),
                 IndexOptions().name("time_idx")
             )
@@ -119,14 +199,14 @@ class MessageArchiveMongoDB(
             // Topic pattern matching will fall back to regex queries which are less efficient
             // but still functional for the archive use case
             /*
-            collection.createIndex(
+            targetCollection.createIndex(
                 Indexes.text("meta.topic"),
                 IndexOptions().name("topic_text_idx")
             )
             */
 
             // Index for client_id queries
-            collection.createIndex(
+            targetCollection.createIndex(
                 Indexes.ascending("meta.client_id"),
                 IndexOptions().name("client_idx")
             )
@@ -161,7 +241,9 @@ class MessageArchiveMongoDB(
                 .ordered(false)  // Continue on error
                 .bypassDocumentValidation(true)  // Faster inserts
 
-            collection.insertMany(documents, options)
+            getActiveCollection()?.insertMany(documents, options) ?: run {
+                logger.warning("MongoDB not connected, skipping batch insert for [$name]")
+            }
         } catch (e: Exception) {
             logger.warning("Error inserting batch data: ${e.message}")
         }
@@ -204,9 +286,15 @@ class MessageArchiveMongoDB(
         val messages = JsonArray()
         
         try {
+            val activeCollection = getActiveCollection()
+            if (activeCollection == null) {
+                logger.warning("MongoDB not connected, returning empty history for [$name]")
+                return messages
+            }
+
             val startQuery = System.currentTimeMillis()
-            
-            collection.find(filter)
+
+            activeCollection.find(filter)
                 .sort(Sorts.descending("time"))
                 .limit(limit)
                 .forEach { doc ->
@@ -255,7 +343,13 @@ class MessageArchiveMongoDB(
         try {
             val startTime = System.currentTimeMillis()
             
-            collection.aggregate(pipeline)
+            val activeCollection = getActiveCollection()
+            if (activeCollection == null) {
+                logger.warning("MongoDB not connected, returning empty search results for [$name]")
+                return result
+            }
+
+            activeCollection.aggregate(pipeline)
                 .allowDiskUse(true)  // Allow using disk for large aggregations
                 .forEach { doc ->
                     result.add(JsonObject(doc.toJson()))
@@ -301,14 +395,16 @@ class MessageArchiveMongoDB(
     override fun getType(): MessageArchiveType = MessageArchiveType.MONGODB
 
     override fun getConnectionStatus(): Boolean {
-        return try {
-            // Check if MongoDB client is connected by attempting a ping
-            database.runCommand(org.bson.Document("ping", 1))
-            true
-        } catch (e: Exception) {
-            logger.fine("MongoDB connection check failed: ${e.message}")
-            false
-        }
+        // Just return the cached connection status - no real-time testing
+        // Real-time testing is done by background health checks
+        return isConnected && mongoClient != null && database != null && collection != null
+    }
+
+    /**
+     * Ensures connection is available, returns null if not connected
+     */
+    private fun getActiveCollection(): MongoCollection<Document>? {
+        return if (isConnected) collection else null
     }
 
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
@@ -320,7 +416,10 @@ class MessageArchiveMongoDB(
         try {
             // For time-series collections, use Date format for filtering
             val filter = Filters.lt("time", Date.from(olderThan))
-            val result = collection.deleteMany(filter)
+            val result = getActiveCollection()?.deleteMany(filter) ?: run {
+                logger.warning("MongoDB not connected, skipping purge for [$name]")
+                return PurgeResult(0, System.currentTimeMillis() - startTime)
+            }
             deletedCount = result.deletedCount.toInt()
         } catch (e: Exception) {
             logger.severe("Error purging old messages from [$name]: ${e.message}")
@@ -336,7 +435,9 @@ class MessageArchiveMongoDB(
 
     override fun dropStorage(): Boolean {
         return try {
-            collection.drop()
+            getActiveCollection()?.drop() ?: run {
+                logger.warning("MongoDB not connected, cannot drop collection for [$name]")
+            }
             logger.info("Dropped collection [$collectionName] for message archive [$name]")
             true
         } catch (e: Exception) {
@@ -346,7 +447,7 @@ class MessageArchiveMongoDB(
     }
 
     override fun stop() {
-        mongoClient.close()
+        mongoClient?.close()
         logger.info("MongoDB connection closed.")
     }
 }

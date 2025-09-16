@@ -275,6 +275,13 @@ class GraphQLServer(
                     .dataFetcher("metrics", metricsResolver.sessionMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.sessionMetricsHistory())
             }
+            .type("ArchiveGroupInfo") { builder ->
+                builder.apply {
+                    archiveGroupResolver?.let { resolver ->
+                        dataFetcher("connectionStatus", resolver.connectionStatus())
+                    }
+                }
+            }
             .build()
     }
 }

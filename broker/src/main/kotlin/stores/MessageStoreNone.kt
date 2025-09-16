@@ -21,5 +21,5 @@ object MessageStoreNone : IMessageStore {
 
     override fun dropStorage(): Boolean = true
 
-    override fun getConnectionStatus(): Boolean = true // NONE store is always "connected"
+    override fun getConnectionStatus(): Boolean = false // NONE store reports as not connected
 }

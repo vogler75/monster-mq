@@ -56,12 +56,8 @@ object ConfigStoreFactory {
             "SQLITE" -> {
                 val sqliteConfig = config.getJsonObject("SQLite")
                 if (sqliteConfig != null) {
-                    val dbPath = sqliteConfig.getString("DbPath")
-                    if (dbPath != null) {
-                        ConfigStoreSQLite(dbPath)
-                    } else {
-                        null
-                    }
+                    val dbPath = sqliteConfig.getString("Path", "monstermq.db")
+                    ConfigStoreSQLite(dbPath)
                 } else {
                     null
                 }

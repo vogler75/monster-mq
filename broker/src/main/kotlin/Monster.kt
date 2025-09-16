@@ -410,7 +410,7 @@ MORE INFO:
             val (retainedStore, retainedReady) = getMessageStore(vertx, "RetainedMessages", retainedStoreType)
 
             // Archive groups
-            val archiveHandler = ArchiveHandler(vertx, configJson, archiveConfigFile)
+            val archiveHandler = ArchiveHandler(vertx, configJson, archiveConfigFile, isClustered)
             val archiveGroupsFuture = archiveHandler.initialize()
 
             // Wait for all stores to be ready

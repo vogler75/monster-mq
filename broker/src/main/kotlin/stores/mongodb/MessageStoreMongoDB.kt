@@ -38,10 +38,20 @@ class MessageStoreMongoDB(
     private val logger = Utils.getLogger(this::class.java, name)
     private val collectionName = name.lowercase()
     
-    private lateinit var mongoClient: MongoClient
-    private lateinit var database: MongoDatabase
-    private lateinit var collection: MongoCollection<Document>
-    
+    @Volatile
+    private var mongoClient: MongoClient? = null
+    @Volatile
+    private var database: MongoDatabase? = null
+    @Volatile
+    private var collection: MongoCollection<Document>? = null
+    @Volatile
+    private var isConnected: Boolean = false
+    @Volatile
+    private var lastConnectionAttempt: Long = 0
+
+    private val connectionRetryInterval = 30_000L // 30 seconds
+    private val healthCheckInterval = 10_000L // 10 seconds for more responsive detection
+
     // Cache for error reporting
     private var lastError: Int = 0
 
@@ -50,47 +60,126 @@ class MessageStoreMongoDB(
     }
 
     override fun start(startPromise: Promise<Void>) {
-        try {
-            // Enhanced connection settings
-            val settings = MongoClientSettings.builder()
-                .applyConnectionString(ConnectionString(connectionString))
-                .applyToConnectionPoolSettings { builder ->
-                    builder.maxSize(50)
-                    builder.minSize(10)
-                    builder.maxWaitTime(2, TimeUnit.SECONDS)
-                }
-                .writeConcern(WriteConcern.W1.withJournal(false)) // Faster writes
-                .build()
+        logger.info("Starting MongoDB Message Store [$name] with async connection management")
 
-            mongoClient = MongoClients.create(settings)
-            database = mongoClient.getDatabase(databaseName)
+        // Start connection establishment in background
+        initiateConnection()
 
-            if (!database.listCollectionNames().contains(collectionName)) {
-                database.createCollection(collectionName)
-                logger.info("Created collection: $collectionName")
-            }
-
-            collection = database.getCollection(collectionName)
-            createOptimizedIndexes()
-            
-            logger.info("Enhanced Message Store [$name] is ready")
-            startPromise.complete()
-        } catch (e: Exception) {
-            logger.severe("Error starting MongoDB connection: ${e.message}")
-            startPromise.fail(e)
+        // Set up periodic health check and reconnection
+        vertx.setPeriodic(healthCheckInterval) {
+            performHealthCheck()
         }
+
+        // Complete startup immediately - connections will be established asynchronously
+        startPromise.complete()
+        logger.info("MongoDB Message Store [$name] startup completed - connections will be established in background")
     }
 
-    private fun createOptimizedIndexes() {
+    /**
+     * Initiates MongoDB connection in background thread
+     */
+    private fun initiateConnection() {
+        if (System.currentTimeMillis() - lastConnectionAttempt < connectionRetryInterval) {
+            return // Too soon to retry
+        }
+
+        lastConnectionAttempt = System.currentTimeMillis()
+
+        vertx.executeBlocking(java.util.concurrent.Callable {
+            try {
+                logger.info("Attempting to connect to MongoDB for store [$name]...")
+
+                // Enhanced connection settings with pooling
+                val settings = MongoClientSettings.builder()
+                    .applyConnectionString(ConnectionString(connectionString))
+                    .applyToConnectionPoolSettings { builder ->
+                        builder.maxSize(50)              // Max connections in pool
+                        builder.minSize(10)              // Min connections to maintain
+                        builder.maxWaitTime(2, TimeUnit.SECONDS)
+                        builder.maxConnectionLifeTime(30, TimeUnit.MINUTES)
+                        builder.maxConnectionIdleTime(10, TimeUnit.MINUTES)
+                    }
+                    .applyToSocketSettings { builder ->
+                        builder.connectTimeout(5, TimeUnit.SECONDS)
+                        builder.readTimeout(10, TimeUnit.SECONDS)
+                    }
+                    .writeConcern(WriteConcern.W1.withJournal(false)) // Faster writes
+                    .build()
+
+                val newClient = MongoClients.create(settings)
+                val newDatabase = newClient.getDatabase(databaseName)
+
+                // Test connection with ping
+                newDatabase.runCommand(org.bson.Document("ping", 1))
+
+                // Create collection if not exists
+                if (!newDatabase.listCollectionNames().into(mutableListOf()).contains(collectionName)) {
+                    newDatabase.createCollection(collectionName)
+                    logger.info("Created collection: $collectionName")
+                }
+
+                val newCollection = newDatabase.getCollection(collectionName)
+
+                // Create optimized indexes for queries
+                createOptimizedIndexes(newCollection)
+
+                // Update connection state atomically
+                synchronized(this) {
+                    // Close old connection if exists
+                    mongoClient?.close()
+
+                    mongoClient = newClient
+                    database = newDatabase
+                    collection = newCollection
+                    isConnected = true
+                }
+
+                logger.info("MongoDB Message Store [$name] connected successfully")
+
+            } catch (e: Exception) {
+                logger.warning("Failed to connect to MongoDB for store [$name]: ${e.message}")
+                synchronized(this) {
+                    isConnected = false
+                }
+            }
+        })
+    }
+
+    /**
+     * Performs periodic health check and reconnection if needed
+     */
+    private fun performHealthCheck() {
+        if (!isConnected) {
+            logger.fine("MongoDB store [$name] not connected, attempting reconnection...")
+            initiateConnection()
+            return
+        }
+
+        // Test existing connection
+        vertx.executeBlocking(java.util.concurrent.Callable {
+            try {
+                database?.runCommand(org.bson.Document("ping", 1))
+                // Connection is healthy
+            } catch (e: Exception) {
+                logger.warning("MongoDB store [$name] health check failed: ${e.message}")
+                synchronized(this) {
+                    isConnected = false
+                }
+                // Will reconnect on next health check
+            }
+        })
+    }
+
+    private fun createOptimizedIndexes(targetCollection: MongoCollection<Document>) {
         try {
             // Unique index on topic for exact matches
-            collection.createIndex(
+            targetCollection.createIndex(
                 Indexes.ascending("topic"),
                 IndexOptions().unique(true).name("topic_unique_idx")
             )
 
             // Compound index for topic levels (optimized wildcard matching)
-            collection.createIndex(
+            targetCollection.createIndex(
                 Document(mapOf(
                     "topic_levels.L0" to 1,
                     "topic_levels.L1" to 1,
@@ -102,13 +191,13 @@ class MessageStoreMongoDB(
             )
 
             // Index for client_id queries
-            collection.createIndex(
+            targetCollection.createIndex(
                 Indexes.ascending("client_id"),
                 IndexOptions().name("client_idx")
             )
 
             // Index for time-based queries
-            collection.createIndex(
+            targetCollection.createIndex(
                 Indexes.descending("time"),
                 IndexOptions().name("time_idx")
             )
@@ -131,14 +220,19 @@ class MessageStoreMongoDB(
 
     override fun get(topicName: String): MqttMessage? {
         try {
-            val document = collection.find(Filters.eq("topic", topicName)).first()
+            val activeCollection = getActiveCollection() ?: run {
+                logger.fine("MongoDB not connected, returning null for topic [$topicName]")
+                return null
+            }
+
+            val document = activeCollection.find(Filters.eq("topic", topicName)).first()
             document?.let {
                 val payload = when (val p = it.get("payload")) {
                     is Binary -> p.data
                     is ByteArray -> p
                     else -> ByteArray(0)
                 }
-                
+
                 return MqttMessage(
                     messageUuid = it.getString("message_uuid"),
                     messageId = 0,
@@ -178,6 +272,11 @@ class MessageStoreMongoDB(
         if (messages.isEmpty()) return
 
         try {
+            val activeCollection = getActiveCollection() ?: run {
+                logger.warning("MongoDB not connected, skipping batch insert for [$name]")
+                return
+            }
+
             val bulkOperations = messages.map { message ->
                 val filter = Filters.eq("topic", message.topicName)
                 val update = Document("\$set", Document(mapOf(
@@ -192,10 +291,10 @@ class MessageStoreMongoDB(
                 )))
                 UpdateOneModel<Document>(filter, update, UpdateOptions().upsert(true))
             }
-            
+
             // Bulk write with unordered for better performance
             val options = BulkWriteOptions().ordered(false)
-            collection.bulkWrite(bulkOperations, options)
+            activeCollection.bulkWrite(bulkOperations, options)
             
             if (lastError != 0) {
                 logger.info("Batch insert successful after error")
@@ -211,8 +310,13 @@ class MessageStoreMongoDB(
         if (topics.isEmpty()) return
 
         try {
+            val activeCollection = getActiveCollection() ?: run {
+                logger.warning("MongoDB not connected, skipping delete for [$name]")
+                return
+            }
+
             val filter = Filters.`in`("topic", topics)
-            collection.deleteMany(filter)
+            activeCollection.deleteMany(filter)
         } catch (e: Exception) {
             logger.warning("Error deleting topics: ${e.message}")
         }
@@ -220,11 +324,16 @@ class MessageStoreMongoDB(
 
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
         try {
+            val activeCollection = getActiveCollection() ?: run {
+                logger.warning("MongoDB not connected, skipping find for [$name]")
+                return
+            }
+
             val filter = createWildcardFilter(topicName)
             val startTime = System.currentTimeMillis()
             var count = 0
 
-            collection.find(filter).iterator().use { cursor ->
+            activeCollection.find(filter).iterator().use { cursor ->
                 while (cursor.hasNext()) {
                     val document = cursor.next()
                 count++
@@ -324,7 +433,12 @@ class MessageStoreMongoDB(
             }
         }
 
-        return collection.find(filter)
+        val activeCollection = getActiveCollection() ?: run {
+            logger.warning("MongoDB not connected, returning empty topics list for [$name]")
+            return emptyList()
+        }
+
+        return activeCollection.find(filter)
             .projection(Projections.include("topic"))
             .map { it.getString("topic") }
             .into(mutableListOf())
@@ -348,7 +462,10 @@ class MessageStoreMongoDB(
         
         try {
             val filter = Filters.lt("time", Instant.ofEpochMilli(olderThan.toEpochMilli()))
-            val result = collection.deleteMany(filter)
+            val result = getActiveCollection()?.deleteMany(filter) ?: run {
+                logger.warning("MongoDB not connected, skipping purge for [$name]")
+                return PurgeResult(0, System.currentTimeMillis() - startTime)
+            }
             deletedCount = result.deletedCount.toInt()
         } catch (e: Exception) {
             logger.severe("Error purging old messages from [$name]: ${e.message}")
@@ -364,7 +481,9 @@ class MessageStoreMongoDB(
 
     override fun dropStorage(): Boolean {
         return try {
-            collection.drop()
+            getActiveCollection()?.drop() ?: run {
+                logger.warning("MongoDB not connected, cannot drop collection for [$name]")
+            }
             logger.info("Dropped collection [$collectionName] for message store [$name]")
             true
         } catch (e: Exception) {
@@ -373,18 +492,21 @@ class MessageStoreMongoDB(
         }
     }
 
+    /**
+     * Ensures connection is available, returns null if not connected
+     */
+    private fun getActiveCollection(): MongoCollection<Document>? {
+        return if (isConnected) collection else null
+    }
+
     override fun getConnectionStatus(): Boolean {
-        return try {
-            database.runCommand(org.bson.Document("ping", 1))
-            true
-        } catch (e: Exception) {
-            logger.fine("MongoDB connection check failed: ${e.message}")
-            false
-        }
+        // Just return the cached connection status - no real-time testing
+        // Real-time testing is done by background health checks
+        return isConnected && mongoClient != null && database != null && collection != null
     }
 
     override fun stop() {
-        mongoClient.close()
+        mongoClient?.close()
         logger.info("MongoDB connection closed.")
     }
 }

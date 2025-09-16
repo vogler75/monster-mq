@@ -12,6 +12,7 @@ import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironment
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
+import io.vertx.core.json.JsonArray
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.CompletableFuture
 import java.sql.DriverManager
@@ -883,6 +884,119 @@ class ArchiveGroupResolver(
             logger.severe("Error dropping SQLite table [$tableName]: ${e.message}")
             false
         }
+    }
+
+    // Field Resolvers
+
+    fun connectionStatus(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Map<String, Any?>>>()
+
+            // Check authorization - requires admin privileges
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+
+            try {
+                val archiveGroupInfo = env.getSource<Map<String, Any?>>()
+                val archiveGroupName = archiveGroupInfo?.get("name") as? String
+                    ?: run {
+                        future.complete(emptyList())
+                        return@DataFetcher future
+                    }
+
+                logger.fine("Getting connection status for archive group [$archiveGroupName] from all nodes")
+
+                // Use event bus to collect connection status from all nodes
+                val requestData = JsonObject().put("name", archiveGroupName)
+
+                // Collect status from all cluster nodes
+                collectClusterConnectionStatus(archiveGroupName) { nodeStatuses ->
+                    logger.fine("Retrieved connection status for archive group [$archiveGroupName] from ${nodeStatuses.size} nodes")
+                    future.complete(nodeStatuses)
+                }
+            } catch (e: Exception) {
+                logger.severe("Error getting connection status for archive group: ${e.message}")
+                future.complete(emptyList())
+            }
+
+            future
+        }
+    }
+
+    private fun collectClusterConnectionStatus(archiveGroupName: String, callback: (List<Map<String, Any?>>) -> Unit) {
+        // In a cluster environment, we would need to collect from all nodes
+        // For now, implement single-node collection with proper cluster detection
+
+        val nodeStatuses = mutableListOf<Map<String, Any?>>()
+        val localNodeId = System.getProperty("nodeId", "local")
+
+        // Get local node status
+        val requestData = JsonObject().put("name", archiveGroupName)
+
+        vertx.eventBus().request<JsonObject>(ArchiveHandler.ARCHIVE_CONNECTION_STATUS, requestData).onComplete { asyncResult ->
+            if (asyncResult.succeeded()) {
+                try {
+                    val response = asyncResult.result().body()
+
+                    // Check if this is a cluster-wide response (has connectionStatus as array)
+                    // or single node response (has connectionStatus as object)
+                    val connectionStatusValue = response.getValue("connectionStatus")
+                    if (connectionStatusValue is JsonArray) {
+                        // Multi-node response format
+                        connectionStatusValue.forEach { item ->
+                            val statusObj = item as JsonObject
+                            nodeStatuses.add(mapOf(
+                                "nodeId" to statusObj.getString("nodeId", "unknown"),
+                                "messageArchive" to statusObj.getBoolean("messageArchive", false),
+                                "lastValueStore" to statusObj.getBoolean("lastValueStore", false),
+                                "error" to statusObj.getString("error"),
+                                "timestamp" to (statusObj.getLong("timestamp") ?: System.currentTimeMillis())
+                            ))
+                        }
+                    } else if (connectionStatusValue is JsonObject) {
+                        // Single node response format (current ArchiveHandler format)
+                        nodeStatuses.add(mapOf(
+                            "nodeId" to localNodeId,
+                            "messageArchive" to connectionStatusValue.getBoolean("messageArchive", false),
+                            "lastValueStore" to connectionStatusValue.getBoolean("lastValueStore", false),
+                            "error" to response.getString("error"),
+                            "timestamp" to System.currentTimeMillis()
+                        ))
+                    } else {
+                        // Fallback for any other format
+                        nodeStatuses.add(mapOf(
+                            "nodeId" to localNodeId,
+                            "messageArchive" to false,
+                            "lastValueStore" to false,
+                            "error" to "Invalid response format",
+                            "timestamp" to System.currentTimeMillis()
+                        ))
+                    }
+
+                    callback(nodeStatuses)
+                } catch (e: Exception) {
+                    logger.severe("Error parsing connection status response for archive group [$archiveGroupName]: ${e.message}")
+                    // Fallback to local status
+                    callback(listOf(getLocalConnectionStatus(archiveGroupName)))
+                }
+            } else {
+                logger.warning("Failed to get connection status for archive group [$archiveGroupName]: ${asyncResult.cause()?.message}")
+                // Fallback to local status
+                callback(listOf(getLocalConnectionStatus(archiveGroupName)))
+            }
+        }
+    }
+
+    private fun getLocalConnectionStatus(archiveGroupName: String): Map<String, Any?> {
+        val localNodeId = System.getProperty("nodeId", "local")
+        val status = archiveHandler.getArchiveGroupConnectionStatus(archiveGroupName)
+
+        return mapOf(
+            "nodeId" to localNodeId,
+            "messageArchive" to (status.getJsonObject("connectionStatus")?.getBoolean("messageArchive") ?: false),
+            "lastValueStore" to (status.getJsonObject("connectionStatus")?.getBoolean("lastValueStore") ?: false),
+            "error" to status.getString("error"),
+            "timestamp" to System.currentTimeMillis()
+        )
     }
 
     // Helper function to check authorization

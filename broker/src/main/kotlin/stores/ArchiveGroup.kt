@@ -176,8 +176,21 @@ class ArchiveGroup(
                 lastValStore = store
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onComplete { result ->
-                    if (result.succeeded()) promise.complete()
-                    else promise.fail(result.cause())
+                    if (result.succeeded()) {
+                        if (!isStopping) {
+                            childDeployments.add(result.result())
+                            logger.info("MongoDB MessageStore [$storeName] deployed successfully")
+                        } else {
+                            // ArchiveGroup is stopping, immediately undeploy
+                            vertx.undeploy(result.result())
+                            logger.info("MongoDB MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                            lastValStore = null
+                        }
+                        promise.complete()
+                    } else {
+                        logger.warning("Failed to deploy MongoDB MessageStore [$storeName]: ${result.cause()?.message}")
+                        promise.fail(result.cause())
+                    }
                 }
             }
             MessageStoreType.SQLITE -> {
@@ -246,8 +259,21 @@ class ArchiveGroup(
                 archiveStore = archive
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(archive, options).onComplete { result ->
-                    if (result.succeeded()) promise.complete()
-                    else promise.fail(result.cause())
+                    if (result.succeeded()) {
+                        if (!isStopping) {
+                            childDeployments.add(result.result())
+                            logger.info("MongoDB MessageArchive [$archiveName] deployed successfully")
+                        } else {
+                            // ArchiveGroup is stopping, immediately undeploy
+                            vertx.undeploy(result.result())
+                            logger.info("MongoDB MessageArchive [$archiveName] deployed but immediately undeployed due to stop")
+                            archiveStore = null
+                        }
+                        promise.complete()
+                    } else {
+                        logger.warning("Failed to deploy MongoDB MessageArchive [$archiveName]: ${result.cause()?.message}")
+                        promise.fail(result.cause())
+                    }
                 }
             }
             MessageArchiveType.KAFKA -> {
@@ -313,7 +339,25 @@ class ArchiveGroup(
                 }
             }
             MessageStoreType.HAZELCAST -> {
-                logger.warning("Hazelcast store not implemented in verticle context for [$storeName]")
+                // Create disconnected Hazelcast store when clustering is not enabled
+                val store = MessageStoreHazelcastDisconnected(storeName)
+                lastValStore = store
+                val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onComplete { result ->
+                    if (result.succeeded()) {
+                        if (!isStopping) {
+                            childDeployments.add(result.result())
+                            logger.info("Hazelcast MessageStore [$storeName] deployed as disconnected")
+                        } else {
+                            // ArchiveGroup is stopping, immediately undeploy
+                            vertx.undeploy(result.result())
+                            logger.info("Hazelcast MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                        }
+                    } else {
+                        logger.warning("Failed to deploy disconnected Hazelcast MessageStore [$storeName]: ${result.cause()?.message}")
+                        lastValStore = null
+                    }
+                }
             }
             MessageStoreType.POSTGRES -> {
                 try {
@@ -717,14 +761,18 @@ class ArchiveGroup(
     }
     
     companion object {
-        fun fromConfig(config: JsonObject, databaseConfig: JsonObject): ArchiveGroup {
+        fun fromConfig(config: JsonObject, databaseConfig: JsonObject, isClustered: Boolean = false): ArchiveGroup {
             val name = config.getString("Name", "ArchiveGroup")
             val topicFilter = config.getJsonArray("TopicFilter").map { it as String }
             val retainedOnly = config.getBoolean("RetainedOnly", false)
-            
+
             val lastValType = MessageStoreType.valueOf(config.getString("LastValType", "NONE"))
             val archiveType = MessageArchiveType.valueOf(config.getString("ArchiveType", "NONE"))
-            
+
+            // Validate database configuration requirements
+            validateStoreConfiguration(name, lastValType, "LastValueStore", databaseConfig, isClustered)
+            validateArchiveConfiguration(name, archiveType, "Archive", databaseConfig)
+
             // Parse retention configuration
             val lastValRetentionStr = config.getString("LastValRetention")
             val archiveRetentionStr = config.getString("ArchiveRetention")
@@ -741,6 +789,82 @@ class ArchiveGroup(
                 lastValRetentionStr, archiveRetentionStr, purgeIntervalStr,
                 databaseConfig
             )
+        }
+
+        private fun validateStoreConfiguration(archiveName: String, storeType: MessageStoreType, storeTypeName: String, databaseConfig: JsonObject, isClustered: Boolean) {
+            when (storeType) {
+                MessageStoreType.POSTGRES -> {
+                    val postgres = databaseConfig.getJsonObject("Postgres")
+                    if (postgres == null || postgres.getString("Url").isNullOrEmpty()) {
+                        throw IllegalArgumentException("Archive group '$archiveName' cannot use POSTGRES $storeTypeName: PostgreSQL configuration (Url) not found or empty")
+                    }
+                }
+                MessageStoreType.CRATEDB -> {
+                    val cratedb = databaseConfig.getJsonObject("CrateDB")
+                    if (cratedb == null || cratedb.getString("Url").isNullOrEmpty()) {
+                        throw IllegalArgumentException("Archive group '$archiveName' cannot use CRATEDB $storeTypeName: CrateDB configuration (Url) not found or empty")
+                    }
+                }
+                MessageStoreType.MONGODB -> {
+                    val mongodb = databaseConfig.getJsonObject("MongoDB")
+                    if (mongodb == null || mongodb.getString("Url").isNullOrEmpty()) {
+                        throw IllegalArgumentException("Archive group '$archiveName' cannot use MONGODB $storeTypeName: MongoDB configuration (Url) not found or empty")
+                    }
+                }
+                MessageStoreType.SQLITE -> {
+                    val sqlite = databaseConfig.getJsonObject("SQLite")
+                    if (sqlite == null || sqlite.getString("Path").isNullOrEmpty()) {
+                        throw IllegalArgumentException("Archive group '$archiveName' cannot use SQLITE $storeTypeName: SQLite configuration (Path) not found or empty")
+                    }
+                }
+                MessageStoreType.HAZELCAST -> {
+                    if (!isClustered) {
+                        // Warning will be logged when the disconnected store is created
+                        // Cannot log here as this is a companion object function
+                    }
+                }
+                MessageStoreType.MEMORY, MessageStoreType.NONE -> {
+                    // No validation needed for memory/none stores
+                }
+            }
+        }
+
+        private fun validateArchiveConfiguration(archiveName: String, archiveType: MessageArchiveType, storeTypeName: String, databaseConfig: JsonObject) {
+            when (archiveType) {
+                MessageArchiveType.POSTGRES -> {
+                    val postgres = databaseConfig.getJsonObject("Postgres")
+                    if (postgres == null || postgres.getString("Url").isNullOrEmpty()) {
+                        throw IllegalArgumentException("Archive group '$archiveName' cannot use POSTGRES $storeTypeName: PostgreSQL configuration (Url) not found or empty")
+                    }
+                }
+                MessageArchiveType.CRATEDB -> {
+                    val cratedb = databaseConfig.getJsonObject("CrateDB")
+                    if (cratedb == null || cratedb.getString("Url").isNullOrEmpty()) {
+                        throw IllegalArgumentException("Archive group '$archiveName' cannot use CRATEDB $storeTypeName: CrateDB configuration (Url) not found or empty")
+                    }
+                }
+                MessageArchiveType.MONGODB -> {
+                    val mongodb = databaseConfig.getJsonObject("MongoDB")
+                    if (mongodb == null || mongodb.getString("Url").isNullOrEmpty()) {
+                        throw IllegalArgumentException("Archive group '$archiveName' cannot use MONGODB $storeTypeName: MongoDB configuration (Url) not found or empty")
+                    }
+                }
+                MessageArchiveType.SQLITE -> {
+                    val sqlite = databaseConfig.getJsonObject("SQLite")
+                    if (sqlite == null || sqlite.getString("Path").isNullOrEmpty()) {
+                        throw IllegalArgumentException("Archive group '$archiveName' cannot use SQLITE $storeTypeName: SQLite configuration (Path) not found or empty")
+                    }
+                }
+                MessageArchiveType.KAFKA -> {
+                    val kafka = databaseConfig.getJsonObject("Kafka")
+                    if (kafka == null || kafka.getString("Servers").isNullOrEmpty()) {
+                        throw IllegalArgumentException("Archive group '$archiveName' cannot use KAFKA $storeTypeName: Kafka configuration (Servers) not found or empty")
+                    }
+                }
+                MessageArchiveType.NONE -> {
+                    // No validation needed for none archive
+                }
+            }
         }
     }
 }

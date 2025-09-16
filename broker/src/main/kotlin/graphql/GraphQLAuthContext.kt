@@ -72,7 +72,7 @@ class GraphQLAuthContext(
      */
     fun canSubscribeToTopic(authContext: AuthContext?, topic: String): Boolean {
         if (!userManager.isUserManagementEnabled()) {
-            logger.info("User management disabled, allowing subscribe to $topic")
+            logger.fine("User management disabled, allowing subscribe to $topic")
             return true // No user management, allow everything
         }
         

@@ -3,6 +3,7 @@ package at.rocworks.stores
 import at.rocworks.stores.postgres.MetricsStorePostgres
 import at.rocworks.stores.cratedb.MetricsStoreCrateDB
 import at.rocworks.stores.mongodb.MetricsStoreMongoDB
+import at.rocworks.stores.sqlite.MetricsStoreSQLite
 import io.vertx.core.json.JsonObject
 
 object MetricsStoreFactory {
@@ -42,6 +43,14 @@ object MetricsStoreFactory {
                     databaseName = mongoDbConfig.getString("Database")
                 )
             }
+            MetricsStoreType.SQLITE -> {
+                val sqliteConfig = config.getJsonObject("SQLite")
+                    ?: throw IllegalArgumentException("SQLite configuration not found")
+                MetricsStoreSQLite(
+                    name = storeName,
+                    dbPath = sqliteConfig.getString("Path", "monstermq.db")
+                )
+            }
         }
     }
 
@@ -63,6 +72,9 @@ object MetricsStoreFactory {
                 }
                 config.containsKey("MongoDB") -> {
                     create(MetricsStoreType.MONGODB, config, storeName)
+                }
+                config.containsKey("SQLite") -> {
+                    create(MetricsStoreType.SQLITE, config, storeName)
                 }
                 else -> null
             }

@@ -320,6 +320,17 @@ input UpdateAclRuleInput {
 
 # ArchiveGroup Management Types
 
+type NodeConnectionStatus {
+    nodeId: String!
+    # Connection status for different store components
+    messageArchive: Boolean
+    lastValueStore: Boolean
+    # Error message if connection failed
+    error: String
+    # Timestamp when status was checked
+    timestamp: Long!
+}
+
 type ArchiveGroupInfo {
     name: String!
     enabled: Boolean!
@@ -334,6 +345,8 @@ type ArchiveGroupInfo {
     purgeInterval: String
     createdAt: String
     updatedAt: String
+    # Database connection status from all nodes in the cluster
+    connectionStatus: [NodeConnectionStatus!]!
 }
 
 input CreateArchiveGroupInput {
