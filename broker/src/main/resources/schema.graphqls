@@ -419,9 +419,19 @@ type MonitoringParameters {
     discardOldest: Boolean!
 }
 
+enum SecurityPolicy {
+    None
+    Basic256Sha256
+    Basic256
+    Basic128Rsa15
+    Aes256_Sha256_RsaPss
+    Aes128_Sha256_RsaOaep
+}
+
 type OpcUaConnectionConfig {
     endpointUrl: String!
-    securityPolicy: String!
+    updateEndpointUrl: Boolean!
+    securityPolicy: SecurityPolicy!
     username: String
     subscriptionSamplingInterval: Float!
     keepAliveFailuresAllowed: Int!
@@ -464,7 +474,8 @@ input MonitoringParametersInput {
 
 input OpcUaConnectionConfigInput {
     endpointUrl: String!
-    securityPolicy: String = "None"
+    updateEndpointUrl: Boolean = true
+    securityPolicy: SecurityPolicy = None
     username: String
     password: String
     subscriptionSamplingInterval: Float = 0.0
@@ -473,6 +484,13 @@ input OpcUaConnectionConfigInput {
     connectionTimeout: Long = 10000
     requestTimeout: Long = 5000
     monitoringParameters: MonitoringParametersInput
+}
+
+input OpcUaAddressInput {
+    address: String!
+    topic: String!
+    publishMode: OpcUaPublishMode = SEPARATE
+    removePath: Boolean = true
 }
 
 input OpcUaDeviceInput {
@@ -517,7 +535,7 @@ extend type Mutation {
     reassignOpcUaDevice(name: String!, nodeId: String!): OpcUaDeviceResult!
 
     # Add an address to an OPC UA device
-    addOpcUaAddress(deviceName: String!, address: String!, topic: String!, publishMode: OpcUaPublishMode = SINGLE, removePath: Boolean = true): OpcUaDeviceResult!
+    addOpcUaAddress(deviceName: String!, input: OpcUaAddressInput!): OpcUaDeviceResult!
 
     # Delete an address from an OPC UA device
     deleteOpcUaAddress(deviceName: String!, address: String!): OpcUaDeviceResult!

@@ -231,6 +231,9 @@ class GraphQLServer(
             .type("MessageArchiveType") { builder ->
                 builder.enumValues { name -> name }
             }
+            .type("SecurityPolicy") { builder ->
+                builder.enumValues { name -> name }
+            }
             // Register query resolvers
             .type("Query") { builder ->
                 builder

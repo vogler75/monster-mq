@@ -137,6 +137,7 @@ class DeviceConfigQueries(
             "backupNodeId" to (device.backupNodeId ?: ""),
             "config" to mapOf(
                 "endpointUrl" to device.config.endpointUrl,
+                "updateEndpointUrl" to device.config.updateEndpointUrl,
                 "securityPolicy" to device.config.securityPolicy,
                 "username" to (device.config.username ?: ""),
                 "subscriptionSamplingInterval" to device.config.subscriptionSamplingInterval,

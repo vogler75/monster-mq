@@ -63,7 +63,7 @@ data class DeviceConfig(
 data class OpcUaAddress(
     val address: String,        // BrowsePath://Objects/Factory/# or NodeId://ns=2;i=16
     val topic: String,          // MQTT topic where to publish the values (for single mode)
-    val publishMode: String = "SINGLE",  // "SINGLE" = all values on one topic, "SEPARATE" = each node gets own topic
+    val publishMode: String = "SEPARATE",  // "SINGLE" = all values on one topic, "SEPARATE" = each node gets own topic
     val removePath: Boolean = true       // Remove base path before first wildcard from topic (default: true)
 ) {
     companion object {
@@ -74,7 +74,7 @@ data class OpcUaAddress(
             return OpcUaAddress(
                 address = json.getString("address"),
                 topic = json.getString("topic"),
-                publishMode = json.getString("publishMode", PUBLISH_MODE_SINGLE),
+                publishMode = json.getString("publishMode", PUBLISH_MODE_SEPARATE),
                 removePath = json.getBoolean("removePath", true)
             )
         }
@@ -210,6 +210,7 @@ data class OpcUaAddress(
  */
 data class OpcUaConnectionConfig(
     val endpointUrl: String,
+    val updateEndpointUrl: Boolean = true,
     val securityPolicy: String = "None",
     val username: String? = null,
     val password: String? = null,
@@ -233,6 +234,7 @@ data class OpcUaConnectionConfig(
 
             return OpcUaConnectionConfig(
                 endpointUrl = json.getString("endpointUrl"),
+                updateEndpointUrl = json.getBoolean("updateEndpointUrl", true),
                 securityPolicy = json.getString("securityPolicy", "None"),
                 username = json.getString("username"),
                 password = json.getString("password"),
@@ -255,6 +257,7 @@ data class OpcUaConnectionConfig(
 
         return JsonObject()
             .put("endpointUrl", endpointUrl)
+            .put("updateEndpointUrl", updateEndpointUrl)
             .put("securityPolicy", securityPolicy)
             .put("username", username)
             .put("password", password)

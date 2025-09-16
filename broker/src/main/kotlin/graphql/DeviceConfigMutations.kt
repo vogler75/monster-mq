@@ -494,6 +494,7 @@ class DeviceConfigMutations(
 
         val config = OpcUaConnectionConfig(
             endpointUrl = configMap["endpointUrl"] as String,
+            updateEndpointUrl = configMap["updateEndpointUrl"] as? Boolean ?: true,
             securityPolicy = configMap["securityPolicy"] as? String ?: "None",
             username = configMap["username"] as? String,
             password = configMap["password"] as? String,
@@ -522,16 +523,28 @@ class DeviceConfigMutations(
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")
-                val addressStr = env.getArgument<String>("address")
-                val topic = env.getArgument<String>("topic")
-                val publishMode = env.getArgument<String>("publishMode") ?: "SINGLE"
-                val removePath = env.getArgument<Boolean>("removePath") ?: true
+                val inputMap = env.getArgument<Map<String, Any>>("input")
 
-                if (deviceName == null || addressStr == null || topic == null) {
+                if (deviceName == null || inputMap == null) {
                     future.complete(
                         mapOf(
                             "success" to false,
-                            "errors" to listOf("Device name, address, and topic are required")
+                            "errors" to listOf("Device name and input are required")
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                val addressStr = inputMap["address"] as? String
+                val topic = inputMap["topic"] as? String
+                val publishMode = inputMap["publishMode"] as? String ?: "SEPARATE"
+                val removePath = inputMap["removePath"] as? Boolean ?: true
+
+                if (addressStr == null || topic == null) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Address and topic are required")
                         )
                     )
                     return@DataFetcher future
@@ -740,6 +753,7 @@ class DeviceConfigMutations(
             "backupNodeId" to device.backupNodeId,
             "config" to mapOf(
                 "endpointUrl" to device.config.endpointUrl,
+                "updateEndpointUrl" to device.config.updateEndpointUrl,
                 "securityPolicy" to device.config.securityPolicy,
                 "username" to device.config.username,
                 "subscriptionSamplingInterval" to device.config.subscriptionSamplingInterval,
