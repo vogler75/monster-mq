@@ -594,73 +594,62 @@ class ArchiveGroupResolver(
 
             val name = env.getArgument<String>("name") ?: ""
 
-            vertx.executeBlocking<Map<String, Any?>> {
-                runBlocking {
-                    try {
-                        val configStore = archiveHandler.getConfigStore()
-                        if (configStore == null) {
-                            return@runBlocking mapOf(
-                                "success" to false,
-                                "message" to "No ConfigStore available - cannot enable archive group"
-                            )
-                        }
-
-                        // First, check if the archive group exists
-                        val existingGroup = configStore.getArchiveGroup(name)
-                        if (existingGroup == null) {
-                            return@runBlocking mapOf(
-                                "success" to false,
-                                "message" to "Archive group '$name' not found"
-                            )
-                        }
-
-                        // Update the enabled flag in database
-                        val updateSuccess = configStore.updateArchiveGroup(existingGroup.archiveGroup, enabled = true)
-                        if (!updateSuccess) {
-                            return@runBlocking mapOf(
-                                "success" to false,
-                                "message" to "Failed to update archive group in database"
-                            )
-                        }
-
-                        // Now start the archive group via message bus (this will propagate to all nodes)
-                        val startFuture = archiveHandler.startArchiveGroup(name)
-                        val startResult = startFuture.toCompletionStage().toCompletableFuture().get()
-
-                        if (startResult) {
-                            mapOf(
-                                "success" to true,
-                                "message" to "Archive group '$name' enabled and started successfully",
-                                "archiveGroup" to mapOf(
-                                    "name" to name,
-                                    "enabled" to true,
-                                    "deployed" to true
-                                )
-                            )
-                        } else {
-                            // If start failed, revert the database change
-                            configStore.updateArchiveGroup(existingGroup.archiveGroup, enabled = false)
-                            mapOf(
-                                "success" to false,
-                                "message" to "Failed to start archive group '$name'"
-                            )
-                        }
-                    } catch (e: Exception) {
-                        mapOf(
-                            "success" to false,
-                            "message" to "Error enabling archive group: ${e.message}"
-                        )
-                    }
-                }
-            }.onComplete { result ->
-                if (result.succeeded()) {
-                    future.complete(result.result())
-                } else {
+            try {
+                val configStore = archiveHandler.getConfigStore()
+                if (configStore == null) {
                     future.complete(mapOf(
                         "success" to false,
-                        "message" to "Error: ${result.cause()?.message}"
+                        "message" to "No ConfigStore available - cannot enable archive group"
                     ))
+                    return@DataFetcher future
                 }
+
+                // First, check if the archive group exists
+                val existingGroup = configStore.getArchiveGroup(name)
+                if (existingGroup == null) {
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to "Archive group '$name' not found"
+                    ))
+                    return@DataFetcher future
+                }
+
+                // Update the enabled flag in database
+                val updateSuccess = configStore.updateArchiveGroup(existingGroup.archiveGroup, enabled = true)
+                if (!updateSuccess) {
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to "Failed to update archive group in database"
+                    ))
+                    return@DataFetcher future
+                }
+
+                // Now start the archive group asynchronously
+                archiveHandler.startArchiveGroup(name).onComplete { startResult ->
+                    if (startResult.succeeded() && startResult.result()) {
+                        future.complete(mapOf(
+                            "success" to true,
+                            "message" to "Archive group '$name' enabled and started successfully",
+                            "archiveGroup" to mapOf(
+                                "name" to name,
+                                "enabled" to true,
+                                "deployed" to true
+                            )
+                        ))
+                    } else {
+                        // If start failed, revert the database change
+                        configStore.updateArchiveGroup(existingGroup.archiveGroup, enabled = false)
+                        future.complete(mapOf(
+                            "success" to false,
+                            "message" to "Failed to start archive group '$name': ${startResult.cause()?.message ?: "Unknown error"}"
+                        ))
+                    }
+                }
+            } catch (e: Exception) {
+                future.complete(mapOf(
+                    "success" to false,
+                    "message" to "Error enabling archive group: ${e.message}"
+                ))
             }
 
             future
@@ -676,70 +665,58 @@ class ArchiveGroupResolver(
 
             val name = env.getArgument<String>("name") ?: ""
 
-            vertx.executeBlocking<Map<String, Any?>> {
-                runBlocking {
-                    try {
-                        val configStore = archiveHandler.getConfigStore()
-                        if (configStore == null) {
-                            return@runBlocking mapOf(
-                                "success" to false,
-                                "message" to "No ConfigStore available - cannot disable archive group"
-                            )
-                        }
-
-                        // First, check if the archive group exists
-                        val existingGroup = configStore.getArchiveGroup(name)
-                        if (existingGroup == null) {
-                            return@runBlocking mapOf(
-                                "success" to false,
-                                "message" to "Archive group '$name' not found"
-                            )
-                        }
-
-                        // First stop the archive group via message bus (this will propagate to all nodes)
-                        val stopFuture = archiveHandler.stopArchiveGroup(name)
-                        val stopResult = stopFuture.toCompletionStage().toCompletableFuture().get()
-
-                        // Update the enabled flag in database regardless of stop result
-                        // (we want to disable it in DB even if it wasn't running)
-                        val updateSuccess = configStore.updateArchiveGroup(existingGroup.archiveGroup, enabled = false)
-
-                        if (updateSuccess) {
-                            mapOf(
-                                "success" to true,
-                                "message" to if (stopResult) {
-                                    "Archive group '$name' stopped and disabled successfully"
-                                } else {
-                                    "Archive group '$name' disabled in database (was not running)"
-                                },
-                                "archiveGroup" to mapOf(
-                                    "name" to name,
-                                    "enabled" to false,
-                                    "deployed" to false
-                                )
-                            )
-                        } else {
-                            mapOf(
-                                "success" to false,
-                                "message" to "Failed to update archive group in database"
-                            )
-                        }
-                    } catch (e: Exception) {
-                        mapOf(
-                            "success" to false,
-                            "message" to "Error disabling archive group: ${e.message}"
-                        )
-                    }
-                }
-            }.onComplete { result ->
-                if (result.succeeded()) {
-                    future.complete(result.result())
-                } else {
+            try {
+                val configStore = archiveHandler.getConfigStore()
+                if (configStore == null) {
                     future.complete(mapOf(
                         "success" to false,
-                        "message" to "Error: ${result.cause()?.message}"
+                        "message" to "No ConfigStore available - cannot disable archive group"
                     ))
+                    return@DataFetcher future
                 }
+
+                // First, check if the archive group exists
+                val existingGroup = configStore.getArchiveGroup(name)
+                if (existingGroup == null) {
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to "Archive group '$name' not found"
+                    ))
+                    return@DataFetcher future
+                }
+
+                // First stop the archive group asynchronously
+                archiveHandler.stopArchiveGroup(name).onComplete { stopResult ->
+                    // Update the enabled flag in database regardless of stop result
+                    // (we want to disable it in DB even if it wasn't running)
+                    val updateSuccess = configStore.updateArchiveGroup(existingGroup.archiveGroup, enabled = false)
+
+                    if (updateSuccess) {
+                        future.complete(mapOf(
+                            "success" to true,
+                            "message" to if (stopResult.succeeded() && stopResult.result()) {
+                                "Archive group '$name' stopped and disabled successfully"
+                            } else {
+                                "Archive group '$name' disabled in database (was not running or stop failed)"
+                            },
+                            "archiveGroup" to mapOf(
+                                "name" to name,
+                                "enabled" to false,
+                                "deployed" to false
+                            )
+                        ))
+                    } else {
+                        future.complete(mapOf(
+                            "success" to false,
+                            "message" to "Failed to update archive group in database"
+                        ))
+                    }
+                }
+            } catch (e: Exception) {
+                future.complete(mapOf(
+                    "success" to false,
+                    "message" to "Error disabling archive group: ${e.message}"
+                ))
             }
 
             future

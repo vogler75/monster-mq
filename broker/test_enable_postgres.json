@@ -1,0 +1,6 @@
+{
+  "query": "mutation EnableArchiveGroup($name: String!) { enableArchiveGroup(name: $name) { success message } }",
+  "variables": {
+    "name": "Test"
+  }
+}
