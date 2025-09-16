@@ -1148,6 +1148,23 @@ mutation {
 }
 ```
 
+**Kafka Data Format:**
+
+When streaming to Kafka, MonsterMQ uses a custom binary serialization format:
+
+- **Kafka Topic**: Archive group name (e.g., "sensors", "events")
+- **Kafka Key**: MQTT topic name (for partitioning)
+- **Kafka Value**: Custom binary encoded `MqttMessage` with:
+  - messageUuid (length-prefixed UTF-8 string)
+  - messageId (4-byte integer)
+  - Flags byte (QoS, isDup, isRetain, isQueued)
+  - topicName (length-prefixed UTF-8 string)
+  - clientId (length-prefixed UTF-8 string)
+  - timestamp (8-byte epoch milliseconds)
+  - payload (raw MQTT message bytes)
+
+This format is optimized for space efficiency and requires the same `MqttMessageCodec` for deserialization.
+
 #### 2. Kafka as Message Bus (Complete Data Stream)
 
 Replace Vert.x EventBus with Kafka for **ALL** internal message distribution:
