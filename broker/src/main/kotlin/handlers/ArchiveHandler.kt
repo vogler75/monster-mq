@@ -507,13 +507,15 @@ class ArchiveHandler(
         val undeployPromise = Promise.promise<String>()
 
         vertx.undeploy(archiveInfo.deploymentId).onComplete { result ->
-            if (result.succeeded()) {
-                logger.info("ArchiveGroup [$name] undeployed successfully")
-                undeployPromise.complete(archiveInfo.deploymentId)
-            } else {
-                logger.warning("Undeploy of ArchiveGroup [$name] failed but proceeding with cleanup: ${result.cause()?.message}")
-                // Even if undeploy fails, we proceed with cleanup
-                undeployPromise.complete(archiveInfo.deploymentId)
+            if (!undeployPromise.future().isComplete) {
+                if (result.succeeded()) {
+                    logger.info("ArchiveGroup [$name] undeployed successfully")
+                    undeployPromise.complete(archiveInfo.deploymentId)
+                } else {
+                    logger.warning("Undeploy of ArchiveGroup [$name] failed but proceeding with cleanup: ${result.cause()?.message}")
+                    // Even if undeploy fails, we proceed with cleanup
+                    undeployPromise.complete(archiveInfo.deploymentId)
+                }
             }
         }
 

@@ -21,23 +21,68 @@ class MessageArchiveKafka(
     private val logger = Utils.getLogger(this::class.java, name)
     private val topicName = name
     private var kafkaProducer: KafkaProducer<String, ByteArray>? = null
+    private var isConnected: Boolean = false
 
     override fun getName(): String = name
     override fun getType() = MessageArchiveType.KAFKA
 
     override fun start(startPromise: Promise<Void>) {
         vertx.executeBlocking(Callable {
-            val configProducer: MutableMap<String, String> = HashMap()
-            configProducer["bootstrap.servers"] = bootstrapServers
-            configProducer["key.serializer"] = "org.apache.kafka.common.serialization.StringSerializer"
-            configProducer["value.serializer"] = "org.apache.kafka.common.serialization.ByteArraySerializer"
-            configProducer["acks"] = "1"
+            try {
+                val configProducer: MutableMap<String, String> = HashMap()
+                configProducer["bootstrap.servers"] = bootstrapServers
+                configProducer["key.serializer"] = "org.apache.kafka.common.serialization.StringSerializer"
+                configProducer["value.serializer"] = "org.apache.kafka.common.serialization.ByteArraySerializer"
+                configProducer["acks"] = "1"
+                configProducer["retries"] = "3"
+                configProducer["retry.backoff.ms"] = "1000"
+                configProducer["max.block.ms"] = "5000" // 5 second timeout for metadata fetch
 
-            kafkaProducer = KafkaProducer.create(vertx, configProducer)
+                kafkaProducer = KafkaProducer.create(vertx, configProducer)
 
-            logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
-            startPromise.complete()
+                // Test connectivity by trying to get metadata
+                testKafkaConnectivity()
+
+                logger.info("Kafka message archive [$name] started successfully")
+                startPromise.complete()
+            } catch (e: Exception) {
+                logger.severe("Failed to start Kafka message archive [$name]: ${e.message}")
+                isConnected = false
+                kafkaProducer?.close()
+                kafkaProducer = null
+                startPromise.fail(e)
+            }
         })
+    }
+
+    override fun stop(stopPromise: Promise<Void>) {
+        try {
+            isConnected = false
+            kafkaProducer?.let { producer ->
+                // Close the Kafka producer
+                producer.close()
+                logger.info("Kafka message archive [$name] stopped successfully")
+            }
+            kafkaProducer = null
+            stopPromise.complete()
+        } catch (e: Exception) {
+            logger.warning("Error stopping Kafka message archive [$name]: ${e.message}")
+            kafkaProducer = null
+            stopPromise.complete() // Complete anyway to avoid hanging
+        }
+    }
+
+    private fun testKafkaConnectivity() {
+        try {
+            // Test connectivity by sending a test record to verify Kafka is reachable
+            kafkaProducer?.write(KafkaProducerRecord.create("__test_connectivity_$topicName", "test", "test".toByteArray()))?.result()
+            isConnected = true
+            logger.fine("Kafka connectivity test passed for [$name]")
+        } catch (e: Exception) {
+            isConnected = false
+            logger.warning("Kafka connectivity test failed for [$name]: ${e.message}")
+            throw e
+        }
     }
 
     override fun addHistory(messages: List<MqttMessage>) {
@@ -64,7 +109,7 @@ class MessageArchiveKafka(
 
     override fun getConnectionStatus(): Boolean {
         return try {
-            kafkaProducer != null
+            isConnected && kafkaProducer != null
         } catch (e: Exception) {
             logger.fine("Kafka connection check failed: ${e.message}")
             false
