@@ -24,6 +24,8 @@ interface IMessageArchive {
     fun purgeOldMessages(olderThan: Instant): PurgeResult
 
     fun dropStorage(): Boolean
+
+    fun getConnectionStatus(): Boolean
 }
 
 interface IMessageArchiveExtended: IMessageArchive {

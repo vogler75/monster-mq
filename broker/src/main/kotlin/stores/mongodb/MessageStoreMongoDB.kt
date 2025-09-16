@@ -373,6 +373,16 @@ class MessageStoreMongoDB(
         }
     }
 
+    override fun getConnectionStatus(): Boolean {
+        return try {
+            database.runCommand(org.bson.Document("ping", 1))
+            true
+        } catch (e: Exception) {
+            logger.fine("MongoDB connection check failed: ${e.message}")
+            false
+        }
+    }
+
     override fun stop() {
         mongoClient.close()
         logger.info("MongoDB connection closed.")

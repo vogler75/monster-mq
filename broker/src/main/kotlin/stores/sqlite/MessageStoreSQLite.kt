@@ -391,4 +391,12 @@ class MessageStoreSQLite(
             false
         }
     }
+
+    override fun getConnectionStatus(): Boolean {
+        return try {
+            ::sqlClient.isInitialized && sqlClient != null
+        } catch (e: Exception) {
+            false
+        }
+    }
 }

@@ -50,6 +50,7 @@ class ArchiveHandler(
         const val ARCHIVE_STOP = "mq.cluster.archive.stop"
         const val ARCHIVE_STATUS = "mq.cluster.archive.status"
         const val ARCHIVE_LIST = "mq.cluster.archive.list"
+        const val ARCHIVE_CONNECTION_STATUS = "mq.cluster.archive.connection.status"
     }
 
     fun initialize(): Future<List<ArchiveGroup>> {
@@ -95,6 +96,11 @@ class ArchiveHandler(
         // Handle archive list requests
         eventBus.consumer<JsonObject>(ARCHIVE_LIST) { message ->
             handleArchiveList(message)
+        }
+
+        // Handle archive connection status requests
+        eventBus.consumer<JsonObject>(ARCHIVE_CONNECTION_STATUS) { message ->
+            handleArchiveConnectionStatus(message)
         }
 
         logger.info("ArchiveHandler event handlers registered")
@@ -431,7 +437,7 @@ class ArchiveHandler(
         // Check if already deployed
         if (deployedArchiveGroups.containsKey(name)) {
             logger.warning("ArchiveGroup [$name] is already deployed")
-            promise.complete(false)
+            promise.complete(true) // Return true since it's already deployed
             return promise.future()
         }
 
@@ -443,15 +449,18 @@ class ArchiveHandler(
                 if (result.succeeded() && result.result() != null) {
                     deployArchiveGroupRuntime(result.result()!!).onComplete { deployResult ->
                         if (deployResult.succeeded()) {
+                            logger.info("ArchiveGroup [$name] deployed successfully - database connections will be established in background")
                             promise.complete(true)
                             // Broadcast to cluster
                             broadcastArchiveGroupEvent("STARTED", name)
                         } else {
-                            promise.fail(deployResult.cause())
+                            logger.severe("Failed to deploy ArchiveGroup [$name]: ${deployResult.cause()?.message}")
+                            promise.complete(false) // Don't fail the future, just return false
                         }
                     }
                 } else {
-                    promise.fail("ArchiveGroup [$name] not found in database")
+                    logger.warning("ArchiveGroup [$name] not found in database")
+                    promise.complete(false)
                 }
             }
         } else {
@@ -460,15 +469,18 @@ class ArchiveHandler(
                 if (result.succeeded() && result.result() != null) {
                     deployArchiveGroupRuntime(result.result()!!).onComplete { deployResult ->
                         if (deployResult.succeeded()) {
+                            logger.info("ArchiveGroup [$name] deployed successfully - database connections will be established in background")
                             promise.complete(true)
                             // Broadcast to cluster
                             broadcastArchiveGroupEvent("STARTED", name)
                         } else {
-                            promise.fail(deployResult.cause())
+                            logger.severe("Failed to deploy ArchiveGroup [$name]: ${deployResult.cause()?.message}")
+                            promise.complete(false) // Don't fail the future, just return false
                         }
                     }
                 } else {
-                    promise.fail("ArchiveGroup [$name] not found in config")
+                    logger.warning("ArchiveGroup [$name] not found in config")
+                    promise.complete(false)
                 }
             }
         }
@@ -482,25 +494,46 @@ class ArchiveHandler(
         val archiveInfo = deployedArchiveGroups[name]
         if (archiveInfo == null) {
             logger.warning("ArchiveGroup [$name] is not deployed")
-            promise.complete(false)
+            promise.complete(true) // Return true since it's already stopped
             return promise.future()
         }
 
+        logger.info("Stopping ArchiveGroup [$name] with deployment ID: ${archiveInfo.deploymentId}")
+
+        // Always undeploy the verticle, regardless of connection state
+        // Use a shorter timeout to prevent hanging
+        val undeployPromise = Promise.promise<String>()
+
         vertx.undeploy(archiveInfo.deploymentId).onComplete { result ->
             if (result.succeeded()) {
-                deployedArchiveGroups.remove(name)
-                logger.info("ArchiveGroup [$name] stopped successfully")
-
-                // Unregister from MessageHandler
-                messageHandler?.unregisterArchiveGroup(name)
-
-                promise.complete(true)
-                // Broadcast to cluster
-                broadcastArchiveGroupEvent("STOPPED", name)
+                logger.info("ArchiveGroup [$name] undeployed successfully")
+                undeployPromise.complete(archiveInfo.deploymentId)
             } else {
-                logger.severe("Failed to stop ArchiveGroup [$name]: ${result.cause()?.message}")
-                promise.fail(result.cause())
+                logger.warning("Undeploy of ArchiveGroup [$name] failed but proceeding with cleanup: ${result.cause()?.message}")
+                // Even if undeploy fails, we proceed with cleanup
+                undeployPromise.complete(archiveInfo.deploymentId)
             }
+        }
+
+        // Apply timeout to undeploy operation
+        vertx.setTimer(5000) { // 5 second timeout
+            if (!undeployPromise.future().isComplete) {
+                logger.warning("Undeploy of ArchiveGroup [$name] timed out after 5 seconds, proceeding with cleanup")
+                undeployPromise.complete(archiveInfo.deploymentId)
+            }
+        }
+
+        undeployPromise.future().onComplete {
+            // Always clean up tracking, regardless of undeploy success
+            deployedArchiveGroups.remove(name)
+            logger.info("ArchiveGroup [$name] stopped and removed from tracking")
+
+            // Unregister from MessageHandler
+            messageHandler?.unregisterArchiveGroup(name)
+
+            promise.complete(true)
+            // Broadcast to cluster
+            broadcastArchiveGroupEvent("STOPPED", name)
         }
 
         return promise.future()
@@ -597,6 +630,18 @@ class ArchiveHandler(
 
     private fun handleArchiveList(message: Message<JsonObject>) {
         message.reply(JsonObject().put("archiveGroups", listArchiveGroups()))
+    }
+
+    private fun handleArchiveConnectionStatus(message: Message<JsonObject>) {
+        val name = message.body().getString("name")
+        if (name != null) {
+            val connectionStatus = getArchiveGroupConnectionStatus(name)
+            message.reply(connectionStatus)
+        } else {
+            // Get connection status for all deployed archive groups
+            val allConnectionStatus = getAllArchiveGroupConnectionStatus()
+            message.reply(JsonObject().put("connectionStatus", allConnectionStatus))
+        }
     }
 
     // Helper Methods
@@ -733,5 +778,53 @@ class ArchiveHandler(
 
         vertx.eventBus().publish("mq.cluster.archive.events", eventData)
         logger.info("Broadcasted archive event: $event for ArchiveGroup [$archiveGroupName]")
+    }
+
+    private fun getArchiveGroupConnectionStatus(name: String): JsonObject {
+        val archiveInfo = deployedArchiveGroups[name]
+        if (archiveInfo == null) {
+            return JsonObject()
+                .put("success", false)
+                .put("name", name)
+                .put("error", "ArchiveGroup not deployed")
+        }
+
+        return try {
+            val archiveGroup = archiveInfo.archiveGroup
+            val connectionStatus = mutableMapOf<String, Boolean>()
+
+            // Check message archive connection
+            archiveGroup.archiveStore?.let { archive ->
+                connectionStatus["messageArchive"] = archive.getConnectionStatus()
+            }
+
+            // Check last value store connection if it exists
+            archiveGroup.lastValStore?.let { store ->
+                connectionStatus["lastValueStore"] = store.getConnectionStatus()
+            }
+
+            JsonObject()
+                .put("success", true)
+                .put("name", name)
+                .put("enabled", archiveInfo.enabled)
+                .put("type", archiveGroup.archiveStore?.getType()?.toString() ?: "NONE")
+                .put("connectionStatus", JsonObject(connectionStatus as Map<String, Any>))
+        } catch (e: Exception) {
+            logger.warning("Error checking connection status for ArchiveGroup [$name]: ${e.message}")
+            JsonObject()
+                .put("success", false)
+                .put("name", name)
+                .put("error", "Failed to check connection status: ${e.message}")
+        }
+    }
+
+    private fun getAllArchiveGroupConnectionStatus(): JsonArray {
+        val result = JsonArray()
+
+        deployedArchiveGroups.forEach { (name, _) ->
+            result.add(getArchiveGroupConnectionStatus(name))
+        }
+
+        return result
     }
 }

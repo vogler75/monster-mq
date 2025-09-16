@@ -84,6 +84,8 @@ class MessageArchivePostgres (
     override fun getName(): String = name
     override fun getType() = MessageArchiveType.POSTGRES
 
+    override fun getConnectionStatus(): Boolean = db.check()
+
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)
     }

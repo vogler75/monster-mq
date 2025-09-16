@@ -318,4 +318,5 @@ class MessageStoreCrateDB(
             false
         }
     }
+    override fun getConnectionStatus(): Boolean = db.check()
 }

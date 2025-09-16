@@ -63,6 +63,8 @@ class MessageArchiveCrateDB (
     override fun getName(): String = name
     override fun getType() = MessageArchiveType.CRATEDB
 
+    override fun getConnectionStatus(): Boolean = db.check()
+
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)
     }

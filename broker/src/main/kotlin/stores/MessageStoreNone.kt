@@ -20,4 +20,6 @@ object MessageStoreNone : IMessageStore {
     override fun purgeOldMessages(olderThan: Instant): PurgeResult = PurgeResult(0, 0)
 
     override fun dropStorage(): Boolean = true
+
+    override fun getConnectionStatus(): Boolean = true // NONE store is always "connected"
 }

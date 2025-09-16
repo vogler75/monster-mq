@@ -35,53 +35,74 @@ class ArchiveGroup(
     private val purgeIntervalStr: String? = null,
     private val databaseConfig: JsonObject
 ) : AbstractVerticle() {
-    
+
     private val logger = Utils.getLogger(this::class.java, name)
     val filterTree: TopicTree<Boolean, Boolean> = TopicTree()
-    
+
     var lastValStore: IMessageStore? = null
         private set
     var archiveStore: IMessageArchive? = null
         private set
-        
+
     private val timers = mutableListOf<Long>()
+
+    // Track child verticle deployments so we can properly clean them up
+    private val childDeployments = mutableListOf<String>()
+    private var isStopping = false
     
     init {
         topicFilter.forEach { filterTree.add(it, key=true, value=true) }
     }
     
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting ArchiveGroup [$name]")
-        
-        // Create and deploy stores
-        val lastValFuture = createMessageStore(lastValType, "${name}Lastval")
-        val archiveFuture = createMessageArchive(archiveType, "${name}Archive")
-        
-        Future.all(lastValFuture, archiveFuture).onComplete { result ->
-            if (result.succeeded()) {
-                // Start retention scheduling if configured
-                startRetentionScheduling()
-                
-                logger.info("ArchiveGroup [$name] started successfully")
-                startPromise.complete()
-            } else {
-                logger.severe("Failed to start ArchiveGroup [$name]: ${result.cause()?.message}")
-                startPromise.fail(result.cause())
-            }
+        logger.info("Starting ArchiveGroup [$name] - deploying stores in background")
+
+        // Always succeed the start immediately, let database connections happen in background
+        startRetentionScheduling()
+        logger.info("ArchiveGroup [$name] started successfully - database connections will be established in background")
+        startPromise.complete()
+
+        // Deploy stores asynchronously in the background
+        vertx.runOnContext {
+            createMessageStoreAsync(lastValType, "${name}Lastval")
+            createMessageArchiveAsync(archiveType, "${name}Archive")
         }
     }
     
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("Stopping ArchiveGroup [$name]")
-        
+        logger.info("Stopping ArchiveGroup [$name] and cleaning up child deployments")
+
+        isStopping = true
         stopRetentionScheduling()
-        
-        // Note: Store verticles will be undeployed automatically by Vert.x
-        lastValStore = null
-        archiveStore = null
-        
-        logger.info("ArchiveGroup [$name] stopped")
-        stopPromise.complete()
+
+        // Clean up child verticle deployments
+        if (childDeployments.isNotEmpty()) {
+            logger.info("Undeploying ${childDeployments.size} child verticles for ArchiveGroup [$name]")
+
+            val undeployFutures = childDeployments.map { deploymentId ->
+                logger.fine("Undeploying child verticle: $deploymentId")
+                vertx.undeploy(deploymentId).recover { error ->
+                    logger.warning("Failed to undeploy child verticle $deploymentId: ${error.message}")
+                    Future.succeededFuture<Void>() // Continue even if undeploy fails
+                }
+            }
+
+            Future.all<Void>(undeployFutures).onComplete { _ ->
+                logger.info("Child verticle cleanup completed for ArchiveGroup [$name]")
+                childDeployments.clear()
+                lastValStore = null
+                archiveStore = null
+
+                logger.info("ArchiveGroup [$name] stopped")
+                stopPromise.complete()
+            }
+        } else {
+            lastValStore = null
+            archiveStore = null
+
+            logger.info("ArchiveGroup [$name] stopped")
+            stopPromise.complete()
+        }
     }
     
     fun getLastValRetentionMs(): Long? = lastValRetentionMs
@@ -257,7 +278,322 @@ class ArchiveGroup(
         
         return promise.future()
     }
-    
+
+    // Async versions that don't block the start process
+    private fun createMessageStoreAsync(storeType: MessageStoreType, storeName: String) {
+        if (isStopping) {
+            logger.info("Skipping MessageStore [$storeName] creation - ArchiveGroup is stopping")
+            return
+        }
+        logger.info("Creating MessageStore [$storeName] of type [$storeType] in background")
+
+        when (storeType) {
+            MessageStoreType.NONE -> {
+                lastValStore = MessageStoreNone
+                logger.info("MessageStore [$storeName] set to NONE")
+            }
+            MessageStoreType.MEMORY -> {
+                val store = MessageStoreMemory(storeName)
+                lastValStore = store
+                val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onComplete { result ->
+                    if (result.succeeded()) {
+                        if (!isStopping) {
+                            childDeployments.add(result.result())
+                            logger.info("MessageStore [$storeName] deployed successfully")
+                        } else {
+                            // ArchiveGroup is stopping, immediately undeploy
+                            vertx.undeploy(result.result())
+                            logger.info("MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                        }
+                    } else {
+                        logger.warning("Failed to deploy MessageStore [$storeName]: ${result.cause()?.message}")
+                        // Store remains null - operations will gracefully handle this
+                    }
+                }
+            }
+            MessageStoreType.HAZELCAST -> {
+                logger.warning("Hazelcast store not implemented in verticle context for [$storeName]")
+            }
+            MessageStoreType.POSTGRES -> {
+                try {
+                    val postgres = databaseConfig.getJsonObject("Postgres")
+                    val store = MessageStorePostgres(
+                        storeName,
+                        postgres.getString("Url"),
+                        postgres.getString("User"),
+                        postgres.getString("Pass")
+                    )
+                    lastValStore = store
+                    val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(store, options).onComplete { result ->
+                        if (result.succeeded()) {
+                            if (!isStopping) {
+                                childDeployments.add(result.result())
+                                logger.info("PostgreSQL MessageStore [$storeName] deployed successfully")
+                            } else {
+                                // ArchiveGroup is stopping, immediately undeploy
+                                vertx.undeploy(result.result())
+                                logger.info("PostgreSQL MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                                lastValStore = null
+                            }
+                        } else {
+                            logger.warning("Failed to deploy PostgreSQL MessageStore [$storeName]: ${result.cause()?.message}")
+                            lastValStore = null
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.warning("Error creating PostgreSQL MessageStore [$storeName]: ${e.message}")
+                }
+            }
+            MessageStoreType.CRATEDB -> {
+                try {
+                    val cratedb = databaseConfig.getJsonObject("CrateDB")
+                    val store = MessageStoreCrateDB(
+                        storeName,
+                        cratedb.getString("Url"),
+                        cratedb.getString("User"),
+                        cratedb.getString("Pass")
+                    )
+                    lastValStore = store
+                    val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(store, options).onComplete { result ->
+                        if (result.succeeded()) {
+                            if (!isStopping) {
+                                childDeployments.add(result.result())
+                                logger.info("CrateDB MessageStore [$storeName] deployed successfully")
+                            } else {
+                                vertx.undeploy(result.result())
+                                logger.info("CrateDB MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                                lastValStore = null
+                            }
+                        } else {
+                            logger.warning("Failed to deploy CrateDB MessageStore [$storeName]: ${result.cause()?.message}")
+                            lastValStore = null
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.warning("Error creating CrateDB MessageStore [$storeName]: ${e.message}")
+                }
+            }
+            MessageStoreType.MONGODB -> {
+                try {
+                    val mongodb = databaseConfig.getJsonObject("MongoDB")
+                    val store = MessageStoreMongoDB(
+                        storeName,
+                        mongodb.getString("Url"),
+                        mongodb.getString("Database", "monstermq")
+                    )
+                    lastValStore = store
+                    val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(store, options).onComplete { result ->
+                        if (result.succeeded()) {
+                            if (!isStopping) {
+                                childDeployments.add(result.result())
+                                logger.info("MongoDB MessageStore [$storeName] deployed successfully")
+                            } else {
+                                vertx.undeploy(result.result())
+                                logger.info("MongoDB MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                                lastValStore = null
+                            }
+                        } else {
+                            logger.warning("Failed to deploy MongoDB MessageStore [$storeName]: ${result.cause()?.message}")
+                            lastValStore = null
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.warning("Error creating MongoDB MessageStore [$storeName]: ${e.message}")
+                }
+            }
+            MessageStoreType.SQLITE -> {
+                try {
+                    val sqlite = databaseConfig.getJsonObject("SQLite")
+                    val store = MessageStoreSQLite(
+                        storeName,
+                        sqlite.getString("Path", "monstermq.db")
+                    )
+                    lastValStore = store
+                    val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(store, options).onComplete { result ->
+                        if (result.succeeded()) {
+                            if (!isStopping) {
+                                childDeployments.add(result.result())
+                                logger.info("SQLite MessageStore [$storeName] deployed successfully")
+                            } else {
+                                vertx.undeploy(result.result())
+                                logger.info("SQLite MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                                lastValStore = null
+                            }
+                        } else {
+                            logger.warning("Failed to deploy SQLite MessageStore [$storeName]: ${result.cause()?.message}")
+                            lastValStore = null
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.warning("Error creating SQLite MessageStore [$storeName]: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun createMessageArchiveAsync(archiveType: MessageArchiveType, archiveName: String) {
+        if (isStopping) {
+            logger.info("Skipping MessageArchive [$archiveName] creation - ArchiveGroup is stopping")
+            return
+        }
+        logger.info("Creating MessageArchive [$archiveName] of type [$archiveType] in background")
+
+        when (archiveType) {
+            MessageArchiveType.NONE -> {
+                archiveStore = MessageArchiveNone
+                logger.info("MessageArchive [$archiveName] set to NONE")
+            }
+            MessageArchiveType.POSTGRES -> {
+                try {
+                    val postgres = databaseConfig.getJsonObject("Postgres")
+                    val archive = MessageArchivePostgres(
+                        archiveName,
+                        postgres.getString("Url"),
+                        postgres.getString("User"),
+                        postgres.getString("Pass")
+                    )
+                    archiveStore = archive
+                    val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(archive, options).onComplete { result ->
+                        if (result.succeeded()) {
+                            if (!isStopping) {
+                                childDeployments.add(result.result())
+                                logger.info("PostgreSQL MessageArchive [$archiveName] deployed successfully")
+                            } else {
+                                vertx.undeploy(result.result())
+                                logger.info("PostgreSQL MessageArchive [$archiveName] deployed but immediately undeployed due to stop")
+                                archiveStore = null
+                            }
+                        } else {
+                            logger.warning("Failed to deploy PostgreSQL MessageArchive [$archiveName]: ${result.cause()?.message}")
+                            archiveStore = null
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.warning("Error creating PostgreSQL MessageArchive [$archiveName]: ${e.message}")
+                }
+            }
+            MessageArchiveType.CRATEDB -> {
+                try {
+                    val cratedb = databaseConfig.getJsonObject("CrateDB")
+                    val archive = MessageArchiveCrateDB(
+                        archiveName,
+                        cratedb.getString("Url"),
+                        cratedb.getString("User"),
+                        cratedb.getString("Pass")
+                    )
+                    archiveStore = archive
+                    val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(archive, options).onComplete { result ->
+                        if (result.succeeded()) {
+                            if (!isStopping) {
+                                childDeployments.add(result.result())
+                                logger.info("CrateDB MessageArchive [$archiveName] deployed successfully")
+                            } else {
+                                vertx.undeploy(result.result())
+                                logger.info("CrateDB MessageArchive [$archiveName] deployed but immediately undeployed due to stop")
+                                archiveStore = null
+                            }
+                        } else {
+                            logger.warning("Failed to deploy CrateDB MessageArchive [$archiveName]: ${result.cause()?.message}")
+                            archiveStore = null
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.warning("Error creating CrateDB MessageArchive [$archiveName]: ${e.message}")
+                }
+            }
+            MessageArchiveType.MONGODB -> {
+                try {
+                    val mongodb = databaseConfig.getJsonObject("MongoDB")
+                    val archive = MessageArchiveMongoDB(
+                        archiveName,
+                        mongodb.getString("Url"),
+                        mongodb.getString("Database", "monstermq")
+                    )
+                    archiveStore = archive
+                    val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(archive, options).onComplete { result ->
+                        if (result.succeeded()) {
+                            if (!isStopping) {
+                                childDeployments.add(result.result())
+                                logger.info("MongoDB MessageArchive [$archiveName] deployed successfully")
+                            } else {
+                                vertx.undeploy(result.result())
+                                logger.info("MongoDB MessageArchive [$archiveName] deployed but immediately undeployed due to stop")
+                                archiveStore = null
+                            }
+                        } else {
+                            logger.warning("Failed to deploy MongoDB MessageArchive [$archiveName]: ${result.cause()?.message}")
+                            archiveStore = null
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.warning("Error creating MongoDB MessageArchive [$archiveName]: ${e.message}")
+                }
+            }
+            MessageArchiveType.KAFKA -> {
+                try {
+                    val kafka = databaseConfig.getJsonObject("Kafka")
+                    val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
+                    val archive = MessageArchiveKafka(archiveName, bootstrapServers)
+                    archiveStore = archive
+                    val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(archive, options).onComplete { result ->
+                        if (result.succeeded()) {
+                            if (!isStopping) {
+                                childDeployments.add(result.result())
+                                logger.info("Kafka MessageArchive [$archiveName] deployed successfully")
+                            } else {
+                                vertx.undeploy(result.result())
+                                logger.info("Kafka MessageArchive [$archiveName] deployed but immediately undeployed due to stop")
+                                archiveStore = null
+                            }
+                        } else {
+                            logger.warning("Failed to deploy Kafka MessageArchive [$archiveName]: ${result.cause()?.message}")
+                            archiveStore = null
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.warning("Error creating Kafka MessageArchive [$archiveName]: ${e.message}")
+                }
+            }
+            MessageArchiveType.SQLITE -> {
+                try {
+                    val sqlite = databaseConfig.getJsonObject("SQLite")
+                    val archive = MessageArchiveSQLite(
+                        archiveName,
+                        sqlite.getString("Path", "monstermq.db")
+                    )
+                    archiveStore = archive
+                    val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(archive, options).onComplete { result ->
+                        if (result.succeeded()) {
+                            if (!isStopping) {
+                                childDeployments.add(result.result())
+                                logger.info("SQLite MessageArchive [$archiveName] deployed successfully")
+                            } else {
+                                vertx.undeploy(result.result())
+                                logger.info("SQLite MessageArchive [$archiveName] deployed but immediately undeployed due to stop")
+                                archiveStore = null
+                            }
+                        } else {
+                            logger.warning("Failed to deploy SQLite MessageArchive [$archiveName]: ${result.cause()?.message}")
+                            archiveStore = null
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.warning("Error creating SQLite MessageArchive [$archiveName]: ${e.message}")
+                }
+            }
+        }
+    }
+
     private fun startRetentionScheduling() {
         // Schedule store purge if configured
         if (lastValStore != null && lastValRetentionMs != null && purgeIntervalMs != null) {

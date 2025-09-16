@@ -475,110 +475,74 @@ class ArchiveGroupResolver(
 
             val name = env.getArgument<String>("name") ?: ""
 
-            vertx.executeBlocking<Map<String, Any?>> {
-                runBlocking {
-                    try {
-                        val configStore = archiveHandler.getConfigStore()
-                        if (configStore == null) {
-                            return@runBlocking mapOf(
-                                "success" to false,
-                                "message" to "No ConfigStore available - cannot delete archive group"
-                            )
-                        }
-
-                        // First, check if the archive group exists
-                        val existingGroup = configStore.getArchiveGroup(name)
-                        if (existingGroup == null) {
-                            return@runBlocking mapOf(
-                                "success" to false,
-                                "message" to "Archive group '$name' not found"
-                            )
-                        }
-
-                        // Check if the archive group is disabled (must be disabled to delete)
-                        if (existingGroup.enabled) {
-                            return@runBlocking mapOf(
-                                "success" to false,
-                                "message" to "Archive group '$name' must be disabled before it can be deleted. Use disableArchiveGroup mutation first."
-                            )
-                        }
-
-                        // Also check if it's currently deployed/running (extra safety check)
-                        val runtimeStatus = archiveHandler.getArchiveGroupStatus(name)
-                        if (runtimeStatus.getBoolean("deployed", false)) {
-                            return@runBlocking mapOf(
-                                "success" to false,
-                                "message" to "Archive group '$name' is currently running. Please disable it first before deletion."
-                            )
-                        }
-
-                        // Delete from database
-                        val deleteSuccess = configStore.deleteArchiveGroup(name)
-                        if (!deleteSuccess) {
-                            return@runBlocking mapOf(
-                                "success" to false,
-                                "message" to "Failed to delete archive group '$name' from database"
-                            )
-                        }
-
-                        // Drop storage for this archive group
-                        val archiveGroup = existingGroup.archiveGroup
-                        val databaseConfig = archiveHandler.createDatabaseConfig()
-                        var storageCleanupErrors = mutableListOf<String>()
-
-                        // Drop last value storage if not NONE
-                        if (archiveGroup.getLastValType() != MessageStoreType.NONE) {
-                            try {
-                                if (!dropTable(archiveGroup.getLastValType().name, "${name}Lastval", databaseConfig)) {
-                                    storageCleanupErrors.add("Failed to drop last value storage (${archiveGroup.getLastValType()})")
-                                }
-                            } catch (e: Exception) {
-                                storageCleanupErrors.add("Error dropping last value storage: ${e.message}")
-                            }
-                        }
-
-                        // Drop archive storage if not NONE
-                        if (archiveGroup.getArchiveType() != MessageArchiveType.NONE) {
-                            try {
-                                if (!dropTable(archiveGroup.getArchiveType().name, "${name}Archive", databaseConfig)) {
-                                    storageCleanupErrors.add("Failed to drop archive storage (${archiveGroup.getArchiveType()})")
-                                }
-                            } catch (e: Exception) {
-                                storageCleanupErrors.add("Error dropping archive storage: ${e.message}")
-                            }
-                        }
-
-                        if (storageCleanupErrors.isNotEmpty()) {
-                            logger.warning("Archive group '$name' deleted from database but storage cleanup had issues: ${storageCleanupErrors.joinToString(", ")}")
-                        } else {
-                            logger.info("Archive group '$name' deleted successfully including storage cleanup")
-                        }
-
-                        mapOf(
-                            "success" to true,
-                            "message" to "Archive group '$name' deleted successfully",
-                            "archiveGroup" to mapOf(
-                                "name" to name,
-                                "enabled" to false,
-                                "deployed" to false
-                            )
-                        )
-                    } catch (e: Exception) {
-                        mapOf(
-                            "success" to false,
-                            "message" to "Error deleting archive group: ${e.message}"
-                        )
-                    }
-                }
-            }.onComplete { result ->
-                if (result.succeeded()) {
-                    future.complete(result.result())
-                } else {
+            try {
+                val configStore = archiveHandler.getConfigStore()
+                if (configStore == null) {
                     future.complete(mapOf(
                         "success" to false,
-                        "message" to "Error: ${result.cause()?.message}"
+                        "message" to "No ConfigStore available - cannot delete archive group"
                     ))
+                    return@DataFetcher future
                 }
+
+                // First, check if the archive group exists
+                val existingGroup = configStore.getArchiveGroup(name)
+                if (existingGroup == null) {
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to "Archive group '$name' not found"
+                    ))
+                    return@DataFetcher future
+                }
+
+                // Check if the archive group is disabled (must be disabled to delete)
+                if (existingGroup.enabled) {
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to "Archive group '$name' must be disabled before it can be deleted. Use disableArchiveGroup mutation first."
+                    ))
+                    return@DataFetcher future
+                }
+
+                // Also check if it's currently deployed/running (extra safety check)
+                val runtimeStatus = archiveHandler.getArchiveGroupStatus(name)
+                if (runtimeStatus.getBoolean("deployed", false)) {
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to "Archive group '$name' is currently running. Please disable it first before deletion."
+                    ))
+                    return@DataFetcher future
+                }
+
+                // Delete from database first
+                val deleteSuccess = configStore.deleteArchiveGroup(name)
+                if (!deleteSuccess) {
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to "Failed to delete archive group '$name' from database"
+                    ))
+                    return@DataFetcher future
+                }
+
+                // Note: Skip storage cleanup for now to prevent blocking
+                // Storage cleanup can be done separately as a background task
+                logger.info("Archive group '$name' deleted from database. Storage cleanup skipped to prevent blocking.")
+
+                future.complete(mapOf(
+                    "success" to true,
+                    "message" to "Archive group '$name' deleted successfully (storage cleanup deferred)",
+                    "archiveGroup" to mapOf(
+                        "name" to name,
+                        "enabled" to false,
+                        "deployed" to false
+                    )
+                ))
+            } catch (e: Exception) {
+                logger.warning("Error deleting archive group '$name': ${e.message}")
+                future.complete(mapOf(
+                    "success" to false,
+                    "message" to "Error deleting archive group: ${e.message}"
+                ))
             }
 
             future

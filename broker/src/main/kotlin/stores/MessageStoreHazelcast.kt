@@ -118,4 +118,12 @@ class MessageStoreHazelcast(
             false
         }
     }
+
+    override fun getConnectionStatus(): Boolean {
+        return try {
+            hazelcast.lifecycleService.isRunning
+        } catch (e: Exception) {
+            false
+        }
+    }
 }

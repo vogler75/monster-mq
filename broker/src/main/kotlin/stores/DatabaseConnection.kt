@@ -61,7 +61,7 @@ abstract class DatabaseConnection(
         return promise.future()
     }
 
-    private fun check(): Boolean {
+    fun check(): Boolean {
         if (connection != null && !connection!!.isClosed) {
             try {
                 connection!!.prepareStatement("SELECT 1").use { stmt ->

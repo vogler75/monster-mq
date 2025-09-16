@@ -112,4 +112,6 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
             false
         }
     }
+
+    override fun getConnectionStatus(): Boolean = true // Memory store is always connected
 }

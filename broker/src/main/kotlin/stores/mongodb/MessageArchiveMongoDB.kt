@@ -300,6 +300,17 @@ class MessageArchiveMongoDB(
     override fun getName(): String = name
     override fun getType(): MessageArchiveType = MessageArchiveType.MONGODB
 
+    override fun getConnectionStatus(): Boolean {
+        return try {
+            // Check if MongoDB client is connected by attempting a ping
+            database.runCommand(org.bson.Document("ping", 1))
+            true
+        } catch (e: Exception) {
+            logger.fine("MongoDB connection check failed: ${e.message}")
+            false
+        }
+    }
+
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
         val startTime = System.currentTimeMillis()
         var deletedCount = 0

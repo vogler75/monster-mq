@@ -61,4 +61,13 @@ class MessageArchiveKafka(
         // We cannot drop Kafka topics from within the application safely
         return true
     }
+
+    override fun getConnectionStatus(): Boolean {
+        return try {
+            kafkaProducer != null
+        } catch (e: Exception) {
+            logger.fine("Kafka connection check failed: ${e.message}")
+            false
+        }
+    }
 }
