@@ -1,9 +1,10 @@
-package at.rocworks.devices.opcua.stores
+package at.rocworks.stores.sqlite
 
-import at.rocworks.devices.opcua.DeviceConfig
+import at.rocworks.stores.DeviceConfig
 import at.rocworks.devices.opcua.DeviceConfigException
-import at.rocworks.devices.opcua.DeviceConfigStore
-import at.rocworks.devices.opcua.OpcUaConnectionConfig
+import at.rocworks.devices.opcua.IDeviceConfigStore
+import at.rocworks.stores.OpcUaAddress
+import at.rocworks.stores.OpcUaConnectionConfig
 import at.rocworks.stores.sqlite.SQLiteClient
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -19,7 +20,7 @@ import java.util.logging.Logger
 class DeviceConfigStoreSQLite(
     private val vertx: Vertx,
     private val dbPath: String
-) : DeviceConfigStore {
+) : IDeviceConfigStore {
 
     private val logger: Logger = Logger.getLogger(DeviceConfigStoreSQLite::class.java.name)
     private lateinit var sqliteClient: SQLiteClient
@@ -244,7 +245,8 @@ class DeviceConfigStoreSQLite(
                 try {
                     val addressesArray = JsonArray()
                     device.config.addresses.forEach { address ->
-                        addressesArray.add(JsonObject()
+                        addressesArray.add(
+                            JsonObject()
                             .put("address", address.address)
                             .put("topic", address.topic)
                             .put("publishMode", address.publishMode))
@@ -426,16 +428,18 @@ class DeviceConfigStoreSQLite(
         val configJson = JsonObject(row.getString("config"))
 
         // Parse addresses array from JSON
-        val addresses = mutableListOf<at.rocworks.devices.opcua.OpcUaAddress>()
+        val addresses = mutableListOf<OpcUaAddress>()
         val addressesArray = configJson.getJsonArray("addresses")
         if (addressesArray != null) {
             addressesArray.forEach { addressObj ->
                 val addressJson = addressObj as JsonObject
-                addresses.add(at.rocworks.devices.opcua.OpcUaAddress(
+                addresses.add(
+                    OpcUaAddress(
                     address = addressJson.getString("address"),
                     topic = addressJson.getString("topic"),
                     publishMode = addressJson.getString("publishMode", "SINGLE")?.uppercase() ?: "SINGLE"
-                ))
+                )
+                )
             }
         }
 

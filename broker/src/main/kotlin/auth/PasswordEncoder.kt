@@ -1,4 +1,4 @@
-package at.rocworks.auth
+package auth
 
 import org.mindrot.jbcrypt.BCrypt
 

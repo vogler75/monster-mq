@@ -1,5 +1,6 @@
-package at.rocworks.devices.opcua
+package at.rocworks.stores
 
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.time.Instant
 
@@ -247,7 +248,7 @@ data class OpcUaConnectionConfig(
     }
 
     fun toJsonObject(): JsonObject {
-        val addressArray = io.vertx.core.json.JsonArray()
+        val addressArray = JsonArray()
         addresses.forEach { address ->
             addressArray.add(address.toJsonObject())
         }

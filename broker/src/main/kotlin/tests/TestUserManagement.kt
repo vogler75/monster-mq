@@ -1,7 +1,7 @@
 package at.rocworks.tests
 
-import at.rocworks.auth.AclCache
-import at.rocworks.auth.PasswordEncoder
+import auth.AclCache
+import auth.PasswordEncoder
 import at.rocworks.auth.UserManager
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
@@ -10,7 +10,6 @@ import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import java.io.File
-import java.time.LocalDateTime
 
 fun main(args: Array<String>) {
     println("=== User Management Tests ===")

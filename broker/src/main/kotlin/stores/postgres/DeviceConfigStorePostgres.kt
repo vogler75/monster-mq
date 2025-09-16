@@ -1,16 +1,16 @@
-package at.rocworks.devices.opcua.stores
+package at.rocworks.stores.postgres
 
-import at.rocworks.devices.opcua.DeviceConfig
+import at.rocworks.stores.DeviceConfig
 import at.rocworks.devices.opcua.DeviceConfigException
-import at.rocworks.devices.opcua.DeviceConfigStore
-import at.rocworks.devices.opcua.OpcUaConnectionConfig
+import at.rocworks.devices.opcua.IDeviceConfigStore
+import at.rocworks.stores.OpcUaConnectionConfig
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import java.sql.Connection
 import java.sql.DriverManager
-import java.sql.PreparedStatement
 import java.sql.ResultSet
+import java.sql.Timestamp
 import java.time.Instant
 import java.util.logging.Logger
 
@@ -21,7 +21,7 @@ class DeviceConfigStorePostgres(
     private val url: String,
     private val user: String,
     private val password: String
-) : DeviceConfigStore {
+) : IDeviceConfigStore {
 
     private val logger: Logger = Logger.getLogger(DeviceConfigStorePostgres::class.java.name)
     private var connection: Connection? = null
@@ -255,8 +255,8 @@ class DeviceConfigStorePostgres(
                 stmt.setString(4, device.backupNodeId)
                 stmt.setString(5, device.config.toJsonObject().toString())
                 stmt.setBoolean(6, device.enabled)
-                stmt.setTimestamp(7, java.sql.Timestamp.from(device.createdAt))
-                stmt.setTimestamp(8, java.sql.Timestamp.from(now))
+                stmt.setTimestamp(7, Timestamp.from(device.createdAt))
+                stmt.setTimestamp(8, Timestamp.from(now))
 
                 val rowsAffected = stmt.executeUpdate()
                 if (rowsAffected > 0) {
@@ -296,7 +296,7 @@ class DeviceConfigStorePostgres(
         try {
             connection!!.prepareStatement(UPDATE_ENABLED).use { stmt ->
                 stmt.setBoolean(1, enabled)
-                stmt.setTimestamp(2, java.sql.Timestamp.from(Instant.now()))
+                stmt.setTimestamp(2, Timestamp.from(Instant.now()))
                 stmt.setString(3, name)
 
                 val rowsAffected = stmt.executeUpdate()
@@ -327,7 +327,7 @@ class DeviceConfigStorePostgres(
         try {
             connection!!.prepareStatement(UPDATE_NODE_ID).use { stmt ->
                 stmt.setString(1, nodeId)
-                stmt.setTimestamp(2, java.sql.Timestamp.from(Instant.now()))
+                stmt.setTimestamp(2, Timestamp.from(Instant.now()))
                 stmt.setString(3, name)
 
                 val rowsAffected = stmt.executeUpdate()
@@ -374,7 +374,7 @@ class DeviceConfigStorePostgres(
             namespace = rs.getString("namespace"),
             nodeId = rs.getString("node_id"),
             backupNodeId = rs.getString("backup_node_id"),
-            config = OpcUaConnectionConfig.fromJsonObject(configJson),
+            config = OpcUaConnectionConfig.Companion.fromJsonObject(configJson),
             enabled = rs.getBoolean("enabled"),
             createdAt = rs.getTimestamp("created_at").toInstant(),
             updatedAt = rs.getTimestamp("updated_at").toInstant()

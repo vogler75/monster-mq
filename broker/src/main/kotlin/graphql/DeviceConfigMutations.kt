@@ -1,11 +1,17 @@
-package at.rocworks.devices.opcua.graphql
+package at.rocworks.graphql
 
 import at.rocworks.Monster
-import at.rocworks.devices.opcua.*
+import at.rocworks.stores.DeviceConfig
+import at.rocworks.stores.DeviceConfigRequest
+import at.rocworks.devices.opcua.IDeviceConfigStore
+import at.rocworks.stores.MonitoringParameters
+import at.rocworks.stores.OpcUaAddress
+import at.rocworks.stores.OpcUaConnectionConfig
+import at.rocworks.devices.opcua.OpcUaExtension
 import graphql.schema.DataFetcher
-import graphql.GraphQLException
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
+import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 
@@ -14,7 +20,7 @@ import java.util.logging.Logger
  */
 class DeviceConfigMutations(
     private val vertx: Vertx,
-    private val deviceStore: DeviceConfigStore
+    private val deviceStore: IDeviceConfigStore
 ) {
     private val logger: Logger = Logger.getLogger(DeviceConfigMutations::class.java.name)
 
@@ -33,46 +39,56 @@ class DeviceConfigMutations(
                 val validationErrors = request.validate()
 
                 if (validationErrors.isNotEmpty()) {
-                    future.complete(mapOf(
-                        "success" to false,
-                        "errors" to validationErrors
-                    ))
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to validationErrors
+                        )
+                    )
                     return@DataFetcher future
                 }
 
                 // Check if name already exists
                 deviceStore.getDevice(request.name).onComplete { existingResult ->
                     if (existingResult.failed()) {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Database error: ${existingResult.cause()?.message}")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Database error: ${existingResult.cause()?.message}")
+                            )
+                        )
                         return@onComplete
                     }
 
                     if (existingResult.result() != null) {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Device with name '${request.name}' already exists")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Device with name '${request.name}' already exists")
+                            )
+                        )
                         return@onComplete
                     }
 
                     // Check if namespace is already in use
                     deviceStore.isNamespaceInUse(request.namespace).onComplete { namespaceResult ->
                         if (namespaceResult.failed()) {
-                            future.complete(mapOf(
-                                "success" to false,
-                                "errors" to listOf("Database error: ${namespaceResult.cause()?.message}")
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Database error: ${namespaceResult.cause()?.message}")
+                                )
+                            )
                             return@onComplete
                         }
 
                         if (namespaceResult.result()) {
-                            future.complete(mapOf(
-                                "success" to false,
-                                "errors" to listOf("Namespace '${request.namespace}' is already in use")
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Namespace '${request.namespace}' is already in use")
+                                )
+                            )
                             return@onComplete
                         }
 
@@ -85,16 +101,20 @@ class DeviceConfigMutations(
                                 // Notify extension about the change
                                 notifyDeviceConfigChange("add", savedDevice)
 
-                                future.complete(mapOf(
-                                    "success" to true,
-                                    "device" to deviceToMap(savedDevice),
-                                    "errors" to emptyList<String>()
-                                ))
+                                future.complete(
+                                    mapOf(
+                                        "success" to true,
+                                        "device" to deviceToMap(savedDevice),
+                                        "errors" to emptyList<String>()
+                                    )
+                                )
                             } else {
-                                future.complete(mapOf(
-                                    "success" to false,
-                                    "errors" to listOf("Failed to save device: ${saveResult.cause()?.message}")
-                                ))
+                                future.complete(
+                                    mapOf(
+                                        "success" to false,
+                                        "errors" to listOf("Failed to save device: ${saveResult.cause()?.message}")
+                                    )
+                                )
                             }
                         }
                     }
@@ -102,10 +122,12 @@ class DeviceConfigMutations(
 
             } catch (e: Exception) {
                 logger.severe("Error adding OPC UA device: ${e.message}")
-                future.complete(mapOf(
-                    "success" to false,
-                    "errors" to listOf("Failed to add device: ${e.message}")
-                ))
+                future.complete(
+                    mapOf(
+                        "success" to false,
+                        "errors" to listOf("Failed to add device: ${e.message}")
+                    )
+                )
             }
 
             future
@@ -121,29 +143,35 @@ class DeviceConfigMutations(
                 val input = env.getArgument<Map<String, Any>>("input")
 
                 if (name == null || input == null) {
-                    future.complete(mapOf(
-                        "success" to false,
-                        "errors" to listOf("Name and input are required")
-                    ))
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Name and input are required")
+                        )
+                    )
                     return@DataFetcher future
                 }
 
                 // Check if device exists
                 deviceStore.getDevice(name).onComplete { existingResult ->
                     if (existingResult.failed()) {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Database error: ${existingResult.cause()?.message}")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Database error: ${existingResult.cause()?.message}")
+                            )
+                        )
                         return@onComplete
                     }
 
                     val existingDevice = existingResult.result()
                     if (existingDevice == null) {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Device '$name' not found")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Device '$name' not found")
+                            )
+                        )
                         return@onComplete
                     }
 
@@ -152,28 +180,34 @@ class DeviceConfigMutations(
                     val validationErrors = request.validate()
 
                     if (validationErrors.isNotEmpty()) {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to validationErrors
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to validationErrors
+                            )
+                        )
                         return@onComplete
                     }
 
                     // Check namespace conflict (exclude current device)
                     deviceStore.isNamespaceInUse(request.namespace, name).onComplete { namespaceResult ->
                         if (namespaceResult.failed()) {
-                            future.complete(mapOf(
-                                "success" to false,
-                                "errors" to listOf("Database error: ${namespaceResult.cause()?.message}")
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Database error: ${namespaceResult.cause()?.message}")
+                                )
+                            )
                             return@onComplete
                         }
 
                         if (namespaceResult.result()) {
-                            future.complete(mapOf(
-                                "success" to false,
-                                "errors" to listOf("Namespace '${request.namespace}' is already in use by another device")
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Namespace '${request.namespace}' is already in use by another device")
+                                )
+                            )
                             return@onComplete
                         }
 
@@ -189,16 +223,20 @@ class DeviceConfigMutations(
                                 // Notify extension about the change
                                 notifyDeviceConfigChange("update", savedDevice)
 
-                                future.complete(mapOf(
-                                    "success" to true,
-                                    "device" to deviceToMap(savedDevice),
-                                    "errors" to emptyList<String>()
-                                ))
+                                future.complete(
+                                    mapOf(
+                                        "success" to true,
+                                        "device" to deviceToMap(savedDevice),
+                                        "errors" to emptyList<String>()
+                                    )
+                                )
                             } else {
-                                future.complete(mapOf(
-                                    "success" to false,
-                                    "errors" to listOf("Failed to update device: ${saveResult.cause()?.message}")
-                                ))
+                                future.complete(
+                                    mapOf(
+                                        "success" to false,
+                                        "errors" to listOf("Failed to update device: ${saveResult.cause()?.message}")
+                                    )
+                                )
                             }
                         }
                     }
@@ -206,10 +244,12 @@ class DeviceConfigMutations(
 
             } catch (e: Exception) {
                 logger.severe("Error updating OPC UA device: ${e.message}")
-                future.complete(mapOf(
-                    "success" to false,
-                    "errors" to listOf("Failed to update device: ${e.message}")
-                ))
+                future.complete(
+                    mapOf(
+                        "success" to false,
+                        "errors" to listOf("Failed to update device: ${e.message}")
+                    )
+                )
             }
 
             future
@@ -248,7 +288,7 @@ class DeviceConfigMutations(
                                 .put("operation", "delete")
                                 .put("deviceName", name)
 
-                            vertx.eventBus().publish(OpcUaExtension.ADDRESS_DEVICE_CONFIG_CHANGED, changeData)
+                            vertx.eventBus().publish(OpcUaExtension.Companion.ADDRESS_DEVICE_CONFIG_CHANGED, changeData)
                             logger.info("Deleted OPC UA device: $name")
 
                             future.complete(true)
@@ -276,10 +316,12 @@ class DeviceConfigMutations(
                 val enabled = env.getArgument<Boolean>("enabled")
 
                 if (name == null || enabled == null) {
-                    future.complete(mapOf(
-                        "success" to false,
-                        "errors" to listOf("Name and enabled are required")
-                    ))
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Name and enabled are required")
+                        )
+                    )
                     return@DataFetcher future
                 }
 
@@ -293,34 +335,42 @@ class DeviceConfigMutations(
                                 .put("deviceName", name)
                                 .put("enabled", enabled)
 
-                            vertx.eventBus().publish(OpcUaExtension.ADDRESS_DEVICE_CONFIG_CHANGED, changeData)
+                            vertx.eventBus().publish(OpcUaExtension.Companion.ADDRESS_DEVICE_CONFIG_CHANGED, changeData)
                             logger.info("Toggled OPC UA device $name to enabled=$enabled")
 
-                            future.complete(mapOf(
-                                "success" to true,
-                                "device" to deviceToMap(updatedDevice),
-                                "errors" to emptyList<String>()
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to true,
+                                    "device" to deviceToMap(updatedDevice),
+                                    "errors" to emptyList<String>()
+                                )
+                            )
                         } else {
-                            future.complete(mapOf(
-                                "success" to false,
-                                "errors" to listOf("Device '$name' not found")
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Device '$name' not found")
+                                )
+                            )
                         }
                     } else {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Failed to toggle device: ${result.cause()?.message}")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Failed to toggle device: ${result.cause()?.message}")
+                            )
+                        )
                     }
                 }
 
             } catch (e: Exception) {
                 logger.severe("Error toggling OPC UA device: ${e.message}")
-                future.complete(mapOf(
-                    "success" to false,
-                    "errors" to listOf("Failed to toggle device: ${e.message}")
-                ))
+                future.complete(
+                    mapOf(
+                        "success" to false,
+                        "errors" to listOf("Failed to toggle device: ${e.message}")
+                    )
+                )
             }
 
             future
@@ -336,20 +386,30 @@ class DeviceConfigMutations(
                 val nodeId = env.getArgument<String>("nodeId")
 
                 if (name == null || nodeId == null) {
-                    future.complete(mapOf(
-                        "success" to false,
-                        "errors" to listOf("Name and nodeId are required")
-                    ))
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Name and nodeId are required")
+                        )
+                    )
                     return@DataFetcher future
                 }
 
                 // Validate node ID exists in cluster
-                val clusterNodes = Monster.getClusterNodeIds(vertx)
+                val clusterNodes = Monster.Companion.getClusterNodeIds(vertx)
                 if (!clusterNodes.contains(nodeId)) {
-                    future.complete(mapOf(
-                        "success" to false,
-                        "errors" to listOf("Cluster node '$nodeId' not found. Available nodes: ${clusterNodes.joinToString(", ")}")
-                    ))
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf(
+                                "Cluster node '$nodeId' not found. Available nodes: ${
+                                    clusterNodes.joinToString(
+                                        ", "
+                                    )
+                                }"
+                            )
+                        )
+                    )
                     return@DataFetcher future
                 }
 
@@ -363,34 +423,42 @@ class DeviceConfigMutations(
                                 .put("deviceName", name)
                                 .put("nodeId", nodeId)
 
-                            vertx.eventBus().publish(OpcUaExtension.ADDRESS_DEVICE_CONFIG_CHANGED, changeData)
+                            vertx.eventBus().publish(OpcUaExtension.Companion.ADDRESS_DEVICE_CONFIG_CHANGED, changeData)
                             logger.info("Reassigned OPC UA device $name to node $nodeId")
 
-                            future.complete(mapOf(
-                                "success" to true,
-                                "device" to deviceToMap(updatedDevice),
-                                "errors" to emptyList<String>()
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to true,
+                                    "device" to deviceToMap(updatedDevice),
+                                    "errors" to emptyList<String>()
+                                )
+                            )
                         } else {
-                            future.complete(mapOf(
-                                "success" to false,
-                                "errors" to listOf("Device '$name' not found")
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Device '$name' not found")
+                                )
+                            )
                         }
                     } else {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Failed to reassign device: ${result.cause()?.message}")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Failed to reassign device: ${result.cause()?.message}")
+                            )
+                        )
                     }
                 }
 
             } catch (e: Exception) {
                 logger.severe("Error reassigning OPC UA device: ${e.message}")
-                future.complete(mapOf(
-                    "success" to false,
-                    "errors" to listOf("Failed to reassign device: ${e.message}")
-                ))
+                future.complete(
+                    mapOf(
+                        "success" to false,
+                        "errors" to listOf("Failed to reassign device: ${e.message}")
+                    )
+                )
             }
 
             future
@@ -403,7 +471,7 @@ class DeviceConfigMutations(
             .put("deviceName", device.name)
             .put("device", device.toJsonObject())
 
-        vertx.eventBus().publish(OpcUaExtension.ADDRESS_DEVICE_CONFIG_CHANGED, changeData)
+        vertx.eventBus().publish(OpcUaExtension.Companion.ADDRESS_DEVICE_CONFIG_CHANGED, changeData)
         logger.info("Notified device config change: $operation for device ${device.name}")
     }
 
@@ -460,10 +528,12 @@ class DeviceConfigMutations(
                 val removePath = env.getArgument<Boolean>("removePath") ?: true
 
                 if (deviceName == null || addressStr == null || topic == null) {
-                    future.complete(mapOf(
-                        "success" to false,
-                        "errors" to listOf("Device name, address, and topic are required")
-                    ))
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Device name, address, and topic are required")
+                        )
+                    )
                     return@DataFetcher future
                 }
 
@@ -477,45 +547,53 @@ class DeviceConfigMutations(
 
                 val validationErrors = address.validate()
                 if (validationErrors.isNotEmpty()) {
-                    future.complete(mapOf(
-                        "success" to false,
-                        "errors" to validationErrors
-                    ))
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to validationErrors
+                        )
+                    )
                     return@DataFetcher future
                 }
 
                 // Get the existing device
                 deviceStore.getDevice(deviceName).onComplete { existingResult ->
                     if (existingResult.failed()) {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Database error: ${existingResult.cause()?.message}")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Database error: ${existingResult.cause()?.message}")
+                            )
+                        )
                         return@onComplete
                     }
 
                     val existingDevice = existingResult.result()
                     if (existingDevice == null) {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Device '$deviceName' not found")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Device '$deviceName' not found")
+                            )
+                        )
                         return@onComplete
                     }
 
                     // Check if address already exists
                     if (existingDevice.config.addresses.any { it.address == address.address }) {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Address '${address.address}' already exists for device '$deviceName'")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Address '${address.address}' already exists for device '$deviceName'")
+                            )
+                        )
                         return@onComplete
                     }
 
                     // Add the new address
                     val updatedAddresses = existingDevice.config.addresses + address
                     val updatedConfig = existingDevice.config.copy(addresses = updatedAddresses)
-                    val updatedDevice = existingDevice.copy(config = updatedConfig, updatedAt = java.time.Instant.now())
+                    val updatedDevice = existingDevice.copy(config = updatedConfig, updatedAt = Instant.now())
 
                     deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
                         if (saveResult.succeeded()) {
@@ -524,26 +602,32 @@ class DeviceConfigMutations(
                             // Notify extension about the change
                             notifyDeviceConfigChange("addAddress", savedDevice)
 
-                            future.complete(mapOf(
-                                "success" to true,
-                                "device" to deviceToMap(savedDevice),
-                                "errors" to emptyList<String>()
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to true,
+                                    "device" to deviceToMap(savedDevice),
+                                    "errors" to emptyList<String>()
+                                )
+                            )
                         } else {
-                            future.complete(mapOf(
-                                "success" to false,
-                                "errors" to listOf("Failed to add address: ${saveResult.cause()?.message}")
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Failed to add address: ${saveResult.cause()?.message}")
+                                )
+                            )
                         }
                     }
                 }
 
             } catch (e: Exception) {
                 logger.severe("Error adding OPC UA address: ${e.message}")
-                future.complete(mapOf(
-                    "success" to false,
-                    "errors" to listOf("Failed to add address: ${e.message}")
-                ))
+                future.complete(
+                    mapOf(
+                        "success" to false,
+                        "errors" to listOf("Failed to add address: ${e.message}")
+                    )
+                )
             }
 
             future
@@ -559,45 +643,53 @@ class DeviceConfigMutations(
                 val address = env.getArgument<String>("address")
 
                 if (deviceName == null || address == null) {
-                    future.complete(mapOf(
-                        "success" to false,
-                        "errors" to listOf("Device name and address are required")
-                    ))
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Device name and address are required")
+                        )
+                    )
                     return@DataFetcher future
                 }
 
                 // Get the existing device
                 deviceStore.getDevice(deviceName).onComplete { existingResult ->
                     if (existingResult.failed()) {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Database error: ${existingResult.cause()?.message}")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Database error: ${existingResult.cause()?.message}")
+                            )
+                        )
                         return@onComplete
                     }
 
                     val existingDevice = existingResult.result()
                     if (existingDevice == null) {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Device '$deviceName' not found")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Device '$deviceName' not found")
+                            )
+                        )
                         return@onComplete
                     }
 
                     // Check if address exists
                     if (!existingDevice.config.addresses.any { it.address == address }) {
-                        future.complete(mapOf(
-                            "success" to false,
-                            "errors" to listOf("Address '$address' not found for device '$deviceName'")
-                        ))
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Address '$address' not found for device '$deviceName'")
+                            )
+                        )
                         return@onComplete
                     }
 
                     // Remove the address
                     val updatedAddresses = existingDevice.config.addresses.filter { it.address != address }
                     val updatedConfig = existingDevice.config.copy(addresses = updatedAddresses)
-                    val updatedDevice = existingDevice.copy(config = updatedConfig, updatedAt = java.time.Instant.now())
+                    val updatedDevice = existingDevice.copy(config = updatedConfig, updatedAt = Instant.now())
 
                     deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
                         if (saveResult.succeeded()) {
@@ -606,26 +698,32 @@ class DeviceConfigMutations(
                             // Notify extension about the change
                             notifyDeviceConfigChange("deleteAddress", savedDevice)
 
-                            future.complete(mapOf(
-                                "success" to true,
-                                "device" to deviceToMap(savedDevice),
-                                "errors" to emptyList<String>()
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to true,
+                                    "device" to deviceToMap(savedDevice),
+                                    "errors" to emptyList<String>()
+                                )
+                            )
                         } else {
-                            future.complete(mapOf(
-                                "success" to false,
-                                "errors" to listOf("Failed to delete address: ${saveResult.cause()?.message}")
-                            ))
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Failed to delete address: ${saveResult.cause()?.message}")
+                                )
+                            )
                         }
                     }
                 }
 
             } catch (e: Exception) {
                 logger.severe("Error deleting OPC UA address: ${e.message}")
-                future.complete(mapOf(
-                    "success" to false,
-                    "errors" to listOf("Failed to delete address: ${e.message}")
-                ))
+                future.complete(
+                    mapOf(
+                        "success" to false,
+                        "errors" to listOf("Failed to delete address: ${e.message}")
+                    )
+                )
             }
 
             future
@@ -633,7 +731,7 @@ class DeviceConfigMutations(
     }
 
     private fun deviceToMap(device: DeviceConfig): Map<String, Any?> {
-        val currentNodeId = Monster.getClusterNodeId(vertx) ?: "local"
+        val currentNodeId = Monster.Companion.getClusterNodeId(vertx) ?: "local"
 
         return mapOf(
             "name" to device.name,

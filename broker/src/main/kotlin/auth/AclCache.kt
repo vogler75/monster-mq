@@ -1,4 +1,4 @@
-package at.rocworks.auth
+package auth
 
 import at.rocworks.Const
 import at.rocworks.Utils

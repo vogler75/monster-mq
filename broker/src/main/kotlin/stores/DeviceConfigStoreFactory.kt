@@ -1,8 +1,10 @@
-package at.rocworks.devices.opcua.stores
+package at.rocworks.stores
 
-import at.rocworks.devices.opcua.DeviceConfigStore
+import at.rocworks.devices.opcua.IDeviceConfigStore
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
+import at.rocworks.stores.postgres.DeviceConfigStorePostgres
+import at.rocworks.stores.sqlite.DeviceConfigStoreSQLite
 
 /**
  * Factory for creating DeviceConfigStore implementations
@@ -13,7 +15,7 @@ object DeviceConfigStoreFactory {
      * Create a DeviceConfigStore based on the config store type
      * (reuse the same database configuration as the config store)
      */
-    fun create(storeType: String?, config: JsonObject, vertx: Vertx): DeviceConfigStore? {
+    fun create(storeType: String?, config: JsonObject, vertx: Vertx): IDeviceConfigStore? {
         return when (storeType?.uppercase()) {
             "POSTGRES" -> {
                 val postgresConfig = config.getJsonObject("Postgres")

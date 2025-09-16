@@ -6,14 +6,12 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient
-import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfigBuilder
 import org.eclipse.milo.opcua.sdk.client.api.identity.AnonymousProvider
 import org.eclipse.milo.opcua.sdk.client.api.identity.IdentityProvider
 import org.eclipse.milo.opcua.sdk.client.api.identity.UsernameProvider
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription
 import org.eclipse.milo.opcua.stack.core.Identifiers
-import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy
 import org.eclipse.milo.opcua.stack.core.types.builtin.*
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.Unsigned
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UByte
@@ -22,8 +20,10 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.ULong
 import org.eclipse.milo.opcua.stack.core.types.enumerated.*
 import org.eclipse.milo.opcua.stack.core.types.structured.*
+import at.rocworks.stores.DeviceConfig
+import at.rocworks.stores.OpcUaAddress
+import at.rocworks.stores.OpcUaConnectionConfig
 import java.time.Instant
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
 import kotlin.concurrent.thread
@@ -544,7 +544,7 @@ class OpcUaConnector : AbstractVerticle() {
             )
 
             // Send to OPC UA extension for proper message bus publishing
-            vertx.eventBus().publish(OpcUaExtension.ADDRESS_OPCUA_VALUE_PUBLISH, mqttMessage)
+            vertx.eventBus().publish(OpcUaExtension.Companion.ADDRESS_OPCUA_VALUE_PUBLISH, mqttMessage)
 
             logger.fine("Published OPC UA value change: $mqttTopic = $value (from ${address.address})")
 

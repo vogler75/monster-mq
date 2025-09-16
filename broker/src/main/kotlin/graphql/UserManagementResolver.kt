@@ -1,7 +1,6 @@
 package at.rocworks.extensions.graphql
 
 import at.rocworks.auth.UserManager
-import at.rocworks.auth.PasswordEncoder
 import at.rocworks.data.User
 import at.rocworks.data.AclRule
 import graphql.schema.DataFetcher

@@ -1,8 +1,8 @@
-package at.rocworks.devices.opcua.graphql
+package at.rocworks.graphql
 
 import at.rocworks.Monster
-import at.rocworks.devices.opcua.DeviceConfig
-import at.rocworks.devices.opcua.DeviceConfigStore
+import at.rocworks.stores.DeviceConfig
+import at.rocworks.devices.opcua.IDeviceConfigStore
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
 import java.util.concurrent.CompletableFuture
@@ -13,7 +13,7 @@ import java.util.logging.Logger
  */
 class DeviceConfigQueries(
     private val vertx: Vertx,
-    private val deviceStore: DeviceConfigStore
+    private val deviceStore: IDeviceConfigStore
 ) {
     private val logger: Logger = Logger.getLogger(DeviceConfigQueries::class.java.name)
 
@@ -107,8 +107,8 @@ class DeviceConfigQueries(
             val future = CompletableFuture<List<Map<String, Any>>>()
 
             try {
-                val nodes = Monster.getClusterNodeIds(vertx)
-                val currentNodeId = Monster.getClusterNodeId(vertx) ?: "local"
+                val nodes = Monster.Companion.getClusterNodeIds(vertx)
+                val currentNodeId = Monster.Companion.getClusterNodeId(vertx) ?: "local"
 
                 val nodeMaps = nodes.map { nodeId ->
                     mapOf(
@@ -128,7 +128,7 @@ class DeviceConfigQueries(
     }
 
     private fun deviceToMap(device: DeviceConfig): Map<String, Any> {
-        val currentNodeId = Monster.getClusterNodeId(vertx) ?: "local"
+        val currentNodeId = Monster.Companion.getClusterNodeId(vertx) ?: "local"
 
         return mapOf(
             "name" to device.name,

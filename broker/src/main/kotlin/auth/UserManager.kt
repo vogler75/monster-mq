@@ -7,6 +7,8 @@ import at.rocworks.data.User
 import at.rocworks.stores.AuthStoreType
 import at.rocworks.stores.IUserManagement
 import at.rocworks.stores.UserManagementFactory
+import auth.AclCache
+import auth.PasswordEncoder
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject

@@ -9,9 +9,9 @@ import at.rocworks.stores.ArchiveGroup
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.IMetricsStore
 import at.rocworks.stores.ISessionStoreAsync
-import at.rocworks.devices.opcua.graphql.DeviceConfigMutations
-import at.rocworks.devices.opcua.graphql.DeviceConfigQueries
-import at.rocworks.devices.opcua.stores.DeviceConfigStoreFactory
+import at.rocworks.graphql.DeviceConfigMutations
+import at.rocworks.graphql.DeviceConfigQueries
+import at.rocworks.stores.DeviceConfigStoreFactory
 import graphql.GraphQL
 import graphql.scalars.ExtendedScalars
 import graphql.schema.idl.RuntimeWiring

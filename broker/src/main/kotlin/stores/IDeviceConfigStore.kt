@@ -1,11 +1,12 @@
 package at.rocworks.devices.opcua
 
 import io.vertx.core.Future
+import at.rocworks.stores.DeviceConfig
 
 /**
  * Interface for OPC UA device configuration storage
  */
-interface DeviceConfigStore {
+interface IDeviceConfigStore {
     /**
      * Initialize the store (create tables, etc.)
      */

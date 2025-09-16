@@ -23,16 +23,15 @@ import at.rocworks.stores.postgres.SessionStorePostgres
 import at.rocworks.stores.sqlite.MessageStoreSQLite
 import at.rocworks.stores.sqlite.SessionStoreSQLite
 import at.rocworks.stores.sqlite.SQLiteVerticle
-import at.rocworks.utils.DurationParser
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
 import io.vertx.core.*
 // VertxInternal removed in Vert.x 5 - using alternative approaches
-import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import com.hazelcast.config.Config
+import at.rocworks.devices.opcua.OpcUaExtension
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
@@ -434,7 +433,7 @@ MORE INFO:
                 }
 
                 // OPC UA Extension
-                val opcUaExtension = at.rocworks.devices.opcua.OpcUaExtension()
+                val opcUaExtension = OpcUaExtension()
 
 
                 // User management

@@ -1,10 +1,10 @@
 package at.rocworks.devices.opcua
 
-import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.MqttMessage
-import at.rocworks.devices.opcua.stores.DeviceConfigStoreFactory
+import at.rocworks.devices.opcua.IDeviceConfigStore
+import at.rocworks.stores.DeviceConfigStoreFactory
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.DeploymentOptions
 import io.vertx.core.Future
@@ -12,8 +12,8 @@ import io.vertx.core.Promise
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.LocalMap
+import at.rocworks.stores.DeviceConfig
 import java.util.concurrent.ConcurrentHashMap
-import java.util.logging.Level
 import java.util.logging.Logger
 
 /**
@@ -30,7 +30,7 @@ class OpcUaExtension : AbstractVerticle() {
     private val logger: Logger = Logger.getLogger(OpcUaExtension::class.java.name)
 
     // Device configuration store
-    private lateinit var deviceStore: DeviceConfigStore
+    private lateinit var deviceStore: IDeviceConfigStore
 
     // Track deployed connector verticles
     private val deployedConnectors = ConcurrentHashMap<String, String>() // deviceName -> deploymentId
@@ -401,7 +401,7 @@ class OpcUaExtension : AbstractVerticle() {
     /**
      * Get device store for external access (e.g., GraphQL)
      */
-    fun getDeviceStore(): DeviceConfigStore {
+    fun getDeviceStore(): IDeviceConfigStore {
         return deviceStore
     }
 }
