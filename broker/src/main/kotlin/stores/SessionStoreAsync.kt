@@ -8,13 +8,13 @@ import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import java.util.concurrent.Callable
 
-class SessionStoreAsync(private val store: ISessionStore): AbstractVerticle(), ISessionStoreAsync {
+class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(), ISessionStoreAsync {
 
     override fun getType(): SessionStoreType {
         return store.getType()
     }
 
-    override val sync: ISessionStore
+    override val sync: ISessionStoreSync
         get() = store
 
     override fun iterateOfflineClients(callback: (clientId: String) -> Unit): Future<Void> {

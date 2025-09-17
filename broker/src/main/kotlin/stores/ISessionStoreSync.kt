@@ -2,7 +2,6 @@ package at.rocworks.stores
 
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
-import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
 
 enum class SessionStoreType {
@@ -12,7 +11,7 @@ enum class SessionStoreType {
     SQLITE
 }
 
-interface ISessionStore {
+interface ISessionStoreSync {
     fun getType(): SessionStoreType
 
     fun iterateOfflineClients(callback: (clientId: String) -> Unit)

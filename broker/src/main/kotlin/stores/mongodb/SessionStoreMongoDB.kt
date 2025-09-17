@@ -4,7 +4,7 @@ import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
-import at.rocworks.stores.ISessionStore
+import at.rocworks.stores.ISessionStoreSync
 import at.rocworks.stores.SessionStoreType
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
@@ -22,7 +22,7 @@ import org.bson.types.Binary
 class SessionStoreMongoDB(
     private val connectionString: String,
     private val databaseName: String
-) : AbstractVerticle(), ISessionStore {
+) : AbstractVerticle(), ISessionStoreSync {
     private val logger = Utils.getLogger(this::class.java)
     private lateinit var mongoClient: MongoClient
     private lateinit var database: MongoDatabase

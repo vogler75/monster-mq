@@ -8,7 +8,7 @@ import io.vertx.core.json.JsonObject
 interface ISessionStoreAsync {
     fun getType(): SessionStoreType
 
-    val sync: ISessionStore
+    val sync: ISessionStoreSync
 
     fun iterateOfflineClients(callback: (clientId: String) -> Unit): Future<Void>
     fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit): Future<Void>

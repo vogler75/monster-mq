@@ -4,7 +4,7 @@ import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttSubscription
-import at.rocworks.stores.ISessionStore
+import at.rocworks.stores.ISessionStoreSync
 import at.rocworks.stores.SessionStoreType
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
@@ -18,7 +18,7 @@ import io.vertx.core.json.JsonObject
  */
 class SessionStoreSQLite(
     private val dbPath: String
-): AbstractVerticle(), ISessionStore {
+): AbstractVerticle(), ISessionStoreSync {
     private val logger = Utils.getLogger(this::class.java)
     private lateinit var sqlClient: SQLiteClient
 
