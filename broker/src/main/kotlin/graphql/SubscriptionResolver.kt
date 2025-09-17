@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
 import at.rocworks.data.MqttMessage
 import graphql.schema.DataFetcher
@@ -17,7 +18,7 @@ class SubscriptionResolver(
     private val messageBus: IMessageBus
 ) {
     companion object {
-        private val logger: Logger = Logger.getLogger(SubscriptionResolver::class.java.name)
+        private val logger: Logger = Utils.getLogger(SubscriptionResolver::class.java)
         private const val GRAPHQL_CLIENT_ID = "graphql-subscription"
     }
 

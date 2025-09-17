@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
@@ -12,7 +13,7 @@ class AuthenticationResolver(
     private val userManager: UserManager
 ) {
     companion object {
-        private val logger: Logger = Logger.getLogger(AuthenticationResolver::class.java.name)
+        private val logger: Logger = Utils.getLogger(AuthenticationResolver::class.java)
     }
 
     /**

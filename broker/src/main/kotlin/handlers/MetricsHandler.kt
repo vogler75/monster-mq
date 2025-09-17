@@ -1,6 +1,7 @@
 package handlers
 
 import at.rocworks.Monster
+import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.extensions.graphql.BrokerMetrics
 import at.rocworks.extensions.graphql.SessionMetrics
@@ -19,7 +20,7 @@ class MetricsHandler(
     private val collectionIntervalSeconds: Int = 1
 ) : AbstractVerticle() {
     companion object {
-        private val logger: Logger = Logger.getLogger(MetricsHandler::class.java.name)
+        private val logger: Logger = Utils.getLogger(MetricsHandler::class.java)
     }
 
     private val collectionIntervalMs = collectionIntervalSeconds * 1000L

@@ -1,6 +1,6 @@
 package at.rocworks.stores
 
-enum class AuthStoreType {
+enum class StoreType {
     POSTGRES,
     SQLITE,
     CRATEDB,

@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 import at.rocworks.bus.IMessageBus
 import at.rocworks.handlers.ArchiveHandler
@@ -12,6 +13,7 @@ import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.graphql.DeviceConfigMutations
 import at.rocworks.graphql.DeviceConfigQueries
 import at.rocworks.stores.DeviceConfigStoreFactory
+import at.rocworks.Monster
 import graphql.GraphQL
 import graphql.scalars.ExtendedScalars
 import graphql.schema.idl.RuntimeWiring
@@ -43,7 +45,7 @@ class GraphQLServer(
     private val archiveHandler: ArchiveHandler?
 ) {
     companion object {
-        private val logger: Logger = Logger.getLogger(GraphQLServer::class.java.name)
+        private val logger: Logger = Utils.getLogger(GraphQLServer::class.java)
     }
 
     private val graphQLConfig = config.getJsonObject("GraphQL", JsonObject())
@@ -194,10 +196,14 @@ class GraphQLServer(
         val archiveGroupResolver = archiveHandler?.let { ArchiveGroupResolver(vertx, it, authContext) }
 
         // Initialize OPC UA resolvers
-        val configStoreType = config.getString("ConfigStoreType")
+        val configStoreType = Monster.getConfigStoreType(config)
 
         val deviceStore = try {
-            val store = DeviceConfigStoreFactory.create(configStoreType, config, vertx)
+            val store = if (configStoreType != "NONE") {
+                DeviceConfigStoreFactory.create(configStoreType, config, vertx)
+            } else {
+                null
+            }
             store?.initialize()?.onComplete { result ->
                 if (result.failed()) {
                     logger.warning("Failed to initialize OPC UA device store: ${result.cause()?.message}")

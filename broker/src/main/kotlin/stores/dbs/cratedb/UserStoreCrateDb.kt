@@ -4,7 +4,7 @@ import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
-import at.rocworks.stores.AuthStoreType
+import at.rocworks.stores.StoreType
 import at.rocworks.stores.IUserStore
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -29,7 +29,7 @@ class UserStoreCrateDb(
         logger.level = Const.DEBUG_LEVEL
     }
 
-    override fun getType(): AuthStoreType = AuthStoreType.CRATEDB
+    override fun getType(): StoreType = StoreType.CRATEDB
 
     private var connection: java.sql.Connection? = null
 

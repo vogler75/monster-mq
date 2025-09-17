@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Utils
 import io.jsonwebtoken.Claims
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
@@ -10,7 +11,7 @@ import java.util.logging.Logger
 import javax.crypto.SecretKey
 
 object JwtService {
-    private val logger: Logger = Logger.getLogger(JwtService::class.java.name)
+    private val logger: Logger = Utils.getLogger(JwtService::class.java)
     
     // Generate a secure key for JWT signing
     // In production, this should be configurable and stored securely

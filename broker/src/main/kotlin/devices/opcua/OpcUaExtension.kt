@@ -1,6 +1,7 @@
 package at.rocworks.devices.opcua
 
 import at.rocworks.Monster
+import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.MqttMessage
 import at.rocworks.devices.opcua.IDeviceConfigStore
@@ -27,7 +28,7 @@ import java.util.logging.Logger
  */
 class OpcUaExtension : AbstractVerticle() {
 
-    private val logger: Logger = Logger.getLogger(OpcUaExtension::class.java.name)
+    private val logger: Logger = Utils.getLogger(this::class.java)
 
     // Device configuration store
     private lateinit var deviceStore: IDeviceConfigStore
@@ -107,9 +108,13 @@ class OpcUaExtension : AbstractVerticle() {
 
         try {
             val config = vertx.orCreateContext.config()
-            val configStoreType = config.getString("ConfigStoreType")
+            val configStoreType = Monster.getConfigStoreType(config)
 
-            val store = DeviceConfigStoreFactory.create(configStoreType, config, vertx)
+            val store = if (configStoreType != "NONE") {
+                DeviceConfigStoreFactory.create(configStoreType, config, vertx)
+            } else {
+                null
+            }
             if (store != null) {
                 deviceStore = store
                 deviceStore.initialize()

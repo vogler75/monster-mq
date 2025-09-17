@@ -80,8 +80,41 @@ class Monster(args: Array<String>) {
     companion object {
         private var singleton: Monster? = null
         private var sqliteVerticleDeploymentId: String? = null
+        private val logger = Logger.getLogger("Monster")
 
         private fun getInstance(): Monster = if (singleton==null) throw Exception("Monster instance is not initialized.") else singleton!!
+
+        /**
+         * Get store type with DefaultStoreType fallback support
+         */
+        @JvmStatic
+        fun getStoreTypeWithDefault(configJson: JsonObject, storeTypeKey: String, defaultFallback: String): String {
+            val explicitType = configJson.getString(storeTypeKey)
+            if (explicitType != null) {
+                return explicitType
+            }
+
+            val defaultStoreType = configJson.getString("DefaultStoreType")
+            if (defaultStoreType != null) {
+                logger.info("Using DefaultStoreType '$defaultStoreType' for $storeTypeKey")
+                return defaultStoreType
+            }
+
+            return defaultFallback
+        }
+
+        // Convenience functions for specific store types
+        @JvmStatic
+        fun getSessionStoreType(configJson: JsonObject): String = getStoreTypeWithDefault(configJson, "SessionStoreType", "SQLITE")
+
+        @JvmStatic
+        fun getRetainedStoreType(configJson: JsonObject): String = getStoreTypeWithDefault(configJson, "RetainedStoreType", "SQLITE")
+
+        @JvmStatic
+        fun getConfigStoreType(configJson: JsonObject): String = getStoreTypeWithDefault(configJson, "ConfigStoreType", "SQLITE")
+
+        @JvmStatic
+        fun getStoreType(configJson: JsonObject): String = getStoreTypeWithDefault(configJson, "StoreType", "SQLITE")
 
         fun isClustered() = getInstance().isClustered
 
@@ -404,7 +437,7 @@ MORE INFO:
         val queuedMessagesEnabled = configJson.getBoolean("QueuedMessagesEnabled", true)
         logger.info("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] QME [$queuedMessagesEnabled]")
 
-        val retainedStoreType = MessageStoreType.valueOf(configJson.getString("RetainedStoreType", "MEMORY"))
+        val retainedStoreType = MessageStoreType.valueOf(Monster.getRetainedStoreType(configJson))
         logger.info("RetainedMessageStoreType [${retainedStoreType}]")
 
         vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
@@ -481,7 +514,7 @@ MORE INFO:
 
                 val (metricsStore, metricsCollector) = if (metricsEnabled) {
                     try {
-                        val storeTypeStr = metricsConfig.getString("StoreType", "POSTGRES")
+                        val storeTypeStr = getStoreType(configJson)
                         val storeType = try {
                             at.rocworks.stores.MetricsStoreType.valueOf(storeTypeStr.uppercase())
                         } catch (e: IllegalArgumentException) {
@@ -589,11 +622,14 @@ MORE INFO:
         }
     }
 
+    /**
+     * Helper function to get store type with DefaultStoreType fallback
+     */
 
     private fun getSessionStore(vertx: Vertx): Future<ISessionStoreAsync> {
         val promise = Promise.promise<ISessionStoreAsync>()
         val sessionStoreType = SessionStoreType.valueOf(
-            configJson.getString("SessionStoreType", "MEMORY")
+            Monster.getSessionStoreType(configJson)
         )
         
         // For SQLite, ensure SQLiteVerticle is deployed first

@@ -222,7 +222,7 @@ fun testUserManager() {
     val config = JsonObject().apply {
         put("UserManagement", JsonObject().apply {
             put("Enabled", true)
-            put("AuthStoreType", "SQLITE")
+            put("StoreType", "SQLITE")
             put("PasswordAlgorithm", "bcrypt")
             put("CacheRefreshInterval", 0) // Disable periodic refresh for testing
             put("DisconnectOnUnauthorized", true)

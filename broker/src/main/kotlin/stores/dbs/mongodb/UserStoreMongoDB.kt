@@ -4,7 +4,7 @@ import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
-import at.rocworks.stores.AuthStoreType
+import at.rocworks.stores.StoreType
 import at.rocworks.stores.IUserStore
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
@@ -42,7 +42,7 @@ class UserStoreMongoDB(
         logger.level = Const.DEBUG_LEVEL
     }
 
-    override fun getType(): AuthStoreType = AuthStoreType.MONGODB
+    override fun getType(): StoreType = StoreType.MONGODB
 
     private fun userToDocument(user: User): Document {
         return Document().apply {

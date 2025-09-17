@@ -306,7 +306,7 @@ Enable user management in your `config.yaml`:
 ```yaml
 UserManagement:
   Enabled: true
-  AuthStoreType: SQLITE           # SQLITE, POSTGRES, CRATEDB, MONGODB
+  StoreType: SQLITE           # SQLITE, POSTGRES, CRATEDB, MONGODB
   PasswordAlgorithm: bcrypt       # Industry-standard password hashing
   CacheRefreshInterval: 60        # Seconds between automatic cache refreshes
   DisconnectOnUnauthorized: true  # Disconnect clients on unauthorized actions

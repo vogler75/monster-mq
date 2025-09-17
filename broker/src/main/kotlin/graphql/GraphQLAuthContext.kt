@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 import graphql.schema.DataFetchingEnvironment
 import io.vertx.ext.web.RoutingContext
@@ -13,7 +14,7 @@ class GraphQLAuthContext(
     private val userManager: UserManager
 ) {
     companion object {
-        private val logger: Logger = Logger.getLogger(GraphQLAuthContext::class.java.name)
+        private val logger: Logger = Utils.getLogger(GraphQLAuthContext::class.java)
         private const val CONTEXT_KEY = "authContext"
         
         // Operations that don't require authentication

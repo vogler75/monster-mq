@@ -4,9 +4,10 @@ import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
-import at.rocworks.stores.AuthStoreType
+import at.rocworks.stores.StoreType
 import at.rocworks.stores.IUserStore
 import at.rocworks.stores.UserFactory
+import at.rocworks.Monster
 import auth.AclCache
 import auth.PasswordEncoder
 import io.vertx.core.AbstractVerticle
@@ -28,7 +29,7 @@ class UserManager(
     
     // Configuration properties
     private val isEnabled: Boolean
-    private val authStoreType: AuthStoreType
+    private val storeType: StoreType
     private val passwordAlgorithm: String
     private val cacheRefreshInterval: Long
     private val disconnectOnUnauthorized: Boolean
@@ -38,14 +39,14 @@ class UserManager(
         
         val userMgmtConfig = config.getJsonObject("UserManagement") ?: JsonObject()
         isEnabled = userMgmtConfig.getBoolean("Enabled", false)
-        authStoreType = AuthStoreType.valueOf(userMgmtConfig.getString("AuthStoreType", "SQLITE"))
+        storeType = StoreType.valueOf(Monster.getStoreType(config))
         passwordAlgorithm = userMgmtConfig.getString("PasswordAlgorithm", "bcrypt")
         cacheRefreshInterval = userMgmtConfig.getLong("CacheRefreshInterval", 60)
         disconnectOnUnauthorized = userMgmtConfig.getBoolean("DisconnectOnUnauthorized", true)
         
         logger.info("User management enabled: $isEnabled")
         if (isEnabled) {
-            logger.info("Auth store type: $authStoreType")
+            logger.info("Auth store type: $storeType")
             logger.info("Password algorithm: $passwordAlgorithm")
             logger.info("Cache refresh interval: ${cacheRefreshInterval}s")
             logger.info("Disconnect on unauthorized: $disconnectOnUnauthorized")
@@ -61,7 +62,7 @@ class UserManager(
         
         try {
             // Create user store
-            userStore = UserFactory.create(authStoreType, config, vertx)
+            userStore = UserFactory.create(storeType, config, vertx)
             
             // Initialize store and load cache
             userStore!!.init().compose { initResult ->

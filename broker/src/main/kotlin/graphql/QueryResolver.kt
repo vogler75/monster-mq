@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Utils
 import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.IMessageArchiveExtended
@@ -26,7 +27,7 @@ class QueryResolver(
     private val authContext: GraphQLAuthContext
 ) {
     companion object {
-        private val logger: Logger = Logger.getLogger(QueryResolver::class.java.name)
+        private val logger: Logger = Utils.getLogger(QueryResolver::class.java)
     }
 
     private fun getCurrentArchiveGroups(): Map<String, ArchiveGroup> {

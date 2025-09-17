@@ -1,5 +1,6 @@
 package at.rocworks.stores.postgres
 
+import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.devices.opcua.DeviceConfigException
 import at.rocworks.devices.opcua.IDeviceConfigStore
@@ -23,7 +24,7 @@ class DeviceConfigStorePostgres(
     private val password: String
 ) : IDeviceConfigStore {
 
-    private val logger: Logger = Logger.getLogger(DeviceConfigStorePostgres::class.java.name)
+    private val logger: Logger = Utils.getLogger(DeviceConfigStorePostgres::class.java)
     private var connection: Connection? = null
 
     companion object {

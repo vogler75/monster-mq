@@ -10,12 +10,12 @@ import io.vertx.core.json.JsonObject
 object UserFactory {
 
     fun create(
-        authStoreType: AuthStoreType,
+        storeType: StoreType,
         config: JsonObject,
         vertx: Vertx
     ): IUserStore {
-        return when (authStoreType) {
-            AuthStoreType.POSTGRES -> {
+        return when (storeType) {
+            StoreType.POSTGRES -> {
                 val postgresConfig = config.getJsonObject("Postgres")
                 UserStorePostgres(
                     url = postgresConfig.getString("Url"),
@@ -24,14 +24,14 @@ object UserFactory {
                     vertx = vertx
                 )
             }
-            AuthStoreType.SQLITE -> {
+            StoreType.SQLITE -> {
                 val sqliteConfig = config.getJsonObject("SQLite")
                 UserStoreSqlite(
                     path = sqliteConfig.getString("Path"),
                     vertx = vertx
                 )
             }
-            AuthStoreType.CRATEDB -> {
+            StoreType.CRATEDB -> {
                 val crateDbConfig = config.getJsonObject("CrateDB")
                 UserStoreCrateDb(
                     url = crateDbConfig.getString("Url"),
@@ -40,7 +40,7 @@ object UserFactory {
                     vertx = vertx
                 )
             }
-            AuthStoreType.MONGODB -> {
+            StoreType.MONGODB -> {
                 val mongoDbConfig = config.getJsonObject("MongoDB")
                 UserStoreMongoDB(
                     url = mongoDbConfig.getString("Url"),

@@ -5,7 +5,7 @@ import at.rocworks.data.User
 import io.vertx.core.Future
 
 interface IUserStore {
-    fun getType(): AuthStoreType
+    fun getType(): StoreType
 
     // User operations
     fun createUser(user: User): Future<Boolean>

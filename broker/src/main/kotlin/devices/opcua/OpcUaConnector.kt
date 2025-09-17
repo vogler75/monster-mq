@@ -1,5 +1,6 @@
 package at.rocworks.devices.opcua
 
+import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -40,7 +41,7 @@ import kotlin.concurrent.thread
  */
 class OpcUaConnector : AbstractVerticle() {
 
-    private val logger: Logger = Logger.getLogger(OpcUaConnector::class.java.name)
+    private val logger: Logger = Utils.getLogger(this::class.java)
 
     // Device configuration
     private lateinit var deviceConfig: DeviceConfig

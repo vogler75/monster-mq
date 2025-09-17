@@ -1,5 +1,6 @@
 package at.rocworks.graphql
 
+import at.rocworks.Utils
 import at.rocworks.Monster
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.devices.opcua.IDeviceConfigStore
@@ -15,7 +16,7 @@ class DeviceConfigQueries(
     private val vertx: Vertx,
     private val deviceStore: IDeviceConfigStore
 ) {
-    private val logger: Logger = Logger.getLogger(DeviceConfigQueries::class.java.name)
+    private val logger: Logger = Utils.getLogger(DeviceConfigQueries::class.java)
 
     fun opcUaDevices(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
         return DataFetcher { _ ->

@@ -13,7 +13,7 @@ ConfigStoreType: POSTGRES
 # User Management configuration
 UserManagement:
   Enabled: false  # Set to true to enable user authentication and ACL
-  AuthStoreType: POSTGRES  # POSTGRES, SQLITE, CRATEDB, MONGODB
+  StoreType: POSTGRES  # POSTGRES, SQLITE, CRATEDB, MONGODB
   PasswordAlgorithm: bcrypt
   CacheRefreshInterval: 60  # seconds
   DisconnectOnUnauthorized: true

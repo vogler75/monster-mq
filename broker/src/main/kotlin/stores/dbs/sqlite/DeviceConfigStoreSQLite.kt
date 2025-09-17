@@ -1,5 +1,6 @@
 package at.rocworks.stores.sqlite
 
+import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.devices.opcua.DeviceConfigException
 import at.rocworks.devices.opcua.IDeviceConfigStore
@@ -22,7 +23,7 @@ class DeviceConfigStoreSQLite(
     private val dbPath: String
 ) : IDeviceConfigStore {
 
-    private val logger: Logger = Logger.getLogger(DeviceConfigStoreSQLite::class.java.name)
+    private val logger: Logger = Utils.getLogger(DeviceConfigStoreSQLite::class.java)
     private lateinit var sqliteClient: SQLiteClient
 
     companion object {

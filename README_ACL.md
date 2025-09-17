@@ -26,7 +26,7 @@ Enable user management in your `config.yaml`:
 ```yaml
 UserManagement:
   Enabled: true
-  AuthStoreType: SQLITE           # SQLITE, POSTGRES, CRATEDB, MONGODB
+  StoreType: SQLITE           # SQLITE, POSTGRES, CRATEDB, MONGODB
   PasswordAlgorithm: bcrypt       # Currently only bcrypt supported
   CacheRefreshInterval: 60        # Seconds between automatic cache refreshes
   DisconnectOnUnauthorized: true  # Disconnect clients on unauthorized actions
@@ -38,7 +38,7 @@ UserManagement:
 ```yaml
 UserManagement:
   Enabled: true
-  AuthStoreType: SQLITE
+  StoreType: SQLITE
   Path: "./users.db"
 ```
 
@@ -46,7 +46,7 @@ UserManagement:
 ```yaml
 UserManagement:
   Enabled: true
-  AuthStoreType: POSTGRES
+  StoreType: POSTGRES
   Url: "jdbc:postgresql://localhost:5432/monstermq"
   Username: "mqttuser"
   Password: "mqttpass"
@@ -56,7 +56,7 @@ UserManagement:
 ```yaml
 UserManagement:
   Enabled: true
-  AuthStoreType: MONGODB
+  StoreType: MONGODB
   Url: "mongodb://localhost:27017"
   Database: "monstermq"
 ```

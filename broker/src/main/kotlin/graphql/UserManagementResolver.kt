@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 import at.rocworks.data.User
 import at.rocworks.data.AclRule
@@ -16,7 +17,7 @@ class UserManagementResolver(
     private val authContext: GraphQLAuthContext
 ) {
     companion object {
-        private val logger: Logger = Logger.getLogger(UserManagementResolver::class.java.name)
+        private val logger: Logger = Utils.getLogger(UserManagementResolver::class.java)
     }
 
     // Helper function to convert User to UserInfo

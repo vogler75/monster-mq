@@ -2,6 +2,7 @@ package at.rocworks.handlers
 
 import at.rocworks.Utils
 import at.rocworks.stores.*
+import at.rocworks.Monster
 import at.rocworks.stores.ConfigStoreFactory
 import at.rocworks.stores.MessageArchiveType
 import at.rocworks.stores.cratedb.MessageArchiveCrateDB
@@ -122,9 +123,9 @@ class ArchiveHandler(
                     val archiveGroups = archiveConfig.getJsonArray("ArchiveGroups")
 
                     if (archiveGroups != null && !archiveGroups.isEmpty) {
-                        val configStoreType = configJson.getString("ConfigStoreType")
+                        val configStoreType = Monster.getConfigStoreType(configJson)
 
-                        if (configStoreType != null) {
+                        if (configStoreType != "NONE") {
                             // Import into database
                             importArchiveConfigToDatabase(archiveGroups, configStoreType).onComplete { importResult ->
                                 if (importResult.succeeded()) {
@@ -231,9 +232,9 @@ class ArchiveHandler(
         val promise = Promise.promise<List<ArchiveGroup>>()
 
         // Check if ConfigStore is configured
-        val configStoreType = configJson.getString("ConfigStoreType")
+        val configStoreType = Monster.getConfigStoreType(configJson)
 
-        if (configStoreType != null) {
+        if (configStoreType != "NONE") {
             // Load from database
             loadArchiveGroupsFromDatabase(configStoreType, promise)
         } else {
@@ -453,8 +454,8 @@ class ArchiveHandler(
         }
 
         // Load from database/config and deploy
-        val configStoreType = configJson.getString("ConfigStoreType")
-        if (configStoreType != null) {
+        val configStoreType = Monster.getConfigStoreType(configJson)
+        if (configStoreType != "NONE") {
             // Load from database
             loadArchiveGroupFromDatabase(name, configStoreType).onComplete { result ->
                 if (result.succeeded() && result.result() != null) {

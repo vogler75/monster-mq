@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
 import at.rocworks.data.MqttMessage
 import at.rocworks.stores.ISessionStoreAsync
@@ -18,7 +19,7 @@ class MutationResolver(
     private val authContext: GraphQLAuthContext
 ) {
     companion object {
-        private val logger: Logger = Logger.getLogger(MutationResolver::class.java.name)
+        private val logger: Logger = Utils.getLogger(MutationResolver::class.java)
         private const val GRAPHQL_CLIENT_ID = "graphql-api"
     }
 

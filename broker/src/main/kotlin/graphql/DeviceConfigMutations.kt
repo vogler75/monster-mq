@@ -1,5 +1,6 @@
 package at.rocworks.graphql
 
+import at.rocworks.Utils
 import at.rocworks.Monster
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigRequest
@@ -22,7 +23,7 @@ class DeviceConfigMutations(
     private val vertx: Vertx,
     private val deviceStore: IDeviceConfigStore
 ) {
-    private val logger: Logger = Logger.getLogger(DeviceConfigMutations::class.java.name)
+    private val logger: Logger = Utils.getLogger(DeviceConfigMutations::class.java)
 
     fun addOpcUaDevice(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
