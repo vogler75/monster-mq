@@ -25,6 +25,20 @@ interface IMessageStore {
     fun delAll(topics: List<String>)
     fun findMatchingMessages(topicName: String, callback: (MqttMessage)->Boolean)
 
+    /**
+     * Find topic names that match the given pattern for efficient topic tree browsing.
+     * This method efficiently discovers topic hierarchy without loading message content.
+     *
+     * For example:
+     * - Pattern "a/+" with topics "a/b/x" and "a/c/y" returns ["a/b", "a/c"]
+     * - Pattern "a/b/+" with topic "a/b/c/d" returns ["a/b/c"]
+     * - Pattern "a/#" returns all topics under "a/"
+     *
+     * @param topicPattern MQTT topic pattern with + (single level) or # (multi level) wildcards
+     * @param callback Called for each matching topic name. Return false to stop iteration.
+     */
+    fun findMatchingTopics(topicPattern: String, callback: (String) -> Boolean)
+
     fun purgeOldMessages(olderThan: Instant): PurgeResult
 
     fun dropStorage(): Boolean

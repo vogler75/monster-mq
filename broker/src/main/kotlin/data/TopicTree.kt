@@ -150,6 +150,85 @@ class TopicTree<K, V> : ITopicTree<K, V> {
         logger.fine { "Found matching topics in [$elapsedTime]ms." }
     }
 
+    /**
+     * Find topic names for browsing based on MQTT topic patterns.
+     * For single-level wildcard (+), returns only the next level topics.
+     * For multi-level wildcard (#), returns all matching topics.
+     *
+     * Example: If pattern is "a/+" and we have topics "a/b/x" and "a/c/y",
+     * this returns ["a/b", "a/c"] (only the first level after 'a').
+     */
+    fun findBrowseTopics(topicPattern: String, callback: (String) -> Boolean) {
+        fun browse(node: Node<K, V>, patternLevels: List<String>, currentTopicLevels: List<String>): Boolean {
+            if (patternLevels.isEmpty()) {
+                // We've consumed all pattern levels - return the current topic
+                if (currentTopicLevels.isNotEmpty()) {
+                    val topicName = currentTopicLevels.joinToString("/")
+                    return callback(topicName)
+                }
+                return true
+            }
+
+            val currentPattern = patternLevels.first()
+            val remainingPattern = patternLevels.drop(1)
+
+            return when (currentPattern) {
+                "+" -> {
+                    // Single-level wildcard: for each child, either return this level or continue deeper
+                    node.children.all { (childName, childNode) ->
+                        val newTopicLevels = currentTopicLevels + childName
+
+                        if (remainingPattern.isEmpty()) {
+                            // This is the last level in pattern - return this topic level
+                            val topicName = newTopicLevels.joinToString("/")
+                            callback(topicName)
+                        } else {
+                            // More pattern levels - continue browsing deeper
+                            browse(childNode, remainingPattern, newTopicLevels)
+                        }
+                    }
+                }
+                "#" -> {
+                    // Multi-level wildcard: return all topics at any depth
+                    fun traverseAll(node: Node<K, V>, topicPath: List<String>): Boolean {
+                        // Return current topic if we have a path
+                        if (topicPath.isNotEmpty()) {
+                            val topicName = topicPath.joinToString("/")
+                            if (!callback(topicName)) return false
+                        }
+
+                        // Traverse all children
+                        return node.children.all { (childName, childNode) ->
+                            traverseAll(childNode, topicPath + childName)
+                        }
+                    }
+                    traverseAll(node, currentTopicLevels)
+                }
+                else -> {
+                    // Exact match: find the matching child and continue
+                    val childNode = node.children[currentPattern]
+                    if (childNode != null) {
+                        val newTopicLevels = currentTopicLevels + currentPattern
+                        if (remainingPattern.isEmpty()) {
+                            // Pattern complete - return this topic if it exists or has children
+                            val topicName = newTopicLevels.joinToString("/")
+                            callback(topicName)
+                        } else {
+                            browse(childNode, remainingPattern, newTopicLevels)
+                        }
+                    } else {
+                        true // No match found, continue
+                    }
+                }
+            }
+        }
+
+        val patternLevels = Utils.getTopicLevels(topicPattern)
+        if (patternLevels.isNotEmpty()) {
+            browse(root, patternLevels, emptyList())
+        }
+    }
+
     fun size(): Int {
         fun countNodes(node: Node<K, V>): Int {
             var count = node.dataset.size

@@ -64,6 +64,11 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
             else true
         }
     }
+
+    override fun findMatchingTopics(topicPattern: String, callback: (String) -> Boolean) {
+        // Use the efficient topic tree browsing method
+        index.findBrowseTopics(topicPattern, callback)
+    }
     
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
         val startTime = System.currentTimeMillis()

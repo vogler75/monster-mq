@@ -16,7 +16,9 @@ object MessageStoreNone : IMessageStore {
     override fun delAll(topics: List<String>) {}
     
     override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {}
-    
+
+    override fun findMatchingTopics(topicPattern: String, callback: (String) -> Boolean) {}
+
     override fun purgeOldMessages(olderThan: Instant): PurgeResult = PurgeResult(0, 0)
 
     override fun dropStorage(): Boolean = true

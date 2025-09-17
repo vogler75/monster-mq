@@ -252,7 +252,7 @@ class MessageStoreSQLite(
                 }
             }
         }.filterNotNull()
-        
+
         val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" } +
                 (if (topicName.endsWith("#")) ""
                 else {
@@ -265,12 +265,12 @@ class MessageStoreSQLite(
                 })
         val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid " +
                   "FROM $tableName WHERE $where"
-        
+
         val params = JsonArray()
         filter.forEach { params.add(it.second) }
-        
+
         logger.fine { "SQL: $sql [findMatchingMessages]" }
-        
+
         sqlClient.executeQuery(sql, params).onComplete { result ->
             if (result.succeeded()) {
                 val results = result.result()
@@ -296,6 +296,139 @@ class MessageStoreSQLite(
                 }
             } else {
                 logger.severe("Error finding data for topic [$topicName]: ${result.cause()?.message}")
+            }
+        }
+    }
+
+    override fun findMatchingTopics(topicPattern: String, callback: (String) -> Boolean) {
+        val levels = Utils.getTopicLevels(topicPattern)
+
+        // For exact topic match (no wildcards), use simple existence check
+        if (!topicPattern.contains("+") && !topicPattern.contains("#")) {
+            val sql = "SELECT 1 FROM $tableName WHERE topic = ? LIMIT 1"
+            val params = JsonArray().add(topicPattern)
+
+            sqlClient.executeQuery(sql, params).onComplete { result ->
+                if (result.succeeded()) {
+                    val results = result.result()
+                    if (results.size() > 0) {
+                        callback(topicPattern)
+                    }
+                }
+            }
+            return
+        }
+
+        // Handle pattern like 'a/+' - find distinct topic combinations at the desired depth
+        val extractDepth = if (topicPattern.endsWith("#")) {
+            levels.size - 1 // Multi-level wildcard - extract at the # level and deeper
+        } else {
+            levels.size // Single level or exact match - extract at pattern depth
+        }
+
+        // Build filter for wildcard matching
+        val filter = levels.mapIndexed { index, level ->
+            when (level) {
+                "+", "#" -> null
+                else -> {
+                    if (index >= MAX_FIXED_TOPIC_LEVELS) {
+                        val jsonIndex = index - MAX_FIXED_TOPIC_LEVELS
+                        Pair("json_extract(topic_r, '$[$jsonIndex]') = ?", level)
+                    } else {
+                        Pair(FIXED_TOPIC_COLUMN_NAMES[index] + " = ?", level)
+                    }
+                }
+            }
+        }.filterNotNull()
+
+        val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" } +
+                (if (topicPattern.endsWith("#")) ""
+                else {
+                    if (levels.size < MAX_FIXED_TOPIC_LEVELS) {
+                        " AND " + FIXED_TOPIC_COLUMN_NAMES[levels.size] + " = ''"
+                    } else {
+                        " AND json_array_length(topic_r) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
+                    }
+                })
+
+        // Use DISTINCT with LIMIT approach to find topic combinations efficiently
+        val sql = buildString {
+            append("SELECT DISTINCT ")
+
+            if (extractDepth <= MAX_FIXED_TOPIC_LEVELS) {
+                // All levels are in fixed columns - select those columns
+                append((0 until extractDepth).map { FIXED_TOPIC_COLUMN_NAMES[it] }.joinToString(", "))
+            } else {
+                // Mix of fixed columns and JSON array
+                append(FIXED_TOPIC_COLUMN_NAMES.joinToString(", "))
+                append(", topic_r")
+            }
+
+            append(" FROM $tableName WHERE $where")
+            append(" AND (")
+
+            // Ensure the topic levels are not empty at the target depth
+            if (extractDepth <= MAX_FIXED_TOPIC_LEVELS) {
+                append(FIXED_TOPIC_COLUMN_NAMES[extractDepth - 1] + " != ''")
+            } else {
+                append("json_array_length(topic_r) >= " + (extractDepth - MAX_FIXED_TOPIC_LEVELS))
+            }
+            append(")")
+        }
+
+        val params = JsonArray()
+        filter.forEach { params.add(it.second) }
+
+        logger.fine { "Optimized SQL for findMatchingTopics: $sql" }
+
+        sqlClient.executeQuery(sql, params).onComplete { result ->
+            if (result.succeeded()) {
+                val results = result.result()
+                results.forEach { row ->
+                    val rowObj = row as JsonObject
+
+                    // Reconstruct topic name from the selected columns
+                    val topicParts = mutableListOf<String>()
+
+                    if (extractDepth <= MAX_FIXED_TOPIC_LEVELS) {
+                        // All from fixed columns
+                        for (i in 0 until extractDepth) {
+                            val part = rowObj.getString(FIXED_TOPIC_COLUMN_NAMES[i])
+                            if (part != null && part.isNotEmpty()) {
+                                topicParts.add(part)
+                            }
+                        }
+                    } else {
+                        // Fixed columns + JSON array
+                        for (i in 0 until MAX_FIXED_TOPIC_LEVELS) {
+                            val part = rowObj.getString(FIXED_TOPIC_COLUMN_NAMES[i])
+                            if (part != null && part.isNotEmpty()) {
+                                topicParts.add(part)
+                            }
+                        }
+
+                        // Add from JSON array
+                        val topicRArray = rowObj.getJsonArray("topic_r")
+                        if (topicRArray != null) {
+                            val remainingLevels = extractDepth - MAX_FIXED_TOPIC_LEVELS
+                            for (i in 0 until minOf(remainingLevels, topicRArray.size())) {
+                                val part = topicRArray.getString(i)
+                                if (part != null && part.isNotEmpty()) {
+                                    topicParts.add(part)
+                                }
+                            }
+                        }
+                    }
+
+                    if (topicParts.isNotEmpty()) {
+                        val topic = topicParts.joinToString("/")
+                        if (!callback(topic)) {
+                            return@forEach // Stop if callback returns false
+                        }
+                    }
+                }
+            } else {
+                logger.severe("Error finding topics for pattern [$topicPattern]: ${result.cause()?.message}")
             }
         }
     }

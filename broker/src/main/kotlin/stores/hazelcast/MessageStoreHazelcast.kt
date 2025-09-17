@@ -74,6 +74,11 @@ class MessageStoreHazelcast(
             else true
         }
     }
+
+    override fun findMatchingTopics(topicPattern: String, callback: (String) -> Boolean) {
+        // For Hazelcast stores, use the index to find matching topic names directly
+        index.findMatchingTopicNames(topicPattern, callback)
+    }
     
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
         val startTime = System.currentTimeMillis()

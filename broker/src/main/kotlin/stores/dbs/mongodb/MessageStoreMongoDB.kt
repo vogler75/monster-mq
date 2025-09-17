@@ -343,7 +343,7 @@ class MessageStoreMongoDB(
                     is ByteArray -> p
                     else -> ByteArray(0)
                 }
-                
+
                 val message = MqttMessage(
                     messageUuid = document.getString("message_uuid") ?: "",
                     messageId = 0,
@@ -355,7 +355,7 @@ class MessageStoreMongoDB(
                     isQueued = false,
                     clientId = document.getString("client_id") ?: ""
                 )
-                
+
                 if (!callback(message)) {
                         break
                     }
@@ -364,9 +364,101 @@ class MessageStoreMongoDB(
 
             val duration = System.currentTimeMillis() - startTime
             logger.fine("Found $count messages in ${duration}ms for pattern [$topicName]")
-            
+
         } catch (e: Exception) {
             logger.warning("Error finding messages for pattern [$topicName]: ${e.message}")
+        }
+    }
+
+    override fun findMatchingTopics(topicPattern: String, callback: (String) -> Boolean) {
+        try {
+            val activeCollection = getActiveCollection() ?: run {
+                logger.warning("MongoDB not connected, skipping find topics for [$name]")
+                return
+            }
+
+            // For exact topic match (no wildcards), use existence check (like LIMIT 1)
+            if (!topicPattern.contains("+") && !topicPattern.contains("#")) {
+                val filter = Filters.eq("topic", topicPattern)
+                val exists = activeCollection.find(filter).limit(1).iterator().use { it.hasNext() }
+                if (exists) {
+                    callback(topicPattern)
+                }
+                return
+            }
+
+            // For wildcard patterns, use aggregation pipeline to extract topic names efficiently
+            val levels = Utils.getTopicLevels(topicPattern)
+
+            // Handle pattern like 'a/+' - find topics like 'a/b' even if only 'a/b/c' exists
+            val extractDepth = if (topicPattern.endsWith("#")) {
+                // Multi-level wildcard - extract at the # level and deeper
+                levels.size - 1
+            } else {
+                // Single level or exact match - extract at pattern depth
+                levels.size
+            }
+
+            val matchStage = Document("\$match", createWildcardFilter(topicPattern))
+
+            // Use aggregation to extract topic prefixes at the desired depth
+            val projectStage = Document("\$project", Document().apply {
+                put("_id", 0)
+
+                // Create array of topic levels for projection
+                val topicLevelsArray = Document("\$slice", listOf("\$topic_levels.L", extractDepth))
+                put("extracted_levels", topicLevelsArray)
+
+                // Convert array back to topic string
+                val topicString = Document("\$reduce", Document().apply {
+                    put("input", "\$extracted_levels")
+                    put("initialValue", "")
+                    put("in", Document("\$concat", listOf(
+                        "\$\$value",
+                        Document("\$cond", listOf(
+                            Document("\$eq", listOf("\$\$value", "")),
+                            "",
+                            "/"
+                        )),
+                        "\$\$this"
+                    )))
+                })
+                put("extracted_topic", topicString)
+            })
+
+            // Group to get distinct topic names
+            val groupStage = Document("\$group", Document().apply {
+                put("_id", "\$extracted_topic")
+            })
+
+            // Filter out empty topics
+            val filterStage = Document("\$match", Document("_id", Document("\$ne", "")))
+
+            val pipeline = listOf(matchStage, projectStage, groupStage, filterStage)
+
+            logger.fine { "MongoDB aggregation pipeline for findMatchingTopics: $pipeline" }
+
+            val startTime = System.currentTimeMillis()
+            var count = 0
+
+            activeCollection.aggregate(pipeline).iterator().use { cursor ->
+                while (cursor.hasNext()) {
+                    val document = cursor.next()
+                    count++
+                    val topic = document.getString("_id")
+                    if (topic != null && topic.isNotEmpty()) {
+                        if (!callback(topic)) {
+                            break // Stop if callback returns false
+                        }
+                    }
+                }
+            }
+
+            val duration = System.currentTimeMillis() - startTime
+            logger.fine("Found $count distinct topics in ${duration}ms for pattern [$topicPattern]")
+
+        } catch (e: Exception) {
+            logger.warning("Error finding topics for pattern [$topicPattern]: ${e.message}")
         }
     }
 

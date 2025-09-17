@@ -498,29 +498,16 @@ class QueryResolver(
                 return@DataFetcher future
             }
 
-            // For wildcard patterns, we need to browse the topic tree
+            // Use the efficient topic browsing method
             val topicNames = mutableSetOf<String>()
             var completed = false
 
-            // Convert pattern to a filter that finds all matching topics
-            val searchFilter = if (topicPattern.endsWith("+")) {
-                // Single level wildcard - replace + with # to get all sub-topics, then filter
-                topicPattern.replace("+", "#")
-            } else {
-                topicPattern
-            }
-
-            lastValueStore.findMatchingMessages(searchFilter) { message ->
+            lastValueStore.findMatchingTopics(topicPattern) { topicName ->
                 if (!completed) {
-                    val messageTopic = message.topicName
-
-                    // Extract the topic level we want to show based on the pattern
-                    val browseResult = extractBrowseTopicFromPattern(messageTopic, topicPattern)
-                    if (browseResult != null && !topicNames.contains(browseResult)) {
-                        topicNames.add(browseResult)
+                    if (!topicNames.contains(topicName)) {
+                        topicNames.add(topicName)
                     }
-
-                    // Continue processing more messages
+                    // Continue processing
                     true
                 } else {
                     false // stop processing
@@ -528,7 +515,7 @@ class QueryResolver(
             }
 
             // Complete with results after async search finishes
-            vertx.setTimer(100) {
+            vertx.setTimer(50) { // Reduced timer since we're more efficient now
                 if (!completed) {
                     completed = true
                     val topics = topicNames.sorted().map { Topic(it) }
@@ -540,49 +527,6 @@ class QueryResolver(
         }
     }
 
-    /**
-     * Extract the topic level to show based on the browse pattern
-     * For example, if pattern is "opcua/+" and messageTopic is "opcua/device1/temp",
-     * this should return "opcua/device1"
-     */
-    private fun extractBrowseTopicFromPattern(messageTopic: String, pattern: String): String? {
-        val patternLevels = pattern.split("/")
-        val messageLevels = messageTopic.split("/")
-
-        // Find the index of the wildcard in the pattern
-        val wildcardIndex = patternLevels.indexOfFirst { it == "+" || it == "#" }
-        if (wildcardIndex == -1) {
-            // No wildcard, should match exactly
-            return if (messageTopic == pattern) messageTopic else null
-        }
-
-        // Check if the message topic has enough levels to match the pattern up to wildcard
-        if (messageLevels.size < wildcardIndex) {
-            return null
-        }
-
-        // Check if the prefix matches
-        for (i in 0 until wildcardIndex) {
-            if (patternLevels[i] != messageLevels[i]) {
-                return null
-            }
-        }
-
-        // For single-level wildcard (+), return the topic up to the next level
-        if (patternLevels[wildcardIndex] == "+") {
-            // Return the topic up to and including the level that matches the +
-            if (messageLevels.size > wildcardIndex) {
-                return messageLevels.take(wildcardIndex + 1).joinToString("/")
-            }
-        }
-
-        // For multi-level wildcard (#), return the full topic
-        if (patternLevels[wildcardIndex] == "#") {
-            return messageTopic
-        }
-
-        return null
-    }
 
     fun topicValue(): DataFetcher<CompletableFuture<TopicValue?>> {
         return DataFetcher { env ->

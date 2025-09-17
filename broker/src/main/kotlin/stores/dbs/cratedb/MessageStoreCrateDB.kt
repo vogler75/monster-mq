@@ -277,6 +277,107 @@ class MessageStoreCrateDB(
         }
     }
 
+    override fun findMatchingTopics(topicPattern: String, callback: (String) -> Boolean) {
+        // Use SQL-level optimization to extract only topic names without loading message content
+        val levels = Utils.getTopicLevels(topicPattern)
+
+        // For exact topic match (no wildcards), use simple existence check with LIMIT 1
+        if (!topicPattern.contains("+") && !topicPattern.contains("#")) {
+            try {
+                db.connection?.let { connection ->
+                    val sql = "SELECT 1 FROM $tableName WHERE topic = ? LIMIT 1"
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        preparedStatement.setString(1, topicPattern)
+                        val resultSet = preparedStatement.executeQuery()
+                        if (resultSet.next()) {
+                            callback(topicPattern)
+                        }
+                    }
+                }
+            } catch (e: SQLException) {
+                logger.warning("Error finding exact topic [$topicPattern]: ${e.message}")
+            }
+            return
+        }
+
+        // For wildcard patterns, build efficient SQL filter
+        val filter = levels.mapIndexed { index, level ->
+            when (level) {
+                "+", "#" -> null
+                else -> {
+                    if (index >= MAX_FIXED_TOPIC_LEVELS) {
+                        Pair("topic_r[${index - MAX_FIXED_TOPIC_LEVELS + 1}] = ?", level)
+                    } else {
+                        Pair(FIXED_TOPIC_COLUMN_NAMES[index] + " = ?", level)
+                    }
+                }
+            }
+        }.filterNotNull()
+
+        val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" } +
+                (if (topicPattern.endsWith("#")) ""
+                else {
+                    if (levels.size < MAX_FIXED_TOPIC_LEVELS) {
+                        " AND " + FIXED_TOPIC_COLUMN_NAMES[levels.size] + " = ''"
+                    } else {
+                        " AND COALESCE(ARRAY_LENGTH(topic_r, 1),0) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
+                    }
+                })
+
+        // Handle pattern like 'a/+' - find topics like 'a/b' even if only 'a/b/c' exists
+        val extractDepth = if (topicPattern.endsWith("#")) {
+            // Multi-level wildcard - extract at the # level and deeper
+            levels.size - 1
+        } else {
+            // Single level or exact match - extract at pattern depth
+            levels.size
+        }
+
+        val sql = buildString {
+            append("SELECT DISTINCT ")
+
+            // Build topic reconstruction from fixed columns and array
+            if (extractDepth <= MAX_FIXED_TOPIC_LEVELS) {
+                // All levels are in fixed columns - use array_cat to combine them
+                val levelColumns = (0 until extractDepth).map {
+                    "CASE WHEN ${FIXED_TOPIC_COLUMN_NAMES[it]} = '' THEN NULL ELSE ${FIXED_TOPIC_COLUMN_NAMES[it]} END"
+                }
+                append("array_to_string(ARRAY[${levelColumns.joinToString(", ")}], '/')")
+            } else {
+                // Mix of fixed columns and array - combine fixed + slice of topic_r
+                val fixedArray = "ARRAY[${FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") {
+                    "CASE WHEN $it = '' THEN NULL ELSE $it END"
+                }}]"
+                val arraySlice = "topic_r[1:${extractDepth - MAX_FIXED_TOPIC_LEVELS}]"
+                append("array_to_string(array_cat($fixedArray, $arraySlice), '/')")
+            }
+
+            append(" AS extracted_topic FROM $tableName WHERE $where")
+            append(" AND extracted_topic IS NOT NULL AND extracted_topic != ''")
+        }
+
+        logger.fine { "SQL for findMatchingTopics: $sql" }
+
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    filter.forEachIndexed { i, x -> preparedStatement.setString(i + 1, x.second) }
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        val topic = resultSet.getString("extracted_topic")
+                        if (topic != null && topic.isNotEmpty()) {
+                            if (!callback(topic)) {
+                                break // Stop if callback returns false
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error finding topics for pattern [$topicPattern]: ${e.message}")
+        }
+    }
+
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
         val startTime = System.currentTimeMillis()
         var deletedCount = 0

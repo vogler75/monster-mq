@@ -43,6 +43,10 @@ class MessageStoreHazelcastDisconnected(
         // No messages to find when disconnected
     }
 
+    override fun findMatchingTopics(topicPattern: String, callback: (String) -> Boolean) {
+        // No topics to find when disconnected - empty implementation like MessageStoreNone
+    }
+
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
         logger.fine("Ignoring purge operation - Hazelcast store [$name] not connected")
         return PurgeResult(0, 0)

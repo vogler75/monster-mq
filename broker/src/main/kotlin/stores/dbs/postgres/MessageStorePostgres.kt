@@ -254,6 +254,138 @@ class MessageStorePostgres(
         }
     }
 
+    override fun findMatchingTopics(topicPattern: String, callback: (String) -> Boolean) {
+        // For database stores, provide a basic implementation that uses the existing topic structure
+        // This could be optimized further with specific SQL queries for topic browsing
+        val levels = Utils.getTopicLevels(topicPattern)
+        val isWildcardPattern = topicPattern.contains("+") || topicPattern.contains("#")
+
+        try {
+            db.connection?.let { connection ->
+                val sql = if (isWildcardPattern) {
+                    // For wildcard patterns, need to implement topic tree-like logic at SQL level
+                    // For now, fall back to using findMatchingMessages and extract unique topic paths
+                    val patternLevels = levels.size
+                    val hasMultiLevel = topicPattern.contains("#")
+                    val hasSingleLevel = topicPattern.contains("+")
+
+                    // Build a query that returns topics matching the pattern structure
+                    when {
+                        hasSingleLevel && !hasMultiLevel -> {
+                            // Handle single-level wildcard (+)
+                            // Find topics at the specific level depth only
+                            val whereClause = levels.mapIndexed { index, level ->
+                                when (level) {
+                                    "+" -> null  // Skip wildcard levels
+                                    else -> {
+                                        if (index < MAX_FIXED_TOPIC_LEVELS) {
+                                            "${FIXED_TOPIC_COLUMN_NAMES[index]} = ?"
+                                        } else {
+                                            "topic_r[${index - MAX_FIXED_TOPIC_LEVELS + 1}] = ?"
+                                        }
+                                    }
+                                }
+                            }.filterNotNull().joinToString(" AND ")
+
+                            // Ensure we get only topics at the exact level (not deeper)
+                            val levelConstraint = if (patternLevels <= MAX_FIXED_TOPIC_LEVELS) {
+                                " AND ${FIXED_TOPIC_COLUMN_NAMES.getOrNull(patternLevels) ?: "topic_r"} = ''"
+                            } else {
+                                " AND COALESCE(ARRAY_LENGTH(topic_r, 1),0) = ${patternLevels - MAX_FIXED_TOPIC_LEVELS}"
+                            }
+
+                            "SELECT DISTINCT topic FROM $tableName WHERE ${whereClause.ifEmpty { "1=1" }}$levelConstraint"
+                        }
+                        else -> {
+                            // Fallback for complex patterns: select all topics and filter in application
+                            "SELECT DISTINCT topic FROM $tableName"
+                        }
+                    }
+                } else {
+                    // Exact match
+                    "SELECT topic FROM $tableName WHERE topic = ?"
+                }
+
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    if (!isWildcardPattern) {
+                        preparedStatement.setString(1, topicPattern)
+                    } else if (topicPattern.contains("+") && !topicPattern.contains("#")) {
+                        // Set parameters for single-level wildcard query
+                        var paramIndex = 1
+                        levels.forEachIndexed { index, level ->
+                            if (level != "+") {
+                                preparedStatement.setString(paramIndex++, level)
+                            }
+                        }
+                    }
+
+                    val resultSet = preparedStatement.executeQuery()
+                    val uniqueTopics = mutableSetOf<String>()
+
+                    while (resultSet.next()) {
+                        val topic = resultSet.getString(1)
+
+                        if (isWildcardPattern) {
+                            // Apply topic tree browsing logic to extract the correct level
+                            val browseResult = extractBrowseTopicFromPattern(topic, topicPattern)
+                            if (browseResult != null && !uniqueTopics.contains(browseResult)) {
+                                uniqueTopics.add(browseResult)
+                                if (!callback(browseResult)) break
+                            }
+                        } else {
+                            if (!callback(topic)) break
+                        }
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error finding topics for pattern [$topicPattern]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
+    /**
+     * Extract the topic level to show based on the browse pattern
+     * Same logic as in QueryResolver but moved here for database stores
+     */
+    private fun extractBrowseTopicFromPattern(messageTopic: String, pattern: String): String? {
+        val patternLevels = Utils.getTopicLevels(pattern)
+        val messageLevels = Utils.getTopicLevels(messageTopic)
+
+        // Find the index of the wildcard in the pattern
+        val wildcardIndex = patternLevels.indexOfFirst { it == "+" || it == "#" }
+        if (wildcardIndex == -1) {
+            // No wildcard, should match exactly
+            return if (messageTopic == pattern) messageTopic else null
+        }
+
+        // Check if the message topic has enough levels to match the pattern up to wildcard
+        if (messageLevels.size < wildcardIndex) {
+            return null
+        }
+
+        // Check if the prefix matches
+        for (i in 0 until wildcardIndex) {
+            if (patternLevels[i] != messageLevels[i]) {
+                return null
+            }
+        }
+
+        // For single-level wildcard (+), return the topic up to the next level
+        if (patternLevels[wildcardIndex] == "+") {
+            // Return the topic up to and including the level that matches the +
+            if (messageLevels.size > wildcardIndex) {
+                return messageLevels.take(wildcardIndex + 1).joinToString("/")
+            }
+        }
+
+        // For multi-level wildcard (#), return the full topic
+        if (patternLevels[wildcardIndex] == "#") {
+            return messageTopic
+        }
+
+        return null
+    }
+
     override fun findTopicsByName(name: String, ignoreCase: Boolean, namespace: String): List<String> {
         val resultTopics = mutableListOf<String>()
         val sqlSearchPattern = name.replace("*", "%").replace("+", "_") // Also handle MQTT single level wildcard for LIKE
