@@ -337,6 +337,46 @@ class OpcUaConnector : AbstractVerticle() {
         return promise.future()
     }
 
+    /**
+     * Parse a browse path with support for escaped forward slashes
+     * Example: "ns=2;s=85\/Mqtt\/home/Original/#" becomes ["ns=2;s=85/Mqtt/home", "Original", "#"]
+     */
+    private fun parsePathElements(browsePath: String): List<String> {
+        val elements = mutableListOf<String>()
+        val current = StringBuilder()
+        var i = 0
+
+        while (i < browsePath.length) {
+            when {
+                browsePath[i] == '\\' && i + 1 < browsePath.length && browsePath[i + 1] == '/' -> {
+                    // Escaped forward slash - add literal '/' to current element
+                    current.append('/')
+                    i += 2
+                }
+                browsePath[i] == '/' -> {
+                    // Path separator - finish current element and start new one
+                    if (current.isNotEmpty()) {
+                        elements.add(current.toString())
+                        current.clear()
+                    }
+                    i++
+                }
+                else -> {
+                    // Regular character
+                    current.append(browsePath[i])
+                    i++
+                }
+            }
+        }
+
+        // Add final element if any
+        if (current.isNotEmpty()) {
+            elements.add(current.toString())
+        }
+
+        return elements.filter { it.isNotEmpty() }
+    }
+
     private fun browsePathToNodeIds(browsePath: String): Future<List<Pair<NodeId, String>>> {
         val promise = Promise.promise<List<Pair<NodeId, String>>>()
 
@@ -346,9 +386,10 @@ class OpcUaConnector : AbstractVerticle() {
         }
 
         thread {
+            var promiseCompleted = false
             try {
                 val resolvedNodeIds = mutableListOf<Pair<NodeId, String>>()
-                val pathElements = browsePath.split("/").filter { it.isNotEmpty() }
+                val pathElements = parsePathElements(browsePath)
 
                 logger.fine("Browse address [$browsePath] [${pathElements.joinToString("|")}]")
 
@@ -424,11 +465,17 @@ class OpcUaConnector : AbstractVerticle() {
                 find(start, 1, start)
 
                 logger.info("Browse path [$browsePath] resolved to ${resolvedNodeIds.size} nodes")
-                promise.complete(resolvedNodeIds)
+                if (!promiseCompleted) {
+                    promiseCompleted = true
+                    promise.complete(resolvedNodeIds)
+                }
 
             } catch (e: Exception) {
                 logger.severe("Error browsing path $browsePath: ${e.message}")
-                promise.fail(e)
+                if (!promiseCompleted) {
+                    promiseCompleted = true
+                    promise.fail(e)
+                }
             }
         }
 

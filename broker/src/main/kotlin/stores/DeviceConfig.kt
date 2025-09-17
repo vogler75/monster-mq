@@ -197,19 +197,31 @@ data class OpcUaAddress(
     }
 
     /**
+     * Unescape forward slashes in a browse path
+     * Converts escaped slashes (\/) to actual slashes (/)
+     */
+    private fun unescapeSlashes(path: String): String {
+        return path.replace("\\/", "/")
+    }
+
+    /**
      * Remove the base path before first wildcard from a browse path
      * Example: "Objects/Factory/Line1/Station1" with base "Objects/Factory/#" -> "Line1/Station1"
+     * Handles escaped slashes in configured path: "ns=2;s=85\/Mqtt\/home/Original/#" -> "ns=2;s=85/Mqtt/home/Original/#"
      */
     private fun removeBasePath(fullBrowsePath: String): String {
         if (!isBrowsePathAddress()) return fullBrowsePath
 
         val configuredPath = getBrowsePath() ?: return fullBrowsePath
 
+        // Unescape slashes in the configured path for comparison
+        val unescapedConfiguredPath = unescapeSlashes(configuredPath)
+
         // Find the base path (everything before first # or +)
-        val wildcardIndex = configuredPath.indexOfFirst { it == '#' || it == '+' }
+        val wildcardIndex = unescapedConfiguredPath.indexOfFirst { it == '#' || it == '+' }
         if (wildcardIndex <= 0) return fullBrowsePath
 
-        val basePath = configuredPath.substring(0, wildcardIndex).trimEnd('/')
+        val basePath = unescapedConfiguredPath.substring(0, wildcardIndex).trimEnd('/')
 
         // Remove the base path from the full browse path
         return if (fullBrowsePath.startsWith(basePath)) {
