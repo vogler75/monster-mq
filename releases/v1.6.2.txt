@@ -1,0 +1,8 @@
+Release v1.6.2
+Built from commit: 14d0287
+Date: 2025-09-17 16:22:43
+
+Changes since v1.6.1:
+---
+14d0287 Update archive group docs and GraphQL client endpoint
+3e637c2 Update index.html
