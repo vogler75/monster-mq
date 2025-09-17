@@ -2,7 +2,7 @@ package at.rocworks.stores.postgres
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.stores.ArchiveGroup
+import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.stores.ArchiveGroupConfig
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IConfigStore

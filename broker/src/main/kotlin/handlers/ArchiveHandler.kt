@@ -1,11 +1,8 @@
 package at.rocworks.handlers
 
 import at.rocworks.Utils
-import at.rocworks.bus.EventBusAddresses
-import at.rocworks.handlers.MessageHandler
 import at.rocworks.stores.*
 import at.rocworks.stores.ConfigStoreFactory
-import at.rocworks.stores.MessageStoreType
 import at.rocworks.stores.MessageArchiveType
 import at.rocworks.stores.cratedb.MessageArchiveCrateDB
 import at.rocworks.stores.mongodb.MessageArchiveMongoDB
@@ -23,11 +20,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Callable
 import java.util.logging.Logger
 
-data class ArchiveGroupInfo(
-    val archiveGroup: ArchiveGroup,
-    val deploymentId: String,
-    val enabled: Boolean
-)
 
 class ArchiveHandler(
     private val vertx: Vertx,

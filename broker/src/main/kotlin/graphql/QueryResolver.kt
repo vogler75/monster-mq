@@ -1,17 +1,12 @@
 package at.rocworks.extensions.graphql
 
-import at.rocworks.data.MqttMessage
-import at.rocworks.stores.ArchiveGroup
+import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.IMessageStore
 import graphql.schema.DataFetcher
-import graphql.schema.DataFetchingEnvironment
 import graphql.GraphQLException
 import io.vertx.core.Vertx
-import io.vertx.core.json.JsonArray
-import io.vertx.core.json.JsonObject
 import java.time.Instant
-import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger

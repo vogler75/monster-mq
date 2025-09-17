@@ -5,7 +5,7 @@ import at.rocworks.bus.IMessageBus
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.handlers.SessionHandler
-import at.rocworks.stores.ArchiveGroup
+import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.IMetricsStore
 import at.rocworks.stores.ISessionStoreAsync

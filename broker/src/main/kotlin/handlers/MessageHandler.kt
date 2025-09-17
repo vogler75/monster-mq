@@ -3,7 +3,6 @@ package at.rocworks.handlers
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.*
-import at.rocworks.stores.ArchiveGroup
 import at.rocworks.stores.IMessageStore
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future

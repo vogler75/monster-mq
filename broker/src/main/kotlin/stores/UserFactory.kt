@@ -1,21 +1,21 @@
 package at.rocworks.stores
 
-import at.rocworks.stores.cratedb.UserManagementCrateDb
-import at.rocworks.stores.mongodb.UserManagementMongoDB
-import at.rocworks.stores.postgres.UserManagementPostgres
-import at.rocworks.stores.sqlite.UserManagementSqlite
+import at.rocworks.stores.cratedb.UserStoreCrateDb
+import at.rocworks.stores.mongodb.UserStoreMongoDB
+import at.rocworks.stores.postgres.UserStorePostgres
+import at.rocworks.stores.sqlite.UserStoreSqlite
 import io.vertx.core.json.JsonObject
 
-object UserManagementFactory {
+object UserFactory {
     
     fun create(
         authStoreType: AuthStoreType,
         config: JsonObject
-    ): IUserManagement {
+    ): IUserStore {
         return when (authStoreType) {
             AuthStoreType.POSTGRES -> {
                 val postgresConfig = config.getJsonObject("Postgres")
-                UserManagementPostgres(
+                UserStorePostgres(
                     url = postgresConfig.getString("Url"),
                     username = postgresConfig.getString("User"),
                     password = postgresConfig.getString("Pass")
@@ -23,13 +23,13 @@ object UserManagementFactory {
             }
             AuthStoreType.SQLITE -> {
                 val sqliteConfig = config.getJsonObject("SQLite")
-                UserManagementSqlite(
+                UserStoreSqlite(
                     path = sqliteConfig.getString("Path")
                 )
             }
             AuthStoreType.CRATEDB -> {
                 val crateDbConfig = config.getJsonObject("CrateDB")
-                UserManagementCrateDb(
+                UserStoreCrateDb(
                     url = crateDbConfig.getString("Url"),
                     username = crateDbConfig.getString("User"),
                     password = crateDbConfig.getString("Pass")
@@ -37,7 +37,7 @@ object UserManagementFactory {
             }
             AuthStoreType.MONGODB -> {
                 val mongoDbConfig = config.getJsonObject("MongoDB")
-                UserManagementMongoDB(
+                UserStoreMongoDB(
                     url = mongoDbConfig.getString("Url"),
                     database = mongoDbConfig.getString("Database")
                 )

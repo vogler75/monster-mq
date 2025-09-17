@@ -5,8 +5,8 @@ import at.rocworks.Utils
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
 import at.rocworks.stores.AuthStoreType
-import at.rocworks.stores.IUserManagement
-import at.rocworks.stores.UserManagementFactory
+import at.rocworks.stores.IUserStore
+import at.rocworks.stores.UserFactory
 import auth.AclCache
 import auth.PasswordEncoder
 import io.vertx.core.AbstractVerticle
@@ -21,7 +21,7 @@ class UserManager(
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
     
-    private var userStore: IUserManagement? = null
+    private var userStore: IUserStore? = null
     private val aclCache = AclCache()
     private var scheduler: ScheduledExecutorService? = null
     
@@ -60,7 +60,7 @@ class UserManager(
         
         try {
             // Create user store
-            userStore = UserManagementFactory.create(authStoreType, config)
+            userStore = UserFactory.create(authStoreType, config)
             
             // Initialize store and load cache
             vertx.executeBlocking(java.util.concurrent.Callable<Void> {
@@ -378,7 +378,7 @@ class UserManager(
     /**
      * Get user store for direct access (used by GraphQL resolver)
      */
-    fun getUserStore(): IUserManagement? = userStore
+    fun getUserStore(): IUserStore? = userStore
     
     /**
      * Ensure Anonymous user exists in the system

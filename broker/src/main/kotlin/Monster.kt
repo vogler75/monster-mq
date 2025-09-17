@@ -32,6 +32,7 @@ import io.vertx.core.json.JsonObject
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import com.hazelcast.config.Config
 import at.rocworks.devices.opcua.OpcUaExtension
+import handlers.MetricsHandler
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
@@ -491,7 +492,7 @@ MORE INFO:
                         val store = at.rocworks.stores.MetricsStoreFactory.create(storeType, configJson, "metrics")
                         val collectionInterval = metricsConfig.getInteger("CollectionInterval", 1)
                         logger.info("Starting Metrics Store: ${store.getName()} (${store.getType()}) with ${collectionInterval}s collection interval")
-                        val collector = MetricsCollector(sessionHandler, store, collectionInterval)
+                        val collector = MetricsHandler(sessionHandler, store, collectionInterval)
                         store to collector
                     } catch (e: Exception) {
                         logger.warning("Failed to create metrics store: ${e.message}")

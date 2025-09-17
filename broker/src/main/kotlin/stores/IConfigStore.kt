@@ -1,6 +1,6 @@
 package at.rocworks.stores
 
-import at.rocworks.stores.ArchiveGroup
+import at.rocworks.handlers.ArchiveGroup
 import io.vertx.core.Future
 
 data class ArchiveGroupConfig(

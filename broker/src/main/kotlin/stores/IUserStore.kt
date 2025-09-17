@@ -3,7 +3,7 @@ package at.rocworks.stores
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
 
-interface IUserManagement {
+interface IUserStore {
     fun getType(): AuthStoreType
 
     // User operations

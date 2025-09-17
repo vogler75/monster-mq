@@ -10,6 +10,7 @@ import at.rocworks.stores.sqlite.*
 import at.rocworks.utils.DurationParser
 import graphql.schema.DataFetcher
 import graphql.schema.DataFetchingEnvironment
+import at.rocworks.handlers.ArchiveGroup
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import io.vertx.core.json.JsonArray

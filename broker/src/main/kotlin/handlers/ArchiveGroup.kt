@@ -1,8 +1,17 @@
-package at.rocworks.stores
+package at.rocworks.handlers
 
 import at.rocworks.Utils
 import at.rocworks.data.PurgeResult
 import at.rocworks.data.TopicTree
+import at.rocworks.stores.IMessageArchive
+import at.rocworks.stores.IMessageStore
+import at.rocworks.stores.MessageArchiveKafka
+import at.rocworks.stores.MessageArchiveNone
+import at.rocworks.stores.MessageArchiveType
+import at.rocworks.stores.MessageStoreHazelcastDisconnected
+import at.rocworks.stores.MessageStoreMemory
+import at.rocworks.stores.MessageStoreNone
+import at.rocworks.stores.MessageStoreType
 import at.rocworks.stores.cratedb.MessageArchiveCrateDB
 import at.rocworks.stores.cratedb.MessageStoreCrateDB
 import at.rocworks.stores.mongodb.MessageArchiveMongoDB
@@ -16,8 +25,8 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.DeploymentOptions
 import io.vertx.core.Future
 import io.vertx.core.Promise
-import io.vertx.core.json.JsonObject
 import io.vertx.core.ThreadingModel
+import io.vertx.core.json.JsonObject
 import java.time.Instant
 import java.util.concurrent.Callable
 
@@ -49,11 +58,11 @@ class ArchiveGroup(
     // Track child verticle deployments so we can properly clean them up
     private val childDeployments = mutableListOf<String>()
     private var isStopping = false
-    
+
     init {
         topicFilter.forEach { filterTree.add(it, key=true, value=true) }
     }
-    
+
     override fun start(startPromise: Promise<Void>) {
         logger.info("Starting ArchiveGroup [$name] - deploying stores in background")
 
@@ -68,7 +77,7 @@ class ArchiveGroup(
             createMessageArchiveAsync(archiveType, "${name}Archive")
         }
     }
-    
+
     override fun stop(stopPromise: Promise<Void>) {
         logger.info("Stopping ArchiveGroup [$name] and cleaning up child deployments")
 
@@ -104,7 +113,7 @@ class ArchiveGroup(
             stopPromise.complete()
         }
     }
-    
+
     fun getLastValRetentionMs(): Long? = lastValRetentionMs
     fun getArchiveRetentionMs(): Long? = archiveRetentionMs
     fun getPurgeIntervalMs(): Long? = purgeIntervalMs
@@ -114,10 +123,10 @@ class ArchiveGroup(
     fun getPurgeInterval(): String? = purgeIntervalStr
     fun getLastValType(): MessageStoreType = lastValType
     fun getArchiveType(): MessageArchiveType = archiveType
-    
+
     private fun createMessageStore(storeType: MessageStoreType, storeName: String): Future<Void> {
         val promise = Promise.promise<Void>()
-        
+
         when (storeType) {
             MessageStoreType.NONE -> {
                 lastValStore = MessageStoreNone
@@ -139,9 +148,9 @@ class ArchiveGroup(
             MessageStoreType.POSTGRES -> {
                 val postgres = databaseConfig.getJsonObject("Postgres")
                 val store = MessageStorePostgres(
-                    storeName, 
+                    storeName,
                     postgres.getString("Url"),
-                    postgres.getString("User"), 
+                    postgres.getString("User"),
                     postgres.getString("Pass")
                 )
                 lastValStore = store
@@ -207,13 +216,13 @@ class ArchiveGroup(
                 }
             }
         }
-        
+
         return promise.future()
     }
-    
+
     private fun createMessageArchive(archiveType: MessageArchiveType, archiveName: String): Future<Void> {
         val promise = Promise.promise<Void>()
-        
+
         when (archiveType) {
             MessageArchiveType.NONE -> {
                 archiveStore = MessageArchiveNone
@@ -301,7 +310,7 @@ class ArchiveGroup(
                 }
             }
         }
-        
+
         return promise.future()
     }
 
@@ -645,53 +654,53 @@ class ArchiveGroup(
                 purgeLastValStore()
             }
             timers.add(timerId)
-            
+
             logger.info("Scheduled LastVal purge for [$name] every ${purgeIntervalMs}ms with retention ${lastValRetentionMs}ms")
         }
-        
+
         // Schedule archive purge if configured
         if (archiveStore != null && archiveRetentionMs != null && purgeIntervalMs != null) {
             val timerId = vertx.setPeriodic(purgeIntervalMs) { _ ->
                 purgeArchiveStore()
             }
             timers.add(timerId)
-            
+
             logger.info("Scheduled Archive purge for [$name] every ${purgeIntervalMs}ms with retention ${archiveRetentionMs}ms")
         }
     }
-    
+
     private fun stopRetentionScheduling() {
         logger.fine { "Stopping retention scheduling for [$name]" }
-        
+
         // Cancel all timers
         timers.forEach { timerId ->
             vertx.cancelTimer(timerId)
         }
         timers.clear()
     }
-    
+
     private fun purgeLastValStore() {
         val retentionMs = lastValRetentionMs ?: return
         val messageStore = lastValStore ?: return
-        
+
         // Use cluster-wide distributed lock to ensure only one node performs purging
         val lockName = "purge-lock-$name-LastVal"
         val sharedData = vertx.sharedData()
-        
+
         sharedData.getLockWithTimeout(lockName, 30000).onComplete { lockResult ->
             if (lockResult.succeeded()) {
                 val lock = lockResult.result()
                 logger.fine { "Acquired purge lock for LastVal store [$name] - starting purge" }
-                
+
                 vertx.executeBlocking(Callable<PurgeResult> {
                     val olderThan = Instant.now().minusMillis(retentionMs)
                     logger.fine { "Starting LastVal purge for [$name] - removing messages older than $olderThan" }
-                    
+
                     messageStore.purgeOldMessages(olderThan)
                 }).onComplete { asyncResult ->
                     // Always release the lock
                     lock.release()
-                    
+
                     if (asyncResult.succeeded()) {
                         val result = asyncResult.result()
                         if (result.deletedCount > 0 || result.elapsedTimeMs > 30000) {
@@ -699,7 +708,7 @@ class ArchiveGroup(
                         } else {
                             logger.fine { "LastVal purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
                         }
-                        
+
                         // Warn if purge takes too long
                         if (result.elapsedTimeMs > 30000) {
                             logger.warning("LastVal purge for [$name] took ${result.elapsedTimeMs}ms - consider adjusting purge interval or retention period")
@@ -714,29 +723,29 @@ class ArchiveGroup(
             }
         }
     }
-    
+
     private fun purgeArchiveStore() {
         val retentionMs = archiveRetentionMs ?: return
         val messageArchive = archiveStore ?: return
-        
+
         // Use cluster-wide distributed lock to ensure only one node performs purging
         val lockName = "purge-lock-$name-Archive"
         val sharedData = vertx.sharedData()
-        
+
         sharedData.getLockWithTimeout(lockName, 30000).onComplete { lockResult ->
             if (lockResult.succeeded()) {
                 val lock = lockResult.result()
                 logger.fine { "Acquired purge lock for Archive store [$name] - starting purge" }
-                
+
                 vertx.executeBlocking(Callable<PurgeResult> {
                     val olderThan = Instant.now().minusMillis(retentionMs)
                     logger.fine { "Starting Archive purge for [$name] - removing messages older than $olderThan" }
-                    
+
                     messageArchive.purgeOldMessages(olderThan)
                 }).onComplete { asyncResult ->
                     // Always release the lock
                     lock.release()
-                    
+
                     if (asyncResult.succeeded()) {
                         val result = asyncResult.result()
                         if (result.deletedCount > 0 || result.elapsedTimeMs > 30000) {
@@ -744,7 +753,7 @@ class ArchiveGroup(
                         } else {
                             logger.fine { "Archive purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
                         }
-                        
+
                         // Warn if purge takes too long
                         if (result.elapsedTimeMs > 30000) {
                             logger.warning("Archive purge for [$name] took ${result.elapsedTimeMs}ms - consider adjusting purge interval or retention period")
@@ -759,7 +768,7 @@ class ArchiveGroup(
             }
         }
     }
-    
+
     companion object {
         fun fromConfig(config: JsonObject, databaseConfig: JsonObject, isClustered: Boolean = false): ArchiveGroup {
             val name = config.getString("Name", "ArchiveGroup")

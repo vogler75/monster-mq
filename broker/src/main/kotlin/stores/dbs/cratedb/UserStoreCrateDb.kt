@@ -5,17 +5,17 @@ import at.rocworks.Utils
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
 import at.rocworks.stores.AuthStoreType
-import at.rocworks.stores.IUserManagement
+import at.rocworks.stores.IUserStore
 import io.vertx.core.Promise
 import org.mindrot.jbcrypt.BCrypt
 import java.sql.SQLException
 import java.util.*
 
-class UserManagementCrateDb(
+class UserStoreCrateDb(
     private val url: String,
     private val username: String,
     private val password: String
-): IUserManagement {
+): IUserStore {
     private val logger = Utils.getLogger(this::class.java)
 
     private val usersTableName = "users"

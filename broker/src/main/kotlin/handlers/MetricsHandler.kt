@@ -1,4 +1,4 @@
-package at.rocworks.stores
+package handlers
 
 import at.rocworks.Monster
 import at.rocworks.bus.EventBusAddresses
@@ -6,19 +6,20 @@ import at.rocworks.extensions.graphql.BrokerMetrics
 import at.rocworks.extensions.graphql.SessionMetrics
 import at.rocworks.extensions.graphql.TimestampConverter
 import at.rocworks.handlers.SessionHandler
+import at.rocworks.stores.IMetricsStoreAsync
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import java.time.Instant
 import java.util.logging.Logger
 
-class MetricsCollector(
+class MetricsHandler(
     private val sessionHandler: SessionHandler,
     private val metricsStore: IMetricsStoreAsync,
     private val collectionIntervalSeconds: Int = 1
 ) : AbstractVerticle() {
     companion object {
-        private val logger: Logger = Logger.getLogger(MetricsCollector::class.java.name)
+        private val logger: Logger = Logger.getLogger(MetricsHandler::class.java.name)
     }
 
     private val collectionIntervalMs = collectionIntervalSeconds * 1000L

@@ -5,7 +5,7 @@ import at.rocworks.Utils
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
 import at.rocworks.stores.AuthStoreType
-import at.rocworks.stores.IUserManagement
+import at.rocworks.stores.IUserStore
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
@@ -20,10 +20,10 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.*
 
-class UserManagementMongoDB(
+class UserStoreMongoDB(
     private val url: String,
     private val database: String
-): IUserManagement {
+): IUserStore {
     private val logger = Utils.getLogger(this::class.java)
 
     private val usersCollectionName = "users"
