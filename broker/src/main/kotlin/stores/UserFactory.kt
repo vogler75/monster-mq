@@ -4,13 +4,15 @@ import at.rocworks.stores.cratedb.UserStoreCrateDb
 import at.rocworks.stores.mongodb.UserStoreMongoDB
 import at.rocworks.stores.postgres.UserStorePostgres
 import at.rocworks.stores.sqlite.UserStoreSqlite
+import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 
 object UserFactory {
-    
+
     fun create(
         authStoreType: AuthStoreType,
-        config: JsonObject
+        config: JsonObject,
+        vertx: Vertx
     ): IUserStore {
         return when (authStoreType) {
             AuthStoreType.POSTGRES -> {
@@ -18,13 +20,15 @@ object UserFactory {
                 UserStorePostgres(
                     url = postgresConfig.getString("Url"),
                     username = postgresConfig.getString("User"),
-                    password = postgresConfig.getString("Pass")
+                    password = postgresConfig.getString("Pass"),
+                    vertx = vertx
                 )
             }
             AuthStoreType.SQLITE -> {
                 val sqliteConfig = config.getJsonObject("SQLite")
                 UserStoreSqlite(
-                    path = sqliteConfig.getString("Path")
+                    path = sqliteConfig.getString("Path"),
+                    vertx = vertx
                 )
             }
             AuthStoreType.CRATEDB -> {
@@ -32,14 +36,16 @@ object UserFactory {
                 UserStoreCrateDb(
                     url = crateDbConfig.getString("Url"),
                     username = crateDbConfig.getString("User"),
-                    password = crateDbConfig.getString("Pass")
+                    password = crateDbConfig.getString("Pass"),
+                    vertx = vertx
                 )
             }
             AuthStoreType.MONGODB -> {
                 val mongoDbConfig = config.getJsonObject("MongoDB")
                 UserStoreMongoDB(
                     url = mongoDbConfig.getString("Url"),
-                    database = mongoDbConfig.getString("Database")
+                    database = mongoDbConfig.getString("Database"),
+                    vertx = vertx
                 )
             }
         }

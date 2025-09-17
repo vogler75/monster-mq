@@ -6,6 +6,7 @@ import at.rocworks.data.AclRule
 import at.rocworks.data.TopicTree
 import at.rocworks.data.User
 import at.rocworks.stores.IUserStore
+import io.vertx.core.Future
 import java.util.concurrent.ConcurrentHashMap
 
 class AclCache {
@@ -32,45 +33,49 @@ class AclCache {
     /**
      * Load all users and ACL rules from the store into memory
      */
-    suspend fun loadFromStore(store: IUserStore) {
+    fun loadFromStore(store: IUserStore): Future<Void> {
         val startTime = System.currentTimeMillis()
         logger.info("Loading users and ACL rules into memory cache...")
-        
-        try {
-            val (allUsers, allAcls) = store.loadAllUsersAndAcls()
-            
-            // Clear existing data
-            users.clear()
-            userAcls.clear()
-            permissionCache.clear()
-            
-            // Load users
-            allUsers.forEach { user ->
-                users[user.username] = user
-            }
-            
-            // Group ACL rules by username and build topic trees
-            val groupedAcls = allAcls.groupBy { it.username }
-            groupedAcls.forEach { (username, rules) ->
-                userAcls[username] = rules.sortedByDescending { it.priority }
-                
-                // Add rules to topic trees for efficient matching
-                rules.forEach { rule ->
-                    if (rule.canSubscribe) {
-                        subscribeTopicTree.add(rule.topicPattern, username, rule)
-                    }
-                    if (rule.canPublish) {
-                        publishTopicTree.add(rule.topicPattern, username, rule)
+
+        return store.loadAllUsersAndAcls().compose { (allUsers, allAcls) ->
+            try {
+                // Clear existing data
+                users.clear()
+                userAcls.clear()
+                permissionCache.clear()
+
+                // Load users
+                allUsers.forEach { user ->
+                    users[user.username] = user
+                }
+
+                // Group ACL rules by username and build topic trees
+                val groupedAcls = allAcls.groupBy { it.username }
+                groupedAcls.forEach { (username, rules) ->
+                    userAcls[username] = rules.sortedByDescending { it.priority }
+
+                    // Add rules to topic trees for efficient matching
+                    rules.forEach { rule ->
+                        if (rule.canSubscribe) {
+                            subscribeTopicTree.add(rule.topicPattern, username, rule)
+                        }
+                        if (rule.canPublish) {
+                            publishTopicTree.add(rule.topicPattern, username, rule)
+                        }
                     }
                 }
+
+                val endTime = System.currentTimeMillis()
+                val duration = endTime - startTime
+                logger.info("Loaded ${allUsers.size} users and ${allAcls.size} ACL rules in ${duration}ms")
+                Future.succeededFuture<Void>()
+            } catch (e: Exception) {
+                logger.severe("Failed to load users and ACL rules: ${e.message}")
+                Future.failedFuture<Void>(e)
             }
-            
-            val endTime = System.currentTimeMillis()
-            val duration = endTime - startTime
-            logger.info("Loaded ${allUsers.size} users and ${allAcls.size} ACL rules in ${duration}ms")
-        } catch (e: Exception) {
-            logger.severe("Failed to load users and ACL rules: ${e.message}")
-            throw e
+        }.recover { throwable ->
+            logger.severe("Failed to load users and ACL rules: ${throwable.message}")
+            Future.succeededFuture<Void>()
         }
     }
     

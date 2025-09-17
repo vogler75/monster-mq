@@ -2,31 +2,32 @@ package at.rocworks.stores
 
 import at.rocworks.data.AclRule
 import at.rocworks.data.User
+import io.vertx.core.Future
 
 interface IUserStore {
     fun getType(): AuthStoreType
 
     // User operations
-    suspend fun createUser(user: User): Boolean
-    suspend fun updateUser(user: User): Boolean
-    suspend fun deleteUser(username: String): Boolean
-    suspend fun getUser(username: String): User?
-    suspend fun getAllUsers(): List<User>
-    suspend fun validateCredentials(username: String, password: String): User?
-    
+    fun createUser(user: User): Future<Boolean>
+    fun updateUser(user: User): Future<Boolean>
+    fun deleteUser(username: String): Future<Boolean>
+    fun getUser(username: String): Future<User?>
+    fun getAllUsers(): Future<List<User>>
+    fun validateCredentials(username: String, password: String): Future<User?>
+
     // ACL operations
-    suspend fun createAclRule(rule: AclRule): Boolean
-    suspend fun updateAclRule(rule: AclRule): Boolean
-    suspend fun deleteAclRule(id: String): Boolean
-    suspend fun getAclRule(id: String): AclRule?
-    suspend fun getUserAclRules(username: String): List<AclRule>
-    suspend fun getAllAclRules(): List<AclRule>
-    
+    fun createAclRule(rule: AclRule): Future<Boolean>
+    fun updateAclRule(rule: AclRule): Future<Boolean>
+    fun deleteAclRule(id: String): Future<Boolean>
+    fun getAclRule(id: String): Future<AclRule?>
+    fun getUserAclRules(username: String): Future<List<AclRule>>
+    fun getAllAclRules(): Future<List<AclRule>>
+
     // Load all data for in-memory cache
-    suspend fun loadAllUsersAndAcls(): Pair<List<User>, List<AclRule>>
-    
+    fun loadAllUsersAndAcls(): Future<Pair<List<User>, List<AclRule>>>
+
     // Initialization
-    suspend fun init(): Boolean
-    suspend fun createTables(): Boolean
-    suspend fun close()
+    fun init(): Future<Boolean>
+    fun createTables(): Future<Boolean>
+    fun close(): Future<Void>
 }

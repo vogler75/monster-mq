@@ -48,42 +48,38 @@ class AuthenticationResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<LoginResult> {
-                    runBlocking {
-                        try {
-                            // Authenticate user
-                            val user = userManager.authenticate(username, password)
-                            
+                // Now authenticate() returns Future<User?>, so we handle it directly
+                userManager.authenticate(username, password).onComplete { authResult ->
+                    try {
+                        if (authResult.succeeded()) {
+                            val user = authResult.result()
+
                             if (user != null && user.enabled) {
                                 // Generate JWT token
                                 val token = JwtService.generateToken(user.username, user.isAdmin)
-                                
-                                LoginResult(
+
+                                future.complete(LoginResult(
                                     success = true,
                                     token = token,
                                     message = "Login successful",
                                     username = user.username,
                                     isAdmin = user.isAdmin
-                                )
+                                ))
                             } else {
-                                LoginResult(
+                                future.complete(LoginResult(
                                     success = false,
                                     message = "Invalid username or password"
-                                )
+                                ))
                             }
-                        } catch (e: Exception) {
-                            logger.severe("Error during login: ${e.message}")
-                            LoginResult(
+                        } else {
+                            logger.severe("Error during login: ${authResult.cause()?.message}")
+                            future.complete(LoginResult(
                                 success = false,
                                 message = "Authentication failed"
-                            )
+                            ))
                         }
-                    }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
-                    } else {
-                        logger.severe("Error processing login: ${result.cause()?.message}")
+                    } catch (e: Exception) {
+                        logger.severe("Error during login: ${e.message}")
                         future.complete(LoginResult(
                             success = false,
                             message = "Authentication failed"

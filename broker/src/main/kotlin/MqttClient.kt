@@ -218,22 +218,18 @@ class MqttClient(
                     return
                 }
                 
-                vertx.executeBlocking(java.util.concurrent.Callable<at.rocworks.data.User?> {
-                    try {
-                        kotlinx.coroutines.runBlocking {
-                            userManager.authenticate(username, password)
-                        }
-                    } catch (e: Exception) {
-                        logger.warning("Client [$clientId] Authentication error: ${e.message}")
-                        throw e
-                    }
-                }).onComplete { result ->
-                    if (result.succeeded() && result.result() != null) {
-                        authenticatedUser = result.result()
+                // Now authenticate() returns Future<User?>, so we handle it directly
+                userManager.authenticate(username, password).onComplete { authResult ->
+                    if (authResult.succeeded() && authResult.result() != null) {
+                        authenticatedUser = authResult.result()
                         logger.info("Client [$clientId] Authentication successful for user [$username]")
                         proceedWithConnection()
                     } else {
-                        logger.warning("Client [$clientId] Authentication failed for user [$username]")
+                        if (authResult.failed()) {
+                            logger.warning("Client [$clientId] Authentication error: ${authResult.cause()?.message}")
+                        } else {
+                            logger.warning("Client [$clientId] Authentication failed for user [$username]")
+                        }
                         rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_NOT_AUTHORIZED)
                     }
                 }

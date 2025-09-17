@@ -68,37 +68,58 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
 
-                vertx.executeBlocking<List<UserInfo>> {
-                    runBlocking {
-                        try {
-                            if (username != null) {
-                                // Get specific user with ACL rules
-                                val user = userManager.getUser(username)
-                                if (user != null) {
-                                    val aclRules = userManager.getUserAclRules(username).map { it.toAclRuleInfo() }
-                                    listOf(user.toUserInfo(aclRules))
-                                } else {
-                                    emptyList()
-                                }
+                if (username != null) {
+                    // Get specific user with ACL rules
+                    val user = userManager.getUser(username)
+                    if (user != null) {
+                        userManager.getUserAclRules(username).onComplete { aclResult ->
+                            if (aclResult.succeeded()) {
+                                val aclRules = aclResult.result().map { it.toAclRuleInfo() }
+                                future.complete(listOf(user.toUserInfo(aclRules)))
                             } else {
-                                // Get all users with their ACL rules
-                                val users = userManager.getAllUsers()
-                                users.map { user ->
-                                    val aclRules = userManager.getUserAclRules(user.username).map { it.toAclRuleInfo() }
-                                    user.toUserInfo(aclRules)
+                                logger.severe("Error getting ACL rules for user $username: ${aclResult.cause()?.message}")
+                                future.complete(listOf(user.toUserInfo()))
+                            }
+                        }
+                    } else {
+                        future.complete(emptyList())
+                    }
+                } else {
+                    // Get all users with their ACL rules
+                    userManager.getAllUsers().onComplete { usersResult ->
+                        if (usersResult.succeeded()) {
+                            val users = usersResult.result()
+                            if (users.isEmpty()) {
+                                future.complete(emptyList())
+                                return@onComplete
+                            }
+
+                            // Collect all user info with ACL rules
+                            val userInfoList = mutableListOf<UserInfo>()
+                            var completed = 0
+
+                            users.forEach { user ->
+                                userManager.getUserAclRules(user.username).onComplete { aclResult ->
+                                    val aclRules = if (aclResult.succeeded()) {
+                                        aclResult.result().map { it.toAclRuleInfo() }
+                                    } else {
+                                        logger.warning("Failed to get ACL rules for user ${user.username}: ${aclResult.cause()?.message}")
+                                        emptyList()
+                                    }
+
+                                    synchronized(userInfoList) {
+                                        userInfoList.add(user.toUserInfo(aclRules))
+                                        completed++
+                                        if (completed == users.size) {
+                                            future.complete(userInfoList.toList())
+                                        }
+                                    }
                                 }
                             }
-                        } catch (e: Exception) {
-                            logger.severe("Error getting users: ${e.message}")
-                            emptyList()
+                        } else {
+                            logger.severe("Error getting all users: ${usersResult.cause()?.message}")
+                            future.completeExceptionally(usersResult.cause())
                         }
-                    }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
-                    } else {
-                        logger.severe("Error getting users: ${result.cause()?.message}")
-                        future.completeExceptionally(result.cause())
                     }
                 }
             } catch (e: Exception) {
@@ -123,22 +144,14 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<List<UserInfo>> {
-                    runBlocking {
-                        try {
-                            val users = userManager.getAllUsers()
-                            users.map { user -> user.toUserInfo() }
-                        } catch (e: Exception) {
-                            logger.severe("Error getting all users: ${e.message}")
-                            emptyList()
-                        }
-                    }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
+                userManager.getAllUsers().onComplete { usersResult ->
+                    if (usersResult.succeeded()) {
+                        val users = usersResult.result()
+                        val userInfoList = users.map { user -> user.toUserInfo() }
+                        future.complete(userInfoList)
                     } else {
-                        logger.severe("Error getting all users: ${result.cause()?.message}")
-                        future.completeExceptionally(result.cause())
+                        logger.severe("Error getting all users: ${usersResult.cause()?.message}")
+                        future.completeExceptionally(usersResult.cause())
                     }
                 }
             } catch (e: Exception) {
@@ -165,21 +178,12 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<UserInfo?> {
-                    try {
-                        val user = userManager.getUser(username)
-                        user?.toUserInfo()
-                    } catch (e: Exception) {
-                        logger.severe("Error getting user $username: ${e.message}")
-                        null
-                    }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
-                    } else {
-                        logger.severe("Error getting user $username: ${result.cause()?.message}")
-                        future.completeExceptionally(result.cause())
-                    }
+                try {
+                    val user = userManager.getUser(username)
+                    future.complete(user?.toUserInfo())
+                } catch (e: Exception) {
+                    logger.severe("Error getting user $username: ${e.message}")
+                    future.completeExceptionally(e)
                 }
             } catch (e: Exception) {
                 logger.severe("Error getting user $username: ${e.message}")
@@ -203,22 +207,14 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<List<AclRuleInfo>> {
-                    runBlocking {
-                        try {
-                            val rules = userManager.getAllAclRules()
-                            rules.map { rule -> rule.toAclRuleInfo() }
-                        } catch (e: Exception) {
-                            logger.severe("Error getting all ACL rules: ${e.message}")
-                            emptyList()
-                        }
-                    }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
+                userManager.getAllAclRules().onComplete { rulesResult ->
+                    if (rulesResult.succeeded()) {
+                        val rules = rulesResult.result()
+                        val ruleInfoList = rules.map { rule -> rule.toAclRuleInfo() }
+                        future.complete(ruleInfoList)
                     } else {
-                        logger.severe("Error getting all ACL rules: ${result.cause()?.message}")
-                        future.completeExceptionally(result.cause())
+                        logger.severe("Error getting all ACL rules: ${rulesResult.cause()?.message}")
+                        future.completeExceptionally(rulesResult.cause())
                     }
                 }
             } catch (e: Exception) {
@@ -245,22 +241,14 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<List<AclRuleInfo>> {
-                    runBlocking {
-                        try {
-                            val rules = userManager.getUserAclRules(username)
-                            rules.map { rule -> rule.toAclRuleInfo() }
-                        } catch (e: Exception) {
-                            logger.severe("Error getting ACL rules for user $username: ${e.message}")
-                            emptyList()
-                        }
-                    }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
+                userManager.getUserAclRules(username).onComplete { rulesResult ->
+                    if (rulesResult.succeeded()) {
+                        val rules = rulesResult.result()
+                        val ruleInfoList = rules.map { rule -> rule.toAclRuleInfo() }
+                        future.complete(ruleInfoList)
                     } else {
-                        logger.severe("Error getting ACL rules for user $username: ${result.cause()?.message}")
-                        future.completeExceptionally(result.cause())
+                        logger.severe("Error getting ACL rules for user $username: ${rulesResult.cause()?.message}")
+                        future.completeExceptionally(rulesResult.cause())
                     }
                 }
             } catch (e: Exception) {
@@ -311,43 +299,50 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<UserManagementResult> {
-                    runBlocking {
-                        try {
-                            // Check if user already exists
-                            val existingUser = userManager.getUser(createUserInput.username)
-                            if (existingUser != null) {
-                                UserManagementResult(success = false, message = "User already exists")
-                            } else {
-                                userManager.createUser(
-                                    username = createUserInput.username,
-                                    password = createUserInput.password,
-                                    enabled = createUserInput.enabled,
-                                    canSubscribe = createUserInput.canSubscribe,
-                                    canPublish = createUserInput.canPublish,
-                                    isAdmin = createUserInput.isAdmin
-                                )
+                try {
+                    // Check if user already exists
+                    val existingUser = userManager.getUser(createUserInput.username)
+                    if (existingUser != null) {
+                        future.complete(UserManagementResult(success = false, message = "User already exists"))
+                        return@DataFetcher future
+                    }
+
+                    userManager.createUser(
+                        username = createUserInput.username,
+                        password = createUserInput.password,
+                        enabled = createUserInput.enabled,
+                        canSubscribe = createUserInput.canSubscribe,
+                        canPublish = createUserInput.canPublish,
+                        isAdmin = createUserInput.isAdmin
+                    ).onComplete { createResult ->
+                        if (createResult.succeeded() && createResult.result()) {
+                            try {
                                 val newUser = userManager.getUser(createUserInput.username)
-                                UserManagementResult(
+                                future.complete(UserManagementResult(
                                     success = true,
                                     message = "User created successfully",
                                     user = newUser?.toUserInfo()
-                                )
+                                ))
+                            } catch (e: Exception) {
+                                logger.severe("Error retrieving created user: ${e.message}")
+                                future.complete(UserManagementResult(
+                                    success = false,
+                                    message = "User created but error retrieving details: ${e.message}"
+                                ))
                             }
-                        } catch (e: Exception) {
-                            UserManagementResult(success = false, message = "Error creating user: ${e.message}")
+                        } else {
+                            val errorMsg = if (createResult.failed()) {
+                                "Error creating user: ${createResult.cause()?.message}"
+                            } else {
+                                "Failed to create user"
+                            }
+                            logger.severe(errorMsg)
+                            future.complete(UserManagementResult(success = false, message = errorMsg))
                         }
                     }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
-                    } else {
-                        logger.severe("Error creating user: ${result.cause()?.message}")
-                        future.complete(UserManagementResult(
-                            success = false,
-                            message = "Error creating user: ${result.cause()?.message}"
-                        ))
-                    }
+                } catch (e: Exception) {
+                    logger.severe("Error creating user: ${e.message}")
+                    future.complete(UserManagementResult(success = false, message = "Error creating user: ${e.message}"))
                 }
             } catch (e: Exception) {
                 logger.severe("Error creating user: ${e.message}")
@@ -395,45 +390,49 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<UserManagementResult> {
-                    runBlocking {
-                        try {
-                            val existingUser = userManager.getUser(updateUserInput.username)
-                            if (existingUser == null) {
-                                UserManagementResult(success = false, message = "User not found")
-                            } else {
-                                val updatedUser = existingUser.copy(
-                                    enabled = updateUserInput.enabled ?: existingUser.enabled,
-                                    canSubscribe = updateUserInput.canSubscribe ?: existingUser.canSubscribe,
-                                    canPublish = updateUserInput.canPublish ?: existingUser.canPublish,
-                                    isAdmin = updateUserInput.isAdmin ?: existingUser.isAdmin
-                                )
-                                val success = userManager.updateUser(updatedUser)
-                                if (success) {
-                                    val refreshedUser = userManager.getUser(updateUserInput.username)
-                                    UserManagementResult(
-                                        success = true,
-                                        message = "User updated successfully",
-                                        user = refreshedUser?.toUserInfo()
-                                    )
-                                } else {
-                                    UserManagementResult(success = false, message = "Failed to update user")
-                                }
+                try {
+                    val existingUser = userManager.getUser(updateUserInput.username)
+                    if (existingUser == null) {
+                        future.complete(UserManagementResult(success = false, message = "User not found"))
+                        return@DataFetcher future
+                    }
+
+                    val updatedUser = existingUser.copy(
+                        enabled = updateUserInput.enabled ?: existingUser.enabled,
+                        canSubscribe = updateUserInput.canSubscribe ?: existingUser.canSubscribe,
+                        canPublish = updateUserInput.canPublish ?: existingUser.canPublish,
+                        isAdmin = updateUserInput.isAdmin ?: existingUser.isAdmin
+                    )
+
+                    userManager.updateUser(updatedUser).onComplete { updateResult ->
+                        if (updateResult.succeeded() && updateResult.result()) {
+                            try {
+                                val refreshedUser = userManager.getUser(updateUserInput.username)
+                                future.complete(UserManagementResult(
+                                    success = true,
+                                    message = "User updated successfully",
+                                    user = refreshedUser?.toUserInfo()
+                                ))
+                            } catch (e: Exception) {
+                                logger.severe("Error retrieving updated user: ${e.message}")
+                                future.complete(UserManagementResult(
+                                    success = false,
+                                    message = "User updated but error retrieving details: ${e.message}"
+                                ))
                             }
-                        } catch (e: Exception) {
-                            UserManagementResult(success = false, message = "Error updating user: ${e.message}")
+                        } else {
+                            val errorMsg = if (updateResult.failed()) {
+                                "Error updating user: ${updateResult.cause()?.message}"
+                            } else {
+                                "Failed to update user"
+                            }
+                            logger.severe(errorMsg)
+                            future.complete(UserManagementResult(success = false, message = errorMsg))
                         }
                     }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
-                    } else {
-                        logger.severe("Error updating user: ${result.cause()?.message}")
-                        future.complete(UserManagementResult(
-                            success = false,
-                            message = "Error updating user: ${result.cause()?.message}"
-                        ))
-                    }
+                } catch (e: Exception) {
+                    logger.severe("Error updating user: ${e.message}")
+                    future.complete(UserManagementResult(success = false, message = "Error updating user: ${e.message}"))
                 }
             } catch (e: Exception) {
                 logger.severe("Error updating user: ${e.message}")
@@ -470,37 +469,32 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<UserManagementResult> {
-                    runBlocking {
-                        try {
-                            val existingUser = userManager.getUser(username)
-                            if (existingUser == null) {
-                                UserManagementResult(success = false, message = "User not found")
+                try {
+                    val existingUser = userManager.getUser(username)
+                    if (existingUser == null) {
+                        future.complete(UserManagementResult(success = false, message = "User not found"))
+                        return@DataFetcher future
+                    }
+
+                    userManager.deleteUser(username).onComplete { deleteResult ->
+                        if (deleteResult.succeeded() && deleteResult.result()) {
+                            future.complete(UserManagementResult(
+                                success = true,
+                                message = "User deleted successfully"
+                            ))
+                        } else {
+                            val errorMsg = if (deleteResult.failed()) {
+                                "Error deleting user: ${deleteResult.cause()?.message}"
                             } else {
-                                val success = userManager.deleteUser(username)
-                                if (success) {
-                                    UserManagementResult(
-                                        success = true,
-                                        message = "User deleted successfully"
-                                    )
-                                } else {
-                                    UserManagementResult(success = false, message = "Failed to delete user")
-                                }
+                                "Failed to delete user"
                             }
-                        } catch (e: Exception) {
-                            UserManagementResult(success = false, message = "Error deleting user: ${e.message}")
+                            logger.severe("Error deleting user $username: $errorMsg")
+                            future.complete(UserManagementResult(success = false, message = errorMsg))
                         }
                     }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
-                    } else {
-                        logger.severe("Error deleting user $username: ${result.cause()?.message}")
-                        future.complete(UserManagementResult(
-                            success = false,
-                            message = "Error deleting user: ${result.cause()?.message}"
-                        ))
-                    }
+                } catch (e: Exception) {
+                    logger.severe("Error deleting user $username: ${e.message}")
+                    future.complete(UserManagementResult(success = false, message = "Error deleting user: ${e.message}"))
                 }
             } catch (e: Exception) {
                 logger.severe("Error deleting user $username: ${e.message}")
@@ -545,39 +539,42 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<UserManagementResult> {
-                    runBlocking {
-                        try {
-                            val existingUser = userManager.getUser(setPasswordInput.username)
-                            if (existingUser == null) {
-                                UserManagementResult(success = false, message = "User not found")
-                            } else {
-                                val success = userManager.setUserPassword(setPasswordInput.username, setPasswordInput.password)
-                                if (success) {
-                                    val refreshedUser = userManager.getUser(setPasswordInput.username)
-                                    UserManagementResult(
-                                        success = true,
-                                        message = "Password updated successfully",
-                                        user = refreshedUser?.toUserInfo()
-                                    )
-                                } else {
-                                    UserManagementResult(success = false, message = "Failed to update password")
-                                }
+                try {
+                    val existingUser = userManager.getUser(setPasswordInput.username)
+                    if (existingUser == null) {
+                        future.complete(UserManagementResult(success = false, message = "User not found"))
+                        return@DataFetcher future
+                    }
+
+                    userManager.setUserPassword(setPasswordInput.username, setPasswordInput.password).onComplete { passwordResult ->
+                        if (passwordResult.succeeded() && passwordResult.result()) {
+                            try {
+                                val refreshedUser = userManager.getUser(setPasswordInput.username)
+                                future.complete(UserManagementResult(
+                                    success = true,
+                                    message = "Password updated successfully",
+                                    user = refreshedUser?.toUserInfo()
+                                ))
+                            } catch (e: Exception) {
+                                logger.severe("Error retrieving user after password update: ${e.message}")
+                                future.complete(UserManagementResult(
+                                    success = false,
+                                    message = "Password updated but error retrieving details: ${e.message}"
+                                ))
                             }
-                        } catch (e: Exception) {
-                            UserManagementResult(success = false, message = "Error setting password: ${e.message}")
+                        } else {
+                            val errorMsg = if (passwordResult.failed()) {
+                                "Error setting password: ${passwordResult.cause()?.message}"
+                            } else {
+                                "Failed to update password"
+                            }
+                            logger.severe(errorMsg)
+                            future.complete(UserManagementResult(success = false, message = errorMsg))
                         }
                     }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
-                    } else {
-                        logger.severe("Error setting password: ${result.cause()?.message}")
-                        future.complete(UserManagementResult(
-                            success = false,
-                            message = "Error setting password: ${result.cause()?.message}"
-                        ))
-                    }
+                } catch (e: Exception) {
+                    logger.severe("Error setting password: ${e.message}")
+                    future.complete(UserManagementResult(success = false, message = "Error setting password: ${e.message}"))
                 }
             } catch (e: Exception) {
                 logger.severe("Error setting password: ${e.message}")
@@ -625,33 +622,26 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<UserManagementResult> {
-                    runBlocking {
-                        try {
-                            userManager.createAclRule(
-                                username = createAclRuleInput.username,
-                                topicPattern = createAclRuleInput.topicPattern,
-                                canSubscribe = createAclRuleInput.canSubscribe,
-                                canPublish = createAclRuleInput.canPublish,
-                                priority = createAclRuleInput.priority
-                            )
-                            UserManagementResult(
-                                success = true,
-                                message = "ACL rule created successfully"
-                            )
-                        } catch (e: Exception) {
-                            UserManagementResult(success = false, message = "Error creating ACL rule: ${e.message}")
-                        }
-                    }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
-                    } else {
-                        logger.severe("Error creating ACL rule: ${result.cause()?.message}")
+                userManager.createAclRule(
+                    username = createAclRuleInput.username,
+                    topicPattern = createAclRuleInput.topicPattern,
+                    canSubscribe = createAclRuleInput.canSubscribe,
+                    canPublish = createAclRuleInput.canPublish,
+                    priority = createAclRuleInput.priority
+                ).onComplete { createResult ->
+                    if (createResult.succeeded() && createResult.result()) {
                         future.complete(UserManagementResult(
-                            success = false,
-                            message = "Error creating ACL rule: ${result.cause()?.message}"
+                            success = true,
+                            message = "ACL rule created successfully"
                         ))
+                    } else {
+                        val errorMsg = if (createResult.failed()) {
+                            "Error creating ACL rule: ${createResult.cause()?.message}"
+                        } else {
+                            "Failed to create ACL rule"
+                        }
+                        logger.severe(errorMsg)
+                        future.complete(UserManagementResult(success = false, message = errorMsg))
                     }
                 }
             } catch (e: Exception) {
@@ -701,44 +691,55 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<UserManagementResult> {
-                    runBlocking {
-                        try {
-                            val existingRule = userManager.getAclRule(updateAclRuleInput.id)
-                            if (existingRule == null) {
-                                UserManagementResult(success = false, message = "ACL rule not found")
-                            } else {
-                                val updatedRule = existingRule.copy(
-                                    username = updateAclRuleInput.username ?: existingRule.username,
-                                    topicPattern = updateAclRuleInput.topicPattern ?: existingRule.topicPattern,
-                                    canSubscribe = updateAclRuleInput.canSubscribe ?: existingRule.canSubscribe,
-                                    canPublish = updateAclRuleInput.canPublish ?: existingRule.canPublish,
-                                    priority = updateAclRuleInput.priority ?: existingRule.priority
-                                )
-                                val success = userManager.updateAclRule(updatedRule)
-                                if (success) {
-                                    val refreshedRule = userManager.getAclRule(updateAclRuleInput.id)
-                                    UserManagementResult(
-                                        success = true,
-                                        message = "ACL rule updated successfully",
-                                        aclRule = refreshedRule?.toAclRuleInfo()
-                                    )
-                                } else {
-                                    UserManagementResult(success = false, message = "Failed to update ACL rule")
-                                }
-                            }
-                        } catch (e: Exception) {
-                            UserManagementResult(success = false, message = "Error updating ACL rule: ${e.message}")
+                userManager.getAclRule(updateAclRuleInput.id).onComplete { getRuleResult ->
+                    if (getRuleResult.succeeded()) {
+                        val existingRule = getRuleResult.result()
+                        if (existingRule == null) {
+                            future.complete(UserManagementResult(success = false, message = "ACL rule not found"))
+                            return@onComplete
                         }
-                    }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
+
+                        val updatedRule = existingRule.copy(
+                            username = updateAclRuleInput.username ?: existingRule.username,
+                            topicPattern = updateAclRuleInput.topicPattern ?: existingRule.topicPattern,
+                            canSubscribe = updateAclRuleInput.canSubscribe ?: existingRule.canSubscribe,
+                            canPublish = updateAclRuleInput.canPublish ?: existingRule.canPublish,
+                            priority = updateAclRuleInput.priority ?: existingRule.priority
+                        )
+
+                        userManager.updateAclRule(updatedRule).onComplete { updateResult ->
+                            if (updateResult.succeeded() && updateResult.result()) {
+                                userManager.getAclRule(updateAclRuleInput.id).onComplete { refreshResult ->
+                                    if (refreshResult.succeeded()) {
+                                        val refreshedRule = refreshResult.result()
+                                        future.complete(UserManagementResult(
+                                            success = true,
+                                            message = "ACL rule updated successfully",
+                                            aclRule = refreshedRule?.toAclRuleInfo()
+                                        ))
+                                    } else {
+                                        logger.warning("ACL rule updated but failed to retrieve: ${refreshResult.cause()?.message}")
+                                        future.complete(UserManagementResult(
+                                            success = true,
+                                            message = "ACL rule updated successfully"
+                                        ))
+                                    }
+                                }
+                            } else {
+                                val errorMsg = if (updateResult.failed()) {
+                                    "Error updating ACL rule: ${updateResult.cause()?.message}"
+                                } else {
+                                    "Failed to update ACL rule"
+                                }
+                                logger.severe(errorMsg)
+                                future.complete(UserManagementResult(success = false, message = errorMsg))
+                            }
+                        }
                     } else {
-                        logger.severe("Error updating ACL rule: ${result.cause()?.message}")
+                        logger.severe("Error getting ACL rule: ${getRuleResult.cause()?.message}")
                         future.complete(UserManagementResult(
                             success = false,
-                            message = "Error updating ACL rule: ${result.cause()?.message}"
+                            message = "Error getting ACL rule: ${getRuleResult.cause()?.message}"
                         ))
                     }
                 }
@@ -777,35 +778,35 @@ class UserManagementResolver(
                     return@DataFetcher future
                 }
                 
-                vertx.executeBlocking<UserManagementResult> {
-                    runBlocking {
-                        try {
-                            val existingRule = userManager.getAclRule(id)
-                            if (existingRule == null) {
-                                UserManagementResult(success = false, message = "ACL rule not found")
-                            } else {
-                                val success = userManager.deleteAclRule(id)
-                                if (success) {
-                                    UserManagementResult(
-                                        success = true,
-                                        message = "ACL rule deleted successfully"
-                                    )
-                                } else {
-                                    UserManagementResult(success = false, message = "Failed to delete ACL rule")
-                                }
-                            }
-                        } catch (e: Exception) {
-                            UserManagementResult(success = false, message = "Error deleting ACL rule: ${e.message}")
+                userManager.getAclRule(id).onComplete { getRuleResult ->
+                    if (getRuleResult.succeeded()) {
+                        val existingRule = getRuleResult.result()
+                        if (existingRule == null) {
+                            future.complete(UserManagementResult(success = false, message = "ACL rule not found"))
+                            return@onComplete
                         }
-                    }
-                }.onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
+
+                        userManager.deleteAclRule(id).onComplete { deleteResult ->
+                            if (deleteResult.succeeded() && deleteResult.result()) {
+                                future.complete(UserManagementResult(
+                                    success = true,
+                                    message = "ACL rule deleted successfully"
+                                ))
+                            } else {
+                                val errorMsg = if (deleteResult.failed()) {
+                                    "Error deleting ACL rule: ${deleteResult.cause()?.message}"
+                                } else {
+                                    "Failed to delete ACL rule"
+                                }
+                                logger.severe("Error deleting ACL rule $id: $errorMsg")
+                                future.complete(UserManagementResult(success = false, message = errorMsg))
+                            }
+                        }
                     } else {
-                        logger.severe("Error deleting ACL rule $id: ${result.cause()?.message}")
+                        logger.severe("Error getting ACL rule $id: ${getRuleResult.cause()?.message}")
                         future.complete(UserManagementResult(
                             success = false,
-                            message = "Error deleting ACL rule: ${result.cause()?.message}"
+                            message = "Error getting ACL rule: ${getRuleResult.cause()?.message}"
                         ))
                     }
                 }
