@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - OPC UA Devices</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <style>
+        /* Enhanced OPC UA Device Table Styles */
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            border-radius: 12px 12px 0 0;
+        }
+
+        .table-title h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .btn-icon {
+            padding: 0.6rem;
+            min-width: auto;
+            width: auto;
+        }
+
+        .btn-icon svg {
+            margin: 0;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .btn svg {
+            flex-shrink: 0;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--dark-surface-2);
+            border: 1px solid var(--dark-border);
+        }
+
+        .btn-action:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-view {
+            color: var(--monster-purple);
+        }
+
+        .btn-view:hover {
+            background: rgba(124, 58, 237, 0.1);
+            border-color: var(--monster-purple);
+            color: var(--monster-light);
+        }
+
+        .btn-play {
+            color: var(--monster-green);
+        }
+
+        .btn-play:hover {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: var(--monster-green);
+            color: #22c55e;
+        }
+
+        .btn-pause {
+            color: var(--monster-orange);
+        }
+
+        .btn-pause:hover {
+            background: rgba(249, 115, 22, 0.1);
+            border-color: var(--monster-orange);
+            color: #fb923c;
+        }
+
+        .btn-delete {
+            color: var(--monster-red);
+        }
+
+        .btn-delete:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--monster-red);
+            color: #f87171;
+        }
+
+        /* Enhanced table styling */
+        .data-table {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+        }
+
+        .data-table table {
+            margin: 0;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+        }
+
+        .data-table thead th {
+            background: var(--dark-surface-2);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--dark-border);
+        }
+
+        .data-table tbody td {
+            padding: 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+        }
+
+        .data-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Status badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-enabled {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--monster-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-disabled {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--monster-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .table-header {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: stretch;
+            }
+
+            .table-actions {
+                justify-content: center;
+            }
+
+            .action-buttons {
+                gap: 0.25rem;
+            }
+
+            .btn-action {
+                width: 28px;
+                height: 28px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <div class="nav-links">
+                <a href="/pages/dashboard.html">Dashboard</a>
+                <a href="/pages/sessions.html">Sessions</a>
+                <a href="/pages/archive-groups.html">Archives</a>
+                <a href="/pages/opcua-devices.html" class="active">OPC UA</a>
+                <a href="/pages/users.html" id="users-link" style="display: none;">Users</a>
+                <a href="#" id="logout-link">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">OPC UA Device Management</h1>
+                <p class="page-subtitle">Configure and manage OPC UA server connections</p>
+            </div>
+
+            <div class="metrics-grid" style="margin-bottom: 2rem;">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Devices</span>
+                        <div class="metric-icon">🔧</div>
+                    </div>
+                    <div class="metric-value" id="total-devices">0</div>
+                    <div class="metric-label">Configured Devices</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Enabled Devices</span>
+                        <div class="metric-icon">🟢</div>
+                    </div>
+                    <div class="metric-value" id="enabled-devices">0</div>
+                    <div class="metric-label">Active Connections</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">On Current Node</span>
+                        <div class="metric-icon">📍</div>
+                    </div>
+                    <div class="metric-value" id="current-node-devices">0</div>
+                    <div class="metric-label">Local Devices</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Addresses</span>
+                        <div class="metric-icon">📊</div>
+                    </div>
+                    <div class="metric-value" id="total-addresses">0</div>
+                    <div class="metric-label">Monitored Points</div>
+                </div>
+            </div>
+
+            <div id="devices-table" class="data-table">
+                <div class="table-header">
+                    <div class="table-title">
+                        <h2>Device Configuration</h2>
+                    </div>
+                    <div class="table-actions">
+                        <button class="btn btn-secondary btn-icon" onclick="refreshDevices()" title="Refresh devices">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                            </svg>
+                        </button>
+                        <button class="btn btn-primary" onclick="showAddDeviceModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                            Add Device
+                        </button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Device Name</th>
+                            <th>Endpoint URL</th>
+                            <th>Namespace</th>
+                            <th>Node Assignment</th>
+                            <th>Status</th>
+                            <th>Addresses</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devices-table-body">
+                        <!-- Device rows will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading devices...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Device Modal -->
+    <div id="add-device-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add OPC UA Device</h3>
+                <button class="modal-close" onclick="hideAddDeviceModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-device-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="device-name">Device Name *</label>
+                            <input type="text" id="device-name" required placeholder="e.g., plc01">
+                        </div>
+                        <div class="form-group">
+                            <label for="device-namespace">Namespace *</label>
+                            <input type="text" id="device-namespace" required placeholder="e.g., opcua/plc01">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="device-endpoint">Endpoint URL *</label>
+                            <input type="text" id="device-endpoint" required placeholder="opc.tcp://192.168.1.100:4840">
+                        </div>
+                        <div class="form-group">
+                            <label for="device-node">Cluster Node *</label>
+                            <select id="device-node" required>
+                                <option value="">Select Node...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="device-security">Security Policy</label>
+                            <select id="device-security">
+                                <option value="None">None</option>
+                                <option value="Basic256Sha256">Basic256Sha256</option>
+                                <option value="Basic256">Basic256</option>
+                                <option value="Basic128Rsa15">Basic128Rsa15</option>
+                                <option value="Aes256_Sha256_RsaPss">Aes256_Sha256_RsaPss</option>
+                                <option value="Aes128_Sha256_RsaOaep">Aes128_Sha256_RsaOaep</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="device-username">Username</label>
+                            <input type="text" id="device-username" placeholder="Optional">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="device-password">Password</label>
+                            <input type="password" id="device-password" placeholder="Optional">
+                        </div>
+                        <div class="form-group">
+                            <label for="device-enabled">
+                                <input type="checkbox" id="device-enabled" checked>
+                                Enabled
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="device-update-endpoint">
+                                <input type="checkbox" id="device-update-endpoint" checked>
+                                Update Endpoint URL
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideAddDeviceModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" onclick="addDevice()">Add Device</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="confirm-delete-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideConfirmDeleteModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the device "<span id="delete-device-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteDevice()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/opcua-devices.js"></script>
+</body>
+</html>

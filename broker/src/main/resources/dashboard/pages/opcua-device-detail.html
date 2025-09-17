@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - OPC UA Device Detail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <div class="nav-links">
+                <a href="/pages/dashboard.html">Dashboard</a>
+                <a href="/pages/sessions.html">Sessions</a>
+                <a href="/pages/archive-groups.html">Archives</a>
+                <a href="/pages/opcua-devices.html" class="active">OPC UA</a>
+                <a href="/pages/users.html" id="users-link" style="display: none;">Users</a>
+                <a href="#" id="logout-link">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div>
+                        <h1 class="page-title" id="device-title">OPC UA Device</h1>
+                        <p class="page-subtitle" id="device-subtitle">Device configuration and address management</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button class="btn btn-secondary" onclick="goBack()">
+                            ← Back to Devices
+                        </button>
+                        <button class="btn btn-primary" onclick="editDevice()" id="edit-device-btn">
+                            ✏️ Edit Device
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading device details...</span>
+            </div>
+
+            <div id="device-content" style="display: none;">
+                <!-- Device Information Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <h2>Device Information</h2>
+                        <div class="device-status" id="device-status">
+                            <span class="status-badge" id="device-status-badge">Unknown</span>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label>Device Name</label>
+                                <span id="device-name">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Namespace</label>
+                                <span id="device-namespace">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Endpoint URL</label>
+                                <span id="device-endpoint">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Security Policy</label>
+                                <span id="device-security">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Cluster Node</label>
+                                <span id="device-node">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Update Endpoint URL</label>
+                                <span id="device-update-endpoint">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Username</label>
+                                <span id="device-username">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Created</label>
+                                <span id="device-created">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Connection Configuration Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <h2>Connection Configuration</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label>Subscription Sampling Interval</label>
+                                <span id="config-sampling">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Keep Alive Failures Allowed</label>
+                                <span id="config-keepalive">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Reconnect Delay</label>
+                                <span id="config-reconnect">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Connection Timeout</label>
+                                <span id="config-connection-timeout">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Request Timeout</label>
+                                <span id="config-request-timeout">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Buffer Size</label>
+                                <span id="config-buffer-size">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Monitoring Sampling Interval</label>
+                                <span id="config-monitoring-sampling">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Discard Oldest</label>
+                                <span id="config-discard-oldest">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Addresses Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <h2>OPC UA Addresses</h2>
+                        <div class="section-actions">
+                            <button class="btn btn-primary" onclick="showAddAddressModal()">
+                                + Add Address
+                            </button>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div id="addresses-container">
+                            <div id="addresses-table" class="data-table">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Address</th>
+                                            <th>Topic</th>
+                                            <th>Publish Mode</th>
+                                            <th>Remove Path</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="addresses-table-body">
+                                        <!-- Address rows will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="no-addresses" class="no-data" style="display: none;">
+                                No addresses configured. Click "Add Address" to monitor OPC UA nodes.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Address Modal -->
+    <div id="add-address-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add OPC UA Address</h3>
+                <button class="modal-close" onclick="hideAddAddressModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-address-form">
+                    <div class="form-group">
+                        <label for="address-address">Address *</label>
+                        <input type="text" id="address-address" required
+                               placeholder="e.g., BrowsePath://Objects/Factory/# or NodeId://ns=2;i=16">
+                        <small class="form-hint">Use BrowsePath:// for hierarchical browsing or NodeId:// for specific nodes</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="address-topic">Topic *</label>
+                        <input type="text" id="address-topic" required
+                               placeholder="e.g., factory/values or machine/status">
+                        <small class="form-hint">MQTT topic where values will be published</small>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="address-publish-mode">Publish Mode</label>
+                            <select id="address-publish-mode">
+                                <option value="SEPARATE">Separate (each node gets own topic)</option>
+                                <option value="SINGLE">Single (all values on one topic)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="address-remove-path">
+                                <input type="checkbox" id="address-remove-path" checked>
+                                Remove Base Path
+                            </label>
+                            <small class="form-hint">Remove base path before first wildcard from topic</small>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" onclick="addAddress()">Add Address</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Device Modal -->
+    <div id="edit-device-modal" class="modal" style="display: none;">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3>Edit OPC UA Device</h3>
+                <button class="modal-close" onclick="hideEditDeviceModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-device-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-device-name">Device Name *</label>
+                            <input type="text" id="edit-device-name" required readonly>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-device-namespace">Namespace *</label>
+                            <input type="text" id="edit-device-namespace" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-device-endpoint">Endpoint URL *</label>
+                            <input type="text" id="edit-device-endpoint" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-device-node">Cluster Node *</label>
+                            <select id="edit-device-node" required>
+                                <option value="">Select Node...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-device-security">Security Policy</label>
+                            <select id="edit-device-security">
+                                <option value="None">None</option>
+                                <option value="Basic256Sha256">Basic256Sha256</option>
+                                <option value="Basic256">Basic256</option>
+                                <option value="Basic128Rsa15">Basic128Rsa15</option>
+                                <option value="Aes256_Sha256_RsaPss">Aes256_Sha256_RsaPss</option>
+                                <option value="Aes128_Sha256_RsaOaep">Aes128_Sha256_RsaOaep</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-device-username">Username</label>
+                            <input type="text" id="edit-device-username">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-device-password">Password</label>
+                            <input type="password" id="edit-device-password" placeholder="Leave empty to keep current">
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label for="edit-device-enabled">
+                                <input type="checkbox" id="edit-device-enabled">
+                                Enabled
+                            </label>
+                            <label for="edit-device-update-endpoint">
+                                <input type="checkbox" id="edit-device-update-endpoint">
+                                Update Endpoint URL
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideEditDeviceModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" onclick="updateDevice()">Update Device</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Address Modal -->
+    <div id="confirm-delete-address-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideConfirmDeleteAddressModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the address "<span id="delete-address-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteAddressModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteAddress()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/opcua-device-detail.js"></script>
+</body>
+</html>
