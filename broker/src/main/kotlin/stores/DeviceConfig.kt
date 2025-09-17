@@ -163,23 +163,33 @@ data class OpcUaAddress(
                 if (topic.startsWith(namespace)) topic else "$namespace/$topic"
             }
             PUBLISH_MODE_SEPARATE -> {
-                // Each node gets its own topic: namespace + / + topic + / + nodeId or browsePath
-                var topicPath = if (browsePath != null && browsePath.isNotEmpty()) {
-                    browsePath
+                // For nodeId subscriptions, only use the topic without appending nodeId
+                if (isNodeIdAddress()) {
+                    // NodeId subscriptions: only use namespace + topic
+                    if (topic.isNotEmpty()) {
+                        "$namespace/$topic"
+                    } else {
+                        namespace
+                    }
                 } else {
-                    nodeId
-                }
+                    // BrowsePath subscriptions: namespace + topic + browsePath
+                    var topicPath = if (browsePath != null && browsePath.isNotEmpty()) {
+                        browsePath
+                    } else {
+                        nodeId
+                    }
 
-                // Apply removePath logic for browse paths if enabled
-                if (removePath && isBrowsePathAddress() && browsePath != null) {
-                    topicPath = removeBasePath(browsePath)
-                }
+                    // Apply removePath logic for browse paths if enabled
+                    if (removePath && isBrowsePathAddress() && browsePath != null) {
+                        topicPath = removeBasePath(browsePath)
+                    }
 
-                // Incorporate the address topic field into the namespace path
-                if (topic.isNotEmpty()) {
-                    "$namespace/$topic/$topicPath"
-                } else {
-                    "$namespace/$topicPath"
+                    // Incorporate the address topic field into the namespace path
+                    if (topic.isNotEmpty()) {
+                        "$namespace/$topic/$topicPath"
+                    } else {
+                        "$namespace/$topicPath"
+                    }
                 }
             }
             else -> topic // fallback
