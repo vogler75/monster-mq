@@ -142,18 +142,34 @@ type Query {
         archiveGroup: String = "Default"
     ): [ArchivedMessage!]!
     
-    # Search for topics by name pattern
+    # Search for topics by name pattern using SQL LIKE wildcards
+    # Supports '%' (matches any sequence of characters) and '_' (matches single character)
+    # Examples:
+    #   pattern: "sensor%" → finds all topics starting with "sensor"
+    #   pattern: "%temperature%" → finds all topics containing "temperature"
+    #   pattern: "device_0_" → finds topics like "device_01", "device_02", etc.
+    # Requires an ArchiveGroup to search within its last value store
     searchTopics(
+        # SQL LIKE pattern with % and _ wildcards
         pattern: String!
+        # Maximum number of topics to return
         limit: Int = 100
+        # ArchiveGroup name to search within (each group has its own last value store)
         archiveGroup: String = "Default"
     ): [String!]!
 
-    # Browse topics tree structure with MQTT-style filtering
-    # Use '+' for single-level wildcards, return direct child topics only
-    # Example: browseTopics(topic: "opcua/+") returns all topics at the opcua level
+    # Browse topics hierarchically using MQTT-style topic structure
+    # Uses MQTT topic conventions: '/' as level separator, '+' for single-level wildcard
+    # Returns only direct child topics (one level down) from the specified path
+    # Examples:
+    #   topic: "opcua" → returns ["opcua/device1", "opcua/device2"] (not deeper levels)
+    #   topic: "opcua/+" → returns all topics at opcua/device level like "opcua/device1/sensor1"
+    #   topic: "+" → returns all top-level topic categories
+    # Requires an ArchiveGroup because topics are stored in the group's last value store
     browseTopics(
+        # MQTT topic path with optional '+' single-level wildcard
         topic: String!
+        # ArchiveGroup name containing the topics (required for data isolation)
         archiveGroup: String = "Default"
     ): [Topic!]!
     
@@ -334,6 +350,25 @@ input UpdateAclRuleInput {
 }
 
 # ArchiveGroup Management Types
+#
+# ArchiveGroups are essential for organizing and managing MQTT data storage in MonsterMQ.
+# Each ArchiveGroup defines:
+# 1. Topic filters that determine which MQTT topics are stored
+# 2. Storage backends (PostgreSQL, CrateDB, MongoDB, etc.) for both last values and historical data
+# 3. Data retention policies and purge intervals
+# 4. Whether to store only retained messages or all messages matching the filters
+#
+# Why ArchiveGroups are required for searchTopics and browseTopics:
+# - MonsterMQ stores topic data in separate databases/collections per ArchiveGroup
+# - Each group has its own "last value store" containing the most recent value for each topic
+# - This isolation allows different topic categories to use different storage backends
+# - Examples: IoT sensors in PostgreSQL, OPC UA data in CrateDB, logs in MongoDB
+# - The "Default" ArchiveGroup is required and typically contains general MQTT topics
+#
+# Topic organization example:
+# - Default ArchiveGroup: general/* topics → PostgreSQL
+# - Industrial ArchiveGroup: opcua/*, modbus/* → CrateDB
+# - Logging ArchiveGroup: logs/*, events/* → MongoDB
 
 type NodeConnectionStatus {
     nodeId: String!
@@ -421,10 +456,18 @@ enum OpcUaPublishMode {
     SEPARATE
 }
 
+# OPC UA address configuration for subscribing to OPC UA server nodes
 type OpcUaAddress {
+    # OPC UA node address - can be either NodeId or BrowsePath format:
+    # NodeId examples: "ns=2;i=1234", "ns=2;s=MyDevice.Temperature", "ns=2;g=550e8400-e29b-41d4-a716-446655440000"
+    # BrowsePath examples: "/Root/Objects/MyDevice/Temperature", "/Objects/2:MyDevice/2:Sensor1"
+    # NodeId is more efficient, BrowsePath is more human-readable but requires browsing
     address: String!
+    # MQTT topic where OPC UA values will be published
     topic: String!
+    # How to publish OPC UA values: SINGLE (all in one message) or SEPARATE (individual messages)
     publishMode: OpcUaPublishMode!
+    # Whether to remove the browse path from the topic name when using BrowsePath addresses
     removePath: Boolean!
 }
 
@@ -502,9 +545,15 @@ input OpcUaConnectionConfigInput {
 }
 
 input OpcUaAddressInput {
+    # OPC UA node address - supports two formats:
+    # 1. NodeId (recommended for performance): "ns=2;i=1234", "ns=2;s=MyDevice.Temperature", "ns=2;g=UUID"
+    # 2. BrowsePath (human-readable): "/Root/Objects/MyDevice/Temperature", "/Objects/2:MyDevice/2:Sensor1"
     address: String!
+    # MQTT topic where OPC UA values will be published
     topic: String!
+    # SINGLE: publish all subscribed values in one JSON object, SEPARATE: individual messages per value
     publishMode: OpcUaPublishMode = SEPARATE
+    # For BrowsePath addresses: whether to remove the path prefix from generated topic names
     removePath: Boolean = true
 }
 
@@ -519,39 +568,57 @@ input OpcUaDeviceInput {
 
 # Extend existing Query type
 extend type Query {
-    # Get all OPC UA device configurations
+    # Get all OPC UA device configurations across the entire cluster
+    # Returns devices from all cluster nodes, showing their assignment and status
     opcUaDevices: [OpcUaDevice!]!
 
-    # Get a specific OPC UA device configuration by name
+    # Get a specific OPC UA device configuration by its unique name
+    # Device names must be unique across the entire MonsterMQ cluster
     opcUaDevice(name: String!): OpcUaDevice
 
     # Get OPC UA devices assigned to a specific cluster node
+    # Useful for monitoring device distribution and cluster load balancing
     opcUaDevicesByNode(nodeId: String!): [OpcUaDevice!]!
 
-    # Get list of available cluster nodes
+    # Get list of all available cluster nodes for device assignment
+    # Shows which nodes are available for deploying OPC UA device connectors
     clusterNodes: [ClusterNode!]!
 }
 
 # Extend existing Mutation type
 extend type Mutation {
-    # Add a new OPC UA device configuration
+    # Add a new OPC UA device configuration to the cluster
+    # Creates a device connector that will be deployed on the specified cluster node
+    # The device will automatically start collecting data from the configured OPC UA addresses
     addOpcUaDevice(input: OpcUaDeviceInput!): OpcUaDeviceResult!
 
     # Update an existing OPC UA device configuration
+    # Changes take effect immediately - the device connector will be redeployed with new settings
+    # Useful for modifying connection parameters, security settings, or sampling intervals
     updateOpcUaDevice(name: String!, input: OpcUaDeviceInput!): OpcUaDeviceResult!
 
-    # Delete an OPC UA device configuration
+    # Delete an OPC UA device configuration permanently
+    # Stops the device connector and removes all configuration data
+    # Returns true if deletion was successful, false if device was not found
     deleteOpcUaDevice(name: String!): Boolean!
 
-    # Enable or disable an OPC UA device
+    # Enable or disable an OPC UA device without deleting its configuration
+    # Disabled devices stop collecting data but retain their configuration
+    # Useful for temporarily pausing data collection or troubleshooting
     toggleOpcUaDevice(name: String!, enabled: Boolean!): OpcUaDeviceResult!
 
     # Reassign an OPC UA device to a different cluster node
+    # Moves the device connector from one node to another for load balancing
+    # The device configuration remains unchanged, only the deployment location changes
     reassignOpcUaDevice(name: String!, nodeId: String!): OpcUaDeviceResult!
 
-    # Add an address to an OPC UA device
+    # Add a new OPC UA address (node subscription) to an existing device
+    # The address can be either a NodeId or BrowsePath - see OpcUaAddressInput for format details
+    # New addresses will immediately start collecting data from the OPC UA server
     addOpcUaAddress(deviceName: String!, input: OpcUaAddressInput!): OpcUaDeviceResult!
 
-    # Delete an address from an OPC UA device
+    # Remove an OPC UA address subscription from a device
+    # Stops data collection for the specified address while keeping other addresses active
+    # Use the exact address string that was used when adding the address
     deleteOpcUaAddress(deviceName: String!, address: String!): OpcUaDeviceResult!
 }
