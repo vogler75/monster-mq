@@ -1061,6 +1061,10 @@ QueuedMessagesEnabled: true    # Enable QoS>0 message queuing
 ### Archive Groups
 Archive groups are now managed dynamically via GraphQL API and web dashboard:
 
+**⚠️ Important:** A "Default" archive group with `lastValType` configured is **required** for:
+- **MCP Server**: AI models need access to current topic values
+- **Topic Browser**: Web dashboard requires last values for topic browsing
+
 ```graphql
 # Create archive groups via GraphQL API
 mutation {
@@ -1074,14 +1078,17 @@ mutation {
   }) { success }
 }
 
-# Default archive group for MCP server
+# Default archive group for MCP server and Topic Browser
+# Note: A "Default" archive group with lastValType is REQUIRED for:
+#   - MCP Server: AI models need access to current topic values
+#   - Topic Browser: Web dashboard requires last values for topic browsing
 mutation {
   createArchiveGroup(input: {
     name: "Default"
     enabled: true
     topicFilter: ["#"]
     retainedOnly: false
-    lastValType: POSTGRES      # Required for MCP server
+    lastValType: POSTGRES      # Required for MCP server and Topic Browser
     archiveType: POSTGRES      # Required for MCP historical queries
   }) { success }
 }
