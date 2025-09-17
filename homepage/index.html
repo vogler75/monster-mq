@@ -40,6 +40,8 @@
             <div class="hero-features">
                 <div class="feature-badge">✓ MQTT 3.1.1</div>
                 <div class="feature-badge">✓ Multi-Database</div>
+                <div class="feature-badge">✓ OPC UA</div>
+                <div class="feature-badge">✓ Dashboard</div>
                 <div class="feature-badge">✓ Clustering</div>
                 <div class="feature-badge">✓ AI Ready</div>
             </div>
@@ -66,6 +68,11 @@
                     <p>Integrated MCP (Model Context Protocol) server allows AI models to query real-time and historical MQTT data directly.</p>
                 </div>
                 <div class="feature-card">
+                    <div class="feature-icon">🏭</div>
+                    <h3>OPC UA Integration</h3>
+                    <p>Native OPC UA support with unified message archiving. Industrial automation data flows through the same central system as MQTT messages, ensuring complete data integrity.</p>
+                </div>
+                <div class="feature-card">
                     <div class="feature-icon">📊</div>
                     <h3>GraphQL API</h3>
                     <p>Query current topic states and historical data through a modern GraphQL interface with real-time subscriptions support.</p>
@@ -79,6 +86,11 @@
                     <div class="feature-icon">🔐</div>
                     <h3>Enterprise Security</h3>
                     <p>TLS/SSL support, user authentication with BCrypt, fine-grained ACL rules, and database-level security.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🖥️</div>
+                    <h3>Web Dashboard</h3>
+                    <p>Complete web-based management interface for archive groups, users, and system configuration. Real-time updates without broker restarts.</p>
                 </div>
             </div>
         </div>
@@ -148,6 +160,34 @@
                     </div>
                     <p class="db-usecase">Best for: Development and single-instance deployments</p>
                 </div>
+
+                <div class="database-card">
+                    <div class="db-header kafka">
+                        <div class="db-logo-text">Kafka</div>
+                        <h3>Apache Kafka</h3>
+                    </div>
+                    <div class="db-features">
+                        <div class="db-feature">✓ Stream processing</div>
+                        <div class="db-feature">✓ Event sourcing</div>
+                        <div class="db-feature">✓ Real-time analytics</div>
+                        <div class="db-feature">✓ Infinite retention</div>
+                    </div>
+                    <p class="db-usecase">Best for: Stream analytics and event-driven architectures</p>
+                </div>
+
+                <div class="database-card">
+                    <div class="db-header hazelcast">
+                        <div class="db-logo-text">Hazelcast</div>
+                        <h3>Hazelcast</h3>
+                    </div>
+                    <div class="db-features">
+                        <div class="db-feature">✓ Distributed cache</div>
+                        <div class="db-feature">✓ In-memory speed</div>
+                        <div class="db-feature">✓ Cluster-aware</div>
+                        <div class="db-feature">✓ Automatic replication</div>
+                    </div>
+                    <p class="db-usecase">Best for: High-speed last values and distributed caching</p>
+                </div>
             </div>
 
             <div class="database-comparison">
@@ -195,6 +235,22 @@
                             <td class="yes">✓</td>
                             <td class="no">✗</td>
                             <td class="yes">✓</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Apache Kafka</strong></td>
+                            <td class="no">✗</td>
+                            <td class="no">✗</td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="no">✗</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Hazelcast</strong></td>
+                            <td class="no">✗</td>
+                            <td class="yes">✓</td>
+                            <td class="no">✗</td>
+                            <td class="yes">✓</td>
+                            <td class="no">✗</td>
                         </tr>
                     </tbody>
                 </table>
@@ -325,6 +381,51 @@ GROUP BY topic</code></pre>
   - Name: events
     TopicFilter: ["events/#"]
     ArchiveType: KAFKA</code></pre>
+                    </div>
+                </div>
+
+                <div class="integration-card opcua">
+                    <div class="integration-header">
+                        <div class="integration-icon">🏭</div>
+                        <h3>OPC UA Integration</h3>
+                    </div>
+                    <p>Native OPC UA client with cluster-aware device management. Unified archiving ensures industrial data flows through the same system as MQTT.</p>
+                    <div class="code-snippet">
+<pre><code>// OPC UA device configuration
+{
+  "name": "factory_plc01",
+  "namespace": "opcua/factory",
+  "config": {
+    "endpointUrl": "opc.tcp://192.168.1.100:4840",
+    "addresses": [{
+      "address": "BrowsePath://Objects/Factory/#",
+      "topic": "sensors"
+    }]
+  }
+}</code></pre>
+                    </div>
+                </div>
+
+                <div class="integration-card dashboard">
+                    <div class="integration-header">
+                        <div class="integration-icon">🖥️</div>
+                        <h3>Web Dashboard</h3>
+                    </div>
+                    <p>Complete browser-based management interface for configuration, monitoring, and administration. Real-time updates without broker restarts.</p>
+                    <div class="code-snippet">
+<pre><code>// Access management dashboard
+http://localhost:4000/archives   // Archive Groups
+http://localhost:4000/users      // User Management
+http://localhost:4000/graphql    // GraphQL Playground
+
+// Dynamic configuration changes
+mutation {
+  createArchiveGroup(input: {
+    name: "Production"
+    enabled: true
+    topicFilter: ["sensors/#"]
+  }) { success }
+}</code></pre>
                     </div>
                 </div>
             </div>
