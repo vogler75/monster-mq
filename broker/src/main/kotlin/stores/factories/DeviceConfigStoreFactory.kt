@@ -70,8 +70,9 @@ object DeviceConfigStoreFactory {
                 val sqliteConfig = config.getJsonObject("SQLite")
                 if (sqliteConfig != null) {
                     // Use main database file for device configs
-                    val path = sqliteConfig.getString("Path", "monstermq.db")
-                    DeviceConfigStoreSQLite(vertx, path)
+                    val directory = sqliteConfig.getString("Path", ".")
+                    val dbPath = "$directory/monstermq.db"
+                    DeviceConfigStoreSQLite(vertx, dbPath)
                 } else {
                     null
                 }

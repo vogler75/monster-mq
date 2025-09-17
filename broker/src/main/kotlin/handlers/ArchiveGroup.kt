@@ -211,9 +211,11 @@ class ArchiveGroup(
             }
             MessageStoreType.SQLITE -> {
                 val sqlite = databaseConfig.getJsonObject("SQLite")
+                val archiveName = storeName.removeSuffix("Lastval")
+                val dbPath = "${sqlite.getString("Path", ".")}/monstermq-${archiveName}-lastval.db"
                 val store = MessageStoreSQLite(
                     storeName,
-                    sqlite.getString("Path", "monstermq.db")
+                    dbPath
                 )
                 lastValStore = store
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
@@ -305,9 +307,11 @@ class ArchiveGroup(
             }
             MessageArchiveType.SQLITE -> {
                 val sqlite = databaseConfig.getJsonObject("SQLite")
+                val archiveGroupName = archiveName.removeSuffix("Archive")
+                val dbPath = "${sqlite.getString("Path", ".")}/monstermq-${archiveGroupName}-archive.db"
                 val archive = MessageArchiveSQLite(
                     archiveName,
-                    sqlite.getString("Path", "monstermq.db")
+                    dbPath
                 )
                 archiveStore = archive
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
@@ -419,9 +423,11 @@ class ArchiveGroup(
                 }
                 MessageStoreType.SQLITE -> {
                     val sqlite = databaseConfig.getJsonObject("SQLite")
+                    val archiveGroupName = storeName.removeSuffix("Lastval")
+                    val dbPath = "${sqlite.getString("Path", ".")}/monstermq-${archiveGroupName}-lastval.db"
                     MessageStoreSQLite(
                         storeName,
-                        sqlite.getString("Path", "monstermq.db")
+                        dbPath
                     )
                 }
                 else -> {
@@ -603,9 +609,11 @@ class ArchiveGroup(
             MessageStoreType.SQLITE -> {
                 try {
                     val sqlite = databaseConfig.getJsonObject("SQLite")
+                    val archiveGroupName = storeName.removeSuffix("Lastval")
+                    val dbPath = "${sqlite.getString("Path", ".")}/monstermq-${archiveGroupName}-lastval.db"
                     val store = MessageStoreSQLite(
                         storeName,
-                        sqlite.getString("Path", "monstermq.db")
+                        dbPath
                     )
                     lastValStore = store
                     val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
@@ -761,9 +769,11 @@ class ArchiveGroup(
             MessageArchiveType.SQLITE -> {
                 try {
                     val sqlite = databaseConfig.getJsonObject("SQLite")
+                    val archiveGroupName = archiveName.removeSuffix("Archive")
+                    val dbPath = "${sqlite.getString("Path", ".")}/monstermq-${archiveGroupName}-archive.db"
                     val archive = MessageArchiveSQLite(
                         archiveName,
-                        sqlite.getString("Path", "monstermq.db")
+                        dbPath
                     )
                     archiveStore = archive
                     val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)

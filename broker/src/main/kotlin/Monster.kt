@@ -33,6 +33,7 @@ import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import com.hazelcast.config.Config
 import at.rocworks.devices.opcua.OpcUaExtension
 import handlers.MetricsHandler
+import java.io.File
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
@@ -340,8 +341,12 @@ MORE INFO:
                     mongoDbConfig.database = mongo.getString("Database", "monster")
                 }
                 configJson.getJsonObject("SQLite", JsonObject()).let { sqlite ->
-                    sqliteConfig.path = sqlite.getString("Path", "monstermq.db")
+                    sqliteConfig.path = sqlite.getString("Path", ".")
                 }
+
+                // Validate SQLite directory if SQLite is used for any store
+                validateSQLiteDirectory(configJson)
+
                 startMonster(vertx)
             } else {
                 logger.severe("Config loading failed: ${it.cause()}")
@@ -651,7 +656,8 @@ MORE INFO:
                     SessionStoreMongoDB(mongoDbConfig.url, mongoDbConfig.database)
                 }
                 SessionStoreType.SQLITE -> {
-                    SessionStoreSQLite(sqliteConfig.path)
+                    val configDbPath = "${sqliteConfig.path}/monstermq.db"
+                    SessionStoreSQLite(configDbPath)
                 }
             }
             val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
@@ -714,7 +720,8 @@ MORE INFO:
                 store
             }
             MessageStoreType.SQLITE -> {
-                val store = MessageStoreSQLite(name, sqliteConfig.path)
+                val configDbPath = "${sqliteConfig.path}/monstermq.db"
+                val store = MessageStoreSQLite(name, configDbPath)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 ensureSQLiteVerticleDeployed(vertx).compose { _ ->
                     vertx.deployVerticle(store, options)
@@ -723,6 +730,38 @@ MORE INFO:
             }
         }
         return store to promise.future()
+    }
+
+    private fun validateSQLiteDirectory(configJson: JsonObject) {
+        val sessionStoreType = configJson.getString("SessionStoreType")
+        val retainedStoreType = configJson.getString("RetainedStoreType")
+        val archiveGroups = configJson.getJsonArray("ArchiveGroups")
+
+        // Check if SQLite is used anywhere
+        val sqliteUsed = sessionStoreType == "SQLITE" ||
+                        retainedStoreType == "SQLITE" ||
+                        (archiveGroups?.any { group ->
+                            val g = group as JsonObject
+                            g.getString("LastValType") == "SQLITE" ||
+                            g.getString("ArchiveType") == "SQLITE"
+                        } ?: false)
+
+        if (sqliteUsed) {
+            val sqliteDir = File(sqliteConfig.path)
+            if (!sqliteDir.exists()) {
+                logger.severe("SQLite directory '${sqliteConfig.path}' does not exist. Please create the directory or update the SQLite.Path configuration.")
+                exitProcess(1)
+            }
+            if (!sqliteDir.isDirectory()) {
+                logger.severe("SQLite path '${sqliteConfig.path}' is not a directory. Please ensure it points to a valid directory.")
+                exitProcess(1)
+            }
+            if (!sqliteDir.canWrite()) {
+                logger.severe("SQLite directory '${sqliteConfig.path}' is not writable. Please check permissions.")
+                exitProcess(1)
+            }
+            logger.info("SQLite directory validated: '${sqliteConfig.path}'")
+        }
     }
 
 }

@@ -46,9 +46,11 @@ object MetricsStoreFactory {
             MetricsStoreType.SQLITE -> {
                 val sqliteConfig = config.getJsonObject("SQLite")
                     ?: throw IllegalArgumentException("SQLite configuration not found")
+                val directory = sqliteConfig.getString("Path", ".")
+                val dbPath = "$directory/monstermq.db"
                 MetricsStoreSQLite(
                     name = storeName,
-                    dbPath = sqliteConfig.getString("Path", "monstermq.db")
+                    dbPath = dbPath
                 )
             }
         }
