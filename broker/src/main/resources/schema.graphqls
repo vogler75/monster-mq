@@ -1,8 +1,16 @@
 scalar Long
 scalar JSON
 
+# Data format specification for MQTT message payloads
+# Determines how payload data is interpreted and processed by the GraphQL API
 enum DataFormat {
+    # JSON format: payload is parsed as JSON and returned as structured data
+    # Allows for rich querying and manipulation of message content
+    # Invalid JSON will result in parsing errors
     JSON
+    # Binary format: payload is treated as raw binary data encoded in base64
+    # Preserves exact byte content for non-text data (images, files, etc.)
+    # Always safe for any payload content regardless of encoding
     BINARY
 }
 
@@ -51,23 +59,32 @@ type BrokerMetrics {
     timestamp: String!
 }
 
-# Represents a broker node in the cluster
+# Represents a broker node in the MonsterMQ cluster
+# Each broker node runs independently and can handle MQTT clients, message processing, and data storage
 type Broker {
-    # The ID of the node
+    # Unique identifier for this cluster node (used for load balancing and device assignment)
     nodeId: String!
-    # Current metrics for this broker node (single most recent entry)
+    # Current performance metrics for this broker node (latest snapshot)
+    # Returns array with single most recent metrics entry for consistency with metricsHistory
     metrics: [BrokerMetrics!]!
-    # Historical metrics data for this broker node
+    # Historical performance metrics over a specified time range
+    # Useful for monitoring trends, performance analysis, and capacity planning
     metricsHistory(
-        # ISO 8601 timestamp for start of time range (e.g., "2024-01-15T10:00:00Z")
+        # ISO 8601 start timestamp (optional - defaults to 24 hours ago)
         from: String
-        # ISO 8601 timestamp for end of time range (e.g., "2024-01-15T11:00:00Z")
+        # ISO 8601 end timestamp (optional - defaults to now)
         to: String
-        # Alternative to from/to: get metrics from the last N minutes
+        # Alternative time range: metrics from the last N minutes (overrides from/to if specified)
         lastMinutes: Int
     ): [BrokerMetrics!]!
-    # Sessions on this broker node with optional filters
-    sessions(cleanSession: Boolean, connected: Boolean): [Session!]!
+    # MQTT client sessions managed by this broker node
+    # Sessions persist client state, subscriptions, and queued messages
+    sessions(
+        # Filter by session persistence type: true=clean, false=persistent, null=all
+        cleanSession: Boolean,
+        # Filter by connection status: true=active connections, false=disconnected, null=all
+        connected: Boolean
+    ): [Session!]!
 }
 
 # Represents a client session
@@ -120,25 +137,69 @@ type MqttSubscription {
 }
 
 type Query {
-    # Get current value of a topic from LastValueStore
-    currentValue(topic: String!, format: DataFormat = JSON, archiveGroup: String = "Default"): TopicValue
-    
-    # Get current values matching a topic filter
-    currentValues(topicFilter: String!, format: DataFormat = JSON, limit: Int = 100, archiveGroup: String = "Default"): [TopicValue!]!
-    
-    # Get retained message for a specific topic
-    retainedMessage(topic: String!, format: DataFormat = JSON): RetainedMessage
-    
-    # Get all retained messages matching a filter
-    retainedMessages(topicFilter: String, format: DataFormat = JSON, limit: Int = 100): [RetainedMessage!]!
-    
-    # Query historical messages from archive
-    archivedMessages(
-        topicFilter: String!
-        startTime: String
-        endTime: String
+    # Get the most recent value for a specific MQTT topic from the LastValueStore
+    # Returns the latest published value with timestamp and QoS information
+    # Useful for dashboard displays and current status monitoring
+    currentValue(
+        # Exact MQTT topic name (no wildcards allowed)
+        topic: String!,
+        # Data format for the payload: JSON (parsed) or BINARY (base64 encoded)
+        format: DataFormat = JSON,
+        # ArchiveGroup containing the topic's last value store
+        archiveGroup: String = "Default"
+    ): TopicValue
+
+    # Get current values for multiple topics matching an MQTT topic filter
+    # Supports MQTT wildcards: '+' (single level) and '#' (multi-level)
+    # Returns array of most recent values from the LastValueStore
+    currentValues(
+        # MQTT topic filter with wildcards: "sensor/+/temperature", "device/#", etc.
+        topicFilter: String!,
+        # Data format for all returned payloads
+        format: DataFormat = JSON,
+        # Maximum number of topics to return (ordered by topic name)
+        limit: Int = 100,
+        # ArchiveGroup to search within
+        archiveGroup: String = "Default"
+    ): [TopicValue!]!
+
+    # Get retained message for a specific MQTT topic from the RetainedMessageStore
+    # Retained messages persist until explicitly removed or overwritten
+    # Different from currentValue as it only includes messages published with retain=true
+    retainedMessage(
+        # Exact MQTT topic name
+        topic: String!,
+        # Data format for the payload
         format: DataFormat = JSON
+    ): RetainedMessage
+
+    # Get all retained messages matching an MQTT topic filter
+    # Returns messages that were published with the MQTT retain flag
+    # Useful for discovering what retained data exists in the system
+    retainedMessages(
+        # MQTT topic filter with wildcards (optional - null returns all retained messages)
+        topicFilter: String,
+        # Data format for all payloads
+        format: DataFormat = JSON,
+        # Maximum number of messages to return
         limit: Int = 100
+    ): [RetainedMessage!]!
+
+    # Query historical messages from the message archive
+    # Searches through time-series data stored for long-term analysis
+    # Returns messages within specified time range and topic filter
+    archivedMessages(
+        # MQTT topic filter with wildcards to match archived messages
+        topicFilter: String!
+        # ISO 8601 start timestamp: "2024-01-15T10:00:00Z" (optional - defaults to 24h ago)
+        startTime: String
+        # ISO 8601 end timestamp: "2024-01-15T11:00:00Z" (optional - defaults to now)
+        endTime: String
+        # Data format for all payloads
+        format: DataFormat = JSON
+        # Maximum number of messages to return (ordered by timestamp)
+        limit: Int = 100
+        # ArchiveGroup containing the message archive to search
         archiveGroup: String = "Default"
     ): [ArchivedMessage!]!
     
@@ -173,68 +234,230 @@ type Query {
         archiveGroup: String = "Default"
     ): [Topic!]!
     
-    # Get a specific broker by its node ID. If nodeId is omitted, returns the current node.
-    broker(nodeId: String): Broker
-    # Get all brokers in the cluster
+    # Get broker node information and metrics for monitoring cluster health
+    # Returns current metrics, session counts, and node status information
+    broker(
+        # Cluster node ID (optional - if omitted, returns current node)
+        nodeId: String
+    ): Broker
+
+    # Get information about all broker nodes in the MonsterMQ cluster
+    # Useful for cluster monitoring and load distribution analysis
+    # Returns array of all active cluster nodes with their metrics
     brokers: [Broker!]!
-    # Get active sessions. If nodeId is omitted, returns sessions from all nodes.
-    sessions(nodeId: String, cleanSession: Boolean, connected: Boolean): [Session!]!
-    # Get a specific session by client ID. If nodeId is omitted, it will be looked up.
-    session(clientId: String!, nodeId: String): Session
 
-    # User Management
-    users(username: String): [UserInfo!]!
+    # Get MQTT client sessions across the cluster or from specific nodes
+    # Sessions represent MQTT client connections with their state and subscriptions
+    sessions(
+        # Filter by specific cluster node (optional - if omitted, returns sessions from all nodes)
+        nodeId: String,
+        # Filter by session type: true=clean sessions, false=persistent sessions, null=all
+        cleanSession: Boolean,
+        # Filter by connection status: true=connected, false=disconnected, null=all
+        connected: Boolean
+    ): [Session!]!
 
-    # ArchiveGroup Management
+    # Get detailed information about a specific MQTT client session
+    # Includes metrics, subscriptions, and connection status
+    session(
+        # MQTT client ID to look up
+        clientId: String!,
+        # Node ID where session is located (optional - will be auto-discovered if omitted)
+        nodeId: String
+    ): Session
+
+    # User Management - Get user accounts and their permissions
+    # Returns authentication and authorization information for MQTT access control
+    users(
+        # Filter by specific username (optional - if omitted, returns all users)
+        username: String
+    ): [UserInfo!]!
+
+    # ArchiveGroup Management - Get data archiving configurations
+    # Shows how MQTT topics are organized and stored across different databases
     archiveGroups: [ArchiveGroupInfo!]!
-    archiveGroup(name: String!): ArchiveGroupInfo
+
+    # Get detailed information about a specific ArchiveGroup
+    # Includes topic filters, storage configuration, and connection status
+    archiveGroup(
+        # Name of the ArchiveGroup to retrieve
+        name: String!
+    ): ArchiveGroupInfo
 }
 
 type Mutation {
-    # Authentication (no token required) - returns null when authentication is disabled
-    login(username: String!, password: String!): LoginResult
-    
-    # Publish a message to a topic (requires token + ACL check)
-    publish(input: PublishInput!): PublishResult!
-    
-    # Publish multiple messages (requires token + ACL check)
-    publishBatch(inputs: [PublishInput!]!): [PublishResult!]!
-    
-    # User Management (requires admin token)
-    createUser(input: CreateUserInput!): UserManagementResult!
-    updateUser(input: UpdateUserInput!): UserManagementResult!
-    deleteUser(username: String!): UserManagementResult!
-    setPassword(input: SetPasswordInput!): UserManagementResult!
-    
-    # ACL Rule Management (requires admin token)
-    createAclRule(input: CreateAclRuleInput!): UserManagementResult!
-    updateAclRule(input: UpdateAclRuleInput!): UserManagementResult!
-    deleteAclRule(id: String!): UserManagementResult!
+    # Authenticate with username/password to obtain a JWT token for API access
+    # Required for accessing protected mutations (publishing, user management, etc.)
+    # Returns null when user authentication is disabled in MonsterMQ configuration
+    login(
+        # Username for authentication
+        username: String!,
+        # Password for authentication
+        password: String!
+    ): LoginResult
 
-    # Queued Messages Management (requires admin token)
-    purgeQueuedMessages(clientId: String): PurgeResult!
+    # Publish an MQTT message to a specific topic through the broker
+    # Message will be distributed to all subscribers and optionally stored based on ArchiveGroup settings
+    # Requires valid JWT token and publish permission for the topic
+    publish(
+        # Message details including topic, payload, QoS, and retention settings
+        input: PublishInput!
+    ): PublishResult!
 
-    # ArchiveGroup Management (requires admin token)
-    createArchiveGroup(input: CreateArchiveGroupInput!): ArchiveGroupResult!
-    updateArchiveGroup(input: UpdateArchiveGroupInput!): ArchiveGroupResult!
-    deleteArchiveGroup(name: String!): ArchiveGroupResult!
-    enableArchiveGroup(name: String!): ArchiveGroupResult!
-    disableArchiveGroup(name: String!): ArchiveGroupResult!
+    # Publish multiple MQTT messages in a single atomic operation
+    # Useful for bulk data ingestion and reducing API call overhead
+    # All messages must pass ACL checks or the entire batch will be rejected
+    publishBatch(
+        # Array of messages to publish simultaneously
+        inputs: [PublishInput!]!
+    ): [PublishResult!]!
+
+    # Create a new user account with specified permissions and access rights
+    # Sets up authentication credentials and initial ACL permissions
+    # Requires admin JWT token for execution
+    createUser(
+        # User account details including username, password, and permission flags
+        input: CreateUserInput!
+    ): UserManagementResult!
+
+    # Update an existing user account's permissions and settings
+    # Can modify enabled status, subscription/publish rights, and admin privileges
+    # Cannot change username or password (use setPassword for password changes)
+    updateUser(
+        # Updated user details (only specified fields will be changed)
+        input: UpdateUserInput!
+    ): UserManagementResult!
+
+    # Permanently delete a user account and all associated ACL rules
+    # This action cannot be undone - the user will immediately lose access
+    # Active sessions for the user will be terminated
+    deleteUser(
+        # Username of the account to delete
+        username: String!
+    ): UserManagementResult!
+
+    # Change the password for an existing user account
+    # New password will be securely hashed before storage
+    # User's existing sessions may need to re-authenticate
+    setPassword(
+        # Username and new password details
+        input: SetPasswordInput!
+    ): UserManagementResult!
+
+    # Create a new ACL (Access Control List) rule for topic-level permissions
+    # Rules define which topics a user can subscribe to or publish on
+    # Higher priority rules override lower priority ones
+    createAclRule(
+        # ACL rule details including user, topic pattern, and permissions
+        input: CreateAclRuleInput!
+    ): UserManagementResult!
+
+    # Update an existing ACL rule's permissions or topic pattern
+    # Changes take effect immediately for new client connections
+    # Existing subscriptions may be affected based on the changes
+    updateAclRule(
+        # Updated ACL rule details (ID required, other fields optional)
+        input: UpdateAclRuleInput!
+    ): UserManagementResult!
+
+    # Delete an ACL rule permanently
+    # Users may lose access to topics if this was their only permission rule
+    # Active subscriptions using this rule may be terminated
+    deleteAclRule(
+        # Unique ID of the ACL rule to delete
+        id: String!
+    ): UserManagementResult!
+
+    # Remove queued messages from persistent sessions to free up memory
+    # Useful for clearing message backlogs from disconnected clients
+    # Can target a specific client or purge all queued messages cluster-wide
+    purgeQueuedMessages(
+        # Client ID to purge messages for (optional - if omitted, purges all clients)
+        clientId: String
+    ): PurgeResult!
+
+    # Create a new ArchiveGroup for organizing topic data storage
+    # Defines which topics are stored, which databases to use, and retention policies
+    # The group becomes active immediately and starts archiving matching topics
+    createArchiveGroup(
+        # ArchiveGroup configuration including topic filters and storage settings
+        input: CreateArchiveGroupInput!
+    ): ArchiveGroupResult!
+
+    # Update an existing ArchiveGroup's configuration
+    # Changes to topic filters take effect immediately
+    # Database changes may require redeployment of the archive handlers
+    updateArchiveGroup(
+        # Updated ArchiveGroup settings (name required, other fields optional)
+        input: UpdateArchiveGroupInput!
+    ): ArchiveGroupResult!
+
+    # Permanently delete an ArchiveGroup and stop archiving its topics
+    # Existing archived data is preserved but no new data will be stored
+    # Cannot delete the "Default" ArchiveGroup as it's required by the system
+    deleteArchiveGroup(
+        # Name of the ArchiveGroup to delete
+        name: String!
+    ): ArchiveGroupResult!
+
+    # Enable a disabled ArchiveGroup to resume topic archiving
+    # Restarts data collection for the group's topic filters
+    # Useful for temporarily pausing and resuming data archiving
+    enableArchiveGroup(
+        # Name of the ArchiveGroup to enable
+        name: String!
+    ): ArchiveGroupResult!
+
+    # Disable an ArchiveGroup to pause topic archiving without deleting it
+    # Stops new data collection but preserves existing archived data
+    # Configuration remains intact for future re-enabling
+    disableArchiveGroup(
+        # Name of the ArchiveGroup to disable
+        name: String!
+    ): ArchiveGroupResult!
 }
 
 type Subscription {
-    # Subscribe to real-time topic updates
-    topicUpdates(topicFilter: String!, format: DataFormat = JSON): TopicUpdate!
-    
-    # Subscribe to multiple topic filters
-    multiTopicUpdates(topicFilters: [String!]!, format: DataFormat = JSON): TopicUpdate!
+    # Subscribe to real-time MQTT message updates for topics matching a filter
+    # Creates a persistent GraphQL subscription that streams live data as messages are published
+    # Uses WebSocket connection to deliver low-latency updates to dashboards and monitoring tools
+    # Subscription will remain active until client disconnects or unsubscribes
+    topicUpdates(
+        # MQTT topic filter with wildcards: "sensor/+/temperature", "device/#", etc.
+        # Supports both single-level (+) and multi-level (#) MQTT wildcards
+        topicFilter: String!,
+        # Data format for streamed message payloads
+        format: DataFormat = JSON
+    ): TopicUpdate!
+
+    # Subscribe to real-time updates from multiple topic filters simultaneously
+    # Efficient way to monitor different topic categories in a single subscription
+    # All matching messages from any of the specified filters will be streamed
+    # Useful for comprehensive dashboard monitoring across topic hierarchies
+    multiTopicUpdates(
+        # Array of MQTT topic filters to monitor simultaneously
+        # Each filter supports MQTT wildcards independently
+        topicFilters: [String!]!,
+        # Data format for all streamed message payloads
+        format: DataFormat = JSON
+    ): TopicUpdate!
 }
 
 input PublishInput {
+    # MQTT topic to publish the message to (no wildcards allowed for publishing)
+    # Must follow MQTT topic naming conventions: use '/' as level separator
     topic: String!
+    # Message payload content - format depends on the 'format' field
+    # For JSON format: valid JSON string, for BINARY format: base64 encoded data
     payload: String!
+    # Specifies how the payload should be interpreted and processed
+    # JSON: payload is parsed as JSON, BINARY: payload is treated as base64 encoded binary data
     format: DataFormat = JSON
+    # MQTT Quality of Service level: 0 (at most once), 1 (at least once), 2 (exactly once)
+    # Higher QoS levels provide stronger delivery guarantees but with increased overhead
     qos: Int = 0
+    # Whether this message should be retained by the broker for future subscribers
+    # Retained messages are delivered to clients that subscribe after publication
     retained: Boolean = false
 }
 
