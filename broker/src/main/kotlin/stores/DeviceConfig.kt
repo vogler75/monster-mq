@@ -163,7 +163,7 @@ data class OpcUaAddress(
                 if (topic.startsWith(namespace)) topic else "$namespace/$topic"
             }
             PUBLISH_MODE_SEPARATE -> {
-                // Each node gets its own topic: namespace + / + nodeId or browsePath
+                // Each node gets its own topic: namespace + / + topic + / + nodeId or browsePath
                 var topicPath = if (browsePath != null && browsePath.isNotEmpty()) {
                     browsePath
                 } else {
@@ -175,7 +175,12 @@ data class OpcUaAddress(
                     topicPath = removeBasePath(browsePath)
                 }
 
-                "$namespace/$topicPath"
+                // Incorporate the address topic field into the namespace path
+                if (topic.isNotEmpty()) {
+                    "$namespace/$topic/$topicPath"
+                } else {
+                    "$namespace/$topicPath"
+                }
             }
             else -> topic // fallback
         }
