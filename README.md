@@ -96,6 +96,12 @@ MonsterMQ supports multiple database backends for different storage needs:
 - **Topic Analytics** - Advanced search and filtering capabilities for AI applications
 - **RESTful API** - HTTP interface for external integrations
 
+### **OPC UA Integration**
+- **Unified Message Archiving** - OPC UA values use the same central publishing system as MQTT clients, ensuring complete archival
+- **Cluster-Aware Device Management** - Dynamic deployment of OPC UA connectors across cluster nodes
+- **Flexible Address Configuration** - Support for both NodeId and BrowsePath subscriptions with configurable topic mapping
+- **Real-Time Configuration** - Hot reconfiguration of devices and addresses without broker restart
+
 ### **SparkplugB Extension**
 - **Automatic Message Expansion** - Converts SparkplugB messages from `spBv1.0` to `spBv1.0e` topics
 - **Industrial IoT Support** - Native support for Sparkplug specification
@@ -494,6 +500,8 @@ For comprehensive documentation including:
 - Troubleshooting guide
 
 See: **[📖 Complete ACL Documentation](broker/README_ACL.md)**
+
+For comprehensive OPC UA integration documentation including configuration examples, device management, and architectural details, see: **[📖 OPC UA Extension Documentation](README_OPCUA.md)**
 
 ## 🗂️ Archive Configuration Management
 
