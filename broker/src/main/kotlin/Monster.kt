@@ -76,6 +76,7 @@ class Monster(args: Array<String>) {
     }
     private val sqliteConfig = object {
         var path: String = ""
+        var enableWAL: Boolean = true
     }
 
     companion object {
@@ -159,7 +160,10 @@ class Monster(args: Array<String>) {
         private fun ensureSQLiteVerticleDeployed(vertx: Vertx): Future<String> {
             return if (sqliteVerticleDeploymentId == null) {
                 val promise = Promise.promise<String>()
-                vertx.deployVerticle(SQLiteVerticle()).onComplete { result ->
+                // Pass SQLite configuration to the verticle
+                val sqliteVerticleConfig = JsonObject().put("EnableWAL", singleton?.sqliteConfig?.enableWAL ?: true)
+                val deploymentOptions = DeploymentOptions().setConfig(sqliteVerticleConfig)
+                vertx.deployVerticle(SQLiteVerticle(), deploymentOptions).onComplete { result ->
                     if (result.succeeded()) {
                         sqliteVerticleDeploymentId = result.result()
                         Logger.getLogger("Monster").info("SQLiteVerticle deployed as singleton with ID: ${sqliteVerticleDeploymentId}")
@@ -342,6 +346,7 @@ MORE INFO:
                 }
                 configJson.getJsonObject("SQLite", JsonObject()).let { sqlite ->
                     sqliteConfig.path = sqlite.getString("Path", ".")
+                    sqliteConfig.enableWAL = sqlite.getBoolean("EnableWAL", true)
                 }
 
                 // Validate SQLite directory if SQLite is used for any store

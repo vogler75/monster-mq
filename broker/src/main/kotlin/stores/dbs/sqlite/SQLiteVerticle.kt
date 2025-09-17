@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
 class SQLiteVerticle : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
     private val connections = ConcurrentHashMap<String, Connection>()
+    private var enableWAL: Boolean = true // Default to true for backward compatibility
     
     companion object {
         // Event bus addresses for different operations
@@ -34,6 +35,11 @@ class SQLiteVerticle : AbstractVerticle() {
     
     override fun start(startPromise: Promise<Void>) {
         try {
+            // Read configuration
+            val config = config()
+            enableWAL = config.getBoolean("EnableWAL", true)
+            logger.info("SQLiteVerticle starting with WAL mode: $enableWAL")
+
             // Register event bus consumers
             vertx.eventBus().consumer<JsonObject>(EB_INIT_DB, this::handleInitDb)
             vertx.eventBus().consumer<JsonObject>(EB_EXECUTE_UPDATE, this::handleExecuteUpdate)
@@ -72,16 +78,21 @@ class SQLiteVerticle : AbstractVerticle() {
             
             // Configure SQLite for optimal concurrent access
             connection.createStatement().use { statement ->
-                statement.executeUpdate("PRAGMA journal_mode = WAL")
+                if (enableWAL) {
+                    statement.executeUpdate("PRAGMA journal_mode = WAL")
+                    statement.executeUpdate("PRAGMA wal_autocheckpoint = 1000")
+                } else {
+                    statement.executeUpdate("PRAGMA journal_mode = DELETE")
+                }
                 statement.executeUpdate("PRAGMA synchronous = NORMAL")
                 statement.executeUpdate("PRAGMA cache_size = -64000")
                 statement.executeUpdate("PRAGMA temp_store = MEMORY")
-                statement.executeUpdate("PRAGMA wal_autocheckpoint = 1000")
                 statement.executeUpdate("PRAGMA busy_timeout = 60000")
                 statement.executeUpdate("PRAGMA foreign_keys = ON")
             }
             
-            logger.fine("Created SQLite connection for [$path] with WAL mode")
+            val journalMode = if (enableWAL) "WAL" else "DELETE"
+            logger.fine("Created SQLite connection for [$path] with journal mode: $journalMode")
             connection
         }
     }
