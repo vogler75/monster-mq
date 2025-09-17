@@ -183,9 +183,10 @@
         }
 
         .data-table tbody td {
-            padding: 1rem;
+            padding: 1.5rem 1rem;
             border-bottom: 1px solid rgba(71, 85, 105, 0.3);
             vertical-align: middle;
+            height: 80px;
         }
 
         .data-table tbody tr:hover {
@@ -194,6 +195,50 @@
 
         .data-table tbody tr:last-child td {
             border-bottom: none;
+        }
+
+        /* Addresses Section Full Width */
+        .full-width {
+            width: 100%;
+            max-width: none;
+        }
+
+        .full-width .data-table {
+            width: 100%;
+        }
+
+        .full-width .data-table table {
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        /* Table Column Widths */
+        .data-table th:nth-child(1),
+        .data-table td:nth-child(1) {
+            width: 45%;
+            max-width: 0;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .data-table th:nth-child(2),
+        .data-table td:nth-child(2) {
+            width: 20%;
+        }
+
+        .data-table th:nth-child(3),
+        .data-table td:nth-child(3) {
+            width: 15%;
+        }
+
+        .data-table th:nth-child(4),
+        .data-table td:nth-child(4) {
+            width: 12%;
+        }
+
+        .data-table th:nth-child(5),
+        .data-table td:nth-child(5) {
+            width: 8%;
         }
 
         /* No Data State */
