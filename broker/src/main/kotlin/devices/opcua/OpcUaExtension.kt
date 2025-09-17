@@ -280,10 +280,14 @@ class OpcUaExtension : AbstractVerticle() {
             val mqttMessage = message.body()
             logger.fine("Forwarding OPC UA value to MQTT bus: ${mqttMessage.topicName} = ${String(mqttMessage.payload)}")
 
-            // Use EventBus to send the message to SessionHandler for publishing via MessageBus
+            // Use the shared SessionHandler to ensure proper archiving and distribution
             // This follows the same pattern as regular MQTT client publishing
-            val sessionHandlerAddress = EventBusAddresses.Node.messages(currentNodeId)
-            vertx.eventBus().publish(sessionHandlerAddress, mqttMessage)
+            val sessionHandler = Monster.getSessionHandler()
+            if (sessionHandler != null) {
+                sessionHandler.publishMessage(mqttMessage)
+            } else {
+                logger.severe("SessionHandler not available for OPC UA message publishing")
+            }
 
         } catch (e: Exception) {
             logger.severe("Error forwarding OPC UA value to MQTT bus: ${e.message}")

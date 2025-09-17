@@ -54,7 +54,7 @@ class Monster(args: Array<String>) {
     private var clusterManager: HazelcastClusterManager? = null
     private var nodeName: String = ""
 
-    //private var sessionHandler: SessionHandler? = null
+    private var sessionHandler: SessionHandler? = null
 
     private val postgresConfig = object {
         var url: String = ""
@@ -111,6 +111,14 @@ class Monster(args: Array<String>) {
                 if (it.getBoolean("Enabled", false)) SparkplugExtension(it)
                 else null
             }
+        }
+
+        fun setSessionHandler(handler: SessionHandler) {
+            getInstance().sessionHandler = handler
+        }
+
+        fun getSessionHandler(): SessionHandler? {
+            return getInstance().sessionHandler
         }
         
         private fun ensureSQLiteVerticleDeployed(vertx: Vertx): Future<String> {
@@ -426,10 +434,11 @@ MORE INFO:
                 // Session handler
                 val sessionHandler = SessionHandler(sessionStore, messageBus, messageHandler, queuedMessagesEnabled)
 
-                // Store ArchiveHandler for later access and set MessageHandler reference
+                // Store ArchiveHandler and SessionHandler for later access
                 singleton?.let { instance ->
                     instance.archiveHandler = archiveHandler
                     archiveHandler.setMessageHandler(messageHandler)
+                    instance.sessionHandler = sessionHandler
                 }
 
                 // OPC UA Extension
