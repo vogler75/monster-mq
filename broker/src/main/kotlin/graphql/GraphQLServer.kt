@@ -243,6 +243,7 @@ class GraphQLServer(
                     .dataFetcher("retainedMessages", queryResolver.retainedMessages())
                     .dataFetcher("archivedMessages", queryResolver.archivedMessages())
                     .dataFetcher("searchTopics", queryResolver.searchTopics())
+                    .dataFetcher("browseTopics", queryResolver.browseTopics())
                     // Metrics queries
                     .dataFetcher("broker", metricsResolver.broker())
                     .dataFetcher("brokers", metricsResolver.brokers())
@@ -333,6 +334,10 @@ class GraphQLServer(
                         dataFetcher("connectionStatus", resolver.connectionStatus())
                     }
                 }
+            }
+            .type("Topic") { builder ->
+                builder
+                    .dataFetcher("value", queryResolver.topicValue())
             }
             .build()
     }

@@ -12,6 +12,13 @@ import java.time.format.DateTimeParseException
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 
+/**
+ * Topic data class for GraphQL browseTopics query
+ */
+data class Topic(
+    val name: String
+)
+
 class QueryResolver(
     private val vertx: Vertx,
     private val retainedStore: IMessageStore?,
@@ -447,6 +454,188 @@ class QueryResolver(
             regex.matches(topicName)
         } else {
             topicName.contains(pattern, ignoreCase = true)
+        }
+    }
+
+    fun browseTopics(): DataFetcher<CompletableFuture<List<Topic>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Topic>>()
+
+            val topicPattern = env.getArgument<String>("topic") ?: "+"
+            // Get auth context from thread-local service (may be null for anonymous users)
+            val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
+
+            // Check subscribe permission for the topic pattern (works with anonymous users)
+            if (!authContext.canSubscribeToTopic(userAuthContext, topicPattern)) {
+                future.completeExceptionally(GraphQLException("No subscribe permission for topic pattern: $topicPattern"))
+                return@DataFetcher future
+            }
+
+            val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
+
+            // Find the specified archive group with a LastValueStore
+            val lastValueStore = getCurrentArchiveGroups()[archiveGroupName]?.lastValStore
+
+            if (lastValueStore == null) {
+                logger.warning("No LastValueStore configured for archive group '$archiveGroupName'")
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            // Parse the topic pattern to determine browsing strategy
+            val topicLevels = topicPattern.split("/")
+            val hasWildcard = topicPattern.contains("+") || topicPattern.contains("#")
+
+            if (!hasWildcard) {
+                // Exact topic - just return it if it exists
+                lastValueStore.getAsync(topicPattern) { message ->
+                    if (message != null) {
+                        future.complete(listOf(Topic(topicPattern)))
+                    } else {
+                        future.complete(emptyList())
+                    }
+                }
+                return@DataFetcher future
+            }
+
+            // For wildcard patterns, we need to browse the topic tree
+            val topicNames = mutableSetOf<String>()
+            var completed = false
+
+            // Convert pattern to a filter that finds all matching topics
+            val searchFilter = if (topicPattern.endsWith("+")) {
+                // Single level wildcard - replace + with # to get all sub-topics, then filter
+                topicPattern.replace("+", "#")
+            } else {
+                topicPattern
+            }
+
+            lastValueStore.findMatchingMessages(searchFilter) { message ->
+                if (!completed) {
+                    val messageTopic = message.topicName
+
+                    // Extract the topic level we want to show based on the pattern
+                    val browseResult = extractBrowseTopicFromPattern(messageTopic, topicPattern)
+                    if (browseResult != null && !topicNames.contains(browseResult)) {
+                        topicNames.add(browseResult)
+                    }
+
+                    // Continue processing more messages
+                    true
+                } else {
+                    false // stop processing
+                }
+            }
+
+            // Complete with results after async search finishes
+            vertx.setTimer(100) {
+                if (!completed) {
+                    completed = true
+                    val topics = topicNames.sorted().map { Topic(it) }
+                    future.complete(topics)
+                }
+            }
+
+            future
+        }
+    }
+
+    /**
+     * Extract the topic level to show based on the browse pattern
+     * For example, if pattern is "opcua/+" and messageTopic is "opcua/device1/temp",
+     * this should return "opcua/device1"
+     */
+    private fun extractBrowseTopicFromPattern(messageTopic: String, pattern: String): String? {
+        val patternLevels = pattern.split("/")
+        val messageLevels = messageTopic.split("/")
+
+        // Find the index of the wildcard in the pattern
+        val wildcardIndex = patternLevels.indexOfFirst { it == "+" || it == "#" }
+        if (wildcardIndex == -1) {
+            // No wildcard, should match exactly
+            return if (messageTopic == pattern) messageTopic else null
+        }
+
+        // Check if the message topic has enough levels to match the pattern up to wildcard
+        if (messageLevels.size < wildcardIndex) {
+            return null
+        }
+
+        // Check if the prefix matches
+        for (i in 0 until wildcardIndex) {
+            if (patternLevels[i] != messageLevels[i]) {
+                return null
+            }
+        }
+
+        // For single-level wildcard (+), return the topic up to the next level
+        if (patternLevels[wildcardIndex] == "+") {
+            // Return the topic up to and including the level that matches the +
+            if (messageLevels.size > wildcardIndex) {
+                return messageLevels.take(wildcardIndex + 1).joinToString("/")
+            }
+        }
+
+        // For multi-level wildcard (#), return the full topic
+        if (patternLevels[wildcardIndex] == "#") {
+            return messageTopic
+        }
+
+        return null
+    }
+
+    fun topicValue(): DataFetcher<CompletableFuture<TopicValue?>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<TopicValue?>()
+            val source = env.getSource<Topic?>()
+            val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
+            val archiveGroupName = "Default" // Use default archive group for Topic field resolver
+
+            if (source == null) {
+                future.complete(null)
+                return@DataFetcher future
+            }
+
+            // Get auth context from thread-local service (may be null for anonymous users)
+            val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
+
+            // Check subscribe permission for this specific topic (works with anonymous users)
+            if (!authContext.canSubscribeToTopic(userAuthContext, source.name)) {
+                future.completeExceptionally(GraphQLException("No subscribe permission for topic: ${source.name}"))
+                return@DataFetcher future
+            }
+
+            // Find the specified archive group with a LastValueStore
+            val lastValueStore = getCurrentArchiveGroups()[archiveGroupName]?.lastValStore
+
+            if (lastValueStore == null) {
+                logger.warning("No LastValueStore configured for archive group '$archiveGroupName'")
+                future.complete(null)
+                return@DataFetcher future
+            }
+
+            // Use getAsync for all stores (now available in all implementations)
+            lastValueStore.getAsync(source.name) { message ->
+                if (message != null) {
+                    val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
+                        message.payload,
+                        format
+                    )
+                    future.complete(
+                        TopicValue(
+                            topic = message.topicName,
+                            payload = payload,
+                            format = actualFormat,
+                            timestamp = message.time.toEpochMilli(),
+                            qos = message.qosLevel
+                        )
+                    )
+                } else {
+                    future.complete(null)
+                }
+            }
+
+            future
         }
     }
 

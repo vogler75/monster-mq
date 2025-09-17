@@ -148,6 +148,14 @@ type Query {
         limit: Int = 100
         archiveGroup: String = "Default"
     ): [String!]!
+
+    # Browse topics tree structure with MQTT-style filtering
+    # Use '+' for single-level wildcards, return direct child topics only
+    # Example: browseTopics(topic: "opcua/+") returns all topics at the opcua level
+    browseTopics(
+        topic: String!
+        archiveGroup: String = "Default"
+    ): [Topic!]!
     
     # Get a specific broker by its node ID. If nodeId is omitted, returns the current node.
     broker(nodeId: String): Broker
@@ -227,6 +235,13 @@ type TopicValue {
     format: DataFormat!
     timestamp: Long!
     qos: Int!
+}
+
+type Topic {
+    # The topic name
+    name: String!
+    # The current value for this topic (null if no value exists)
+    value(format: DataFormat = JSON): TopicValue
 }
 
 type RetainedMessage {
