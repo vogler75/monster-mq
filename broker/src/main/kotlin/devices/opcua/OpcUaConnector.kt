@@ -53,6 +53,7 @@ class OpcUaConnector : AbstractVerticle() {
     // Connection state
     private var isConnected = false
     private var isReconnecting = false
+    private var reconnectTimerId: Long? = null
 
     // Static address subscriptions
     private val addressSubscriptions = ConcurrentHashMap<String, AddressSubscription>() // address -> subscription
@@ -95,6 +96,13 @@ class OpcUaConnector : AbstractVerticle() {
 
     override fun stop(stopPromise: Promise<Void>) {
         logger.info("Stopping OpcUaConnector for device: ${deviceConfig.name}")
+
+        // Cancel any pending reconnection timer
+        reconnectTimerId?.let { timerId ->
+            vertx.cancelTimer(timerId)
+            reconnectTimerId = null
+            logger.info("Cancelled pending reconnection timer for device ${deviceConfig.name}")
+        }
 
         disconnectFromOpcUaServer()
             .onComplete { result ->
@@ -231,9 +239,16 @@ class OpcUaConnector : AbstractVerticle() {
     private fun disconnectFromOpcUaServer(): Future<Void> {
         val promise = Promise.promise<Void>()
 
+        // Cancel any pending reconnection timer
+        reconnectTimerId?.let { timerId ->
+            vertx.cancelTimer(timerId)
+            reconnectTimerId = null
+        }
+
         if (client != null && isConnected) {
             client!!.disconnect().whenComplete { _, _ ->
                 isConnected = false
+                isReconnecting = false
                 client = null
                 subscription = null
                 addressSubscriptions.clear()
@@ -241,6 +256,12 @@ class OpcUaConnector : AbstractVerticle() {
                 promise.complete()
             }
         } else {
+            isConnected = false
+            isReconnecting = false
+            client = null
+            subscription = null
+            addressSubscriptions.clear()
+            opcUaMonitoredItems.clear()
             promise.complete()
         }
 
@@ -249,12 +270,26 @@ class OpcUaConnector : AbstractVerticle() {
 
     private fun scheduleReconnection() {
         if (!isReconnecting) {
-            vertx.setTimer(opcUaConfig.reconnectDelay) {
+            // Cancel any existing reconnection timer
+            reconnectTimerId?.let { timerId ->
+                vertx.cancelTimer(timerId)
+            }
+
+            // Schedule new reconnection attempt
+            reconnectTimerId = vertx.setTimer(opcUaConfig.reconnectDelay) {
+                reconnectTimerId = null
                 if (!isConnected) {
-                    logger.info("Attempting to reconnect to OPC UA server...")
+                    logger.info("Attempting to reconnect to OPC UA server for device ${deviceConfig.name}...")
                     connectToOpcUaServer()
+                        .compose { setupStaticSubscriptions() }
+                        .onComplete { result ->
+                            if (result.failed()) {
+                                logger.warning("Reconnection failed for device ${deviceConfig.name}: ${result.cause()?.message}")
+                            }
+                        }
                 }
             }
+            logger.info("Scheduled reconnection for device ${deviceConfig.name} in ${opcUaConfig.reconnectDelay}ms")
         }
     }
 
