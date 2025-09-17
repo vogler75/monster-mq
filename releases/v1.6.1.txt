@@ -1,0 +1,31 @@
+Release v1.6.1
+Built from commit: 8a7eb20
+Date: 2025-09-17 15:16:07
+
+Changes since v1.6.0:
+---
+8a7eb20 Update version.txt
+de77c6d Add Topic Browser page and navigation to dashboard
+8b9bead Add efficient topic browsing with findMatchingTopics
+58e8bde Add browseTopics query and Topic type to GraphQL API
+9c8d47a Handle escaped slashes in OPC UA browse paths
+e022172 Improve ArchiveGroup startup and dynamic group access
+5e24f91 Refactor user and ACL management to use Vert.x Futures
+723ceb3 Refactoring
+1657650 Rename ISessionStore to ISessionStoreSync and update usage
+fd1f0eb Refactor archive group and session store operations to async
+158bbe5 Refactor SessionStoreSQLite to use synchronous DB operations
+d07867a Add OPC UA, Dashboard, Kafka, and Hazelcast features
+db883fc Add OPC UA integration documentation
+fcfe71f Expose SessionHandler in Monster and update OPC UA publishing
+e9573df Fix topic generation for NodeId subscriptions in OPC UA
+c800a6f Include topic in OPC UA publish mode topic path
+53a0b8f Add modal styles and improve checkbox layout in device detail
+a6fa127 Improve OPC UA device detail table layout and styling
+82dddc0 Enhance OPC UA device detail UI and run script
+61c7053 Add OPC UA device management UI to dashboard
+b114705 Fix device toggle to fetch from database if not active
+78bd038 Add updateEndpointUrl and refactor OPC UA address input
+ce36d9b Refactor OPC UA device config to stores package
+d7707f6 Add OPC UA integration with device management
+41464d9 Document Kafka data format in README
