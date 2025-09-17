@@ -96,35 +96,31 @@ class SessionStoreSQLite(
 
     override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int) -> Unit) {
         val sql = "SELECT client_id, topic, qos FROM $subscriptionsTableName"
-        sqlClient.executeQuery(sql).onComplete { result ->
-            if (result.succeeded()) {
-                val results = result.result()
-                results.forEach { row ->
-                    val rowObj = row as JsonObject
-                    val clientId = rowObj.getString("client_id")
-                    val topic = rowObj.getString("topic")
-                    val qos = rowObj.getInteger("qos")
-                    callback(topic, clientId, qos)
-                }
-            } else {
-                logger.warning("Error fetching subscriptions: ${result.cause()?.message} [iterateSubscriptions]")
+        try {
+            val results = sqlClient.executeQuerySync(sql)
+            results.forEach { row ->
+                val rowObj = row as JsonObject
+                val clientId = rowObj.getString("client_id")
+                val topic = rowObj.getString("topic")
+                val qos = rowObj.getInteger("qos")
+                callback(topic, clientId, qos)
             }
+        } catch (e: Exception) {
+            logger.warning("Error fetching subscriptions: ${e.message} [iterateSubscriptions]")
         }
     }
 
     override fun iterateOfflineClients(callback: (clientId: String) -> Unit) {
         val sql = "SELECT client_id FROM $sessionsTableName WHERE connected = false"
-        sqlClient.executeQuery(sql).onComplete { result ->
-            if (result.succeeded()) {
-                val results = result.result()
-                results.forEach { row ->
-                    val rowObj = row as JsonObject
-                    val clientId = rowObj.getString("client_id")
-                    callback(clientId)
-                }
-            } else {
-                logger.warning("Error fetching offline clients: ${result.cause()?.message}")
+        try {
+            val results = sqlClient.executeQuerySync(sql)
+            results.forEach { row ->
+                val rowObj = row as JsonObject
+                val clientId = rowObj.getString("client_id")
+                callback(clientId)
             }
+        } catch (e: Exception) {
+            logger.warning("Error fetching offline clients: ${e.message}")
         }
     }
 
@@ -134,70 +130,66 @@ class SessionStoreSQLite(
 
     override fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit) {
         val sql = "SELECT client_id, node_id, connected, clean_session FROM $sessionsTableName"
-        sqlClient.executeQuery(sql).onComplete { result ->
-            if (result.succeeded()) {
-                val results = result.result()
-                results.forEach { row ->
-                    val rowObj = row as JsonObject
-                    val clientId = rowObj.getString("client_id")
-                    val nodeId = rowObj.getString("node_id") ?: ""
-                    val connected = rowObj.getBoolean("connected") ?: false
-                    val cleanSession = rowObj.getBoolean("clean_session") ?: true
-                    callback(clientId, nodeId, connected, cleanSession)
-                }
-            } else {
-                logger.warning("Error at fetching all sessions [${result.cause()?.message}] [${Utils.getCurrentFunctionName()}]")
+        try {
+            val results = sqlClient.executeQuerySync(sql)
+            results.forEach { row ->
+                val rowObj = row as JsonObject
+                val clientId = rowObj.getString("client_id")
+                val nodeId = rowObj.getString("node_id") ?: ""
+                val connected = rowObj.getBoolean("connected") ?: false
+                val cleanSession = rowObj.getBoolean("clean_session") ?: true
+                callback(clientId, nodeId, connected, cleanSession)
             }
+        } catch (e: Exception) {
+            logger.warning("Error at fetching all sessions [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
     override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit) {
         val sql = "SELECT client_id, clean_session, last_will_topic, last_will_message, last_will_qos, last_will_retain FROM $sessionsTableName WHERE node_id = ?"
         val params = JsonArray().add(nodeId)
-        sqlClient.executeQuery(sql, params).onComplete { result ->
-            if (result.succeeded()) {
-                val results = result.result()
-                results.forEach { row ->
-                    val rowObj = row as JsonObject
-                    val clientId = rowObj.getString("client_id")
-                    val cleanSession = rowObj.getBoolean("clean_session", false)
-                    
-                    // Reconstruct last will message
-                    val lastWillTopic = rowObj.getString("last_will_topic")
-                    val lastWill = if (lastWillTopic != null) {
-                        val payload = rowObj.getBinary("last_will_message") ?: ByteArray(0)
-                        val qos = rowObj.getInteger("last_will_qos", 0)
-                        val retain = rowObj.getBoolean("last_will_retain", false)
-                        MqttMessage(
-                            messageUuid = "",
-                            messageId = 0,
-                            topicName = lastWillTopic,
-                            payload = payload,
-                            qosLevel = qos,
-                            isRetain = retain,
-                            isQueued = false,
-                            clientId = clientId,
-                            isDup = false
-                        )
-                    } else {
-                        MqttMessage(
-                            messageUuid = "",
-                            messageId = 0,
-                            topicName = "",
-                            payload = ByteArray(0),
-                            qosLevel = 0,
-                            isRetain = false,
-                            isQueued = false,
-                            clientId = clientId,
-                            isDup = false
-                        )
-                    }
-                    
-                    callback(clientId, cleanSession, lastWill)
+        try {
+            val results = sqlClient.executeQuerySync(sql, params)
+            results.forEach { row ->
+                val rowObj = row as JsonObject
+                val clientId = rowObj.getString("client_id")
+                val cleanSession = rowObj.getBoolean("clean_session", false)
+
+                // Reconstruct last will message
+                val lastWillTopic = rowObj.getString("last_will_topic")
+                val lastWill = if (lastWillTopic != null) {
+                    val payload = rowObj.getBinary("last_will_message") ?: ByteArray(0)
+                    val qos = rowObj.getInteger("last_will_qos", 0)
+                    val retain = rowObj.getBoolean("last_will_retain", false)
+                    MqttMessage(
+                        messageUuid = "",
+                        messageId = 0,
+                        topicName = lastWillTopic,
+                        payload = payload,
+                        qosLevel = qos,
+                        isRetain = retain,
+                        isQueued = false,
+                        clientId = clientId,
+                        isDup = false
+                    )
+                } else {
+                    MqttMessage(
+                        messageUuid = "",
+                        messageId = 0,
+                        topicName = "",
+                        payload = ByteArray(0),
+                        qosLevel = 0,
+                        isRetain = false,
+                        isQueued = false,
+                        clientId = clientId,
+                        isDup = false
+                    )
                 }
-            } else {
-                logger.warning("Error fetching node clients: ${result.cause()?.message}")
+
+                callback(clientId, cleanSession, lastWill)
             }
+        } catch (e: Exception) {
+            logger.warning("Error fetching node clients: ${e.message}")
         }
     }
 
@@ -210,21 +202,23 @@ class SessionStoreSQLite(
                   "connected = excluded.connected, "+
                   "information = excluded.information, "+
                   "update_time = CURRENT_TIMESTAMP"
-        
+
         val params = JsonArray()
             .add(clientId)
             .add(nodeId)
             .add(cleanSession)
             .add(connected)
             .add(information.encode())
-        
-        sqlClient.executeUpdateAsync(sql, params)
+
+        val result = sqlClient.executeUpdateSync(sql, params)
+        logger.finest { "Client [$clientId] session stored successfully. Rows affected: $result" }
     }
 
     override fun setConnected(clientId: String, connected: Boolean) {
         val sql = "UPDATE $sessionsTableName SET connected = ?, update_time = CURRENT_TIMESTAMP WHERE client_id = ?"
         val params = JsonArray().add(connected).add(clientId)
-        sqlClient.executeUpdateAsync(sql, params)
+        val result = sqlClient.executeUpdateSync(sql, params)
+        logger.finest { "Client [$clientId] connection status updated to [$connected]. Rows affected: $result" }
     }
 
     override fun isConnected(clientId: String): Boolean {
@@ -250,26 +244,27 @@ class SessionStoreSQLite(
 
     override fun setLastWill(clientId: String, message: MqttMessage?) {
         logger.fine { "Setting last will for client [$clientId] [setLastWill]" }
-        
+
         val sql = """
-            INSERT INTO $sessionsTableName (client_id, last_will_topic, last_will_message, last_will_qos, last_will_retain) 
-            VALUES (?, ?, ?, ?, ?) 
-            ON CONFLICT (client_id) DO UPDATE 
+            INSERT INTO $sessionsTableName (client_id, last_will_topic, last_will_message, last_will_qos, last_will_retain)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT (client_id) DO UPDATE
             SET last_will_topic = excluded.last_will_topic,
-                last_will_message = excluded.last_will_message, 
+                last_will_message = excluded.last_will_message,
                 last_will_qos = excluded.last_will_qos,
                 last_will_retain = excluded.last_will_retain,
                 update_time = CURRENT_TIMESTAMP
         """.trimIndent()
-        
+
         val params = JsonArray()
             .add(clientId)
             .add(message?.topicName)
             .add(message?.payload)
             .add(message?.qosLevel)
             .add(message?.isRetain)
-        
-        sqlClient.executeUpdateAsync(sql, params)
+
+        val result = sqlClient.executeUpdateSync(sql, params)
+        logger.finest { "Last will for client [$clientId] stored successfully. Rows affected: $result" }
     }
 
     override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
@@ -318,36 +313,34 @@ class SessionStoreSQLite(
         // First fetch all subscriptions for this client to call callback
         val selectSql = "SELECT topic, qos FROM $subscriptionsTableName WHERE client_id = ?"
         val params = JsonArray().add(clientId)
-        
-        sqlClient.executeQuery(selectSql, params).onComplete { result ->
-            if (result.succeeded()) {
-                val results = result.result()
-                results.forEach { row ->
-                    val rowObj = row as JsonObject
-                    val topic = rowObj.getString("topic")
-                    val qos = rowObj.getInteger("qos")
-                    val subscription = MqttSubscription(
-                        clientId = clientId,
-                        topicName = topic,
-                        qos = MqttQoS.valueOf(qos)
-                    )
-                    callback(subscription)
-                }
-                
-                // Then delete in order: subscriptions, queued messages, then session
-                val deleteSql = listOf(
-                    "DELETE FROM $subscriptionsTableName WHERE client_id = ?",
-                    "DELETE FROM $queuedMessagesClientsTableName WHERE client_id = ?", 
-                    "DELETE FROM $sessionsTableName WHERE client_id = ?"
+
+        try {
+            val results = sqlClient.executeQuerySync(selectSql, params)
+            results.forEach { row ->
+                val rowObj = row as JsonObject
+                val topic = rowObj.getString("topic")
+                val qos = rowObj.getInteger("qos")
+                val subscription = MqttSubscription(
+                    clientId = clientId,
+                    topicName = topic,
+                    qos = MqttQoS.valueOf(qos)
                 )
-                
-                deleteSql.forEach { sql ->
-                    val deleteParams = JsonArray().add(clientId)
-                    sqlClient.executeUpdateAsync(sql, deleteParams)
-                }
-            } else {
-                logger.warning("Error fetching subscriptions for client deletion: ${result.cause()?.message}")
+                callback(subscription)
             }
+
+            // Then delete in order: subscriptions, queued messages, then session
+            val deleteSql = listOf(
+                "DELETE FROM $subscriptionsTableName WHERE client_id = ?",
+                "DELETE FROM $queuedMessagesClientsTableName WHERE client_id = ?",
+                "DELETE FROM $sessionsTableName WHERE client_id = ?"
+            )
+
+            deleteSql.forEach { sql ->
+                val deleteParams = JsonArray().add(clientId)
+                sqlClient.executeUpdateAsync(sql, deleteParams)
+            }
+        } catch (e: Exception) {
+            logger.warning("Error fetching subscriptions for client deletion: ${e.message}")
         }
     }
 
@@ -398,54 +391,52 @@ class SessionStoreSQLite(
                     JOIN $queuedMessagesClientsTableName c ON m.message_uuid = c.message_uuid
                     WHERE c.client_id = ?
                     ORDER BY c.rowid"""
-        
+
         val params = JsonArray().add(clientId)
-        
-        sqlClient.executeQuery(sql, params).onComplete { result ->
-            if (result.succeeded()) {
-                val results = result.result()
-                val processedUuids = mutableListOf<String>()
-                
-                results.forEach { row ->
-                    val rowObj = row as JsonObject
-                    val messageUuid = rowObj.getString("message_uuid")
-                    val messageId = rowObj.getInteger("message_id")
-                    val topic = rowObj.getString("topic")
-                    val payload = rowObj.getBinary("payload") ?: ByteArray(0)
-                    val qos = rowObj.getInteger("qos")
-                    val retained = rowObj.getBoolean("retained", false)
-                    val originalClientId = rowObj.getString("client_id")
-                    
-                    val message = MqttMessage(
-                        messageUuid = messageUuid,
-                        messageId = messageId,
-                        topicName = topic,
-                        payload = payload,
-                        qosLevel = qos,
-                        isRetain = retained,
-                        isQueued = true,
-                        clientId = originalClientId,
-                        isDup = false
-                    )
-                    
-                    // Call callback and collect processed messages
-                    if (callback(message)) {
-                        processedUuids.add(messageUuid)
-                    }
+
+        try {
+            val results = sqlClient.executeQuerySync(sql, params)
+            val processedUuids = mutableListOf<String>()
+
+            results.forEach { row ->
+                val rowObj = row as JsonObject
+                val messageUuid = rowObj.getString("message_uuid")
+                val messageId = rowObj.getInteger("message_id")
+                val topic = rowObj.getString("topic")
+                val payload = rowObj.getBinary("payload") ?: ByteArray(0)
+                val qos = rowObj.getInteger("qos")
+                val retained = rowObj.getBoolean("retained", false)
+                val originalClientId = rowObj.getString("client_id")
+
+                val message = MqttMessage(
+                    messageUuid = messageUuid,
+                    messageId = messageId,
+                    topicName = topic,
+                    payload = payload,
+                    qosLevel = qos,
+                    isRetain = retained,
+                    isQueued = true,
+                    clientId = originalClientId,
+                    isDup = false
+                )
+
+                // Call callback and collect processed messages
+                if (callback(message)) {
+                    processedUuids.add(messageUuid)
                 }
-                
-                // Remove processed messages for this client
-                if (processedUuids.isNotEmpty()) {
-                    val deleteSql = "DELETE FROM $queuedMessagesClientsTableName WHERE client_id = ? AND message_uuid = ?"
-                    val deleteBatch = JsonArray()
-                    processedUuids.forEach { uuid ->
-                        deleteBatch.add(JsonArray().add(clientId).add(uuid))
-                    }
-                    sqlClient.executeBatch(deleteSql, deleteBatch)
-                }
-            } else {
-                logger.warning("Error dequeuing messages for client [$clientId]: ${result.cause()?.message}")
             }
+
+            // Remove processed messages for this client
+            if (processedUuids.isNotEmpty()) {
+                val deleteSql = "DELETE FROM $queuedMessagesClientsTableName WHERE client_id = ? AND message_uuid = ?"
+                val deleteBatch = JsonArray()
+                processedUuids.forEach { uuid ->
+                    deleteBatch.add(JsonArray().add(clientId).add(uuid))
+                }
+                sqlClient.executeBatch(deleteSql, deleteBatch)
+            }
+        } catch (e: Exception) {
+            logger.warning("Error dequeuing messages for client [$clientId]: ${e.message}")
         }
     }
 

@@ -83,7 +83,19 @@ class SQLiteClient(private val vertx: Vertx, private val dbPath: String) {
             JsonArray()
         }
     }
-    
+
+    fun executeUpdateSync(sql: String, params: JsonArray = JsonArray(), timeoutMs: Long = 1000): Int {
+        return try {
+            executeUpdate(sql, params)
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get(timeoutMs, TimeUnit.MILLISECONDS)
+        } catch (e: Exception) {
+            logger.warning("Sync update failed [$sql]: ${e.message}")
+            0
+        }
+    }
+
     /**
      * Execute batch updates (multiple statements with different parameters)
      */
