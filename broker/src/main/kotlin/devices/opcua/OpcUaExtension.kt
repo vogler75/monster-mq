@@ -330,28 +330,36 @@ class OpcUaExtension : AbstractVerticle() {
 
                 "toggle" -> {
                     val enabled = changeData.getBoolean("enabled", false)
-                    val device = activeDevices[deviceName]
 
-                    if (device != null) {
-                        if (enabled && device.isAssignedToNode(currentNodeId)) {
-                            // Re-enable: redeploy
-                            undeployConnectorForDevice(deviceName)
-                                .compose { deployConnectorForDevice(device.copy(enabled = true)) }
-                                .onComplete { result ->
-                                    if (result.succeeded()) {
-                                        message.reply(JsonObject().put("success", true))
+                    // First get device from database (might not be in activeDevices if currently disabled)
+                    deviceStore.getDevice(deviceName)
+                        .onComplete { deviceResult ->
+                            if (deviceResult.succeeded()) {
+                                val device = deviceResult.result()
+                                if (device != null) {
+                                    if (enabled && device.isAssignedToNode(currentNodeId)) {
+                                        // Enable: first undeploy if exists, then deploy with new config
+                                        undeployConnectorForDevice(deviceName)
+                                            .compose { deployConnectorForDevice(device.copy(enabled = true)) }
+                                            .onComplete { result ->
+                                                if (result.succeeded()) {
+                                                    message.reply(JsonObject().put("success", true))
+                                                } else {
+                                                    message.fail(500, result.cause()?.message ?: "Deploy failed")
+                                                }
+                                            }
                                     } else {
-                                        message.fail(500, result.cause()?.message ?: "Redeploy failed")
+                                        // Disable: undeploy
+                                        undeployConnectorForDevice(deviceName)
+                                            .onComplete { message.reply(JsonObject().put("success", true)) }
                                     }
+                                } else {
+                                    message.fail(404, "Device not found: $deviceName")
                                 }
-                        } else {
-                            // Disable: undeploy
-                            undeployConnectorForDevice(deviceName)
-                                .onComplete { message.reply(JsonObject().put("success", true)) }
+                            } else {
+                                message.fail(500, "Failed to load device: ${deviceResult.cause()?.message}")
+                            }
                         }
-                    } else {
-                        message.reply(JsonObject().put("success", true))
-                    }
                 }
 
                 "reassign" -> {
