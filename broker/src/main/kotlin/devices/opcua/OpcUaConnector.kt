@@ -474,7 +474,7 @@ class OpcUaConnector : AbstractVerticle() {
                         addressSubscriptions[address.address] = AddressSubscription(address, nodeId)
                         opcUaMonitoredItems[address.address] = item
 
-                        logger.info("Created monitored item for address ${address.address}, nodeId $nodeId")
+                        logger.fine("Created monitored item for address ${address.address}, nodeId $nodeId")
                         promise.complete()
                     } else {
                         logger.warning("Failed to create monitored item for address ${address.address}: ${item.statusCode}")
