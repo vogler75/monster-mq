@@ -196,32 +196,75 @@ class MutationResolver(
 
             try {
                 if (clientId != null) {
-                    // Purge queued messages for specific client using delClient
-                    // Get count before deleting
-                    val deletedCount = sessionStore.sync.countQueuedMessagesForClient(clientId)
-                    sessionStore.sync.delClient(clientId) { subscription ->
-                        // We don't need the subscription callback but it's required
+                    // Purge queued messages for specific client using async calls
+                    sessionStore.countQueuedMessagesForClient(clientId).onComplete { countResult ->
+                        if (countResult.succeeded()) {
+                            val deletedCount = countResult.result()
+                            sessionStore.delClient(clientId) { subscription ->
+                                // We don't need the subscription callback but it's required
+                            }.onComplete { delResult ->
+                                if (delResult.succeeded()) {
+                                    future.complete(
+                                        PurgeResult(
+                                            success = true,
+                                            message = "Successfully purged queued messages for client: $clientId",
+                                            deletedCount = deletedCount
+                                        )
+                                    )
+                                } else {
+                                    future.complete(
+                                        PurgeResult(
+                                            success = false,
+                                            message = "Failed to purge messages for client $clientId: ${delResult.cause()?.message}",
+                                            deletedCount = 0L
+                                        )
+                                    )
+                                }
+                            }
+                        } else {
+                            future.complete(
+                                PurgeResult(
+                                    success = false,
+                                    message = "Failed to count messages for client $clientId: ${countResult.cause()?.message}",
+                                    deletedCount = 0L
+                                )
+                            )
+                        }
                     }
-
-                    future.complete(
-                        PurgeResult(
-                            success = true,
-                            message = "Successfully purged queued messages for client: $clientId",
-                            deletedCount = deletedCount
-                        )
-                    )
                 } else {
-                    // Purge all queued messages using existing purgeQueuedMessages function
-                    val countBefore = sessionStore.sync.countQueuedMessages()
-                    sessionStore.sync.purgeQueuedMessages()
-
-                    future.complete(
-                        PurgeResult(
-                            success = true,
-                            message = "Successfully purged all queued messages",
-                            deletedCount = countBefore
-                        )
-                    )
+                    // Purge all queued messages using async calls
+                    sessionStore.countQueuedMessages().onComplete { countResult ->
+                        if (countResult.succeeded()) {
+                            val countBefore = countResult.result()
+                            sessionStore.purgeQueuedMessages().onComplete { purgeResult ->
+                                if (purgeResult.succeeded()) {
+                                    future.complete(
+                                        PurgeResult(
+                                            success = true,
+                                            message = "Successfully purged all queued messages",
+                                            deletedCount = countBefore
+                                        )
+                                    )
+                                } else {
+                                    future.complete(
+                                        PurgeResult(
+                                            success = false,
+                                            message = "Failed to purge messages: ${purgeResult.cause()?.message}",
+                                            deletedCount = 0L
+                                        )
+                                    )
+                                }
+                            }
+                        } else {
+                            future.complete(
+                                PurgeResult(
+                                    success = false,
+                                    message = "Failed to count messages: ${countResult.cause()?.message}",
+                                    deletedCount = 0L
+                                )
+                            )
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 logger.severe("Error purging queued messages: ${e.message}")

@@ -11,6 +11,7 @@ import io.vertx.core.json.JsonObject
 import java.sql.*
 import java.time.Instant
 import java.util.logging.Logger
+import java.util.concurrent.Callable
 
 /**
  * CrateDB implementation of IConfigStore for archive group configuration management
@@ -80,150 +81,202 @@ class ConfigStoreCrateDB(
         logger.info("Archive config table created/verified in CrateDB")
     }
 
-    override fun getAllArchiveGroups(): List<ArchiveGroupConfig> {
-        val sql = "SELECT * FROM $configTableName ORDER BY name"
+    override fun getAllArchiveGroups(): io.vertx.core.Future<List<ArchiveGroupConfig>> {
+        val promise = Promise.promise<List<ArchiveGroupConfig>>()
 
-        return try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    val resultSet = preparedStatement.executeQuery()
-                    val results = mutableListOf<ArchiveGroupConfig>()
+        vertx.executeBlocking(Callable {
+            val sql = "SELECT * FROM $configTableName ORDER BY name"
 
-                    while (resultSet.next()) {
-                        try {
-                            val archiveGroup = resultSetToArchiveGroup(resultSet)
-                            val enabled = resultSet.getBoolean("enabled")
-                            results.add(ArchiveGroupConfig(archiveGroup, enabled))
-                        } catch (e: Exception) {
-                            logger.warning("Error parsing archive group from CrateDB: ${e.message}")
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        val resultSet = preparedStatement.executeQuery()
+                        val results = mutableListOf<ArchiveGroupConfig>()
+
+                        while (resultSet.next()) {
+                            try {
+                                val archiveGroup = resultSetToArchiveGroup(resultSet)
+                                val enabled = resultSet.getBoolean("enabled")
+                                results.add(ArchiveGroupConfig(archiveGroup, enabled))
+                            } catch (e: Exception) {
+                                logger.warning("Error parsing archive group from CrateDB: ${e.message}")
+                            }
                         }
-                    }
 
-                    logger.info("Retrieved ${results.size} archive groups from CrateDB")
-                    results
+                        logger.info("Retrieved ${results.size} archive groups from CrateDB")
+                        results
+                    }
+                } ?: run {
+                    logger.severe("Getting archive groups not possible without database connection! [getAllArchiveGroups]")
+                    emptyList()
                 }
-            } ?: run {
-                logger.severe("Getting archive groups not possible without database connection! [getAllArchiveGroups]")
+            } catch (e: SQLException) {
+                logger.severe("Error retrieving archive groups from CrateDB: ${e.message}")
                 emptyList()
             }
-        } catch (e: SQLException) {
-            logger.severe("Error retrieving archive groups from CrateDB: ${e.message}")
-            emptyList()
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in getAllArchiveGroups: ${result.cause()?.message}")
+                promise.complete(emptyList())
+            }
         }
+
+        return promise.future()
     }
 
-    override fun getArchiveGroup(name: String): ArchiveGroupConfig? {
-        val sql = "SELECT * FROM $configTableName WHERE name = ?"
+    override fun getArchiveGroup(name: String): io.vertx.core.Future<ArchiveGroupConfig?> {
+        val promise = Promise.promise<ArchiveGroupConfig?>()
 
-        return try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    preparedStatement.setString(1, name)
-                    val resultSet = preparedStatement.executeQuery()
+        vertx.executeBlocking(Callable {
+            val sql = "SELECT * FROM $configTableName WHERE name = ?"
 
-                    if (resultSet.next()) {
-                        val archiveGroup = resultSetToArchiveGroup(resultSet)
-                        val enabled = resultSet.getBoolean("enabled")
-                        ArchiveGroupConfig(archiveGroup, enabled)
-                    } else {
-                        null
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        preparedStatement.setString(1, name)
+                        val resultSet = preparedStatement.executeQuery()
+
+                        if (resultSet.next()) {
+                            val archiveGroup = resultSetToArchiveGroup(resultSet)
+                            val enabled = resultSet.getBoolean("enabled")
+                            ArchiveGroupConfig(archiveGroup, enabled)
+                        } else {
+                            null
+                        }
                     }
+                } ?: run {
+                    logger.severe("Getting archive group not possible without database connection! [getArchiveGroup]")
+                    null
                 }
-            } ?: run {
-                logger.severe("Getting archive group not possible without database connection! [getArchiveGroup]")
+            } catch (e: SQLException) {
+                logger.severe("Error retrieving archive group '$name' from CrateDB: ${e.message}")
                 null
             }
-        } catch (e: SQLException) {
-            logger.severe("Error retrieving archive group '$name' from CrateDB: ${e.message}")
-            null
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in getArchiveGroup: ${result.cause()?.message}")
+                promise.complete(null)
+            }
         }
+
+        return promise.future()
     }
 
-    override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Boolean {
-        val sql = """
-            INSERT INTO $configTableName
-            (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT (name) DO UPDATE SET
-                enabled = EXCLUDED.enabled,
-                topic_filter = EXCLUDED.topic_filter,
-                retained_only = EXCLUDED.retained_only,
-                last_val_type = EXCLUDED.last_val_type,
-                archive_type = EXCLUDED.archive_type,
-                last_val_retention = EXCLUDED.last_val_retention,
-                archive_retention = EXCLUDED.archive_retention,
-                purge_interval = EXCLUDED.purge_interval,
-                updated_at = CURRENT_TIMESTAMP
-        """.trimIndent()
+    override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): io.vertx.core.Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
 
-        return try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    val lastValRetention = archiveGroup.getLastValRetentionMs()?.let { DurationParser.formatDuration(it) }
-                    val archiveRetention = archiveGroup.getArchiveRetentionMs()?.let { DurationParser.formatDuration(it) }
-                    val purgeInterval = archiveGroup.getPurgeIntervalMs()?.let { DurationParser.formatDuration(it) }
+        vertx.executeBlocking(Callable {
+            val sql = """
+                INSERT INTO $configTableName
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (name) DO UPDATE SET
+                    enabled = EXCLUDED.enabled,
+                    topic_filter = EXCLUDED.topic_filter,
+                    retained_only = EXCLUDED.retained_only,
+                    last_val_type = EXCLUDED.last_val_type,
+                    archive_type = EXCLUDED.archive_type,
+                    last_val_retention = EXCLUDED.last_val_retention,
+                    archive_retention = EXCLUDED.archive_retention,
+                    purge_interval = EXCLUDED.purge_interval,
+                    updated_at = CURRENT_TIMESTAMP
+            """.trimIndent()
 
-                    preparedStatement.setString(1, archiveGroup.name)
-                    preparedStatement.setBoolean(2, enabled)
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        val lastValRetention = archiveGroup.getLastValRetentionMs()?.let { DurationParser.formatDuration(it) }
+                        val archiveRetention = archiveGroup.getArchiveRetentionMs()?.let { DurationParser.formatDuration(it) }
+                        val purgeInterval = archiveGroup.getPurgeIntervalMs()?.let { DurationParser.formatDuration(it) }
 
-                    // Convert topic filter list to CrateDB array format
-                    val topicFilterArray = connection.createArrayOf("STRING", archiveGroup.topicFilter.toTypedArray())
-                    preparedStatement.setArray(3, topicFilterArray)
+                        preparedStatement.setString(1, archiveGroup.name)
+                        preparedStatement.setBoolean(2, enabled)
 
-                    preparedStatement.setBoolean(4, archiveGroup.retainedOnly)
-                    preparedStatement.setString(5, archiveGroup.getLastValType().name)
-                    preparedStatement.setString(6, archiveGroup.getArchiveType().name)
-                    preparedStatement.setString(7, lastValRetention)
-                    preparedStatement.setString(8, archiveRetention)
-                    preparedStatement.setString(9, purgeInterval)
+                        // Convert topic filter list to CrateDB array format
+                        val topicFilterArray = connection.createArrayOf("STRING", archiveGroup.topicFilter.toTypedArray())
+                        preparedStatement.setArray(3, topicFilterArray)
 
-                    val rowsAffected = preparedStatement.executeUpdate()
-                    val success = rowsAffected > 0
+                        preparedStatement.setBoolean(4, archiveGroup.retainedOnly)
+                        preparedStatement.setString(5, archiveGroup.getLastValType().name)
+                        preparedStatement.setString(6, archiveGroup.getArchiveType().name)
+                        preparedStatement.setString(7, lastValRetention)
+                        preparedStatement.setString(8, archiveRetention)
+                        preparedStatement.setString(9, purgeInterval)
 
-                    if (success) {
-                        logger.info("Archive group '${archiveGroup.name}' saved successfully to CrateDB")
+                        val rowsAffected = preparedStatement.executeUpdate()
+                        val success = rowsAffected > 0
+
+                        if (success) {
+                            logger.info("Archive group '${archiveGroup.name}' saved successfully to CrateDB")
+                        }
+                        success
                     }
-                    success
+                } ?: run {
+                    logger.severe("Saving archive group not possible without database connection! [saveArchiveGroup]")
+                    false
                 }
-            } ?: run {
-                logger.severe("Saving archive group not possible without database connection! [saveArchiveGroup]")
+            } catch (e: SQLException) {
+                logger.severe("Error saving archive group '${archiveGroup.name}' to CrateDB: ${e.message}")
                 false
             }
-        } catch (e: SQLException) {
-            logger.severe("Error saving archive group '${archiveGroup.name}' to CrateDB: ${e.message}")
-            false
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in saveArchiveGroup: ${result.cause()?.message}")
+                promise.complete(false)
+            }
         }
+
+        return promise.future()
     }
 
-    override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Boolean {
+    override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): io.vertx.core.Future<Boolean> {
         return saveArchiveGroup(archiveGroup, enabled) // CrateDB UPSERT handles both insert and update
     }
 
-    override fun deleteArchiveGroup(name: String): Boolean {
-        val sql = "DELETE FROM $configTableName WHERE name = ?"
+    override fun deleteArchiveGroup(name: String): io.vertx.core.Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
 
-        return try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    preparedStatement.setString(1, name)
-                    val rowsAffected = preparedStatement.executeUpdate()
-                    val success = rowsAffected > 0
+        vertx.executeBlocking(Callable {
+            val sql = "DELETE FROM $configTableName WHERE name = ?"
 
-                    if (success) {
-                        logger.info("Archive group '$name' deleted successfully from CrateDB")
-                    } else {
-                        logger.warning("Archive group '$name' not found in CrateDB for deletion")
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        preparedStatement.setString(1, name)
+                        val rowsAffected = preparedStatement.executeUpdate()
+                        val success = rowsAffected > 0
+
+                        if (success) {
+                            logger.info("Archive group '$name' deleted successfully from CrateDB")
+                        } else {
+                            logger.warning("Archive group '$name' not found in CrateDB for deletion")
+                        }
+                        success
                     }
-                    success
+                } ?: run {
+                    logger.severe("Deleting archive group not possible without database connection! [deleteArchiveGroup]")
+                    false
                 }
-            } ?: run {
-                logger.severe("Deleting archive group not possible without database connection! [deleteArchiveGroup]")
+            } catch (e: SQLException) {
+                logger.severe("Error deleting archive group '$name' from CrateDB: ${e.message}")
                 false
             }
-        } catch (e: SQLException) {
-            logger.severe("Error deleting archive group '$name' from CrateDB: ${e.message}")
-            false
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in deleteArchiveGroup: ${result.cause()?.message}")
+                promise.complete(false)
+            }
         }
+
+        return promise.future()
     }
 
     private fun resultSetToArchiveGroup(resultSet: ResultSet): ArchiveGroup {

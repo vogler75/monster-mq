@@ -11,9 +11,9 @@ data class ArchiveGroupConfig(
 interface IConfigStore {
     fun getType(): String
 
-    fun getAllArchiveGroups(): List<ArchiveGroupConfig>
-    fun getArchiveGroup(name: String): ArchiveGroupConfig?
-    fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Boolean
-    fun deleteArchiveGroup(name: String): Boolean
-    fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Boolean
+    fun getAllArchiveGroups(): Future<List<ArchiveGroupConfig>>
+    fun getArchiveGroup(name: String): Future<ArchiveGroupConfig?>
+    fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean>
+    fun deleteArchiveGroup(name: String): Future<Boolean>
+    fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean>
 }

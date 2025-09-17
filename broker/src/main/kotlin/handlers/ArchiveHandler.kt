@@ -186,34 +186,44 @@ class ArchiveHandler(
                 val databaseConfig = createDatabaseConfig()
 
                 // Import each archive group
-                var importedCount = 0
-                archiveGroups.filterIsInstance<JsonObject>().forEach { config ->
+                val configsList = archiveGroups.filterIsInstance<JsonObject>()
+                val importFutures = configsList.map { config ->
                     try {
                         val archiveGroup = ArchiveGroup.fromConfig(config, databaseConfig, isClustered)
                         val enabled = config.getBoolean("Enabled", true)
 
-                        val success = configStore.saveArchiveGroup(archiveGroup, enabled)
-                        if (success) {
-                            importedCount++
-                            logger.info("Imported ArchiveGroup [${archiveGroup.name}] to database")
-                        } else {
-                            logger.warning("Failed to import ArchiveGroup [${archiveGroup.name}] to database")
+                        configStore.saveArchiveGroup(archiveGroup, enabled).map { success ->
+                            if (success) {
+                                logger.info("Imported ArchiveGroup [${archiveGroup.name}] to database")
+                                1
+                            } else {
+                                logger.warning("Failed to import ArchiveGroup [${archiveGroup.name}] to database")
+                                0
+                            }
                         }
                     } catch (e: Exception) {
                         logger.severe("Error importing archive group: ${e.message}")
+                        Future.succeededFuture(0)
                     }
                 }
 
-                logger.info("Successfully imported $importedCount archive groups from $archiveConfigFile to database")
+                @Suppress("UNCHECKED_CAST")
+                Future.all<Any>(importFutures as List<Future<Any>>).onComplete { importResult ->
+                    val importedCount = importFutures.mapNotNull {
+                        if (it.succeeded()) it.result() as? Int else null
+                    }.sum()
 
-                // Undeploy the temporary ConfigStore
-                vertx.undeploy(deployResult.result()).onComplete { undeployResult ->
-                    if (undeployResult.succeeded()) {
-                        logger.info("Temporary ConfigStore undeployed after import")
-                        promise.complete()
-                    } else {
-                        logger.warning("Failed to undeploy temporary ConfigStore: ${undeployResult.cause()?.message}")
-                        promise.complete() // Still complete successfully even if undeploy fails
+                    logger.info("Successfully imported $importedCount archive groups from $archiveConfigFile to database")
+
+                    // Undeploy the temporary ConfigStore
+                    vertx.undeploy(deployResult.result()).onComplete { undeployResult ->
+                        if (undeployResult.succeeded()) {
+                            logger.info("Temporary ConfigStore undeployed after import")
+                            promise.complete()
+                        } else {
+                            logger.warning("Failed to undeploy temporary ConfigStore: ${undeployResult.cause()?.message}")
+                            promise.complete() // Still complete successfully even if undeploy fails
+                        }
                     }
                 }
             } else {
@@ -263,55 +273,62 @@ class ArchiveHandler(
                 val databaseConfig = createDatabaseConfig()
 
                 // Load archive groups from database
-                val archiveGroupConfigs = configStore.getAllArchiveGroups().filter { it.enabled }
-                val archiveGroups = archiveGroupConfigs.map { config ->
-                    // Recreate ArchiveGroup with proper database config
-                    val ag = config.archiveGroup
-                    ArchiveGroup(
-                        name = ag.name,
-                        topicFilter = ag.topicFilter,
-                        retainedOnly = ag.retainedOnly,
-                        lastValType = ag.getLastValType(), // Use actual store type from database
-                        archiveType = ag.getArchiveType(), // Use actual store type from database
-                        lastValRetentionMs = ag.getLastValRetentionMs(),
-                        archiveRetentionMs = ag.getArchiveRetentionMs(),
-                        purgeIntervalMs = ag.getPurgeIntervalMs(),
-                        lastValRetentionStr = ag.getLastValRetention(),
-                        archiveRetentionStr = ag.getArchiveRetention(),
-                        purgeIntervalStr = ag.getPurgeInterval(),
-                        databaseConfig = databaseConfig
-                    )
-                }
-
-                if (archiveGroups.isEmpty()) {
-                    logger.info("No enabled archive groups found in database")
-                    promise.complete(emptyList())
-                    return@onComplete
-                }
-
-                // Deploy each archive group
-                val deploymentFutures: List<Future<ArchiveGroup>> = archiveGroups.map { archiveGroup ->
-                    val archiveGroupOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-
-                    vertx.deployVerticle(archiveGroup, archiveGroupOptions).map { deploymentId ->
-                        // Track the deployment
-                        val archiveInfo = ArchiveGroupInfo(archiveGroup, deploymentId, true)
-                        deployedArchiveGroups[archiveGroup.name] = archiveInfo
-
-                        logger.info("ArchiveGroup [${archiveGroup.name}] deployed successfully from database with ID: $deploymentId")
-                        archiveGroup
-                    }
-                }
-
-                @Suppress("UNCHECKED_CAST")
-                Future.all<Any>(deploymentFutures as List<Future<Any>>).onComplete { result ->
-                    if (result.succeeded()) {
-                        val deployedGroups = deploymentFutures.mapNotNull {
-                            if (it.succeeded()) it.result() else null
+                configStore.getAllArchiveGroups().onComplete { getAllResult ->
+                    if (getAllResult.succeeded()) {
+                        val archiveGroupConfigs = getAllResult.result().filter { it.enabled }
+                        val archiveGroups = archiveGroupConfigs.map { config ->
+                            // Recreate ArchiveGroup with proper database config
+                            val ag = config.archiveGroup
+                            ArchiveGroup(
+                                name = ag.name,
+                                topicFilter = ag.topicFilter,
+                                retainedOnly = ag.retainedOnly,
+                                lastValType = ag.getLastValType(), // Use actual store type from database
+                                archiveType = ag.getArchiveType(), // Use actual store type from database
+                                lastValRetentionMs = ag.getLastValRetentionMs(),
+                                archiveRetentionMs = ag.getArchiveRetentionMs(),
+                                purgeIntervalMs = ag.getPurgeIntervalMs(),
+                                lastValRetentionStr = ag.getLastValRetention(),
+                                archiveRetentionStr = ag.getArchiveRetention(),
+                                purgeIntervalStr = ag.getPurgeInterval(),
+                                databaseConfig = databaseConfig
+                            )
                         }
-                        promise.complete(deployedGroups)
+
+                        if (archiveGroups.isEmpty()) {
+                            logger.info("No enabled archive groups found in database")
+                            promise.complete(emptyList())
+                            return@onComplete
+                        }
+
+                        // Deploy each archive group
+                        val deploymentFutures: List<Future<ArchiveGroup>> = archiveGroups.map { archiveGroup ->
+                            val archiveGroupOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+
+                            vertx.deployVerticle(archiveGroup, archiveGroupOptions).map { deploymentId ->
+                                // Track the deployment
+                                val archiveInfo = ArchiveGroupInfo(archiveGroup, deploymentId, true)
+                                deployedArchiveGroups[archiveGroup.name] = archiveInfo
+
+                                logger.info("ArchiveGroup [${archiveGroup.name}] deployed successfully from database with ID: $deploymentId")
+                                archiveGroup
+                            }
+                        }
+
+                        @Suppress("UNCHECKED_CAST")
+                        Future.all<Any>(deploymentFutures as List<Future<Any>>).onComplete { result ->
+                            if (result.succeeded()) {
+                                val deployedGroups = deploymentFutures.mapNotNull {
+                                    if (it.succeeded()) it.result() else null
+                                }
+                                promise.complete(deployedGroups)
+                            } else {
+                                promise.fail(result.cause())
+                            }
+                        }
                     } else {
-                        promise.fail(result.cause())
+                        logger.severe("Failed to load archive groups from database: ${getAllResult.cause()?.message}")
+                        promise.fail(getAllResult.cause())
                     }
                 }
             } else {
@@ -694,28 +711,35 @@ class ArchiveHandler(
         val configStore = deployedConfigStore
         if (configStore != null) {
             // ConfigStore is already deployed, use it directly
-            val archiveGroupConfig = configStore.getArchiveGroup(name)
-            if (archiveGroupConfig != null) {
-                // Don't check enabled flag here - we want to load it regardless
-                val databaseConfig = createDatabaseConfig()
-                val ag = archiveGroupConfig.archiveGroup
-                val archiveGroup = ArchiveGroup(
-                    name = ag.name,
-                    topicFilter = ag.topicFilter,
-                    retainedOnly = ag.retainedOnly,
-                    lastValType = ag.getLastValType(),
-                    archiveType = ag.getArchiveType(),
-                    lastValRetentionMs = ag.getLastValRetentionMs(),
-                    archiveRetentionMs = ag.getArchiveRetentionMs(),
-                    purgeIntervalMs = ag.getPurgeIntervalMs(),
-                    lastValRetentionStr = ag.getLastValRetention(),
-                    archiveRetentionStr = ag.getArchiveRetention(),
-                    purgeIntervalStr = ag.getPurgeInterval(),
-                    databaseConfig = databaseConfig
-                )
-                promise.complete(archiveGroup)
-            } else {
-                promise.complete(null)
+            configStore.getArchiveGroup(name).onComplete { getResult ->
+                if (getResult.succeeded()) {
+                    val archiveGroupConfig = getResult.result()
+                    if (archiveGroupConfig != null) {
+                        // Don't check enabled flag here - we want to load it regardless
+                        val databaseConfig = createDatabaseConfig()
+                        val ag = archiveGroupConfig.archiveGroup
+                        val archiveGroup = ArchiveGroup(
+                            name = ag.name,
+                            topicFilter = ag.topicFilter,
+                            retainedOnly = ag.retainedOnly,
+                            lastValType = ag.getLastValType(),
+                            archiveType = ag.getArchiveType(),
+                            lastValRetentionMs = ag.getLastValRetentionMs(),
+                            archiveRetentionMs = ag.getArchiveRetentionMs(),
+                            purgeIntervalMs = ag.getPurgeIntervalMs(),
+                            lastValRetentionStr = ag.getLastValRetention(),
+                            archiveRetentionStr = ag.getArchiveRetention(),
+                            purgeIntervalStr = ag.getPurgeInterval(),
+                            databaseConfig = databaseConfig
+                        )
+                        promise.complete(archiveGroup)
+                    } else {
+                        promise.complete(null)
+                    }
+                } else {
+                    logger.severe("Failed to get archive group from ConfigStore: ${getResult.cause()?.message}")
+                    promise.complete(null)
+                }
             }
             return promise.future()
         }
@@ -731,32 +755,39 @@ class ArchiveHandler(
         val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
         vertx.deployVerticle(newConfigStore as AbstractVerticle, options).onComplete { deployResult ->
             if (deployResult.succeeded()) {
-                val archiveGroupConfig = newConfigStore.getArchiveGroup(name)
-                if (archiveGroupConfig != null) {
-                    // Don't check enabled flag here - we want to load it regardless
-                    val databaseConfig = createDatabaseConfig()
-                    val ag = archiveGroupConfig.archiveGroup
-                    val archiveGroup = ArchiveGroup(
-                        name = ag.name,
-                        topicFilter = ag.topicFilter,
-                        retainedOnly = ag.retainedOnly,
-                        lastValType = ag.getLastValType(),
-                        archiveType = ag.getArchiveType(),
-                        lastValRetentionMs = ag.getLastValRetentionMs(),
-                        archiveRetentionMs = ag.getArchiveRetentionMs(),
-                        purgeIntervalMs = ag.getPurgeIntervalMs(),
-                        lastValRetentionStr = ag.getLastValRetention(),
-                        archiveRetentionStr = ag.getArchiveRetention(),
-                        purgeIntervalStr = ag.getPurgeInterval(),
-                        databaseConfig = databaseConfig
-                    )
-                    promise.complete(archiveGroup)
-                } else {
-                    promise.complete(null)
-                }
+                newConfigStore.getArchiveGroup(name).onComplete { getResult ->
+                    if (getResult.succeeded()) {
+                        val archiveGroupConfig = getResult.result()
+                        if (archiveGroupConfig != null) {
+                            // Don't check enabled flag here - we want to load it regardless
+                            val databaseConfig = createDatabaseConfig()
+                            val ag = archiveGroupConfig.archiveGroup
+                            val archiveGroup = ArchiveGroup(
+                                name = ag.name,
+                                topicFilter = ag.topicFilter,
+                                retainedOnly = ag.retainedOnly,
+                                lastValType = ag.getLastValType(),
+                                archiveType = ag.getArchiveType(),
+                                lastValRetentionMs = ag.getLastValRetentionMs(),
+                                archiveRetentionMs = ag.getArchiveRetentionMs(),
+                                purgeIntervalMs = ag.getPurgeIntervalMs(),
+                                lastValRetentionStr = ag.getLastValRetention(),
+                                archiveRetentionStr = ag.getArchiveRetention(),
+                                purgeIntervalStr = ag.getPurgeInterval(),
+                                databaseConfig = databaseConfig
+                            )
+                            promise.complete(archiveGroup)
+                        } else {
+                            promise.complete(null)
+                        }
+                    } else {
+                        logger.severe("Failed to get archive group from temporary ConfigStore: ${getResult.cause()?.message}")
+                        promise.complete(null)
+                    }
 
-                // Cleanup temporary ConfigStore
-                vertx.undeploy(deployResult.result())
+                    // Cleanup temporary ConfigStore
+                    vertx.undeploy(deployResult.result())
+                }
             } else {
                 promise.fail(deployResult.cause())
             }

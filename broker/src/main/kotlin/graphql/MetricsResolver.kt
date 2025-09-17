@@ -407,7 +407,7 @@ class MetricsResolver(
     }
 
     private fun getQueuedMessagesCount(): Long {
-        // This method is used synchronously in broker metrics, but ideally should be async too
+        // This method is used synchronously in broker metrics within executeBlocking blocks
         return try {
             sessionStore.sync.countQueuedMessages()
         } catch (e: Exception) {

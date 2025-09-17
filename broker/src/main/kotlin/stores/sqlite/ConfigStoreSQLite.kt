@@ -5,11 +5,13 @@ import at.rocworks.Utils
 import at.rocworks.stores.*
 import at.rocworks.utils.DurationParser
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.sql.*
 import java.time.Instant
+import java.util.concurrent.Callable
 import java.util.logging.Logger
 
 /**
@@ -78,140 +80,192 @@ class ConfigStoreSQLite(
         logger.info("Archive config table created/verified in SQLite")
     }
 
-    override fun getAllArchiveGroups(): List<ArchiveGroupConfig> {
-        val sql = "SELECT * FROM $configTableName ORDER BY name"
+    override fun getAllArchiveGroups(): Future<List<ArchiveGroupConfig>> {
+        val promise = Promise.promise<List<ArchiveGroupConfig>>()
 
-        return try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    val resultSet = preparedStatement.executeQuery()
-                    val results = mutableListOf<ArchiveGroupConfig>()
+        vertx.executeBlocking(Callable {
+            val sql = "SELECT * FROM $configTableName ORDER BY name"
 
-                    while (resultSet.next()) {
-                        try {
-                            val archiveGroup = resultSetToArchiveGroup(resultSet)
-                            val enabled = resultSet.getInt("enabled") == 1
-                            results.add(ArchiveGroupConfig(archiveGroup, enabled))
-                        } catch (e: Exception) {
-                            logger.warning("Error parsing archive group from SQLite: ${e.message}")
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        val resultSet = preparedStatement.executeQuery()
+                        val results = mutableListOf<ArchiveGroupConfig>()
+
+                        while (resultSet.next()) {
+                            try {
+                                val archiveGroup = resultSetToArchiveGroup(resultSet)
+                                val enabled = resultSet.getInt("enabled") == 1
+                                results.add(ArchiveGroupConfig(archiveGroup, enabled))
+                            } catch (e: Exception) {
+                                logger.warning("Error parsing archive group from SQLite: ${e.message}")
+                            }
                         }
-                    }
 
-                    logger.fine("Retrieved ${results.size} archive groups from SQLite")
-                    results
+                        logger.fine("Retrieved ${results.size} archive groups from SQLite")
+                        results
+                    }
+                } ?: run {
+                    logger.severe("Getting archive groups not possible without database connection! [getAllArchiveGroups]")
+                    emptyList()
                 }
-            } ?: run {
-                logger.severe("Getting archive groups not possible without database connection! [getAllArchiveGroups]")
+            } catch (e: SQLException) {
+                logger.severe("Error retrieving archive groups from SQLite: ${e.message}")
                 emptyList()
             }
-        } catch (e: SQLException) {
-            logger.severe("Error retrieving archive groups from SQLite: ${e.message}")
-            emptyList()
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in getAllArchiveGroups: ${result.cause()?.message}")
+                promise.complete(emptyList())
+            }
         }
+
+        return promise.future()
     }
 
-    override fun getArchiveGroup(name: String): ArchiveGroupConfig? {
-        val sql = "SELECT * FROM $configTableName WHERE name = ?"
+    override fun getArchiveGroup(name: String): Future<ArchiveGroupConfig?> {
+        val promise = Promise.promise<ArchiveGroupConfig?>()
 
-        return try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    preparedStatement.setString(1, name)
-                    val resultSet = preparedStatement.executeQuery()
+        vertx.executeBlocking(Callable {
+            val sql = "SELECT * FROM $configTableName WHERE name = ?"
 
-                    if (resultSet.next()) {
-                        val archiveGroup = resultSetToArchiveGroup(resultSet)
-                        val enabled = resultSet.getInt("enabled") == 1
-                        ArchiveGroupConfig(archiveGroup, enabled)
-                    } else {
-                        null
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        preparedStatement.setString(1, name)
+                        val resultSet = preparedStatement.executeQuery()
+
+                        if (resultSet.next()) {
+                            val archiveGroup = resultSetToArchiveGroup(resultSet)
+                            val enabled = resultSet.getInt("enabled") == 1
+                            ArchiveGroupConfig(archiveGroup, enabled)
+                        } else {
+                            null
+                        }
                     }
+                } ?: run {
+                    logger.severe("Getting archive group not possible without database connection! [getArchiveGroup]")
+                    null
                 }
-            } ?: run {
-                logger.severe("Getting archive group not possible without database connection! [getArchiveGroup]")
+            } catch (e: SQLException) {
+                logger.severe("Error retrieving archive group '$name' from SQLite: ${e.message}")
                 null
             }
-        } catch (e: SQLException) {
-            logger.severe("Error retrieving archive group '$name' from SQLite: ${e.message}")
-            null
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in getArchiveGroup: ${result.cause()?.message}")
+                promise.complete(null)
+            }
         }
+
+        return promise.future()
     }
 
-    override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Boolean {
-        val sql = """
-            INSERT OR REPLACE INTO $configTableName
-            (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        """.trimIndent()
+    override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
 
-        return try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    val lastValRetention = archiveGroup.getLastValRetentionMs()?.let { DurationParser.formatDuration(it) }
-                    val archiveRetention = archiveGroup.getArchiveRetentionMs()?.let { DurationParser.formatDuration(it) }
-                    val purgeInterval = archiveGroup.getPurgeIntervalMs()?.let { DurationParser.formatDuration(it) }
+        vertx.executeBlocking(Callable {
+            val sql = """
+                INSERT OR REPLACE INTO $configTableName
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            """.trimIndent()
 
-                    preparedStatement.setString(1, archiveGroup.name)
-                    preparedStatement.setInt(2, if (enabled) 1 else 0)
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        val lastValRetention = archiveGroup.getLastValRetentionMs()?.let { DurationParser.formatDuration(it) }
+                        val archiveRetention = archiveGroup.getArchiveRetentionMs()?.let { DurationParser.formatDuration(it) }
+                        val purgeInterval = archiveGroup.getPurgeIntervalMs()?.let { DurationParser.formatDuration(it) }
 
-                    // Convert topic filter list to JSON string for SQLite storage
-                    val topicFilterJson = JsonArray(archiveGroup.topicFilter).encode()
-                    preparedStatement.setString(3, topicFilterJson)
+                        preparedStatement.setString(1, archiveGroup.name)
+                        preparedStatement.setInt(2, if (enabled) 1 else 0)
 
-                    preparedStatement.setInt(4, if (archiveGroup.retainedOnly) 1 else 0)
-                    preparedStatement.setString(5, archiveGroup.getLastValType().name)
-                    preparedStatement.setString(6, archiveGroup.getArchiveType().name)
-                    preparedStatement.setString(7, lastValRetention)
-                    preparedStatement.setString(8, archiveRetention)
-                    preparedStatement.setString(9, purgeInterval)
+                        // Convert topic filter list to JSON string for SQLite storage
+                        val topicFilterJson = JsonArray(archiveGroup.topicFilter).encode()
+                        preparedStatement.setString(3, topicFilterJson)
 
-                    val rowsAffected = preparedStatement.executeUpdate()
-                    val success = rowsAffected > 0
+                        preparedStatement.setInt(4, if (archiveGroup.retainedOnly) 1 else 0)
+                        preparedStatement.setString(5, archiveGroup.getLastValType().name)
+                        preparedStatement.setString(6, archiveGroup.getArchiveType().name)
+                        preparedStatement.setString(7, lastValRetention)
+                        preparedStatement.setString(8, archiveRetention)
+                        preparedStatement.setString(9, purgeInterval)
 
-                    if (success) {
-                        logger.info("Archive group '${archiveGroup.name}' saved successfully to SQLite")
+                        val rowsAffected = preparedStatement.executeUpdate()
+                        val success = rowsAffected > 0
+
+                        if (success) {
+                            logger.info("Archive group '${archiveGroup.name}' saved successfully to SQLite")
+                        }
+                        success
                     }
-                    success
+                } ?: run {
+                    logger.severe("Saving archive group not possible without database connection! [saveArchiveGroup]")
+                    false
                 }
-            } ?: run {
-                logger.severe("Saving archive group not possible without database connection! [saveArchiveGroup]")
+            } catch (e: SQLException) {
+                logger.severe("Error saving archive group '${archiveGroup.name}' to SQLite: ${e.message}")
                 false
             }
-        } catch (e: SQLException) {
-            logger.severe("Error saving archive group '${archiveGroup.name}' to SQLite: ${e.message}")
-            false
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in saveArchiveGroup: ${result.cause()?.message}")
+                promise.complete(false)
+            }
         }
+
+        return promise.future()
     }
 
-    override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Boolean {
+    override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
         return saveArchiveGroup(archiveGroup, enabled) // SQLite UPSERT handles both insert and update
     }
 
-    override fun deleteArchiveGroup(name: String): Boolean {
-        val sql = "DELETE FROM $configTableName WHERE name = ?"
+    override fun deleteArchiveGroup(name: String): Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
 
-        return try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    preparedStatement.setString(1, name)
-                    val rowsAffected = preparedStatement.executeUpdate()
-                    val success = rowsAffected > 0
+        vertx.executeBlocking(Callable {
+            val sql = "DELETE FROM $configTableName WHERE name = ?"
 
-                    if (success) {
-                        logger.info("Archive group '$name' deleted successfully from SQLite")
-                    } else {
-                        logger.warning("Archive group '$name' not found in SQLite for deletion")
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        preparedStatement.setString(1, name)
+                        val rowsAffected = preparedStatement.executeUpdate()
+                        val success = rowsAffected > 0
+
+                        if (success) {
+                            logger.info("Archive group '$name' deleted successfully from SQLite")
+                        } else {
+                            logger.warning("Archive group '$name' not found in SQLite for deletion")
+                        }
+                        success
                     }
-                    success
+                } ?: run {
+                    logger.severe("Deleting archive group not possible without database connection! [deleteArchiveGroup]")
+                    false
                 }
-            } ?: run {
-                logger.severe("Deleting archive group not possible without database connection! [deleteArchiveGroup]")
+            } catch (e: SQLException) {
+                logger.severe("Error deleting archive group '$name' from SQLite: ${e.message}")
                 false
             }
-        } catch (e: SQLException) {
-            logger.severe("Error deleting archive group '$name' from SQLite: ${e.message}")
-            false
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in deleteArchiveGroup: ${result.cause()?.message}")
+                promise.complete(false)
+            }
         }
+
+        return promise.future()
     }
 
     private fun resultSetToArchiveGroup(resultSet: ResultSet): ArchiveGroup {

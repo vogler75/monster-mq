@@ -18,6 +18,7 @@ import io.vertx.core.json.JsonObject
 import org.bson.Document
 import java.time.Instant
 import java.util.logging.Logger
+import java.util.concurrent.Callable
 
 /**
  * MongoDB implementation of IConfigStore for archive group configuration management
@@ -72,88 +73,140 @@ class ConfigStoreMongoDB(
         }
     }
 
-    override fun getAllArchiveGroups(): List<ArchiveGroupConfig> {
-        return try {
-            val results = mutableListOf<ArchiveGroupConfig>()
+    override fun getAllArchiveGroups(): io.vertx.core.Future<List<ArchiveGroupConfig>> {
+        val promise = Promise.promise<List<ArchiveGroupConfig>>()
 
-            collection.find().forEach { document ->
-                try {
+        vertx.executeBlocking(Callable {
+            try {
+                val results = mutableListOf<ArchiveGroupConfig>()
+
+                collection.find().forEach { document ->
+                    try {
+                        val archiveGroup = documentToArchiveGroup(document)
+                        val enabled = document.getBoolean("enabled", false)
+                        results.add(ArchiveGroupConfig(archiveGroup, enabled))
+                    } catch (e: Exception) {
+                        logger.warning("Error parsing archive group document: ${e.message}")
+                    }
+                }
+
+                logger.info("Retrieved ${results.size} archive groups from MongoDB")
+                results
+            } catch (e: Exception) {
+                logger.severe("Error retrieving archive groups from MongoDB: ${e.message}")
+                emptyList()
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in getAllArchiveGroups: ${result.cause()?.message}")
+                promise.complete(emptyList())
+            }
+        }
+
+        return promise.future()
+    }
+
+    override fun getArchiveGroup(name: String): io.vertx.core.Future<ArchiveGroupConfig?> {
+        val promise = Promise.promise<ArchiveGroupConfig?>()
+
+        vertx.executeBlocking(Callable {
+            try {
+                val document = collection.find(Filters.eq("name", name)).first()
+
+                if (document != null) {
                     val archiveGroup = documentToArchiveGroup(document)
                     val enabled = document.getBoolean("enabled", false)
-                    results.add(ArchiveGroupConfig(archiveGroup, enabled))
-                } catch (e: Exception) {
-                    logger.warning("Error parsing archive group document: ${e.message}")
+                    ArchiveGroupConfig(archiveGroup, enabled)
+                } else {
+                    null
                 }
-            }
-
-            logger.info("Retrieved ${results.size} archive groups from MongoDB")
-            results
-        } catch (e: Exception) {
-            logger.severe("Error retrieving archive groups from MongoDB: ${e.message}")
-            emptyList()
-        }
-    }
-
-    override fun getArchiveGroup(name: String): ArchiveGroupConfig? {
-        return try {
-            val document = collection.find(Filters.eq("name", name)).first()
-
-            if (document != null) {
-                val archiveGroup = documentToArchiveGroup(document)
-                val enabled = document.getBoolean("enabled", false)
-                ArchiveGroupConfig(archiveGroup, enabled)
-            } else {
+            } catch (e: Exception) {
+                logger.severe("Error retrieving archive group '$name' from MongoDB: ${e.message}")
                 null
             }
-        } catch (e: Exception) {
-            logger.severe("Error retrieving archive group '$name' from MongoDB: ${e.message}")
-            null
-        }
-    }
-
-    override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Boolean {
-        return try {
-            val document = archiveGroupToDocument(archiveGroup, enabled)
-
-            val options = ReplaceOptions().upsert(true)
-            val result = collection.replaceOne(
-                Filters.eq("name", archiveGroup.name),
-                document,
-                options
-            )
-
-            val success = result.wasAcknowledged()
-            if (success) {
-                logger.info("Archive group '${archiveGroup.name}' saved successfully to MongoDB")
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
             } else {
-                logger.warning("Failed to save archive group '${archiveGroup.name}' to MongoDB")
+                logger.severe("Error in getArchiveGroup: ${result.cause()?.message}")
+                promise.complete(null)
             }
-            success
-        } catch (e: Exception) {
-            logger.severe("Error saving archive group '${archiveGroup.name}' to MongoDB: ${e.message}")
-            false
         }
+
+        return promise.future()
     }
 
-    override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Boolean {
+    override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): io.vertx.core.Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
+
+        vertx.executeBlocking(Callable {
+            try {
+                val document = archiveGroupToDocument(archiveGroup, enabled)
+
+                val options = ReplaceOptions().upsert(true)
+                val result = collection.replaceOne(
+                    Filters.eq("name", archiveGroup.name),
+                    document,
+                    options
+                )
+
+                val success = result.wasAcknowledged()
+                if (success) {
+                    logger.info("Archive group '${archiveGroup.name}' saved successfully to MongoDB")
+                } else {
+                    logger.warning("Failed to save archive group '${archiveGroup.name}' to MongoDB")
+                }
+                success
+            } catch (e: Exception) {
+                logger.severe("Error saving archive group '${archiveGroup.name}' to MongoDB: ${e.message}")
+                false
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in saveArchiveGroup: ${result.cause()?.message}")
+                promise.complete(false)
+            }
+        }
+
+        return promise.future()
+    }
+
+    override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): io.vertx.core.Future<Boolean> {
         return saveArchiveGroup(archiveGroup, enabled) // MongoDB upsert handles both insert and update
     }
 
-    override fun deleteArchiveGroup(name: String): Boolean {
-        return try {
-            val result = collection.deleteOne(Filters.eq("name", name))
-            val success = result.deletedCount > 0
+    override fun deleteArchiveGroup(name: String): io.vertx.core.Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
 
-            if (success) {
-                logger.info("Archive group '$name' deleted successfully from MongoDB")
-            } else {
-                logger.warning("Archive group '$name' not found in MongoDB for deletion")
+        vertx.executeBlocking(Callable {
+            try {
+                val result = collection.deleteOne(Filters.eq("name", name))
+                val success = result.deletedCount > 0
+
+                if (success) {
+                    logger.info("Archive group '$name' deleted successfully from MongoDB")
+                } else {
+                    logger.warning("Archive group '$name' not found in MongoDB for deletion")
+                }
+                success
+            } catch (e: Exception) {
+                logger.severe("Error deleting archive group '$name' from MongoDB: ${e.message}")
+                false
             }
-            success
-        } catch (e: Exception) {
-            logger.severe("Error deleting archive group '$name' from MongoDB: ${e.message}")
-            false
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in deleteArchiveGroup: ${result.cause()?.message}")
+                promise.complete(false)
+            }
         }
+
+        return promise.future()
     }
 
     private fun documentToArchiveGroup(document: Document): ArchiveGroup {

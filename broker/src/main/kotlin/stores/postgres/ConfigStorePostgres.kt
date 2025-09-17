@@ -15,6 +15,7 @@ import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import io.vertx.core.json.JsonArray
 import java.sql.*
+import java.util.concurrent.Callable
 
 class ConfigStorePostgres(
     private val url: String,
@@ -71,186 +72,240 @@ class ConfigStorePostgres(
         db.start(vertx, startPromise)
     }
 
-    override fun getAllArchiveGroups(): List<ArchiveGroupConfig> {
-        val archiveGroups = mutableListOf<ArchiveGroupConfig>()
-        val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval FROM $configTableName ORDER BY name"
+    override fun getAllArchiveGroups(): Future<List<ArchiveGroupConfig>> {
+        val promise = Promise.promise<List<ArchiveGroupConfig>>()
 
-        try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    val resultSet = preparedStatement.executeQuery()
-                    while (resultSet.next()) {
-                        val name = resultSet.getString("name")
-                        val enabled = resultSet.getBoolean("enabled")
-                        val topicFilterJson = resultSet.getString("topic_filter")
-                        val retainedOnly = resultSet.getBoolean("retained_only")
-                        val lastValType = resultSet.getString("last_val_type")
-                        val archiveType = resultSet.getString("archive_type")
-                        val lastValRetention = resultSet.getString("last_val_retention")
-                        val archiveRetention = resultSet.getString("archive_retention")
-                        val purgeInterval = resultSet.getString("purge_interval")
+        vertx.executeBlocking(Callable {
+            val archiveGroups = mutableListOf<ArchiveGroupConfig>()
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval FROM $configTableName ORDER BY name"
 
-                        val topicFilter = try {
-                            // Try to parse as direct array first (new format)
-                            JsonArray(topicFilterJson).list.map { it.toString() }
-                        } catch (e: Exception) {
-                            // Fall back to old format with "filters" wrapper
-                            JsonObject(topicFilterJson).getJsonArray("filters")?.list?.map { it.toString() } ?: emptyList()
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        val resultSet = preparedStatement.executeQuery()
+                        while (resultSet.next()) {
+                            val name = resultSet.getString("name")
+                            val enabled = resultSet.getBoolean("enabled")
+                            val topicFilterJson = resultSet.getString("topic_filter")
+                            val retainedOnly = resultSet.getBoolean("retained_only")
+                            val lastValType = resultSet.getString("last_val_type")
+                            val archiveType = resultSet.getString("archive_type")
+                            val lastValRetention = resultSet.getString("last_val_retention")
+                            val archiveRetention = resultSet.getString("archive_retention")
+                            val purgeInterval = resultSet.getString("purge_interval")
+
+                            val topicFilter = try {
+                                // Try to parse as direct array first (new format)
+                                JsonArray(topicFilterJson).list.map { it.toString() }
+                            } catch (e: Exception) {
+                                // Fall back to old format with "filters" wrapper
+                                JsonObject(topicFilterJson).getJsonArray("filters")?.list?.map { it.toString() } ?: emptyList()
+                            }
+
+                            val archiveGroup = ArchiveGroup(
+                                name = name,
+                                topicFilter = topicFilter,
+                                retainedOnly = retainedOnly,
+                                lastValType = MessageStoreType.valueOf(lastValType),
+                                archiveType = MessageArchiveType.valueOf(archiveType),
+                                lastValRetentionMs = DurationParser.parse(lastValRetention),
+                                archiveRetentionMs = DurationParser.parse(archiveRetention),
+                                purgeIntervalMs = DurationParser.parse(purgeInterval),
+                                lastValRetentionStr = lastValRetention,
+                                archiveRetentionStr = archiveRetention,
+                                purgeIntervalStr = purgeInterval,
+                                databaseConfig = JsonObject()
+                            )
+                            archiveGroups.add(ArchiveGroupConfig(archiveGroup, enabled))
                         }
-
-                        val archiveGroup = ArchiveGroup(
-                            name = name,
-                            topicFilter = topicFilter,
-                            retainedOnly = retainedOnly,
-                            lastValType = MessageStoreType.valueOf(lastValType),
-                            archiveType = MessageArchiveType.valueOf(archiveType),
-                            lastValRetentionMs = DurationParser.parse(lastValRetention),
-                            archiveRetentionMs = DurationParser.parse(archiveRetention),
-                            purgeIntervalMs = DurationParser.parse(purgeInterval),
-                            lastValRetentionStr = lastValRetention,
-                            archiveRetentionStr = archiveRetention,
-                            purgeIntervalStr = purgeInterval,
-                            databaseConfig = JsonObject()
-                        )
-                        archiveGroups.add(ArchiveGroupConfig(archiveGroup, enabled))
                     }
+                } ?: run {
+                    logger.severe("Getting archive groups not possible without database connection! [${Utils.getCurrentFunctionName()}]")
                 }
-            } ?: run {
-                logger.severe("Getting archive groups not possible without database connection! [${Utils.getCurrentFunctionName()}]")
+            } catch (e: SQLException) {
+                logger.warning("Error fetching archive groups: ${e.message} [${Utils.getCurrentFunctionName()}]")
             }
-        } catch (e: SQLException) {
-            logger.warning("Error fetching archive groups: ${e.message} [${Utils.getCurrentFunctionName()}]")
+
+            archiveGroups
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in getAllArchiveGroups: ${result.cause()?.message}")
+                promise.complete(emptyList())
+            }
         }
 
-        return archiveGroups
+        return promise.future()
     }
 
-    override fun getArchiveGroup(name: String): ArchiveGroupConfig? {
-        val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval FROM $configTableName WHERE name = ?"
+    override fun getArchiveGroup(name: String): Future<ArchiveGroupConfig?> {
+        val promise = Promise.promise<ArchiveGroupConfig?>()
 
-        try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    preparedStatement.setString(1, name)
-                    val resultSet = preparedStatement.executeQuery()
-                    if (resultSet.next()) {
-                        val enabled = resultSet.getBoolean("enabled")
-                        val topicFilterJson = resultSet.getString("topic_filter")
-                        val retainedOnly = resultSet.getBoolean("retained_only")
-                        val lastValType = resultSet.getString("last_val_type")
-                        val archiveType = resultSet.getString("archive_type")
-                        val lastValRetention = resultSet.getString("last_val_retention")
-                        val archiveRetention = resultSet.getString("archive_retention")
-                        val purgeInterval = resultSet.getString("purge_interval")
+        vertx.executeBlocking(Callable {
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval FROM $configTableName WHERE name = ?"
 
-                        val topicFilter = try {
-                            // Try to parse as direct array first (new format)
-                            JsonArray(topicFilterJson).list.map { it.toString() }
-                        } catch (e: Exception) {
-                            // Fall back to old format with "filters" wrapper
-                            JsonObject(topicFilterJson).getJsonArray("filters")?.list?.map { it.toString() } ?: emptyList()
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        preparedStatement.setString(1, name)
+                        val resultSet = preparedStatement.executeQuery()
+                        if (resultSet.next()) {
+                            val enabled = resultSet.getBoolean("enabled")
+                            val topicFilterJson = resultSet.getString("topic_filter")
+                            val retainedOnly = resultSet.getBoolean("retained_only")
+                            val lastValType = resultSet.getString("last_val_type")
+                            val archiveType = resultSet.getString("archive_type")
+                            val lastValRetention = resultSet.getString("last_val_retention")
+                            val archiveRetention = resultSet.getString("archive_retention")
+                            val purgeInterval = resultSet.getString("purge_interval")
+
+                            val topicFilter = try {
+                                // Try to parse as direct array first (new format)
+                                JsonArray(topicFilterJson).list.map { it.toString() }
+                            } catch (e: Exception) {
+                                // Fall back to old format with "filters" wrapper
+                                JsonObject(topicFilterJson).getJsonArray("filters")?.list?.map { it.toString() } ?: emptyList()
+                            }
+
+                            val archiveGroup = ArchiveGroup(
+                                name = name,
+                                topicFilter = topicFilter,
+                                retainedOnly = retainedOnly,
+                                lastValType = MessageStoreType.valueOf(lastValType),
+                                archiveType = MessageArchiveType.valueOf(archiveType),
+                                lastValRetentionMs = DurationParser.parse(lastValRetention),
+                                archiveRetentionMs = DurationParser.parse(archiveRetention),
+                                purgeIntervalMs = DurationParser.parse(purgeInterval),
+                                lastValRetentionStr = lastValRetention,
+                                archiveRetentionStr = archiveRetention,
+                                purgeIntervalStr = purgeInterval,
+                                databaseConfig = JsonObject()
+                            )
+                            ArchiveGroupConfig(archiveGroup, enabled)
+                        } else {
+                            null
                         }
-
-                        val archiveGroup = ArchiveGroup(
-                            name = name,
-                            topicFilter = topicFilter,
-                            retainedOnly = retainedOnly,
-                            lastValType = MessageStoreType.valueOf(lastValType),
-                            archiveType = MessageArchiveType.valueOf(archiveType),
-                            lastValRetentionMs = DurationParser.parse(lastValRetention),
-                            archiveRetentionMs = DurationParser.parse(archiveRetention),
-                            purgeIntervalMs = DurationParser.parse(purgeInterval),
-                            lastValRetentionStr = lastValRetention,
-                            archiveRetentionStr = archiveRetention,
-                            purgeIntervalStr = purgeInterval,
-                            databaseConfig = JsonObject()
-                        )
-                        return ArchiveGroupConfig(archiveGroup, enabled)
                     }
+                } ?: run {
+                    logger.severe("Getting archive group not possible without database connection! [${Utils.getCurrentFunctionName()}]")
+                    null
                 }
-            } ?: run {
-                logger.severe("Getting archive group not possible without database connection! [${Utils.getCurrentFunctionName()}]")
+            } catch (e: SQLException) {
+                logger.warning("Error fetching archive group $name: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                null
             }
-        } catch (e: SQLException) {
-            logger.warning("Error fetching archive group $name: ${e.message} [${Utils.getCurrentFunctionName()}]")
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in getArchiveGroup: ${result.cause()?.message}")
+                promise.complete(null)
+            }
         }
 
-        return null
+        return promise.future()
     }
 
-    override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Boolean {
-        val sql = """
-            INSERT INTO $configTableName
-            (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, updated_at)
-            VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT (name) DO UPDATE SET
-                enabled = EXCLUDED.enabled,
-                topic_filter = EXCLUDED.topic_filter,
-                retained_only = EXCLUDED.retained_only,
-                last_val_type = EXCLUDED.last_val_type,
-                archive_type = EXCLUDED.archive_type,
-                last_val_retention = EXCLUDED.last_val_retention,
-                archive_retention = EXCLUDED.archive_retention,
-                purge_interval = EXCLUDED.purge_interval,
-                updated_at = CURRENT_TIMESTAMP
-        """.trimIndent()
+    override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
 
-        try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    val topicFilterJson = JsonArray(archiveGroup.topicFilter).encode()
+        vertx.executeBlocking(Callable {
+            val sql = """
+                INSERT INTO $configTableName
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, updated_at)
+                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (name) DO UPDATE SET
+                    enabled = EXCLUDED.enabled,
+                    topic_filter = EXCLUDED.topic_filter,
+                    retained_only = EXCLUDED.retained_only,
+                    last_val_type = EXCLUDED.last_val_type,
+                    archive_type = EXCLUDED.archive_type,
+                    last_val_retention = EXCLUDED.last_val_retention,
+                    archive_retention = EXCLUDED.archive_retention,
+                    purge_interval = EXCLUDED.purge_interval,
+                    updated_at = CURRENT_TIMESTAMP
+            """.trimIndent()
 
-                    // Use the string retention values directly to preserve original format
-                    val lastValRetention = archiveGroup.getLastValRetention()
-                    val archiveRetention = archiveGroup.getArchiveRetention()
-                    val purgeInterval = archiveGroup.getPurgeInterval()
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        val topicFilterJson = JsonArray(archiveGroup.topicFilter).encode()
 
-                    preparedStatement.setString(1, archiveGroup.name)
-                    preparedStatement.setBoolean(2, enabled)
-                    preparedStatement.setString(3, topicFilterJson)
-                    preparedStatement.setBoolean(4, archiveGroup.retainedOnly)
-                    preparedStatement.setString(5, archiveGroup.getLastValType().name)
-                    preparedStatement.setString(6, archiveGroup.getArchiveType().name)
-                    preparedStatement.setString(7, lastValRetention)
-                    preparedStatement.setString(8, archiveRetention)
-                    preparedStatement.setString(9, purgeInterval)
+                        // Use the string retention values directly to preserve original format
+                        val lastValRetention = archiveGroup.getLastValRetention()
+                        val archiveRetention = archiveGroup.getArchiveRetention()
+                        val purgeInterval = archiveGroup.getPurgeInterval()
 
-                    val rowsAffected = preparedStatement.executeUpdate()
-                    connection.commit()
-                    return rowsAffected > 0
+                        preparedStatement.setString(1, archiveGroup.name)
+                        preparedStatement.setBoolean(2, enabled)
+                        preparedStatement.setString(3, topicFilterJson)
+                        preparedStatement.setBoolean(4, archiveGroup.retainedOnly)
+                        preparedStatement.setString(5, archiveGroup.getLastValType().name)
+                        preparedStatement.setString(6, archiveGroup.getArchiveType().name)
+                        preparedStatement.setString(7, lastValRetention)
+                        preparedStatement.setString(8, archiveRetention)
+                        preparedStatement.setString(9, purgeInterval)
+
+                        val rowsAffected = preparedStatement.executeUpdate()
+                        connection.commit()
+                        rowsAffected > 0
+                    }
+                } ?: run {
+                    logger.severe("Saving archive group not possible without database connection! [${Utils.getCurrentFunctionName()}]")
+                    false
                 }
-            } ?: run {
-                logger.severe("Saving archive group not possible without database connection! [${Utils.getCurrentFunctionName()}]")
-                return false
+            } catch (e: SQLException) {
+                logger.warning("Error saving archive group ${archiveGroup.name}: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                false
             }
-        } catch (e: SQLException) {
-            logger.warning("Error saving archive group ${archiveGroup.name}: ${e.message} [${Utils.getCurrentFunctionName()}]")
-            return false
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in saveArchiveGroup: ${result.cause()?.message}")
+                promise.complete(false)
+            }
         }
+
+        return promise.future()
     }
 
-    override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Boolean {
+    override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
         return saveArchiveGroup(archiveGroup, enabled) // PostgreSQL UPSERT handles both insert and update
     }
 
-    override fun deleteArchiveGroup(name: String): Boolean {
-        val sql = "DELETE FROM $configTableName WHERE name = ?"
+    override fun deleteArchiveGroup(name: String): Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
 
-        try {
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
-                    preparedStatement.setString(1, name)
-                    val rowsAffected = preparedStatement.executeUpdate()
-                    connection.commit()
-                    return rowsAffected > 0
+        vertx.executeBlocking(Callable {
+            val sql = "DELETE FROM $configTableName WHERE name = ?"
+
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        preparedStatement.setString(1, name)
+                        val rowsAffected = preparedStatement.executeUpdate()
+                        connection.commit()
+                        rowsAffected > 0
+                    }
+                } ?: run {
+                    logger.severe("Deleting archive group not possible without database connection! [${Utils.getCurrentFunctionName()}]")
+                    false
                 }
-            } ?: run {
-                logger.severe("Deleting archive group not possible without database connection! [${Utils.getCurrentFunctionName()}]")
-                return false
+            } catch (e: SQLException) {
+                logger.warning("Error deleting archive group $name: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                false
             }
-        } catch (e: SQLException) {
-            logger.warning("Error deleting archive group $name: ${e.message} [${Utils.getCurrentFunctionName()}]")
-            return false
+        }).onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                logger.severe("Error in deleteArchiveGroup: ${result.cause()?.message}")
+                promise.complete(false)
+            }
         }
+
+        return promise.future()
     }
 }
