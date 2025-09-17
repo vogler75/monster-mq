@@ -1,6 +1,7 @@
 package at.rocworks.extensions.graphql
 
 import at.rocworks.handlers.ArchiveGroup
+import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.IMessageStore
 import graphql.schema.DataFetcher
@@ -14,11 +15,15 @@ import java.util.logging.Logger
 class QueryResolver(
     private val vertx: Vertx,
     private val retainedStore: IMessageStore?,
-    private val archiveGroups: Map<String, ArchiveGroup>,
+    private val archiveHandler: ArchiveHandler?,
     private val authContext: GraphQLAuthContext
 ) {
     companion object {
         private val logger: Logger = Logger.getLogger(QueryResolver::class.java.name)
+    }
+
+    private fun getCurrentArchiveGroups(): Map<String, ArchiveGroup> {
+        return archiveHandler?.getDeployedArchiveGroups() ?: emptyMap()
     }
 
     fun currentValue(): DataFetcher<CompletableFuture<TopicValue?>> {
@@ -39,7 +44,7 @@ class QueryResolver(
             val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
 
             // Find the specified archive group with a LastValueStore
-            val lastValueStore = archiveGroups[archiveGroupName]?.lastValStore
+            val lastValueStore = getCurrentArchiveGroups()[archiveGroupName]?.lastValStore
 
             if (lastValueStore == null) {
                 logger.warning("No LastValueStore configured for archive group '$archiveGroupName'")
@@ -91,7 +96,7 @@ class QueryResolver(
             val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
 
             // Find the specified archive group with a LastValueStore
-            val lastValueStore = archiveGroups[archiveGroupName]?.lastValStore
+            val lastValueStore = getCurrentArchiveGroups()[archiveGroupName]?.lastValStore
 
             if (lastValueStore == null) {
                 logger.warning("No LastValueStore configured for archive group '$archiveGroupName'")
@@ -283,7 +288,7 @@ class QueryResolver(
             val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
 
             // Find the specified archive group with an extended archive store
-            val archiveStore = archiveGroups[archiveGroupName]?.archiveStore as? IMessageArchiveExtended
+            val archiveStore = getCurrentArchiveGroups()[archiveGroupName]?.archiveStore as? IMessageArchiveExtended
 
             if (archiveStore == null) {
                 logger.warning("No extended archive store configured for archive group '$archiveGroupName'")
@@ -376,7 +381,7 @@ class QueryResolver(
             val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
 
             // Find the specified archive group with a LastValueStore
-            val lastValueStore = archiveGroups[archiveGroupName]?.lastValStore
+            val lastValueStore = getCurrentArchiveGroups()[archiveGroupName]?.lastValStore
 
             if (lastValueStore == null) {
                 logger.warning("No LastValueStore configured for archive group '$archiveGroupName'")

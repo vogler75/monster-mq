@@ -64,17 +64,24 @@ class ArchiveGroup(
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting ArchiveGroup [$name] - deploying stores in background")
+        logger.info("Starting ArchiveGroup [$name] - deploying stores and waiting for LastValueStore")
 
-        // Always succeed the start immediately, let database connections happen in background
         startRetentionScheduling()
-        logger.info("ArchiveGroup [$name] started successfully - database connections will be established in background")
-        startPromise.complete()
 
-        // Deploy stores asynchronously in the background
+        // Deploy stores and wait for critical ones to complete before reporting success
         vertx.runOnContext {
-            createMessageStoreAsync(lastValType, "${name}Lastval")
-            createMessageArchiveAsync(archiveType, "${name}Archive")
+            createMessageStoreWithCallback(lastValType, "${name}Lastval") { storeReady ->
+                if (storeReady) {
+                    logger.info("ArchiveGroup [$name] started successfully - LastValueStore is ready")
+                    startPromise.complete()
+
+                    // Start archive store in background (less critical for immediate functionality)
+                    createMessageArchiveAsync(archiveType, "${name}Archive")
+                } else {
+                    logger.severe("ArchiveGroup [$name] failed to start - LastValueStore initialization failed")
+                    startPromise.fail("Failed to initialize LastValueStore")
+                }
+            }
         }
     }
 
@@ -312,6 +319,141 @@ class ArchiveGroup(
         }
 
         return promise.future()
+    }
+
+    // Version with callback for critical store initialization during start
+    private fun createMessageStoreWithCallback(storeType: MessageStoreType, storeName: String, callback: (Boolean) -> Unit) {
+        if (isStopping) {
+            logger.info("Skipping MessageStore [$storeName] creation - ArchiveGroup is stopping")
+            callback(false)
+            return
+        }
+        logger.info("Creating MessageStore [$storeName] of type [$storeType] with callback")
+
+        when (storeType) {
+            MessageStoreType.NONE -> {
+                lastValStore = MessageStoreNone
+                logger.info("MessageStore [$storeName] set to NONE")
+                callback(true)
+            }
+            MessageStoreType.MEMORY -> {
+                val store = MessageStoreMemory(storeName)
+                lastValStore = store
+                val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onComplete { result ->
+                    if (result.succeeded()) {
+                        if (!isStopping) {
+                            childDeployments.add(result.result())
+                            logger.info("MessageStore [$storeName] deployed successfully")
+                            callback(true)
+                        } else {
+                            vertx.undeploy(result.result())
+                            logger.info("MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                            callback(false)
+                        }
+                    } else {
+                        logger.warning("Failed to deploy MessageStore [$storeName]: ${result.cause()?.message}")
+                        lastValStore = null
+                        callback(false)
+                    }
+                }
+            }
+            MessageStoreType.HAZELCAST -> {
+                val store = MessageStoreHazelcastDisconnected(storeName)
+                lastValStore = store
+                val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onComplete { result ->
+                    if (result.succeeded()) {
+                        if (!isStopping) {
+                            childDeployments.add(result.result())
+                            logger.info("Hazelcast MessageStore [$storeName] deployed as disconnected")
+                            callback(true)
+                        } else {
+                            vertx.undeploy(result.result())
+                            logger.info("Hazelcast MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                            callback(false)
+                        }
+                    } else {
+                        logger.warning("Failed to deploy disconnected Hazelcast MessageStore [$storeName]: ${result.cause()?.message}")
+                        lastValStore = null
+                        callback(false)
+                    }
+                }
+            }
+            MessageStoreType.POSTGRES, MessageStoreType.CRATEDB, MessageStoreType.MONGODB, MessageStoreType.SQLITE -> {
+                createDatabaseMessageStore(storeType, storeName) { success ->
+                    callback(success)
+                }
+            }
+        }
+    }
+
+    private fun createDatabaseMessageStore(storeType: MessageStoreType, storeName: String, callback: (Boolean) -> Unit) {
+        try {
+            val store = when (storeType) {
+                MessageStoreType.POSTGRES -> {
+                    val postgres = databaseConfig.getJsonObject("Postgres")
+                    MessageStorePostgres(
+                        storeName,
+                        postgres.getString("Url"),
+                        postgres.getString("User"),
+                        postgres.getString("Pass")
+                    )
+                }
+                MessageStoreType.CRATEDB -> {
+                    val cratedb = databaseConfig.getJsonObject("CrateDB")
+                    MessageStoreCrateDB(
+                        storeName,
+                        cratedb.getString("Url"),
+                        cratedb.getString("User"),
+                        cratedb.getString("Pass")
+                    )
+                }
+                MessageStoreType.MONGODB -> {
+                    val mongodb = databaseConfig.getJsonObject("MongoDB")
+                    MessageStoreMongoDB(
+                        storeName,
+                        mongodb.getString("Url"),
+                        mongodb.getString("Database", "monstermq")
+                    )
+                }
+                MessageStoreType.SQLITE -> {
+                    val sqlite = databaseConfig.getJsonObject("SQLite")
+                    MessageStoreSQLite(
+                        storeName,
+                        sqlite.getString("Path", "monstermq.db")
+                    )
+                }
+                else -> {
+                    callback(false)
+                    return
+                }
+            }
+            lastValStore = store
+            val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+            vertx.deployVerticle(store, options).onComplete { result ->
+                if (result.succeeded()) {
+                    if (!isStopping) {
+                        childDeployments.add(result.result())
+                        logger.info("${storeType.name} MessageStore [$storeName] deployed successfully")
+                        callback(true)
+                    } else {
+                        vertx.undeploy(result.result())
+                        logger.info("${storeType.name} MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                        lastValStore = null
+                        callback(false)
+                    }
+                } else {
+                    logger.warning("Failed to deploy ${storeType.name} MessageStore [$storeName]: ${result.cause()?.message}")
+                    lastValStore = null
+                    callback(false)
+                }
+            }
+        } catch (e: Exception) {
+            logger.warning("Error creating ${storeType.name} MessageStore [$storeName]: ${e.message}")
+            lastValStore = null
+            callback(false)
+        }
     }
 
     // Async versions that don't block the start process

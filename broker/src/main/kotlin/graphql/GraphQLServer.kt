@@ -185,7 +185,7 @@ class GraphQLServer(
 
 
     private fun buildRuntimeWiring(): RuntimeWiring {
-        val queryResolver = QueryResolver(vertx, retainedStore, archiveGroups, authContext)
+        val queryResolver = QueryResolver(vertx, retainedStore, archiveHandler, authContext)
         val metricsResolver = MetricsResolver(vertx, sessionStore, sessionHandler, metricsStore)
         val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, sessionStore, sessionHandler, authContext)
         val subscriptionResolver = SubscriptionResolver(vertx, messageBus)

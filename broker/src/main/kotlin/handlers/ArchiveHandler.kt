@@ -819,6 +819,10 @@ class ArchiveHandler(
         logger.info("Broadcasted archive event: $event for ArchiveGroup [$archiveGroupName]")
     }
 
+    fun getDeployedArchiveGroups(): Map<String, ArchiveGroup> {
+        return deployedArchiveGroups.mapValues { it.value.archiveGroup }
+    }
+
     fun getArchiveGroupConnectionStatus(name: String): JsonObject {
         val archiveInfo = deployedArchiveGroups[name]
         if (archiveInfo == null) {
