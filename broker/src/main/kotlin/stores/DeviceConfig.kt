@@ -247,7 +247,8 @@ data class OpcUaConnectionConfig(
     val connectionTimeout: Long = 10000,
     val requestTimeout: Long = 5000,
     val monitoringParameters: MonitoringParameters = MonitoringParameters(),
-    val addresses: List<OpcUaAddress> = emptyList()
+    val addresses: List<OpcUaAddress> = emptyList(),
+    val certificateConfig: CertificateConfig = CertificateConfig()
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): OpcUaConnectionConfig {
@@ -258,6 +259,10 @@ data class OpcUaConnectionConfig(
             val addresses = json.getJsonArray("addresses")?.map { addressObj ->
                 OpcUaAddress.fromJsonObject(addressObj as JsonObject)
             } ?: emptyList()
+
+            val certificateConfig = json.getJsonObject("certificateConfig")?.let {
+                CertificateConfig.fromJsonObject(it)
+            } ?: CertificateConfig()
 
             return OpcUaConnectionConfig(
                 endpointUrl = json.getString("endpointUrl"),
@@ -271,7 +276,8 @@ data class OpcUaConnectionConfig(
                 connectionTimeout = json.getLong("connectionTimeout", 10000),
                 requestTimeout = json.getLong("requestTimeout", 5000),
                 monitoringParameters = monitoringParams,
-                addresses = addresses
+                addresses = addresses,
+                certificateConfig = certificateConfig
             )
         }
     }
@@ -295,6 +301,7 @@ data class OpcUaConnectionConfig(
             .put("requestTimeout", requestTimeout)
             .put("monitoringParameters", monitoringParameters.toJsonObject())
             .put("addresses", addressArray)
+            .put("certificateConfig", certificateConfig.toJsonObject())
     }
 
     fun validate(): List<String> {
@@ -329,6 +336,50 @@ data class OpcUaConnectionConfig(
         }
 
         return errors
+    }
+}
+
+/**
+ * Certificate configuration for OPC UA connections
+ */
+data class CertificateConfig(
+    val securityDir: String = "security",
+    val applicationName: String = "MonsterMQ@localhost",
+    val applicationUri: String = "urn:MonsterMQ:Client",
+    val organization: String = "MonsterMQ",
+    val organizationalUnit: String = "Client",
+    val localityName: String = "Unknown",
+    val countryCode: String = "XX",
+    val createSelfSigned: Boolean = true,
+    val keystorePassword: String = "password"
+) {
+    companion object {
+        fun fromJsonObject(json: JsonObject): CertificateConfig {
+            return CertificateConfig(
+                securityDir = json.getString("securityDir", "security"),
+                applicationName = json.getString("applicationName", "MonsterMQ@localhost"),
+                applicationUri = json.getString("applicationUri", "urn:MonsterMQ:Client"),
+                organization = json.getString("organization", "MonsterMQ"),
+                organizationalUnit = json.getString("organizationalUnit", "Client"),
+                localityName = json.getString("localityName", "Unknown"),
+                countryCode = json.getString("countryCode", "XX"),
+                createSelfSigned = json.getBoolean("createSelfSigned", true),
+                keystorePassword = json.getString("keystorePassword", "password")
+            )
+        }
+    }
+
+    fun toJsonObject(): JsonObject {
+        return JsonObject()
+            .put("securityDir", securityDir)
+            .put("applicationName", applicationName)
+            .put("applicationUri", applicationUri)
+            .put("organization", organization)
+            .put("organizationalUnit", organizationalUnit)
+            .put("localityName", localityName)
+            .put("countryCode", countryCode)
+            .put("createSelfSigned", createSelfSigned)
+            .put("keystorePassword", keystorePassword)
     }
 }
 

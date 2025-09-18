@@ -7,9 +7,14 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient
+import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfigBuilder
 import org.eclipse.milo.opcua.sdk.client.api.identity.AnonymousProvider
 import org.eclipse.milo.opcua.sdk.client.api.identity.IdentityProvider
 import org.eclipse.milo.opcua.sdk.client.api.identity.UsernameProvider
+import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy
+import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText
+import org.eclipse.milo.opcua.stack.core.types.structured.EndpointDescription
+import org.eclipse.milo.opcua.stack.core.util.EndpointUtil
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription
 import org.eclipse.milo.opcua.stack.core.Identifiers
@@ -51,6 +56,9 @@ class OpcUaConnector : AbstractVerticle() {
     private var client: OpcUaClient? = null
     private var subscription: UaSubscription? = null
 
+    // Certificate management
+    private var keyStoreLoader: KeyStoreLoader? = null
+
     // Connection state
     private var isConnected = false
     private var isReconnecting = false
@@ -73,6 +81,17 @@ class OpcUaConnector : AbstractVerticle() {
             opcUaConfig = deviceConfig.config
 
             logger.info("Starting OpcUaConnector for device: ${deviceConfig.name}")
+
+            // Initialize certificate management
+            try {
+                keyStoreLoader = KeyStoreLoader(opcUaConfig.certificateConfig).load()
+                logger.info("Certificate management initialized for device: ${deviceConfig.name}")
+            } catch (e: Exception) {
+                logger.warning("Failed to initialize certificates for device ${deviceConfig.name}: ${e.message}")
+                if (opcUaConfig.certificateConfig.createSelfSigned) {
+                    logger.warning("Certificate auto-creation failed. OPC UA connections may be limited to unsecured endpoints.")
+                }
+            }
 
             // Start connector successfully regardless of initial connection status
             logger.info("OpcUaConnector for device ${deviceConfig.name} started successfully")
@@ -152,6 +171,45 @@ class OpcUaConnector : AbstractVerticle() {
         return promise.future()
     }
 
+    private fun createOpcUaClient(identityProvider: IdentityProvider): OpcUaClient {
+        val securityPolicy = when (opcUaConfig.securityPolicy.uppercase()) {
+            "BASIC256SHA256" -> SecurityPolicy.Basic256Sha256
+            "AES128_SHA256_RSAOAEP" -> SecurityPolicy.Aes128_Sha256_RsaOaep
+            "AES256_SHA256_RSAPSS" -> SecurityPolicy.Aes256_Sha256_RsaPss
+            else -> SecurityPolicy.None
+        }
+
+        val certificateConfig = opcUaConfig.certificateConfig
+
+        return if (securityPolicy == SecurityPolicy.None || keyStoreLoader?.clientCertificate == null) {
+            // Create simple client without certificates for unsecured connections
+            logger.info("Creating OPC UA client without certificates (security policy: ${opcUaConfig.securityPolicy})")
+            OpcUaClient.create(opcUaConfig.endpointUrl)
+        } else {
+            // Create client with certificates for secured connections
+            logger.info("Creating OPC UA client with certificates (security policy: ${opcUaConfig.securityPolicy})")
+
+            OpcUaClient.create(
+                opcUaConfig.endpointUrl,
+                { endpoints: List<EndpointDescription> ->
+                    endpoints.stream()
+                        .filter { endpoint -> endpoint.securityPolicyUri == securityPolicy.uri }
+                        .findFirst()
+                }
+            ) { configBuilder: OpcUaClientConfigBuilder ->
+                configBuilder
+                    .setApplicationName(LocalizedText.english(certificateConfig.applicationName))
+                    .setApplicationUri(certificateConfig.applicationUri)
+                    .setCertificate(keyStoreLoader!!.clientCertificate)
+                    .setKeyPair(keyStoreLoader!!.clientKeyPair)
+                    .setIdentityProvider(identityProvider)
+                    .setRequestTimeout(UInteger.valueOf(opcUaConfig.requestTimeout))
+                    .setConnectTimeout(UInteger.valueOf(opcUaConfig.connectionTimeout))
+                    .build()
+            }
+        }
+    }
+
     private fun connectToOpcUaServer(): Future<Void> {
         val promise = Promise.promise<Void>()
 
@@ -173,8 +231,8 @@ class OpcUaConnector : AbstractVerticle() {
                     AnonymousProvider()
                 }
 
-                // Create client
-                client = OpcUaClient.create(opcUaConfig.endpointUrl)
+                // Create client with certificate support
+                client = createOpcUaClient(identityProvider)
 
                 // Connect
                 val connectFuture = client!!.connect()
