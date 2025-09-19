@@ -8,6 +8,7 @@ import at.rocworks.devices.opcua.IDeviceConfigStore
 import at.rocworks.stores.MonitoringParameters
 import at.rocworks.stores.OpcUaAddress
 import at.rocworks.stores.OpcUaConnectionConfig
+import at.rocworks.stores.CertificateConfig
 import at.rocworks.devices.opcua.OpcUaExtension
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
@@ -493,6 +494,23 @@ class DeviceConfigMutations(
             )
         } ?: MonitoringParameters()
 
+        // Parse certificate configuration
+        val certificateConfig = (configMap["certificateConfig"] as? Map<*, *>)?.let { certMap ->
+            @Suppress("UNCHECKED_CAST")
+            val certConfigMap = certMap as Map<String, Any>
+            CertificateConfig(
+                securityDir = certConfigMap["securityDir"] as? String ?: "security",
+                applicationName = certConfigMap["applicationName"] as? String ?: "MonsterMQ@localhost",
+                applicationUri = certConfigMap["applicationUri"] as? String ?: "urn:MonsterMQ:Client",
+                organization = certConfigMap["organization"] as? String ?: "MonsterMQ",
+                organizationalUnit = certConfigMap["organizationalUnit"] as? String ?: "Client",
+                localityName = certConfigMap["localityName"] as? String ?: "Unknown",
+                countryCode = certConfigMap["countryCode"] as? String ?: "XX",
+                createSelfSigned = certConfigMap["createSelfSigned"] as? Boolean ?: true,
+                keystorePassword = certConfigMap["keystorePassword"] as? String ?: "password"
+            )
+        } ?: CertificateConfig()
+
         val config = OpcUaConnectionConfig(
             endpointUrl = configMap["endpointUrl"] as String,
             updateEndpointUrl = configMap["updateEndpointUrl"] as? Boolean ?: true,
@@ -505,7 +523,8 @@ class DeviceConfigMutations(
             connectionTimeout = (configMap["connectionTimeout"] as? Number)?.toLong() ?: 10000L,
             requestTimeout = (configMap["requestTimeout"] as? Number)?.toLong() ?: 5000L,
             monitoringParameters = monitoringParams,
-            addresses = emptyList() // Addresses are managed separately now
+            addresses = emptyList(), // Addresses are managed separately now
+            certificateConfig = certificateConfig
         )
 
         return DeviceConfigRequest(
@@ -774,7 +793,18 @@ class DeviceConfigMutations(
                         "publishMode" to address.publishMode,
                         "removePath" to address.removePath
                     )
-                }
+                },
+                "certificateConfig" to mapOf(
+                    "securityDir" to device.config.certificateConfig.securityDir,
+                    "applicationName" to device.config.certificateConfig.applicationName,
+                    "applicationUri" to device.config.certificateConfig.applicationUri,
+                    "organization" to device.config.certificateConfig.organization,
+                    "organizationalUnit" to device.config.certificateConfig.organizationalUnit,
+                    "localityName" to device.config.certificateConfig.localityName,
+                    "countryCode" to device.config.certificateConfig.countryCode,
+                    "createSelfSigned" to device.config.certificateConfig.createSelfSigned,
+                    "keystorePassword" to device.config.certificateConfig.keystorePassword
+                )
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

@@ -679,6 +679,28 @@ enum OpcUaPublishMode {
     SEPARATE
 }
 
+# Certificate configuration for OPC UA connections with TLS/SSL security
+type CertificateConfig {
+    # Directory for storing certificates and keystores (relative to application root)
+    securityDir: String!
+    # Application name used in certificate subject (e.g., "MonsterMQ@localhost")
+    applicationName: String!
+    # Unique application URI for OPC UA client identification
+    applicationUri: String!
+    # Organization name for certificate subject
+    organization: String!
+    # Organizational unit for certificate subject  
+    organizationalUnit: String!
+    # Locality/city name for certificate subject
+    localityName: String!
+    # Two-letter country code for certificate subject (e.g., "US", "DE")
+    countryCode: String!
+    # Whether to automatically create self-signed certificates if none exist
+    createSelfSigned: Boolean!
+    # Password for protecting the keystore containing client certificates
+    keystorePassword: String!
+}
+
 # OPC UA address configuration for subscribing to OPC UA server nodes
 type OpcUaAddress {
     # OPC UA node address - can be either NodeId or BrowsePath format:
@@ -714,6 +736,7 @@ type OpcUaConnectionConfig {
     updateEndpointUrl: Boolean!
     securityPolicy: SecurityPolicy!
     username: String
+    password: String
     subscriptionSamplingInterval: Float!
     keepAliveFailuresAllowed: Int!
     reconnectDelay: Long!
@@ -721,6 +744,8 @@ type OpcUaConnectionConfig {
     requestTimeout: Long!
     monitoringParameters: MonitoringParameters!
     addresses: [OpcUaAddress!]!
+    # Certificate configuration for TLS/SSL connections and client authentication
+    certificateConfig: CertificateConfig!
 }
 
 type OpcUaDevice {
@@ -753,6 +778,28 @@ input MonitoringParametersInput {
     discardOldest: Boolean = false
 }
 
+# Input type for certificate configuration settings
+input CertificateConfigInput {
+    # Directory for storing certificates and keystores (default: "security")
+    securityDir: String = "security"
+    # Application name for certificate subject (default: "MonsterMQ@localhost")
+    applicationName: String = "MonsterMQ@localhost"
+    # Application URI for OPC UA client identification (default: "urn:MonsterMQ:Client")
+    applicationUri: String = "urn:MonsterMQ:Client"
+    # Organization name for certificate subject (default: "MonsterMQ")
+    organization: String = "MonsterMQ"
+    # Organizational unit for certificate subject (default: "Client")
+    organizationalUnit: String = "Client"
+    # Locality/city name for certificate subject (default: "Unknown")
+    localityName: String = "Unknown"
+    # Two-letter country code (default: "XX")
+    countryCode: String = "XX"
+    # Whether to create self-signed certificates automatically (default: true)
+    createSelfSigned: Boolean = true
+    # Keystore password for certificate protection (default: "password")
+    keystorePassword: String = "password"
+}
+
 input OpcUaConnectionConfigInput {
     endpointUrl: String!
     updateEndpointUrl: Boolean = true
@@ -765,6 +812,8 @@ input OpcUaConnectionConfigInput {
     connectionTimeout: Long = 10000
     requestTimeout: Long = 5000
     monitoringParameters: MonitoringParametersInput
+    # Certificate configuration for TLS/SSL and client authentication
+    certificateConfig: CertificateConfigInput
 }
 
 input OpcUaAddressInput {

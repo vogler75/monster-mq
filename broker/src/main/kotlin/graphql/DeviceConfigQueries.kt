@@ -141,6 +141,7 @@ class DeviceConfigQueries(
                 "updateEndpointUrl" to device.config.updateEndpointUrl,
                 "securityPolicy" to device.config.securityPolicy,
                 "username" to (device.config.username ?: ""),
+                "password" to (device.config.password ?: ""),
                 "subscriptionSamplingInterval" to device.config.subscriptionSamplingInterval,
                 "keepAliveFailuresAllowed" to device.config.keepAliveFailuresAllowed,
                 "reconnectDelay" to device.config.reconnectDelay,
@@ -158,7 +159,18 @@ class DeviceConfigQueries(
                         "publishMode" to address.publishMode,
                         "removePath" to address.removePath
                     )
-                }
+                },
+                "certificateConfig" to mapOf(
+                    "securityDir" to device.config.certificateConfig.securityDir,
+                    "applicationName" to device.config.certificateConfig.applicationName,
+                    "applicationUri" to device.config.certificateConfig.applicationUri,
+                    "organization" to device.config.certificateConfig.organization,
+                    "organizationalUnit" to device.config.certificateConfig.organizationalUnit,
+                    "localityName" to device.config.certificateConfig.localityName,
+                    "countryCode" to device.config.certificateConfig.countryCode,
+                    "createSelfSigned" to device.config.certificateConfig.createSelfSigned,
+                    "keystorePassword" to device.config.certificateConfig.keystorePassword
+                )
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),
