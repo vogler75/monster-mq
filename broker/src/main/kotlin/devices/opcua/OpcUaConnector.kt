@@ -91,19 +91,30 @@ class OpcUaConnector : AbstractVerticle() {
 
             // Initialize certificate management
             try {
-                keyStoreLoader = KeyStoreLoader(opcUaConfig.certificateConfig).load()
+                // Pass device name to create unique certificate files per device
+                keyStoreLoader = KeyStoreLoader(opcUaConfig.certificateConfig, deviceConfig.name).load()
                 logger.info("Certificate management initialized for device: ${deviceConfig.name}")
 
-                // Initialize trust list manager for server certificate validation
-                val securityDir = Paths.get(opcUaConfig.certificateConfig.securityDir)
-                Files.createDirectories(securityDir)
-                val pkiDir = securityDir.resolve("pki")
-                Files.createDirectories(pkiDir.resolve("trusted/certs"))
-                Files.createDirectories(pkiDir.resolve("issuers/certs"))
-                Files.createDirectories(pkiDir.resolve("rejected/certs"))
+                // Only initialize trust manager if we need certificate validation
+                if (opcUaConfig.certificateConfig.validateServerCertificate) {
+                    val securityDir = Paths.get(opcUaConfig.certificateConfig.securityDir)
+                    Files.createDirectories(securityDir)
 
-                trustListManager = DefaultTrustListManager(pkiDir.toFile())
-                logger.info("Trust list manager initialized at: $pkiDir")
+                    // For OPC UA client, only create trust directories when validation is enabled
+                    val deviceTrustedDir = securityDir.resolve("trusted-${deviceConfig.name.replace(Regex("[^a-zA-Z0-9-]"), "_")}")
+
+                    // DefaultTrustListManager requires this PKI structure, even though we only use trusted/certs
+                    // We create these on-demand only when certificate validation is actually needed
+                    Files.createDirectories(deviceTrustedDir.resolve("trusted/certs"))
+                    Files.createDirectories(deviceTrustedDir.resolve("issuers/certs"))
+                    Files.createDirectories(deviceTrustedDir.resolve("rejected/certs"))
+
+                    trustListManager = DefaultTrustListManager(deviceTrustedDir.toFile())
+                    logger.info("Trust store initialized for device ${deviceConfig.name} at: $deviceTrustedDir")
+                } else {
+                    trustListManager = null
+                    logger.info("Certificate validation disabled for device ${deviceConfig.name} - no trust store created")
+                }
             } catch (e: Exception) {
                 logger.warning("Failed to initialize certificates for device ${deviceConfig.name}: ${e.message}")
                 if (opcUaConfig.certificateConfig.createSelfSigned) {

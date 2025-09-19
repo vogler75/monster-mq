@@ -133,14 +133,42 @@ Browse-based subscriptions with wildcards:
 
 ## Certificate Security
 
+### Certificate Storage Architecture
+
+MonsterMQ uses a device-specific certificate storage system to support multiple OPC UA connections with different security requirements:
+
+```
+security/                                     # Root security directory
+├── monstermq-opcua-client-device1.pfx      # OPC UA client certificate for device1
+├── monstermq-opcua-client-device2.pfx      # OPC UA client certificate for device2
+├── trusted-device1/                        # Trust store (only created if validation enabled)
+│   └── trusted/certs/                      # Trusted server certificates
+└── trusted-device2/                        # Trust store (only created if validation enabled)
+    └── trusted/certs/                      # Trusted server certificates
+```
+
+**Key Points:**
+- Each device gets its own certificate file (`monstermq-opcua-client-{device-name}.pfx`)
+- Trust directories (`trusted-{device-name}/`) are **only created when certificate validation is enabled**
+- With `validateServerCertificate: false`, no trust directories are created at all
+- Special characters in device names are replaced with underscores
+- No certificate conflicts between multiple OPC UA connections
+
+**Directory Creation Logic:**
+- **Always created**: Client certificate file (`.pfx`) when using security policies other than "None"
+- **Conditionally created**: Trust directories only when `validateServerCertificate: true`
+- **Never created**: Trust directories when `validateServerCertificate: false` or `securityPolicy: "None"`
+
 ### Auto-Generated Certificates
 
-MonsterMQ automatically generates self-signed certificates:
+MonsterMQ automatically generates self-signed certificates when:
+- `createSelfSigned: true` is configured
+- No existing certificate is found
 
 ```kotlin
-// Certificate stored at: ./security/monstermq-client.pfx
-// Password: Configurable (default: "password")
-// Format: PKCS12 keystore with X.509 certificate
+// Certificate format: PKCS12 keystore with X.509 certificate
+// Key algorithm: RSA 2048-bit
+// Certificate alias: "client-ai"
 ```
 
 ### Certificate Configuration
@@ -153,11 +181,24 @@ certificateConfig: {
   organization: "Factory Corp"               # Certificate organization
   organizationalUnit: "Production"           # Department/unit
   localityName: "Vienna"                     # City
-  countryCode: "AT"                          # Country code
+  countryCode: "AT"                          # Country code (2 letters)
   createSelfSigned: true                     # Auto-generate if missing
   keystorePassword: "secure123"              # Keystore password
+  validateServerCertificate: true            # Validate server certificates
+  autoAcceptServerCertificates: false        # Auto-accept new server certs
 }
 ```
+
+### Certificate Validation Options
+
+**validateServerCertificate** (default: true)
+- `true`: Validates server certificates against trust store
+- `false`: Disables certificate validation (insecure, not for production)
+
+**autoAcceptServerCertificates** (default: false)
+- `true`: Automatically accepts and saves new server certificates
+- `false`: Only accepts certificates already in trust store
+- Note: If trust store is empty with `validateServerCertificate: true`, the first certificate is auto-accepted
 
 ### Certificate Properties
 
@@ -167,18 +208,147 @@ Generated certificates include:
 - **All hostnames** (localhost, FQDN, etc.)
 - **Common Name** from applicationName
 - **Subject Alternative Names** for flexibility
+- **Validity period**: 365 days from creation
+
+### Using Existing Certificates
+
+#### Option 1: Replace Auto-Generated Certificate
+
+If you have an existing certificate from a Certificate Authority (CA):
+
+```bash
+# 1. Convert your certificate and key to PKCS12 format (if needed)
+openssl pkcs12 -export \
+  -in your-certificate.crt \
+  -inkey your-private-key.key \
+  -out monstermq-opcua-client-yourdevice.pfx \
+  -name "client-ai" \
+  -password pass:yourpassword
+
+# 2. Place in security directory with correct naming
+cp monstermq-opcua-client-yourdevice.pfx /path/to/monstermq/security/
+
+# 3. Update device configuration
+# Set createSelfSigned: false
+# Set keystorePassword to match your certificate password
+```
+
+#### Option 2: Import Existing Certificate into Keystore
+
+```bash
+# Import existing certificate with private key
+keytool -importkeystore \
+  -srckeystore your-certificate.p12 \
+  -srcstoretype PKCS12 \
+  -destkeystore security/monstermq-opcua-client-yourdevice.pfx \
+  -deststoretype PKCS12 \
+  -deststorepass yourpassword \
+  -destalias "client-ai"
+```
+
+#### Option 3: Use Certificate with Different Alias
+
+```bash
+# List aliases in your certificate
+keytool -list -keystore your-certificate.pfx -storetype PKCS12
+
+# If alias is different from "client-ai", rename it
+keytool -changealias \
+  -alias "old-alias" \
+  -destalias "client-ai" \
+  -keystore your-certificate.pfx \
+  -storetype PKCS12
+```
 
 ### Manual Certificate Management
 
 ```bash
 # View certificate information
-keytool -list -v -keystore security/monstermq-client.pfx -storetype PKCS12
+keytool -list -v \
+  -keystore security/monstermq-opcua-client-device1.pfx \
+  -storetype PKCS12 \
+  -storepass yourpassword
 
-# Extract certificate for OPC UA server
-keytool -export -alias client-ai -keystore security/monstermq-client.pfx -file client.cer
+# Extract certificate for OPC UA server trust
+keytool -export \
+  -alias client-ai \
+  -keystore security/monstermq-opcua-client-device1.pfx \
+  -storetype PKCS12 \
+  -storepass yourpassword \
+  -file device1-client.cer
 
-# Import into OPC UA server trusted certificates
-cp client.cer /path/to/opcua/server/trusted/
+# Import server certificate to trust store
+keytool -import \
+  -alias opcua-server \
+  -file server-certificate.cer \
+  -keystore security/trusted-device1/trusted/certs/server.crt \
+  -storetype PEM \
+  -noprompt
+```
+
+### Server Certificate Trust Management
+
+#### Auto-Accept Mode (Development)
+
+For development or initial setup:
+
+```graphql
+certificateConfig: {
+  validateServerCertificate: true
+  autoAcceptServerCertificates: true  # Auto-accept and save
+}
+```
+
+Server certificates are automatically saved to: `security/trusted-{device}/trusted/certs/`
+
+#### Manual Trust (Production)
+
+For production environments:
+
+```bash
+# 1. Get server certificate
+openssl s_client -connect opcua-server:4840 \
+  -showcerts </dev/null 2>/dev/null | \
+  openssl x509 -outform PEM > server.crt
+
+# 2. Place in device trust store
+cp server.crt security/trusted-device1/trusted/certs/
+
+# 3. Configure strict validation
+certificateConfig: {
+  validateServerCertificate: true
+  autoAcceptServerCertificates: false  # Only trust existing certs
+}
+```
+
+### Certificate Troubleshooting
+
+**Issue: "trustAnchors parameter must be non-empty"**
+- **Cause**: Trust store is empty and `autoAcceptServerCertificates: false`
+- **Solution**: Either set `autoAcceptServerCertificates: true` or manually add server certificate to trust store
+
+**Issue: Certificate file not found**
+- **Cause**: `createSelfSigned: false` but certificate doesn't exist
+- **Solution**: Either set `createSelfSigned: true` or provide existing certificate
+
+**Issue: Bad certificate password**
+- **Cause**: Wrong password in configuration
+- **Solution**: Verify `keystorePassword` matches certificate password
+
+**Issue: Server rejects client certificate**
+- **Cause**: Client certificate not trusted by OPC UA server
+- **Solution**: Export client certificate and import into server's trusted certificates
+
+```bash
+# Export MonsterMQ client certificate
+keytool -export \
+  -alias client-ai \
+  -keystore security/monstermq-opcua-client-device1.pfx \
+  -storetype PKCS12 \
+  -file monstermq-opcua-client.cer
+
+# On OPC UA server, import to trusted certificates
+# Location varies by server (Kepware, Siemens, etc.)
 ```
 
 ## Security Policies
@@ -425,7 +595,7 @@ tail -f log/monstermq.log | grep "Failed to connect"
 
 ```bash
 # Check if certificates exist
-ls -la security/monstermq-client.pfx
+ls -la security/monstermq-opcua-client-device1.pfx
 
 # Test OPC UA endpoint connectivity
 telnet 192.168.1.100 4840
@@ -609,10 +779,10 @@ mutation {
 **1. Certificate Errors**
 ```bash
 # Check certificate exists
-ls -la security/monstermq-client.pfx
+ls -la security/monstermq-opcua-client-device1.pfx
 
 # Verify certificate details
-keytool -list -v -keystore security/monstermq-client.pfx -storetype PKCS12
+keytool -list -v -keystore security/monstermq-opcua-client-device1.pfx -storetype PKCS12
 
 # Trust client certificate on OPC UA server
 ```

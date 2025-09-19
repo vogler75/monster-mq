@@ -13,7 +13,10 @@ import java.security.*
 import java.security.cert.X509Certificate
 import java.util.regex.Pattern
 
-class KeyStoreLoader(private val config: CertificateConfig) {
+class KeyStoreLoader(
+    private val config: CertificateConfig,
+    private val deviceIdentifier: String? = null
+) {
     private val logger = Utils.getLogger(this::class.java)
 
     companion object {
@@ -49,7 +52,13 @@ class KeyStoreLoader(private val config: CertificateConfig) {
     @Throws(Exception::class)
     private fun loadKeyStore(baseDir: Path): KeyStoreLoader {
         val keyStore = KeyStore.getInstance("PKCS12")
-        val serverKeyStore = baseDir.resolve("monstermq-client.pfx")
+        // Use device-specific certificate file name to avoid conflicts
+        val certificateFileName = if (deviceIdentifier != null) {
+            "monstermq-opcua-client-${deviceIdentifier.replace(Regex("[^a-zA-Z0-9-]"), "_")}.pfx"
+        } else {
+            "monstermq-opcua-client.pfx"
+        }
+        val serverKeyStore = baseDir.resolve(certificateFileName)
         val password = config.keystorePassword.toCharArray()
 
         logger.info("Loading Client KeyStore at $serverKeyStore")
