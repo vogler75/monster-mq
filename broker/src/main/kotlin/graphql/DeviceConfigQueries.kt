@@ -175,6 +175,7 @@ class DeviceConfigQueries(
                 )
             ),
             "enabled" to device.enabled,
+            "type" to device.type,
             "createdAt" to device.createdAt.toString(),
             "updatedAt" to device.updatedAt.toString(),
             "isOnCurrentNode" to device.isAssignedToNode(currentNodeId)

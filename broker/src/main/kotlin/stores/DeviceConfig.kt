@@ -14,6 +14,7 @@ data class DeviceConfig(
     val backupNodeId: String? = null,       // Future: backup node for failover
     val config: OpcUaConnectionConfig,      // OPC UA connection configuration
     val enabled: Boolean = true,
+    val type: String = "OPC Client",        // Device type (e.g., "OPC Client")
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now()
 ) {
@@ -26,6 +27,7 @@ data class DeviceConfig(
                 backupNodeId = json.getString("backupNodeId"),
                 config = OpcUaConnectionConfig.fromJsonObject(json.getJsonObject("config")),
                 enabled = json.getBoolean("enabled", true),
+                type = json.getString("type", "OPC Client"),
                 createdAt = json.getString("createdAt")?.let { Instant.parse(it) } ?: Instant.now(),
                 updatedAt = json.getString("updatedAt")?.let { Instant.parse(it) } ?: Instant.now()
             )
@@ -40,6 +42,7 @@ data class DeviceConfig(
             .put("backupNodeId", backupNodeId)
             .put("config", config.toJsonObject())
             .put("enabled", enabled)
+            .put("type", type)
             .put("createdAt", createdAt.toString())
             .put("updatedAt", updatedAt.toString())
     }
@@ -424,7 +427,8 @@ data class DeviceConfigRequest(
     val nodeId: String,
     val backupNodeId: String? = null,
     val config: OpcUaConnectionConfig,
-    val enabled: Boolean = true
+    val enabled: Boolean = true,
+    val type: String = "OPC Client"
 ) {
     fun toDeviceConfig(): DeviceConfig {
         return DeviceConfig(
@@ -434,6 +438,7 @@ data class DeviceConfigRequest(
             backupNodeId = backupNodeId,
             config = config,
             enabled = enabled,
+            type = type,
             createdAt = Instant.now(),
             updatedAt = Instant.now()
         )

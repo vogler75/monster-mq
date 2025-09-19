@@ -759,6 +759,7 @@ type OpcUaDevice {
     backupNodeId: String
     config: OpcUaConnectionConfig!
     enabled: Boolean!
+    type: String!
     createdAt: String!
     updatedAt: String!
     isOnCurrentNode: Boolean!
@@ -844,6 +845,7 @@ input OpcUaDeviceInput {
     backupNodeId: String
     config: OpcUaConnectionConfigInput!
     enabled: Boolean = true
+    type: String = "OPC Client"
 }
 
 # Extend existing Query type

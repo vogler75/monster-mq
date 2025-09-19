@@ -545,7 +545,8 @@ class DeviceConfigMutations(
             nodeId = input["nodeId"] as String,
             backupNodeId = input["backupNodeId"] as? String,
             config = config,
-            enabled = input["enabled"] as? Boolean ?: true
+            enabled = input["enabled"] as? Boolean ?: true,
+            type = input["type"] as? String ?: "OPC Client"
         )
     }
 
