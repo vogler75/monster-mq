@@ -122,6 +122,19 @@ class OpcUaDeviceDetailManager {
                                 publishMode
                                 removePath
                             }
+                            certificateConfig {
+                                securityDir
+                                applicationName
+                                applicationUri
+                                organization
+                                organizationalUnit
+                                localityName
+                                countryCode
+                                createSelfSigned
+                                keystorePassword
+                                validateServerCertificate
+                                autoAcceptServerCertificates
+                            }
                         }
                     }
                 }
@@ -189,6 +202,16 @@ class OpcUaDeviceDetailManager {
             this.device.config.monitoringParameters.samplingInterval + ' ms';
         document.getElementById('config-discard-oldest').textContent =
             this.device.config.monitoringParameters.discardOldest ? 'Yes' : 'No';
+
+        // Certificate configuration
+        const certConfig = this.device.config.certificateConfig;
+        document.getElementById('cert-security-dir').textContent = certConfig.securityDir;
+        document.getElementById('cert-application-name').textContent = certConfig.applicationName;
+        document.getElementById('cert-application-uri').textContent = certConfig.applicationUri;
+        document.getElementById('cert-organization').textContent = certConfig.organization;
+        document.getElementById('cert-create-self-signed').textContent = certConfig.createSelfSigned ? 'Yes' : 'No';
+        document.getElementById('cert-validate-server').textContent = certConfig.validateServerCertificate ? 'Yes' : 'No';
+        document.getElementById('cert-auto-accept').textContent = certConfig.autoAcceptServerCertificates ? 'Yes' : 'No';
 
         // Render addresses
         this.renderAddresses();
@@ -366,6 +389,36 @@ class OpcUaDeviceDetailManager {
         document.getElementById('edit-device-enabled').checked = this.device.enabled;
         document.getElementById('edit-device-update-endpoint').checked = this.device.config.updateEndpointUrl;
 
+        // Populate certificate configuration
+        const certConfig = this.device.config.certificateConfig;
+        document.getElementById('edit-cert-security-dir').value = certConfig.securityDir;
+        document.getElementById('edit-cert-application-name').value = certConfig.applicationName;
+        document.getElementById('edit-cert-application-uri').value = certConfig.applicationUri;
+        document.getElementById('edit-cert-organization').value = certConfig.organization;
+        document.getElementById('edit-cert-organizational-unit').value = certConfig.organizationalUnit;
+        document.getElementById('edit-cert-locality').value = certConfig.localityName;
+        document.getElementById('edit-cert-country').value = certConfig.countryCode;
+        document.getElementById('edit-cert-create-self-signed').checked = certConfig.createSelfSigned;
+        document.getElementById('edit-cert-validate-server-certificate').checked = certConfig.validateServerCertificate;
+        document.getElementById('edit-cert-auto-accept-server-certificates').checked = certConfig.autoAcceptServerCertificates;
+        document.getElementById('edit-cert-keystore-password').value = '';
+
+        // Populate connection settings
+        document.getElementById('edit-subscription-sampling').value = this.device.config.subscriptionSamplingInterval;
+        document.getElementById('edit-keep-alive-failures').value = this.device.config.keepAliveFailuresAllowed;
+        document.getElementById('edit-reconnect-delay').value = this.device.config.reconnectDelay;
+        document.getElementById('edit-connection-timeout').value = this.device.config.connectionTimeout;
+        document.getElementById('edit-request-timeout').value = this.device.config.requestTimeout;
+        document.getElementById('edit-monitoring-buffer-size').value = this.device.config.monitoringParameters.bufferSize;
+        document.getElementById('edit-monitoring-sampling').value = this.device.config.monitoringParameters.samplingInterval;
+        document.getElementById('edit-monitoring-discard-oldest').checked = this.device.config.monitoringParameters.discardOldest;
+
+        // Reset password update checkboxes and hide password fields
+        document.getElementById('edit-device-update-password').checked = false;
+        document.getElementById('password-field-group').style.display = 'none';
+        document.getElementById('edit-cert-update-keystore-password').checked = false;
+        document.getElementById('keystore-password-field-group').style.display = 'none';
+
         this.showEditDeviceModal();
     }
 
@@ -386,13 +439,32 @@ class OpcUaDeviceDetailManager {
                 updateEndpointUrl: document.getElementById('edit-device-update-endpoint').checked,
                 securityPolicy: document.getElementById('edit-device-security').value,
                 username: document.getElementById('edit-device-username').value.trim() || null,
-                password: document.getElementById('edit-device-password').value || null,
-                subscriptionSamplingInterval: this.device.config.subscriptionSamplingInterval,
-                keepAliveFailuresAllowed: this.device.config.keepAliveFailuresAllowed,
-                reconnectDelay: this.device.config.reconnectDelay,
-                connectionTimeout: this.device.config.connectionTimeout,
-                requestTimeout: this.device.config.requestTimeout,
-                monitoringParameters: this.device.config.monitoringParameters
+                password: document.getElementById('edit-device-update-password').checked ?
+                    document.getElementById('edit-device-password').value || null : undefined,
+                subscriptionSamplingInterval: parseFloat(document.getElementById('edit-subscription-sampling').value),
+                keepAliveFailuresAllowed: parseInt(document.getElementById('edit-keep-alive-failures').value),
+                reconnectDelay: parseInt(document.getElementById('edit-reconnect-delay').value),
+                connectionTimeout: parseInt(document.getElementById('edit-connection-timeout').value),
+                requestTimeout: parseInt(document.getElementById('edit-request-timeout').value),
+                monitoringParameters: {
+                    bufferSize: parseInt(document.getElementById('edit-monitoring-buffer-size').value),
+                    samplingInterval: parseFloat(document.getElementById('edit-monitoring-sampling').value),
+                    discardOldest: document.getElementById('edit-monitoring-discard-oldest').checked
+                },
+                certificateConfig: {
+                    securityDir: document.getElementById('edit-cert-security-dir').value.trim(),
+                    applicationName: document.getElementById('edit-cert-application-name').value.trim(),
+                    applicationUri: document.getElementById('edit-cert-application-uri').value.trim(),
+                    organization: document.getElementById('edit-cert-organization').value.trim(),
+                    organizationalUnit: document.getElementById('edit-cert-organizational-unit').value.trim(),
+                    localityName: document.getElementById('edit-cert-locality').value.trim(),
+                    countryCode: document.getElementById('edit-cert-country').value.trim(),
+                    createSelfSigned: document.getElementById('edit-cert-create-self-signed').checked,
+                    keystorePassword: document.getElementById('edit-cert-update-keystore-password').checked ?
+                        document.getElementById('edit-cert-keystore-password').value || null : undefined,
+                    validateServerCertificate: document.getElementById('edit-cert-validate-server-certificate').checked,
+                    autoAcceptServerCertificates: document.getElementById('edit-cert-auto-accept-server-certificates').checked
+                }
             }
         };
 

@@ -169,7 +169,9 @@ class DeviceConfigQueries(
                     "localityName" to device.config.certificateConfig.localityName,
                     "countryCode" to device.config.certificateConfig.countryCode,
                     "createSelfSigned" to device.config.certificateConfig.createSelfSigned,
-                    "keystorePassword" to device.config.certificateConfig.keystorePassword
+                    "keystorePassword" to device.config.certificateConfig.keystorePassword,
+                    "validateServerCertificate" to device.config.certificateConfig.validateServerCertificate,
+                    "autoAcceptServerCertificates" to device.config.certificateConfig.autoAcceptServerCertificates
                 )
             ),
             "enabled" to device.enabled,

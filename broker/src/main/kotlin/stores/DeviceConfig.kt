@@ -351,7 +351,9 @@ data class CertificateConfig(
     val localityName: String = "Unknown",
     val countryCode: String = "XX",
     val createSelfSigned: Boolean = true,
-    val keystorePassword: String = "password"
+    val keystorePassword: String = "password",
+    val validateServerCertificate: Boolean = true,
+    val autoAcceptServerCertificates: Boolean = false
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): CertificateConfig {
@@ -364,7 +366,9 @@ data class CertificateConfig(
                 localityName = json.getString("localityName", "Unknown"),
                 countryCode = json.getString("countryCode", "XX"),
                 createSelfSigned = json.getBoolean("createSelfSigned", true),
-                keystorePassword = json.getString("keystorePassword", "password")
+                keystorePassword = json.getString("keystorePassword", "password"),
+                validateServerCertificate = json.getBoolean("validateServerCertificate", true),
+                autoAcceptServerCertificates = json.getBoolean("autoAcceptServerCertificates", false)
             )
         }
     }
@@ -380,6 +384,8 @@ data class CertificateConfig(
             .put("countryCode", countryCode)
             .put("createSelfSigned", createSelfSigned)
             .put("keystorePassword", keystorePassword)
+            .put("validateServerCertificate", validateServerCertificate)
+            .put("autoAcceptServerCertificates", autoAcceptServerCertificates)
     }
 }
 

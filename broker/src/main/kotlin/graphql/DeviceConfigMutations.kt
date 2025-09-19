@@ -213,10 +213,20 @@ class DeviceConfigMutations(
                             return@onComplete
                         }
 
-                        // Update device (preserve creation time and existing addresses)
+                        // Update device (preserve creation time, existing addresses, and passwords if not provided)
+                        val newConfig = request.config.copy(
+                            addresses = existingDevice.config.addresses,
+                            // Preserve existing password if not provided in update
+                            password = request.config.password ?: existingDevice.config.password,
+                            // Preserve existing keystore password if not provided in update
+                            certificateConfig = request.config.certificateConfig.copy(
+                                keystorePassword = request.config.certificateConfig.keystorePassword
+                                    ?: existingDevice.config.certificateConfig.keystorePassword
+                            )
+                        )
                         val updatedDevice = request.toDeviceConfig().copy(
                             createdAt = existingDevice.createdAt,
-                            config = request.config.copy(addresses = existingDevice.config.addresses)
+                            config = newConfig
                         )
                         deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
                             if (saveResult.succeeded()) {
@@ -507,7 +517,9 @@ class DeviceConfigMutations(
                 localityName = certConfigMap["localityName"] as? String ?: "Unknown",
                 countryCode = certConfigMap["countryCode"] as? String ?: "XX",
                 createSelfSigned = certConfigMap["createSelfSigned"] as? Boolean ?: true,
-                keystorePassword = certConfigMap["keystorePassword"] as? String ?: "password"
+                keystorePassword = certConfigMap["keystorePassword"] as? String ?: "password",
+                validateServerCertificate = certConfigMap["validateServerCertificate"] as? Boolean ?: true,
+                autoAcceptServerCertificates = certConfigMap["autoAcceptServerCertificates"] as? Boolean ?: false
             )
         } ?: CertificateConfig()
 

@@ -850,6 +850,87 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Certificate Configuration Section -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                                    </svg>
+                                </div>
+                                <h2>Certificate Settings</h2>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="info-list">
+                                <div class="info-item">
+                                    <div class="info-label">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+                                        </svg>
+                                        Security Directory
+                                    </div>
+                                    <span class="info-value" id="cert-security-dir">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                        </svg>
+                                        Application Name
+                                    </div>
+                                    <span class="info-value" id="cert-application-name">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+                                        </svg>
+                                        Application URI
+                                    </div>
+                                    <span class="info-value" id="cert-application-uri">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                        </svg>
+                                        Organization
+                                    </div>
+                                    <span class="info-value" id="cert-organization">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                        </svg>
+                                        Create Self-Signed
+                                    </div>
+                                    <span class="info-value" id="cert-create-self-signed">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        Validate Server Certs
+                                    </div>
+                                    <span class="info-value" id="cert-validate-server">-</span>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        Auto-Accept Server Certs
+                                    </div>
+                                    <span class="info-value" id="cert-auto-accept">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Addresses Section - Full Width -->
@@ -1011,8 +1092,16 @@
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="edit-device-password">Password</label>
-                            <input type="password" id="edit-device-password" placeholder="Leave empty to keep current">
+                            <div class="checkbox-group">
+                                <label for="edit-device-update-password">
+                                    <input type="checkbox" id="edit-device-update-password">
+                                    Update Password
+                                </label>
+                            </div>
+                            <div id="password-field-group" style="display: none;">
+                                <label for="edit-device-password">New Password</label>
+                                <input type="password" id="edit-device-password" placeholder="Enter new password">
+                            </div>
                         </div>
                         <div class="form-group">
                             <div class="checkbox-group">
@@ -1025,6 +1114,128 @@
                                 <label for="edit-device-update-endpoint">
                                     <input type="checkbox" id="edit-device-update-endpoint">
                                     Update Endpoint URL
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Connection Settings Section -->
+                    <h4 style="margin: 2rem 0 1rem 0; color: var(--text-primary); border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Connection Settings</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-subscription-sampling">Subscription Sampling Interval (ms)</label>
+                            <input type="text" id="edit-subscription-sampling" pattern="[0-9]*\.?[0-9]+" placeholder="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-keep-alive-failures">Keep Alive Failures Allowed</label>
+                            <input type="text" id="edit-keep-alive-failures" pattern="[0-9]+" placeholder="3">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-reconnect-delay">Reconnect Delay (ms)</label>
+                            <input type="text" id="edit-reconnect-delay" pattern="[0-9]+" placeholder="5000">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-connection-timeout">Connection Timeout (ms)</label>
+                            <input type="text" id="edit-connection-timeout" pattern="[0-9]+" placeholder="10000">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-request-timeout">Request Timeout (ms)</label>
+                            <input type="text" id="edit-request-timeout" pattern="[0-9]+" placeholder="5000">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-monitoring-buffer-size">Monitoring Buffer Size</label>
+                            <input type="text" id="edit-monitoring-buffer-size" pattern="[0-9]+" placeholder="100">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-monitoring-sampling">Monitoring Sampling Interval (ms)</label>
+                            <input type="text" id="edit-monitoring-sampling" pattern="[0-9]*\.?[0-9]+" placeholder="0">
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <label for="edit-monitoring-discard-oldest">
+                                    <input type="checkbox" id="edit-monitoring-discard-oldest">
+                                    Discard Oldest When Buffer Full
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Certificate Configuration Section -->
+                    <h4 style="margin: 2rem 0 1rem 0; color: var(--text-primary); border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Certificate Configuration</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-cert-security-dir">Security Directory</label>
+                            <input type="text" id="edit-cert-security-dir" placeholder="security">
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <label for="edit-cert-update-keystore-password">
+                                    <input type="checkbox" id="edit-cert-update-keystore-password">
+                                    Update Keystore Password
+                                </label>
+                            </div>
+                            <div id="keystore-password-field-group" style="display: none;">
+                                <label for="edit-cert-keystore-password">New Keystore Password</label>
+                                <input type="password" id="edit-cert-keystore-password" placeholder="Enter new keystore password">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-cert-application-name">Application Name</label>
+                            <input type="text" id="edit-cert-application-name" placeholder="MonsterMQ@localhost">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-cert-application-uri">Application URI</label>
+                            <input type="text" id="edit-cert-application-uri" placeholder="urn:MonsterMQ:Client">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-cert-organization">Organization</label>
+                            <input type="text" id="edit-cert-organization" placeholder="MonsterMQ">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-cert-organizational-unit">Organizational Unit</label>
+                            <input type="text" id="edit-cert-organizational-unit" placeholder="Client">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-cert-locality">Locality Name</label>
+                            <input type="text" id="edit-cert-locality" placeholder="Unknown">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-cert-country">Country Code</label>
+                            <input type="text" id="edit-cert-country" placeholder="XX" maxlength="2">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <label for="edit-cert-create-self-signed">
+                                    <input type="checkbox" id="edit-cert-create-self-signed" checked>
+                                    Create Self-Signed Certificates
+                                </label>
+                            </div>
+                            <div class="checkbox-group">
+                                <label for="edit-cert-validate-server-certificate">
+                                    <input type="checkbox" id="edit-cert-validate-server-certificate" checked>
+                                    Validate Server Certificates
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <label for="edit-cert-auto-accept-server-certificates">
+                                    <input type="checkbox" id="edit-cert-auto-accept-server-certificates">
+                                    Auto-Accept Server Certificates
                                 </label>
                             </div>
                         </div>
@@ -1057,5 +1268,35 @@
     </div>
 
     <script src="/js/opcua-device-detail.js"></script>
+    <script>
+        // Add event listeners for password toggles
+        document.addEventListener('DOMContentLoaded', function() {
+            // Toggle password field visibility
+            const updatePasswordCheckbox = document.getElementById('edit-device-update-password');
+            const passwordFieldGroup = document.getElementById('password-field-group');
+
+            if (updatePasswordCheckbox) {
+                updatePasswordCheckbox.addEventListener('change', function() {
+                    passwordFieldGroup.style.display = this.checked ? 'block' : 'none';
+                    if (!this.checked) {
+                        document.getElementById('edit-device-password').value = '';
+                    }
+                });
+            }
+
+            // Toggle keystore password field visibility
+            const updateKeystorePasswordCheckbox = document.getElementById('edit-cert-update-keystore-password');
+            const keystorePasswordFieldGroup = document.getElementById('keystore-password-field-group');
+
+            if (updateKeystorePasswordCheckbox) {
+                updateKeystorePasswordCheckbox.addEventListener('change', function() {
+                    keystorePasswordFieldGroup.style.display = this.checked ? 'block' : 'none';
+                    if (!this.checked) {
+                        document.getElementById('edit-cert-keystore-password').value = '';
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 </html>

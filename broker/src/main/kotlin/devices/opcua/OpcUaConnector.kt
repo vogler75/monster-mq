@@ -15,6 +15,12 @@ import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy
 import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText
 import org.eclipse.milo.opcua.stack.core.types.structured.EndpointDescription
 import org.eclipse.milo.opcua.stack.core.util.EndpointUtil
+import org.eclipse.milo.opcua.stack.core.security.DefaultTrustListManager
+import org.eclipse.milo.opcua.stack.client.security.ClientCertificateValidator
+import org.eclipse.milo.opcua.stack.client.security.DefaultClientCertificateValidator
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.security.cert.X509Certificate
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription
 import org.eclipse.milo.opcua.stack.core.Identifiers
@@ -58,6 +64,7 @@ class OpcUaConnector : AbstractVerticle() {
 
     // Certificate management
     private var keyStoreLoader: KeyStoreLoader? = null
+    private var trustListManager: DefaultTrustListManager? = null
 
     // Connection state
     private var isConnected = false
@@ -86,6 +93,17 @@ class OpcUaConnector : AbstractVerticle() {
             try {
                 keyStoreLoader = KeyStoreLoader(opcUaConfig.certificateConfig).load()
                 logger.info("Certificate management initialized for device: ${deviceConfig.name}")
+
+                // Initialize trust list manager for server certificate validation
+                val securityDir = Paths.get(opcUaConfig.certificateConfig.securityDir)
+                Files.createDirectories(securityDir)
+                val pkiDir = securityDir.resolve("pki")
+                Files.createDirectories(pkiDir.resolve("trusted/certs"))
+                Files.createDirectories(pkiDir.resolve("issuers/certs"))
+                Files.createDirectories(pkiDir.resolve("rejected/certs"))
+
+                trustListManager = DefaultTrustListManager(pkiDir.toFile())
+                logger.info("Trust list manager initialized at: $pkiDir")
             } catch (e: Exception) {
                 logger.warning("Failed to initialize certificates for device ${deviceConfig.name}: ${e.message}")
                 if (opcUaConfig.certificateConfig.createSelfSigned) {
@@ -208,6 +226,7 @@ class OpcUaConnector : AbstractVerticle() {
                     .setIdentityProvider(identityProvider)
                     .setRequestTimeout(UInteger.valueOf(opcUaConfig.requestTimeout))
                     .setConnectTimeout(UInteger.valueOf(opcUaConfig.connectionTimeout))
+                    .setCertificateValidator(createCertificateValidator())
                     .build()
             }
         }
@@ -635,6 +654,112 @@ class OpcUaConnector : AbstractVerticle() {
         }
 
         return promise.future()
+    }
+
+    private fun createCertificateValidator(): ClientCertificateValidator {
+        val certificateConfig = opcUaConfig.certificateConfig
+
+        return when {
+            !certificateConfig.validateServerCertificate -> {
+                // Certificate validation is disabled - accept all
+                logger.warning("Server certificate validation is disabled for device ${deviceConfig.name}")
+                object : ClientCertificateValidator {
+                    override fun validateCertificateChain(certificateChain: MutableList<X509Certificate>) {
+                        // Accept all certificates - no validation
+                    }
+
+                    override fun validateCertificateChain(
+                        certificateChain: MutableList<X509Certificate>,
+                        applicationUri: String,
+                        vararg validHostNames: String
+                    ) {
+                        // Accept all certificates - no validation
+                    }
+                }
+            }
+            certificateConfig.autoAcceptServerCertificates && trustListManager != null -> {
+                // Auto-accept certificates and add them to trust list
+                logger.info("Auto-accepting server certificates and adding to trust list for device ${deviceConfig.name}")
+                object : ClientCertificateValidator {
+                    override fun validateCertificateChain(certificateChain: MutableList<X509Certificate>) {
+                        try {
+                            if (certificateChain.isNotEmpty()) {
+                                val certificate = certificateChain[0]
+                                trustListManager!!.addTrustedCertificate(certificate)
+                                logger.info("Auto-accepted server certificate: ${certificate.subjectX500Principal}")
+                            }
+                        } catch (e: Exception) {
+                            logger.warning("Failed to auto-accept certificate: ${e.message}")
+                            throw e
+                        }
+                    }
+
+                    override fun validateCertificateChain(
+                        certificateChain: MutableList<X509Certificate>,
+                        applicationUri: String,
+                        vararg validHostNames: String
+                    ) {
+                        validateCertificateChain(certificateChain)
+                    }
+                }
+            }
+            trustListManager != null -> {
+                // Use custom validator that handles empty trust store gracefully
+                logger.info("Using trust list validation for device ${deviceConfig.name}")
+                object : ClientCertificateValidator {
+                    override fun validateCertificateChain(certificateChain: MutableList<X509Certificate>) {
+                        try {
+                            // Check if we have any trusted certificates
+                            val trustedCerts = trustListManager!!.trustedCertificates
+                            if (trustedCerts.isEmpty()) {
+                                logger.warning("Trust store is empty for device ${deviceConfig.name}. " +
+                                    "Auto-accepting server certificate since no trusted certificates are configured.")
+
+                                // Auto-accept the certificate when trust store is empty
+                                if (certificateChain.isNotEmpty()) {
+                                    val certificate = certificateChain[0]
+                                    trustListManager!!.addTrustedCertificate(certificate)
+                                    logger.info("Auto-accepted and saved server certificate: ${certificate.subjectX500Principal}")
+                                }
+                                return
+                            }
+
+                            // Use the default validator if we have trusted certificates
+                            val defaultValidator = DefaultClientCertificateValidator(trustListManager)
+                            defaultValidator.validateCertificateChain(certificateChain)
+                        } catch (e: Exception) {
+                            logger.severe("Certificate validation failed for device ${deviceConfig.name}: ${e.message}")
+                            throw e
+                        }
+                    }
+
+                    override fun validateCertificateChain(
+                        certificateChain: MutableList<X509Certificate>,
+                        applicationUri: String,
+                        vararg validHostNames: String
+                    ) {
+                        validateCertificateChain(certificateChain)
+                    }
+                }
+            }
+            else -> {
+                // Fallback to accepting all certificates (logs warning)
+                logger.warning("Trust list manager not available - using insecure certificate validation for device ${deviceConfig.name}")
+                object : ClientCertificateValidator {
+                    override fun validateCertificateChain(certificateChain: MutableList<X509Certificate>) {
+                        // Accept all certificates - no validation
+                    }
+
+                    override fun validateCertificateChain(
+                        certificateChain: MutableList<X509Certificate>,
+                        applicationUri: String,
+                        vararg validHostNames: String
+                    ) {
+                        // Accept all certificates - no validation
+                    }
+                }
+            }
+        }
     }
 
     private fun handleOpcUaValueChangeForAddress(address: OpcUaAddress, nodeId: NodeId, browsePath: String, dataValue: DataValue) {

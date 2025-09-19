@@ -699,6 +699,10 @@ type CertificateConfig {
     createSelfSigned: Boolean!
     # Password for protecting the keystore containing client certificates
     keystorePassword: String!
+    # Whether to validate server certificates (enable for production security)
+    validateServerCertificate: Boolean!
+    # Auto-accept and save new server certificates to trust store (useful for initial setup)
+    autoAcceptServerCertificates: Boolean!
 }
 
 # OPC UA address configuration for subscribing to OPC UA server nodes
@@ -798,6 +802,10 @@ input CertificateConfigInput {
     createSelfSigned: Boolean = true
     # Keystore password for certificate protection (default: "password")
     keystorePassword: String = "password"
+    # Whether to validate server certificates (default: true for security)
+    validateServerCertificate: Boolean = true
+    # Auto-accept and save new server certificates (default: false, enable for initial setup)
+    autoAcceptServerCertificates: Boolean = false
 }
 
 input OpcUaConnectionConfigInput {

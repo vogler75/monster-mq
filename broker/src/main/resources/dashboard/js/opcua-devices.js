@@ -243,15 +243,28 @@ class OpcUaDeviceManager {
                 securityPolicy: document.getElementById('device-security').value,
                 username: document.getElementById('device-username').value.trim() || null,
                 password: document.getElementById('device-password').value || null,
-                subscriptionSamplingInterval: 0.0,
-                keepAliveFailuresAllowed: 3,
-                reconnectDelay: 5000,
-                connectionTimeout: 10000,
-                requestTimeout: 5000,
+                subscriptionSamplingInterval: parseFloat(document.getElementById('subscription-sampling').value),
+                keepAliveFailuresAllowed: parseInt(document.getElementById('keep-alive-failures').value),
+                reconnectDelay: parseInt(document.getElementById('reconnect-delay').value),
+                connectionTimeout: parseInt(document.getElementById('connection-timeout').value),
+                requestTimeout: parseInt(document.getElementById('request-timeout').value),
                 monitoringParameters: {
-                    bufferSize: 100,
-                    samplingInterval: 0.0,
-                    discardOldest: false
+                    bufferSize: parseInt(document.getElementById('monitoring-buffer-size').value),
+                    samplingInterval: parseFloat(document.getElementById('monitoring-sampling').value),
+                    discardOldest: document.getElementById('monitoring-discard-oldest').checked
+                },
+                certificateConfig: {
+                    securityDir: document.getElementById('cert-security-dir').value.trim(),
+                    applicationName: document.getElementById('cert-application-name').value.trim(),
+                    applicationUri: document.getElementById('cert-application-uri').value.trim(),
+                    organization: document.getElementById('cert-organization').value.trim(),
+                    organizationalUnit: document.getElementById('cert-organizational-unit').value.trim(),
+                    localityName: document.getElementById('cert-locality').value.trim(),
+                    countryCode: document.getElementById('cert-country').value.trim(),
+                    createSelfSigned: document.getElementById('cert-create-self-signed').checked,
+                    keystorePassword: document.getElementById('cert-keystore-password').value || null,
+                    validateServerCertificate: document.getElementById('cert-validate-server-certificate').checked,
+                    autoAcceptServerCertificates: document.getElementById('cert-auto-accept-server-certificates').checked
                 }
             }
         };

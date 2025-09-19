@@ -589,6 +589,120 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Connection Settings Section -->
+                    <h4 style="margin: 2rem 0 1rem 0; color: var(--text-primary); border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Connection Settings</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="subscription-sampling">Subscription Sampling Interval (ms)</label>
+                            <input type="text" id="subscription-sampling" pattern="[0-9]*\.?[0-9]+" placeholder="0" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="keep-alive-failures">Keep Alive Failures Allowed</label>
+                            <input type="text" id="keep-alive-failures" pattern="[0-9]+" placeholder="3" value="3">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="reconnect-delay">Reconnect Delay (ms)</label>
+                            <input type="text" id="reconnect-delay" pattern="[0-9]+" placeholder="5000" value="5000">
+                        </div>
+                        <div class="form-group">
+                            <label for="connection-timeout">Connection Timeout (ms)</label>
+                            <input type="text" id="connection-timeout" pattern="[0-9]+" placeholder="10000" value="10000">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="request-timeout">Request Timeout (ms)</label>
+                            <input type="text" id="request-timeout" pattern="[0-9]+" placeholder="5000" value="5000">
+                        </div>
+                        <div class="form-group">
+                            <label for="monitoring-buffer-size">Monitoring Buffer Size</label>
+                            <input type="text" id="monitoring-buffer-size" pattern="[0-9]+" placeholder="100" value="100">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="monitoring-sampling">Monitoring Sampling Interval (ms)</label>
+                            <input type="text" id="monitoring-sampling" pattern="[0-9]*\.?[0-9]+" placeholder="0" value="0">
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <label for="monitoring-discard-oldest">
+                                    <input type="checkbox" id="monitoring-discard-oldest">
+                                    Discard Oldest When Buffer Full
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Certificate Configuration Section -->
+                    <h4 style="margin: 2rem 0 1rem 0; color: var(--text-primary); border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Certificate Configuration</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="cert-security-dir">Security Directory</label>
+                            <input type="text" id="cert-security-dir" value="security">
+                        </div>
+                        <div class="form-group">
+                            <label for="cert-keystore-password">Keystore Password</label>
+                            <input type="password" id="cert-keystore-password" value="password">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="cert-application-name">Application Name</label>
+                            <input type="text" id="cert-application-name" value="MonsterMQ@localhost">
+                        </div>
+                        <div class="form-group">
+                            <label for="cert-application-uri">Application URI</label>
+                            <input type="text" id="cert-application-uri" value="urn:MonsterMQ:Client">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="cert-organization">Organization</label>
+                            <input type="text" id="cert-organization" value="MonsterMQ">
+                        </div>
+                        <div class="form-group">
+                            <label for="cert-organizational-unit">Organizational Unit</label>
+                            <input type="text" id="cert-organizational-unit" value="Client">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="cert-locality">Locality Name</label>
+                            <input type="text" id="cert-locality" value="Unknown">
+                        </div>
+                        <div class="form-group">
+                            <label for="cert-country">Country Code</label>
+                            <input type="text" id="cert-country" value="XX" maxlength="2">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <label for="cert-create-self-signed">
+                                    <input type="checkbox" id="cert-create-self-signed" checked>
+                                    Create Self-Signed Certificates
+                                </label>
+                            </div>
+                            <div class="checkbox-group">
+                                <label for="cert-validate-server-certificate">
+                                    <input type="checkbox" id="cert-validate-server-certificate" checked>
+                                    Validate Server Certificates
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <label for="cert-auto-accept-server-certificates">
+                                    <input type="checkbox" id="cert-auto-accept-server-certificates">
+                                    Auto-Accept Server Certificates
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
