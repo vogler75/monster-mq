@@ -173,6 +173,9 @@ class OpcUaConnector : AbstractVerticle() {
 
     private fun createOpcUaClient(identityProvider: IdentityProvider): OpcUaClient {
         val securityPolicy = when (opcUaConfig.securityPolicy.uppercase()) {
+            "NONE" -> SecurityPolicy.None
+            "BASIC128RSA15" -> SecurityPolicy.Basic128Rsa15
+            "BASIC256" -> SecurityPolicy.Basic256
             "BASIC256SHA256" -> SecurityPolicy.Basic256Sha256
             "AES128_SHA256_RSAOAEP" -> SecurityPolicy.Aes128_Sha256_RsaOaep
             "AES256_SHA256_RSAPSS" -> SecurityPolicy.Aes256_Sha256_RsaPss
