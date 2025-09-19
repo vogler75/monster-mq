@@ -1,0 +1,20 @@
+Release v1.6.3
+Built from commit: 084b951
+Date: 2025-09-19 18:52:44
+
+Changes since v1.6.2:
+---
+084b951 Add device-specific OPC UA certificate and trust stores
+2d66412 Add advanced OPC UA certificate validation options
+2cac6a4 Add more OPC UA security policies and update .gitignore
+5e2ff77 Add 'Try Demo Server' button to homepage
+58be254 Update README.md
+c2e78bd Revamp README and add modular documentation
+de8100a Add certificate config to OPC UA connection settings
+62339de Add OPC UA client certificate management and config
+b15cbf5 Add configurable WAL mode for SQLiteVerticle
+ae20c45 Refactor SQLite path handling and add directory validation
+d35687a Update schema.graphqls
+e19f9bf Update schema.graphqls
+a4c873f Refactor AuthStoreType to StoreType and add store type fallback
+bf6bb8f Add reconnection timer management to OpcUaConnector
