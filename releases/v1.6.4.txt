@@ -1,0 +1,7 @@
+Release v1.6.4
+Built from commit: 3eafc56
+Date: 2025-09-19 23:33:23
+
+Changes since v1.6.3:
+---
+3eafc56 Add device type field to OPC UA device configuration
