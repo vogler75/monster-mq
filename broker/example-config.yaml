@@ -6,14 +6,11 @@ WSS: 9001
 MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 
-SessionStoreType: POSTGRES
-RetainedStoreType: POSTGRES
-ConfigStoreType: POSTGRES
+DefaultStoreType: POSTGRES
 
 # User Management configuration
 UserManagement:
   Enabled: false  # Set to true to enable user authentication and ACL
-  StoreType: POSTGRES  # POSTGRES, SQLITE, CRATEDB, MONGODB
   PasswordAlgorithm: bcrypt
   CacheRefreshInterval: 60  # seconds
   DisconnectOnUnauthorized: true
