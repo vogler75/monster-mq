@@ -1,6 +1,6 @@
 # MonsterMQ
 
-A factory-grade MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data storage through PostgreSQL, CrateDB, MongoDB, or SQLite.
+A MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data storage through PostgreSQL, CrateDB, MongoDB, or SQLite.
 
 ## 🚀 Key Features
 
