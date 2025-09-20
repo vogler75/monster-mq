@@ -77,6 +77,11 @@ fi
 echo "$VERSION_WITH_SHA" > version.txt
 echo -e "${GREEN}✓ Updated version.txt to ${VERSION_WITH_SHA}${NC}"
 
+# Copy version.txt to broker resources for runtime access
+mkdir -p broker/src/main/resources
+cp version.txt broker/src/main/resources/version.txt
+echo -e "${GREEN}✓ Copied version.txt to broker resources${NC}"
+
 # Create release notes file
 RELEASE_NOTES_FILE="releases/v${NEW_VERSION}.txt"
 mkdir -p releases

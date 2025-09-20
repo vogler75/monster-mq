@@ -157,7 +157,8 @@ data class BrokerMetrics(
 )
 
 data class Broker(
-    val nodeId: String
+    val nodeId: String,
+    val version: String
 )
 
 data class SessionMetrics(

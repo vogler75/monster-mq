@@ -264,6 +264,7 @@ class DashboardManager {
     updateMetrics(brokers) {
         this.updateOverviewCards(brokers);
         this.updateBrokerTable(brokers);
+        this.updateVersionInfo(brokers);
     }
 
     initializeChartsWithHistory(brokers) {
@@ -499,6 +500,7 @@ class DashboardManager {
             return `
                 <tr>
                     <td><strong>${broker.nodeId}</strong></td>
+                    <td><code style="font-size: 0.875rem; background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px;">${broker.version || 'unknown'}</code></td>
                     <td>
                         <span class="status-indicator ${isHealthy ? 'status-online' : 'status-offline'}">
                             <span class="status-dot"></span>
@@ -518,6 +520,35 @@ class DashboardManager {
         }).join('');
     }
 
+    updateVersionInfo(brokers) {
+        const versionElement = document.getElementById('version-info');
+
+        if (brokers && brokers.length > 0) {
+            // Get the version from the first broker (assuming all nodes have the same version)
+            const version = brokers[0].version || 'unknown';
+
+            // Check if all brokers have the same version
+            const allSameVersion = brokers.every(broker => broker.version === version);
+
+            if (allSameVersion) {
+                versionElement.innerHTML = `
+                    <div style="color: var(--text-secondary);">MonsterMQ</div>
+                    <div style="font-family: 'Courier New', monospace; color: var(--text-primary); font-weight: 500;">${version}</div>
+                `;
+            } else {
+                // Mixed versions in cluster
+                versionElement.innerHTML = `
+                    <div style="color: var(--text-secondary);">MonsterMQ</div>
+                    <div style="font-family: 'Courier New', monospace; color: #F59E0B; font-weight: 500;">Mixed Versions</div>
+                `;
+            }
+        } else {
+            versionElement.innerHTML = `
+                <div style="color: var(--text-secondary);">MonsterMQ</div>
+                <div style="font-family: 'Courier New', monospace; color: var(--text-tertiary); font-weight: 500;">unknown</div>
+            `;
+        }
+    }
 
     formatNumber(num) {
         if (num >= 1000000) {

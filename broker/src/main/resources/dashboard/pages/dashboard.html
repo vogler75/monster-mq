@@ -32,9 +32,14 @@
 
     <div class="main-content">
         <div class="container">
-            <div class="page-header">
-                <h1 class="page-title">Dashboard</h1>
-                <p class="page-subtitle">Real-time monitoring of your MQTT broker cluster</p>
+            <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <h1 class="page-title">Dashboard</h1>
+                    <p class="page-subtitle">Real-time monitoring of your MQTT broker cluster</p>
+                </div>
+                <div class="version-info" id="version-info" style="text-align: right; opacity: 0.7; font-size: 0.875rem; margin-top: 0.5rem;">
+                    <!-- Version will be populated here -->
+                </div>
             </div>
 
             <div id="cluster-overview" class="metrics-grid">
@@ -69,6 +74,7 @@
                     <thead>
                         <tr>
                             <th>Node ID</th>
+                            <th>Version</th>
                             <th>Status</th>
                             <th>Messages In</th>
                             <th>Messages Out</th>

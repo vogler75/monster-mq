@@ -98,6 +98,7 @@ class GraphQLDashboardClient {
             query GetBrokers {
                 brokers {
                     nodeId
+                    version
                     metrics {
                         messagesIn
                         messagesOut
@@ -124,6 +125,7 @@ class GraphQLDashboardClient {
             query GetBrokersWithHistory($lastMinutes: Int, $from: String, $to: String) {
                 brokers {
                     nodeId
+                    version
                     metrics {
                         messagesIn
                         messagesOut

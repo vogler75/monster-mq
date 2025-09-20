@@ -64,6 +64,8 @@ type BrokerMetrics {
 type Broker {
     # Unique identifier for this cluster node (used for load balancing and device assignment)
     nodeId: String!
+    # MonsterMQ version string (e.g., "1.6.5+9945c5a")
+    version: String!
     # Current performance metrics for this broker node (latest snapshot)
     # Returns array with single most recent metrics entry for consistency with metricsHistory
     metrics: [BrokerMetrics!]!

@@ -1,6 +1,7 @@
 package at.rocworks.extensions.graphql
 
 import at.rocworks.Utils
+import at.rocworks.Version
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.Monster
 import at.rocworks.stores.ISessionStoreAsync
@@ -63,7 +64,7 @@ class MetricsResolver(
                         }
                     }).onComplete { result ->
                         if (result.succeeded()) {
-                            future.complete(Broker(nodeId))
+                            future.complete(Broker(nodeId, Version.getVersion()))
                         } else {
                             future.completeExceptionally(result.cause())
                         }
@@ -116,7 +117,7 @@ class MetricsResolver(
                             }
                         }).onComplete { result ->
                             if (result.succeeded()) {
-                                brokerFuture.complete(Broker(nodeId))
+                                brokerFuture.complete(Broker(nodeId, Version.getVersion()))
                             } else {
                                 brokerFuture.complete(null)
                             }
