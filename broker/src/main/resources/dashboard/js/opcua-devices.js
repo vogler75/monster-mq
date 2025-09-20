@@ -82,7 +82,6 @@ class OpcUaDeviceManager {
                 query GetOpcUaDevices {
                     opcUaDevices {
                         name
-                        type
                         namespace
                         nodeId
                         backupNodeId
@@ -157,7 +156,7 @@ class OpcUaDeviceManager {
         if (this.devices.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="8" class="no-data">
+                    <td colspan="7" class="no-data">
                         No OPC UA devices configured. Click "Add Device" to get started.
                     </td>
                 </tr>
@@ -177,7 +176,6 @@ class OpcUaDeviceManager {
                     <div class="device-name">${this.escapeHtml(device.name)}</div>
                     <small class="device-namespace">${this.escapeHtml(device.namespace)}</small>
                 </td>
-                <td>${this.escapeHtml(device.type || 'OPC Client')}</td>
                 <td>
                     <div class="endpoint-url" title="${this.escapeHtml(device.config.endpointUrl)}">
                         ${this.escapeHtml(device.config.endpointUrl)}
@@ -236,7 +234,6 @@ class OpcUaDeviceManager {
 
         const deviceData = {
             name: document.getElementById('device-name').value.trim(),
-            type: document.getElementById('device-type').value.trim() || 'OPC Client',
             namespace: document.getElementById('device-namespace').value.trim(),
             nodeId: document.getElementById('device-node').value,
             enabled: document.getElementById('device-enabled').checked,

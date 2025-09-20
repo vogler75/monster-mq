@@ -29,7 +29,7 @@ class DeviceConfigStoreSQLite(
     companion object {
         private const val TABLE_NAME = "deviceconfigs"
 
-        private const val CREATE_TABLE = """
+        private val CREATE_TABLE = """
             CREATE TABLE IF NOT EXISTS $TABLE_NAME (
                 name TEXT PRIMARY KEY,
                 namespace TEXT NOT NULL,
@@ -37,7 +37,7 @@ class DeviceConfigStoreSQLite(
                 backup_node_id TEXT,
                 config TEXT NOT NULL,
                 enabled INTEGER DEFAULT 1,
-                type TEXT DEFAULT 'OPC Client',
+                type TEXT DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}',
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
             )
@@ -495,7 +495,7 @@ class DeviceConfigStoreSQLite(
             backupNodeId = row.getString("backup_node_id"),
             config = config,
             enabled = row.getInteger("enabled") == 1,
-            type = row.getString("type") ?: "OPC Client",
+            type = row.getString("type") ?: DeviceConfig.LEGACY_OPC_CLIENT_TYPE,
             createdAt = createdAt,
             updatedAt = updatedAt
         )

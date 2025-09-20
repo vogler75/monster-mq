@@ -30,7 +30,7 @@ class DeviceConfigStorePostgres(
     companion object {
         private const val TABLE_NAME = "deviceconfigs"
 
-        private const val CREATE_TABLE = """
+        private val CREATE_TABLE = """
             CREATE TABLE IF NOT EXISTS $TABLE_NAME (
                 name VARCHAR(255) PRIMARY KEY,
                 namespace VARCHAR(255) NOT NULL,
@@ -38,7 +38,7 @@ class DeviceConfigStorePostgres(
                 backup_node_id VARCHAR(255),
                 config JSONB NOT NULL,
                 enabled BOOLEAN DEFAULT true,
-                type VARCHAR(255) DEFAULT 'OPC Client',
+                type VARCHAR(255) DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}',
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW(),
 
@@ -53,12 +53,12 @@ class DeviceConfigStorePostgres(
             CREATE INDEX IF NOT EXISTS idx_deviceconfigs_namespace ON $TABLE_NAME (namespace);
         """
 
-        private const val MIGRATE_SCHEMA = """
+        private val MIGRATE_SCHEMA = """
             DO ${'$'}${'$'}
             BEGIN
                 -- Add type column if it doesn't exist
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='$TABLE_NAME' AND column_name='type') THEN
-                    ALTER TABLE $TABLE_NAME ADD COLUMN type VARCHAR(255) DEFAULT 'OPC Client';
+                    ALTER TABLE $TABLE_NAME ADD COLUMN type VARCHAR(255) DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}';
                 END IF;
 
                 -- Drop unique constraint on namespace if it exists
@@ -397,7 +397,7 @@ class DeviceConfigStorePostgres(
             backupNodeId = rs.getString("backup_node_id"),
             config = OpcUaConnectionConfig.Companion.fromJsonObject(configJson),
             enabled = rs.getBoolean("enabled"),
-            type = rs.getString("type") ?: "OPC Client",
+            type = rs.getString("type") ?: DeviceConfig.LEGACY_OPC_CLIENT_TYPE,
             createdAt = rs.getTimestamp("created_at").toInstant(),
             updatedAt = rs.getTimestamp("updated_at").toInstant()
         )

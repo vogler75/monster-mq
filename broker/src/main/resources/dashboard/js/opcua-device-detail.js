@@ -94,7 +94,6 @@ class OpcUaDeviceDetailManager {
                 query GetOpcUaDevice($name: String!) {
                     opcUaDevice(name: $name) {
                         name
-                        type
                         namespace
                         nodeId
                         backupNodeId
@@ -175,7 +174,6 @@ class OpcUaDeviceDetailManager {
         // Device information
         document.getElementById('device-name').textContent = this.device.name;
         document.getElementById('device-namespace').textContent = this.device.namespace;
-        document.getElementById('device-type').textContent = this.device.type || 'OPC Client';
         document.getElementById('device-endpoint').textContent = this.device.config.endpointUrl;
         document.getElementById('device-security').textContent = this.device.config.securityPolicy;
         document.getElementById('device-node').textContent =

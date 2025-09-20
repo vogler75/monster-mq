@@ -14,11 +14,17 @@ data class DeviceConfig(
     val backupNodeId: String? = null,       // Future: backup node for failover
     val config: OpcUaConnectionConfig,      // OPC UA connection configuration
     val enabled: Boolean = true,
-    val type: String = "OPC Client",        // Device type (e.g., "OPC Client")
+    val type: String = DEVICE_TYPE_OPCUA_CLIENT, // Device type
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now()
 ) {
     companion object {
+        // Global constant for OPC UA Client device type
+        const val DEVICE_TYPE_OPCUA_CLIENT = "OPCUA-Client"
+        const val DEVICE_TYPE_OPCUA_SERVER = "OPCUA-Server"  // Reserved for future use
+
+        // Legacy constant for backward compatibility (used in database defaults)
+        const val LEGACY_OPC_CLIENT_TYPE = "OPC Client"
         fun fromJsonObject(json: JsonObject): DeviceConfig {
             return DeviceConfig(
                 name = json.getString("name"),
@@ -27,7 +33,7 @@ data class DeviceConfig(
                 backupNodeId = json.getString("backupNodeId"),
                 config = OpcUaConnectionConfig.fromJsonObject(json.getJsonObject("config")),
                 enabled = json.getBoolean("enabled", true),
-                type = json.getString("type", "OPC Client"),
+                type = json.getString("type", DEVICE_TYPE_OPCUA_CLIENT),
                 createdAt = json.getString("createdAt")?.let { Instant.parse(it) } ?: Instant.now(),
                 updatedAt = json.getString("updatedAt")?.let { Instant.parse(it) } ?: Instant.now()
             )
@@ -428,7 +434,7 @@ data class DeviceConfigRequest(
     val backupNodeId: String? = null,
     val config: OpcUaConnectionConfig,
     val enabled: Boolean = true,
-    val type: String = "OPC Client"
+    val type: String = DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT
 ) {
     fun toDeviceConfig(): DeviceConfig {
         return DeviceConfig(

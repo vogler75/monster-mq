@@ -546,7 +546,7 @@ class DeviceConfigMutations(
             backupNodeId = input["backupNodeId"] as? String,
             config = config,
             enabled = input["enabled"] as? Boolean ?: true,
-            type = input["type"] as? String ?: "OPC Client"
+            type = DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT  // Always use OPCUA-Client type
         )
     }
 

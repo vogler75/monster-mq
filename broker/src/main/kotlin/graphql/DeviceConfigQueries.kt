@@ -25,7 +25,10 @@ class DeviceConfigQueries(
             try {
                 deviceStore.getAllDevices().onComplete { result ->
                     if (result.succeeded()) {
-                        val deviceMaps = result.result().map { device -> deviceToMap(device) }
+                        // Filter to only return OPCUA-Client type devices
+                        val deviceMaps = result.result()
+                            .filter { device -> device.type == DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT }
+                            .map { device -> deviceToMap(device) }
                         future.complete(deviceMaps)
                     } else {
                         logger.severe("Error fetching OPC UA devices: ${result.cause()?.message}")
@@ -55,7 +58,8 @@ class DeviceConfigQueries(
                 deviceStore.getDevice(name).onComplete { result ->
                     if (result.succeeded()) {
                         val device = result.result()
-                        if (device != null) {
+                        // Only return device if it's OPCUA-Client type
+                        if (device != null && device.type == DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT) {
                             future.complete(deviceToMap(device))
                         } else {
                             future.complete(null)
@@ -87,7 +91,10 @@ class DeviceConfigQueries(
 
                 deviceStore.getDevicesByNode(nodeId).onComplete { result ->
                     if (result.succeeded()) {
-                        val deviceMaps = result.result().map { device -> deviceToMap(device) }
+                        // Filter to only return OPCUA-Client type devices
+                        val deviceMaps = result.result()
+                            .filter { device -> device.type == DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT }
+                            .map { device -> deviceToMap(device) }
                         future.complete(deviceMaps)
                     } else {
                         logger.severe("Error fetching OPC UA devices by node: ${result.cause()?.message}")
@@ -175,7 +182,7 @@ class DeviceConfigQueries(
                 )
             ),
             "enabled" to device.enabled,
-            "type" to device.type,
+            // type is not exposed in GraphQL - always OPCUA-Client for this API
             "createdAt" to device.createdAt.toString(),
             "updatedAt" to device.updatedAt.toString(),
             "isOnCurrentNode" to device.isAssignedToNode(currentNodeId)
