@@ -1,0 +1,10 @@
+Release v1.6.5
+Built from commit: 9945c5a
+Date: 2025-09-20 11:30:34
+
+Changes since v1.6.4:
+---
+9945c5a Add CrateDB and MongoDB device config stores
+a793878 Remove backupNodeId from OPC UA device config
+80d9b9d Remove device type field from OPC UA device API and UI
+96a2cb9 Add default archive group config to all DB stores
