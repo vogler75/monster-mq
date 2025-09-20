@@ -1,0 +1,427 @@
+package at.rocworks.graphql
+
+import at.rocworks.devices.opcuaserver.*
+import at.rocworks.extensions.graphql.GraphQLAuthContext
+import at.rocworks.stores.IDeviceConfigStore
+import at.rocworks.stores.DeviceConfig
+import at.rocworks.stores.OpcUaConnectionConfig
+import at.rocworks.stores.MonitoringParameters
+import at.rocworks.stores.CertificateConfig
+import at.rocworks.Monster
+import at.rocworks.Utils
+import graphql.schema.DataFetcher
+import graphql.GraphQLException
+import io.vertx.core.Vertx
+import io.vertx.core.json.JsonArray
+import io.vertx.core.json.JsonObject
+import java.time.Instant
+import java.util.concurrent.CompletableFuture
+import java.util.logging.Logger
+
+/**
+ * GraphQL mutation resolvers for OPC UA Server management
+ */
+class OpcUaServerMutations(
+    private val vertx: Vertx,
+    private val deviceConfigStore: IDeviceConfigStore
+) {
+    companion object {
+        private val logger: Logger = Utils.getLogger(OpcUaServerMutations::class.java)
+        private const val DEVICE_TYPE = "OPCUA-Server"
+    }
+
+    private val currentNodeId = Monster.getClusterNodeId(vertx)
+
+    /**
+     * Create a new OPC UA Server configuration
+     */
+    fun createOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerResult>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<OpcUaServerResult>()
+
+            try {
+                val config = env.getArgument<Map<String, Any>>("config")
+                    ?: throw IllegalArgumentException("Config is required")
+
+                val serverConfig = parseServerConfig(config)
+
+                // Validate configuration
+                validateServerConfig(serverConfig)
+
+                // Convert to DeviceConfig format
+                val deviceConfig = convertToDeviceConfig(serverConfig)
+
+                // Save to device store
+                deviceConfigStore.saveDevice(deviceConfig).onComplete { result ->
+                    if (result.succeeded()) {
+                        // Send command to start server if enabled
+                        if (serverConfig.enabled) {
+                            startServerCommand(serverConfig) { success, message ->
+                                future.complete(OpcUaServerResult(
+                                    success = success,
+                                    message = message,
+                                    server = if (success) convertToOpcUaServerInfo(deviceConfig) else null,
+                                    errors = if (!success && message != null) listOf(message) else emptyList()
+                                ))
+                            }
+                        } else {
+                            future.complete(OpcUaServerResult(
+                                success = true,
+                                message = "OPC UA Server configuration created successfully",
+                                server = convertToOpcUaServerInfo(deviceConfig),
+                                errors = emptyList()
+                            ))
+                        }
+                    } else {
+                        logger.severe("Failed to save OPC UA Server configuration: ${result.cause()?.message}")
+                        future.complete(OpcUaServerResult(
+                            success = false,
+                            message = "Failed to save server configuration",
+                            server = null,
+                            errors = listOf(result.cause()?.message ?: "Unknown error")
+                        ))
+                    }
+                }
+
+            } catch (e: Exception) {
+                logger.severe("Error creating OPC UA Server: ${e.message}")
+                future.complete(OpcUaServerResult(
+                    success = false,
+                    message = "Failed to create server",
+                    server = null,
+                    errors = listOf(e.message ?: "Unknown error")
+                ))
+            }
+
+            future
+        }
+    }
+
+    /**
+     * Start an OPC UA Server
+     */
+    fun startOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerOperationResult>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<OpcUaServerOperationResult>()
+
+            val serverName = env.getArgument<String>("serverName")
+                ?: return@DataFetcher future.apply {
+                    complete(OpcUaServerOperationResult(false, "Server name is required"))
+                }
+
+            val nodeId = env.getArgument<String>("nodeId") ?: "*"
+
+            // Get server configuration
+            deviceConfigStore.getDevice(serverName).onComplete { result ->
+                if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
+                    try {
+                        val deviceConfig = result.result()!!
+                        val configJson = JsonObject(deviceConfig.config.toJsonObject().toString()).apply {
+                            put("name", deviceConfig.name)
+                            put("namespace", deviceConfig.namespace)
+                            put("nodeId", deviceConfig.nodeId)
+                            put("enabled", true) // Enable when starting
+                        }
+
+                        val serverConfig = OpcUaServerConfig.fromJsonObject(configJson)
+
+                        // Update enabled status in store
+                        val updatedDeviceConfig = deviceConfig.copy(enabled = true)
+                        deviceConfigStore.saveDevice(updatedDeviceConfig).onComplete { saveResult ->
+                            if (saveResult.succeeded()) {
+                                // Send start command
+                                startServerCommand(serverConfig) { success, message ->
+                                    future.complete(OpcUaServerOperationResult(success, message))
+                                }
+                            } else {
+                                future.complete(OpcUaServerOperationResult(
+                                    false,
+                                    "Failed to update server configuration: ${saveResult.cause()?.message}"
+                                ))
+                            }
+                        }
+
+                    } catch (e: Exception) {
+                        logger.severe("Error starting OPC UA Server $serverName: ${e.message}")
+                        future.complete(OpcUaServerOperationResult(false, e.message))
+                    }
+                } else {
+                    future.complete(OpcUaServerOperationResult(false, "Server '$serverName' not found"))
+                }
+            }
+
+            future
+        }
+    }
+
+    /**
+     * Stop an OPC UA Server
+     */
+    fun stopOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerOperationResult>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<OpcUaServerOperationResult>()
+
+            val serverName = env.getArgument<String>("serverName")
+                ?: return@DataFetcher future.apply {
+                    complete(OpcUaServerOperationResult(false, "Server name is required"))
+                }
+
+            val nodeId = env.getArgument<String>("nodeId") ?: "*"
+
+            // Send stop command
+            stopServerCommand(serverName, nodeId) { success, message ->
+                if (success) {
+                    // Update enabled status in store
+                    deviceConfigStore.getDevice(serverName).onComplete { result ->
+                        if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
+                            val deviceConfig = result.result()!!.copy(enabled = false)
+                            deviceConfigStore.saveDevice(deviceConfig).onComplete { saveResult ->
+                                if (saveResult.failed()) {
+                                    logger.warning("Failed to update server enabled status: ${saveResult.cause()?.message}")
+                                }
+                            }
+                        }
+                    }
+                }
+                future.complete(OpcUaServerOperationResult(success, message))
+            }
+
+            future
+        }
+    }
+
+    /**
+     * Delete an OPC UA Server configuration
+     */
+    fun deleteOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerOperationResult>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<OpcUaServerOperationResult>()
+
+            val serverName = env.getArgument<String>("serverName")
+                ?: return@DataFetcher future.apply {
+                    complete(OpcUaServerOperationResult(false, "Server name is required"))
+                }
+
+            // First stop the server if it's running
+            stopServerCommand(serverName, "*") { _, _ ->
+                // Then delete the configuration
+                deviceConfigStore.deleteDevice(serverName).onComplete { result ->
+                    if (result.succeeded()) {
+                        future.complete(OpcUaServerOperationResult(
+                            true,
+                            "Server '$serverName' deleted successfully"
+                        ))
+                    } else {
+                        logger.severe("Failed to delete OPC UA Server $serverName: ${result.cause()?.message}")
+                        future.complete(OpcUaServerOperationResult(
+                            false,
+                            "Failed to delete server: ${result.cause()?.message}"
+                        ))
+                    }
+                }
+            }
+
+            future
+        }
+    }
+
+    /**
+     * Parse server configuration from GraphQL input
+     */
+    private fun parseServerConfig(config: Map<String, Any>): OpcUaServerConfig {
+        // Use default addresses and security for simplified configuration
+        val addresses = emptyList<OpcUaServerAddress>()
+        val security = OpcUaServerSecurity()
+
+        return OpcUaServerConfig(
+            name = config["name"] as? String ?: throw IllegalArgumentException("Name is required"),
+            namespace = config["namespace"] as? String ?: throw IllegalArgumentException("Namespace is required"),
+            nodeId = config["nodeId"] as? String ?: throw IllegalArgumentException("NodeId is required"),
+            enabled = config["enabled"] as? Boolean ?: true,
+            port = (config["port"] as? Number)?.toInt() ?: 4840,
+            path = config["path"] as? String ?: "monstermq",
+            namespaceIndex = (config["namespaceIndex"] as? Number)?.toInt() ?: 1,
+            namespaceUri = config["namespaceUri"] as? String ?: "urn:monstermq:opcua:${config["name"]}",
+            addresses = addresses,
+            security = security,
+            bufferSize = (config["bufferSize"] as? Number)?.toInt() ?: 1000,
+            updateInterval = (config["updateInterval"] as? Number)?.toLong() ?: 1000L
+        )
+    }
+
+    /**
+     * Validate server configuration
+     */
+    private fun validateServerConfig(config: OpcUaServerConfig) {
+        if (config.name.isBlank()) {
+            throw IllegalArgumentException("Server name cannot be empty")
+        }
+        if (config.namespace.isBlank()) {
+            throw IllegalArgumentException("Namespace cannot be empty")
+        }
+        if (config.nodeId.isBlank()) {
+            throw IllegalArgumentException("Node ID cannot be empty")
+        }
+        if (config.port < 1 || config.port > 65535) {
+            throw IllegalArgumentException("Port must be between 1 and 65535")
+        }
+        if (config.addresses.isEmpty()) {
+            throw IllegalArgumentException("At least one MQTT topic address is required")
+        }
+
+        // Validate addresses
+        config.addresses.forEach { addr ->
+            if (addr.mqttTopic.isBlank()) {
+                throw IllegalArgumentException("MQTT topic cannot be empty")
+            }
+            if (addr.displayName.isBlank()) {
+                throw IllegalArgumentException("Display name cannot be empty")
+            }
+        }
+    }
+
+    /**
+     * Convert OpcUaServerConfig to DeviceConfig
+     */
+    private fun convertToDeviceConfig(serverConfig: OpcUaServerConfig): DeviceConfig {
+        // Create a simplified OpcUaConnectionConfig for storage
+        val connectionConfig = OpcUaConnectionConfig(
+            endpointUrl = "opc.tcp://localhost:${serverConfig.port}/${serverConfig.path}",
+            updateEndpointUrl = false,
+            securityPolicy = "None",
+            username = null,
+            password = null,
+            subscriptionSamplingInterval = 0.0,
+            keepAliveFailuresAllowed = 3,
+            reconnectDelay = 5000L,
+            connectionTimeout = 10000L,
+            requestTimeout = 5000L,
+            monitoringParameters = MonitoringParameters(),
+            addresses = emptyList(),
+            certificateConfig = CertificateConfig()
+        )
+
+        return DeviceConfig(
+            name = serverConfig.name,
+            namespace = serverConfig.namespace,
+            nodeId = serverConfig.nodeId,
+            config = connectionConfig,
+            enabled = serverConfig.enabled,
+            type = DEVICE_TYPE
+        )
+    }
+
+    /**
+     * Convert DeviceConfig to OpcUaServerInfo
+     */
+    private fun convertToOpcUaServerInfo(deviceConfig: DeviceConfig): OpcUaServerInfo {
+        return OpcUaServerInfo(
+            name = deviceConfig.name,
+            namespace = deviceConfig.namespace,
+            nodeId = deviceConfig.nodeId,
+            enabled = deviceConfig.enabled,
+            port = 4840, // Default port
+            path = "monstermq",
+            namespaceIndex = 1,
+            namespaceUri = "urn:monstermq:opcua:${deviceConfig.name}",
+            addresses = emptyList(),
+            security = OpcUaServerSecurityInfo(
+                keystorePath = "server-keystore.jks",
+                certificateAlias = "server-cert",
+                securityPolicies = listOf("None"),
+                allowAnonymous = true,
+                requireAuthentication = false
+            ),
+            bufferSize = 1000,
+            updateInterval = 1000L,
+            createdAt = Instant.now().toString(),
+            updatedAt = Instant.now().toString(),
+            isOnCurrentNode = deviceConfig.nodeId == "*" || deviceConfig.nodeId == currentNodeId,
+            status = null
+        )
+    }
+
+    /**
+     * Send start command to OPC UA Server Extension
+     */
+    private fun startServerCommand(config: OpcUaServerConfig, callback: (Boolean, String?) -> Unit) {
+        val command = OpcUaServerCommand(
+            action = OpcUaServerCommand.Action.START,
+            serverName = config.name,
+            nodeId = config.nodeId,
+            config = config
+        )
+
+        val targetNodeId = if (config.nodeId == "*") currentNodeId else config.nodeId
+        val controlAddress = "opcua.server.control.$targetNodeId"
+
+        vertx.eventBus().request<JsonObject>(controlAddress, command.toJsonObject()).onComplete { asyncResult ->
+            if (asyncResult.succeeded()) {
+                val response = asyncResult.result().body()
+                val success = response.getBoolean("success", false)
+                val message = if (success) {
+                    "Server '${config.name}' started successfully"
+                } else {
+                    response.getString("error") ?: "Failed to start server"
+                }
+                callback(success, message)
+            } else {
+                callback(false, "Failed to communicate with cluster node: ${asyncResult.cause()?.message}")
+            }
+        }
+
+        // Timeout after 10 seconds
+        vertx.setTimer(10000) {
+            callback(false, "Timeout waiting for server start command")
+        }
+    }
+
+    /**
+     * Send stop command to OPC UA Server Extension
+     */
+    private fun stopServerCommand(serverName: String, nodeId: String, callback: (Boolean, String?) -> Unit) {
+        val command = OpcUaServerCommand(
+            action = OpcUaServerCommand.Action.STOP,
+            serverName = serverName,
+            nodeId = nodeId
+        )
+
+        val targetNodeId = if (nodeId == "*") currentNodeId else nodeId
+        val controlAddress = "opcua.server.control.$targetNodeId"
+
+        vertx.eventBus().request<JsonObject>(controlAddress, command.toJsonObject()).onComplete { asyncResult ->
+            if (asyncResult.succeeded()) {
+                val response = asyncResult.result().body()
+                val success = response.getBoolean("success", false)
+                val message = if (success) {
+                    "Server '$serverName' stopped successfully"
+                } else {
+                    response.getString("error") ?: "Failed to stop server"
+                }
+                callback(success, message)
+            } else {
+                callback(false, "Failed to communicate with cluster node: ${asyncResult.cause()?.message}")
+            }
+        }
+
+        // Timeout after 10 seconds
+        vertx.setTimer(10000) {
+            callback(false, "Timeout waiting for server stop command")
+        }
+    }
+}
+
+/**
+ * GraphQL result types for OPC UA Server operations
+ */
+data class OpcUaServerResult(
+    val success: Boolean,
+    val message: String?,
+    val server: OpcUaServerInfo?,
+    val errors: List<String>
+)
+
+data class OpcUaServerOperationResult(
+    val success: Boolean,
+    val message: String?
+)

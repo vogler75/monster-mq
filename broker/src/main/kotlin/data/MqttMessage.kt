@@ -25,6 +25,7 @@ class MqttMessage(
     val isQueued: Boolean,
     val clientId: String,
     val time: Instant = Instant.now(),
+    val sender: String? = null,  // Optional sender identification for loop prevention
     // TODO: Properties for MQTT 5.0
 ): Serializable {
     constructor(clientId: String, message: MqttPublishMessage): this(
@@ -63,8 +64,8 @@ class MqttMessage(
         clientId
     )
 
-    fun cloneWithNewQoS(qosLevel: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId)
-    fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId)
+    fun cloneWithNewQoS(qosLevel: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender)
+    fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 

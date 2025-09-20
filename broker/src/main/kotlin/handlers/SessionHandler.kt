@@ -782,6 +782,9 @@ open class SessionHandler(
                 }
             }
         }
+
+        // Also deliver to internal clients (OPC UA Server, etc.)
+        deliverToInternalClients(message)
     }
 
     // Helper function to determine target nodes for a topic
@@ -810,5 +813,114 @@ open class SessionHandler(
             return tempTree.isTopicNameMatching(topicName)
         }
         return false
+    }
+
+    // --------------------------------------------------------------------------------------------------------
+    // Internal subscription methods for OPC UA Server and other internal components
+    // --------------------------------------------------------------------------------------------------------
+
+    // Internal message handlers for each internal client
+    private val internalSubscriptions = ConcurrentHashMap<String, ConcurrentHashMap<String, (MqttMessage) -> Unit>>()
+
+    /**
+     * Subscribe internally to MQTT topics (for OPC UA Server, etc.)
+     * @param clientId Internal client identifier
+     * @param topicFilter MQTT topic filter (with wildcards)
+     * @param qos QoS level (0, 1, or 2)
+     * @param messageHandler Function to handle incoming messages
+     */
+    fun subscribeInternal(
+        clientId: String,
+        topicFilter: String,
+        qos: Int,
+        messageHandler: (MqttMessage) -> Unit
+    ) {
+        logger.info("Internal subscription: Client '$clientId' subscribing to '$topicFilter' with QoS $qos")
+
+        // Add to internal subscriptions
+        internalSubscriptions.getOrPut(clientId) { ConcurrentHashMap() }[topicFilter] = messageHandler
+
+        // Add to topic index for message routing
+        topicIndex.add(topicFilter, clientId, qos)
+
+        // Update topic-node mapping for cluster awareness
+        val localNodeId = Monster.getClusterNodeId(vertx)
+        topicNodeMapping.addToSet(topicFilter, localNodeId)
+
+        logger.info("Internal client '$clientId' subscribed to '$topicFilter'")
+    }
+
+    /**
+     * Unsubscribe internally from MQTT topics
+     * @param clientId Internal client identifier
+     * @param topicFilter MQTT topic filter to unsubscribe from
+     */
+    fun unsubscribeInternal(clientId: String, topicFilter: String) {
+        logger.info("Internal unsubscription: Client '$clientId' unsubscribing from '$topicFilter'")
+
+        // Remove from internal subscriptions
+        internalSubscriptions[clientId]?.remove(topicFilter)
+        if (internalSubscriptions[clientId]?.isEmpty() == true) {
+            internalSubscriptions.remove(clientId)
+        }
+
+        // Remove from topic index
+        topicIndex.del(topicFilter, clientId)
+
+        // Update topic-node mapping
+        val localNodeId = Monster.getClusterNodeId(vertx)
+        val hasOtherSubscriptions = topicIndex.findDataOfTopicName(topicFilter).isNotEmpty()
+        if (!hasOtherSubscriptions) {
+            topicNodeMapping.removeFromSet(topicFilter, localNodeId)
+        }
+
+        logger.info("Internal client '$clientId' unsubscribed from '$topicFilter'")
+    }
+
+    /**
+     * Publish a message internally (for OPC UA Server writes back to MQTT)
+     * @param clientId Internal client identifier (for sender tracking)
+     * @param message The MQTT message to publish
+     */
+    fun publishInternal(clientId: String, message: MqttMessage) {
+        logger.finest("Internal publish: Client '$clientId' publishing to '${message.topicName}'")
+
+        // Create message with sender identification for loop prevention
+        val messageWithSender = MqttMessage(
+            messageUuid = message.messageUuid,
+            messageId = message.messageId,
+            topicName = message.topicName,
+            payload = message.payload,
+            qosLevel = message.qosLevel,
+            isRetain = message.isRetain,
+            isDup = message.isDup,
+            isQueued = message.isQueued,
+            clientId = clientId,
+            time = message.time,
+            sender = clientId  // Mark sender for loop prevention
+        )
+
+        // Route through normal message handling
+        publishMessage(messageWithSender)
+    }
+
+    /**
+     * Check if message should be delivered to internal clients
+     */
+    private fun deliverToInternalClients(message: MqttMessage) {
+        internalSubscriptions.forEach { (clientId, subscriptions) ->
+            subscriptions.forEach { (topicFilter, handler) ->
+                if (matchesTopicFilter(message.topicName, topicFilter)) {
+                    try {
+                        // Skip delivery if message came from this internal client (loop prevention)
+                        if (message.sender != clientId) {
+                            handler(message)
+                        }
+                    } catch (e: Exception) {
+                        logger.warning("Error delivering message to internal client '$clientId': ${e.message}")
+                    }
+                }
+            }
+        }
     }
 }

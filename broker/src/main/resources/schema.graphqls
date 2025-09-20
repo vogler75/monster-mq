@@ -777,6 +777,264 @@ type OpcUaDeviceResult {
     errors: [String!]!
 }
 
+# ================================================================================================
+# OPC UA Server Types
+# Types for OPC UA servers that expose MQTT topics as OPC UA nodes
+# ================================================================================================
+
+# OPC UA Server configuration that exposes MQTT topics as hierarchical OPC UA nodes
+type OpcUaServer {
+    # Unique server name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Target cluster node ("*" for all nodes, specific ID for single node)
+    nodeId: String!
+    # Whether the server is enabled
+    enabled: Boolean!
+    # OPC UA server port
+    port: Int!
+    # OPC UA server endpoint path
+    path: String!
+    # OPC UA namespace index
+    namespaceIndex: Int!
+    # OPC UA namespace URI
+    namespaceUri: String!
+    # MQTT topic to OPC UA node mappings
+    addresses: [OpcUaServerAddress!]!
+    # Security configuration
+    security: OpcUaServerSecurity!
+    # Buffer size for value updates
+    bufferSize: Int!
+    # Minimum update interval in milliseconds
+    updateInterval: Long!
+    # Server creation timestamp
+    createdAt: String!
+    # Server last update timestamp
+    updatedAt: String!
+    # Whether this server is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current server status (if running on accessible node)
+    status: OpcUaServerStatus
+}
+
+# MQTT topic to OPC UA node mapping configuration
+type OpcUaServerAddress {
+    # MQTT topic pattern with wildcards (e.g., "factory/+/temperature")
+    mqttTopic: String!
+    # Human-readable display name for the OPC UA node
+    displayName: String!
+    # Optional browse name (defaults to last topic segment)
+    browseName: String
+    # Optional description for the node
+    description: String
+    # Data type conversion strategy
+    dataType: OpcUaServerDataType!
+    # OPC UA node access level
+    accessLevel: OpcUaServerAccessLevel!
+    # Optional engineering unit (e.g., "°C", "bar")
+    unit: String
+}
+
+# Data type conversion strategy between MQTT and OPC UA
+enum OpcUaServerDataType {
+    # ByteString - raw payload bytes
+    BINARY
+    # String - payload as UTF-8 text
+    TEXT
+    # Double - parse payload as number
+    NUMERIC
+    # Boolean - parse payload as true/false
+    BOOLEAN
+    # Custom JSON format: {"value": x, "timestamp": "iso", "status": int}
+    JSON
+}
+
+# OPC UA node access level
+enum OpcUaServerAccessLevel {
+    # OPC UA clients can only read
+    READ_ONLY
+    # OPC UA clients can read and write (writes go back to MQTT)
+    READ_WRITE
+}
+
+# Security configuration for OPC UA server
+type OpcUaServerSecurity {
+    # Path to keystore file (default: reuse MQTT server keystore)
+    keystorePath: String!
+    # Certificate alias in keystore
+    certificateAlias: String!
+    # Supported security policies
+    securityPolicies: [String!]!
+    # Allow anonymous access
+    allowAnonymous: Boolean!
+    # Require user authentication
+    requireAuthentication: Boolean!
+}
+
+# Current status of an OPC UA Server instance
+type OpcUaServerStatus {
+    # Server name
+    serverName: String!
+    # Node ID where server is running
+    nodeId: String!
+    # Current status
+    status: OpcUaServerStatusEnum!
+    # Server port (if running)
+    port: Int
+    # Bound addresses (if running)
+    boundAddresses: [String!]!
+    # OPC UA endpoint URL (if running)
+    endpointUrl: String
+    # Number of active client connections
+    activeConnections: Int!
+    # Number of OPC UA nodes created
+    nodeCount: Int!
+    # Error message (if status is ERROR)
+    error: String
+    # Last status update timestamp
+    lastUpdated: String!
+}
+
+# OPC UA Server status enumeration
+enum OpcUaServerStatusEnum {
+    STOPPED
+    STARTING
+    RUNNING
+    ERROR
+    STOPPING
+}
+
+# Simplified OPC UA Server information (used by mutations)
+type OpcUaServerInfo {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean!
+    port: Int!
+    path: String!
+    namespaceIndex: Int!
+    namespaceUri: String!
+    addresses: [OpcUaServerAddress!]!
+    security: OpcUaServerSecurityInfo!
+    bufferSize: Int!
+    updateInterval: Long!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    status: OpcUaServerStatus
+}
+
+# Simplified security information for OPC UA servers
+type OpcUaServerSecurityInfo {
+    keystorePath: String!
+    certificateAlias: String!
+    securityPolicies: [String!]!
+    allowAnonymous: Boolean!
+    requireAuthentication: Boolean!
+}
+
+# Result type for OPC UA Server operations
+type OpcUaServerResult {
+    success: Boolean!
+    server: OpcUaServerInfo
+    errors: [String!]!
+}
+
+# Result type for simplified OPC UA Server operations
+type OpcUaServerOperationResult {
+    success: Boolean!
+    message: String
+}
+
+# ================================================================================================
+# OPC UA Server Input Types
+# Input types for creating and updating OPC UA servers
+# ================================================================================================
+
+# Input for creating or updating an OPC UA Server
+input OpcUaServerInput {
+    # Unique server name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (optional, defaults to "opcua/server/{name}")
+    namespace: String
+    # Target cluster node ("*" for all nodes, specific ID for single node)
+    nodeId: String = "*"
+    # Whether the server should be enabled
+    enabled: Boolean = true
+    # OPC UA server port
+    port: Int = 4840
+    # OPC UA server endpoint path
+    path: String = "server"
+    # OPC UA namespace index (must be >= 1)
+    namespaceIndex: Int = 1
+    # OPC UA namespace URI
+    namespaceUri: String = "urn:MonsterMQ:OpcUaServer"
+    # MQTT topic to OPC UA node mappings
+    addresses: [OpcUaServerAddressInput!]!
+    # Security configuration
+    security: OpcUaServerSecurityInput
+    # Buffer size for value updates
+    bufferSize: Int = 1000
+    # Minimum update interval in milliseconds
+    updateInterval: Long = 100
+}
+
+# Input for MQTT topic to OPC UA node mapping
+input OpcUaServerAddressInput {
+    # MQTT topic pattern with wildcards (e.g., "factory/+/temperature")
+    mqttTopic: String!
+    # Human-readable display name for the OPC UA node
+    displayName: String!
+    # Optional browse name (defaults to last topic segment)
+    browseName: String
+    # Optional description for the node
+    description: String
+    # Data type conversion strategy
+    dataType: OpcUaServerDataType = TEXT
+    # OPC UA node access level
+    accessLevel: OpcUaServerAccessLevel = READ_ONLY
+    # Optional engineering unit (e.g., "°C", "bar")
+    unit: String
+}
+
+# Input for OPC UA server security configuration
+input OpcUaServerSecurityInput {
+    # Path to keystore file (default: reuse MQTT server keystore)
+    keystorePath: String = "server-keystore.jks"
+    # Keystore password
+    keystorePassword: String = "password"
+    # Certificate alias in keystore
+    certificateAlias: String = "server-cert"
+    # Supported security policies
+    securityPolicies: [String!] = ["None", "Basic256Sha256"]
+    # Allow anonymous access
+    allowAnonymous: Boolean = true
+    # Require user authentication
+    requireAuthentication: Boolean = false
+}
+
+# Simplified input for creating OPC UA servers (matches web form)
+input OpcUaServerConfigInput {
+    # Unique server name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Target cluster node ("*" for all nodes, specific ID for single node)
+    nodeId: String!
+    # Whether the server should be enabled
+    enabled: Boolean = true
+    # OPC UA server port
+    port: Int = 4840
+    # OPC UA server endpoint path
+    path: String = "monstermq"
+    # OPC UA namespace URI
+    namespaceUri: String
+    # Minimum update interval in milliseconds
+    updateInterval: Long = 1000
+    # Buffer size for value updates
+    bufferSize: Int = 1000
+}
 
 input MonitoringParametersInput {
     bufferSize: Int = 100
@@ -865,6 +1123,18 @@ extend type Query {
     # Get list of all available cluster nodes for device assignment
     # Shows which nodes are available for deploying OPC UA device connectors
     clusterNodes: [ClusterNode!]!
+
+    # Get all OPC UA server configurations across the entire cluster
+    # Returns servers from all cluster nodes, showing their assignment and status
+    opcUaServers: [OpcUaServer!]!
+
+    # Get a specific OPC UA server configuration by its unique name
+    # Server names must be unique across the entire MonsterMQ cluster
+    opcUaServer(name: String!): OpcUaServer
+
+    # Get OPC UA servers assigned to a specific cluster node
+    # Useful for monitoring server distribution and cluster load balancing
+    opcUaServersByNode(nodeId: String!): [OpcUaServer!]!
 }
 
 # Extend existing Mutation type
@@ -903,4 +1173,37 @@ extend type Mutation {
     # Stops data collection for the specified address while keeping other addresses active
     # Use the exact address string that was used when adding the address
     deleteOpcUaAddress(deviceName: String!, address: String!): OpcUaDeviceResult!
+
+    # Add a new OPC UA server configuration
+    # Creates a new OPC UA server that exposes MQTT topics as OPC UA nodes with hierarchical structure
+    addOpcUaServer(input: OpcUaServerInput!): OpcUaServerResult!
+
+    # Update an existing OPC UA server configuration
+    # Changes will be applied immediately - server will be restarted if currently running
+    updateOpcUaServer(name: String!, input: OpcUaServerInput!): OpcUaServerResult!
+
+    # Remove an OPC UA server configuration
+    # Stops the server if running and removes all configuration data
+    deleteOpcUaServer(name: String!): Boolean!
+
+    # Enable or disable an OPC UA server
+    # Controls whether the server should be running on the target cluster nodes
+    toggleOpcUaServer(name: String!, enabled: Boolean!): OpcUaServerResult!
+
+    # Reassign an OPC UA server to different cluster node(s)
+    # Moves the server from one node to another or changes multi-node deployment
+    reassignOpcUaServer(name: String!, nodeId: String!): OpcUaServerResult!
+
+    # Create a new OPC UA server configuration (simplified form)
+    # Creates a server using simplified configuration matching the web form
+    createOpcUaServer(config: OpcUaServerConfigInput!): OpcUaServerOperationResult!
+
+    # Start an OPC UA server
+    startOpcUaServer(serverName: String!, nodeId: String): OpcUaServerOperationResult!
+
+    # Stop an OPC UA server
+    stopOpcUaServer(serverName: String!, nodeId: String): OpcUaServerOperationResult!
+
+    # Delete an OPC UA server
+    deleteOpcUaServer(serverName: String!): OpcUaServerOperationResult!
 }

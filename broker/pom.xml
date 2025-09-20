@@ -248,10 +248,15 @@
             <version>1.9.0</version>
         </dependency>
 
-        <!-- Eclipse Milo OPC UA Client -->
+        <!-- Eclipse Milo OPC UA Client and Server -->
         <dependency>
             <groupId>org.eclipse.milo</groupId>
             <artifactId>sdk-client</artifactId>
+            <version>0.6.16</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.milo</groupId>
+            <artifactId>sdk-server</artifactId>
             <version>0.6.16</version>
         </dependency>
         <dependency>

@@ -12,6 +12,8 @@ import at.rocworks.stores.IMetricsStore
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.graphql.OpcUaClientConfigMutations
 import at.rocworks.graphql.OpcUaClientConfigQueries
+import at.rocworks.graphql.OpcUaServerQueries
+import at.rocworks.graphql.OpcUaServerMutations
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
@@ -223,6 +225,10 @@ class GraphQLServer(
         val opcUaQueries = deviceStore?.let { OpcUaClientConfigQueries(vertx, it) }
         val opcUaMutations = deviceStore?.let { OpcUaClientConfigMutations(vertx, it) }
 
+        // Initialize OPC UA Server resolvers
+        val opcUaServerQueries = deviceStore?.let { OpcUaServerQueries(vertx, it) }
+        val opcUaServerMutations = deviceStore?.let { OpcUaServerMutations(vertx, it) }
+
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
             .scalar(ExtendedScalars.GraphQLLong)
@@ -264,13 +270,21 @@ class GraphQLServer(
                             dataFetcher("archiveGroup", resolver.archiveGroup())
                         }
                     }
-                    // OPC UA queries
+                    // OPC UA Client queries
                     .apply {
                         opcUaQueries?.let { resolver ->
                             dataFetcher("opcUaDevices", resolver.opcUaDevices())
                             dataFetcher("opcUaDevice", resolver.opcUaDevice())
                             dataFetcher("opcUaDevicesByNode", resolver.opcUaDevicesByNode())
                             dataFetcher("clusterNodes", resolver.clusterNodes())
+                        }
+                    }
+                    // OPC UA Server queries
+                    .apply {
+                        opcUaServerQueries?.let { resolver ->
+                            dataFetcher("opcUaServers", resolver.opcUaServers())
+                            dataFetcher("opcUaServer", resolver.opcUaServer())
+                            dataFetcher("opcUaServersByNode", resolver.opcUaServersByNode())
                         }
                     }
             }
@@ -302,7 +316,7 @@ class GraphQLServer(
                             dataFetcher("disableArchiveGroup", resolver.disableArchiveGroup())
                         }
                     }
-                    // OPC UA mutations
+                    // OPC UA Client mutations
                     .apply {
                         opcUaMutations?.let { resolver ->
                             dataFetcher("addOpcUaDevice", resolver.addOpcUaDevice())
@@ -312,6 +326,15 @@ class GraphQLServer(
                             dataFetcher("reassignOpcUaDevice", resolver.reassignOpcUaDevice())
                             dataFetcher("addOpcUaAddress", resolver.addOpcUaAddress())
                             dataFetcher("deleteOpcUaAddress", resolver.deleteOpcUaAddress())
+                        }
+                    }
+                    // OPC UA Server mutations
+                    .apply {
+                        opcUaServerMutations?.let { resolver ->
+                            dataFetcher("createOpcUaServer", resolver.createOpcUaServer())
+                            dataFetcher("startOpcUaServer", resolver.startOpcUaServer())
+                            dataFetcher("stopOpcUaServer", resolver.stopOpcUaServer())
+                            dataFetcher("deleteOpcUaServer", resolver.deleteOpcUaServer())
                         }
                     }
             }

@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - OPC UA Servers</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <style>
+        /* OPC UA Server Page Styles */
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            border-radius: 12px 12px 0 0;
+        }
+
+        .table-title h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .btn-icon {
+            padding: 0.6rem;
+            min-width: auto;
+            width: auto;
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+
+        .status-running {
+            background-color: rgba(34, 197, 94, 0.1);
+            color: rgb(34, 197, 94);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .status-stopped {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: rgb(239, 68, 68);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .status-starting {
+            background-color: rgba(251, 191, 36, 0.1);
+            color: rgb(251, 191, 36);
+            border: 1px solid rgba(251, 191, 36, 0.2);
+        }
+
+        .status-error {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: rgb(239, 68, 68);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .status-disabled {
+            background-color: rgba(107, 114, 128, 0.1);
+            color: rgb(107, 114, 128);
+            border: 1px solid rgba(107, 114, 128, 0.2);
+        }
+
+        .status-unknown {
+            background-color: rgba(156, 163, 175, 0.1);
+            color: rgb(156, 163, 175);
+            border: 1px solid rgba(156, 163, 175, 0.2);
+        }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .modal-content {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.25rem;
+            line-height: 1;
+            transition: color 0.2s ease;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 2rem;
+        }
+
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+
+        /* Enhanced Form Styles for Modals */
+        .modal .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .modal .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .modal .form-control,
+        .modal input[type="text"],
+        .modal input[type="number"],
+        .modal input[type="password"],
+        .modal select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        .modal input[type="text"]:focus,
+        .modal input[type="number"]:focus,
+        .modal input[type="password"]:focus,
+        .modal select:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+
+        .modal .form-control::placeholder,
+        .modal input::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Checkbox Styling */
+        .modal input[type="checkbox"] {
+            margin-right: 0.5rem;
+            accent-color: var(--monster-purple);
+            transform: scale(1.1);
+        }
+
+        .modal .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .modal .checkbox-group label {
+            margin-bottom: 0;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Two Column Layout for Forms */
+        .modal .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .modal .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+
+
+        .node-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .large-modal .modal-content {
+            max-width: 90vw;
+            width: 800px;
+        }
+
+        @media (max-width: 768px) {
+            .large-modal .modal-content {
+                max-width: 95vw;
+                width: 95vw;
+                margin: 1rem;
+                padding: 1rem;
+            }
+
+            .modal-content {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <div class="nav-links">
+                <a href="/pages/dashboard.html">Dashboard</a>
+                <a href="/pages/sessions.html">Sessions</a>
+                <a href="/pages/archive-groups.html">Archives</a>
+                <a href="/pages/topic-browser.html">Topics</a>
+                <a href="/pages/opcua-devices.html">OPC UA Clients</a>
+                <a href="/pages/opcua-servers.html" class="active">OPC UA Servers</a>
+                <a href="/pages/users.html" id="users-link" style="display: none;">Users</a>
+                <a href="#" id="logout-link">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">OPC UA Server Management</h1>
+                <p class="page-subtitle">Configure and manage OPC UA servers that expose MQTT topics</p>
+            </div>
+
+            <div class="metrics-grid" style="margin-bottom: 2rem;">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Servers</span>
+                        <div class="metric-icon">🖥️</div>
+                    </div>
+                    <div class="metric-value" id="total-servers">0</div>
+                    <div class="metric-label">Configured Servers</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Running Servers</span>
+                        <div class="metric-icon">🟢</div>
+                    </div>
+                    <div class="metric-value" id="running-servers">0</div>
+                    <div class="metric-label">Active Servers</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">On Current Node</span>
+                        <div class="metric-icon">📍</div>
+                    </div>
+                    <div class="metric-value" id="current-node-servers">0</div>
+                    <div class="metric-label">Local Servers</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Exposed Nodes</span>
+                        <div class="metric-icon">📊</div>
+                    </div>
+                    <div class="metric-value" id="total-nodes">0</div>
+                    <div class="metric-label">OPC UA Nodes</div>
+                </div>
+            </div>
+
+            <div id="servers-table" class="data-table">
+                <div class="table-header">
+                    <div class="table-title">
+                        <h2>Server Configuration</h2>
+                    </div>
+                    <div class="table-actions">
+                        <button class="btn btn-secondary btn-icon" onclick="refreshServers()" title="Refresh servers">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                            </svg>
+                        </button>
+                        <button class="btn btn-primary" onclick="showAddServerModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                            Add Server
+                        </button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Server Name</th>
+                            <th>Port</th>
+                            <th>Namespace</th>
+                            <th>Node Assignment</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="servers-table-body">
+                        <!-- Server rows will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading servers...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Server Modal -->
+    <div id="add-server-modal" class="modal" style="display: none;">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3>Add OPC UA Server</h3>
+                <button class="modal-close" onclick="hideAddServerModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-server-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="server-name">Server Name *</label>
+                            <input type="text" id="server-name" required placeholder="e.g., mqtt-bridge-01">
+                        </div>
+                        <div class="form-group">
+                            <label for="server-namespace">Namespace *</label>
+                            <input type="text" id="server-namespace" required placeholder="e.g., opcua/mqtt-bridge">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="server-port">Port *</label>
+                            <input type="number" id="server-port" required placeholder="4840" min="1" max="65535">
+                        </div>
+                        <div class="form-group">
+                            <label for="server-path">Path</label>
+                            <input type="text" id="server-path" placeholder="monstermq" value="monstermq">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="server-node">Cluster Node *</label>
+                            <select id="server-node" required>
+                                <option value="">Select Node...</option>
+                                <option value="*">All Nodes</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="server-namespace-uri">Namespace URI</label>
+                            <input type="text" id="server-namespace-uri" placeholder="urn:monstermq:opcua:server">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="update-interval">Update Interval (ms)</label>
+                            <input type="number" id="update-interval" placeholder="1000" value="1000" min="100">
+                        </div>
+                        <div class="form-group">
+                            <label for="buffer-size">Buffer Size</label>
+                            <input type="number" id="buffer-size" placeholder="1000" value="1000" min="10">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <label for="server-enabled">
+                                    <input type="checkbox" id="server-enabled" checked>
+                                    Enabled
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideAddServerModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveServer()">Save Server</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/opcua-servers.js"></script>
+</body>
+</html>
