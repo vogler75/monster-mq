@@ -110,24 +110,6 @@ class DeviceConfigStoreSQLite(
             SELECT COUNT(*) as count FROM $TABLE_NAME WHERE namespace = ? AND name != ?
         """
 
-        private const val MIGRATE_DROP_BACKUP_NODE_ID = """
-            BEGIN;
-            CREATE TABLE IF NOT EXISTS deviceconfigs_new (
-                name TEXT PRIMARY KEY,
-                namespace TEXT NOT NULL,
-                node_id TEXT NOT NULL,
-                config TEXT NOT NULL,
-                enabled INTEGER DEFAULT 1,
-                type TEXT DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}',
-                created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now'))
-            );
-            INSERT OR IGNORE INTO deviceconfigs_new (name, namespace, node_id, config, enabled, type, created_at, updated_at)
-            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at FROM deviceconfigs;
-            DROP TABLE IF EXISTS deviceconfigs;
-            ALTER TABLE deviceconfigs_new RENAME TO deviceconfigs;
-            COMMIT;
-        """
     }
 
     override fun initialize(): Future<Void> {
@@ -145,8 +127,8 @@ class DeviceConfigStoreSQLite(
 
             sqliteClient.initDatabase(initSql)
                 .compose {
-                    // Run migration to remove backup_node_id column if it exists
-                    sqliteClient.executeUpdate(MIGRATE_DROP_BACKUP_NODE_ID, JsonArray())
+                    // Check if backup_node_id column exists and migrate if needed
+                    migrateDropBackupNodeId()
                 }
                 .onSuccess {
                     logger.info("DeviceConfigStoreSQLite initialized successfully")
@@ -160,6 +142,80 @@ class DeviceConfigStoreSQLite(
             logger.severe("Failed to create SQLiteClient: ${e.message}")
             promise.fail(DeviceConfigException("Failed to initialize database", e))
         }
+
+        return promise.future()
+    }
+
+    private fun migrateDropBackupNodeId(): Future<Void> {
+        val promise = Promise.promise<Void>()
+
+        // Check if backup_node_id column exists
+        val checkColumnSql = "PRAGMA table_info(deviceconfigs)"
+
+        sqliteClient.executeQuery(checkColumnSql, JsonArray())
+            .onSuccess { result ->
+                var hasBackupNodeId = false
+                for (i in 0 until result.size()) {
+                    val row = result.getJsonObject(i)
+                    val columnName = row.getString("name")
+                    if (columnName == "backup_node_id") {
+                        hasBackupNodeId = true
+                        break
+                    }
+                }
+
+                if (hasBackupNodeId) {
+                    // Run migration step by step
+                    logger.info("Migrating deviceconfigs table to remove backup_node_id column")
+
+                    val createNewTable = """
+                        CREATE TABLE deviceconfigs_new (
+                            name TEXT PRIMARY KEY,
+                            namespace TEXT NOT NULL,
+                            node_id TEXT NOT NULL,
+                            config TEXT NOT NULL,
+                            enabled INTEGER DEFAULT 1,
+                            type TEXT DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}',
+                            created_at TEXT DEFAULT (datetime('now')),
+                            updated_at TEXT DEFAULT (datetime('now'))
+                        )
+                    """
+
+                    sqliteClient.executeUpdate(createNewTable, JsonArray())
+                        .compose {
+                            // Copy data
+                            val copyData = """
+                                INSERT INTO deviceconfigs_new (name, namespace, node_id, config, enabled, type, created_at, updated_at)
+                                SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at FROM deviceconfigs
+                            """
+                            sqliteClient.executeUpdate(copyData, JsonArray())
+                        }
+                        .compose {
+                            // Drop old table
+                            sqliteClient.executeUpdate("DROP TABLE deviceconfigs", JsonArray())
+                        }
+                        .compose {
+                            // Rename new table
+                            sqliteClient.executeUpdate("ALTER TABLE deviceconfigs_new RENAME TO deviceconfigs", JsonArray())
+                        }
+                        .onComplete { migrationResult ->
+                            if (migrationResult.succeeded()) {
+                                logger.info("Successfully migrated deviceconfigs table")
+                                promise.complete()
+                            } else {
+                                logger.severe("Failed to migrate deviceconfigs table: ${migrationResult.cause()?.message}")
+                                promise.fail(migrationResult.cause())
+                            }
+                        }
+                } else {
+                    // No migration needed
+                    promise.complete()
+                }
+            }
+            .onFailure { error ->
+                logger.severe("Failed to check table schema: ${error.message}")
+                promise.fail(error)
+            }
 
         return promise.future()
     }

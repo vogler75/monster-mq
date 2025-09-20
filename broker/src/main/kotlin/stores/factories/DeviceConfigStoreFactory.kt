@@ -5,6 +5,8 @@ import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import at.rocworks.stores.postgres.DeviceConfigStorePostgres
 import at.rocworks.stores.sqlite.DeviceConfigStoreSQLite
+import at.rocworks.stores.cratedb.DeviceConfigStoreCrateDB
+import at.rocworks.stores.mongodb.DeviceConfigStoreMongoDB
 
 /**
  * Factory for creating DeviceConfigStore implementations
@@ -40,8 +42,7 @@ object DeviceConfigStoreFactory {
                     val user = crateConfig.getString("User")
                     val pass = crateConfig.getString("Pass")
                     if (url != null && user != null && pass != null) {
-                        // TODO: Implement DeviceConfigStoreCrateDB
-                        throw NotImplementedError("CrateDB device config store not yet implemented")
+                        DeviceConfigStoreCrateDB(url, user, pass)
                     } else {
                         null
                     }
@@ -56,8 +57,7 @@ object DeviceConfigStoreFactory {
                     val connectionString = mongoConfig.getString("ConnectionString")
                     val database = mongoConfig.getString("Database")
                     if (connectionString != null && database != null) {
-                        // TODO: Implement DeviceConfigStoreMongoDB
-                        throw NotImplementedError("MongoDB device config store not yet implemented")
+                        DeviceConfigStoreMongoDB(connectionString, database)
                     } else {
                         null
                     }
