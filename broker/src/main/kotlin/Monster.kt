@@ -550,10 +550,10 @@ MORE INFO:
                 // GraphQL Server
                 val graphQLConfig = configJson.getJsonObject("GraphQL", JsonObject())
                 val graphQLEnabled = graphQLConfig.getBoolean("Enabled", false)
-                if (graphQLEnabled) {
+                val graphQLServer = if (graphQLEnabled) {
                     val archiveGroupsMap = archiveGroups.associateBy { it.name }
 
-                    val graphQLServer = GraphQLServer(
+                    GraphQLServer(
                         vertx,
                         configJson,
                         messageBus,
@@ -566,11 +566,9 @@ MORE INFO:
                         metricsStore,
                         this.archiveHandler
                     )
-
-                    graphQLServer.start()
-                    logger.info("GraphQL server enabled")
                 } else {
                     logger.info("GraphQL server is disabled in configuration")
+                    null
                 }
 
                 // MQTT Servers
@@ -600,6 +598,22 @@ MORE INFO:
                         }
                     }
                     .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) } as List<Future<String>>) }
+                    .compose {
+                        // Start GraphQL server after all other components are ready
+                        if (graphQLServer != null) {
+                            logger.info("Starting GraphQL server...")
+                            // Run GraphQL server start asynchronously to avoid blocking
+                            vertx.runOnContext {
+                                try {
+                                    graphQLServer.start()
+                                    logger.info("GraphQL server started successfully")
+                                } catch (e: Exception) {
+                                    logger.severe("Failed to start GraphQL server: ${e.message}")
+                                }
+                            }
+                        }
+                        Future.succeededFuture<Unit>()
+                    }
                     .onFailure {
                         logger.severe("Startup error: ${it.message}")
                         exitProcess(-1)

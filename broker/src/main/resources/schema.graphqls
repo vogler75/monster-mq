@@ -1182,9 +1182,6 @@ extend type Mutation {
     # Changes will be applied immediately - server will be restarted if currently running
     updateOpcUaServer(name: String!, input: OpcUaServerInput!): OpcUaServerResult!
 
-    # Remove an OPC UA server configuration
-    # Stops the server if running and removes all configuration data
-    deleteOpcUaServer(name: String!): Boolean!
 
     # Enable or disable an OPC UA server
     # Controls whether the server should be running on the target cluster nodes
@@ -1204,6 +1201,6 @@ extend type Mutation {
     # Stop an OPC UA server
     stopOpcUaServer(serverName: String!, nodeId: String): OpcUaServerOperationResult!
 
-    # Delete an OPC UA server
+    # Delete an OPC UA server instance
     deleteOpcUaServer(serverName: String!): OpcUaServerOperationResult!
 }

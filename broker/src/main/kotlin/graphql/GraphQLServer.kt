@@ -10,6 +10,7 @@ import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.IMetricsStore
 import at.rocworks.stores.ISessionStoreAsync
+import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.graphql.OpcUaClientConfigMutations
 import at.rocworks.graphql.OpcUaClientConfigQueries
 import at.rocworks.graphql.OpcUaServerQueries
@@ -158,17 +159,25 @@ class GraphQLServer(
             .setPort(port)
             .setHost("0.0.0.0")
 
-        vertx.createHttpServer(options)
-            .requestHandler(router)
-            .listen()
-            .onSuccess {
-                logger.info("GraphQL server started successfully on port $port")
-                logger.info("GraphQL endpoint: http://localhost:$port$path")
-                logger.info("GraphQL WebSocket endpoint: ws://localhost:$port${path}ws")
-            }
-            .onFailure { err ->
-                logger.severe("Failed to start GraphQL server: ${err.message}")
-            }
+        logger.info("Creating HTTP server with options: port=$port, host=0.0.0.0")
+        try {
+            vertx.createHttpServer(options)
+                .requestHandler(router)
+                .listen(port, "0.0.0.0")  // Explicitly specify port and host
+                .onSuccess {
+                    logger.info("GraphQL server started successfully on port $port")
+                    logger.info("GraphQL endpoint: http://localhost:$port$path")
+                    logger.info("GraphQL WebSocket endpoint: ws://localhost:$port${path}ws")
+                    logger.info("Dashboard available at: http://localhost:$port/dashboard")
+                }
+                .onFailure { err ->
+                    logger.severe("Failed to start GraphQL server: ${err.message}")
+                    err.printStackTrace()
+                }
+        } catch (e: Exception) {
+            logger.severe("Exception creating HTTP server: ${e.message}")
+            e.printStackTrace()
+        }
     }
 
     private fun loadSchema(): String {
@@ -206,6 +215,7 @@ class GraphQLServer(
             } else {
                 null
             }
+            // Initialize device store asynchronously but don't block on it
             store?.initialize()?.onComplete { result ->
                 if (result.failed()) {
                     logger.warning("Failed to initialize OPC UA device store: ${result.cause()?.message}")
