@@ -2,8 +2,8 @@ package at.rocworks.stores.postgres
 
 import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
-import at.rocworks.devices.opcua.DeviceConfigException
-import at.rocworks.devices.opcua.IDeviceConfigStore
+import at.rocworks.stores.DeviceConfigException
+import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.OpcUaConnectionConfig
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -35,7 +35,6 @@ class DeviceConfigStorePostgres(
                 name VARCHAR(255) PRIMARY KEY,
                 namespace VARCHAR(255) NOT NULL,
                 node_id VARCHAR(255) NOT NULL,
-                backup_node_id VARCHAR(255),
                 config JSONB NOT NULL,
                 enabled BOOLEAN DEFAULT true,
                 type VARCHAR(255) DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}',
@@ -65,32 +64,37 @@ class DeviceConfigStorePostgres(
                 IF EXISTS (SELECT 1 FROM information_schema.constraint_column_usage WHERE table_name='$TABLE_NAME' AND constraint_name LIKE '%namespace%') THEN
                     ALTER TABLE $TABLE_NAME DROP CONSTRAINT IF EXISTS deviceconfigs_namespace_key;
                 END IF;
+
+                -- Drop backup_node_id column if it exists
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='$TABLE_NAME' AND column_name='backup_node_id') THEN
+                    ALTER TABLE $TABLE_NAME DROP COLUMN backup_node_id;
+                END IF;
             END
             ${'$'}${'$'};
         """
 
         private const val SELECT_ALL = """
-            SELECT name, namespace, node_id, backup_node_id, config, enabled, type, created_at, updated_at
+            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
             ORDER BY name
         """
 
         private const val SELECT_BY_NODE = """
-            SELECT name, namespace, node_id, backup_node_id, config, enabled, type, created_at, updated_at
+            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
             WHERE node_id = ?
             ORDER BY name
         """
 
         private const val SELECT_ENABLED_BY_NODE = """
-            SELECT name, namespace, node_id, backup_node_id, config, enabled, type, created_at, updated_at
+            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
             WHERE node_id = ? AND enabled = true
             ORDER BY name
         """
 
         private const val SELECT_BY_NAME = """
-            SELECT name, namespace, node_id, backup_node_id, config, enabled, type, created_at, updated_at
+            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
             WHERE name = ?
         """
@@ -101,12 +105,11 @@ class DeviceConfigStorePostgres(
         """
 
         private const val INSERT_OR_UPDATE = """
-            INSERT INTO $TABLE_NAME (name, namespace, node_id, backup_node_id, config, enabled, type, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?)
+            INSERT INTO $TABLE_NAME (name, namespace, node_id, config, enabled, type, created_at, updated_at)
+            VALUES (?, ?, ?, ?::jsonb, ?, ?, ?, ?)
             ON CONFLICT (name) DO UPDATE SET
                 namespace = EXCLUDED.namespace,
                 node_id = EXCLUDED.node_id,
-                backup_node_id = EXCLUDED.backup_node_id,
                 config = EXCLUDED.config,
                 enabled = EXCLUDED.enabled,
                 type = EXCLUDED.type,
@@ -272,12 +275,11 @@ class DeviceConfigStorePostgres(
                 stmt.setString(1, device.name)
                 stmt.setString(2, device.namespace)
                 stmt.setString(3, device.nodeId)
-                stmt.setString(4, device.backupNodeId)
-                stmt.setString(5, device.config.toJsonObject().toString())
-                stmt.setBoolean(6, device.enabled)
-                stmt.setString(7, device.type)
-                stmt.setTimestamp(8, Timestamp.from(device.createdAt))
-                stmt.setTimestamp(9, Timestamp.from(now))
+                stmt.setString(4, device.config.toJsonObject().toString())
+                stmt.setBoolean(5, device.enabled)
+                stmt.setString(6, device.type)
+                stmt.setTimestamp(7, Timestamp.from(device.createdAt))
+                stmt.setTimestamp(8, Timestamp.from(now))
 
                 val rowsAffected = stmt.executeUpdate()
                 if (rowsAffected > 0) {
@@ -394,7 +396,6 @@ class DeviceConfigStorePostgres(
             name = rs.getString("name"),
             namespace = rs.getString("namespace"),
             nodeId = rs.getString("node_id"),
-            backupNodeId = rs.getString("backup_node_id"),
             config = OpcUaConnectionConfig.Companion.fromJsonObject(configJson),
             enabled = rs.getBoolean("enabled"),
             type = rs.getString("type") ?: DeviceConfig.LEGACY_OPC_CLIENT_TYPE,

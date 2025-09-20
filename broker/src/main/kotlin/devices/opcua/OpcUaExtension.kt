@@ -4,7 +4,7 @@ import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.MqttMessage
-import at.rocworks.devices.opcua.IDeviceConfigStore
+import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.DeviceConfigStoreFactory
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.DeploymentOptions

@@ -2,8 +2,8 @@ package at.rocworks.stores.sqlite
 
 import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
-import at.rocworks.devices.opcua.DeviceConfigException
-import at.rocworks.devices.opcua.IDeviceConfigStore
+import at.rocworks.stores.DeviceConfigException
+import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.OpcUaAddress
 import at.rocworks.stores.OpcUaConnectionConfig
 import at.rocworks.stores.sqlite.SQLiteClient
@@ -34,7 +34,6 @@ class DeviceConfigStoreSQLite(
                 name TEXT PRIMARY KEY,
                 namespace TEXT NOT NULL,
                 node_id TEXT NOT NULL,
-                backup_node_id TEXT,
                 config TEXT NOT NULL,
                 enabled INTEGER DEFAULT 1,
                 type TEXT DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}',
@@ -56,38 +55,38 @@ class DeviceConfigStoreSQLite(
         """
 
         private const val SELECT_ALL = """
-            SELECT name, namespace, node_id, backup_node_id, config, enabled, type, created_at, updated_at
+            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
             ORDER BY name
         """
 
         private const val SELECT_BY_NODE = """
-            SELECT name, namespace, node_id, backup_node_id, config, enabled, type, created_at, updated_at
+            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
             WHERE node_id = ?
             ORDER BY name
         """
 
         private const val SELECT_ENABLED_BY_NODE = """
-            SELECT name, namespace, node_id, backup_node_id, config, enabled, type, created_at, updated_at
+            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
             WHERE node_id = ? AND enabled = 1
             ORDER BY name
         """
 
         private const val SELECT_BY_NAME = """
-            SELECT name, namespace, node_id, backup_node_id, config, enabled, type, created_at, updated_at
+            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
             WHERE name = ?
         """
 
         private const val INSERT_DEVICE = """
-            INSERT INTO $TABLE_NAME (name, namespace, node_id, backup_node_id, config, enabled, type, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            INSERT INTO $TABLE_NAME (name, namespace, node_id, config, enabled, type, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         """
 
         private const val UPDATE_DEVICE = """
-            UPDATE $TABLE_NAME SET namespace = ?, node_id = ?, backup_node_id = ?, config = ?, enabled = ?, type = ?, updated_at = datetime('now')
+            UPDATE $TABLE_NAME SET namespace = ?, node_id = ?, config = ?, enabled = ?, type = ?, updated_at = datetime('now')
             WHERE name = ?
         """
 
@@ -110,6 +109,25 @@ class DeviceConfigStoreSQLite(
         private const val COUNT_NAMESPACE_EXCLUDE = """
             SELECT COUNT(*) as count FROM $TABLE_NAME WHERE namespace = ? AND name != ?
         """
+
+        private const val MIGRATE_DROP_BACKUP_NODE_ID = """
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS deviceconfigs_new (
+                name TEXT PRIMARY KEY,
+                namespace TEXT NOT NULL,
+                node_id TEXT NOT NULL,
+                config TEXT NOT NULL,
+                enabled INTEGER DEFAULT 1,
+                type TEXT DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}',
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+            INSERT OR IGNORE INTO deviceconfigs_new (name, namespace, node_id, config, enabled, type, created_at, updated_at)
+            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at FROM deviceconfigs;
+            DROP TABLE IF EXISTS deviceconfigs;
+            ALTER TABLE deviceconfigs_new RENAME TO deviceconfigs;
+            COMMIT;
+        """
     }
 
     override fun initialize(): Future<Void> {
@@ -126,6 +144,10 @@ class DeviceConfigStoreSQLite(
                 .add(CREATE_INDEX_NAMESPACE)
 
             sqliteClient.initDatabase(initSql)
+                .compose {
+                    // Run migration to remove backup_node_id column if it exists
+                    sqliteClient.executeUpdate(MIGRATE_DROP_BACKUP_NODE_ID, JsonArray())
+                }
                 .onSuccess {
                     logger.info("DeviceConfigStoreSQLite initialized successfully")
                     promise.complete()
@@ -268,22 +290,20 @@ class DeviceConfigStoreSQLite(
 
                     val sql = if (exists) UPDATE_DEVICE else INSERT_DEVICE
                     val params = if (exists) {
-                        // UPDATE: namespace, node_id, backup_node_id, config, enabled, type WHERE name
+                        // UPDATE: namespace, node_id, config, enabled, type WHERE name
                         JsonArray()
                             .add(device.namespace)
                             .add(device.nodeId)
-                            .add(device.backupNodeId)
                             .add(configJson.encode())
                             .add(if (device.enabled) 1 else 0)
                             .add(device.type)
                             .add(device.name)
                     } else {
-                        // INSERT: name, namespace, node_id, backup_node_id, config, enabled, type
+                        // INSERT: name, namespace, node_id, config, enabled, type
                         JsonArray()
                             .add(device.name)
                             .add(device.namespace)
                             .add(device.nodeId)
-                            .add(device.backupNodeId)
                             .add(configJson.encode())
                             .add(if (device.enabled) 1 else 0)
                             .add(device.type)
@@ -492,7 +512,6 @@ class DeviceConfigStoreSQLite(
             name = row.getString("name"),
             namespace = row.getString("namespace"),
             nodeId = row.getString("node_id"),
-            backupNodeId = row.getString("backup_node_id"),
             config = config,
             enabled = row.getInteger("enabled") == 1,
             type = row.getString("type") ?: DeviceConfig.LEGACY_OPC_CLIENT_TYPE,

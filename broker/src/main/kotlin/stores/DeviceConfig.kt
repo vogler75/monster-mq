@@ -11,7 +11,6 @@ data class DeviceConfig(
     val name: String,                       // Device identifier (e.g., "plc01")
     val namespace: String,                  // MQTT topic namespace (e.g., "opcua/plc01")
     val nodeId: String,                     // Cluster node ID that handles this device
-    val backupNodeId: String? = null,       // Future: backup node for failover
     val config: OpcUaConnectionConfig,      // OPC UA connection configuration
     val enabled: Boolean = true,
     val type: String = DEVICE_TYPE_OPCUA_CLIENT, // Device type
@@ -30,7 +29,6 @@ data class DeviceConfig(
                 name = json.getString("name"),
                 namespace = json.getString("namespace"),
                 nodeId = json.getString("nodeId"),
-                backupNodeId = json.getString("backupNodeId"),
                 config = OpcUaConnectionConfig.fromJsonObject(json.getJsonObject("config")),
                 enabled = json.getBoolean("enabled", true),
                 type = json.getString("type", DEVICE_TYPE_OPCUA_CLIENT),
@@ -45,7 +43,6 @@ data class DeviceConfig(
             .put("name", name)
             .put("namespace", namespace)
             .put("nodeId", nodeId)
-            .put("backupNodeId", backupNodeId)
             .put("config", config.toJsonObject())
             .put("enabled", enabled)
             .put("type", type)
@@ -431,7 +428,6 @@ data class DeviceConfigRequest(
     val name: String,
     val namespace: String,
     val nodeId: String,
-    val backupNodeId: String? = null,
     val config: OpcUaConnectionConfig,
     val enabled: Boolean = true,
     val type: String = DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT
@@ -441,7 +437,6 @@ data class DeviceConfigRequest(
             name = name,
             namespace = namespace,
             nodeId = nodeId,
-            backupNodeId = backupNodeId,
             config = config,
             enabled = enabled,
             type = type,

@@ -4,7 +4,7 @@ import at.rocworks.Utils
 import at.rocworks.Monster
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigRequest
-import at.rocworks.devices.opcua.IDeviceConfigStore
+import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.MonitoringParameters
 import at.rocworks.stores.OpcUaAddress
 import at.rocworks.stores.OpcUaConnectionConfig
@@ -18,13 +18,13 @@ import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 
 /**
- * GraphQL mutations for OPC UA device configuration management
+ * GraphQL mutations for OPC UA client configuration management
  */
-class DeviceConfigMutations(
+class OpcUaClientConfigMutations(
     private val vertx: Vertx,
     private val deviceStore: IDeviceConfigStore
 ) {
-    private val logger: Logger = Utils.getLogger(DeviceConfigMutations::class.java)
+    private val logger: Logger = Utils.getLogger(OpcUaClientConfigMutations::class.java)
 
     fun addOpcUaDevice(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
@@ -543,7 +543,6 @@ class DeviceConfigMutations(
             name = input["name"] as String,
             namespace = input["namespace"] as String,
             nodeId = input["nodeId"] as String,
-            backupNodeId = input["backupNodeId"] as? String,
             config = config,
             enabled = input["enabled"] as? Boolean ?: true,
             type = DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT  // Always use OPCUA-Client type
@@ -783,7 +782,6 @@ class DeviceConfigMutations(
             "name" to device.name,
             "namespace" to device.namespace,
             "nodeId" to device.nodeId,
-            "backupNodeId" to device.backupNodeId,
             "config" to mapOf(
                 "endpointUrl" to device.config.endpointUrl,
                 "updateEndpointUrl" to device.config.updateEndpointUrl,

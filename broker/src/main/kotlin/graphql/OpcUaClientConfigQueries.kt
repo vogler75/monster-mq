@@ -3,20 +3,20 @@ package at.rocworks.graphql
 import at.rocworks.Utils
 import at.rocworks.Monster
 import at.rocworks.stores.DeviceConfig
-import at.rocworks.devices.opcua.IDeviceConfigStore
+import at.rocworks.stores.IDeviceConfigStore
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 
 /**
- * GraphQL queries for OPC UA device configuration management
+ * GraphQL queries for OPC UA client configuration management
  */
-class DeviceConfigQueries(
+class OpcUaClientConfigQueries(
     private val vertx: Vertx,
     private val deviceStore: IDeviceConfigStore
 ) {
-    private val logger: Logger = Utils.getLogger(DeviceConfigQueries::class.java)
+    private val logger: Logger = Utils.getLogger(OpcUaClientConfigQueries::class.java)
 
     fun opcUaDevices(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
         return DataFetcher { _ ->
@@ -142,7 +142,6 @@ class DeviceConfigQueries(
             "name" to device.name,
             "namespace" to device.namespace,
             "nodeId" to device.nodeId,
-            "backupNodeId" to (device.backupNodeId ?: ""),
             "config" to mapOf(
                 "endpointUrl" to device.config.endpointUrl,
                 "updateEndpointUrl" to device.config.updateEndpointUrl,

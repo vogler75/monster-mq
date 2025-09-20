@@ -1,6 +1,6 @@
 package at.rocworks.stores
 
-import at.rocworks.devices.opcua.IDeviceConfigStore
+import at.rocworks.stores.IDeviceConfigStore
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import at.rocworks.stores.postgres.DeviceConfigStorePostgres

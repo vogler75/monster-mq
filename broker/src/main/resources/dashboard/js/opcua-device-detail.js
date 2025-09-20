@@ -96,7 +96,6 @@ class OpcUaDeviceDetailManager {
                         name
                         namespace
                         nodeId
-                        backupNodeId
                         enabled
                         isOnCurrentNode
                         createdAt

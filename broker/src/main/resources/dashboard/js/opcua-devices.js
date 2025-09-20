@@ -84,7 +84,6 @@ class OpcUaDeviceManager {
                         name
                         namespace
                         nodeId
-                        backupNodeId
                         enabled
                         isOnCurrentNode
                         createdAt
@@ -187,7 +186,6 @@ class OpcUaDeviceManager {
                     <div class="node-assignment">
                         ${nodeIndicator}${this.escapeHtml(device.nodeId)}
                     </div>
-                    ${device.backupNodeId ? `<small>Backup: ${this.escapeHtml(device.backupNodeId)}</small>` : ''}
                 </td>
                 <td>
                     <span class="status-badge ${statusClass}">${statusText}</span>

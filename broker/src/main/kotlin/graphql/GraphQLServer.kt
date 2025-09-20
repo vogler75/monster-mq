@@ -10,8 +10,8 @@ import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.IMetricsStore
 import at.rocworks.stores.ISessionStoreAsync
-import at.rocworks.graphql.DeviceConfigMutations
-import at.rocworks.graphql.DeviceConfigQueries
+import at.rocworks.graphql.OpcUaClientConfigMutations
+import at.rocworks.graphql.OpcUaClientConfigQueries
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
@@ -220,8 +220,8 @@ class GraphQLServer(
             null
         }
 
-        val opcUaQueries = deviceStore?.let { DeviceConfigQueries(vertx, it) }
-        val opcUaMutations = deviceStore?.let { DeviceConfigMutations(vertx, it) }
+        val opcUaQueries = deviceStore?.let { OpcUaClientConfigQueries(vertx, it) }
+        val opcUaMutations = deviceStore?.let { OpcUaClientConfigMutations(vertx, it) }
 
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
