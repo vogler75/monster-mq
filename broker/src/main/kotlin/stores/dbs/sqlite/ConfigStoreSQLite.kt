@@ -76,8 +76,22 @@ class ConfigStoreSQLite(
 
         connection.createStatement().use { statement ->
             statement.execute(sql)
+
+            // Insert default archive config if it doesn't exist
+            val insertDefaultSQL = """
+                INSERT OR IGNORE INTO $configTableName (
+                    name, enabled, topic_filter, retained_only,
+                    last_val_type, archive_type, last_val_retention,
+                    archive_retention, purge_interval
+                ) VALUES (
+                    'Default', 1, '["#"]', 0,
+                    'MEMORY', 'NONE', '1h', '1h', '1h'
+                )
+            """.trimIndent()
+
+            statement.execute(insertDefaultSQL)
         }
-        logger.info("Archive config table created/verified in SQLite")
+        logger.info("Archive config table created/verified with default entry in SQLite")
     }
 
     override fun getAllArchiveGroups(): Future<List<ArchiveGroupConfig>> {

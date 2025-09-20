@@ -22,7 +22,7 @@ A MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data sto
 
 ```bash
 # Pull from Docker Hub
-docker run -p 1883:1883 -p 3000:3000 rocworks/monstermq:latest
+docker run -p 1883:1883 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
 
 # Or with PostgreSQL
 docker-compose up -d
@@ -135,7 +135,7 @@ Available at: **[rocworks/monstermq:latest](https://hub.docker.com/r/rocworks/mo
 docker pull rocworks/monstermq:latest
 
 # Run with custom configuration
-docker run -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
+docker run -p 1883:1883 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
 
 # Docker Compose with PostgreSQL
 

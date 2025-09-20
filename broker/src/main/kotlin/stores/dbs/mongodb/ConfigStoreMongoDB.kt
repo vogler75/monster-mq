@@ -53,7 +53,10 @@ class ConfigStoreMongoDB(
             // Create index on name field for faster lookups
             collection.createIndex(Document("name", 1))
 
-            logger.info("MongoDB ConfigStore connected successfully to $databaseName.$collectionName")
+            // Insert default archive config if it doesn't exist
+            insertDefaultArchiveGroup()
+
+            logger.info("MongoDB ConfigStore connected successfully to $databaseName.$collectionName with default entry")
             startPromise.complete()
         } catch (e: Exception) {
             logger.severe("Failed to connect to MongoDB: ${e.message}")
@@ -210,6 +213,35 @@ class ConfigStoreMongoDB(
         return promise.future()
     }
 
+    private fun insertDefaultArchiveGroup() {
+        try {
+            // Check if Default archive group already exists
+            val existing = collection.find(Filters.eq("name", "Default")).first()
+            if (existing == null) {
+                // Create default archive config document
+                val defaultDoc = Document()
+                    .append("name", "Default")
+                    .append("enabled", true)
+                    .append("topic_filter", listOf("#"))
+                    .append("retained_only", false)
+                    .append("last_val_type", "MEMORY")
+                    .append("archive_type", "NONE")
+                    .append("last_val_retention", "1h")
+                    .append("archive_retention", "1h")
+                    .append("purge_interval", "1h")
+                    .append("created_at", Instant.now())
+                    .append("updated_at", Instant.now())
+
+                collection.insertOne(defaultDoc)
+                logger.info("Default archive group created in MongoDB")
+            } else {
+                logger.fine("Default archive group already exists in MongoDB")
+            }
+        } catch (e: Exception) {
+            logger.warning("Error creating default archive group in MongoDB: ${e.message}")
+        }
+    }
+
     private fun documentToArchiveGroup(document: Document): ArchiveGroup {
         val name = document.getString("name") ?: throw IllegalArgumentException("Missing name field")
 
@@ -240,6 +272,9 @@ class ConfigStoreMongoDB(
             lastValRetentionMs = lastValRetention?.let { DurationParser.parse(it) },
             archiveRetentionMs = archiveRetention?.let { DurationParser.parse(it) },
             purgeIntervalMs = purgeInterval?.let { DurationParser.parse(it) },
+            lastValRetentionStr = lastValRetention,
+            archiveRetentionStr = archiveRetention,
+            purgeIntervalStr = purgeInterval,
             databaseConfig = JsonObject() // Will be populated from config
         )
     }

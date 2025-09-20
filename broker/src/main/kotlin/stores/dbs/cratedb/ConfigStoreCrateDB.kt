@@ -76,8 +76,22 @@ class ConfigStoreCrateDB(
 
         connection.createStatement().use { statement ->
             statement.execute(sql)
+
+            // Insert default archive config if it doesn't exist
+            val insertDefaultSQL = """
+                INSERT INTO $configTableName (
+                    name, enabled, topic_filter, retained_only,
+                    last_val_type, archive_type, last_val_retention,
+                    archive_retention, purge_interval
+                ) VALUES (
+                    'Default', true, ['#'], false,
+                    'MEMORY', 'NONE', '1h', '1h', '1h'
+                ) ON CONFLICT (name) DO NOTHING
+            """.trimIndent()
+
+            statement.execute(insertDefaultSQL)
         }
-        logger.info("Archive config table created/verified in CrateDB")
+        logger.info("Archive config table created/verified with default entry in CrateDB")
     }
 
     override fun getAllArchiveGroups(): io.vertx.core.Future<List<ArchiveGroupConfig>> {

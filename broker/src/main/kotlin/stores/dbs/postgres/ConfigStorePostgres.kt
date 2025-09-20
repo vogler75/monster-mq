@@ -56,9 +56,23 @@ class ConfigStorePostgres(
 
                 connection.createStatement().use { statement ->
                     statement.executeUpdate(createTableSQL)
+
+                    // Insert default archive config if it doesn't exist
+                    val insertDefaultSQL = """
+                        INSERT INTO $configTableName (
+                            name, enabled, topic_filter, retained_only,
+                            last_val_type, archive_type, last_val_retention,
+                            archive_retention, purge_interval
+                        ) VALUES (
+                            'Default', true, '["#"]'::jsonb, false,
+                            'MEMORY', 'NONE', '1h', '1h', '1h'
+                        ) ON CONFLICT (name) DO NOTHING
+                    """.trimIndent()
+
+                    statement.executeUpdate(insertDefaultSQL)
                 }
                 connection.commit()
-                logger.info("Archive config table is ready [${Utils.getCurrentFunctionName()}]")
+                logger.info("Archive config table is ready with default entry [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
             } catch (e: Exception) {
                 logger.severe("Error in getting archive config table ready: ${e.message} [${Utils.getCurrentFunctionName()}]")
