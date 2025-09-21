@@ -1203,4 +1203,18 @@ extend type Mutation {
 
     # Delete an OPC UA server instance
     deleteOpcUaServer(serverName: String!): OpcUaServerOperationResult!
+
+    # Add an address mapping to an existing OPC UA Server
+    # Adds a new MQTT topic to OPC UA node mapping to the server configuration
+    addOpcUaServerAddress(
+        serverName: String!,
+        address: OpcUaServerAddressInput!
+    ): OpcUaServerOperationResult!
+
+    # Remove an address mapping from an existing OPC UA Server
+    # Removes a mapping by its MQTT topic pattern
+    removeOpcUaServerAddress(
+        serverName: String!,
+        mqttTopic: String!
+    ): OpcUaServerOperationResult!
 }

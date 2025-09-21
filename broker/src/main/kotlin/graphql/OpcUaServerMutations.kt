@@ -226,6 +226,160 @@ class OpcUaServerMutations(
     }
 
     /**
+     * Add an address mapping to an existing OPC UA Server
+     */
+    fun addOpcUaServerAddress(): DataFetcher<CompletableFuture<OpcUaServerOperationResult>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<OpcUaServerOperationResult>()
+
+            val serverName = env.getArgument<String>("serverName")
+                ?: return@DataFetcher future.apply {
+                    complete(OpcUaServerOperationResult(false, "Server name is required"))
+                }
+
+            val addressInput = env.getArgument<Map<String, Any>>("address")
+                ?: return@DataFetcher future.apply {
+                    complete(OpcUaServerOperationResult(false, "Address is required"))
+                }
+
+            // Get current server configuration
+            deviceConfigStore.getDevice(serverName).onComplete { result ->
+                if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
+                    try {
+                        val deviceConfig = result.result()!!
+                        val configJson = JsonObject(deviceConfig.config.toJsonObject().toString()).apply {
+                            put("name", deviceConfig.name)
+                            put("namespace", deviceConfig.namespace)
+                            put("nodeId", deviceConfig.nodeId)
+                            put("enabled", deviceConfig.enabled)
+                        }
+
+                        val serverConfig = OpcUaServerConfig.fromJsonObject(configJson)
+
+                        // Parse new address
+                        val newAddress = parseOpcUaServerAddress(addressInput)
+
+                        // Add the new address to the list
+                        val updatedAddresses = serverConfig.addresses + newAddress
+                        val updatedConfig = serverConfig.copy(addresses = updatedAddresses)
+
+                        // Convert back to DeviceConfig and save
+                        val updatedDeviceConfig = convertToDeviceConfig(updatedConfig)
+                        deviceConfigStore.saveDevice(updatedDeviceConfig).onComplete { saveResult ->
+                            if (saveResult.succeeded()) {
+                                // If server is running, send update command
+                                if (deviceConfig.enabled) {
+                                    updateServerCommand(updatedConfig) { success, message ->
+                                        future.complete(OpcUaServerOperationResult(success, message))
+                                    }
+                                } else {
+                                    future.complete(OpcUaServerOperationResult(
+                                        true,
+                                        "Address added successfully to server '$serverName'"
+                                    ))
+                                }
+                            } else {
+                                future.complete(OpcUaServerOperationResult(
+                                    false,
+                                    "Failed to save configuration: ${saveResult.cause()?.message}"
+                                ))
+                            }
+                        }
+
+                    } catch (e: Exception) {
+                        logger.severe("Error adding address to OPC UA Server $serverName: ${e.message}")
+                        future.complete(OpcUaServerOperationResult(false, e.message))
+                    }
+                } else {
+                    future.complete(OpcUaServerOperationResult(false, "Server '$serverName' not found"))
+                }
+            }
+
+            future
+        }
+    }
+
+    /**
+     * Remove an address mapping from an existing OPC UA Server
+     */
+    fun removeOpcUaServerAddress(): DataFetcher<CompletableFuture<OpcUaServerOperationResult>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<OpcUaServerOperationResult>()
+
+            val serverName = env.getArgument<String>("serverName")
+                ?: return@DataFetcher future.apply {
+                    complete(OpcUaServerOperationResult(false, "Server name is required"))
+                }
+
+            val mqttTopic = env.getArgument<String>("mqttTopic")
+                ?: return@DataFetcher future.apply {
+                    complete(OpcUaServerOperationResult(false, "MQTT topic is required"))
+                }
+
+            // Get current server configuration
+            deviceConfigStore.getDevice(serverName).onComplete { result ->
+                if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
+                    try {
+                        val deviceConfig = result.result()!!
+                        val configJson = JsonObject(deviceConfig.config.toJsonObject().toString()).apply {
+                            put("name", deviceConfig.name)
+                            put("namespace", deviceConfig.namespace)
+                            put("nodeId", deviceConfig.nodeId)
+                            put("enabled", deviceConfig.enabled)
+                        }
+
+                        val serverConfig = OpcUaServerConfig.fromJsonObject(configJson)
+
+                        // Remove the address with matching MQTT topic
+                        val updatedAddresses = serverConfig.addresses.filter { it.mqttTopic != mqttTopic }
+
+                        if (updatedAddresses.size == serverConfig.addresses.size) {
+                            future.complete(OpcUaServerOperationResult(
+                                false,
+                                "Address with MQTT topic '$mqttTopic' not found"
+                            ))
+                            return@onComplete
+                        }
+
+                        val updatedConfig = serverConfig.copy(addresses = updatedAddresses)
+
+                        // Convert back to DeviceConfig and save
+                        val updatedDeviceConfig = convertToDeviceConfig(updatedConfig)
+                        deviceConfigStore.saveDevice(updatedDeviceConfig).onComplete { saveResult ->
+                            if (saveResult.succeeded()) {
+                                // If server is running, send update command
+                                if (deviceConfig.enabled) {
+                                    updateServerCommand(updatedConfig) { success, message ->
+                                        future.complete(OpcUaServerOperationResult(success, message))
+                                    }
+                                } else {
+                                    future.complete(OpcUaServerOperationResult(
+                                        true,
+                                        "Address removed successfully from server '$serverName'"
+                                    ))
+                                }
+                            } else {
+                                future.complete(OpcUaServerOperationResult(
+                                    false,
+                                    "Failed to save configuration: ${saveResult.cause()?.message}"
+                                ))
+                            }
+                        }
+
+                    } catch (e: Exception) {
+                        logger.severe("Error removing address from OPC UA Server $serverName: ${e.message}")
+                        future.complete(OpcUaServerOperationResult(false, e.message))
+                    }
+                } else {
+                    future.complete(OpcUaServerOperationResult(false, "Server '$serverName' not found"))
+                }
+            }
+
+            future
+        }
+    }
+
+    /**
      * Parse server configuration from GraphQL input
      */
     private fun parseServerConfig(config: Map<String, Any>): OpcUaServerConfig {
@@ -265,11 +419,9 @@ class OpcUaServerMutations(
         if (config.port < 1 || config.port > 65535) {
             throw IllegalArgumentException("Port must be between 1 and 65535")
         }
-        if (config.addresses.isEmpty()) {
-            throw IllegalArgumentException("At least one MQTT topic address is required")
-        }
+        // Allow empty addresses for initial creation - addresses can be added later
 
-        // Validate addresses
+        // Validate addresses if present
         config.addresses.forEach { addr ->
             if (addr.mqttTopic.isBlank()) {
                 throw IllegalArgumentException("MQTT topic cannot be empty")
@@ -408,6 +560,60 @@ class OpcUaServerMutations(
         vertx.setTimer(10000) {
             callback(false, "Timeout waiting for server stop command")
         }
+    }
+
+    /**
+     * Send update command to OPC UA Server Extension
+     */
+    private fun updateServerCommand(config: OpcUaServerConfig, callback: (Boolean, String?) -> Unit) {
+        val command = OpcUaServerCommand(
+            action = OpcUaServerCommand.Action.UPDATE_CONFIG,
+            serverName = config.name,
+            nodeId = config.nodeId,
+            config = config
+        )
+
+        val targetNodeId = if (config.nodeId == "*") currentNodeId else config.nodeId
+        val controlAddress = "opcua.server.control.$targetNodeId"
+
+        vertx.eventBus().request<JsonObject>(controlAddress, command.toJsonObject()).onComplete { asyncResult ->
+            if (asyncResult.succeeded()) {
+                val response = asyncResult.result().body()
+                val success = response.getBoolean("success", false)
+                val message = if (success) {
+                    "Server '${config.name}' updated successfully"
+                } else {
+                    response.getString("error") ?: "Failed to update server"
+                }
+                callback(success, message)
+            } else {
+                callback(false, "Failed to communicate with cluster node: ${asyncResult.cause()?.message}")
+            }
+        }
+
+        // Timeout after 10 seconds
+        vertx.setTimer(10000) {
+            callback(false, "Timeout waiting for server update command")
+        }
+    }
+
+    /**
+     * Parse OPC UA Server Address from GraphQL input
+     */
+    private fun parseOpcUaServerAddress(input: Map<String, Any>): OpcUaServerAddress {
+        return OpcUaServerAddress(
+            mqttTopic = input["mqttTopic"] as? String ?: throw IllegalArgumentException("MQTT topic is required"),
+            displayName = input["displayName"] as? String ?: throw IllegalArgumentException("Display name is required"),
+            browseName = input["browseName"] as? String,
+            description = input["description"] as? String,
+            dataType = input["dataType"]?.let {
+                OpcUaServerDataType.valueOf(it as String)
+            } ?: OpcUaServerDataType.TEXT,
+            accessLevel = input["accessLevel"]?.let {
+                OpcUaAccessLevel.valueOf(it as String)
+            } ?: OpcUaAccessLevel.READ_ONLY,
+            unit = input["unit"] as? String
+        )
     }
 }
 

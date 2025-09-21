@@ -345,6 +345,8 @@ class GraphQLServer(
                             dataFetcher("startOpcUaServer", resolver.startOpcUaServer())
                             dataFetcher("stopOpcUaServer", resolver.stopOpcUaServer())
                             dataFetcher("deleteOpcUaServer", resolver.deleteOpcUaServer())
+                            dataFetcher("addOpcUaServerAddress", resolver.addOpcUaServerAddress())
+                            dataFetcher("removeOpcUaServerAddress", resolver.removeOpcUaServerAddress())
                         }
                     }
             }
