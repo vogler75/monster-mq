@@ -133,33 +133,85 @@ class OpcUaServerQueries(
      * Convert DeviceConfig to OpcUaServerInfo
      */
     private fun convertToOpcUaServerInfo(device: DeviceConfig): OpcUaServerInfo {
-        // Parse the configuration from the device config
-        val configJson = JsonObject(device.config.toJsonObject().toString()).apply {
-            put("name", device.name)
-            put("namespace", device.namespace)
-            put("nodeId", device.nodeId)
-            put("enabled", device.enabled)
-        }
+        // Get the connection config JSON
+        val configJson = JsonObject(device.config.toJsonObject().toString())
 
-        // Extract basic server information
-        return OpcUaServerInfo(
-            name = device.name,
-            namespace = device.namespace,
-            nodeId = device.nodeId,
-            enabled = device.enabled,
-            port = configJson.getInteger("port", 4840),
-            path = configJson.getString("path", "server"),
-            namespaceIndex = configJson.getInteger("namespaceIndex", 1),
-            namespaceUri = configJson.getString("namespaceUri", "urn:MonsterMQ:OpcUaServer"),
-            addresses = parseAddresses(configJson),
-            security = parseSecurity(configJson),
-            bufferSize = configJson.getInteger("bufferSize", 1000),
-            updateInterval = configJson.getLong("updateInterval", 100L),
-            createdAt = device.config.toJsonObject().getString("createdAt") ?: "",
-            updatedAt = device.config.toJsonObject().getString("updatedAt") ?: "",
-            isOnCurrentNode = device.nodeId == "*" || device.nodeId == currentNodeId,
-            status = null // Will be populated later
-        )
+        // Check if we have the full OPC UA server config stored
+        val serverConfigJson = configJson.getJsonObject("opcUaServerConfig")
+
+        return if (serverConfigJson != null) {
+            // Use the stored OPC UA server configuration
+            OpcUaServerInfo(
+                name = device.name,
+                namespace = device.namespace,
+                nodeId = device.nodeId,
+                enabled = device.enabled,
+                port = serverConfigJson.getInteger("port", 4840),
+                path = serverConfigJson.getString("path", "server"),
+                namespaceIndex = serverConfigJson.getInteger("namespaceIndex", 1),
+                namespaceUri = serverConfigJson.getString("namespaceUri", "urn:MonsterMQ:OpcUaServer"),
+                addresses = parseAddresses(serverConfigJson),
+                security = parseSecurity(serverConfigJson),
+                bufferSize = serverConfigJson.getInteger("bufferSize", 1000),
+                updateInterval = serverConfigJson.getLong("updateInterval", 100L),
+                createdAt = serverConfigJson.getString("createdAt") ?: "",
+                updatedAt = serverConfigJson.getString("updatedAt") ?: "",
+                isOnCurrentNode = device.nodeId == "*" || device.nodeId == currentNodeId,
+                status = null // Will be populated later
+            )
+        } else {
+            // Fallback for legacy data or missing config - extract port from endpointUrl
+            val endpointUrl = configJson.getString("endpointUrl", "opc.tcp://localhost:4840/server")
+            val port = extractPortFromEndpointUrl(endpointUrl)
+            val path = extractPathFromEndpointUrl(endpointUrl)
+
+            OpcUaServerInfo(
+                name = device.name,
+                namespace = device.namespace,
+                nodeId = device.nodeId,
+                enabled = device.enabled,
+                port = port,
+                path = path,
+                namespaceIndex = configJson.getInteger("namespaceIndex", 1),
+                namespaceUri = configJson.getString("namespaceUri", "urn:MonsterMQ:OpcUaServer"),
+                addresses = parseAddresses(configJson),
+                security = parseSecurity(configJson),
+                bufferSize = configJson.getInteger("bufferSize", 1000),
+                updateInterval = configJson.getLong("updateInterval", 100L),
+                createdAt = device.config.toJsonObject().getString("createdAt") ?: "",
+                updatedAt = device.config.toJsonObject().getString("updatedAt") ?: "",
+                isOnCurrentNode = device.nodeId == "*" || device.nodeId == currentNodeId,
+                status = null // Will be populated later
+            )
+        }
+    }
+
+    /**
+     * Extract port from OPC UA endpoint URL
+     */
+    private fun extractPortFromEndpointUrl(endpointUrl: String): Int {
+        return try {
+            // Extract port from URL like "opc.tcp://localhost:4841/path"
+            val regex = Regex("opc\\.tcp://[^:]+:(\\d+)")
+            val match = regex.find(endpointUrl)
+            match?.groupValues?.get(1)?.toIntOrNull() ?: 4840
+        } catch (e: Exception) {
+            4840
+        }
+    }
+
+    /**
+     * Extract path from OPC UA endpoint URL
+     */
+    private fun extractPathFromEndpointUrl(endpointUrl: String): String {
+        return try {
+            // Extract path from URL like "opc.tcp://localhost:4841/monstermq"
+            val regex = Regex("opc\\.tcp://[^/]+/(.*)")
+            val match = regex.find(endpointUrl)
+            match?.groupValues?.get(1) ?: "server"
+        } catch (e: Exception) {
+            "server"
+        }
     }
 
     private fun parseAddresses(configJson: JsonObject): List<OpcUaServerAddressInfo> {

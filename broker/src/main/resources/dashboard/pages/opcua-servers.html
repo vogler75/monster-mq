@@ -366,6 +366,36 @@
             color: var(--text-muted);
             background: var(--dark-bg);
         }
+
+        /* Action buttons for addresses table */
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--dark-surface-2);
+            border: 1px solid var(--dark-border);
+        }
+
+        .btn-action:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-delete {
+            color: var(--monster-red);
+        }
+
+        .btn-delete:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--monster-red);
+            color: #f87171;
+        }
     </style>
 </head>
 <body>
@@ -562,75 +592,147 @@
                 <button class="modal-close" onclick="hideEditServerModal()">×</button>
             </div>
             <div class="modal-body">
-                <div class="form-tabs">
-                    <button type="button" class="tab-button active" onclick="switchTab('config')">Configuration</button>
-                    <button type="button" class="tab-button" onclick="switchTab('addresses')">Address Mappings</button>
-                </div>
+                <form id="edit-server-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-server-name">Server Name *</label>
+                            <input type="text" id="edit-server-name" required readonly>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-server-namespace">Namespace *</label>
+                            <input type="text" id="edit-server-namespace" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-server-port">Port *</label>
+                            <input type="number" id="edit-server-port" required min="1" max="65535">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-server-path">Path</label>
+                            <input type="text" id="edit-server-path">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-server-node">Cluster Node *</label>
+                            <select id="edit-server-node" required>
+                                <option value="">Select Node...</option>
+                                <option value="*">All Nodes</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-server-namespace-uri">Namespace URI</label>
+                            <input type="text" id="edit-server-namespace-uri">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <label for="edit-server-enabled">
+                                    <input type="checkbox" id="edit-server-enabled">
+                                    Enabled
+                                </label>
+                            </div>
+                        </div>
+                    </div>
 
-                <!-- Configuration Tab -->
-                <div id="config-tab" class="tab-content active">
-                    <form id="edit-server-form">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="edit-server-name">Server Name *</label>
-                                <input type="text" id="edit-server-name" required readonly>
+                    <!-- Address Mappings Section -->
+                    <h4 style="margin: 2rem 0 1rem 0; color: var(--text-primary); border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">MQTT Topic to OPC UA Node Mappings</h4>
+                    <div class="addresses-section">
+                        <div class="addresses-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <span style="color: var(--text-secondary); font-size: 0.875rem;">Configure which MQTT topics are exposed as OPC UA nodes</span>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="showInlineAddAddress()" style="font-size: 0.8rem; padding: 0.5rem 1rem;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                </svg>
+                                Add Mapping
+                            </button>
+                        </div>
+
+                        <!-- Inline Add Address Form (initially hidden) -->
+                        <div id="inline-add-address-form" class="inline-address-form" style="display: none; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem;">
+                            <h5 style="margin: 0 0 1rem 0; color: var(--text-primary);">Add Address Mapping</h5>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="inline-address-mqtt-topic">MQTT Topic *</label>
+                                    <input type="text" id="inline-address-mqtt-topic" required placeholder="sensors/temperature/room1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="inline-address-display-name">Display Name *</label>
+                                    <input type="text" id="inline-address-display-name" required placeholder="Room 1 Temperature">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="inline-address-browse-name">Browse Name</label>
+                                    <input type="text" id="inline-address-browse-name" placeholder="Room1Temp">
+                                </div>
+                                <div class="form-group">
+                                    <label for="inline-address-data-type">Data Type</label>
+                                    <select id="inline-address-data-type">
+                                        <option value="TEXT">Text</option>
+                                        <option value="NUMERIC">Numeric</option>
+                                        <option value="BOOLEAN">Boolean</option>
+                                        <option value="BINARY">Binary</option>
+                                        <option value="JSON">JSON</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="inline-address-access-level">Access Level</label>
+                                    <select id="inline-address-access-level">
+                                        <option value="READ_ONLY">Read Only</option>
+                                        <option value="READ_WRITE">Read/Write</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="inline-address-unit">Unit</label>
+                                    <input type="text" id="inline-address-unit" placeholder="°C">
+                                </div>
                             </div>
                             <div class="form-group">
-                                <label for="edit-server-namespace">Namespace *</label>
-                                <input type="text" id="edit-server-namespace" required>
+                                <label for="inline-address-description">Description</label>
+                                <input type="text" id="inline-address-description" placeholder="Temperature sensor for room 1">
+                            </div>
+                            <div class="form-actions" style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="hideInlineAddAddress()">Cancel</button>
+                                <button type="button" class="btn btn-primary btn-sm" onclick="addInlineAddress()">Add Mapping</button>
                             </div>
                         </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="edit-server-port">Port *</label>
-                                <input type="number" id="edit-server-port" required min="1" max="65535">
+
+                        <!-- Addresses Table -->
+                        <div id="addresses-table-container">
+                            <div id="addresses-table" class="data-table" style="background: transparent; border: none; border-radius: 0; box-shadow: none;">
+                                <table style="width: 100%; border-collapse: collapse; background: var(--dark-bg); border-radius: 8px; overflow: hidden;">
+                                    <thead>
+                                        <tr>
+                                            <th style="background: var(--dark-surface-2); padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary); border-bottom: 1px solid var(--dark-border);">MQTT Topic</th>
+                                            <th style="background: var(--dark-surface-2); padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary); border-bottom: 1px solid var(--dark-border);">Display Name</th>
+                                            <th style="background: var(--dark-surface-2); padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary); border-bottom: 1px solid var(--dark-border);">Data Type</th>
+                                            <th style="background: var(--dark-surface-2); padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary); border-bottom: 1px solid var(--dark-border);">Access</th>
+                                            <th style="background: var(--dark-surface-2); padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary); border-bottom: 1px solid var(--dark-border); width: 60px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="addresses-table-body">
+                                        <!-- Address rows will be populated here -->
+                                    </tbody>
+                                </table>
                             </div>
-                            <div class="form-group">
-                                <label for="edit-server-path">Path</label>
-                                <input type="text" id="edit-server-path">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="edit-server-node">Cluster Node *</label>
-                                <select id="edit-server-node" required>
-                                    <option value="">Select Node...</option>
-                                    <option value="*">All Nodes</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="edit-server-namespace-uri">Namespace URI</label>
-                                <input type="text" id="edit-server-namespace-uri">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <div class="checkbox-group">
-                                    <label for="edit-server-enabled">
-                                        <input type="checkbox" id="edit-server-enabled">
-                                        Enabled
-                                    </label>
+                            <div id="no-addresses" class="no-data" style="display: none; padding: 0; background: transparent; border: none;">
+                                <div class="no-data-content" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem; text-align: center; background: var(--dark-bg); border-radius: 8px; border: 2px dashed var(--dark-border);">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" opacity="0.3" style="margin-bottom: 1rem; color: var(--text-muted);">
+                                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                                        <polyline points="9,22 9,12 15,12 15,22"/>
+                                    </svg>
+                                    <h3 style="margin: 0 0 0.5rem 0; color: var(--text-primary); font-size: 1.125rem; font-weight: 600;">No address mappings configured</h3>
+                                    <p style="margin: 0; color: var(--text-secondary); font-size: 0.875rem;">Click "Add Mapping" to expose MQTT topics as OPC UA nodes</p>
                                 </div>
                             </div>
                         </div>
-                    </form>
-                </div>
-
-                <!-- Address Mappings Tab -->
-                <div id="addresses-tab" class="tab-content">
-                    <div class="addresses-header">
-                        <h4>MQTT Topic to OPC UA Node Mappings</h4>
-                        <button type="button" class="btn btn-primary btn-sm" onclick="showAddAddressModal()">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                            </svg>
-                            Add Mapping
-                        </button>
                     </div>
-                    <div id="addresses-table" class="addresses-list">
-                        <!-- Address mappings will be populated here -->
-                    </div>
-                </div>
+                </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="hideEditServerModal()">Cancel</button>
@@ -639,65 +741,6 @@
         </div>
     </div>
 
-    <!-- Add Address Modal -->
-    <div id="add-address-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Add Address Mapping</h3>
-                <button class="modal-close" onclick="hideAddAddressModal()">×</button>
-            </div>
-            <div class="modal-body">
-                <form id="add-address-form">
-                    <div class="form-group">
-                        <label for="address-mqtt-topic">MQTT Topic *</label>
-                        <input type="text" id="address-mqtt-topic" required placeholder="sensors/temperature/room1">
-                    </div>
-                    <div class="form-group">
-                        <label for="address-display-name">Display Name *</label>
-                        <input type="text" id="address-display-name" required placeholder="Room 1 Temperature">
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="address-browse-name">Browse Name</label>
-                            <input type="text" id="address-browse-name" placeholder="Room1Temp">
-                        </div>
-                        <div class="form-group">
-                            <label for="address-data-type">Data Type</label>
-                            <select id="address-data-type">
-                                <option value="TEXT">Text</option>
-                                <option value="BOOLEAN">Boolean</option>
-                                <option value="INTEGER">Integer</option>
-                                <option value="DOUBLE">Double</option>
-                                <option value="FLOAT">Float</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="address-access-level">Access Level</label>
-                            <select id="address-access-level">
-                                <option value="READ_ONLY">Read Only</option>
-                                <option value="WRITE_ONLY">Write Only</option>
-                                <option value="READ_WRITE">Read/Write</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="address-unit">Unit</label>
-                            <input type="text" id="address-unit" placeholder="°C">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="address-description">Description</label>
-                        <input type="text" id="address-description" placeholder="Temperature sensor in room 1">
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="saveAddress()">Add Mapping</button>
-            </div>
-        </div>
-    </div>
 
     <script src="/js/opcua-servers.js"></script>
 </body>

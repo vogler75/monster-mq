@@ -53,7 +53,7 @@ function setupEventListeners() {
         if (e.key === 'Escape') {
             hideAddServerModal();
             hideEditServerModal();
-            hideAddAddressModal();
+            hideInlineAddAddress();
         }
     });
 
@@ -74,13 +74,7 @@ function setupEventListeners() {
         });
     }
 
-    const addressForm = document.getElementById('add-address-form');
-    if (addressForm) {
-        addressForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            saveAddress();
-        });
-    }
+    // Inline address form handling is done via onclick handlers
 }
 
 async function loadServers() {
@@ -93,9 +87,17 @@ async function loadServers() {
                 opcUaServers {
                     name
                     port
+                    path
                     namespace
+                    namespaceIndex
+                    namespaceUri
                     nodeId
                     enabled
+                    bufferSize
+                    updateInterval
+                    createdAt
+                    updatedAt
+                    isOnCurrentNode
                     status {
                         status
                         serverName
@@ -112,6 +114,13 @@ async function loadServers() {
                         displayName
                         description
                         unit
+                    }
+                    security {
+                        keystorePath
+                        certificateAlias
+                        securityPolicies
+                        allowAnonymous
+                        requireAuthentication
                     }
                 }
             }
@@ -458,7 +467,7 @@ function editServer(serverName) {
     // Populate configuration form
     document.getElementById('edit-server-name').value = server.name;
     document.getElementById('edit-server-namespace').value = server.namespace || '';
-    document.getElementById('edit-server-port').value = server.port || 4840;
+    document.getElementById('edit-server-port').value = server.port;
     document.getElementById('edit-server-path').value = server.path || 'monstermq';
     document.getElementById('edit-server-namespace-uri').value = server.namespaceUri || '';
     document.getElementById('edit-server-enabled').checked = server.enabled;
@@ -470,8 +479,7 @@ function editServer(serverName) {
     // Populate addresses
     updateAddressesList();
 
-    // Show modal and switch to config tab
-    switchTab('config');
+    // Show modal
     document.getElementById('edit-server-modal').style.display = 'flex';
 }
 
@@ -480,15 +488,7 @@ function hideEditServerModal() {
     currentEditingServer = null;
 }
 
-function switchTab(tabName) {
-    // Remove active class from all tabs and content
-    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-
-    // Add active class to selected tab and content
-    document.querySelector(`[onclick="switchTab('${tabName}')"]`).classList.add('active');
-    document.getElementById(`${tabName}-tab`).classList.add('active');
-}
+// Function removed - no longer using tabs
 
 function updateEditNodeSelector() {
     const select = document.getElementById('edit-server-node');
@@ -506,74 +506,90 @@ function updateEditNodeSelector() {
 }
 
 function updateAddressesList() {
-    const container = document.getElementById('addresses-table');
+    const tbody = document.getElementById('addresses-table-body');
+    const noAddresses = document.getElementById('no-addresses');
+    const table = document.getElementById('addresses-table');
 
     if (!currentEditingServer || !currentEditingServer.addresses || currentEditingServer.addresses.length === 0) {
-        container.innerHTML = '<div class="empty-addresses">No address mappings configured. Click "Add Mapping" to create one.</div>';
+        table.style.display = 'none';
+        noAddresses.style.display = 'block';
         return;
     }
 
-    container.innerHTML = '';
+    table.style.display = 'block';
+    noAddresses.style.display = 'none';
+    tbody.innerHTML = '';
 
     currentEditingServer.addresses.forEach(address => {
-        const item = createAddressItem(address);
-        container.appendChild(item);
+        const row = createAddressRow(address);
+        tbody.appendChild(row);
     });
 }
 
-function createAddressItem(address) {
-    const div = document.createElement('div');
-    div.className = 'address-item';
+function createAddressRow(address) {
+    const row = document.createElement('tr');
+    row.style.borderBottom = '1px solid rgba(71, 85, 105, 0.3)';
 
-    div.innerHTML = `
-        <div class="address-info">
-            <div class="address-topic">${escapeHtml(address.mqttTopic)}</div>
-            <div class="address-display-name">${escapeHtml(address.displayName)}</div>
-            <div class="address-details">
-                <span>Type: ${address.dataType}</span>
-                <span>Access: ${address.accessLevel}</span>
-                ${address.unit ? `<span>Unit: ${escapeHtml(address.unit)}</span>` : ''}
-            </div>
-        </div>
-        <div class="address-actions">
-            <button class="btn btn-sm btn-danger" onclick="deleteAddress('${escapeHtml(address.mqttTopic)}')">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+    row.innerHTML = `
+        <td style="padding: 1rem; vertical-align: middle; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 0.875rem;">${escapeHtml(address.mqttTopic)}</td>
+        <td style="padding: 1rem; vertical-align: middle; color: var(--text-primary);">${escapeHtml(address.displayName)}</td>
+        <td style="padding: 1rem; vertical-align: middle; color: var(--text-secondary);">${address.dataType}</td>
+        <td style="padding: 1rem; vertical-align: middle; color: var(--text-secondary);">${address.accessLevel.replace('_', ' ')}</td>
+        <td style="padding: 1rem; vertical-align: middle; text-align: center;">
+            <button class="btn-action btn-delete" onclick="deleteAddress('${escapeHtml(address.mqttTopic)}')" title="Delete address">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                 </svg>
-                Delete
             </button>
-        </div>
+        </td>
     `;
 
-    return div;
+    // Add hover effect
+    row.addEventListener('mouseenter', () => {
+        row.style.background = 'rgba(71, 85, 105, 0.1)';
+    });
+    row.addEventListener('mouseleave', () => {
+        row.style.background = 'transparent';
+    });
+
+    return row;
 }
 
-function showAddAddressModal() {
+function showInlineAddAddress() {
     if (!currentEditingServer) {
         showErrorMessage('No server selected');
         return;
     }
+
+    const form = document.getElementById('inline-add-address-form');
 
     // Reset form
-    document.getElementById('add-address-form').reset();
-    document.getElementById('address-data-type').value = 'TEXT';
-    document.getElementById('address-access-level').value = 'READ_ONLY';
+    document.getElementById('inline-address-mqtt-topic').value = '';
+    document.getElementById('inline-address-display-name').value = '';
+    document.getElementById('inline-address-browse-name').value = '';
+    document.getElementById('inline-address-data-type').value = 'TEXT';
+    document.getElementById('inline-address-access-level').value = 'READ_ONLY';
+    document.getElementById('inline-address-unit').value = '';
+    document.getElementById('inline-address-description').value = '';
 
-    document.getElementById('add-address-modal').style.display = 'flex';
+    form.style.display = 'block';
+
+    // Focus first field
+    document.getElementById('inline-address-mqtt-topic').focus();
 }
 
-function hideAddAddressModal() {
-    document.getElementById('add-address-modal').style.display = 'none';
+function hideInlineAddAddress() {
+    document.getElementById('inline-add-address-form').style.display = 'none';
 }
 
-async function saveAddress() {
+async function addInlineAddress() {
     if (!currentEditingServer) {
         showErrorMessage('No server selected');
         return;
     }
 
-    const mqttTopic = document.getElementById('address-mqtt-topic').value.trim();
-    const displayName = document.getElementById('address-display-name').value.trim();
+    const mqttTopic = document.getElementById('inline-address-mqtt-topic').value.trim();
+    const displayName = document.getElementById('inline-address-display-name').value.trim();
 
     if (!mqttTopic || !displayName) {
         showErrorMessage('MQTT Topic and Display Name are required');
@@ -583,11 +599,11 @@ async function saveAddress() {
     const address = {
         mqttTopic: mqttTopic,
         displayName: displayName,
-        browseName: document.getElementById('address-browse-name').value.trim() || null,
-        description: document.getElementById('address-description').value.trim() || null,
-        dataType: document.getElementById('address-data-type').value,
-        accessLevel: document.getElementById('address-access-level').value,
-        unit: document.getElementById('address-unit').value.trim() || null
+        browseName: document.getElementById('inline-address-browse-name').value.trim() || null,
+        description: document.getElementById('inline-address-description').value.trim() || null,
+        dataType: document.getElementById('inline-address-data-type').value,
+        accessLevel: document.getElementById('inline-address-access-level').value,
+        unit: document.getElementById('inline-address-unit').value.trim() || null
     };
 
     try {
@@ -616,7 +632,7 @@ async function saveAddress() {
 
             // Update display
             updateAddressesList();
-            hideAddAddressModal();
+            hideInlineAddAddress();
 
             showSuccessMessage('Address mapping added successfully');
         } else {
