@@ -257,6 +257,115 @@
                 max-width: 100%;
             }
         }
+
+        /* Tab Styles */
+        .form-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--dark-border);
+            margin-bottom: 2rem;
+        }
+
+        .tab-button {
+            background: none;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .tab-button:hover {
+            color: var(--text-primary);
+        }
+
+        .tab-button.active {
+            color: var(--monster-purple);
+            border-bottom-color: var(--monster-purple);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Address List Styles */
+        .addresses-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .addresses-header h4 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .addresses-list {
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .address-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--dark-border);
+            background: var(--dark-bg);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .address-item:last-child {
+            border-bottom: none;
+        }
+
+        .address-item:hover {
+            background: var(--dark-surface);
+        }
+
+        .address-info {
+            flex: 1;
+        }
+
+        .address-topic {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .address-display-name {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .address-details {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .address-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .empty-addresses {
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-muted);
+            background: var(--dark-bg);
+        }
     </style>
 </head>
 <body>
@@ -441,6 +550,151 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="hideAddServerModal()">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="saveServer()">Save Server</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Server Modal -->
+    <div id="edit-server-modal" class="modal" style="display: none;">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3>Edit OPC UA Server</h3>
+                <button class="modal-close" onclick="hideEditServerModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-tabs">
+                    <button type="button" class="tab-button active" onclick="switchTab('config')">Configuration</button>
+                    <button type="button" class="tab-button" onclick="switchTab('addresses')">Address Mappings</button>
+                </div>
+
+                <!-- Configuration Tab -->
+                <div id="config-tab" class="tab-content active">
+                    <form id="edit-server-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="edit-server-name">Server Name *</label>
+                                <input type="text" id="edit-server-name" required readonly>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-server-namespace">Namespace *</label>
+                                <input type="text" id="edit-server-namespace" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="edit-server-port">Port *</label>
+                                <input type="number" id="edit-server-port" required min="1" max="65535">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-server-path">Path</label>
+                                <input type="text" id="edit-server-path">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="edit-server-node">Cluster Node *</label>
+                                <select id="edit-server-node" required>
+                                    <option value="">Select Node...</option>
+                                    <option value="*">All Nodes</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-server-namespace-uri">Namespace URI</label>
+                                <input type="text" id="edit-server-namespace-uri">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <label for="edit-server-enabled">
+                                        <input type="checkbox" id="edit-server-enabled">
+                                        Enabled
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Address Mappings Tab -->
+                <div id="addresses-tab" class="tab-content">
+                    <div class="addresses-header">
+                        <h4>MQTT Topic to OPC UA Node Mappings</h4>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="showAddAddressModal()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                            Add Mapping
+                        </button>
+                    </div>
+                    <div id="addresses-table" class="addresses-list">
+                        <!-- Address mappings will be populated here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideEditServerModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="updateServer()">Update Server</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Address Modal -->
+    <div id="add-address-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Address Mapping</h3>
+                <button class="modal-close" onclick="hideAddAddressModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-address-form">
+                    <div class="form-group">
+                        <label for="address-mqtt-topic">MQTT Topic *</label>
+                        <input type="text" id="address-mqtt-topic" required placeholder="sensors/temperature/room1">
+                    </div>
+                    <div class="form-group">
+                        <label for="address-display-name">Display Name *</label>
+                        <input type="text" id="address-display-name" required placeholder="Room 1 Temperature">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="address-browse-name">Browse Name</label>
+                            <input type="text" id="address-browse-name" placeholder="Room1Temp">
+                        </div>
+                        <div class="form-group">
+                            <label for="address-data-type">Data Type</label>
+                            <select id="address-data-type">
+                                <option value="TEXT">Text</option>
+                                <option value="BOOLEAN">Boolean</option>
+                                <option value="INTEGER">Integer</option>
+                                <option value="DOUBLE">Double</option>
+                                <option value="FLOAT">Float</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="address-access-level">Access Level</label>
+                            <select id="address-access-level">
+                                <option value="READ_ONLY">Read Only</option>
+                                <option value="WRITE_ONLY">Write Only</option>
+                                <option value="READ_WRITE">Read/Write</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="address-unit">Unit</label>
+                            <input type="text" id="address-unit" placeholder="°C">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="address-description">Description</label>
+                        <input type="text" id="address-description" placeholder="Temperature sensor in room 1">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveAddress()">Add Mapping</button>
             </div>
         </div>
     </div>

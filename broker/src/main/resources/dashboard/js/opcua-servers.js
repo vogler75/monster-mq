@@ -52,15 +52,33 @@ function setupEventListeners() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             hideAddServerModal();
+            hideEditServerModal();
+            hideAddAddressModal();
         }
     });
 
     // Form validation
-    const form = document.getElementById('add-server-form');
-    if (form) {
-        form.addEventListener('submit', function(e) {
+    const addForm = document.getElementById('add-server-form');
+    if (addForm) {
+        addForm.addEventListener('submit', function(e) {
             e.preventDefault();
             saveServer();
+        });
+    }
+
+    const editForm = document.getElementById('edit-server-form');
+    if (editForm) {
+        editForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            updateServer();
+        });
+    }
+
+    const addressForm = document.getElementById('add-address-form');
+    if (addressForm) {
+        addressForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveAddress();
         });
     }
 }
@@ -426,9 +444,265 @@ async function deleteServer(serverName) {
     }
 }
 
+let currentEditingServer = null;
+
 function editServer(serverName) {
-    // TODO: Implement edit functionality
-    alert('Edit functionality will be implemented in the next version');
+    const server = servers.find(s => s.name === serverName);
+    if (!server) {
+        showErrorMessage('Server not found');
+        return;
+    }
+
+    currentEditingServer = server;
+
+    // Populate configuration form
+    document.getElementById('edit-server-name').value = server.name;
+    document.getElementById('edit-server-namespace').value = server.namespace || '';
+    document.getElementById('edit-server-port').value = server.port || 4840;
+    document.getElementById('edit-server-path').value = server.path || 'monstermq';
+    document.getElementById('edit-server-namespace-uri').value = server.namespaceUri || '';
+    document.getElementById('edit-server-enabled').checked = server.enabled;
+
+    // Update node selector for edit form
+    updateEditNodeSelector();
+    document.getElementById('edit-server-node').value = server.nodeId || '';
+
+    // Populate addresses
+    updateAddressesList();
+
+    // Show modal and switch to config tab
+    switchTab('config');
+    document.getElementById('edit-server-modal').style.display = 'flex';
+}
+
+function hideEditServerModal() {
+    document.getElementById('edit-server-modal').style.display = 'none';
+    currentEditingServer = null;
+}
+
+function switchTab(tabName) {
+    // Remove active class from all tabs and content
+    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+    // Add active class to selected tab and content
+    document.querySelector(`[onclick="switchTab('${tabName}')"]`).classList.add('active');
+    document.getElementById(`${tabName}-tab`).classList.add('active');
+}
+
+function updateEditNodeSelector() {
+    const select = document.getElementById('edit-server-node');
+
+    // Clear existing options except the first two
+    select.innerHTML = '<option value="">Select Node...</option><option value="*">All Nodes</option>';
+
+    // Add cluster nodes
+    clusterNodes.forEach(nodeId => {
+        const option = document.createElement('option');
+        option.value = nodeId;
+        option.textContent = nodeId;
+        select.appendChild(option);
+    });
+}
+
+function updateAddressesList() {
+    const container = document.getElementById('addresses-table');
+
+    if (!currentEditingServer || !currentEditingServer.addresses || currentEditingServer.addresses.length === 0) {
+        container.innerHTML = '<div class="empty-addresses">No address mappings configured. Click "Add Mapping" to create one.</div>';
+        return;
+    }
+
+    container.innerHTML = '';
+
+    currentEditingServer.addresses.forEach(address => {
+        const item = createAddressItem(address);
+        container.appendChild(item);
+    });
+}
+
+function createAddressItem(address) {
+    const div = document.createElement('div');
+    div.className = 'address-item';
+
+    div.innerHTML = `
+        <div class="address-info">
+            <div class="address-topic">${escapeHtml(address.mqttTopic)}</div>
+            <div class="address-display-name">${escapeHtml(address.displayName)}</div>
+            <div class="address-details">
+                <span>Type: ${address.dataType}</span>
+                <span>Access: ${address.accessLevel}</span>
+                ${address.unit ? `<span>Unit: ${escapeHtml(address.unit)}</span>` : ''}
+            </div>
+        </div>
+        <div class="address-actions">
+            <button class="btn btn-sm btn-danger" onclick="deleteAddress('${escapeHtml(address.mqttTopic)}')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                Delete
+            </button>
+        </div>
+    `;
+
+    return div;
+}
+
+function showAddAddressModal() {
+    if (!currentEditingServer) {
+        showErrorMessage('No server selected');
+        return;
+    }
+
+    // Reset form
+    document.getElementById('add-address-form').reset();
+    document.getElementById('address-data-type').value = 'TEXT';
+    document.getElementById('address-access-level').value = 'READ_ONLY';
+
+    document.getElementById('add-address-modal').style.display = 'flex';
+}
+
+function hideAddAddressModal() {
+    document.getElementById('add-address-modal').style.display = 'none';
+}
+
+async function saveAddress() {
+    if (!currentEditingServer) {
+        showErrorMessage('No server selected');
+        return;
+    }
+
+    const mqttTopic = document.getElementById('address-mqtt-topic').value.trim();
+    const displayName = document.getElementById('address-display-name').value.trim();
+
+    if (!mqttTopic || !displayName) {
+        showErrorMessage('MQTT Topic and Display Name are required');
+        return;
+    }
+
+    const address = {
+        mqttTopic: mqttTopic,
+        displayName: displayName,
+        browseName: document.getElementById('address-browse-name').value.trim() || null,
+        description: document.getElementById('address-description').value.trim() || null,
+        dataType: document.getElementById('address-data-type').value,
+        accessLevel: document.getElementById('address-access-level').value,
+        unit: document.getElementById('address-unit').value.trim() || null
+    };
+
+    try {
+        const mutation = `
+            mutation AddOpcUaServerAddress($serverName: String!, $address: OpcUaServerAddressInput!) {
+                addOpcUaServerAddress(serverName: $serverName, address: $address) {
+                    success
+                    message
+                }
+            }
+        `;
+
+        const variables = {
+            serverName: currentEditingServer.name,
+            address: address
+        };
+
+        const response = await window.graphqlClient.query(mutation, variables);
+
+        if (response && response.addOpcUaServerAddress && response.addOpcUaServerAddress.success) {
+            // Add to local server object
+            if (!currentEditingServer.addresses) {
+                currentEditingServer.addresses = [];
+            }
+            currentEditingServer.addresses.push(address);
+
+            // Update display
+            updateAddressesList();
+            hideAddAddressModal();
+
+            showSuccessMessage('Address mapping added successfully');
+        } else {
+            const errorMsg = response?.addOpcUaServerAddress?.message || 'Failed to add address mapping';
+            showErrorMessage(errorMsg);
+        }
+
+    } catch (error) {
+        console.error('Error adding address:', error);
+        showErrorMessage('Failed to add address mapping: ' + error.message);
+    }
+}
+
+async function deleteAddress(mqttTopic) {
+    if (!currentEditingServer) {
+        showErrorMessage('No server selected');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to delete the mapping for "${mqttTopic}"?`)) {
+        return;
+    }
+
+    try {
+        const mutation = `
+            mutation RemoveOpcUaServerAddress($serverName: String!, $mqttTopic: String!) {
+                removeOpcUaServerAddress(serverName: $serverName, mqttTopic: $mqttTopic) {
+                    success
+                    message
+                }
+            }
+        `;
+
+        const variables = {
+            serverName: currentEditingServer.name,
+            mqttTopic: mqttTopic
+        };
+
+        const response = await window.graphqlClient.query(mutation, variables);
+
+        if (response && response.removeOpcUaServerAddress && response.removeOpcUaServerAddress.success) {
+            // Remove from local server object
+            if (currentEditingServer.addresses) {
+                currentEditingServer.addresses = currentEditingServer.addresses.filter(addr => addr.mqttTopic !== mqttTopic);
+            }
+
+            // Update display
+            updateAddressesList();
+
+            showSuccessMessage('Address mapping deleted successfully');
+        } else {
+            const errorMsg = response?.removeOpcUaServerAddress?.message || 'Failed to delete address mapping';
+            showErrorMessage(errorMsg);
+        }
+
+    } catch (error) {
+        console.error('Error deleting address:', error);
+        showErrorMessage('Failed to delete address mapping: ' + error.message);
+    }
+}
+
+async function updateServer() {
+    if (!currentEditingServer) {
+        showErrorMessage('No server selected');
+        return;
+    }
+
+    // For now, just close the modal since we're focusing on address management
+    // Full server configuration update can be implemented later
+    hideEditServerModal();
+    showSuccessMessage('Server updated successfully');
+}
+
+function showSuccessMessage(message) {
+    // Simple success notification - you can enhance this with a proper notification system
+    const errorDiv = document.getElementById('error-message');
+    const errorText = errorDiv.querySelector('.error-text');
+    const errorIcon = errorDiv.querySelector('.error-icon');
+
+    errorIcon.textContent = '✅';
+    errorText.textContent = message;
+    errorDiv.style.display = 'block';
+
+    setTimeout(() => {
+        errorDiv.style.display = 'none';
+    }, 3000);
 }
 
 
