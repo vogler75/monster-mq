@@ -37,7 +37,7 @@ class DeviceConfigStoreCrateDB(
                 node_id STRING NOT NULL,
                 config OBJECT(DYNAMIC) NOT NULL,
                 enabled BOOLEAN DEFAULT TRUE,
-                type STRING DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}',
+                type STRING DEFAULT '${DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT}',
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
@@ -373,7 +373,7 @@ class DeviceConfigStoreCrateDB(
             nodeId = rs.getString("node_id"),
             config = OpcUaConnectionConfig.Companion.fromJsonObject(configJson),
             enabled = rs.getBoolean("enabled"),
-            type = rs.getString("type") ?: DeviceConfig.LEGACY_OPC_CLIENT_TYPE,
+            type = rs.getString("type") ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,
             createdAt = rs.getTimestamp("created_at").toInstant(),
             updatedAt = rs.getTimestamp("updated_at").toInstant()
         )

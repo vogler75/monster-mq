@@ -32,6 +32,8 @@ import io.vertx.core.json.JsonObject
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import com.hazelcast.config.Config
 import at.rocworks.devices.opcua.OpcUaExtension
+import at.rocworks.devices.opcuaserver.OpcUaServerExtension
+import at.rocworks.stores.DeviceConfigStoreFactory
 import handlers.MetricsHandler
 import java.io.File
 import java.util.logging.Level
@@ -488,9 +490,35 @@ MORE INFO:
                 // OPC UA Extension
                 val opcUaExtension = OpcUaExtension()
 
-
                 // User management
                 val userManager = at.rocworks.auth.UserManager(configJson)
+
+                // Device Config Store for OPC UA Server Extension
+                val configStoreType = getConfigStoreType(configJson)
+                val deviceConfigStore = if (configStoreType != "NONE") {
+                    try {
+                        val store = at.rocworks.stores.DeviceConfigStoreFactory.create(configStoreType, configJson, vertx)
+                        // Initialize device store asynchronously
+                        store?.initialize()?.onComplete { result ->
+                            if (result.failed()) {
+                                logger.warning("Failed to initialize device config store: ${result.cause()?.message}")
+                            }
+                        }
+                        store
+                    } catch (e: Exception) {
+                        logger.warning("Failed to create device config store: ${e.message}")
+                        null
+                    }
+                } else {
+                    null
+                }
+
+                // OPC UA Server Extension
+                val opcUaServerExtension = if (deviceConfigStore != null) {
+                    OpcUaServerExtension(sessionHandler, deviceConfigStore, userManager)
+                } else {
+                    null
+                }
 
                 // Health handler
                 val healthHandler = HealthHandler(sessionHandler)
@@ -589,6 +617,13 @@ MORE INFO:
                     .compose {
                         val opcUaDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(opcUaExtension, opcUaDeploymentOptions)
+                    }
+                    .compose {
+                        if (opcUaServerExtension != null) {
+                            vertx.deployVerticle(opcUaServerExtension)
+                        } else {
+                            Future.succeededFuture<String>()
+                        }
                     }
                     .compose {
                         if (metricsCollector != null) {

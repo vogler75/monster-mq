@@ -36,7 +36,7 @@ class DeviceConfigStoreSQLite(
                 node_id TEXT NOT NULL,
                 config TEXT NOT NULL,
                 enabled INTEGER DEFAULT 1,
-                type TEXT DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}',
+                type TEXT DEFAULT '${DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT}',
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
             )
@@ -175,7 +175,7 @@ class DeviceConfigStoreSQLite(
                             node_id TEXT NOT NULL,
                             config TEXT NOT NULL,
                             enabled INTEGER DEFAULT 1,
-                            type TEXT DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}',
+                            type TEXT DEFAULT '${DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT}',
                             created_at TEXT DEFAULT (datetime('now')),
                             updated_at TEXT DEFAULT (datetime('now'))
                         )
@@ -570,7 +570,7 @@ class DeviceConfigStoreSQLite(
             nodeId = row.getString("node_id"),
             config = config,
             enabled = row.getInteger("enabled") == 1,
-            type = row.getString("type") ?: DeviceConfig.LEGACY_OPC_CLIENT_TYPE,
+            type = row.getString("type") ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,
             createdAt = createdAt,
             updatedAt = updatedAt
         )

@@ -151,8 +151,11 @@ class OpcUaExtension : AbstractVerticle() {
         deviceStore.getEnabledDevicesByNode(currentNodeId)
             .onComplete { result ->
                 if (result.succeeded()) {
-                    val devices = result.result()
-                    logger.info("Found ${devices.size} enabled devices assigned to node $currentNodeId")
+                    // Filter to only include OPC UA Client devices, not Server devices
+                    val devices = result.result().filter { device ->
+                        device.type == DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT
+                    }
+                    logger.info("Found ${devices.size} enabled OPC UA Client devices assigned to node $currentNodeId")
 
                     if (devices.isEmpty()) {
                         promise.complete()

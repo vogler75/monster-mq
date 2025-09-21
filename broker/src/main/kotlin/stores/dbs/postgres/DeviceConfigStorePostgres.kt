@@ -37,7 +37,7 @@ class DeviceConfigStorePostgres(
                 node_id VARCHAR(255) NOT NULL,
                 config JSONB NOT NULL,
                 enabled BOOLEAN DEFAULT true,
-                type VARCHAR(255) DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}',
+                type VARCHAR(255) DEFAULT '${DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT}',
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW(),
 
@@ -57,7 +57,7 @@ class DeviceConfigStorePostgres(
             BEGIN
                 -- Add type column if it doesn't exist
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='$TABLE_NAME' AND column_name='type') THEN
-                    ALTER TABLE $TABLE_NAME ADD COLUMN type VARCHAR(255) DEFAULT '${DeviceConfig.LEGACY_OPC_CLIENT_TYPE}';
+                    ALTER TABLE $TABLE_NAME ADD COLUMN type VARCHAR(255) DEFAULT '${DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT}';
                 END IF;
 
                 -- Drop unique constraint on namespace if it exists
@@ -398,7 +398,7 @@ class DeviceConfigStorePostgres(
             nodeId = rs.getString("node_id"),
             config = OpcUaConnectionConfig.Companion.fromJsonObject(configJson),
             enabled = rs.getBoolean("enabled"),
-            type = rs.getString("type") ?: DeviceConfig.LEGACY_OPC_CLIENT_TYPE,
+            type = rs.getString("type") ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,
             createdAt = rs.getTimestamp("created_at").toInstant(),
             updatedAt = rs.getTimestamp("updated_at").toInstant()
         )

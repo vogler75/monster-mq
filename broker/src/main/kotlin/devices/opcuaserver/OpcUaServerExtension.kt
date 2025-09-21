@@ -30,9 +30,10 @@ class OpcUaServerExtension(
 
     private val runningServers = ConcurrentHashMap<String, OpcUaServerInstance>()
     private val serverStatuses = ConcurrentHashMap<String, OpcUaServerStatus>()
-    private val currentNodeId = Monster.getClusterNodeId(vertx)
+    private lateinit var currentNodeId: String
 
     override fun start(startPromise: Promise<Void>) {
+        currentNodeId = Monster.getClusterNodeId(vertx)
         logger.info("Starting OPC UA Server Extension on node: $currentNodeId")
 
         // Register message bus handlers

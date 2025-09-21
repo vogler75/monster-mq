@@ -20,10 +20,7 @@ data class DeviceConfig(
     companion object {
         // Global constant for OPC UA Client device type
         const val DEVICE_TYPE_OPCUA_CLIENT = "OPCUA-Client"
-        const val DEVICE_TYPE_OPCUA_SERVER = "OPCUA-Server"  // Reserved for future use
-
-        // Legacy constant for backward compatibility (used in database defaults)
-        const val LEGACY_OPC_CLIENT_TYPE = "OPC Client"
+        const val DEVICE_TYPE_OPCUA_SERVER = "OPCUA-Server"
         fun fromJsonObject(json: JsonObject): DeviceConfig {
             return DeviceConfig(
                 name = json.getString("name"),

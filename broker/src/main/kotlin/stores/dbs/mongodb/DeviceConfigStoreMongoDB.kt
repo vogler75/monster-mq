@@ -302,7 +302,7 @@ class DeviceConfigStoreMongoDB(
             nodeId = document.getString("node_id"),
             config = OpcUaConnectionConfig.fromJsonObject(configJson),
             enabled = document.getBoolean("enabled", true),
-            type = document.getString("type") ?: DeviceConfig.LEGACY_OPC_CLIENT_TYPE,
+            type = document.getString("type") ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,
             createdAt = document.getDate("created_at")?.toInstant() ?: Instant.now(),
             updatedAt = document.getDate("updated_at")?.toInstant() ?: Instant.now()
         )
