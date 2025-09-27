@@ -37,7 +37,6 @@ class OpcUaServerNodeManager(
     private val nodeUpdateTimes = ConcurrentHashMap<NodeId, AtomicLong>()
 
     fun initializeNodes() {
-
         // Create root folder for this OPC UA server
         val rootFolder = createRootFolder()
         logger.info("OPC UA Server namespace started with index: $namespaceIndex, URI: $namespaceUri")
@@ -76,12 +75,35 @@ class OpcUaServerNodeManager(
             )
 
             nodeManager.addNode(folderNode)
+
+            // Add reference to Objects folder
             folderNode.addReference(Reference(
                 folderNode.nodeId,
                 Identifiers.Organizes,
                 Identifiers.ObjectsFolder.expanded(),
                 Reference.Direction.INVERSE
             ))
+
+            // Add the forward reference from Objects folder to this folder
+            try {
+                // Get the objects folder from the address space
+                val addressSpace = server.addressSpaceManager
+                val objectsNode = addressSpace.getManagedNode(Identifiers.ObjectsFolder)
+
+                if (objectsNode.isPresent) {
+                    objectsNode.get().addReference(Reference(
+                        Identifiers.ObjectsFolder,
+                        Identifiers.Organizes,
+                        folderNode.nodeId.expanded(),
+                        false
+                    ))
+                    logger.info("Added cross-namespace reference from Objects to MonsterMQ folder")
+                } else {
+                    logger.warning("Could not find Objects folder to add reference")
+                }
+            } catch (e: Exception) {
+                logger.warning("Could not add forward reference to Objects folder: ${e.message}")
+            }
 
             folderNodes[rootPath] = rootNodeId
         }

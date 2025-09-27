@@ -460,6 +460,16 @@ class OpcUaServerMutations(
         // Store the full OPC UA server configuration in the config field as JSON
         val serverConfigJson = serverConfig.toJsonObject()
 
+        // Convert server addresses to OpcUaAddress format for storage in the addresses field
+        val opcUaAddresses = serverConfig.addresses.map { serverAddress ->
+            at.rocworks.stores.OpcUaAddress(
+                address = serverAddress.mqttTopic,
+                topic = serverAddress.mqttTopic,
+                publishMode = "SEPARATE",
+                removePath = false
+            )
+        }
+
         // Create a wrapper OpcUaConnectionConfig that contains the full server config
         val connectionConfig = OpcUaConnectionConfig(
             endpointUrl = "opc.tcp://localhost:${serverConfig.port}/${serverConfig.path}",
@@ -473,7 +483,7 @@ class OpcUaServerMutations(
             connectionTimeout = 10000L,
             requestTimeout = 5000L,
             monitoringParameters = MonitoringParameters(),
-            addresses = emptyList(),
+            addresses = opcUaAddresses, // Store server addresses here for visibility
             certificateConfig = CertificateConfig()
         )
 

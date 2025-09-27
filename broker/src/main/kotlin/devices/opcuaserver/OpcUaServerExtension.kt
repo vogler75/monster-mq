@@ -177,14 +177,22 @@ class OpcUaServerExtension(
                     configs.forEach { device ->
                         try {
                             // Parse the configuration
-                            val serverConfig = OpcUaServerConfig.fromJsonObject(
-                                JsonObject(device.config.toJsonObject().toString()).apply {
+                            val configJson = JsonObject(device.config.toJsonObject().toString())
+
+                            // Check if we have the full OPC UA server config stored
+                            val serverConfig = if (configJson.containsKey("opcUaServerConfig")) {
+                                // Use the stored OPC UA server configuration
+                                OpcUaServerConfig.fromJsonObject(configJson.getJsonObject("opcUaServerConfig"))
+                            } else {
+                                // Legacy fallback - reconstruct from device config
+                                configJson.apply {
                                     put("name", device.name)
                                     put("namespace", device.namespace)
                                     put("nodeId", device.nodeId)
                                     put("enabled", device.enabled)
                                 }
-                            )
+                                OpcUaServerConfig.fromJsonObject(configJson)
+                            }
 
                             if (serverConfig.enabled) {
                                 startServerInternal(serverConfig)
@@ -209,7 +217,7 @@ class OpcUaServerExtension(
     /**
      * Start an OPC UA Server
      */
-    private fun startServer(config: OpcUaServerConfig): JsonObject {
+    private fun startServer(config: OpcUaServerConfig, skipSave: Boolean = false): JsonObject {
         return try {
             // Check if server is already running
             if (runningServers.containsKey(config.name)) {
@@ -217,7 +225,7 @@ class OpcUaServerExtension(
                     .put("success", false)
                     .put("error", "Server '${config.name}' is already running")
             } else {
-                val status = startServerInternal(config)
+                val status = startServerInternal(config, skipSave)
                 JsonObject()
                     .put("success", status.status == OpcUaServerStatus.Status.RUNNING)
                     .put("status", status.toJsonObject())
@@ -233,7 +241,7 @@ class OpcUaServerExtension(
     /**
      * Internal method to start a server
      */
-    private fun startServerInternal(config: OpcUaServerConfig): OpcUaServerStatus {
+    private fun startServerInternal(config: OpcUaServerConfig, skipSave: Boolean = false): OpcUaServerStatus {
         val instance = OpcUaServerInstance(
             config,
             vertx,
@@ -250,8 +258,10 @@ class OpcUaServerExtension(
             // Publish status update
             publishStatusUpdate(status)
 
-            // Save to device store if available
-            saveServerConfig(config)
+            // Save to device store if available (unless explicitly skipped)
+            if (!skipSave) {
+                saveServerConfig(config)
+            }
         }
 
         return status
@@ -297,12 +307,10 @@ class OpcUaServerExtension(
                 stopServer(serverName)
             }
 
-            // Save new configuration
-            saveServerConfig(newConfig)
-
-            // Start with new configuration if it was running and is enabled
+            // Don't save here - the GraphQL mutation already saved to the database
+            // Just restart with the new configuration if it was running and is enabled
             if (wasRunning && newConfig.enabled) {
-                startServer(newConfig)
+                startServer(newConfig, skipSave = true)
             } else {
                 JsonObject()
                     .put("success", true)
@@ -340,26 +348,45 @@ class OpcUaServerExtension(
     private fun saveServerConfig(config: OpcUaServerConfig) {
         deviceConfigStore?.let { store ->
             try {
-                // Convert to device config format
+                // Store the full OPC UA server configuration in the config field as JSON
+                val serverConfigJson = config.toJsonObject()
+
+                // Convert server addresses to OpcUaAddress format for storage in the addresses field
+                val opcUaAddresses = config.addresses.map { serverAddress ->
+                    at.rocworks.stores.OpcUaAddress(
+                        address = serverAddress.mqttTopic,
+                        topic = serverAddress.mqttTopic,
+                        publishMode = "SEPARATE",
+                        removePath = false
+                    )
+                }
+
+                // Create a wrapper OpcUaConnectionConfig that contains the full server config
+                val connectionConfig = at.rocworks.stores.OpcUaConnectionConfig(
+                    endpointUrl = "opc.tcp://localhost:${config.port}/${config.path}",
+                    updateEndpointUrl = false,
+                    securityPolicy = "None",
+                    username = null,
+                    password = null,
+                    subscriptionSamplingInterval = 0.0,
+                    keepAliveFailuresAllowed = 3,
+                    reconnectDelay = 5000L,
+                    connectionTimeout = 10000L,
+                    requestTimeout = 5000L,
+                    monitoringParameters = at.rocworks.stores.MonitoringParameters(),
+                    addresses = opcUaAddresses, // Store server addresses here for visibility
+                    certificateConfig = at.rocworks.stores.CertificateConfig()
+                )
+
+                // Add the full server config to the connection config's JSON representation
+                val configJsonObject = connectionConfig.toJsonObject()
+                configJsonObject.put("opcUaServerConfig", serverConfigJson)
+
                 val deviceConfig = at.rocworks.stores.DeviceConfig(
                     name = config.name,
                     namespace = config.namespace,
                     nodeId = config.nodeId,
-                    config = at.rocworks.stores.OpcUaConnectionConfig(
-                        endpointUrl = "opc.tcp://localhost:${config.port}/${config.path}",
-                        updateEndpointUrl = false,
-                        securityPolicy = "None",
-                        username = null,
-                        password = null,
-                        subscriptionSamplingInterval = 0.0,
-                        keepAliveFailuresAllowed = 3,
-                        reconnectDelay = 5000L,
-                        connectionTimeout = 10000L,
-                        requestTimeout = 5000L,
-                        monitoringParameters = at.rocworks.stores.MonitoringParameters(),
-                        addresses = emptyList(),
-                        certificateConfig = at.rocworks.stores.CertificateConfig()
-                    ),
+                    config = at.rocworks.stores.OpcUaConnectionConfig.fromJsonObject(configJsonObject),
                     enabled = config.enabled,
                     type = DEVICE_TYPE
                 )

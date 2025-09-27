@@ -74,6 +74,9 @@ class OpcUaServerInstance(
             // Start the server
             server!!.startup().get(10, TimeUnit.SECONDS)
 
+            // Initialize the namespace and create root folder
+            nodeManager?.initializeNodes()
+
             // Create nodes for configured addresses
             setupConfiguredNodes()
 
@@ -212,23 +215,56 @@ class OpcUaServerInstance(
         }
 
         try {
-            // Find the corresponding address configuration
-            val address = config.addresses.find { it.mqttTopic == message.topicName }
-            if (address != null) {
+            // Find the corresponding address configuration that matches this topic
+            val matchingAddress = config.addresses.find { address ->
+                // Check for exact match first
+                if (address.mqttTopic == message.topicName) {
+                    return@find true
+                }
+                // Check for wildcard match
+                if (address.mqttTopic.contains("#") || address.mqttTopic.contains("+")) {
+                    return@find topicMatches(address.mqttTopic, message.topicName)
+                }
+                false
+            }
+
+            if (matchingAddress != null) {
+                logger.fine("Processing MQTT message for topic: ${message.topicName} (matched pattern: ${matchingAddress.mqttTopic})")
+
                 // Convert MQTT message to OPC UA DataValue
                 val dataValue = OpcUaDataConverter.mqttToOpcUa(
                     message.payload,
-                    address.dataType,
+                    matchingAddress.dataType,
                     message.time
                 )
 
-                // Update the OPC UA node
-                nodeManager?.updateNodeValue(message.topicName, dataValue)
-                logger.finest("Updated OPC UA node for topic: ${message.topicName}")
+                // Update or create the OPC UA node for the specific topic (not the pattern)
+                val nodeExists = nodeManager?.updateNodeValue(message.topicName, dataValue) ?: false
+                if (!nodeExists) {
+                    // Create new node for this specific topic using the pattern's configuration
+                    val specificAddress = matchingAddress.copy(mqttTopic = message.topicName)
+                    nodeManager?.createOrUpdateVariableNode(message.topicName, specificAddress, dataValue)
+                    logger.info("Created new OPC UA node for topic: ${message.topicName}")
+                }
+            } else {
+                logger.finest("No matching address pattern found for topic: ${message.topicName}")
             }
         } catch (e: Exception) {
             logger.warning("Error handling MQTT message for topic ${message.topicName}: ${e.message}")
         }
+    }
+
+    /**
+     * Check if an MQTT topic matches a pattern with wildcards
+     */
+    private fun topicMatches(pattern: String, topic: String): Boolean {
+        // Convert MQTT wildcard pattern to regex
+        // + matches a single level, # matches multiple levels
+        val regexPattern = pattern
+            .replace("+", "[^/]+")
+            .replace("#", ".*")
+
+        return topic.matches(Regex("^$regexPattern$"))
     }
 
     /**
