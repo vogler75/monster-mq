@@ -207,10 +207,6 @@ Kafka:
   Bus:
     Enabled: true
     Topic: monster-bus
-    ProducerConfig:
-      batch.size: 65536
-      linger.ms: 10
-      compression.type: lz4
 ```
 
 **Trade-offs:**
@@ -425,11 +421,6 @@ Kafka:
   Bus:
     Enabled: true
     Topic: monster-bus
-    ProducerConfig:
-      batch.size: 65536
-      linger.ms: 10
-      compression.type: lz4
-      acks: 1
 ```
 
 ## Command Line Options
