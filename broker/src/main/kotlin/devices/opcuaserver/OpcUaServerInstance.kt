@@ -57,7 +57,7 @@ class OpcUaServerInstance(
             val serverConfig = createServerConfig()
             server = OpcUaServer(serverConfig)
 
-            // Create and register namespace manager
+            // Create and register namespace manager BEFORE server startup
             val namespaceManager = OpcUaServerNodeManager(
                 server!!,
                 config.namespaceUri,
@@ -67,14 +67,14 @@ class OpcUaServerInstance(
                 handleOpcUaWrite(topic, dataValue)
             }
             nodeManager = namespaceManager
-            // Note: Namespace manager will be automatically registered during server startup
-            // The ManagedNamespaceWithLifecycle will handle its own registration
+
+            // The ManagedNamespaceWithLifecycle will automatically register itself
             logger.info("Namespace manager created for namespace: ${namespaceManager.namespaceUri}")
 
             // Start the server
             server!!.startup().get(10, TimeUnit.SECONDS)
 
-            // Initialize the namespace and create root folder
+            // Initialize the namespace and create root folder (after server startup)
             nodeManager?.initializeNodes()
 
             // Create nodes for configured addresses

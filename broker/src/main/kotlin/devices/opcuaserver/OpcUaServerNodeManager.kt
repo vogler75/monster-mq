@@ -4,9 +4,9 @@ import at.rocworks.Utils
 import org.eclipse.milo.opcua.sdk.core.AccessLevel
 import org.eclipse.milo.opcua.sdk.core.Reference
 import org.eclipse.milo.opcua.sdk.server.OpcUaServer
+import org.eclipse.milo.opcua.sdk.server.api.DataItem
 import org.eclipse.milo.opcua.sdk.server.api.ManagedNamespaceWithLifecycle
 import org.eclipse.milo.opcua.sdk.server.api.MonitoredItem
-import org.eclipse.milo.opcua.sdk.server.api.DataItem
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode
 import org.eclipse.milo.opcua.stack.core.Identifiers
@@ -27,6 +27,7 @@ class OpcUaServerNodeManager(
 ) : ManagedNamespaceWithLifecycle(server, namespaceUri) {
 
     companion object {
+        private const val ROOT_FOLDER_NAME = "MonsterMQ"
         private val logger: Logger = Utils.getLogger(OpcUaServerNodeManager::class.java)
     }
 
@@ -35,12 +36,14 @@ class OpcUaServerNodeManager(
     private val topicToNodeId = ConcurrentHashMap<String, NodeId>()
     private val nodeIdToTopic = ConcurrentHashMap<NodeId, String>()
     private val nodeUpdateTimes = ConcurrentHashMap<NodeId, AtomicLong>()
+    @Volatile
+    private var monsterMqRootNodeId: NodeId? = null
+
+
 
     fun initializeNodes() {
-        // Create root folder for this OPC UA server
-        val rootFolder = createRootFolder()
         logger.info("OPC UA Server namespace started with index: $namespaceIndex, URI: $namespaceUri")
-        logger.info("Created MonsterMQ root folder with NodeId: $rootFolder")
+        createMonsterMQRootFolder()
     }
 
     fun cleanupNodes() {
@@ -64,53 +67,79 @@ class OpcUaServerNodeManager(
     }
 
     private fun createRootFolder(): NodeId {
-        val rootPath = "MonsterMQ"
-        val rootNodeId = NodeId(namespaceIndex, rootPath)
+        return monsterMqRootNodeId ?: createMonsterMQRootFolder()
+    }
 
-        if (!folderNodes.containsKey(rootPath)) {
+    private fun createMonsterMQRootFolder(): NodeId {
+        monsterMqRootNodeId?.let { return it }
+
+        return synchronized(this) {
+            monsterMqRootNodeId ?: run {
+                // Create root folder with simple NodeId, not path-based
+                val rootNodeId = NodeId(namespaceIndex, ROOT_FOLDER_NAME)
+                val rootFolder = UaFolderNode(
+                    nodeContext,
+                    rootNodeId,
+                    QualifiedName(namespaceIndex, ROOT_FOLDER_NAME),
+                    LocalizedText.english(ROOT_FOLDER_NAME)
+                )
+
+                // Add to namespace manager
+                nodeManager.addNode(rootFolder)
+
+                // Add only inverse reference to Objects folder (like the gateway)
+                rootFolder.addReference(
+                    Reference(
+                        rootNodeId,
+                        Identifiers.HasComponent,
+                        Identifiers.ObjectsFolder.expanded(),
+                        Reference.Direction.INVERSE
+                    )
+                )
+
+                // Cache the root folder with simple path
+                folderNodes[ROOT_FOLDER_NAME] = rootNodeId
+                monsterMqRootNodeId = rootNodeId
+                logger.info("MonsterMQ root folder created with NodeId: $rootNodeId")
+                rootNodeId
+            }
+        }
+    }
+
+    private fun ensureFolder(parentNodeId: NodeId, folderName: String): NodeId {
+        val path = folderPath(parentNodeId, folderName)
+        return folderNodes.computeIfAbsent(path) {
+            val folderNodeId = NodeId(namespaceIndex, path)
             val folderNode = UaFolderNode(
                 nodeContext,
-                rootNodeId,
-                QualifiedName(namespaceIndex, rootPath),
-                LocalizedText(rootPath)
+                folderNodeId,
+                QualifiedName(namespaceIndex, folderName),
+                LocalizedText.english(folderName)
             )
 
             nodeManager.addNode(folderNode)
 
-            // Add reference to Objects folder
-            folderNode.addReference(Reference(
-                folderNode.nodeId,
-                Identifiers.Organizes,
-                Identifiers.ObjectsFolder.expanded(),
-                Reference.Direction.INVERSE
-            ))
+            folderNode.addReference(
+                Reference(
+                    folderNode.nodeId,
+                    Identifiers.HasComponent,
+                    parentNodeId.expanded(),
+                    Reference.Direction.INVERSE
+                )
+            )
 
-            // Add the forward reference from Objects folder to this folder
-            try {
-                // Get the objects folder from the address space
-                val addressSpace = server.addressSpaceManager
-                val objectsNode = addressSpace.getManagedNode(Identifiers.ObjectsFolder)
-
-                if (objectsNode.isPresent) {
-                    objectsNode.get().addReference(Reference(
-                        Identifiers.ObjectsFolder,
-                        Identifiers.Organizes,
-                        folderNode.nodeId.expanded(),
-                        false
-                    ))
-                    logger.info("Added cross-namespace reference from Objects to MonsterMQ folder")
-                } else {
-                    logger.warning("Could not find Objects folder to add reference")
-                }
-            } catch (e: Exception) {
-                logger.warning("Could not add forward reference to Objects folder: ${e.message}")
-            }
-
-            folderNodes[rootPath] = rootNodeId
+            folderNodeId
         }
-
-        return rootNodeId
     }
+
+    private fun folderPath(parentNodeId: NodeId, folderName: String): String {
+        return if (parentNodeId == Identifiers.ObjectsFolder) {
+            folderName
+        } else {
+            "${parentNodeId.identifier}/$folderName"
+        }
+    }
+
 
     /**
      * Create or get a hierarchical folder structure for the given topic path
@@ -122,40 +151,18 @@ class OpcUaServerNodeManager(
             return createRootFolder()
         }
 
-        // Start from root
         var currentParent = createRootFolder()
-        var currentPath = "MonsterMQ"
 
-        // Create folder hierarchy
         for (i in 0 until parts.size - 1) {
             val folderName = parts[i]
-            currentPath = "$currentPath/$folderName"
-
-            currentParent = folderNodes.getOrPut(currentPath) {
-                val folderNodeId = NodeId(namespaceIndex, currentPath)
-                val folderNode = UaFolderNode(
-                    nodeContext,
-                    folderNodeId,
-                    QualifiedName(namespaceIndex, folderName),
-                    LocalizedText(folderName)
-                )
-
-                nodeManager.addNode(folderNode)
-
-                // Add reference to parent
-                folderNode.addReference(Reference(
-                    folderNode.nodeId,
-                    Identifiers.Organizes,
-                    currentParent.expanded(),
-                    Reference.Direction.INVERSE
-                ))
-
-                logger.fine("Created folder node: $currentPath")
-                folderNodeId
-            }
+            currentParent = createFolderUnderParent(currentParent, folderName)
         }
 
         return currentParent
+    }
+
+    private fun createFolderUnderParent(parentNodeId: NodeId, folderName: String): NodeId {
+        return ensureFolder(parentNodeId, folderName)
     }
 
     /**
@@ -250,12 +257,14 @@ class OpcUaServerNodeManager(
         nodeManager.addNode(variableNode)
 
         // Add reference to parent folder
-        variableNode.addReference(Reference(
-            variableNode.nodeId,
-            Identifiers.Organizes,
-            parentNodeId.expanded(),
-            Reference.Direction.INVERSE
-        ))
+        variableNode.addReference(
+            Reference(
+                variableNode.nodeId,
+                Identifiers.HasComponent,
+                parentNodeId.expanded(),
+                Reference.Direction.INVERSE
+            )
+        )
 
         // Store mappings
         variableNodes[mqttTopic] = variableNode
@@ -263,7 +272,7 @@ class OpcUaServerNodeManager(
         nodeIdToTopic[nodeId] = mqttTopic
         nodeUpdateTimes[nodeId] = AtomicLong(System.currentTimeMillis())
 
-        logger.info("Created variable node for topic: $mqttTopic with NodeId: $nodeId")
+        logger.fine("Created variable node for topic: $mqttTopic with NodeId: $nodeId")
         return nodeId
     }
 
