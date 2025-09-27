@@ -3,35 +3,30 @@
 ## Dashboard Implementation
 
 ### Overview
-A complete dark monster-themed dashboard has been created for monitoring and managing MonsterMQ MQTT broker clusters. The dashboard is implemented as a separate Node.js application that communicates exclusively through the MonsterMQ GraphQL API.
+A complete dark monster-themed dashboard has been created for monitoring and managing MonsterMQ MQTT broker clusters. The dashboard is integrated into the MonsterMQ broker as static resources and served through the embedded web server. It communicates with the broker through the GraphQL API.
 
 ### Directory Structure
 ```
-dashboard/
-├── server/                  # Express.js backend
-│   ├── server.js           # Main server with WebSocket support
-│   ├── auth/               # Authentication & GraphQL client
-│   │   ├── graphql-client.js
-│   │   └── middleware.js
-│   └── routes/             # API endpoints
-│       └── api.js
-├── public/                 # Frontend assets
-│   ├── assets/             # CSS, images
-│   │   ├── monster-theme.css
-│   │   └── logo.png        # Updated from Logo-v3-transparent.png
-│   ├── js/                 # Client-side JavaScript
-│   │   ├── login.js
-│   │   ├── dashboard.js
-│   │   ├── sessions.js
-│   │   └── users.js
-│   └── pages/              # HTML pages
-│       ├── login.html
-│       ├── dashboard.html
-│       ├── sessions.html
-│       └── users.html
-├── package.json
-└── README.md
+broker/src/main/resources/dashboard/    # Integrated dashboard
+├── assets/                 # Frontend assets
+│   ├── monster-theme.css
+│   └── logo.png           # Updated from Logo-v3-transparent.png
+├── js/                    # Client-side JavaScript
+│   ├── login.js
+│   ├── dashboard.js
+│   ├── sessions.js
+│   ├── users.js
+│   └── [additional JS files]
+├── pages/                 # HTML pages
+│   ├── login.html
+│   ├── dashboard.html
+│   ├── sessions.html
+│   ├── users.html
+│   └── [additional pages]
+└── index.html            # Dashboard entry point
 ```
+
+**Note:** The dashboard is integrated directly into the MonsterMQ broker and served from the embedded web server, not as a separate Node.js application. It communicates with the broker through the GraphQL API endpoint.
 
 ### Key Features Implemented
 
@@ -62,12 +57,12 @@ dashboard/
 
 ### Technical Implementation
 
-#### Backend (Node.js/Express)
-- **GraphQL Integration**: Complete client for MonsterMQ GraphQL API
+#### Backend (Embedded in MonsterMQ)
+- **GraphQL Integration**: Direct access to MonsterMQ GraphQL API
 - **Authentication**: JWT-based login with role-based access control
-- **Real-time Updates**: Socket.io WebSocket connection for live metrics
-- **API Abstraction**: REST endpoints that proxy to GraphQL
-- **Security**: CORS enabled, input validation, XSS protection
+- **Real-time Updates**: WebSocket connection for live metrics
+- **API Access**: Direct GraphQL queries from client-side JavaScript
+- **Security**: Built-in authentication, input validation, XSS protection
 
 #### Frontend (Vanilla JavaScript)
 - **Modular Architecture**: Separate JS files for each page functionality
@@ -78,43 +73,36 @@ dashboard/
 
 ### Configuration Options
 
-#### GraphQL Endpoint Configuration
-Multiple ways to specify the MonsterMQ GraphQL endpoint:
+The dashboard is automatically served by MonsterMQ when the broker is running. No separate configuration is needed.
 
-1. **Command Line Arguments**:
-   ```bash
-   npm start -- --graphql http://broker:4000/graphql
-   npm start -- -g http://192.168.1.100:4000/graphql
-   npm start -- --endpoint http://remote:8080/graphql
-   npm start -- -e http://cluster:4000/graphql
-   ```
-
-2. **Environment Variables**:
-   ```bash
-   GRAPHQL_ENDPOINT=http://broker:4000/graphql npm start
-   ```
-
-3. **Default**: `http://localhost:4000/graphql`
-
-#### Server Configuration
-- **PORT**: Dashboard server port (default: 3001)
-- **GRAPHQL_ENDPOINT**: MonsterMQ GraphQL endpoint
+#### Dashboard Access
+- **URL**: `http://broker-host:4000/dashboard` (or configured GraphQL port)
+- **GraphQL Endpoint**: Same host and port as the dashboard
+- **Authentication**: Uses MonsterMQ user credentials
 
 ### Installation & Usage
 
 #### Prerequisites
-- Node.js 16+
-- MonsterMQ broker with GraphQL enabled
+- MonsterMQ broker running with GraphQL enabled
 - Admin user in MonsterMQ for full dashboard access
 
 #### Quick Start
-```bash
-cd dashboard
-npm install
-npm start -- --graphql http://your-broker:4000/graphql
+```yaml
+# Enable GraphQL in config.yaml
+GraphQL:
+  Enabled: true
+  Port: 4000
 ```
 
-Dashboard available at: `http://localhost:3001`
+```bash
+# Start MonsterMQ
+java -jar monstermq.jar -config config.yaml
+
+# Access dashboard
+# Open browser to: http://localhost:4000/dashboard
+```
+
+Dashboard is automatically available when GraphQL is enabled.
 
 ### GraphQL API Requirements
 The dashboard requires these MonsterMQ GraphQL features:
@@ -143,10 +131,11 @@ The following files were updated during development:
 ### Development Notes
 
 #### Real-time Data Flow
-1. **Server**: Express server fetches data from MonsterMQ GraphQL
-2. **WebSocket**: Socket.io broadcasts metrics updates every 5 seconds
-3. **Client**: JavaScript receives updates and refreshes charts/tables
-4. **Caching**: 5-second cache on server to prevent GraphQL overload
+1. **Client**: Dashboard JavaScript queries GraphQL API directly
+2. **GraphQL**: Broker responds with current metrics and data
+3. **WebSocket**: Real-time updates via GraphQL subscriptions (when available)
+4. **Polling**: Client polls for updates at configured intervals
+5. **Caching**: Browser-side caching to reduce API calls
 
 #### Authentication Flow
 1. **Login**: User submits credentials via REST API
