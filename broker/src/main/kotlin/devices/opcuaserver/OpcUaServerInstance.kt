@@ -26,7 +26,7 @@ import kotlin.concurrent.thread
  * OPC UA Server instance that exposes MQTT topics as OPC UA nodes
  */
 class OpcUaServerInstance(
-    private val config: OpcUaServerConfig,
+    private var config: OpcUaServerConfig,
     private val vertx: Vertx,
     private val sessionHandler: SessionHandler,
     private val userManager: UserManager?
@@ -159,17 +159,59 @@ class OpcUaServerInstance(
      * Setup configured nodes for OPC UA addresses
      */
     private fun setupConfiguredNodes() {
+        logger.info("Setting up ${config.addresses.size} configured nodes for OPC UA server '${config.name}'")
         config.addresses.forEach { address ->
             try {
                 nodeManager?.createOrUpdateVariableNode(
                     address.mqttTopic,
                     address
                 )
-                logger.fine("Created OPC UA node for topic: ${address.mqttTopic}")
+                logger.info("Created OPC UA node for topic: ${address.mqttTopic} with NodeId: ns=${nodeManager?.namespaceIndex};s=${address.mqttTopic}")
             } catch (e: Exception) {
-                logger.warning("Failed to create OPC UA node for topic ${address.mqttTopic}: ${e.message}")
+                logger.severe("Failed to create OPC UA node for topic ${address.mqttTopic}: ${e.message}")
+                e.printStackTrace()
             }
         }
+    }
+
+    /**
+     * Update server configuration dynamically without restart
+     */
+    fun updateConfiguration(newConfig: OpcUaServerConfig) {
+        logger.info("Updating configuration for OPC UA server '${config.name}'")
+
+        // Check for new topic mappings to subscribe to
+        val oldTopics = config.addresses.map { it.mqttTopic }.toSet()
+        val newTopics = newConfig.addresses.map { it.mqttTopic }.toSet()
+        val topicsToAdd = newTopics - oldTopics
+        val topicsToRemove = oldTopics - newTopics
+
+        // Unsubscribe from removed topics
+        topicsToRemove.forEach { topic ->
+            try {
+                sessionHandler.unsubscribeInternal(internalClientId, topic)
+                subscribedTopics.remove(topic)
+                logger.info("Unsubscribed OPC UA server '${config.name}' from topic: $topic")
+            } catch (e: Exception) {
+                logger.warning("Failed to unsubscribe from topic $topic: ${e.message}")
+            }
+        }
+
+        // Subscribe to new topics
+        topicsToAdd.forEach { topic ->
+            try {
+                sessionHandler.subscribeInternal(internalClientId, topic, 0) { message ->
+                    handleMqttMessage(message, newConfig.addresses.find { it.mqttTopic == topic })
+                }
+                subscribedTopics[topic] = internalClientId
+                logger.info("Subscribed OPC UA server '${config.name}' to new topic: $topic")
+            } catch (e: Exception) {
+                logger.warning("Failed to subscribe to new topic $topic: ${e.message}")
+            }
+        }
+
+        // Update the configuration
+        this.config = newConfig
     }
 
     /**
@@ -179,10 +221,10 @@ class OpcUaServerInstance(
         config.addresses.forEach { address ->
             try {
                 sessionHandler.subscribeInternal(internalClientId, address.mqttTopic, 0) { message ->
-                    handleMqttMessage(message)
+                    handleMqttMessage(message, address)
                 }
                 subscribedTopics[address.mqttTopic] = internalClientId
-                logger.fine("Subscribed to MQTT topic: ${address.mqttTopic}")
+                logger.info("Subscribed OPC UA server '${config.name}' to MQTT topic: ${address.mqttTopic}")
             } catch (e: Exception) {
                 logger.warning("Failed to subscribe to MQTT topic ${address.mqttTopic}: ${e.message}")
             }
@@ -207,29 +249,26 @@ class OpcUaServerInstance(
     /**
      * Handle incoming MQTT messages and update OPC UA nodes
      */
-    private fun handleMqttMessage(message: MqttMessage) {
+    private fun handleMqttMessage(message: MqttMessage, addressConfig: OpcUaServerAddress? = null) {
         // Skip messages from this OPC UA server to prevent loops
         if (message.sender == internalClientId) {
-            logger.finest("Skipping message from self: ${message.topicName}")
+            logger.fine("Skipping message from self: ${message.topicName}")
             return
         }
 
+        logger.info("OPC UA server '${config.name}' received MQTT message on topic: ${message.topicName}")
+
         try {
-            // Find the corresponding address configuration that matches this topic
-            val matchingAddress = config.addresses.find { address ->
-                // Check for exact match first
-                if (address.mqttTopic == message.topicName) {
-                    return@find true
-                }
-                // Check for wildcard match
-                if (address.mqttTopic.contains("#") || address.mqttTopic.contains("+")) {
-                    return@find topicMatches(address.mqttTopic, message.topicName)
-                }
-                false
+            // Use the provided address config, or find one that matches
+            val matchingAddress = addressConfig ?: config.addresses.find { address ->
+                address.mqttTopic == message.topicName ||
+                // Simple wildcard check for patterns ending with #
+                (address.mqttTopic.endsWith("#") &&
+                 message.topicName.startsWith(address.mqttTopic.dropLast(1)))
             }
 
             if (matchingAddress != null) {
-                logger.fine("Processing MQTT message for topic: ${message.topicName} (matched pattern: ${matchingAddress.mqttTopic})")
+                logger.info("Processing MQTT message for topic: ${message.topicName}")
 
                 // Convert MQTT message to OPC UA DataValue
                 val dataValue = OpcUaDataConverter.mqttToOpcUa(
@@ -238,34 +277,35 @@ class OpcUaServerInstance(
                     message.time
                 )
 
-                // Update or create the OPC UA node for the specific topic (not the pattern)
-                val nodeExists = nodeManager?.updateNodeValue(message.topicName, dataValue) ?: false
-                if (!nodeExists) {
-                    // Create new node for this specific topic using the pattern's configuration
-                    val specificAddress = matchingAddress.copy(mqttTopic = message.topicName)
-                    nodeManager?.createOrUpdateVariableNode(message.topicName, specificAddress, dataValue)
-                    logger.info("Created new OPC UA node for topic: ${message.topicName}")
-                }
+                // Create or update the OPC UA node dynamically like the gateway does
+                createOrUpdateNode(message.topicName, matchingAddress, dataValue)
+
             } else {
-                logger.finest("No matching address pattern found for topic: ${message.topicName}")
+                logger.fine("No matching address pattern found for topic: ${message.topicName}")
             }
         } catch (e: Exception) {
             logger.warning("Error handling MQTT message for topic ${message.topicName}: ${e.message}")
+            e.printStackTrace()
         }
     }
 
     /**
-     * Check if an MQTT topic matches a pattern with wildcards
+     * Create or update OPC UA node for a specific topic (like the gateway implementation)
      */
-    private fun topicMatches(pattern: String, topic: String): Boolean {
-        // Convert MQTT wildcard pattern to regex
-        // + matches a single level, # matches multiple levels
-        val regexPattern = pattern
-            .replace("+", "[^/]+")
-            .replace("#", ".*")
+    private fun createOrUpdateNode(topicName: String, addressConfig: OpcUaServerAddress, dataValue: org.eclipse.milo.opcua.stack.core.types.builtin.DataValue) {
+        // Check if node already exists
+        val nodeExists = nodeManager?.updateNodeValue(topicName, dataValue) ?: false
 
-        return topic.matches(Regex("^$regexPattern$"))
+        if (!nodeExists) {
+            // Create new node dynamically
+            val specificAddress = addressConfig.copy(mqttTopic = topicName)
+            nodeManager?.createOrUpdateVariableNode(topicName, specificAddress, dataValue)
+            logger.info("Created new OPC UA node for topic: $topicName")
+        } else {
+            logger.info("Updated existing OPC UA node for topic: $topicName")
+        }
     }
+
 
     /**
      * Handle OPC UA node writes and publish to MQTT

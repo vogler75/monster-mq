@@ -267,7 +267,7 @@ data class OpcUaConnectionConfig(
                 CertificateConfig.fromJsonObject(it)
             } ?: CertificateConfig()
 
-            return OpcUaConnectionConfig(
+            val config = OpcUaConnectionConfig(
                 endpointUrl = json.getString("endpointUrl"),
                 updateEndpointUrl = json.getBoolean("updateEndpointUrl", true),
                 securityPolicy = json.getString("securityPolicy", "None"),
@@ -282,8 +282,26 @@ data class OpcUaConnectionConfig(
                 addresses = addresses,
                 certificateConfig = certificateConfig
             )
+
+            // Preserve any extra fields not part of the standard config
+            val standardFields = setOf(
+                "endpointUrl", "updateEndpointUrl", "securityPolicy", "username", "password",
+                "subscriptionSamplingInterval", "keepAliveFailuresAllowed", "reconnectDelay",
+                "connectionTimeout", "requestTimeout", "monitoringParameters", "addresses", "certificateConfig"
+            )
+
+            json.forEach { entry ->
+                if (!standardFields.contains(entry.key)) {
+                    config.extraFields.put(entry.key, entry.value)
+                }
+            }
+
+            return config
         }
     }
+
+    // Store extra fields that are not part of the data class
+    var extraFields: JsonObject = JsonObject()
 
     fun toJsonObject(): JsonObject {
         val addressArray = JsonArray()
@@ -291,7 +309,7 @@ data class OpcUaConnectionConfig(
             addressArray.add(address.toJsonObject())
         }
 
-        return JsonObject()
+        val result = JsonObject()
             .put("endpointUrl", endpointUrl)
             .put("updateEndpointUrl", updateEndpointUrl)
             .put("securityPolicy", securityPolicy)
@@ -305,6 +323,13 @@ data class OpcUaConnectionConfig(
             .put("monitoringParameters", monitoringParameters.toJsonObject())
             .put("addresses", addressArray)
             .put("certificateConfig", certificateConfig.toJsonObject())
+
+        // Merge any extra fields (like opcUaServerConfig)
+        extraFields.forEach { entry ->
+            result.put(entry.key, entry.value)
+        }
+
+        return result
     }
 
     fun validate(): List<String> {

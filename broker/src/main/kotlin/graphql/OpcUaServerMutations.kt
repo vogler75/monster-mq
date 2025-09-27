@@ -487,15 +487,14 @@ class OpcUaServerMutations(
             certificateConfig = CertificateConfig()
         )
 
-        // Add the full server config to the connection config's JSON representation
-        val configJsonObject = connectionConfig.toJsonObject()
-        configJsonObject.put("opcUaServerConfig", serverConfigJson)
+        // Add the full server config to the connection config's extra fields
+        connectionConfig.extraFields.put("opcUaServerConfig", serverConfigJson)
 
         return DeviceConfig(
             name = serverConfig.name,
             namespace = serverConfig.namespace,
             nodeId = serverConfig.nodeId,
-            config = OpcUaConnectionConfig.fromJsonObject(configJsonObject),
+            config = connectionConfig,
             enabled = serverConfig.enabled,
             type = DEVICE_TYPE
         )

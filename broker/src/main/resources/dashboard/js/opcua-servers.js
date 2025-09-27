@@ -566,11 +566,8 @@ function showInlineAddAddress() {
     // Reset form
     document.getElementById('inline-address-mqtt-topic').value = '';
     document.getElementById('inline-address-display-name').value = '';
-    document.getElementById('inline-address-browse-name').value = '';
     document.getElementById('inline-address-data-type').value = 'TEXT';
     document.getElementById('inline-address-access-level').value = 'READ_ONLY';
-    document.getElementById('inline-address-unit').value = '';
-    document.getElementById('inline-address-description').value = '';
 
     form.style.display = 'block';
 
@@ -599,11 +596,11 @@ async function addInlineAddress() {
     const address = {
         mqttTopic: mqttTopic,
         displayName: displayName,
-        browseName: document.getElementById('inline-address-browse-name').value.trim() || null,
-        description: document.getElementById('inline-address-description').value.trim() || null,
+        browseName: null,  // Not needed
+        description: null,  // Not needed
         dataType: document.getElementById('inline-address-data-type').value,
         accessLevel: document.getElementById('inline-address-access-level').value,
-        unit: document.getElementById('inline-address-unit').value.trim() || null
+        unit: null  // Not needed
     };
 
     try {

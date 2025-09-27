@@ -40,6 +40,7 @@ class OpcUaServerNodeManager(
         // Create root folder for this OPC UA server
         val rootFolder = createRootFolder()
         logger.info("OPC UA Server namespace started with index: $namespaceIndex, URI: $namespaceUri")
+        logger.info("Created MonsterMQ root folder with NodeId: $rootFolder")
     }
 
     fun cleanupNodes() {

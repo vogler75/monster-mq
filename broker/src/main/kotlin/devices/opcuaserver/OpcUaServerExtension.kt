@@ -10,6 +10,7 @@ import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.eventbus.Message
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
@@ -176,22 +177,34 @@ class OpcUaServerExtension(
 
                     configs.forEach { device ->
                         try {
-                            // Parse the configuration
-                            val configJson = JsonObject(device.config.toJsonObject().toString())
+                            // Parse the configuration - the device.config should have extraFields with opcUaServerConfig
+                            val configJson = device.config.toJsonObject()
 
                             // Check if we have the full OPC UA server config stored
                             val serverConfig = if (configJson.containsKey("opcUaServerConfig")) {
                                 // Use the stored OPC UA server configuration
-                                OpcUaServerConfig.fromJsonObject(configJson.getJsonObject("opcUaServerConfig"))
-                            } else {
-                                // Legacy fallback - reconstruct from device config
-                                configJson.apply {
-                                    put("name", device.name)
-                                    put("namespace", device.namespace)
-                                    put("nodeId", device.nodeId)
-                                    put("enabled", device.enabled)
+                                val serverConfigJson = configJson.getJsonObject("opcUaServerConfig")
+                                val config = OpcUaServerConfig.fromJsonObject(serverConfigJson)
+                                logger.info("Loaded OPC UA server '${device.name}' with ${config.addresses.size} address mappings")
+                                config.addresses.forEach { addr ->
+                                    logger.info("  Address mapping: ${addr.mqttTopic} -> ${addr.displayName} (${addr.dataType})")
                                 }
-                                OpcUaServerConfig.fromJsonObject(configJson)
+                                config
+                            } else {
+                                // Legacy fallback - try to reconstruct from device config
+                                logger.warning("No opcUaServerConfig found in database for server '${device.name}', attempting legacy load")
+                                val fallbackJson = JsonObject()
+                                    .put("name", device.name)
+                                    .put("namespace", device.namespace)
+                                    .put("nodeId", device.nodeId)
+                                    .put("enabled", device.enabled)
+                                    .put("addresses", JsonArray())  // Empty addresses for legacy
+                                    .put("port", 4840)  // Default port
+                                    .put("path", "server")  // Default path
+
+                                val config = OpcUaServerConfig.fromJsonObject(fallbackJson)
+                                logger.info("Loaded legacy OPC UA server '${device.name}' with ${config.addresses.size} address mappings")
+                                config
                             }
 
                             if (serverConfig.enabled) {
@@ -297,19 +310,24 @@ class OpcUaServerExtension(
     }
 
     /**
-     * Update server configuration
+     * Update server configuration without restarting
      */
     private fun updateServerConfig(serverName: String, newConfig: OpcUaServerConfig): JsonObject {
         return try {
-            // Stop existing server if running
-            val wasRunning = runningServers.containsKey(serverName)
-            if (wasRunning) {
-                stopServer(serverName)
-            }
+            val runningServer = runningServers[serverName]
 
-            // Don't save here - the GraphQL mutation already saved to the database
-            // Just restart with the new configuration if it was running and is enabled
-            if (wasRunning && newConfig.enabled) {
+            if (runningServer != null) {
+                // Server is running - update configuration dynamically
+                logger.info("Dynamically updating OPC UA server '$serverName' configuration")
+
+                // Update the server's configuration in memory
+                runningServer.updateConfiguration(newConfig)
+
+                JsonObject()
+                    .put("success", true)
+                    .put("message", "Configuration updated dynamically")
+            } else if (newConfig.enabled) {
+                // Server not running but should be enabled - start it
                 startServer(newConfig, skipSave = true)
             } else {
                 JsonObject()
@@ -378,15 +396,14 @@ class OpcUaServerExtension(
                     certificateConfig = at.rocworks.stores.CertificateConfig()
                 )
 
-                // Add the full server config to the connection config's JSON representation
-                val configJsonObject = connectionConfig.toJsonObject()
-                configJsonObject.put("opcUaServerConfig", serverConfigJson)
+                // Add the full server config to the connection config's extra fields
+                connectionConfig.extraFields.put("opcUaServerConfig", serverConfigJson)
 
                 val deviceConfig = at.rocworks.stores.DeviceConfig(
                     name = config.name,
                     namespace = config.namespace,
                     nodeId = config.nodeId,
-                    config = at.rocworks.stores.OpcUaConnectionConfig.fromJsonObject(configJsonObject),
+                    config = connectionConfig,
                     enabled = config.enabled,
                     type = DEVICE_TYPE
                 )
