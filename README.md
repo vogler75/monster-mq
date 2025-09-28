@@ -8,7 +8,7 @@ A MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data sto
 - **Multi-Database Support** - PostgreSQL, CrateDB, MongoDB, SQLite backends
 - **Hazelcast Clustering** - Multi-node scalability with automatic failover
 - **Message Archiving** - Persistent storage with configurable retention policies
-- **OPC UA Integration** - Native industrial protocol support with certificate security
+- **OPC UA Server** - Industrial protocol server with MQTT bridge and real-time subscriptions
 - **GraphQL API** - Real-time data access and management interface
 - **MCP Server** - AI model integration through Model Context Protocol
 - **User Authentication** - BCrypt-secured user management with ACL rules
@@ -22,7 +22,7 @@ A MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data sto
 
 ```bash
 # Pull from Docker Hub
-docker run -p 1883:1883 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
+docker run -p 1883:1883 -p 4840:4840 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
 
 # Or with PostgreSQL
 docker-compose up -d
@@ -135,7 +135,7 @@ Available at: **[rocworks/monstermq:latest](https://hub.docker.com/r/rocworks/mo
 docker pull rocworks/monstermq:latest
 
 # Run with custom configuration
-docker run -p 1883:1883 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
+docker run -p 1883:1883 -p 4840:4840 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
 
 # Docker Compose with PostgreSQL
 
@@ -150,6 +150,7 @@ services:
       - "8883:8883"    # MQTT TLS
       - "9000:9000"    # WebSocket
       - "9001:9001"    # WebSocket TLS
+      - "4840:4840"    # OPC UA Server
       - "4000:4000"    # GraphQL API
       - "3000:3000"    # MCP Server
     volumes:
@@ -209,23 +210,119 @@ MCP:
 | MQTT TLS | 8883 | MQTT over TLS/SSL |
 | WebSocket | 9000 | MQTT over WebSocket |
 | WebSocket TLS | 9001 | MQTT over secure WebSocket |
+| **OPC UA Server** | **4840** | **Industrial protocol with MQTT bridge** |
 | GraphQL API | 4000 | Management and real-time data |
 | MCP Server | 3000 | AI model integration |
 
+## 🏭 OPC UA Server
+
+MonsterMQ includes a built-in **OPC UA Server** that bridges MQTT and OPC UA protocols, enabling seamless integration between modern IoT systems and industrial automation.
+
+### Key Features
+
+- **MQTT-to-OPC UA Bridge** - Automatically creates OPC UA nodes from MQTT topics
+- **Real-time Subscriptions** - OPC UA clients receive live updates when MQTT messages arrive
+- **Multiple Data Types** - Support for TEXT, NUMERIC, BOOLEAN, BINARY, and JSON data types
+- **Hierarchical Structure** - MQTT topic paths become OPC UA folder hierarchies
+- **Eclipse Milo Foundation** - Built on industry-standard Eclipse Milo OPC UA SDK
+- **Web-based Configuration** - Configure address mappings through the GraphQL dashboard
+
+### Configuration
+
+Configure OPC UA servers through the GraphQL API or dashboard:
+
+```yaml
+# Example configuration (via GraphQL API)
+mutation {
+  createOpcUaServer(input: {
+    name: "test"
+    enabled: true
+    port: 4840
+    namespaceUri: "urn:MonsterMQ:OpcUaServer"
+    addressMappings: [
+      {
+        topicPattern: "sensors/temperature/#"
+        browseName: "temperature"
+        dataType: NUMERIC
+        accessLevel: READ_ONLY
+      }
+      {
+        topicPattern: "devices/status/#"
+        browseName: "status"
+        dataType: TEXT
+        accessLevel: READ_WRITE
+      }
+    ]
+  }) {
+    success
+  }
+}
+```
+
+### Data Type Mapping
+
+| MQTT Payload | OPC UA Data Type | Example |
+|-------------|------------------|---------|
+| `"23.5"` | Double (NUMERIC) | Temperature sensor |
+| `"true"` | Boolean (BOOLEAN) | Status flags |
+| `"Hello World"` | String (TEXT) | Status messages |
+| `"base64data"` | ByteString (BINARY) | File transfers |
+| `{"temp":23.5}` | String (JSON) | Complex data |
+
+### Address Space Structure
+
+MQTT topics are automatically mapped to OPC UA nodes:
+
+```
+MQTT Topic: sensors/temperature/room1
+OPC UA Path: Objects/MonsterMQ/sensors/temperature/room1
+
+MQTT Topic: factory/line1/status
+OPC UA Path: Objects/MonsterMQ/factory/line1/status
+```
+
+### Real-time Updates
+
+When MQTT messages are published, OPC UA subscribers receive immediate notifications:
+
+1. **MQTT Message Published** → `sensors/temp1` with payload `"24.5"`
+2. **OPC UA Node Updated** → `MonsterMQ/sensors/temp1` value becomes `24.5`
+3. **Subscriptions Notified** → All OPC UA clients subscribed to the node receive the update
+
 ## 🧪 Example Usage
 
+### MQTT Operations
 ```bash
 # Publish message
 mosquitto_pub -h localhost -p 1883 -t "sensors/temp1" -m "23.5"
 
 # Subscribe to topics
 mosquitto_sub -h localhost -p 1883 -t "sensors/#"
+```
 
-# GraphQL query (current values)
+### OPC UA Operations
+```bash
+# Connect with OPC UA client
+opc.tcp://localhost:4840/server
+
+# Browse namespace
+Objects/MonsterMQ/sensors/temp1
+
+# Subscribe to data changes
+# (Temperature updates will be received in real-time)
+```
+
+### GraphQL Queries
+```bash
+# Query current values
 curl -X POST http://localhost:4000/graphql \
   -H "Content-Type: application/json" \
   -d '{"query": "query { currentValue(topic: \"sensors/temp1\") { payload timestamp } }"}'
 
+# Publish via GraphQL
+curl -X POST http://localhost:4000/graphql \
+  -H "Content-Type: application/json" \
+  -d '{"query": "mutation { publish(input: {topic: \"sensors/temp1\", payload: \"25.0\", qos: 0}) { success } }"}'
 ```
 
 ## 📋 Requirements
