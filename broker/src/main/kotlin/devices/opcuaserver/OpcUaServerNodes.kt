@@ -196,10 +196,11 @@ class OpcUaServerNodes(
         // Create node ID based on topic
         val nodeId = NodeId(namespaceIndex, mqttTopic)
 
-        // Get the last part of the topic as default browse name
+        // Get the last part of the topic as default browse name and display name
         val topicParts = mqttTopic.split("/")
         val defaultBrowseName = topicParts.lastOrNull() ?: "value"
         val browseName = address.browseName ?: defaultBrowseName
+        val displayName = defaultBrowseName // Use leaf name for display
 
         // Determine access level using AccessLevel enum like the gateway
         val accessLevelValue = when (address.accessLevel) {
@@ -213,7 +214,7 @@ class OpcUaServerNodes(
             setAccessLevel(accessLevelValue)
             setUserAccessLevel(accessLevelValue)
             setBrowseName(QualifiedName(namespaceIndex, browseName))
-            setDisplayName(LocalizedText.english(address.displayName))
+            setDisplayName(LocalizedText.english(displayName))
             setDataType(OpcUaDataConverter.getOpcUaDataType(address.dataType))
             setTypeDefinition(Identifiers.BaseDataVariableType)
             setMinimumSamplingInterval(100.0)

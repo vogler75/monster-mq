@@ -166,6 +166,12 @@ class OpcUaServerInstance(
     private fun setupConfiguredNodes() {
         logger.info("Setting up ${config.addresses.size} configured nodes for OPC UA server '${config.name}'")
         config.addresses.forEach { address ->
+            // Skip wildcard patterns - they are for subscriptions only, not for creating nodes
+            if (address.mqttTopic.contains("#") || address.mqttTopic.contains("+")) {
+                logger.info("Skipping node creation for wildcard pattern: ${address.mqttTopic}")
+                return@forEach
+            }
+
             try {
                 nodeManager?.createOrUpdateVariableNode(
                     address.mqttTopic,
