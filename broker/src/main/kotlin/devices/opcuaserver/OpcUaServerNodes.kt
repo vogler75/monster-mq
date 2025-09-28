@@ -55,19 +55,55 @@ class OpcUaServerNodes(
     override fun getFilter() = filter
 
     override fun onDataItemsCreated(items: List<DataItem>) {
-        // Implementation for data item creation
+        logger.info("DataItems created: ${items.size} items")
+        items.forEach { item ->
+            logger.info("  Created DataItem: ${item.readValueId.nodeId} sampling interval: ${item.samplingInterval}")
+
+            // Get the current value for this node and send it immediately to the subscriber
+            val nodeId = item.readValueId.nodeId
+            val topic = nodeIdToTopic[nodeId]
+            if (topic != null) {
+                val node = variableNodes[topic]
+                if (node != null) {
+                    try {
+                        // Get current value and trigger immediate notification
+                        val currentValue = node.value
+                        logger.info("  Sending current value to new subscriber for topic: $topic, value: ${currentValue.value}")
+
+                        // Trigger value change notification for this specific DataItem
+                        // This ensures new subscribers get the current value immediately
+                        node.setValue(currentValue)
+                    } catch (e: Exception) {
+                        logger.warning("Error sending current value to new subscriber: ${e.message}")
+                    }
+                } else {
+                    logger.warning("  No variable node found for topic: $topic")
+                }
+            } else {
+                logger.warning("  No topic mapping found for NodeId: $nodeId")
+            }
+        }
     }
 
     override fun onDataItemsModified(items: List<DataItem>) {
-        // Implementation for data item modification
+        logger.info("DataItems modified: ${items.size} items")
+        items.forEach { item ->
+            logger.info("  Modified DataItem: ${item.readValueId.nodeId} sampling interval: ${item.samplingInterval}")
+        }
     }
 
     override fun onDataItemsDeleted(items: List<DataItem>) {
-        // Implementation for data item deletion
+        logger.info("DataItems deleted: ${items.size} items")
+        items.forEach { item ->
+            logger.info("  Deleted DataItem: ${item.readValueId.nodeId}")
+        }
     }
 
     override fun onMonitoringModeChanged(items: List<MonitoredItem>) {
-        // Implementation for monitoring mode changes
+        logger.info("Monitoring mode changed: ${items.size} items")
+        items.forEach { item ->
+            logger.info("  MonitoredItem: ${item.readValueId.nodeId}")
+        }
     }
 
     private fun inverseReferenceTo(node: UaVariableNode, targetNodeId: NodeId, typeId: NodeId) {
