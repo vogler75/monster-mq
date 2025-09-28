@@ -89,7 +89,7 @@ class OpcUaServerNodes(
                 logger.info("Creating MonsterMQ root folder with namespace index: $namespaceIndex")
 
                 // Create root folder using gateway pattern
-                val rootNodeId = NodeId(namespaceIndex, ROOT_FOLDER_NAME)
+                val rootNodeId = NodeId(namespaceIndex, "$ROOT_FOLDER_NAME:o")
                 val rootFolder = UaFolderNode(
                     nodeContext,
                     rootNodeId,
@@ -122,9 +122,11 @@ class OpcUaServerNodes(
     }
 
     private fun createFolderUnderParent(parentNodeId: NodeId, folderName: String): NodeId {
-        val path = "${parentNodeId.identifier}/$folderName"
+        // Extract the base path without the :o suffix
+        val parentPath = parentNodeId.identifier.toString().removeSuffix(":o")
+        val path = "$parentPath/$folderName"
         return folderNodes.computeIfAbsent(path) {
-            val folderNodeId = NodeId(namespaceIndex, path)
+            val folderNodeId = NodeId(namespaceIndex, "$path:o")
             val folderNode = UaFolderNode(
                 nodeContext,
                 folderNodeId,
@@ -193,8 +195,8 @@ class OpcUaServerNodes(
         // Create hierarchical folders
         val parentNodeId = createHierarchicalFolders(mqttTopic)
 
-        // Create node ID based on topic
-        val nodeId = NodeId(namespaceIndex, mqttTopic)
+        // Create node ID based on topic with MonsterMQ prefix and :v suffix
+        val nodeId = NodeId(namespaceIndex, "$ROOT_FOLDER_NAME/$mqttTopic:v")
 
         // Get the last part of the topic as default browse name and display name
         val topicParts = mqttTopic.split("/")
