@@ -9,6 +9,8 @@ import org.eclipse.milo.opcua.sdk.server.api.DataItem
 import org.eclipse.milo.opcua.sdk.server.api.ManagedAddressSpaceFragmentWithLifecycle
 import org.eclipse.milo.opcua.sdk.server.api.MonitoredItem
 import org.eclipse.milo.opcua.sdk.server.api.SimpleAddressSpaceFilter
+import org.eclipse.milo.opcua.sdk.server.nodes.AttributeContext
+import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode
 import org.eclipse.milo.opcua.stack.core.Identifiers
@@ -43,6 +45,8 @@ class OpcUaServerNodes(
     private val topicToNodeId = ConcurrentHashMap<String, NodeId>()
     private val nodeIdToTopic = ConcurrentHashMap<NodeId, String>()
     private val nodeUpdateTimes = ConcurrentHashMap<NodeId, AtomicLong>()
+    // Store DataItems for proper subscription notifications (like gateway implementation)
+    private val nodeDataItems = ConcurrentHashMap<NodeId, MutableList<DataItem>>()
     @Volatile
     private var monsterMqRootNodeId: NodeId? = null
 
@@ -59,20 +63,29 @@ class OpcUaServerNodes(
         items.forEach { item ->
             logger.info("  Created DataItem: ${item.readValueId.nodeId} sampling interval: ${item.samplingInterval}")
 
-            // Get the current value for this node and send it immediately to the subscriber
             val nodeId = item.readValueId.nodeId
+
+            // Store the DataItem for later notifications (like gateway implementation)
+            nodeDataItems.computeIfAbsent(nodeId) { mutableListOf() }.add(item)
+
+            // Send current value to new subscriber using item.setValue() (like gateway implementation)
             val topic = nodeIdToTopic[nodeId]
             if (topic != null) {
                 val node = variableNodes[topic]
                 if (node != null) {
                     try {
-                        // Get current value and trigger immediate notification
-                        val currentValue = node.value
+                        // Get current value using proper OPC UA read mechanism (like gateway)
+                        val currentValue = node.readAttribute(
+                            AttributeContext(item.session.server),
+                            item.readValueId.attributeId,
+                            TimestampsToReturn.Both,
+                            item.readValueId.indexRange,
+                            item.readValueId.dataEncoding
+                        )
                         logger.info("  Sending current value to new subscriber for topic: $topic, value: ${currentValue.value}")
 
-                        // Trigger value change notification for this specific DataItem
-                        // This ensures new subscribers get the current value immediately
-                        node.setValue(currentValue)
+                        // Use item.setValue() to properly trigger subscription notifications (like gateway)
+                        item.setValue(currentValue)
                     } catch (e: Exception) {
                         logger.warning("Error sending current value to new subscriber: ${e.message}")
                     }
@@ -96,6 +109,15 @@ class OpcUaServerNodes(
         logger.info("DataItems deleted: ${items.size} items")
         items.forEach { item ->
             logger.info("  Deleted DataItem: ${item.readValueId.nodeId}")
+
+            // Remove DataItem from our tracking map to prevent memory leaks
+            val nodeId = item.readValueId.nodeId
+            nodeDataItems[nodeId]?.remove(item)
+
+            // Clean up empty lists
+            if (nodeDataItems[nodeId]?.isEmpty() == true) {
+                nodeDataItems.remove(nodeId)
+            }
         }
     }
 
@@ -295,7 +317,19 @@ class OpcUaServerNodes(
 
         if (now - lastUpdate >= config.updateInterval) {
             try {
-                node.setValue(dataValue)
+                // Use the value property instead of setValue() method to properly trigger OPC UA notifications
+                // This is how the gateway implementation does it to ensure subscription notifications work
+                node.value = dataValue
+
+                // Notify all DataItems for this node to trigger subscription notifications (like gateway pattern)
+                nodeDataItems[nodeId]?.forEach { item ->
+                    try {
+                        logger.finest("Notifying DataItem subscriber for topic: $mqttTopic, value: ${dataValue.value}")
+                        item.setValue(dataValue)
+                    } catch (e: Exception) {
+                        logger.warning("Error notifying DataItem subscriber: ${e.message}")
+                    }
+                }
             } catch (e: Exception) {
                 logger.warning("Error setting node value: ${e.message}")
             }
