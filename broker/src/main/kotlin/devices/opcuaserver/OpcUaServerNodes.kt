@@ -377,10 +377,10 @@ class OpcUaServerNodes(
             if (topic != null) {
                 try {
                     val dataValue = writeValue.value
-                    logger.info("OPC UA write to node: $topic, value: ${dataValue.value}")
-                    logger.info("Calling onNodeWrite callback for topic: $topic")
+                    logger.fine("OPC UA write to node: $topic, value: ${dataValue.value}")
+                    logger.fine("Calling onNodeWrite callback for topic: $topic")
                     onNodeWrite(topic, dataValue)
-                    logger.info("onNodeWrite callback completed for topic: $topic")
+                    logger.fine("onNodeWrite callback completed for topic: $topic")
                 } catch (e: Exception) {
                     logger.warning("Error handling OPC UA write for topic $topic: ${e.message}")
                     e.printStackTrace()
