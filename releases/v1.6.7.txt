@@ -1,0 +1,10 @@
+Release v1.6.7
+Built from commit: ba9d4d3
+Date: 2025-09-28 22:54:51
+
+Changes since v1.6.6:
+---
+ba9d4d3 Merge branch 'main' of github.com:vogler75/monster-mq
+c43c0a3 Improve device config error handling and validation
+89beb45 Changed entrypoint.sh
+815fa9f Update version.txt
