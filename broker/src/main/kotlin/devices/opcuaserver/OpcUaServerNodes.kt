@@ -260,7 +260,7 @@ class OpcUaServerNodes(
         val topicParts = mqttTopic.split("/")
         val defaultBrowseName = topicParts.lastOrNull() ?: "value"
         val browseName = address.browseName ?: defaultBrowseName
-        val displayName = defaultBrowseName // Use leaf name for display
+        val displayName = address.displayName?.takeIf { it.isNotBlank() } ?: defaultBrowseName
 
         // Determine access level using AccessLevel enum like the gateway
         val accessLevelValue = when (address.accessLevel) {

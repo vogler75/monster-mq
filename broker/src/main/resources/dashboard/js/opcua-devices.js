@@ -29,7 +29,13 @@ class OpcUaDeviceManager {
 
         // Check if user is admin
         const isAdmin = localStorage.getItem('monstermq_isAdmin') === 'true';
-        if (!isAdmin) {
+        const usersLink = document.getElementById('users-link');
+        if (isAdmin) {
+            // Show Users menu for admin users
+            if (usersLink) {
+                usersLink.style.display = 'inline';
+            }
+        } else {
             // Hide admin-only elements
             document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
         }

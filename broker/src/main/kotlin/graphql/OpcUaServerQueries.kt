@@ -220,7 +220,7 @@ class OpcUaServerQueries(
             .map { addrJson ->
                 OpcUaServerAddressInfo(
                     mqttTopic = addrJson.getString("mqttTopic", ""),
-                    displayName = addrJson.getString("displayName", ""),
+                    displayName = addrJson.getString("displayName")?.takeIf { it.isNotBlank() },
                     browseName = addrJson.getString("browseName"),
                     description = addrJson.getString("description"),
                     dataType = addrJson.getString("dataType", "TEXT"),
@@ -360,7 +360,7 @@ data class OpcUaServerInfo(
 
 data class OpcUaServerAddressInfo(
     val mqttTopic: String,
-    val displayName: String,
+    val displayName: String?,
     val browseName: String?,
     val description: String?,
     val dataType: String,

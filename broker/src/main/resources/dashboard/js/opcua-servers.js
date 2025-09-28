@@ -43,6 +43,13 @@ function checkAuthAndLoadData() {
         });
     }
 
+    // Check if user is admin and show Users menu
+    const isAdmin = localStorage.getItem('monstermq_isAdmin') === 'true';
+    const usersLink = document.getElementById('users-link');
+    if (isAdmin && usersLink) {
+        usersLink.style.display = 'inline';
+    }
+
     loadServers();
     loadClusterNodes();
 }
@@ -588,20 +595,24 @@ async function addInlineAddress() {
     const mqttTopic = document.getElementById('inline-address-mqtt-topic').value.trim();
     const displayName = document.getElementById('inline-address-display-name').value.trim();
 
-    if (!mqttTopic || !displayName) {
-        showErrorMessage('MQTT Topic and Display Name are required');
+    if (!mqttTopic) {
+        showErrorMessage('MQTT Topic is required');
         return;
     }
 
     const address = {
         mqttTopic: mqttTopic,
-        displayName: displayName,
         browseName: null,  // Not needed
         description: null,  // Not needed
         dataType: document.getElementById('inline-address-data-type').value,
         accessLevel: document.getElementById('inline-address-access-level').value,
         unit: null  // Not needed
     };
+
+    // Only include displayName if it's not empty
+    if (displayName) {
+        address.displayName = displayName;
+    }
 
     try {
         const mutation = `

@@ -75,7 +75,7 @@ data class OpcUaServerConfig(
  */
 data class OpcUaServerAddress(
     val mqttTopic: String,                      // MQTT topic pattern with wildcards (e.g., "factory/+/temperature")
-    val displayName: String,                    // Human-readable display name for OPC UA node
+    val displayName: String? = null,            // Optional human-readable display name for OPC UA node
     val browseName: String? = null,             // Optional browse name (defaults to last topic segment)
     val description: String? = null,            // Optional description for the node
     val dataType: OpcUaServerDataType,          // Data type conversion strategy
@@ -86,7 +86,7 @@ data class OpcUaServerAddress(
         fun fromJsonObject(json: JsonObject): OpcUaServerAddress {
             return OpcUaServerAddress(
                 mqttTopic = json.getString("mqttTopic"),
-                displayName = json.getString("displayName"),
+                displayName = json.getString("displayName")?.takeIf { it.isNotBlank() },
                 browseName = json.getString("browseName"),
                 description = json.getString("description"),
                 dataType = OpcUaServerDataType.valueOf(
@@ -103,8 +103,8 @@ data class OpcUaServerAddress(
     fun toJsonObject(): JsonObject {
         return JsonObject()
             .put("mqttTopic", mqttTopic)
-            .put("displayName", displayName)
             .apply {
+                displayName?.let { put("displayName", it) }
                 browseName?.let { put("browseName", it) }
                 description?.let { put("description", it) }
                 unit?.let { put("unit", it) }

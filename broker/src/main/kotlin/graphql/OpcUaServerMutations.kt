@@ -447,9 +447,6 @@ class OpcUaServerMutations(
             if (addr.mqttTopic.isBlank()) {
                 throw IllegalArgumentException("MQTT topic cannot be empty")
             }
-            if (addr.displayName.isBlank()) {
-                throw IllegalArgumentException("Display name cannot be empty")
-            }
         }
     }
 
@@ -600,7 +597,7 @@ class OpcUaServerMutations(
             .map { addrJson ->
                 OpcUaServerAddressInfo(
                     mqttTopic = addrJson.getString("mqttTopic", ""),
-                    displayName = addrJson.getString("displayName", ""),
+                    displayName = addrJson.getString("displayName")?.takeIf { it.isNotBlank() },
                     browseName = addrJson.getString("browseName"),
                     description = addrJson.getString("description"),
                     dataType = addrJson.getString("dataType", "TEXT"),
@@ -736,7 +733,7 @@ class OpcUaServerMutations(
     private fun parseOpcUaServerAddress(input: Map<String, Any>): OpcUaServerAddress {
         return OpcUaServerAddress(
             mqttTopic = input["mqttTopic"] as? String ?: throw IllegalArgumentException("MQTT topic is required"),
-            displayName = input["displayName"] as? String ?: throw IllegalArgumentException("Display name is required"),
+            displayName = (input["displayName"] as? String)?.takeIf { it.isNotBlank() },
             browseName = input["browseName"] as? String,
             description = input["description"] as? String,
             dataType = input["dataType"]?.let {

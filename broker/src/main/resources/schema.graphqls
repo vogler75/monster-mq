@@ -822,8 +822,8 @@ type OpcUaServer {
 type OpcUaServerAddress {
     # MQTT topic pattern with wildcards (e.g., "factory/+/temperature")
     mqttTopic: String!
-    # Human-readable display name for the OPC UA node
-    displayName: String!
+    # Optional human-readable display name for the OPC UA node
+    displayName: String
     # Optional browse name (defaults to last topic segment)
     browseName: String
     # Optional description for the node
@@ -984,8 +984,8 @@ input OpcUaServerInput {
 input OpcUaServerAddressInput {
     # MQTT topic pattern with wildcards (e.g., "factory/+/temperature")
     mqttTopic: String!
-    # Human-readable display name for the OPC UA node
-    displayName: String!
+    # Optional human-readable display name for the OPC UA node
+    displayName: String
     # Optional browse name (defaults to last topic segment)
     browseName: String
     # Optional description for the node
