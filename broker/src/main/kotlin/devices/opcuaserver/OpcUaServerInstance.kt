@@ -296,13 +296,13 @@ class OpcUaServerInstance(
         val nodeExists = nodeManager?.updateNodeValue(topicName, dataValue) ?: false
 
         if (!nodeExists) {
-            // Create new node dynamically with write access enabled
+            // Create new node dynamically with the access level from the matching pattern
             val specificAddress = addressConfig.copy(
-                mqttTopic = topicName,
-                accessLevel = OpcUaAccessLevel.READ_WRITE // Enable write access for dynamic nodes
+                mqttTopic = topicName
+                // Keep the original accessLevel from the pattern configuration
             )
             nodeManager?.createOrUpdateVariableNode(topicName, specificAddress, dataValue)
-            logger.fine("Created new OPC UA node for topic: $topicName with READ_WRITE access")
+            logger.fine("Created new OPC UA node for topic: $topicName with ${addressConfig.accessLevel} access")
         } else {
             logger.fine("Updated existing OPC UA node for topic: $topicName")
         }

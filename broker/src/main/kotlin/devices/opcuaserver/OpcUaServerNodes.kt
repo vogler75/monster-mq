@@ -50,6 +50,8 @@ class OpcUaServerNodes(
     private val nodeUpdateTimes = ConcurrentHashMap<NodeId, AtomicLong>()
     // Store DataItems for proper subscription notifications (like gateway implementation)
     private val nodeDataItems = ConcurrentHashMap<NodeId, MutableList<DataItem>>()
+    // Fast lookup for write access control - only READ_WRITE nodes are in this set
+    private val writableTopics = ConcurrentHashMap.newKeySet<String>()
     @Volatile
     private var monsterMqRootNodeId: NodeId? = null
 
@@ -291,9 +293,9 @@ class OpcUaServerNodes(
             build()
         }
 
-        // Store write-enabled nodes for later write handling
+        // Store write-enabled nodes for fast write access checking
         if (address.accessLevel == OpcUaAccessLevel.READ_WRITE) {
-            // We'll handle writes in the namespace's write method override
+            writableTopics.add(mqttTopic)
             logger.fine("Node $mqttTopic configured for write operations")
         }
 
@@ -375,15 +377,20 @@ class OpcUaServerNodes(
             val topic = nodeIdToTopic[nodeId]
 
             if (topic != null) {
-                try {
-                    val dataValue = writeValue.value
-                    logger.fine("OPC UA write to node: $topic, value: ${dataValue.value}")
-                    logger.fine("Calling onNodeWrite callback for topic: $topic")
-                    onNodeWrite(topic, dataValue)
-                    logger.fine("onNodeWrite callback completed for topic: $topic")
-                } catch (e: Exception) {
-                    logger.warning("Error handling OPC UA write for topic $topic: ${e.message}")
-                    e.printStackTrace()
+                // Fast access level check - only process writes for READ_WRITE nodes
+                if (writableTopics.contains(topic)) {
+                    try {
+                        val dataValue = writeValue.value
+                        logger.fine("OPC UA write to node: $topic, value: ${dataValue.value}")
+                        logger.fine("Calling onNodeWrite callback for topic: $topic")
+                        onNodeWrite(topic, dataValue)
+                        logger.fine("onNodeWrite callback completed for topic: $topic")
+                    } catch (e: Exception) {
+                        logger.warning("Error handling OPC UA write for topic $topic: ${e.message}")
+                        e.printStackTrace()
+                    }
+                } else {
+                    logger.fine("Write to READ_ONLY node rejected: $topic")
                 }
             }
         }
