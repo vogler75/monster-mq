@@ -118,19 +118,8 @@ class OpcUaServerMutations(
                         val deviceConfig = result.result()!!
                         val configJson = JsonObject(deviceConfig.config.toJsonObject().toString())
 
-                        // Get the stored OPC UA server config or create from legacy data
-                        val serverConfig = if (configJson.containsKey("opcUaServerConfig")) {
-                            OpcUaServerConfig.fromJsonObject(configJson.getJsonObject("opcUaServerConfig"))
-                        } else {
-                            // Legacy fallback - reconstruct from device config
-                            configJson.apply {
-                                put("name", deviceConfig.name)
-                                put("namespace", deviceConfig.namespace)
-                                put("nodeId", deviceConfig.nodeId)
-                                put("enabled", true)
-                            }
-                            OpcUaServerConfig.fromJsonObject(configJson)
-                        }.copy(enabled = true) // Enable when starting
+                        // Load server config using helper method (handles both old and new formats)
+                        val serverConfig = loadServerConfigFromDeviceConfig(deviceConfig).copy(enabled = true) // Enable when starting
 
                         // Update enabled status in store
                         val updatedDeviceConfig = deviceConfig.copy(enabled = true)
@@ -256,19 +245,8 @@ class OpcUaServerMutations(
                         val deviceConfig = result.result()!!
                         val configJson = JsonObject(deviceConfig.config.toJsonObject().toString())
 
-                        // Get the stored OPC UA server config or create from legacy data
-                        val serverConfig = if (configJson.containsKey("opcUaServerConfig")) {
-                            OpcUaServerConfig.fromJsonObject(configJson.getJsonObject("opcUaServerConfig"))
-                        } else {
-                            // Legacy fallback - reconstruct from device config
-                            configJson.apply {
-                                put("name", deviceConfig.name)
-                                put("namespace", deviceConfig.namespace)
-                                put("nodeId", deviceConfig.nodeId)
-                                put("enabled", deviceConfig.enabled)
-                            }
-                            OpcUaServerConfig.fromJsonObject(configJson)
-                        }
+                        // Load server config using helper method (handles both old and new formats)
+                        val serverConfig = loadServerConfigFromDeviceConfig(deviceConfig)
 
                         // Parse new address
                         val newAddress = parseOpcUaServerAddress(addressInput)
@@ -337,19 +315,8 @@ class OpcUaServerMutations(
                         val deviceConfig = result.result()!!
                         val configJson = JsonObject(deviceConfig.config.toJsonObject().toString())
 
-                        // Get the stored OPC UA server config or create from legacy data
-                        val serverConfig = if (configJson.containsKey("opcUaServerConfig")) {
-                            OpcUaServerConfig.fromJsonObject(configJson.getJsonObject("opcUaServerConfig"))
-                        } else {
-                            // Legacy fallback - reconstruct from device config
-                            configJson.apply {
-                                put("name", deviceConfig.name)
-                                put("namespace", deviceConfig.namespace)
-                                put("nodeId", deviceConfig.nodeId)
-                                put("enabled", deviceConfig.enabled)
-                            }
-                            OpcUaServerConfig.fromJsonObject(configJson)
-                        }
+                        // Load server config using helper method (handles both old and new formats)
+                        val serverConfig = loadServerConfigFromDeviceConfig(deviceConfig)
 
                         // Remove the address with matching MQTT topic
                         val updatedAddresses = serverConfig.addresses.filter { it.mqttTopic != mqttTopic }
@@ -454,20 +421,8 @@ class OpcUaServerMutations(
      * Convert OpcUaServerConfig to DeviceConfig
      */
     private fun convertToDeviceConfig(serverConfig: OpcUaServerConfig): DeviceConfig {
-        // Store the full OPC UA server configuration in the config field as JSON
-        val serverConfigJson = serverConfig.toJsonObject()
-
-        // Convert server addresses to OpcUaAddress format for storage in the addresses field
-        val opcUaAddresses = serverConfig.addresses.map { serverAddress ->
-            at.rocworks.stores.OpcUaAddress(
-                address = serverAddress.mqttTopic,
-                topic = serverAddress.mqttTopic,
-                publishMode = "SEPARATE",
-                removePath = false
-            )
-        }
-
-        // Create a wrapper OpcUaConnectionConfig that contains the full server config
+        // Create a flattened config structure by merging OpcUaConnectionConfig with OpcUaServerConfig
+        // and remove nodeId/enabled (stored in DeviceConfig table directly)
         val connectionConfig = OpcUaConnectionConfig(
             endpointUrl = "opc.tcp://localhost:${serverConfig.port}/${serverConfig.path}",
             updateEndpointUrl = false,
@@ -480,12 +435,20 @@ class OpcUaServerMutations(
             connectionTimeout = 10000L,
             requestTimeout = 5000L,
             monitoringParameters = MonitoringParameters(),
-            addresses = opcUaAddresses, // Store server addresses here for visibility
+            addresses = emptyList(), // No addresses at this level
             certificateConfig = CertificateConfig()
         )
 
-        // Add the full server config to the connection config's extra fields
-        connectionConfig.extraFields.put("opcUaServerConfig", serverConfigJson)
+        // Flatten all OPC UA server fields to the top level (removing nodeId and enabled)
+        val serverConfigJson = serverConfig.toJsonObject().apply {
+            remove("nodeId")
+            remove("enabled")
+        }
+
+        // Merge all server config fields directly into extraFields for flat structure
+        serverConfigJson.forEach { entry ->
+            connectionConfig.extraFields.put(entry.key, entry.value)
+        }
 
         return DeviceConfig(
             name = serverConfig.name,
@@ -501,63 +464,28 @@ class OpcUaServerMutations(
      * Convert DeviceConfig to OpcUaServerInfo
      */
     private fun convertToOpcUaServerInfo(deviceConfig: DeviceConfig): OpcUaServerInfo {
-        // Get the connection config JSON
+        // Get the flattened config JSON (OPC UA server fields are at top level now)
         val configJson = JsonObject(deviceConfig.config.toJsonObject().toString())
 
-        // Check if we have the full OPC UA server config stored
-        val serverConfigJson = configJson.getJsonObject("opcUaServerConfig")
-
-        return if (serverConfigJson != null) {
-            // Use the stored OPC UA server configuration
-            OpcUaServerInfo(
-                name = deviceConfig.name,
-                namespace = deviceConfig.namespace,
-                nodeId = deviceConfig.nodeId,
-                enabled = deviceConfig.enabled,
-                port = serverConfigJson.getInteger("port", 4840),
-                path = serverConfigJson.getString("path", "monstermq"),
-                namespaceIndex = serverConfigJson.getInteger("namespaceIndex", 1),
-                namespaceUri = serverConfigJson.getString("namespaceUri", "urn:monstermq:opcua:${deviceConfig.name}"),
-                addresses = parseAddresses(serverConfigJson),
-                security = parseSecurity(serverConfigJson),
-                bufferSize = serverConfigJson.getInteger("bufferSize", 1000),
-                updateInterval = serverConfigJson.getLong("updateInterval", 1000L),
-                createdAt = serverConfigJson.getString("createdAt") ?: Instant.now().toString(),
-                updatedAt = serverConfigJson.getString("updatedAt") ?: Instant.now().toString(),
-                isOnCurrentNode = deviceConfig.nodeId == "*" || deviceConfig.nodeId == currentNodeId,
-                status = null
-            )
-        } else {
-            // Fallback for legacy data or missing config - extract port from endpointUrl
-            val endpointUrl = configJson.getString("endpointUrl", "opc.tcp://localhost:4840/monstermq")
-            val port = extractPortFromEndpointUrl(endpointUrl)
-            val path = extractPathFromEndpointUrl(endpointUrl)
-
-            OpcUaServerInfo(
-                name = deviceConfig.name,
-                namespace = deviceConfig.namespace,
-                nodeId = deviceConfig.nodeId,
-                enabled = deviceConfig.enabled,
-                port = port,
-                path = path,
-                namespaceIndex = configJson.getInteger("namespaceIndex", 1),
-                namespaceUri = configJson.getString("namespaceUri", "urn:monstermq:opcua:${deviceConfig.name}"),
-                addresses = emptyList(),
-                security = OpcUaServerSecurityInfo(
-                    keystorePath = "server-keystore.jks",
-                    certificateAlias = "server-cert",
-                    securityPolicies = listOf("None"),
-                    allowAnonymous = true,
-                    requireAuthentication = false
-                ),
-                bufferSize = configJson.getInteger("bufferSize", 1000),
-                updateInterval = configJson.getLong("updateInterval", 1000L),
-                createdAt = Instant.now().toString(),
-                updatedAt = Instant.now().toString(),
-                isOnCurrentNode = deviceConfig.nodeId == "*" || deviceConfig.nodeId == currentNodeId,
-                status = null
-            )
-        }
+        // All OPC UA server fields are now flattened to the top level
+        return OpcUaServerInfo(
+            name = deviceConfig.name,
+            namespace = deviceConfig.namespace,
+            nodeId = deviceConfig.nodeId,
+            enabled = deviceConfig.enabled,
+            port = configJson.getInteger("port", 4840),
+            path = configJson.getString("path", "server"),
+            namespaceIndex = configJson.getInteger("namespaceIndex", 1),
+            namespaceUri = configJson.getString("namespaceUri", "urn:monstermq:opcua:${deviceConfig.name}"),
+            addresses = parseAddresses(configJson),
+            security = parseSecurity(configJson),
+            bufferSize = configJson.getInteger("bufferSize", 1000),
+            updateInterval = configJson.getLong("updateInterval", 1000L),
+            createdAt = configJson.getString("createdAt") ?: Instant.now().toString(),
+            updatedAt = configJson.getString("updatedAt") ?: Instant.now().toString(),
+            isOnCurrentNode = deviceConfig.nodeId == "*" || deviceConfig.nodeId == currentNodeId,
+            status = null
+        )
     }
 
     /**
@@ -724,6 +652,33 @@ class OpcUaServerMutations(
         // Timeout after 10 seconds
         vertx.setTimer(10000) {
             callback(false, "Timeout waiting for server update command")
+        }
+    }
+
+    /**
+     * Load OpcUaServerConfig from DeviceConfig, handling both legacy nested format and new flattened format
+     */
+    private fun loadServerConfigFromDeviceConfig(deviceConfig: DeviceConfig): OpcUaServerConfig {
+        val configJson = JsonObject(deviceConfig.config.toJsonObject().toString())
+
+        return if (configJson.containsKey("opcUaServerConfig")) {
+            // Legacy nested format - extract from opcUaServerConfig field
+            val serverConfigJson = configJson.getJsonObject("opcUaServerConfig").apply {
+                // Add back nodeId and enabled from DeviceConfig
+                put("nodeId", deviceConfig.nodeId)
+                put("enabled", deviceConfig.enabled)
+            }
+            OpcUaServerConfig.fromJsonObject(serverConfigJson)
+        } else {
+            // New flattened format - all fields are at top level
+            configJson.apply {
+                // Add back nodeId and enabled from DeviceConfig
+                put("name", deviceConfig.name)
+                put("namespace", deviceConfig.namespace)
+                put("nodeId", deviceConfig.nodeId)
+                put("enabled", deviceConfig.enabled)
+            }
+            OpcUaServerConfig.fromJsonObject(configJson)
         }
     }
 

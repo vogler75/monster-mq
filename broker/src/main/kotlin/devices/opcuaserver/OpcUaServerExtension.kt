@@ -180,30 +180,35 @@ class OpcUaServerExtension(
                             // Parse the configuration - the device.config should have extraFields with opcUaServerConfig
                             val configJson = device.config.toJsonObject()
 
-                            // Check if we have the full OPC UA server config stored
+                            // Handle both old nested format and new flattened format
                             val serverConfig = if (configJson.containsKey("opcUaServerConfig")) {
-                                // Use the stored OPC UA server configuration
-                                val serverConfigJson = configJson.getJsonObject("opcUaServerConfig")
+                                // Legacy nested format - extract from opcUaServerConfig field
+                                val serverConfigJson = configJson.getJsonObject("opcUaServerConfig").copy().apply {
+                                    // Add back nodeId and enabled from DeviceConfig
+                                    put("nodeId", device.nodeId)
+                                    put("enabled", device.enabled)
+                                }
                                 val config = OpcUaServerConfig.fromJsonObject(serverConfigJson)
-                                logger.info("Loaded OPC UA server '${device.name}' with ${config.addresses.size} address mappings")
+                                logger.info("Loaded OPC UA server '${device.name}' (legacy nested format) with ${config.addresses.size} address mappings")
                                 config.addresses.forEach { addr ->
                                     logger.info("  Address mapping: ${addr.mqttTopic} -> ${addr.displayName} (${addr.dataType})")
                                 }
                                 config
                             } else {
-                                // Legacy fallback - try to reconstruct from device config
-                                logger.warning("No opcUaServerConfig found in database for server '${device.name}', attempting legacy load")
-                                val fallbackJson = JsonObject()
-                                    .put("name", device.name)
-                                    .put("namespace", device.namespace)
-                                    .put("nodeId", device.nodeId)
-                                    .put("enabled", device.enabled)
-                                    .put("addresses", JsonArray())  // Empty addresses for legacy
-                                    .put("port", 4840)  // Default port
-                                    .put("path", "server")  // Default path
+                                // New flattened format or legacy fallback
+                                val serverConfigJson = configJson.copy().apply {
+                                    // Add back nodeId and enabled from DeviceConfig
+                                    put("name", device.name)
+                                    put("namespace", device.namespace)
+                                    put("nodeId", device.nodeId)
+                                    put("enabled", device.enabled)
+                                }
 
-                                val config = OpcUaServerConfig.fromJsonObject(fallbackJson)
-                                logger.info("Loaded legacy OPC UA server '${device.name}' with ${config.addresses.size} address mappings")
+                                val config = OpcUaServerConfig.fromJsonObject(serverConfigJson)
+                                logger.info("Loaded OPC UA server '${device.name}' (flattened format) with ${config.addresses.size} address mappings")
+                                config.addresses.forEach { addr ->
+                                    logger.info("  Address mapping: ${addr.mqttTopic} -> ${addr.displayName} (${addr.dataType})")
+                                }
                                 config
                             }
 
@@ -366,20 +371,8 @@ class OpcUaServerExtension(
     private fun saveServerConfig(config: OpcUaServerConfig) {
         deviceConfigStore?.let { store ->
             try {
-                // Store the full OPC UA server configuration in the config field as JSON
-                val serverConfigJson = config.toJsonObject()
-
-                // Convert server addresses to OpcUaAddress format for storage in the addresses field
-                val opcUaAddresses = config.addresses.map { serverAddress ->
-                    at.rocworks.stores.OpcUaAddress(
-                        address = serverAddress.mqttTopic,
-                        topic = serverAddress.mqttTopic,
-                        publishMode = "SEPARATE",
-                        removePath = false
-                    )
-                }
-
-                // Create a wrapper OpcUaConnectionConfig that contains the full server config
+                // Create a flattened config structure by merging OpcUaConnectionConfig with OpcUaServerConfig
+                // and remove nodeId/enabled (stored in DeviceConfig table directly)
                 val connectionConfig = at.rocworks.stores.OpcUaConnectionConfig(
                     endpointUrl = "opc.tcp://localhost:${config.port}/${config.path}",
                     updateEndpointUrl = false,
@@ -392,12 +385,20 @@ class OpcUaServerExtension(
                     connectionTimeout = 10000L,
                     requestTimeout = 5000L,
                     monitoringParameters = at.rocworks.stores.MonitoringParameters(),
-                    addresses = opcUaAddresses, // Store server addresses here for visibility
+                    addresses = emptyList(), // No addresses at this level
                     certificateConfig = at.rocworks.stores.CertificateConfig()
                 )
 
-                // Add the full server config to the connection config's extra fields
-                connectionConfig.extraFields.put("opcUaServerConfig", serverConfigJson)
+                // Flatten all OPC UA server fields to the top level (removing nodeId and enabled)
+                val serverConfigJson = config.toJsonObject().apply {
+                    remove("nodeId")
+                    remove("enabled")
+                }
+
+                // Merge all server config fields directly into extraFields for flat structure
+                serverConfigJson.forEach { entry ->
+                    connectionConfig.extraFields.put(entry.key, entry.value)
+                }
 
                 val deviceConfig = at.rocworks.stores.DeviceConfig(
                     name = config.name,
