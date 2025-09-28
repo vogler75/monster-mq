@@ -36,7 +36,8 @@ class OpcUaServerInstance(
     }
 
     private var server: OpcUaServer? = null
-    private var nodeManager: OpcUaServerNodeManager? = null
+    private var namespace: OpcUaServerNamespace? = null
+    private var nodeManager: OpcUaServerNodes? = null
     private val subscribedTopics = ConcurrentHashMap<String, String>() // topic -> clientId
     private val activeConnections = AtomicInteger(0)
     private val writeValueQueue = ArrayBlockingQueue<Pair<String, ByteArray>>(config.bufferSize)
@@ -57,25 +58,28 @@ class OpcUaServerInstance(
             val serverConfig = createServerConfig()
             server = OpcUaServer(serverConfig)
 
-            // Create and register namespace manager BEFORE server startup
-            val namespaceManager = OpcUaServerNodeManager(
+            // Create namespace following gateway pattern
+            val opcUaNamespace = OpcUaServerNamespace(server!!, config.namespaceUri)
+            namespace = opcUaNamespace
+            opcUaNamespace.startup()
+
+            // Create node manager following gateway pattern
+            val opcUaNodes = OpcUaServerNodes(
+                config,
                 server!!,
-                config.namespaceUri,
-                config
+                opcUaNamespace,
+                opcUaNamespace.namespaceIndex
             ) { topic, dataValue ->
                 // Handle OPC UA node writes
                 handleOpcUaWrite(topic, dataValue)
             }
-            nodeManager = namespaceManager
+            nodeManager = opcUaNodes
+            opcUaNodes.startup()
 
-            // The ManagedNamespaceWithLifecycle will automatically register itself
-            logger.info("Namespace manager created for namespace: ${namespaceManager.namespaceUri}")
+            logger.info("Namespace and node manager created for namespace: ${config.namespaceUri}")
 
             // Start the server
             server!!.startup().get(10, TimeUnit.SECONDS)
-
-            // Initialize the namespace and create root folder (after server startup)
-            nodeManager?.initializeNodes()
 
             // Create nodes for configured addresses
             setupConfiguredNodes()
@@ -112,8 +116,9 @@ class OpcUaServerInstance(
             // Unsubscribe from MQTT topics
             unsubscribeFromMqttTopics()
 
-            // Shutdown namespace manager
-            nodeManager?.cleanupNodes()
+            // Shutdown namespace and node manager
+            nodeManager?.shutdown()
+            namespace?.shutdown()
 
             // Shutdown server
             server?.shutdown()?.get(10, TimeUnit.SECONDS)

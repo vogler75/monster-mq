@@ -4,30 +4,38 @@ import at.rocworks.Utils
 import org.eclipse.milo.opcua.sdk.core.AccessLevel
 import org.eclipse.milo.opcua.sdk.core.Reference
 import org.eclipse.milo.opcua.sdk.server.OpcUaServer
+import org.eclipse.milo.opcua.sdk.server.api.AddressSpaceComposite
 import org.eclipse.milo.opcua.sdk.server.api.DataItem
-import org.eclipse.milo.opcua.sdk.server.api.ManagedNamespaceWithLifecycle
+import org.eclipse.milo.opcua.sdk.server.api.ManagedAddressSpaceFragmentWithLifecycle
 import org.eclipse.milo.opcua.sdk.server.api.MonitoredItem
+import org.eclipse.milo.opcua.sdk.server.api.SimpleAddressSpaceFilter
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode
 import org.eclipse.milo.opcua.stack.core.Identifiers
 import org.eclipse.milo.opcua.stack.core.types.builtin.*
+import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UShort
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
 
 /**
- * Manages OPC UA nodes and their hierarchical structure for the OPC UA Server
+ * MonsterMQ OPC UA Node Manager following the gateway pattern
  */
-class OpcUaServerNodeManager(
+class OpcUaServerNodes(
+    private val config: OpcUaServerConfig,
     private val server: OpcUaServer,
-    private val namespaceUri: String,
-    private val config: at.rocworks.devices.opcuaserver.OpcUaServerConfig,
-    private val onNodeWrite: (String, DataValue) -> Unit // Callback for node writes
-) : ManagedNamespaceWithLifecycle(server, namespaceUri) {
+    composite: AddressSpaceComposite,
+    val namespaceIndex: UShort,
+    private val onNodeWrite: (String, DataValue) -> Unit
+) : ManagedAddressSpaceFragmentWithLifecycle(server, composite) {
 
     companion object {
         private const val ROOT_FOLDER_NAME = "MonsterMQ"
-        private val logger: Logger = Utils.getLogger(OpcUaServerNodeManager::class.java)
+        private val logger: Logger = Utils.getLogger(OpcUaServerNodes::class.java)
+    }
+
+    private val filter = SimpleAddressSpaceFilter.create {
+        nodeManager.containsNode(it)
     }
 
     private val folderNodes = ConcurrentHashMap<String, NodeId>()
@@ -38,85 +46,39 @@ class OpcUaServerNodeManager(
     @Volatile
     private var monsterMqRootNodeId: NodeId? = null
 
-
-
-    fun initializeNodes() {
-        logger.info("OPC UA Server namespace started with index: $namespaceIndex, URI: $namespaceUri")
-        createMonsterMQRootFolder()
+    init {
+        lifecycleManager.addStartupTask {
+            createMonsterMQRootFolder()
+        }
     }
 
-    fun ensureRootFolderVisibility() {
-        monsterMqRootNodeId?.let { rootNodeId ->
-            logger.info("Ensuring MonsterMQ root folder visibility after server startup")
-            logger.info("MonsterMQ root folder NodeId: $rootNodeId")
-            logger.info("Namespace URI: ${namespaceUri}, Namespace Index: $namespaceIndex")
+    override fun getFilter() = filter
 
-            // Add forward reference from Objects to MonsterMQ (crucial for cross-namespace browsing)
-            try {
-                val objectsNode = server.addressSpaceManager.getManagedNode(Identifiers.ObjectsFolder)
-                if (objectsNode.isPresent) {
-                    // Check if reference already exists
-                    val existingRefs = objectsNode.get().references
-                    val hasForwardRef = existingRefs.any { ref ->
-                        ref.targetNodeId == rootNodeId.expanded() &&
-                        ref.referenceTypeId == Identifiers.Organizes &&
-                        ref.direction == Reference.Direction.FORWARD
-                    }
-
-                    if (!hasForwardRef) {
-                        objectsNode.get().addReference(
-                            Reference(
-                                Identifiers.ObjectsFolder,
-                                Identifiers.Organizes,
-                                rootNodeId.expanded(),
-                                Reference.Direction.FORWARD
-                            )
-                        )
-                        logger.info("✓ Added forward reference from Objects to MonsterMQ")
-                    } else {
-                        logger.info("✓ Forward reference from Objects to MonsterMQ already exists")
-                    }
-
-                    // Verify the node exists in our namespace
-                    val monsterNode = nodeManager.get(rootNodeId)
-                    if (monsterNode != null) {
-                        logger.info("✓ MonsterMQ node exists in namespace manager")
-                    } else {
-                        logger.warning("✗ MonsterMQ node NOT found in namespace manager!")
-                    }
-
-                } else {
-                    logger.warning("✗ Objects folder not found in address space manager")
-                }
-            } catch (e: Exception) {
-                logger.warning("✗ Error ensuring root folder visibility: ${e.message}")
-                e.printStackTrace()
-            }
-        } ?: logger.warning("✗ MonsterMQ root node ID is null - root folder was not created")
-    }
-
-    fun cleanupNodes() {
-    }
-
-    // Required abstract methods from ManagedNamespaceWithLifecycle
-    override fun onDataItemsCreated(dataItems: MutableList<DataItem>) {
+    override fun onDataItemsCreated(items: List<DataItem>) {
         // Implementation for data item creation
     }
 
-    override fun onDataItemsModified(dataItems: MutableList<DataItem>) {
+    override fun onDataItemsModified(items: List<DataItem>) {
         // Implementation for data item modification
     }
 
-    override fun onDataItemsDeleted(dataItems: MutableList<DataItem>) {
+    override fun onDataItemsDeleted(items: List<DataItem>) {
         // Implementation for data item deletion
     }
 
-    override fun onMonitoringModeChanged(items: MutableList<MonitoredItem>) {
+    override fun onMonitoringModeChanged(items: List<MonitoredItem>) {
         // Implementation for monitoring mode changes
     }
 
-    private fun createRootFolder(): NodeId {
-        return monsterMqRootNodeId ?: createMonsterMQRootFolder()
+    private fun inverseReferenceTo(node: UaVariableNode, targetNodeId: NodeId, typeId: NodeId) {
+        node.addReference(
+            Reference(
+                node.nodeId,
+                typeId,
+                targetNodeId.expanded(),
+                Reference.Direction.INVERSE
+            )
+        )
     }
 
     private fun createMonsterMQRootFolder(): NodeId {
@@ -124,11 +86,10 @@ class OpcUaServerNodeManager(
 
         return synchronized(this) {
             monsterMqRootNodeId ?: run {
-                // Create root folder using Eclipse Milo's proper pattern
-                val rootNodeId = NodeId(namespaceIndex, ROOT_FOLDER_NAME)
-
                 logger.info("Creating MonsterMQ root folder with namespace index: $namespaceIndex")
 
+                // Create root folder using gateway pattern
+                val rootNodeId = NodeId(namespaceIndex, ROOT_FOLDER_NAME)
                 val rootFolder = UaFolderNode(
                     nodeContext,
                     rootNodeId,
@@ -136,23 +97,20 @@ class OpcUaServerNodeManager(
                     LocalizedText(ROOT_FOLDER_NAME)
                 )
 
-                // Add to our namespace manager first
+                // Add to our namespace manager
                 nodeManager.addNode(rootFolder)
                 logger.info("Added MonsterMQ root folder to node manager")
 
-                // Create bidirectional references between Objects folder and MonsterMQ
-                // 1. Add inverse reference from MonsterMQ to Objects (child -> parent)
+                // Add inverse reference from MonsterMQ to Objects folder (like gateway pattern)
                 rootFolder.addReference(
                     Reference(
                         rootNodeId,
-                        Identifiers.Organizes,
+                        Identifiers.HasComponent,
                         Identifiers.ObjectsFolder.expanded(),
                         Reference.Direction.INVERSE
                     )
                 )
                 logger.info("Added inverse reference from MonsterMQ to Objects folder")
-
-                // Note: Forward reference from Objects to MonsterMQ will be added after server startup
 
                 // Cache the root folder
                 folderNodes[ROOT_FOLDER_NAME] = rootNodeId
@@ -163,8 +121,8 @@ class OpcUaServerNodeManager(
         }
     }
 
-    private fun ensureFolder(parentNodeId: NodeId, folderName: String): NodeId {
-        val path = folderPath(parentNodeId, folderName)
+    private fun createFolderUnderParent(parentNodeId: NodeId, folderName: String): NodeId {
+        val path = "${parentNodeId.identifier}/$folderName"
         return folderNodes.computeIfAbsent(path) {
             val folderNodeId = NodeId(namespaceIndex, path)
             val folderNode = UaFolderNode(
@@ -189,27 +147,17 @@ class OpcUaServerNodeManager(
         }
     }
 
-
-    private fun folderPath(parentNodeId: NodeId, folderName: String): String {
-        return if (parentNodeId == Identifiers.ObjectsFolder) {
-            folderName
-        } else {
-            "${parentNodeId.identifier}/$folderName"
-        }
-    }
-
-
     /**
-     * Create or get a hierarchical folder structure for the given topic path
+     * Create hierarchical folder structure for topic path
      */
     fun createHierarchicalFolders(topicPath: String): NodeId {
         val parts = topicPath.split("/").filter { it.isNotEmpty() && it != "#" && it != "+" }
 
         if (parts.isEmpty()) {
-            return createRootFolder()
+            return createMonsterMQRootFolder()
         }
 
-        var currentParent = createRootFolder()
+        var currentParent = createMonsterMQRootFolder()
 
         for (i in 0 until parts.size - 1) {
             val folderName = parts[i]
@@ -219,12 +167,8 @@ class OpcUaServerNodeManager(
         return currentParent
     }
 
-    private fun createFolderUnderParent(parentNodeId: NodeId, folderName: String): NodeId {
-        return ensureFolder(parentNodeId, folderName)
-    }
-
     /**
-     * Create or update a variable node for an MQTT topic
+     * Create or update a variable node for MQTT topic (like gateway pattern)
      */
     fun createOrUpdateVariableNode(
         mqttTopic: String,
@@ -268,7 +212,7 @@ class OpcUaServerNodeManager(
             setNodeId(nodeId)
             setAccessLevel(accessLevelValue)
             setUserAccessLevel(accessLevelValue)
-            setBrowseName(QualifiedName(parentNodeId.namespaceIndex, browseName))
+            setBrowseName(QualifiedName(namespaceIndex, browseName))
             setDisplayName(LocalizedText.english(address.displayName))
             setDataType(OpcUaDataConverter.getOpcUaDataType(address.dataType))
             setTypeDefinition(Identifiers.BaseDataVariableType)
@@ -286,15 +230,8 @@ class OpcUaServerNodeManager(
         // Add node to manager
         nodeManager.addNode(variableNode)
 
-        // Add reference to parent folder
-        variableNode.addReference(
-            Reference(
-                variableNode.nodeId,
-                Identifiers.HasComponent,
-                parentNodeId.expanded(),
-                Reference.Direction.INVERSE
-            )
-        )
+        // Add reference to parent folder (like gateway pattern)
+        inverseReferenceTo(variableNode, parentNodeId, Identifiers.HasComponent)
 
         // Store mappings
         variableNodes[mqttTopic] = variableNode
@@ -347,31 +284,6 @@ class OpcUaServerNodeManager(
     }
 
     /**
-     * Remove a variable node
-     */
-    fun removeVariableNode(mqttTopic: String): Boolean {
-        val nodeId = topicToNodeId[mqttTopic] ?: return false
-        val node = variableNodes[mqttTopic] ?: return false
-
-        try {
-            // Remove from node manager
-            nodeManager.removeNode(nodeId)
-
-            // Clean up mappings
-            variableNodes.remove(mqttTopic)
-            topicToNodeId.remove(mqttTopic)
-            nodeIdToTopic.remove(nodeId)
-            nodeUpdateTimes.remove(nodeId)
-
-            logger.info("Removed variable node for topic: $mqttTopic")
-            return true
-        } catch (e: Exception) {
-            logger.warning("Failed to remove node for topic $mqttTopic: ${e.message}")
-            return false
-        }
-    }
-
-    /**
      * Get statistics about the node manager
      */
     fun getStatistics(): Map<String, Any> {
@@ -379,7 +291,7 @@ class OpcUaServerNodeManager(
             "totalNodes" to variableNodes.size,
             "totalFolders" to folderNodes.size,
             "namespaceIndex" to namespaceIndex.toInt(),
-            "namespaceUri" to namespaceUri
+            "namespaceUri" to config.namespaceUri
         )
     }
 }
