@@ -118,6 +118,7 @@ For detailed documentation, see the [`doc/`](doc/) directory:
 - **[Clustering](doc/clustering.md)** - Hazelcast clustering and high availability
 - **[Message Archiving](doc/archiving.md)** - Archive groups, retention policies, and storage
 - **[User Management & ACL](doc/user-management.md)** - Authentication and authorization system
+- **[Access Control Lists (ACL)](doc/acl.md)** - Comprehensive ACL documentation and examples
 - **[OPC UA Integration](doc/opcua.md)** - Industrial protocol support and certificates
 - **[GraphQL API](doc/graphql.md)** - Real-time data access and management
 - **[MCP Server](doc/mcp.md)** - AI model integration and analytics
