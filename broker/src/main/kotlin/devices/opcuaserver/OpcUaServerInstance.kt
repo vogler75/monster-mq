@@ -14,13 +14,10 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode
 import org.eclipse.milo.opcua.stack.server.EndpointConfiguration
 import java.net.InetAddress
-import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Logger
-import kotlin.concurrent.thread
 
 /**
  * OPC UA Server instance that exposes MQTT topics as OPC UA nodes
@@ -40,9 +37,6 @@ class OpcUaServerInstance(
     private var nodeManager: OpcUaServerNodes? = null
     private val subscribedTopics = ConcurrentHashMap<String, String>() // topic -> clientId
     private val activeConnections = AtomicInteger(0)
-    private val writeValueQueue = ArrayBlockingQueue<Pair<String, ByteArray>>(config.bufferSize)
-    private val writeValueStop = AtomicBoolean(false)
-    private var writeValueThread: Thread? = null
     private val internalClientId = "opcua-server-${config.name}"
     private var status = OpcUaServerStatus.Status.STOPPED
 
@@ -87,9 +81,6 @@ class OpcUaServerInstance(
             // Subscribe to MQTT topics
             subscribeToMqttTopics()
 
-            // Start write value thread
-            startWriteValueThread()
-
             status = OpcUaServerStatus.Status.RUNNING
             logger.info("OPC UA Server '${config.name}' started successfully on port ${config.port}")
 
@@ -109,9 +100,6 @@ class OpcUaServerInstance(
         return try {
             logger.info("Stopping OPC UA Server '${config.name}'")
             status = OpcUaServerStatus.Status.STOPPING
-
-            // Stop write value thread
-            stopWriteValueThread()
 
             // Unsubscribe from MQTT topics
             unsubscribeFromMqttTopics()
@@ -308,85 +296,94 @@ class OpcUaServerInstance(
         val nodeExists = nodeManager?.updateNodeValue(topicName, dataValue) ?: false
 
         if (!nodeExists) {
-            // Create new node dynamically
-            val specificAddress = addressConfig.copy(mqttTopic = topicName)
+            // Create new node dynamically with write access enabled
+            val specificAddress = addressConfig.copy(
+                mqttTopic = topicName,
+                accessLevel = OpcUaAccessLevel.READ_WRITE // Enable write access for dynamic nodes
+            )
             nodeManager?.createOrUpdateVariableNode(topicName, specificAddress, dataValue)
-            logger.info("Created new OPC UA node for topic: $topicName")
+            logger.info("Created new OPC UA node for topic: $topicName with READ_WRITE access")
         } else {
             logger.info("Updated existing OPC UA node for topic: $topicName")
         }
     }
 
+    /**
+     * Check if a topic matches a wildcard pattern
+     */
+    private fun matchesWildcardPattern(topic: String, pattern: String): Boolean {
+        if (!pattern.contains("+") && !pattern.contains("#")) {
+            return false
+        }
+
+        val topicParts = topic.split("/")
+        val patternParts = pattern.split("/")
+
+        // Handle multi-level wildcard (#) - should be at the end
+        if (pattern.endsWith("#")) {
+            val basePattern = pattern.dropLast(1) // Remove the #
+            return topic.startsWith(basePattern)
+        }
+
+        // Handle single-level wildcards (+)
+        if (topicParts.size != patternParts.size) {
+            return false
+        }
+
+        for (i in patternParts.indices) {
+            if (patternParts[i] != "+" && patternParts[i] != topicParts[i]) {
+                return false
+            }
+        }
+
+        return true
+    }
 
     /**
      * Handle OPC UA node writes and publish to MQTT
      */
     private fun handleOpcUaWrite(topic: String, dataValue: org.eclipse.milo.opcua.stack.core.types.builtin.DataValue) {
+        logger.info("OPC UA write to node: $topic, value: ${dataValue.value}")
+
         try {
-            // Find the corresponding address configuration
-            val address = config.addresses.find { it.mqttTopic == topic }
+            // Find any address configuration that matches this topic pattern
+            // We only need this to get the dataType for conversion
+            val address = config.addresses.find { addressConfig ->
+                addressConfig.mqttTopic == topic ||
+                (addressConfig.mqttTopic.endsWith("/#") &&
+                 topic.startsWith(addressConfig.mqttTopic.dropLast(2))) ||
+                matchesWildcardPattern(topic, addressConfig.mqttTopic)
+            }
+
             if (address != null) {
                 // Convert OPC UA DataValue to MQTT payload
                 val payload = OpcUaDataConverter.opcUaToMqtt(dataValue, address.dataType)
+                logger.info("Publishing OPC UA write to MQTT topic: $topic")
 
-                // Queue for publishing to MQTT
-                if (!writeValueQueue.offer(Pair(topic, payload))) {
-                    logger.warning("Write value queue is full, dropping message for topic: $topic")
-                }
+                // Publish directly to MQTT (sessionHandler.publishInternal is already async)
+                val message = MqttMessage(
+                    messageId = 0,
+                    topicName = topic,
+                    payload = payload,
+                    qosLevel = 0,
+                    isRetain = false,
+                    isDup = false,
+                    isQueued = false,
+                    clientId = internalClientId,
+                    sender = internalClientId // Mark as coming from this OPC UA server
+                )
+
+                sessionHandler.publishInternal(internalClientId, message)
+                logger.info("Successfully published OPC UA write to MQTT topic: $topic")
+            } else {
+                logger.warning("No address configuration found for topic: $topic - unable to determine data type")
             }
         } catch (e: Exception) {
-            logger.warning("Error handling OPC UA write for topic $topic: ${e.message}")
+            logger.severe("Error handling OPC UA write for topic $topic: ${e.message}")
+            e.printStackTrace()
         }
     }
 
-    /**
-     * Start the write value thread for MQTT publishing
-     */
-    private fun startWriteValueThread() {
-        writeValueStop.set(false)
-        writeValueThread = thread(name = "OpcUaServer-WriteThread-${config.name}") {
-            logger.info("Write value thread started for OPC UA Server '${config.name}'")
-
-            while (!writeValueStop.get()) {
-                try {
-                    val (topic, payload) = writeValueQueue.poll(100, TimeUnit.MILLISECONDS)
-                        ?: continue
-
-                    // Publish to MQTT with sender identification
-                    val message = MqttMessage(
-                        messageId = 0,
-                        topicName = topic,
-                        payload = payload,
-                        qosLevel = 0,
-                        isRetain = false,
-                        isDup = false,
-                        isQueued = false,
-                        clientId = internalClientId,
-                        sender = internalClientId // Mark as coming from this OPC UA server
-                    )
-
-                    sessionHandler.publishInternal(internalClientId, message)
-                    logger.fine("Published OPC UA write to MQTT topic: $topic")
-
-                } catch (e: InterruptedException) {
-                    // Normal shutdown
-                    break
-                } catch (e: Exception) {
-                    logger.warning("Error in write value thread: ${e.message}")
-                }
-            }
-            logger.info("Write value thread stopped for OPC UA Server '${config.name}'")
-        }
-    }
-
-    /**
-     * Stop the write value thread
-     */
-    private fun stopWriteValueThread() {
-        writeValueStop.set(true)
-        writeValueThread?.interrupt()
-        writeValueThread?.join(5000)
-    }
 
     /**
      * Get current server status

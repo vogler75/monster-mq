@@ -14,6 +14,9 @@ import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode
 import org.eclipse.milo.opcua.stack.core.Identifiers
+import org.eclipse.milo.opcua.stack.core.StatusCodes
+import org.eclipse.milo.opcua.sdk.server.api.services.AttributeServices
+import org.eclipse.milo.opcua.stack.core.types.structured.WriteValue
 import org.eclipse.milo.opcua.stack.core.types.builtin.*
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UShort
 import java.util.concurrent.ConcurrentHashMap
@@ -288,6 +291,12 @@ class OpcUaServerNodes(
             build()
         }
 
+        // Store write-enabled nodes for later write handling
+        if (address.accessLevel == OpcUaAccessLevel.READ_WRITE) {
+            // We'll handle writes in the namespace's write method override
+            logger.fine("Node $mqttTopic configured for write operations")
+        }
+
         // Add node to manager
         nodeManager.addNode(variableNode)
 
@@ -354,6 +363,33 @@ class OpcUaServerNodes(
      */
     fun getAllTopics(): Set<String> {
         return topicToNodeId.keys.toSet()
+    }
+
+    /**
+     * Override write method to handle OPC UA node writes
+     */
+    override fun write(context: AttributeServices.WriteContext, writeValues: MutableList<WriteValue>) {
+        // Process each write request
+        writeValues.forEach { writeValue ->
+            val nodeId = writeValue.nodeId
+            val topic = nodeIdToTopic[nodeId]
+
+            if (topic != null) {
+                try {
+                    val dataValue = writeValue.value
+                    logger.info("OPC UA write to node: $topic, value: ${dataValue.value}")
+                    logger.info("Calling onNodeWrite callback for topic: $topic")
+                    onNodeWrite(topic, dataValue)
+                    logger.info("onNodeWrite callback completed for topic: $topic")
+                } catch (e: Exception) {
+                    logger.warning("Error handling OPC UA write for topic $topic: ${e.message}")
+                    e.printStackTrace()
+                }
+            }
+        }
+
+        // Call super to perform the actual write
+        super.write(context, writeValues)
     }
 
     /**
