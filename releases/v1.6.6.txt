@@ -1,0 +1,32 @@
+Release v1.6.6
+Built from commit: 0c06440
+Date: 2025-09-28 17:21:18
+
+Changes since v1.6.5:
+---
+0c06440 Add comprehensive OPC UA and MQTT test suite
+e58a8ed Flatten OPC UA server config storage format
+360eaca Preserve access level for dynamic OPC UA nodes
+ae3e65c Update OPC UA node value before address lookup
+bfd48c4 Refactor OPC UA write handling and enable dynamic node writes
+7e01399 Make displayName optional for OPC UA server addresses
+4642ab0 Update README.md
+c71a292 Improve OPC UA subscription notification handling
+63895de Add detailed logging to OPC UA server node events
+8faad91 Update pom.xml
+6948e2a Update NodeId construction with suffixes in OPC UA nodes
+75d2207 Skip node creation for MQTT wildcard topics
+084a724 Refactor OPC UA server to use gateway pattern
+e3e100a Refactor OPC UA node hierarchy and folder creation
+e1a8c06 Refactor OPC UA server config handling and address UI
+3f55980 Improve OPC UA server config storage and node management
+0e82780 Merge branch 'main' into development
+ecfa177 Add and update documentation for dashboard and features
+827ddf7 Update .gitignore
+c0d2d76 Refactor OPC UA server config storage and UI address mapping
+dcee5c0 Add OPC UA server edit modal with address mapping management
+325c2ec Add OPC UA Server extension and unify device type constants
+36ca8f7 Add mutations to manage OPC UA server addresses
+7166fc8 Improve GraphQL server startup and update schema
+f55fc7f Add OPC UA Server integration and GraphQL support
+c369d75 Add broker version reporting to dashboard and API
