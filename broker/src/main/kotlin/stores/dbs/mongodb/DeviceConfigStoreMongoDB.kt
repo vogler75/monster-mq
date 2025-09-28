@@ -72,7 +72,12 @@ class DeviceConfigStoreMongoDB(
             val devices = mutableListOf<DeviceConfig>()
 
             for (doc in documents) {
-                devices.add(mapDocumentToDevice(doc))
+                try {
+                    devices.add(mapDocumentToDevice(doc))
+                } catch (e: DeviceConfigException) {
+                    logger.warning("Skipping invalid device record: ${e.message}")
+                    // Continue processing other records instead of failing completely
+                }
             }
 
             promise.complete(devices)
@@ -92,7 +97,12 @@ class DeviceConfigStoreMongoDB(
             val devices = mutableListOf<DeviceConfig>()
 
             for (doc in documents) {
-                devices.add(mapDocumentToDevice(doc))
+                try {
+                    devices.add(mapDocumentToDevice(doc))
+                } catch (e: DeviceConfigException) {
+                    logger.warning("Skipping invalid device record: ${e.message}")
+                    // Continue processing other records instead of failing completely
+                }
             }
 
             promise.complete(devices)
@@ -113,7 +123,12 @@ class DeviceConfigStoreMongoDB(
             val devices = mutableListOf<DeviceConfig>()
 
             for (doc in documents) {
-                devices.add(mapDocumentToDevice(doc))
+                try {
+                    devices.add(mapDocumentToDevice(doc))
+                } catch (e: DeviceConfigException) {
+                    logger.warning("Skipping invalid device record: ${e.message}")
+                    // Continue processing other records instead of failing completely
+                }
             }
 
             promise.complete(devices)
@@ -131,7 +146,12 @@ class DeviceConfigStoreMongoDB(
         try {
             val document = deviceConfigsCollection.find(eq("name", name)).first()
             if (document != null) {
-                promise.complete(mapDocumentToDevice(document))
+                try {
+                    promise.complete(mapDocumentToDevice(document))
+                } catch (e: DeviceConfigException) {
+                    logger.warning("Invalid device record for name $name: ${e.message}")
+                    promise.complete(null) // Return null for invalid records
+                }
             } else {
                 promise.complete(null)
             }
@@ -294,12 +314,30 @@ class DeviceConfigStoreMongoDB(
 
     private fun mapDocumentToDevice(document: Document): DeviceConfig {
         val configDoc = document.get("config", Document::class.java)
+        if (configDoc == null) {
+            throw DeviceConfigException("Config field is null for device")
+        }
         val configJson = JsonObject(configDoc.toJson())
 
+        val name = document.getString("name")
+        if (name == null) {
+            throw DeviceConfigException("Name field is null for device")
+        }
+
+        val namespace = document.getString("namespace")
+        if (namespace == null) {
+            throw DeviceConfigException("Namespace field is null for device")
+        }
+
+        val nodeId = document.getString("node_id")
+        if (nodeId == null) {
+            throw DeviceConfigException("Node ID field is null for device")
+        }
+
         return DeviceConfig(
-            name = document.getString("name"),
-            namespace = document.getString("namespace"),
-            nodeId = document.getString("node_id"),
+            name = name,
+            namespace = namespace,
+            nodeId = nodeId,
             config = OpcUaConnectionConfig.fromJsonObject(configJson),
             enabled = document.getBoolean("enabled", true),
             type = document.getString("type") ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,

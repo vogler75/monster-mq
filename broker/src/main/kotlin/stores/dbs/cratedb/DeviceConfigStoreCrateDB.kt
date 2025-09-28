@@ -136,7 +136,12 @@ class DeviceConfigStoreCrateDB(
                 stmt.executeQuery().use { rs ->
                     val devices = mutableListOf<DeviceConfig>()
                     while (rs.next()) {
-                        devices.add(mapResultSetToDevice(rs))
+                        try {
+                            devices.add(mapResultSetToDevice(rs))
+                        } catch (e: DeviceConfigException) {
+                            logger.warning("Skipping invalid device record: ${e.message}")
+                            // Continue processing other records instead of failing completely
+                        }
                     }
                     promise.complete(devices)
                 }
@@ -158,7 +163,12 @@ class DeviceConfigStoreCrateDB(
                 stmt.executeQuery().use { rs ->
                     val devices = mutableListOf<DeviceConfig>()
                     while (rs.next()) {
-                        devices.add(mapResultSetToDevice(rs))
+                        try {
+                            devices.add(mapResultSetToDevice(rs))
+                        } catch (e: DeviceConfigException) {
+                            logger.warning("Skipping invalid device record for node $nodeId: ${e.message}")
+                            // Continue processing other records instead of failing completely
+                        }
                     }
                     promise.complete(devices)
                 }
@@ -180,7 +190,12 @@ class DeviceConfigStoreCrateDB(
                 stmt.executeQuery().use { rs ->
                     val devices = mutableListOf<DeviceConfig>()
                     while (rs.next()) {
-                        devices.add(mapResultSetToDevice(rs))
+                        try {
+                            devices.add(mapResultSetToDevice(rs))
+                        } catch (e: DeviceConfigException) {
+                            logger.warning("Skipping invalid enabled device record for node $nodeId: ${e.message}")
+                            // Continue processing other records instead of failing completely
+                        }
                     }
                     promise.complete(devices)
                 }
@@ -201,7 +216,12 @@ class DeviceConfigStoreCrateDB(
                 stmt.setString(1, name)
                 stmt.executeQuery().use { rs ->
                     if (rs.next()) {
-                        promise.complete(mapResultSetToDevice(rs))
+                        try {
+                            promise.complete(mapResultSetToDevice(rs))
+                        } catch (e: DeviceConfigException) {
+                            logger.warning("Invalid device record for name $name: ${e.message}")
+                            promise.complete(null) // Return null for invalid records
+                        }
                     } else {
                         promise.complete(null)
                     }
@@ -365,12 +385,31 @@ class DeviceConfigStoreCrateDB(
     }
 
     private fun mapResultSetToDevice(rs: ResultSet): DeviceConfig {
-        val configJson = JsonObject(rs.getString("config"))
+        val configString = rs.getString("config")
+        if (configString == null) {
+            throw DeviceConfigException("Config column is null for device")
+        }
+        val configJson = JsonObject(configString)
+
+        val name = rs.getString("name")
+        if (name == null) {
+            throw DeviceConfigException("Name column is null for device")
+        }
+
+        val namespace = rs.getString("namespace")
+        if (namespace == null) {
+            throw DeviceConfigException("Namespace column is null for device")
+        }
+
+        val nodeId = rs.getString("node_id")
+        if (nodeId == null) {
+            throw DeviceConfigException("Node ID column is null for device")
+        }
 
         return DeviceConfig(
-            name = rs.getString("name"),
-            namespace = rs.getString("namespace"),
-            nodeId = rs.getString("node_id"),
+            name = name,
+            namespace = namespace,
+            nodeId = nodeId,
             config = OpcUaConnectionConfig.Companion.fromJsonObject(configJson),
             enabled = rs.getBoolean("enabled"),
             type = rs.getString("type") ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,

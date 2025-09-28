@@ -255,48 +255,102 @@ data class OpcUaConnectionConfig(
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): OpcUaConnectionConfig {
-            val monitoringParams = json.getJsonObject("monitoringParameters")?.let {
-                MonitoringParameters.fromJsonObject(it)
-            } ?: MonitoringParameters()
-
-            val addresses = json.getJsonArray("addresses")?.map { addressObj ->
-                OpcUaAddress.fromJsonObject(addressObj as JsonObject)
-            } ?: emptyList()
-
-            val certificateConfig = json.getJsonObject("certificateConfig")?.let {
-                CertificateConfig.fromJsonObject(it)
-            } ?: CertificateConfig()
-
-            val config = OpcUaConnectionConfig(
-                endpointUrl = json.getString("endpointUrl"),
-                updateEndpointUrl = json.getBoolean("updateEndpointUrl", true),
-                securityPolicy = json.getString("securityPolicy", "None"),
-                username = json.getString("username"),
-                password = json.getString("password"),
-                subscriptionSamplingInterval = json.getDouble("subscriptionSamplingInterval", 0.0),
-                keepAliveFailuresAllowed = json.getInteger("keepAliveFailuresAllowed", 3),
-                reconnectDelay = json.getLong("reconnectDelay", 5000),
-                connectionTimeout = json.getLong("connectionTimeout", 10000),
-                requestTimeout = json.getLong("requestTimeout", 5000),
-                monitoringParameters = monitoringParams,
-                addresses = addresses,
-                certificateConfig = certificateConfig
-            )
-
-            // Preserve any extra fields not part of the standard config
-            val standardFields = setOf(
-                "endpointUrl", "updateEndpointUrl", "securityPolicy", "username", "password",
-                "subscriptionSamplingInterval", "keepAliveFailuresAllowed", "reconnectDelay",
-                "connectionTimeout", "requestTimeout", "monitoringParameters", "addresses", "certificateConfig"
-            )
-
-            json.forEach { entry ->
-                if (!standardFields.contains(entry.key)) {
-                    config.extraFields.put(entry.key, entry.value)
+            try {
+                val monitoringParams = try {
+                    json.getJsonObject("monitoringParameters")?.let {
+                        MonitoringParameters.fromJsonObject(it)
+                    } ?: MonitoringParameters()
+                } catch (e: Exception) {
+                    println("Error parsing monitoringParameters: ${e.message}")
+                    MonitoringParameters()
                 }
-            }
 
-            return config
+                val addresses = try {
+                    json.getJsonArray("addresses")?.map { addressObj ->
+                        OpcUaAddress.fromJsonObject(addressObj as JsonObject)
+                    } ?: emptyList()
+                } catch (e: Exception) {
+                    println("Error parsing addresses: ${e.message}")
+                    emptyList()
+                }
+
+                val certificateConfig = try {
+                    json.getJsonObject("certificateConfig")?.let {
+                        CertificateConfig.fromJsonObject(it)
+                    } ?: CertificateConfig()
+                } catch (e: Exception) {
+                    println("Error parsing certificateConfig: ${e.message}")
+                    CertificateConfig()
+                }
+
+                val config = OpcUaConnectionConfig(
+                    endpointUrl = try { json.getString("endpointUrl", "opc.tcp://localhost:4840/server") } catch (e: Exception) {
+                        println("Error parsing endpointUrl: ${e.message}")
+                        "opc.tcp://localhost:4840/server"
+                    },
+                    updateEndpointUrl = try { json.getBoolean("updateEndpointUrl", true) } catch (e: Exception) {
+                        println("Error parsing updateEndpointUrl: ${e.message}")
+                        true
+                    },
+                    securityPolicy = try { json.getString("securityPolicy", "None") } catch (e: Exception) {
+                        println("Error parsing securityPolicy: ${e.message}")
+                        "None"
+                    },
+                    username = try { json.getString("username") } catch (e: Exception) {
+                        println("Error parsing username: ${e.message}")
+                        null
+                    },
+                    password = try { json.getString("password") } catch (e: Exception) {
+                        println("Error parsing password: ${e.message}")
+                        null
+                    },
+                    subscriptionSamplingInterval = try { json.getDouble("subscriptionSamplingInterval", 0.0) } catch (e: Exception) {
+                        println("Error parsing subscriptionSamplingInterval: ${e.message}")
+                        0.0
+                    },
+                    keepAliveFailuresAllowed = try { json.getInteger("keepAliveFailuresAllowed", 3) } catch (e: Exception) {
+                        println("Error parsing keepAliveFailuresAllowed: ${e.message}")
+                        3
+                    },
+                    reconnectDelay = try { json.getLong("reconnectDelay", 5000) } catch (e: Exception) {
+                        println("Error parsing reconnectDelay: ${e.message}")
+                        5000
+                    },
+                    connectionTimeout = try { json.getLong("connectionTimeout", 10000) } catch (e: Exception) {
+                        println("Error parsing connectionTimeout: ${e.message}")
+                        10000
+                    },
+                    requestTimeout = try { json.getLong("requestTimeout", 5000) } catch (e: Exception) {
+                        println("Error parsing requestTimeout: ${e.message}")
+                        5000
+                    },
+                    monitoringParameters = monitoringParams,
+                    addresses = addresses,
+                    certificateConfig = certificateConfig
+                )
+
+                // Preserve any extra fields not part of the standard config
+                val standardFields = setOf(
+                    "endpointUrl", "updateEndpointUrl", "securityPolicy", "username", "password",
+                    "subscriptionSamplingInterval", "keepAliveFailuresAllowed", "reconnectDelay",
+                    "connectionTimeout", "requestTimeout", "monitoringParameters", "addresses", "certificateConfig"
+                )
+
+                try {
+                    json.forEach { entry ->
+                        if (!standardFields.contains(entry.key)) {
+                            config.extraFields.put(entry.key, entry.value)
+                        }
+                    }
+                } catch (e: Exception) {
+                    println("Error processing extra fields: ${e.message}")
+                }
+
+                return config
+            } catch (e: Exception) {
+                println("Overall error in fromJsonObject: ${e.message}")
+                throw e
+            }
         }
     }
 

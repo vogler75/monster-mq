@@ -161,7 +161,12 @@ class DeviceConfigStorePostgres(
                 stmt.executeQuery().use { rs ->
                     val devices = mutableListOf<DeviceConfig>()
                     while (rs.next()) {
-                        devices.add(mapResultSetToDevice(rs))
+                        try {
+                            devices.add(mapResultSetToDevice(rs))
+                        } catch (e: DeviceConfigException) {
+                            logger.warning("Skipping invalid device record: ${e.message}")
+                            // Continue processing other records instead of failing completely
+                        }
                     }
                     promise.complete(devices)
                 }
@@ -183,7 +188,12 @@ class DeviceConfigStorePostgres(
                 stmt.executeQuery().use { rs ->
                     val devices = mutableListOf<DeviceConfig>()
                     while (rs.next()) {
-                        devices.add(mapResultSetToDevice(rs))
+                        try {
+                            devices.add(mapResultSetToDevice(rs))
+                        } catch (e: DeviceConfigException) {
+                            logger.warning("Skipping invalid device record for node $nodeId: ${e.message}")
+                            // Continue processing other records instead of failing completely
+                        }
                     }
                     promise.complete(devices)
                 }
@@ -205,7 +215,12 @@ class DeviceConfigStorePostgres(
                 stmt.executeQuery().use { rs ->
                     val devices = mutableListOf<DeviceConfig>()
                     while (rs.next()) {
-                        devices.add(mapResultSetToDevice(rs))
+                        try {
+                            devices.add(mapResultSetToDevice(rs))
+                        } catch (e: DeviceConfigException) {
+                            logger.warning("Skipping invalid enabled device record for node $nodeId: ${e.message}")
+                            // Continue processing other records instead of failing completely
+                        }
                     }
                     promise.complete(devices)
                 }
@@ -226,7 +241,12 @@ class DeviceConfigStorePostgres(
                 stmt.setString(1, name)
                 stmt.executeQuery().use { rs ->
                     if (rs.next()) {
-                        promise.complete(mapResultSetToDevice(rs))
+                        try {
+                            promise.complete(mapResultSetToDevice(rs))
+                        } catch (e: DeviceConfigException) {
+                            logger.warning("Invalid device record for name $name: ${e.message}")
+                            promise.complete(null) // Return null for invalid records
+                        }
                     } else {
                         promise.complete(null)
                     }
@@ -390,17 +410,77 @@ class DeviceConfigStorePostgres(
     }
 
     private fun mapResultSetToDevice(rs: ResultSet): DeviceConfig {
-        val configJson = JsonObject(rs.getString("config"))
+        // Get all fields first to identify which one is null - using wasNull() to detect nulls safely
+        val name = rs.getString("name")
+        val nameWasNull = rs.wasNull()
+
+        val namespace = rs.getString("namespace")
+        val namespaceWasNull = rs.wasNull()
+
+        val nodeId = rs.getString("node_id")
+        val nodeIdWasNull = rs.wasNull()
+
+        val configString = rs.getString("config")
+        val configWasNull = rs.wasNull()
+
+        val type = rs.getString("type")
+        val typeWasNull = rs.wasNull()
+
+        val createdAt = rs.getTimestamp("created_at")
+        val createdAtWasNull = rs.wasNull()
+
+        val updatedAt = rs.getTimestamp("updated_at")
+        val updatedAtWasNull = rs.wasNull()
+
+        // Log debug info for problematic records
+        logger.info("Device record debug - name: $name (null: $nameWasNull), namespace: $namespace (null: $namespaceWasNull), nodeId: $nodeId (null: $nodeIdWasNull), config: ${if (configWasNull) "NULL" else "present"}, type: $type (null: $typeWasNull), createdAt: ${if (createdAtWasNull) "NULL" else createdAt}, updatedAt: ${if (updatedAtWasNull) "NULL" else updatedAt}")
+
+        // Check for null values in critical fields
+
+        if (nameWasNull) {
+            throw DeviceConfigException("Name column is null for device")
+        }
+
+        if (namespaceWasNull) {
+            throw DeviceConfigException("Namespace column is null for device name: $name")
+        }
+
+        if (nodeIdWasNull) {
+            throw DeviceConfigException("Node ID column is null for device name: $name")
+        }
+
+        if (configWasNull) {
+            throw DeviceConfigException("Config column is null for device name: $name")
+        }
+
+        if (createdAtWasNull) {
+            throw DeviceConfigException("Created timestamp is null for device name: $name")
+        }
+
+        if (updatedAtWasNull) {
+            throw DeviceConfigException("Updated timestamp is null for device name: $name")
+        }
+
+        val configJson = JsonObject(configString)
+        logger.info("Config JSON for device $name: $configString")
+
+        val opcUaConfig = try {
+            OpcUaConnectionConfig.Companion.fromJsonObject(configJson)
+        } catch (e: Exception) {
+            logger.severe("Failed to parse OpcUaConnectionConfig for device $name: ${e.message}")
+            logger.severe("Config JSON content: $configString")
+            throw DeviceConfigException("Failed to parse config JSON for device $name", e)
+        }
 
         return DeviceConfig(
-            name = rs.getString("name"),
-            namespace = rs.getString("namespace"),
-            nodeId = rs.getString("node_id"),
-            config = OpcUaConnectionConfig.Companion.fromJsonObject(configJson),
+            name = name!!,
+            namespace = namespace!!,
+            nodeId = nodeId!!,
+            config = opcUaConfig,
             enabled = rs.getBoolean("enabled"),
-            type = rs.getString("type") ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,
-            createdAt = rs.getTimestamp("created_at").toInstant(),
-            updatedAt = rs.getTimestamp("updated_at").toInstant()
+            type = type ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,
+            createdAt = createdAt!!.toInstant(),
+            updatedAt = updatedAt!!.toInstant()
         )
     }
 }
