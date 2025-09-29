@@ -152,7 +152,10 @@ data class OpcUaServerSecurity(
     val certificateAlias: String = "server-cert",       // Certificate alias in keystore
     val securityPolicies: List<String> = listOf("None", "Basic256Sha256"),
     val allowAnonymous: Boolean = true,
-    val requireAuthentication: Boolean = false          // Use MonsterMQ user management
+    val requireAuthentication: Boolean = false,         // Use MonsterMQ user management
+    val allowUnencrypted: Boolean = true,               // Allow unencrypted connections (set to false to require encryption)
+    val certificateDir: String = "./security",          // Directory for certificates
+    val createSelfSigned: Boolean = true                // Create self-signed certificate if not exists
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): OpcUaServerSecurity {
@@ -164,7 +167,10 @@ data class OpcUaServerSecurity(
                     .filterIsInstance<String>()
                     .ifEmpty { listOf("None", "Basic256Sha256") },
                 allowAnonymous = json.getBoolean("allowAnonymous", true),
-                requireAuthentication = json.getBoolean("requireAuthentication", false)
+                requireAuthentication = json.getBoolean("requireAuthentication", false),
+                allowUnencrypted = json.getBoolean("allowUnencrypted", true),
+                certificateDir = json.getString("certificateDir", "./security"),
+                createSelfSigned = json.getBoolean("createSelfSigned", true)
             )
         }
     }
@@ -177,6 +183,9 @@ data class OpcUaServerSecurity(
             .put("securityPolicies", JsonArray(securityPolicies))
             .put("allowAnonymous", allowAnonymous)
             .put("requireAuthentication", requireAuthentication)
+            .put("allowUnencrypted", allowUnencrypted)
+            .put("certificateDir", certificateDir)
+            .put("createSelfSigned", createSelfSigned)
     }
 }
 
