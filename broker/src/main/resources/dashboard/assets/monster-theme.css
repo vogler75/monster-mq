@@ -186,6 +186,7 @@ body {
     justify-content: center;
     padding: 1rem 0;
     width: 100%;
+    padding-left: 8px;
 }
 
 /* Keep the logo visible and centered when collapsed */
@@ -202,6 +203,18 @@ body {
 /* Make the logo clickable when collapsed */
 .sidebar.collapsed .sidebar-brand {
     cursor: pointer;
+}
+
+/* Center the user info in collapsed sidebar */
+.sidebar.collapsed .user-info {
+    justify-content: center;
+    padding: 0.5rem 0;
+    padding-left: 8px;
+}
+
+/* Hide the user name in collapsed sidebar, keep only avatar */
+.sidebar.collapsed .user-info #user-name {
+    display: none;
 }
 
 /* Login page navbar styling (since it still uses old navbar structure) */
