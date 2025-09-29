@@ -40,6 +40,64 @@
             width: auto;
         }
 
+        .btn-icon svg {
+            margin: 0;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .btn svg {
+            flex-shrink: 0;
+        }
+
+        /* Enhanced table styling */
+        .data-table {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+        }
+
+        .data-table table {
+            margin: 0;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+        }
+
+        .data-table thead th {
+            background: var(--dark-surface-2);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--dark-border);
+        }
+
+        .data-table tbody td {
+            padding: 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+        }
+
+        .data-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
         .status-badge {
             padding: 0.25rem 0.75rem;
             border-radius: 9999px;
@@ -367,7 +425,14 @@
             background: var(--dark-bg);
         }
 
-        /* Action buttons for addresses table */
+        /* Action buttons for server table */
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            align-items: center;
+        }
+
         .btn-action {
             display: inline-flex;
             align-items: center;
@@ -387,11 +452,52 @@
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
         }
 
+        .btn-view {
+            color: var(--monster-purple);
+        }
+
+        .btn-view:hover {
+            background: rgba(124, 58, 237, 0.1);
+            border-color: var(--monster-purple);
+            color: var(--monster-light);
+        }
+
+        .btn-play {
+            color: var(--monster-green);
+        }
+
+        .btn-play:hover {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: var(--monster-green);
+            color: #22c55e;
+        }
+
+        .btn-pause {
+            color: var(--monster-orange);
+        }
+
+        .btn-pause:hover {
+            background: rgba(249, 115, 22, 0.1);
+            border-color: var(--monster-orange);
+            color: #fb923c;
+        }
+
         .btn-delete {
             color: var(--monster-red);
         }
 
         .btn-delete:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--monster-red);
+            color: #f87171;
+        }
+
+        /* Action buttons for addresses table */
+        .btn-delete-address {
+            color: var(--monster-red);
+        }
+
+        .btn-delete-address:hover {
             background: rgba(239, 68, 68, 0.1);
             border-color: var(--monster-red);
             color: #f87171;

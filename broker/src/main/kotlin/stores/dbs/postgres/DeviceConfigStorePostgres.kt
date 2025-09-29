@@ -431,8 +431,6 @@ class DeviceConfigStorePostgres(
         val updatedAt = rs.getTimestamp("updated_at")
         val updatedAtWasNull = rs.wasNull()
 
-        // Log debug info for problematic records
-        logger.info("Device record debug - name: $name (null: $nameWasNull), namespace: $namespace (null: $namespaceWasNull), nodeId: $nodeId (null: $nodeIdWasNull), config: ${if (configWasNull) "NULL" else "present"}, type: $type (null: $typeWasNull), createdAt: ${if (createdAtWasNull) "NULL" else createdAt}, updatedAt: ${if (updatedAtWasNull) "NULL" else updatedAt}")
 
         // Check for null values in critical fields
 
@@ -468,7 +466,6 @@ class DeviceConfigStorePostgres(
             throw DeviceConfigException("Failed to parse config JSON for device $name", e)
         }
 
-        logger.info("Config JSON for device $name: $configString")
 
         return DeviceConfig(
             name = name!!,
