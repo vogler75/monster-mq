@@ -45,8 +45,15 @@ fi
 NEW_PATCH=$((PATCH + 1))
 NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
 
+# Get current git SHA before making any changes (this will be the base for the version)
+GIT_SHA=$(git rev-parse --short HEAD)
+
+# Create version string with git SHA
+VERSION_WITH_SHA="${NEW_VERSION}+${GIT_SHA}"
+
 echo -e "${YELLOW}Current version: ${BASE_VERSION}${NC}"
 echo -e "${GREEN}New version: ${NEW_VERSION}${NC}"
+echo -e "${GREEN}Git SHA: ${GIT_SHA}${NC}"
 
 # Check for uncommitted changes
 if ! git diff-index --quiet HEAD --; then
@@ -66,9 +73,12 @@ if git rev-parse "v${NEW_VERSION}" >/dev/null 2>&1; then
     exit 1
 fi
 
-# First, update version.txt with the new version (without SHA yet)
-echo "$NEW_VERSION" > version.txt
-echo -e "${GREEN}✓ Updated version.txt to ${NEW_VERSION}${NC}"
+# Create version string with git SHA using current commit (before any changes)
+VERSION_WITH_SHA="${NEW_VERSION}+${GIT_SHA}"
+
+# Update version.txt with the version including SHA
+echo "$VERSION_WITH_SHA" > version.txt
+echo -e "${GREEN}✓ Updated version.txt to ${VERSION_WITH_SHA}${NC}"
 
 # Copy version.txt to broker resources for runtime access
 mkdir -p broker/src/main/resources
@@ -100,17 +110,6 @@ git add version.txt broker/src/main/resources/version.txt "$RELEASE_NOTES_FILE"
 git commit -m "Bump version to ${NEW_VERSION}" || {
     echo -e "${YELLOW}No changes to commit (files might already be staged)${NC}"
 }
-
-# Now get the commit SHA and update version.txt with SHA for reference
-GIT_SHA=$(git rev-parse --short HEAD)
-VERSION_WITH_SHA="${NEW_VERSION}+${GIT_SHA}"
-
-echo -e "${GREEN}Git SHA: ${GIT_SHA}${NC}"
-
-# Update version.txt with SHA for reference (this won't be committed, just for development tracking)
-echo "$VERSION_WITH_SHA" > version.txt
-cp version.txt broker/src/main/resources/version.txt
-echo -e "${GREEN}✓ Updated version.txt to include SHA: ${VERSION_WITH_SHA}${NC}"
 
 # Create git tag
 echo -e "${YELLOW}Creating git tag v${NEW_VERSION}...${NC}"
