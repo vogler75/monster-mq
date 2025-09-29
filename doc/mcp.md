@@ -179,3 +179,96 @@ interface QueryMessageArchiveBySqlParams {
   }
 }
 ```
+
+## Topic Configuration and Metadata
+
+### MCP Config Topic
+
+MonsterMQ uses a special configuration topic suffix `<config>` to store metadata and descriptions for MQTT topics. This enables AI models to better understand the purpose and context of data streams.
+
+#### How It Works
+
+For any MQTT topic, you can publish a configuration message to `{topic}/<config>` containing metadata:
+
+```bash
+# Publish configuration for a temperature sensor
+mosquitto_pub -t "sensors/temperature/room1/<config>" -m '{
+  "description": "Temperature sensor in conference room 1",
+  "unit": "°C",
+  "type": "temperature",
+  "location": "Conference Room 1",
+  "range": {"min": 15, "max": 35}
+}'
+
+# Publish configuration for a humidity sensor
+mosquitto_pub -t "sensors/humidity/office/<config>" -m '{
+  "description": "Humidity monitoring for office environment",
+  "unit": "%RH",
+  "type": "humidity",
+  "location": "Main Office",
+  "critical_threshold": 80
+}'
+```
+
+#### Configuration Format
+
+The configuration message should be valid JSON and can contain any metadata fields:
+
+```json
+{
+  "description": "Human-readable description of the topic",
+  "unit": "Measurement unit (°C, %RH, ppm, etc.)",
+  "type": "Data type or sensor category",
+  "location": "Physical location description",
+  "range": {"min": 0, "max": 100},
+  "thresholds": {
+    "warning": 75,
+    "critical": 90
+  },
+  "tags": ["sensor", "environmental", "critical"],
+  "owner": "maintenance-team",
+  "installation_date": "2024-01-15"
+}
+```
+
+#### MCP Integration
+
+The MCP server uses these configuration topics to provide richer context to AI models:
+
+1. **Enhanced Topic Discovery**: The `find-topics-by-description` tool searches through these configuration descriptions
+2. **Contextual Information**: AI models receive topic metadata alongside data values
+3. **Smart Filtering**: Configuration allows filtering by location, type, or other attributes
+
+#### Best Practices
+
+- **Use Descriptive Names**: Include clear, human-readable descriptions
+- **Standardize Units**: Use consistent unit formats (°C, %RH, ppm)
+- **Include Context**: Add location, installation date, and ownership information
+- **Set Thresholds**: Define warning and critical thresholds for monitoring
+- **Use Tags**: Add searchable tags for categorization
+
+#### Example: Environmental Monitoring Setup
+
+```bash
+# Temperature sensors
+mosquitto_pub -t "building/floor1/room101/temperature/<config>" -m '{
+  "description": "Temperature sensor for server room environmental monitoring",
+  "unit": "°C",
+  "type": "temperature",
+  "location": "Server Room 101, Floor 1",
+  "critical_max": 25,
+  "tags": ["environmental", "server-room", "critical"]
+}'
+
+# Humidity sensors
+mosquitto_pub -t "building/floor1/room101/humidity/<config>" -m '{
+  "description": "Humidity sensor for server room environmental monitoring",
+  "unit": "%RH",
+  "type": "humidity",
+  "location": "Server Room 101, Floor 1",
+  "critical_max": 60,
+  "tags": ["environmental", "server-room", "critical"]
+}'
+```
+
+This allows AI models to understand that these are critical environmental sensors in a server room and respond appropriately to threshold violations.
