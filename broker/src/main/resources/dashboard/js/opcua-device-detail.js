@@ -28,17 +28,7 @@ class OpcUaDeviceDetailManager {
             console.log('Authentication appears to be disabled, continuing...');
         }
 
-        // Set up logout handler
-        const logoutLink = document.getElementById('logout-link');
-        if (logoutLink) {
-            logoutLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                localStorage.removeItem('monstermq_token');
-                localStorage.removeItem('monstermq_username');
-                localStorage.removeItem('monstermq_isAdmin');
-                window.location.href = '/pages/login.html';
-            });
-        }
+        // UI setup is now handled by sidebar.js
 
         // Get device name from URL parameters
         const urlParams = new URLSearchParams(window.location.search);

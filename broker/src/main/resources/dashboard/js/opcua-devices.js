@@ -15,30 +15,7 @@ class OpcUaDeviceManager {
         // Since user management is disabled, skip authentication check
         console.log('Initializing without authentication check (user management disabled)');
 
-        // Set up logout handler
-        const logoutLink = document.getElementById('logout-link');
-        if (logoutLink) {
-            logoutLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                localStorage.removeItem('monstermq_token');
-                localStorage.removeItem('monstermq_username');
-                localStorage.removeItem('monstermq_isAdmin');
-                window.location.href = '/pages/login.html';
-            });
-        }
-
-        // Check if user is admin
-        const isAdmin = localStorage.getItem('monstermq_isAdmin') === 'true';
-        const usersLink = document.getElementById('users-link');
-        if (isAdmin) {
-            // Show Users menu for admin users
-            if (usersLink) {
-                usersLink.style.display = 'inline';
-            }
-        } else {
-            // Hide admin-only elements
-            document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
-        }
+        // UI setup is now handled by sidebar.js
 
         // Load initial data
         await this.loadClusterNodes();

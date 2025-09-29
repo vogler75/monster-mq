@@ -1,18 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MonsterMQ - Sessions</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/assets/monster-theme.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/js/graphql-client.js"></script>
-    <script src="/js/sidebar.js"></script>
-</head>
-<body>
+<!--
+    SIDEBAR TEMPLATE for MonsterMQ Dashboard Pages
+
+    To use this template in a page:
+    1. Add the sidebar.js script: <script src="/js/sidebar.js"></script>
+    2. Copy the entire sidebar HTML structure below
+    3. Set the appropriate nav-item as "active" for the current page
+    4. Wrap your main content in <div class="main-content" id="main-content">
+-->
+
     <!-- Mobile Top Bar -->
     <div class="top-bar">
         <div class="sidebar-brand">
@@ -54,7 +49,7 @@
                     </svg>
                     <span class="nav-text">Dashboard</span>
                 </a>
-                <a href="/pages/sessions.html" class="nav-item active">
+                <a href="/pages/sessions.html" class="nav-item">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
                         <circle cx="9" cy="7" r="4"></circle>
@@ -133,116 +128,3 @@
             </div>
         </div>
     </aside>
-
-    <div class="main-content" id="main-content">
-        <div class="container">
-            <div class="page-header">
-                <h1 class="page-title">Session Management</h1>
-                <p class="page-subtitle">Monitor and manage MQTT client sessions across your cluster</p>
-            </div>
-
-            <div class="metrics-grid" style="margin-bottom: 2rem;">
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Total Sessions</span>
-                        <div class="metric-icon">👥</div>
-                    </div>
-                    <div class="metric-value" id="total-sessions">0</div>
-                    <div class="metric-label">All Nodes</div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Connected</span>
-                        <div class="metric-icon">🟢</div>
-                    </div>
-                    <div class="metric-value" id="connected-sessions">0</div>
-                    <div class="metric-label">Active Connections</div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Disconnected</span>
-                        <div class="metric-icon">🔴</div>
-                    </div>
-                    <div class="metric-value" id="disconnected-sessions">0</div>
-                    <div class="metric-label">Persistent Sessions</div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Queued Messages</span>
-                        <div class="metric-icon">⏳</div>
-                    </div>
-                    <div class="metric-value" id="total-queued">0</div>
-                    <div class="metric-label">Pending Delivery</div>
-                </div>
-            </div>
-
-            <div class="chart-container" style="margin-bottom: 2rem;">
-                <div class="chart-header">
-                    <h2 class="chart-title">Session Distribution by Node</h2>
-                </div>
-                <canvas id="sessionDistributionChart" width="400" height="200"></canvas>
-            </div>
-
-            <div class="data-table">
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
-                    <div>
-                        <h3 style="margin: 0; color: var(--text-primary);">Active Sessions</h3>
-                    </div>
-                    <div style="display: flex; gap: 1rem; align-items: center;">
-                        <select id="node-filter" class="form-control" style="width: auto; min-width: 150px;">
-                            <option value="">All Nodes</option>
-                        </select>
-                        <select id="connection-filter" class="form-control" style="width: auto; min-width: 150px;">
-                            <option value="">All Sessions</option>
-                            <option value="true">Connected Only</option>
-                            <option value="false">Disconnected Only</option>
-                        </select>
-                        <button id="refresh-sessions" class="btn btn-secondary">
-                            <span id="refresh-text">Refresh</span>
-                            <span id="refresh-spinner" class="loading-spinner" style="display: none;"></span>
-                        </button>
-                    </div>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Client ID</th>
-                            <th>Node</th>
-                            <th>Status</th>
-                            <th>Messages In</th>
-                            <th>Messages Out</th>
-                            <th>Queued</th>
-                            <th>Clean Session</th>
-                            <th>Client Address</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="sessions-table-body">
-                        <!-- Sessions will be populated here -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- Session Detail Modal -->
-    <div id="session-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 2000; padding: 2rem;">
-        <div style="max-width: 1000px; margin: 0 auto; background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-height: 90vh; overflow-y: auto;">
-            <div style="padding: 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="margin: 0; color: var(--text-primary);" id="modal-title">Session Details</h2>
-                <button id="close-modal" class="btn btn-secondary">Close</button>
-            </div>
-            <div style="padding: 2rem;">
-                <div id="session-detail-content">
-                    <!-- Session details will be populated here -->
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="/js/sessions.js"></script>
-</body>
-</html>

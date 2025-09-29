@@ -35,24 +35,7 @@ class ArchiveGroupsManager {
     }
 
     setupUI() {
-        const isAdmin = localStorage.getItem('monstermq_isAdmin');
-
-        // Show users link if admin
-        if (isAdmin === 'true') {
-            const usersLink = document.getElementById('users-link');
-            if (usersLink) {
-                usersLink.style.display = '';
-            }
-        }
-
-        // Setup logout
-        document.getElementById('logout-link').addEventListener('click', (e) => {
-            e.preventDefault();
-            localStorage.removeItem('monstermq_token');
-            localStorage.removeItem('monstermq_username');
-            localStorage.removeItem('monstermq_isAdmin');
-            window.location.href = '/pages/login.html';
-        });
+        // UI setup is now handled by sidebar.js
     }
 
     setupEventListeners() {

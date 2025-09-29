@@ -34,24 +34,7 @@ function checkAuthAndLoadData() {
         }
     }
 
-    // Set up logout functionality
-    const logoutLink = document.getElementById('logout-link');
-    if (logoutLink) {
-        logoutLink.addEventListener('click', function(e) {
-            e.preventDefault();
-            localStorage.removeItem('monstermq_token');
-            localStorage.removeItem('monstermq_username');
-            localStorage.removeItem('monstermq_isAdmin');
-            window.location.href = '/pages/login.html';
-        });
-    }
-
-    // Check if user is admin and show Users menu
-    const isAdmin = localStorage.getItem('monstermq_isAdmin') === 'true';
-    const usersLink = document.getElementById('users-link');
-    if (isAdmin && usersLink) {
-        usersLink.style.display = 'inline';
-    }
+    // UI setup is now handled by sidebar.js
 
     // Get server name from URL parameters
     const urlParams = new URLSearchParams(window.location.search);

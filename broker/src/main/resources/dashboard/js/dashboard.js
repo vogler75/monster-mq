@@ -57,16 +57,7 @@ class DashboardManager {
     }
 
     setupUI() {
-        const isAdmin = localStorage.getItem('monstermq_isAdmin') === 'true';
-        const usersLink = document.getElementById('users-link');
-        if (isAdmin) {
-            usersLink.style.display = 'inline';
-        }
-
-        document.getElementById('logout-link').addEventListener('click', (e) => {
-            e.preventDefault();
-            this.logout();
-        });
+        // Dashboard-specific UI setup
 
         document.querySelectorAll('.chart-controls button').forEach(btn => {
             btn.addEventListener('click', (e) => {

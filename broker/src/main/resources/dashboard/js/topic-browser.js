@@ -61,16 +61,7 @@ class TopicBrowser {
     }
 
     setupUI() {
-        const isAdmin = localStorage.getItem('monstermq_isAdmin') === 'true';
-        const usersLink = document.getElementById('users-link');
-        if (isAdmin) {
-            usersLink.style.display = 'inline';
-        }
-
-        document.getElementById('logout-link').addEventListener('click', (e) => {
-            e.preventDefault();
-            this.logout();
-        });
+        // UI setup is now handled by sidebar.js
     }
 
     logout() {

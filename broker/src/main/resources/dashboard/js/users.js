@@ -56,10 +56,7 @@ class UserManager {
     }
 
     setupUI() {
-        document.getElementById('logout-link').addEventListener('click', (e) => {
-            e.preventDefault();
-            this.logout();
-        });
+        // UI setup is now handled by sidebar.js
 
         document.getElementById('refresh-users').addEventListener('click', () => {
             this.loadUsers();
