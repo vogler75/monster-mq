@@ -66,17 +66,24 @@ class ArchiveGroup(
     override fun start(startPromise: Promise<Void>) {
         logger.info("Starting ArchiveGroup [$name] - deploying stores and waiting for LastValueStore")
 
-        startRetentionScheduling()
-
         // Deploy stores and wait for critical ones to complete before reporting success
         vertx.runOnContext {
             createMessageStoreWithCallback(lastValType, "${name}Lastval") { storeReady ->
                 if (storeReady) {
                     logger.info("ArchiveGroup [$name] started successfully - LastValueStore is ready")
+
+                    // Start retention scheduling for LastVal store now that it's ready
+                    startLastValRetentionScheduling()
+
                     startPromise.complete()
 
                     // Start archive store in background (less critical for immediate functionality)
-                    createMessageArchiveAsync(archiveType, "${name}Archive")
+                    createMessageArchiveWithCallback(archiveType, "${name}Archive") { archiveReady ->
+                        if (archiveReady) {
+                            // Start retention scheduling for Archive store now that it's ready
+                            startArchiveRetentionScheduling()
+                        }
+                    }
                 } else {
                     logger.severe("ArchiveGroup [$name] failed to start - LastValueStore initialization failed")
                     startPromise.fail("Failed to initialize LastValueStore")
@@ -639,6 +646,103 @@ class ArchiveGroup(
         }
     }
 
+    private fun createMessageArchiveWithCallback(archiveType: MessageArchiveType, archiveName: String, callback: (Boolean) -> Unit) {
+        if (isStopping) {
+            logger.info("Skipping MessageArchive [$archiveName] creation - ArchiveGroup is stopping")
+            callback(false)
+            return
+        }
+        logger.info("Creating MessageArchive [$archiveName] of type [$archiveType] with callback")
+
+        when (archiveType) {
+            MessageArchiveType.NONE -> {
+                archiveStore = MessageArchiveNone
+                logger.info("MessageArchive [$archiveName] set to NONE")
+                callback(true)
+            }
+            MessageArchiveType.POSTGRES, MessageArchiveType.CRATEDB, MessageArchiveType.MONGODB, MessageArchiveType.KAFKA, MessageArchiveType.SQLITE -> {
+                createDatabaseMessageArchive(archiveType, archiveName) { success ->
+                    callback(success)
+                }
+            }
+        }
+    }
+
+    private fun createDatabaseMessageArchive(archiveType: MessageArchiveType, archiveName: String, callback: (Boolean) -> Unit) {
+        try {
+            val archive = when (archiveType) {
+                MessageArchiveType.POSTGRES -> {
+                    val postgres = databaseConfig.getJsonObject("Postgres")
+                    MessageArchivePostgres(
+                        archiveName,
+                        postgres.getString("Url"),
+                        postgres.getString("User"),
+                        postgres.getString("Pass")
+                    )
+                }
+                MessageArchiveType.CRATEDB -> {
+                    val cratedb = databaseConfig.getJsonObject("CrateDB")
+                    MessageArchiveCrateDB(
+                        archiveName,
+                        cratedb.getString("Url"),
+                        cratedb.getString("User"),
+                        cratedb.getString("Pass")
+                    )
+                }
+                MessageArchiveType.MONGODB -> {
+                    val mongodb = databaseConfig.getJsonObject("MongoDB")
+                    MessageArchiveMongoDB(
+                        archiveName,
+                        mongodb.getString("Url"),
+                        mongodb.getString("Database", "monstermq")
+                    )
+                }
+                MessageArchiveType.KAFKA -> {
+                    val kafka = databaseConfig.getJsonObject("Kafka")
+                    val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
+                    MessageArchiveKafka(archiveName, bootstrapServers)
+                }
+                MessageArchiveType.SQLITE -> {
+                    val sqlite = databaseConfig.getJsonObject("SQLite")
+                    val archiveGroupName = archiveName.removeSuffix("Archive")
+                    val dbPath = "${sqlite.getString("Path", ".")}/monstermq-${archiveGroupName}-archive.db"
+                    MessageArchiveSQLite(
+                        archiveName,
+                        dbPath
+                    )
+                }
+                else -> {
+                    callback(false)
+                    return
+                }
+            }
+            archiveStore = archive
+            val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+            vertx.deployVerticle(archive, options).onComplete { result ->
+                if (result.succeeded()) {
+                    if (!isStopping) {
+                        childDeployments.add(result.result())
+                        logger.info("${archiveType.name} MessageArchive [$archiveName] deployed successfully")
+                        callback(true)
+                    } else {
+                        vertx.undeploy(result.result())
+                        logger.info("${archiveType.name} MessageArchive [$archiveName] deployed but immediately undeployed due to stop")
+                        archiveStore = null
+                        callback(false)
+                    }
+                } else {
+                    logger.warning("Failed to deploy ${archiveType.name} MessageArchive [$archiveName]: ${result.cause()?.message}")
+                    archiveStore = null
+                    callback(false)
+                }
+            }
+        } catch (e: Exception) {
+            logger.warning("Error creating ${archiveType.name} MessageArchive [$archiveName]: ${e.message}")
+            archiveStore = null
+            callback(false)
+        }
+    }
+
     private fun createMessageArchiveAsync(archiveType: MessageArchiveType, archiveName: String) {
         if (isStopping) {
             logger.info("Skipping MessageArchive [$archiveName] creation - ArchiveGroup is stopping")
@@ -799,7 +903,7 @@ class ArchiveGroup(
         }
     }
 
-    private fun startRetentionScheduling() {
+    private fun startLastValRetentionScheduling() {
         // Schedule store purge if configured
         if (lastValStore != null && lastValRetentionMs != null && purgeIntervalMs != null) {
             val timerId = vertx.setPeriodic(purgeIntervalMs) { _ ->
@@ -808,8 +912,12 @@ class ArchiveGroup(
             timers.add(timerId)
 
             logger.info("Scheduled LastVal purge for [$name] every ${purgeIntervalMs}ms with retention ${lastValRetentionMs}ms")
+        } else {
+            logger.fine { "LastVal retention scheduling not configured for [$name] - store: ${lastValStore != null}, retention: $lastValRetentionMs, interval: $purgeIntervalMs" }
         }
+    }
 
+    private fun startArchiveRetentionScheduling() {
         // Schedule archive purge if configured
         if (archiveStore != null && archiveRetentionMs != null && purgeIntervalMs != null) {
             val timerId = vertx.setPeriodic(purgeIntervalMs) { _ ->
@@ -818,6 +926,8 @@ class ArchiveGroup(
             timers.add(timerId)
 
             logger.info("Scheduled Archive purge for [$name] every ${purgeIntervalMs}ms with retention ${archiveRetentionMs}ms")
+        } else {
+            logger.fine { "Archive retention scheduling not configured for [$name] - store: ${archiveStore != null}, retention: $archiveRetentionMs, interval: $purgeIntervalMs" }
         }
     }
 
@@ -891,7 +1001,7 @@ class ArchiveGroup(
 
                 vertx.executeBlocking(Callable<PurgeResult> {
                     val olderThan = Instant.now().minusMillis(retentionMs)
-                    logger.fine { "Starting Archive purge for [$name] - removing messages older than $olderThan" }
+                    logger.info { "Starting Archive purge for [$name] - removing messages older than $olderThan" }
 
                     messageArchive.purgeOldMessages(olderThan)
                 }).onComplete { asyncResult ->
