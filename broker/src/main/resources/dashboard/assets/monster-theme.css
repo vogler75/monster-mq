@@ -181,6 +181,63 @@ body {
     width: 0;
 }
 
+/* Center the logo when sidebar is collapsed */
+.sidebar.collapsed .sidebar-brand {
+    justify-content: center;
+    padding: 1rem 0;
+    width: 100%;
+}
+
+/* Keep the logo visible and centered when collapsed */
+.sidebar.collapsed .sidebar-brand img {
+    display: block;
+    margin: 0 auto;
+}
+
+/* Hide the toggle button completely when collapsed */
+.sidebar.collapsed .sidebar-toggle {
+    display: none;
+}
+
+/* Make the logo clickable when collapsed */
+.sidebar.collapsed .sidebar-brand {
+    cursor: pointer;
+}
+
+/* Login page navbar styling (since it still uses old navbar structure) */
+.navbar {
+    background: var(--dark-surface);
+    border-bottom: 1px solid var(--dark-border);
+    padding: 1rem 0;
+}
+
+.navbar .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.navbar .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.navbar .nav-brand img {
+    height: 32px;
+    width: auto;
+    flex-shrink: 0;
+}
+
+.navbar .brand-name {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
 .sidebar-footer {
     position: absolute;
     bottom: 0;
@@ -292,7 +349,9 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: calc(100vh - 80px);
+    height: 100vh;
+    padding: 2rem;
+    box-sizing: border-box;
     background: linear-gradient(180deg, rgba(124, 58, 237, 0.1) 0%, transparent 100%);
 }
 
@@ -303,6 +362,7 @@ body {
     padding: 3rem;
     max-width: 400px;
     width: 100%;
+    margin: 0 auto;
     box-shadow: var(--card-shadow);
     backdrop-filter: blur(10px);
 }

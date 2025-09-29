@@ -7,6 +7,7 @@ class SidebarManager {
 
     init() {
         this.setupUI();
+        this.restoreSidebarState();
         this.setActiveNavItem();
         this.setupEventListeners();
     }
@@ -43,7 +44,30 @@ class SidebarManager {
         }
     }
 
+    restoreSidebarState() {
+        const isCollapsed = localStorage.getItem('monstermq_sidebar_collapsed') === 'true';
+        if (isCollapsed) {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('main-content');
+            if (sidebar && mainContent && window.innerWidth > 768) {
+                sidebar.classList.add('collapsed');
+                mainContent.classList.add('sidebar-collapsed');
+            }
+        }
+    }
+
     setupEventListeners() {
+        // Make logo clickable to expand sidebar when collapsed
+        const sidebar = document.getElementById('sidebar');
+        const sidebarBrand = sidebar ? sidebar.querySelector('.sidebar-brand') : null;
+        if (sidebarBrand) {
+            sidebarBrand.addEventListener('click', () => {
+                if (sidebar && sidebar.classList.contains('collapsed')) {
+                    window.toggleSidebar();
+                }
+            });
+        }
+
         // Handle responsive behavior on window resize
         window.addEventListener('resize', () => {
             const sidebar = document.getElementById('sidebar');
@@ -96,6 +120,10 @@ window.toggleSidebar = function() {
         // Desktop behavior - collapse/expand sidebar
         sidebar.classList.toggle('collapsed');
         mainContent.classList.toggle('sidebar-collapsed');
+
+        // Save the collapsed state to localStorage
+        const isCollapsed = sidebar.classList.contains('collapsed');
+        localStorage.setItem('monstermq_sidebar_collapsed', isCollapsed.toString());
     }
 };
 
