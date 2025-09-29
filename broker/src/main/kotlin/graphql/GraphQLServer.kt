@@ -15,6 +15,8 @@ import at.rocworks.graphql.OpcUaClientConfigMutations
 import at.rocworks.graphql.OpcUaClientConfigQueries
 import at.rocworks.graphql.OpcUaServerQueries
 import at.rocworks.graphql.OpcUaServerMutations
+import at.rocworks.graphql.OpcUaServerInfo
+import at.rocworks.graphql.OpcUaServerCertificateInfo
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
@@ -295,6 +297,7 @@ class GraphQLServer(
                             dataFetcher("opcUaServers", resolver.opcUaServers())
                             dataFetcher("opcUaServer", resolver.opcUaServer())
                             dataFetcher("opcUaServersByNode", resolver.opcUaServersByNode())
+                            dataFetcher("opcUaServerCertificates", resolver.opcUaServerCertificates())
                         }
                     }
             }
@@ -347,6 +350,10 @@ class GraphQLServer(
                             dataFetcher("deleteOpcUaServer", resolver.deleteOpcUaServer())
                             dataFetcher("addOpcUaServerAddress", resolver.addOpcUaServerAddress())
                             dataFetcher("removeOpcUaServerAddress", resolver.removeOpcUaServerAddress())
+                            // Certificate management mutations
+                            dataFetcher("trustOpcUaServerCertificates", resolver.trustOpcUaServerCertificates())
+                            dataFetcher("removeTrustedOpcUaServerCertificates", resolver.removeTrustedOpcUaServerCertificates())
+                            dataFetcher("deleteOpcUaServerCertificates", resolver.deleteOpcUaServerCertificates())
                         }
                     }
             }
@@ -379,6 +386,42 @@ class GraphQLServer(
             .type("Topic") { builder ->
                 builder
                     .dataFetcher("value", queryResolver.topicValue())
+            }
+            .type("OpcUaServer") { builder ->
+                builder.apply {
+                    opcUaServerQueries?.let { resolver ->
+                        dataFetcher("trustedCertificates") { env ->
+                            val server = env.getSource<OpcUaServerInfo>()
+                            if (server != null) {
+                                resolver.opcUaServerCertificates().get(
+                                    graphql.schema.DataFetchingEnvironmentImpl.newDataFetchingEnvironment(env)
+                                        .arguments(mapOf(
+                                            "serverName" to server.name,
+                                            "trusted" to true
+                                        ))
+                                        .build()
+                                )
+                            } else {
+                                java.util.concurrent.CompletableFuture.completedFuture(emptyList<OpcUaServerCertificateInfo>())
+                            }
+                        }
+                        dataFetcher("untrustedCertificates") { env ->
+                            val server = env.getSource<OpcUaServerInfo>()
+                            if (server != null) {
+                                resolver.opcUaServerCertificates().get(
+                                    graphql.schema.DataFetchingEnvironmentImpl.newDataFetchingEnvironment(env)
+                                        .arguments(mapOf(
+                                            "serverName" to server.name,
+                                            "trusted" to false
+                                        ))
+                                        .build()
+                                )
+                            } else {
+                                java.util.concurrent.CompletableFuture.completedFuture(emptyList<OpcUaServerCertificateInfo>())
+                            }
+                        }
+                    }
+                }
             }
             .build()
     }

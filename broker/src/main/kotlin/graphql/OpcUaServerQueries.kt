@@ -92,6 +92,64 @@ class OpcUaServerQueries(
     }
 
     /**
+     * Get certificates for a specific OPC UA server
+     */
+    fun opcUaServerCertificates(): DataFetcher<CompletableFuture<List<OpcUaServerCertificateInfo>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<OpcUaServerCertificateInfo>>()
+            val serverName = env.getArgument<String>("serverName")
+            val trusted = env.getArgument<Boolean?>("trusted")
+
+            if (serverName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            try {
+                // Get server configuration to find security directory
+                deviceConfigStore.getDevice(serverName).onComplete { result ->
+                    if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
+                        try {
+                            val device = result.result()!!
+                            val securityDir = device.config.getJsonObject("security", JsonObject())
+                                .getString("certificateDir", "./security")
+
+                            val certificateManager = OpcUaServerCertificateManager()
+                            val certificates = certificateManager.getCertificates(serverName, securityDir, trusted)
+
+                            val certificateInfos = certificates.map { cert ->
+                                OpcUaServerCertificateInfo(
+                                    serverName = cert.serverName,
+                                    fingerprint = cert.fingerprint,
+                                    subject = cert.subject,
+                                    issuer = cert.issuer,
+                                    validFrom = cert.validFrom,
+                                    validTo = cert.validTo,
+                                    trusted = cert.trusted,
+                                    filePath = cert.filePath,
+                                    firstSeen = cert.firstSeen
+                                )
+                            }
+
+                            future.complete(certificateInfos)
+                        } catch (e: Exception) {
+                            logger.severe("Error getting certificates for server $serverName: ${e.message}")
+                            future.completeExceptionally(e)
+                        }
+                    } else {
+                        future.complete(emptyList())
+                    }
+                }
+            } catch (e: Exception) {
+                logger.severe("Error in opcUaServerCertificates: ${e.message}")
+                future.completeExceptionally(e)
+            }
+
+            future
+        }
+    }
+
+    /**
      * Get OPC UA servers assigned to a specific cluster node
      */
     fun opcUaServersByNode(): DataFetcher<CompletableFuture<List<OpcUaServerInfo>>> {
@@ -143,6 +201,48 @@ class OpcUaServerQueries(
         val port = configJson.getInteger("port") ?: extractPortFromEndpointUrl(endpointUrl)
         val path = configJson.getString("path") ?: extractPathFromEndpointUrl(endpointUrl)
 
+        // Get certificate information
+        val securityDir = configJson.getJsonObject("security", JsonObject())
+            .getString("certificateDir", "./security")
+        val certificateManager = OpcUaServerCertificateManager()
+        val trustedCertificates = try {
+            certificateManager.getCertificates(device.name, securityDir, trustedFilter = true).map { cert ->
+                OpcUaServerCertificateInfo(
+                    serverName = cert.serverName,
+                    fingerprint = cert.fingerprint,
+                    subject = cert.subject,
+                    issuer = cert.issuer,
+                    validFrom = cert.validFrom,
+                    validTo = cert.validTo,
+                    trusted = cert.trusted,
+                    filePath = cert.filePath,
+                    firstSeen = cert.firstSeen
+                )
+            }
+        } catch (e: Exception) {
+            logger.warning("Error loading trusted certificates for server ${device.name}: ${e.message}")
+            emptyList()
+        }
+
+        val untrustedCertificates = try {
+            certificateManager.getCertificates(device.name, securityDir, trustedFilter = false).map { cert ->
+                OpcUaServerCertificateInfo(
+                    serverName = cert.serverName,
+                    fingerprint = cert.fingerprint,
+                    subject = cert.subject,
+                    issuer = cert.issuer,
+                    validFrom = cert.validFrom,
+                    validTo = cert.validTo,
+                    trusted = cert.trusted,
+                    filePath = cert.filePath,
+                    firstSeen = cert.firstSeen
+                )
+            }
+        } catch (e: Exception) {
+            logger.warning("Error loading untrusted certificates for server ${device.name}: ${e.message}")
+            emptyList()
+        }
+
         return OpcUaServerInfo(
             name = device.name,
             namespace = device.namespace,
@@ -159,7 +259,9 @@ class OpcUaServerQueries(
             createdAt = configJson.getString("createdAt") ?: "",
             updatedAt = configJson.getString("updatedAt") ?: "",
             isOnCurrentNode = device.nodeId == "*" || device.nodeId == currentNodeId,
-            status = null // Will be populated later
+            status = null, // Will be populated later
+            trustedCertificates = trustedCertificates,
+            untrustedCertificates = untrustedCertificates
         )
     }
 
@@ -336,7 +438,9 @@ data class OpcUaServerInfo(
     val createdAt: String,
     val updatedAt: String,
     val isOnCurrentNode: Boolean,
-    val status: OpcUaServerStatusInfo?
+    val status: OpcUaServerStatusInfo?,
+    val trustedCertificates: List<OpcUaServerCertificateInfo>,
+    val untrustedCertificates: List<OpcUaServerCertificateInfo>
 )
 
 data class OpcUaServerAddressInfo(
@@ -368,4 +472,16 @@ data class OpcUaServerStatusInfo(
     val nodeCount: Int,
     val error: String?,
     val lastUpdated: String
+)
+
+data class OpcUaServerCertificateInfo(
+    val serverName: String,
+    val fingerprint: String,
+    val subject: String,
+    val issuer: String,
+    val validFrom: String,
+    val validTo: String,
+    val trusted: Boolean,
+    val filePath: String,
+    val firstSeen: String
 )
