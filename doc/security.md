@@ -10,7 +10,6 @@ Security features include:
 - **Authorization** - ACL-based access control
 - **Certificate Management** - X.509 certificate handling
 - **Password Security** - BCrypt hashing
-- **Token Authentication** - JWT for API access
 - **OPC UA Security** - Industrial protocol security
 
 ## TLS/SSL Configuration
@@ -121,68 +120,7 @@ Authentication:
     LockoutDuration: 300  # seconds
 ```
 
-### External Authentication
-
-#### LDAP/Active Directory
-
-```yaml
-Authentication:
-  Type: LDAP
-
-  LDAP:
-    Url: "ldap://ldap.example.com:389"
-    BaseDN: "dc=example,dc=com"
-    UserSearchBase: "ou=users"
-    UserSearchFilter: "(uid={0})"
-    GroupSearchBase: "ou=groups"
-    GroupSearchFilter: "(member={0})"
-
-    # Bind credentials
-    BindDN: "cn=admin,dc=example,dc=com"
-    BindPassword: "${LDAP_BIND_PASSWORD}"
-
-    # SSL/TLS
-    UseSSL: true
-    TrustStore: "/app/security/ldap-truststore.jks"
-```
-
-#### OAuth 2.0 / JWT
-
-```yaml
-Authentication:
-  Type: JWT
-
-  JWT:
-    # JWT validation
-    Secret: "${JWT_SECRET}"  # For HMAC
-    PublicKey: "/app/security/jwt-public.pem"  # For RSA
-    Algorithm: RS256
-
-    # Token configuration
-    Issuer: "https://auth.example.com"
-    Audience: "monstermq"
-    ClockSkew: 60  # seconds
-
-    # Claims mapping
-    UsernameClaim: "sub"
-    RolesClaim: "roles"
-    PermissionsClaim: "permissions"
-```
-
-### Multi-Factor Authentication (MFA)
-
-```yaml
-Authentication:
-  MFA:
-    Enabled: true
-    Type: TOTP  # Time-based One-Time Password
-
-    TOTP:
-      Issuer: "MonsterMQ"
-      Period: 30  # seconds
-      Digits: 6
-      Algorithm: SHA256
-```
+> External identity providers and token-based authentication flows are not supported in the current broker build.
 
 ## Authorization (ACL)
 

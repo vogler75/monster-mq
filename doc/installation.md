@@ -226,76 +226,6 @@ Run with clustering:
 java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -cluster -config config-hazelcast.yaml
 ```
 
-## Database Setup
-
-### PostgreSQL
-
-```bash
-# Install PostgreSQL
-apt-get install postgresql postgresql-contrib
-
-# Create database and user
-sudo -u postgres psql
-CREATE DATABASE monster;
-CREATE USER system WITH PASSWORD 'manager';
-GRANT ALL PRIVILEGES ON DATABASE monster TO system;
-\q
-
-# Test connection
-psql -h localhost -U system -d monster
-```
-
-### CrateDB
-
-```bash
-# Run CrateDB with Docker
-docker run -p 4200:4200 -p 5432:5432 crate:latest
-
-# Or install locally
-wget https://cdn.crate.io/downloads/releases/crate-*.tar.gz
-tar -xzf crate-*.tar.gz
-./bin/crate
-```
-
-### MongoDB
-
-```bash
-# Run MongoDB with Docker
-docker run -p 27017:27017 -e MONGO_INITDB_ROOT_USERNAME=system -e MONGO_INITDB_ROOT_PASSWORD=manager mongo:latest
-
-# Or install locally
-apt-get install mongodb
-systemctl start mongodb
-```
-
-## Verification
-
-### Test MQTT Connection
-
-```bash
-# Publish test message
-mosquitto_pub -h localhost -p 1883 -t "test/topic" -m "Hello MonsterMQ"
-
-# Subscribe to topics
-mosquitto_sub -h localhost -p 1883 -t "test/#"
-```
-
-### Test GraphQL API
-
-```bash
-# Query current values
-curl -X POST http://localhost:4000/graphql \
-  -H "Content-Type: application/json" \
-  -d '{"query": "query { currentValues(topicFilter: \"test/#\") { topic payload timestamp } }"}'
-```
-
-### Test MCP Server
-
-```bash
-# Check MCP server status
-curl http://localhost:3000/health
-```
-
 ## Troubleshooting
 
 ### Common Issues
@@ -353,11 +283,3 @@ tail -f log/monstermq.log
 grep ERROR log/monstermq.log
 grep "Failed to" log/monstermq.log
 ```
-
-## Next Steps
-
-- **[Configuration Reference](configuration.md)** - Detailed configuration options
-- **[Database Setup](databases.md)** - Database-specific configuration
-- **[Clustering](clustering.md)** - Multi-node setup
-- **[User Management](user-management.md)** - Authentication and ACL
-- **[Security](security.md)** - TLS and security best practices
