@@ -64,18 +64,18 @@ class TopicTree<K, V> : ITopicTree<K, V> {
     }
 
     override fun isTopicNameMatching(topicName: String): Boolean {
-        fun find(node: Node<K, V>, current: String, rest: List<String>): Boolean {
+        fun find(node: Node<K, V>, current: String, rest: List<String>, level: Int): Boolean {
             return node.children.any { child ->
                 when (child.key) {
-                    "#" -> true
+                    "#" -> !(level == 1 && current == Const.SYS_TOPIC_NAME)
                     "+", current -> (rest.isEmpty() && child.value.dataset.isNotEmpty() )
-                            || (rest.isNotEmpty() && find(child.value, rest.first(), rest.drop(1)))
+                            || (rest.isNotEmpty() && find(child.value, rest.first(), rest.drop(1), level + 1))
                     else -> false
                 }
             }
         }
         val xs = Utils.getTopicLevels(topicName)
-        return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1)) else false
+        return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1), 1) else false
     }
 
     override fun findDataOfTopicName(topicName: String): List<Pair<K, V>> {
