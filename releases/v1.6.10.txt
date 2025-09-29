@@ -1,0 +1,8 @@
+Release v1.6.10
+Built from commit: 4e87268
+Date: 2025-09-29 10:37:21
+
+Changes since v1.6.9:
+---
+4e87268 Improve archive store initialization and retention scheduling
+9cc5a1f Update version.txt
