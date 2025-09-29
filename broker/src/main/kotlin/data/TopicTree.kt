@@ -82,7 +82,7 @@ class TopicTree<K, V> : ITopicTree<K, V> {
         fun find(node: Node<K, V>, current: String, rest: List<String>, level: Int): List<Pair<K, V>> {
             return node.children.flatMap { child ->
                 when (child.key) {
-                    "#" -> if (level == 1 && current == "\$SYS") listOf() else child.value.dataset.toList()
+                    "#" -> if (level == 1 && current == Const.SYS_TOPIC_NAME) listOf() else child.value.dataset.toList()
                     "+" -> {
                         (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
                                 (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), level+1)
