@@ -26,9 +26,10 @@ class OpcUaServerNodeManager(
 ) : ManagedNamespaceWithLifecycle(server, namespaceUri) {
 
     companion object {
-        private const val ROOT_FOLDER_NAME = "MonsterMQ"
         private val logger: Logger = Utils.getLogger(OpcUaServerNodeManager::class.java)
     }
+
+    private val rootFolderName: String = config.namespace // Use namespace as root folder name
 
     private val folderNodes = ConcurrentHashMap<String, NodeId>()
     private val variableNodes = ConcurrentHashMap<String, UaVariableNode>()
@@ -47,11 +48,11 @@ class OpcUaServerNodeManager(
 
     fun ensureRootFolderVisibility() {
         monsterMqRootNodeId?.let { rootNodeId ->
-            logger.info("Ensuring MonsterMQ root folder visibility after server startup")
-            logger.info("MonsterMQ root folder NodeId: $rootNodeId")
+            logger.info("Ensuring $rootFolderName root folder visibility after server startup")
+            logger.info("$rootFolderName root folder NodeId: $rootNodeId")
             logger.info("Namespace URI: ${namespaceUri}, Namespace Index: $namespaceIndex")
 
-            // Add forward reference from Objects to MonsterMQ (crucial for cross-namespace browsing)
+            // Add forward reference from Objects to root folder (crucial for cross-namespace browsing)
             try {
                 val objectsNode = server.addressSpaceManager.getManagedNode(Identifiers.ObjectsFolder)
                 if (objectsNode.isPresent) {
@@ -72,17 +73,17 @@ class OpcUaServerNodeManager(
                                 Reference.Direction.FORWARD
                             )
                         )
-                        logger.info("✓ Added forward reference from Objects to MonsterMQ")
+                        logger.info("✓ Added forward reference from Objects to $rootFolderName")
                     } else {
-                        logger.info("✓ Forward reference from Objects to MonsterMQ already exists")
+                        logger.info("✓ Forward reference from Objects to $rootFolderName already exists")
                     }
 
                     // Verify the node exists in our namespace
                     val monsterNode = nodeManager.get(rootNodeId)
                     if (monsterNode != null) {
-                        logger.info("✓ MonsterMQ node exists in namespace manager")
+                        logger.info("✓ $rootFolderName node exists in namespace manager")
                     } else {
-                        logger.warning("✗ MonsterMQ node NOT found in namespace manager!")
+                        logger.warning("✗ $rootFolderName node NOT found in namespace manager!")
                     }
 
                 } else {
@@ -92,7 +93,7 @@ class OpcUaServerNodeManager(
                 logger.warning("✗ Error ensuring root folder visibility: ${e.message}")
                 e.printStackTrace()
             }
-        } ?: logger.warning("✗ MonsterMQ root node ID is null - root folder was not created")
+        } ?: logger.warning("✗ $rootFolderName root node ID is null - root folder was not created")
     }
 
     fun cleanupNodes() {
@@ -125,23 +126,23 @@ class OpcUaServerNodeManager(
         return synchronized(this) {
             monsterMqRootNodeId ?: run {
                 // Create root folder using Eclipse Milo's proper pattern
-                val rootNodeId = NodeId(namespaceIndex, ROOT_FOLDER_NAME)
+                val rootNodeId = NodeId(namespaceIndex, rootFolderName)
 
-                logger.info("Creating MonsterMQ root folder with namespace index: $namespaceIndex")
+                logger.info("Creating $rootFolderName root folder with namespace index: $namespaceIndex")
 
                 val rootFolder = UaFolderNode(
                     nodeContext,
                     rootNodeId,
-                    QualifiedName(namespaceIndex, ROOT_FOLDER_NAME),
-                    LocalizedText(ROOT_FOLDER_NAME)
+                    QualifiedName(namespaceIndex, rootFolderName),
+                    LocalizedText(rootFolderName)
                 )
 
                 // Add to our namespace manager first
                 nodeManager.addNode(rootFolder)
-                logger.info("Added MonsterMQ root folder to node manager")
+                logger.info("Added $rootFolderName root folder to node manager")
 
-                // Create bidirectional references between Objects folder and MonsterMQ
-                // 1. Add inverse reference from MonsterMQ to Objects (child -> parent)
+                // Create bidirectional references between Objects folder and root folder
+                // 1. Add inverse reference from root folder to Objects (child -> parent)
                 rootFolder.addReference(
                     Reference(
                         rootNodeId,
@@ -150,14 +151,14 @@ class OpcUaServerNodeManager(
                         Reference.Direction.INVERSE
                     )
                 )
-                logger.info("Added inverse reference from MonsterMQ to Objects folder")
+                logger.info("Added inverse reference from $rootFolderName to Objects folder")
 
-                // Note: Forward reference from Objects to MonsterMQ will be added after server startup
+                // Note: Forward reference from Objects to root folder will be added after server startup
 
                 // Cache the root folder
-                folderNodes[ROOT_FOLDER_NAME] = rootNodeId
+                folderNodes[rootFolderName] = rootNodeId
                 monsterMqRootNodeId = rootNodeId
-                logger.info("MonsterMQ root folder created successfully with NodeId: $rootNodeId")
+                logger.info("$rootFolderName root folder created successfully with NodeId: $rootNodeId")
                 rootNodeId
             }
         }

@@ -35,9 +35,10 @@ class OpcUaServerNodes(
 ) : ManagedAddressSpaceFragmentWithLifecycle(server, composite) {
 
     companion object {
-        private const val ROOT_FOLDER_NAME = "MonsterMQ"
         private val logger: Logger = Utils.getLogger(OpcUaServerNodes::class.java)
     }
+
+    private val rootFolderName: String = config.namespace // Use namespace as root folder name
 
     private val filter = SimpleAddressSpaceFilter.create {
         nodeManager.containsNode(it)
@@ -149,22 +150,22 @@ class OpcUaServerNodes(
 
         return synchronized(this) {
             monsterMqRootNodeId ?: run {
-                logger.info("Creating MonsterMQ root folder with namespace index: $namespaceIndex")
+                logger.info("Creating $rootFolderName root folder with namespace index: $namespaceIndex")
 
                 // Create root folder using gateway pattern
-                val rootNodeId = NodeId(namespaceIndex, "$ROOT_FOLDER_NAME:o")
+                val rootNodeId = NodeId(namespaceIndex, "$rootFolderName:o")
                 val rootFolder = UaFolderNode(
                     nodeContext,
                     rootNodeId,
-                    QualifiedName(namespaceIndex, ROOT_FOLDER_NAME),
-                    LocalizedText(ROOT_FOLDER_NAME)
+                    QualifiedName(namespaceIndex, rootFolderName),
+                    LocalizedText(rootFolderName)
                 )
 
                 // Add to our namespace manager
                 nodeManager.addNode(rootFolder)
-                logger.info("Added MonsterMQ root folder to node manager")
+                logger.info("Added $rootFolderName root folder to node manager")
 
-                // Add inverse reference from MonsterMQ to Objects folder (like gateway pattern)
+                // Add inverse reference from root folder to Objects folder (like gateway pattern)
                 rootFolder.addReference(
                     Reference(
                         rootNodeId,
@@ -173,12 +174,12 @@ class OpcUaServerNodes(
                         Reference.Direction.INVERSE
                     )
                 )
-                logger.info("Added inverse reference from MonsterMQ to Objects folder")
+                logger.info("Added inverse reference from $rootFolderName to Objects folder")
 
                 // Cache the root folder
-                folderNodes[ROOT_FOLDER_NAME] = rootNodeId
+                folderNodes[rootFolderName] = rootNodeId
                 monsterMqRootNodeId = rootNodeId
-                logger.info("MonsterMQ root folder created successfully with NodeId: $rootNodeId")
+                logger.info("$rootFolderName root folder created successfully with NodeId: $rootNodeId")
                 rootNodeId
             }
         }
@@ -258,8 +259,8 @@ class OpcUaServerNodes(
         // Create hierarchical folders
         val parentNodeId = createHierarchicalFolders(mqttTopic)
 
-        // Create node ID based on topic with MonsterMQ prefix and :v suffix
-        val nodeId = NodeId(namespaceIndex, "$ROOT_FOLDER_NAME/$mqttTopic:v")
+        // Create node ID based on topic with root folder prefix and :v suffix
+        val nodeId = NodeId(namespaceIndex, "$rootFolderName/$mqttTopic:v")
 
         // Get the last part of the topic as default browse name and display name
         val topicParts = mqttTopic.split("/")
