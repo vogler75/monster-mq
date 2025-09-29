@@ -1,0 +1,10 @@
+Release v1.6.12
+Built from commit: 9cdba8f
+Date: 2025-09-29 19:52:03
+
+Changes since v1.6.11:
+---
+9cdba8f Update sidebar user info styling and remove test files
+16980cf Improve sidebar and login page UI/UX
+2de13ab Refactor dashboard navigation to use shared sidebar
+15641ce Update documentation for ACL, clustering, config, databases, GraphQL
