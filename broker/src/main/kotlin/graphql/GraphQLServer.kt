@@ -352,7 +352,6 @@ class GraphQLServer(
                             dataFetcher("removeOpcUaServerAddress", resolver.removeOpcUaServerAddress())
                             // Certificate management mutations
                             dataFetcher("trustOpcUaServerCertificates", resolver.trustOpcUaServerCertificates())
-                            dataFetcher("removeTrustedOpcUaServerCertificates", resolver.removeTrustedOpcUaServerCertificates())
                             dataFetcher("deleteOpcUaServerCertificates", resolver.deleteOpcUaServerCertificates())
                         }
                     }

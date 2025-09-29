@@ -1254,13 +1254,7 @@ extend type Mutation {
         fingerprints: [String!]!
     ): CertificateManagementResult!
 
-    # Remove certificates from trusted directory
-    removeTrustedOpcUaServerCertificates(
-        serverName: String!,
-        fingerprints: [String!]!
-    ): CertificateManagementResult!
-
-    # Delete certificates completely (from untrusted directory)
+    # Delete certificates completely (from both trusted and untrusted directories)
     deleteOpcUaServerCertificates(
         serverName: String!,
         fingerprints: [String!]!

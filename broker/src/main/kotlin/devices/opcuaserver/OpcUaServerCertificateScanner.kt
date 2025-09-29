@@ -45,7 +45,13 @@ class OpcUaServerCertificateScanner {
         }
 
         // Scan untrusted/rejected certificates in trusted-{serverName}/rejected/certs/
-        val rejectedDir = baseDir.resolve("trusted-$serverName").resolve("rejected").resolve("certs")
+        val rejectedCertsDir = baseDir.resolve("trusted-$serverName").resolve("rejected").resolve("certs")
+        if (Files.exists(rejectedCertsDir)) {
+            certificates.addAll(scanDirectory(rejectedCertsDir, serverName, trusted = false))
+        }
+
+        // Also scan rejected certificates in trusted-{serverName}/rejected/ (where Eclipse Milo places them)
+        val rejectedDir = baseDir.resolve("trusted-$serverName").resolve("rejected")
         if (Files.exists(rejectedDir)) {
             certificates.addAll(scanDirectory(rejectedDir, serverName, trusted = false))
         }

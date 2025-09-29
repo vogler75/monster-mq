@@ -38,7 +38,8 @@ class OpcUaServerCertificateManager {
         }
 
         val trustedDir = Paths.get(securityDir).resolve("trusted-$serverName").resolve("trusted").resolve("certs")
-        val rejectedDir = Paths.get(securityDir).resolve("trusted-$serverName").resolve("rejected").resolve("certs")
+        // Eclipse Milo places rejected certificates in rejected/ directly, not in rejected/certs/
+        val rejectedDir = Paths.get(securityDir).resolve("trusted-$serverName").resolve("rejected")
 
         try {
             // Ensure trusted directory exists
@@ -83,78 +84,18 @@ class OpcUaServerCertificateManager {
         }
     }
 
-    /**
-     * Remove certificates from trusted directory (move to rejected)
-     */
-    fun removeTrustedCertificates(serverName: String, securityDir: String, fingerprints: List<String>): CertificateManagementResult {
-        val certificates = scanner.scanCertificates(serverName, securityDir)
-        val trustedCerts = certificates.filter { it.trusted && fingerprints.contains(it.fingerprint) }
-
-        if (trustedCerts.isEmpty()) {
-            return CertificateManagementResult(
-                success = false,
-                message = "No trusted certificates found with the specified fingerprints",
-                affectedCertificates = emptyList()
-            )
-        }
-
-        val trustedDir = Paths.get(securityDir).resolve("trusted-$serverName").resolve("trusted").resolve("certs")
-        val rejectedDir = Paths.get(securityDir).resolve("trusted-$serverName").resolve("rejected").resolve("certs")
-
-        try {
-            // Ensure rejected directory exists
-            Files.createDirectories(rejectedDir)
-
-            val movedCertificates = mutableListOf<OpcUaServerCertificate>()
-
-            trustedCerts.forEach { cert ->
-                val sourceFile = Paths.get(cert.filePath)
-                val targetFile = rejectedDir.resolve(sourceFile.fileName)
-
-                if (Files.exists(sourceFile)) {
-                    // Move certificate file
-                    Files.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING)
-
-                    // Update certificate object with new trust status and path
-                    val rejectedCert = cert.copy(
-                        trusted = false,
-                        filePath = targetFile.toString()
-                    )
-                    movedCertificates.add(rejectedCert)
-
-                    logger.info("Moved certificate ${cert.fingerprint} to rejected directory for server $serverName")
-                } else {
-                    logger.warning("Certificate file not found: ${cert.filePath}")
-                }
-            }
-
-            return CertificateManagementResult(
-                success = true,
-                message = "Successfully removed ${movedCertificates.size} certificate(s) from trusted list",
-                affectedCertificates = movedCertificates
-            )
-
-        } catch (e: Exception) {
-            logger.severe("Error removing trusted certificates: ${e.message}")
-            return CertificateManagementResult(
-                success = false,
-                message = "Error removing trusted certificates: ${e.message}",
-                affectedCertificates = emptyList()
-            )
-        }
-    }
 
     /**
-     * Delete certificates completely (from rejected directory)
+     * Delete certificates completely (from both trusted and untrusted directories)
      */
     fun deleteCertificates(serverName: String, securityDir: String, fingerprints: List<String>): CertificateManagementResult {
         val certificates = scanner.scanCertificates(serverName, securityDir)
-        val rejectedCerts = certificates.filter { !it.trusted && fingerprints.contains(it.fingerprint) }
+        val certsToDelete = certificates.filter { fingerprints.contains(it.fingerprint) }
 
-        if (rejectedCerts.isEmpty()) {
+        if (certsToDelete.isEmpty()) {
             return CertificateManagementResult(
                 success = false,
-                message = "No untrusted certificates found with the specified fingerprints",
+                message = "No certificates found with the specified fingerprints",
                 affectedCertificates = emptyList()
             )
         }
@@ -162,7 +103,7 @@ class OpcUaServerCertificateManager {
         try {
             val deletedCertificates = mutableListOf<OpcUaServerCertificate>()
 
-            rejectedCerts.forEach { cert ->
+            certsToDelete.forEach { cert ->
                 val certFile = Paths.get(cert.filePath)
 
                 if (Files.exists(certFile)) {
@@ -170,7 +111,8 @@ class OpcUaServerCertificateManager {
                     Files.delete(certFile)
                     deletedCertificates.add(cert)
 
-                    logger.info("Deleted certificate ${cert.fingerprint} for server $serverName")
+                    val status = if (cert.trusted) "trusted" else "untrusted"
+                    logger.info("Deleted $status certificate ${cert.fingerprint} for server $serverName")
                 } else {
                     logger.warning("Certificate file not found: ${cert.filePath}")
                 }
@@ -178,7 +120,7 @@ class OpcUaServerCertificateManager {
 
             return CertificateManagementResult(
                 success = true,
-                message = "Successfully deleted ${deletedCertificates.size} certificate(s)",
+                message = "Successfully deleted ${deletedCertificates.size} certificate(s) from both trusted and untrusted directories",
                 affectedCertificates = deletedCertificates
             )
 
@@ -212,10 +154,14 @@ class OpcUaServerCertificateManager {
         try {
             val baseDir = Paths.get(securityDir)
             val trustedDir = baseDir.resolve("trusted-$serverName").resolve("trusted").resolve("certs")
-            val rejectedDir = baseDir.resolve("trusted-$serverName").resolve("rejected").resolve("certs")
+            // Eclipse Milo places rejected certificates in rejected/ directly
+            val rejectedDir = baseDir.resolve("trusted-$serverName").resolve("rejected")
+            // Also create the certs subdirectory for compatibility
+            val rejectedCertsDir = rejectedDir.resolve("certs")
 
             Files.createDirectories(trustedDir)
             Files.createDirectories(rejectedDir)
+            Files.createDirectories(rejectedCertsDir)
 
             logger.info("Ensured certificate directories exist for server $serverName")
         } catch (e: Exception) {
