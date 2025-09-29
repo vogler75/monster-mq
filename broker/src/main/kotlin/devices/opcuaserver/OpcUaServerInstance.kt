@@ -295,7 +295,7 @@ class OpcUaServerInstance(
                     java.nio.file.Files.createDirectories(securityDir)
 
                     // Create trust directories for server certificate validation
-                    val trustedDir = securityDir.resolve("trusted")
+                    val trustedDir = securityDir.resolve("trusted-${config.name}")
                     java.nio.file.Files.createDirectories(trustedDir)
 
                     val trustListManager = org.eclipse.milo.opcua.stack.core.security.DefaultTrustListManager(trustedDir.toFile())
