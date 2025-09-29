@@ -26,11 +26,7 @@ data class OpcUaServerConfig(
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): OpcUaServerConfig {
-            println("DEBUG OpcUaServerConfig.fromJsonObject: input JSON keys: ${json.fieldNames()}")
-            println("DEBUG OpcUaServerConfig.fromJsonObject: addresses field present: ${json.containsKey("addresses")}")
             val addressesArray = json.getJsonArray("addresses", JsonArray())
-            println("DEBUG OpcUaServerConfig.fromJsonObject: addresses array size: ${addressesArray.size()}")
-            println("DEBUG OpcUaServerConfig.fromJsonObject: addresses array content: $addressesArray")
 
             return OpcUaServerConfig(
                 name = json.getString("name"),

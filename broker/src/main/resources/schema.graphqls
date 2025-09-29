@@ -777,11 +777,6 @@ type OpcUaDeviceResult {
     errors: [String!]!
 }
 
-# ================================================================================================
-# OPC UA Server Types
-# Types for OPC UA servers that expose MQTT topics as OPC UA nodes
-# ================================================================================================
-
 # OPC UA Server configuration that exposes MQTT topics as hierarchical OPC UA nodes
 type OpcUaServer {
     # Unique server name across the cluster
@@ -816,6 +811,10 @@ type OpcUaServer {
     isOnCurrentNode: Boolean!
     # Current server status (if running on accessible node)
     status: OpcUaServerStatus
+    # List trusted certificates for this server
+    trustedCertificates: [OpcUaServerCertificate!]!
+    # List untrusted (rejected) certificates for this server
+    untrustedCertificates: [OpcUaServerCertificate!]!
 }
 
 # MQTT topic to OPC UA node mapping configuration
@@ -905,6 +904,34 @@ enum OpcUaServerStatusEnum {
     STOPPING
 }
 
+# Represents a certificate file in the trust directories
+type OpcUaServerCertificate {
+    # Server name this certificate belongs to
+    serverName: String!
+    # Certificate fingerprint/hash for unique identification
+    fingerprint: String!
+    # Subject information from the certificate
+    subject: String!
+    # Issuer information
+    issuer: String!
+    # Certificate validity period
+    validFrom: String!
+    validTo: String!
+    # Whether certificate is currently trusted or untrusted
+    trusted: Boolean!
+    # File path relative to the trusted/untrusted directory
+    filePath: String!
+    # When this certificate was first detected
+    firstSeen: String!
+}
+
+# Result type for certificate operations
+type CertificateManagementResult {
+    success: Boolean!
+    message: String
+    affectedCertificates: [OpcUaServerCertificate!]!
+}
+
 # Simplified OPC UA Server information (used by mutations)
 type OpcUaServerInfo {
     name: String!
@@ -946,11 +973,6 @@ type OpcUaServerOperationResult {
     success: Boolean!
     message: String
 }
-
-# ================================================================================================
-# OPC UA Server Input Types
-# Input types for creating and updating OPC UA servers
-# ================================================================================================
 
 # Input for creating or updating an OPC UA Server
 input OpcUaServerInput {
@@ -1135,6 +1157,13 @@ extend type Query {
     # Get OPC UA servers assigned to a specific cluster node
     # Useful for monitoring server distribution and cluster load balancing
     opcUaServersByNode(nodeId: String!): [OpcUaServer!]!
+
+    # Get certificates for a specific OPC UA server
+    opcUaServerCertificates(
+        serverName: String!,
+        # Filter by trust status: true=trusted, false=untrusted, null=all
+        trusted: Boolean
+    ): [OpcUaServerCertificate!]!
 }
 
 # Extend existing Mutation type
@@ -1217,4 +1246,17 @@ extend type Mutation {
         serverName: String!,
         mqttTopic: String!
     ): OpcUaServerOperationResult!
+
+    # Trust one or more certificates (move from untrusted to trusted directory)
+    trustOpcUaServerCertificates(
+        serverName: String!,
+        # Certificate fingerprints to trust
+        fingerprints: [String!]!
+    ): CertificateManagementResult!
+
+    # Delete certificates completely (from both trusted and untrusted directories)
+    deleteOpcUaServerCertificates(
+        serverName: String!,
+        fingerprints: [String!]!
+    ): CertificateManagementResult!
 }

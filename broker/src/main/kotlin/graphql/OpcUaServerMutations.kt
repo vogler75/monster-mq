@@ -28,6 +28,7 @@ class OpcUaServerMutations(
     }
 
     private val currentNodeId = Monster.getClusterNodeId(vertx)
+    private val certificateManager = OpcUaServerCertificateManager()
 
     /**
      * Create a new OPC UA Server configuration
@@ -459,7 +460,9 @@ class OpcUaServerMutations(
             createdAt = configJson.getString("createdAt") ?: Instant.now().toString(),
             updatedAt = configJson.getString("updatedAt") ?: Instant.now().toString(),
             isOnCurrentNode = deviceConfig.nodeId == "*" || deviceConfig.nodeId == currentNodeId,
-            status = null
+            status = null,
+            trustedCertificates = emptyList(), // Certificate loading is handled separately in queries
+            untrustedCertificates = emptyList() // Certificate loading is handled separately in queries
         )
     }
 
@@ -675,6 +678,129 @@ class OpcUaServerMutations(
             unit = input["unit"] as? String
         )
     }
+
+    /**
+     * Trust certificates (move from untrusted to trusted directory)
+     */
+    fun trustOpcUaServerCertificates(): DataFetcher<CompletableFuture<CertificateManagementResultGraphQL>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<CertificateManagementResultGraphQL>()
+            val serverName = env.getArgument<String>("serverName")
+            val fingerprints = env.getArgument<List<String>>("fingerprints")
+
+            if (serverName == null || fingerprints == null || fingerprints.isEmpty()) {
+                future.complete(CertificateManagementResultGraphQL(false, "Server name and fingerprints are required", emptyList()))
+                return@DataFetcher future
+            }
+
+            try {
+                // Get server configuration to find security directory
+                deviceConfigStore.getDevice(serverName).onComplete { result ->
+                    if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
+                        try {
+                            val device = result.result()!!
+                            val securityDir = device.config.getJsonObject("security", JsonObject())
+                                .getString("certificateDir", "./security")
+
+                            val managementResult = certificateManager.trustCertificates(serverName, securityDir, fingerprints)
+
+                            val certificateInfos = managementResult.affectedCertificates.map { cert ->
+                                OpcUaServerCertificateInfo(
+                                    serverName = cert.serverName,
+                                    fingerprint = cert.fingerprint,
+                                    subject = cert.subject,
+                                    issuer = cert.issuer,
+                                    validFrom = cert.validFrom,
+                                    validTo = cert.validTo,
+                                    trusted = cert.trusted,
+                                    filePath = cert.filePath,
+                                    firstSeen = cert.firstSeen
+                                )
+                            }
+
+                            future.complete(CertificateManagementResultGraphQL(
+                                success = managementResult.success,
+                                message = managementResult.message,
+                                affectedCertificates = certificateInfos
+                            ))
+                        } catch (e: Exception) {
+                            logger.severe("Error trusting certificates for server $serverName: ${e.message}")
+                            future.complete(CertificateManagementResultGraphQL(false, "Error: ${e.message}", emptyList()))
+                        }
+                    } else {
+                        future.complete(CertificateManagementResultGraphQL(false, "Server not found", emptyList()))
+                    }
+                }
+            } catch (e: Exception) {
+                logger.severe("Error in trustOpcUaServerCertificates: ${e.message}")
+                future.complete(CertificateManagementResultGraphQL(false, "Error: ${e.message}", emptyList()))
+            }
+
+            future
+        }
+    }
+
+
+    /**
+     * Delete certificates completely (from both trusted and untrusted directories)
+     */
+    fun deleteOpcUaServerCertificates(): DataFetcher<CompletableFuture<CertificateManagementResultGraphQL>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<CertificateManagementResultGraphQL>()
+            val serverName = env.getArgument<String>("serverName")
+            val fingerprints = env.getArgument<List<String>>("fingerprints")
+
+            if (serverName == null || fingerprints == null || fingerprints.isEmpty()) {
+                future.complete(CertificateManagementResultGraphQL(false, "Server name and fingerprints are required", emptyList()))
+                return@DataFetcher future
+            }
+
+            try {
+                // Get server configuration to find security directory
+                deviceConfigStore.getDevice(serverName).onComplete { result ->
+                    if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
+                        try {
+                            val device = result.result()!!
+                            val securityDir = device.config.getJsonObject("security", JsonObject())
+                                .getString("certificateDir", "./security")
+
+                            val managementResult = certificateManager.deleteCertificates(serverName, securityDir, fingerprints)
+
+                            val certificateInfos = managementResult.affectedCertificates.map { cert ->
+                                OpcUaServerCertificateInfo(
+                                    serverName = cert.serverName,
+                                    fingerprint = cert.fingerprint,
+                                    subject = cert.subject,
+                                    issuer = cert.issuer,
+                                    validFrom = cert.validFrom,
+                                    validTo = cert.validTo,
+                                    trusted = cert.trusted,
+                                    filePath = cert.filePath,
+                                    firstSeen = cert.firstSeen
+                                )
+                            }
+
+                            future.complete(CertificateManagementResultGraphQL(
+                                success = managementResult.success,
+                                message = managementResult.message,
+                                affectedCertificates = certificateInfos
+                            ))
+                        } catch (e: Exception) {
+                            logger.severe("Error deleting certificates for server $serverName: ${e.message}")
+                            future.complete(CertificateManagementResultGraphQL(false, "Error: ${e.message}", emptyList()))
+                        }
+                    } else {
+                        future.complete(CertificateManagementResultGraphQL(false, "Server not found", emptyList()))
+                    }
+                }
+            } catch (e: Exception) {
+                logger.severe("Error in deleteOpcUaServerCertificates: ${e.message}")
+                future.complete(CertificateManagementResultGraphQL(false, "Error: ${e.message}", emptyList()))
+            }
+
+            future
+        }
+    }
 }
 
 /**
@@ -690,4 +816,10 @@ data class OpcUaServerResult(
 data class OpcUaServerOperationResult(
     val success: Boolean,
     val message: String?
+)
+
+data class CertificateManagementResultGraphQL(
+    val success: Boolean,
+    val message: String?,
+    val affectedCertificates: List<OpcUaServerCertificateInfo>
 )
