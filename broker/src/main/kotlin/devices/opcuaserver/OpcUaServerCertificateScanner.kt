@@ -139,8 +139,8 @@ class OpcUaServerCertificateScanner {
                 .joinToString(":") { "%02X".format(it) }
 
             // Get certificate details
-            val subject = x509Cert.subjectDN.toString()
-            val issuer = x509Cert.issuerDN.toString()
+            val subject = x509Cert.subjectX500Principal.toString()
+            val issuer = x509Cert.issuerX500Principal.toString()
             val validFrom = x509Cert.notBefore.toInstant().toString()
             val validTo = x509Cert.notAfter.toInstant().toString()
 
