@@ -105,7 +105,7 @@ CREATE TABLE usersacl (
 The system automatically creates an "Anonymous" user for unauthenticated connections:
 - Username: `Anonymous`
 - No password (empty hash)
-- Can subscribe and publish by default
+- Global permissions disabled (`canSubscribe=false`, `canPublish=false`) – grant access via ACL rules if required
 - Not an admin
 
 ## ACL Rules
@@ -204,7 +204,7 @@ MonsterMQ provides a comprehensive GraphQL API for user and ACL management.
 #### Get All Users
 ```graphql
 query {
-  getAllUsers {
+  users {
     username
     enabled
     canSubscribe
@@ -216,16 +216,21 @@ query {
 }
 ```
 
-#### Get Specific User
+#### Get Specific User (with ACL details)
 ```graphql
 query {
-  getUser(username: "alice") {
+  users(username: "alice") {
     username
     enabled
     canSubscribe
     canPublish
     isAdmin
-    createdAt
+    aclRules {
+      topicPattern
+      canSubscribe
+      canPublish
+      priority
+    }
   }
 }
 ```
@@ -297,33 +302,7 @@ mutation {
 
 ### ACL Rule Queries
 
-#### Get All ACL Rules
-```graphql
-query {
-  getAllAclRules {
-    id
-    username
-    topicPattern
-    canSubscribe
-    canPublish
-    priority
-    createdAt
-  }
-}
-```
-
-#### Get User's ACL Rules
-```graphql
-query {
-  getUserAclRules(username: "alice") {
-    id
-    topicPattern
-    canSubscribe
-    canPublish
-    priority
-  }
-}
-```
+Use the `users` query to retrieve ACL information; the schema no longer exposes the legacy `getAllAclRules`/`getUserAclRules` fields (`broker/src/main/resources/schema.graphqls:300-356`).
 
 ### ACL Rule Mutations
 

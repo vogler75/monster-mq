@@ -1,155 +1,53 @@
 # Configuration Reference
 
-Complete reference for MonsterMQ configuration options with examples and schema validation.
+MonsterMQ reads settings from a YAML file. This guide lists the keys that are currently parsed by the broker so you can keep your configuration lean and reliable.
 
-## Configuration File
+## File Basics
 
-MonsterMQ uses YAML configuration files with JSON schema validation for auto-completion and error checking.
+- The file is passed via `-config path/to/config.yaml` (see `broker/src/main/kotlin/Monster.kt:181-219`).
+- Unknown keys are ignored; keep only the options documented below.
+- Example starter configuration: `broker/example-config.yaml`.
 
-### Schema Support
-
-**VS Code Setup:**
-1. Install [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml)
-2. Add to VS Code `settings.json`:
-```json
-{
-  "yaml.schemas": {
-    "./broker/yaml-json-schema.json": "config*.yaml"
-  }
-}
-```
-
-## Network Configuration
-
-### Ports
+## Core Server Settings
 
 ```yaml
-TCP: 1883           # MQTT TCP port (0 to disable)
-TCPS: 8883          # MQTT TLS port (0 to disable)
-WS: 9000            # MQTT WebSocket port (0 to disable)
-WSS: 9001           # MQTT WebSocket TLS port (0 to disable)
-MaxMessageSizeKb: 512   # Maximum message size in KB
+TCP: 1883      # MQTT TCP listener (set 0 to disable)
+TCPS: 8883     # MQTT TLS listener
+WS: 9000       # MQTT WebSocket listener
+WSS: 9001      # MQTT Secure WebSocket listener
+MaxMessageSizeKb: 512
+QueuedMessagesEnabled: true
+NodeName: node-a        # Optional, used in cluster mode
 ```
 
-**Default Values:**
-- TCP: 1883
-- TCPS: 0 (disabled)
-- WS: 0 (disabled)
-- WSS: 0 (disabled)
-- MaxMessageSizeKb: 8
+All ports default to `0` (disabled) except `TCP`, which defaults to 1883 if omitted (`broker/src/main/kotlin/Monster.kt:447-472`). `NodeName` is only used when the broker runs with `-cluster`.
 
-## Storage Configuration
+## Store Selection
 
-### Store Types
+MonsterMQ supports multiple backends for sessions, retained messages, archive groups, metrics, and user storage. Select store types with the following keys:
 
 ```yaml
-SessionStoreType: POSTGRES      # Client session persistence
-RetainedStoreType: POSTGRES     # Retained message storage
-ConfigStoreType: POSTGRES       # Archive group configuration
-QueuedMessagesEnabled: true     # Enable QoS>0 message queuing
+DefaultStoreType: POSTGRES   # Optional global fallback
+SessionStoreType: POSTGRES
+RetainedStoreType: SQLITE
+ConfigStoreType: POSTGRES
 ```
 
-**Available Store Types:**
-- **SessionStoreType:** POSTGRES, CRATEDB, MONGODB, SQLITE
-- **RetainedStoreType:** MEMORY, HAZELCAST, POSTGRES, CRATEDB, SQLITE
-- **ConfigStoreType:** POSTGRES, CRATEDB, MONGODB, SQLITE
+See `doc/databases.md` for backend-specific connection options (`Postgres`, `CrateDB`, `MongoDB`, `SQLite`).
 
-## Database Connections
-
-### PostgreSQL
+## Kafka Integration
 
 ```yaml
-Postgres:
-  Url: jdbc:postgresql://localhost:5432/monster
-  User: system
-  Pass: manager
+Kafka:
+  Servers: kafka1:9092,kafka2:9092
+  Bus:
+    Enabled: true
+    Topic: monster-bus
 ```
 
-**Connection String Format:**
-- Local: `jdbc:postgresql://localhost:5432/database`
-- Remote: `jdbc:postgresql://host:port/database`
-- SSL: `jdbc:postgresql://host:port/database?ssl=true`
-
-### CrateDB
-
-```yaml
-CrateDB:
-  Url: jdbc:postgresql://localhost:5432/monster
-  User: crate
-  Pass: ""
-```
-
-**Notes:**
-- Uses PostgreSQL protocol
-- Default user is usually `crate` with empty password
-- Supports clustering and sharding
-
-### MongoDB
-
-```yaml
-MongoDB:
-  Url: mongodb://system:manager@localhost:27017
-  Database: monster
-```
-
-**Connection String Formats:**
-- Simple: `mongodb://localhost:27017`
-- Authenticated: `mongodb://user:pass@localhost:27017`
-- Replica Set: `mongodb://host1:27017,host2:27017/database?replicaSet=rs0`
-
-### SQLite
-
-```yaml
-SQLite:
-  Path: "monstermq.db"
-```
-
-**Notes:**
-- File path relative to working directory
-- Database file created automatically
-- Cannot be used in cluster mode
-
-## Extensions
-
-### GraphQL API
-
-```yaml
-GraphQL:
-  Enabled: true
-  Port: 4000
-```
-
-**Endpoints:**
-- API: `http://localhost:4000/graphql`
-- Playground: `http://localhost:4000/graphql` (browser)
-- WebSocket: `ws://localhost:4000/graphql`
-
-### MCP Server
-
-```yaml
-MCP:
-  Enabled: true
-  Port: 3000
-```
-
-**Requirements:**
-- Requires archive group named "Default" with `lastValType` configured
-- Used for AI model integration
-
-### SparkplugB Extension
-
-```yaml
-SparkplugMetricExpansion:
-  Enabled: true
-```
-
-**Functionality:**
-- Expands SparkplugB messages from `spBv1.0` to `spBv1.0e` topics
-- Automatic metric extraction and topic creation
+`Servers` is reused by the Kafka message bus and the Kafka archive store. No additional security or topic-management settings are read (`broker/src/main/kotlin/Monster.kt:640-688`, `broker/src/main/kotlin/handlers/ArchiveGroup.kt:298-315`).
 
 ## User Management
-
-### Basic Configuration
 
 ```yaml
 UserManagement:
@@ -160,421 +58,69 @@ UserManagement:
   DisconnectOnUnauthorized: true
 ```
 
-**Parameters:**
-- **StoreType:** POSTGRES, CRATEDB, MONGODB, SQLITE
-- **PasswordAlgorithm:** bcrypt (only supported algorithm)
-- **CacheRefreshInterval:** Seconds between cache refreshes
-- **DisconnectOnUnauthorized:** Disconnect clients on ACL violations
+When enabled, the broker provisions the default `Admin` account on first start and stores users in the configured backend (`broker/src/main/kotlin/auth/UserManager.kt:39-118`).
 
-### Default Admin User
-
-When user management is enabled, default admin user is created:
-- **Username:** Admin
-- **Password:** Admin
-
-⚠️ **Change default password immediately for security**
-
-## Kafka Integration
-
-### Archive Streaming
-
-Stream specific topics to Kafka:
+## MCP Server
 
 ```yaml
-Kafka:
-  Servers: kafka1:9092,kafka2:9092,kafka3:9092
-```
-
-Create archive groups with `archiveType: KAFKA`:
-
-```graphql
-mutation {
-  createArchiveGroup(input: {
-    name: "sensors"
-    topicFilter: ["sensors/#"]
-    archiveType: KAFKA
-  }) { success }
-}
-```
-
-### Kafka as Message Bus
-
-Replace Vert.x EventBus with Kafka:
-
-```yaml
-Kafka:
-  Servers: kafka:9092
-  Bus:
-    Enabled: true
-    Topic: monster-bus
-```
-
-**Trade-offs:**
-- ✅ Complete message stream capture
-- ✅ Kafka's replay and analytics features
-- ⚠️ Higher latency (5-20ms additional)
-- ⚠️ Kafka becomes critical dependency
-
-## OPC UA Configuration
-
-OPC UA devices are managed via GraphQL API, not YAML configuration.
-
-**Example device creation:**
-```graphql
-mutation {
-  createOpcUaDevice(input: {
-    name: "plc01"
-    namespace: "opcua/factory"
-    nodeId: "node1"
-    config: {
-      endpointUrl: "opc.tcp://192.168.1.100:4840"
-      securityPolicy: "Basic256Sha256"
-      addresses: [
-        {
-          address: "NodeId://ns=2;i=1001"
-          topic: "temperature"
-        }
-      ]
-      certificateConfig: {
-        securityDir: "security"
-        createSelfSigned: true
-      }
-    }
-  }) { success }
-}
-```
-
-## Complete Configuration Examples
-
-### Development (SQLite)
-
-```yaml
-# config-sqlite.yaml
-TCP: 1883
-WS: 8080
-MaxMessageSizeKb: 8
-
-SessionStoreType: SQLITE
-RetainedStoreType: SQLITE
-ConfigStoreType: SQLITE
-QueuedMessagesEnabled: true
-
-SQLite:
-  Path: "monstermq.db"
-
 MCP:
   Enabled: true
   Port: 3000
+```
 
+The MCP server requires an archive group named `Default` with an archive backend that implements `IMessageArchiveExtended` (`broker/src/main/kotlin/Monster.kt:526-540`). Only the `Enabled` flag and `Port` value are used.
+
+## GraphQL Server
+
+```yaml
 GraphQL:
   Enabled: true
   Port: 4000
+  Path: /graphql
+```
 
-UserManagement:
+If `Enabled` is `false` the GraphQL server is not deployed. Otherwise it listens on the supplied port and path (`broker/src/main/kotlin/Monster.kt:563-611`). Default values are port `8080` and path `/graphql` when omitted (`broker/src/main/kotlin/extensions/graphql/GraphQLServer.kt:34-45`).
+
+## Metrics Collection
+
+```yaml
+Metrics:
   Enabled: true
-  StoreType: SQLITE
+  CollectionInterval: 5   # seconds (optional)
+```
 
+When enabled the broker chooses a metrics store based on the available database configuration or an optional `MetricsStore.Type` override (`broker/src/main/kotlin/Monster.kt:541-561`, `broker/src/main/kotlin/stores/factories/MetricsStoreFactory.kt:23-62`).
+
+## Sparkplug Metric Expansion
+
+```yaml
 SparkplugMetricExpansion:
   Enabled: true
 ```
 
-### Production (PostgreSQL)
+Toggles the Sparkplug metric expansion helper (`broker/src/main/kotlin/Monster.kt:139-152`).
+
+## Cluster Mode
+
+Cluster mode is activated with the `-cluster` flag on the command line. The YAML file has no additional Hazelcast configuration knobs; see `doc/clustering.md` for details.
+
+## Archive Groups
+
+Archive groups can be seeded in the configuration file or managed through GraphQL. Each entry must at least include the group name, topic filter, and store types. Example:
 
 ```yaml
-# config-postgres.yaml
-TCP: 1883
-TCPS: 8883
-WS: 9000
-WSS: 9001
-MaxMessageSizeKb: 512
-
-SessionStoreType: POSTGRES
-RetainedStoreType: POSTGRES
-ConfigStoreType: POSTGRES
-QueuedMessagesEnabled: true
-
-Postgres:
-  Url: jdbc:postgresql://localhost:5432/monster
-  User: system
-  Pass: manager
-
-MCP:
-  Enabled: true
-  Port: 3000
-
-GraphQL:
-  Enabled: true
-  Port: 4000
-
-UserManagement:
-  Enabled: true
-  StoreType: POSTGRES
-  PasswordAlgorithm: bcrypt
-
-SparkplugMetricExpansion:
-  Enabled: true
+ArchiveGroups:
+  - Name: Default
+    TopicFilter: ["#"]
+    RetainedOnly: false
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
 ```
 
-### Clustering (Hazelcast)
+The parser validates that the required database sections exist for the selected store types (`broker/src/main/kotlin/handlers/ArchiveGroup.kt:1035-1123`).
 
-```yaml
-# config-hazelcast.yaml
-TCP: 1883
-WS: 9000
-MaxMessageSizeKb: 512
+## Summary
 
-# Clustering requires central database
-SessionStoreType: POSTGRES
-RetainedStoreType: HAZELCAST     # Distributed across cluster
-ConfigStoreType: POSTGRES
-
-Postgres:
-  Url: jdbc:postgresql://shared-db-server:5432/monster
-  User: system
-  Pass: manager
-
-MCP:
-  Enabled: true
-  Port: 3000
-
-GraphQL:
-  Enabled: true
-  Port: 4000
-
-UserManagement:
-  Enabled: true
-  StoreType: POSTGRES
-```
-
-**Run with clustering:**
-```bash
-java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -cluster -config config-hazelcast.yaml
-```
-
-### Memory-Only (Testing)
-
-```yaml
-# config-memory.yaml
-TCP: 1883
-WS: 8080
-MaxMessageSizeKb: 8
-
-SessionStoreType: SQLITE        # Minimal persistence for sessions
-RetainedStoreType: MEMORY       # Volatile retained messages
-QueuedMessagesEnabled: false    # No message queuing
-
-SQLite:
-  Path: ":memory:"              # In-memory SQLite
-
-MCP:
-  Enabled: false
-GraphQL:
-  Enabled: false
-UserManagement:
-  Enabled: false
-```
-
-### Kafka Streaming
-
-```yaml
-# config-kafka.yaml
-TCP: 1883
-WS: 9000
-MaxMessageSizeKb: 512
-
-SessionStoreType: POSTGRES
-RetainedStoreType: POSTGRES
-ConfigStoreType: POSTGRES
-
-Postgres:
-  Url: jdbc:postgresql://localhost:5432/monster
-  User: system
-  Pass: manager
-
-Kafka:
-  Servers: kafka:9092
-
-GraphQL:
-  Enabled: true
-  Port: 4000
-
-# Create archive groups via GraphQL for Kafka streaming
-```
-
-### Kafka as Message Bus
-
-```yaml
-# config-kafka-bus.yaml
-TCP: 1883
-WS: 8080
-
-SessionStoreType: POSTGRES
-RetainedStoreType: POSTGRES
-
-Postgres:
-  Url: jdbc:postgresql://localhost:5432/monster
-  User: system
-  Pass: manager
-
-Kafka:
-  Servers: kafka1:9092,kafka2:9092,kafka3:9092
-  Bus:
-    Enabled: true
-    Topic: monster-bus
-```
-
-## Command Line Options
-
-### Basic Usage
-
-```bash
-# Show help
-java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -help
-
-# Run with configuration file
-java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -config config.yaml
-
-# Enable clustering
-java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -cluster -config config.yaml
-
-# Set log level
-java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -log FINE -config config.yaml
-```
-
-### Convenience Script
-
-```bash
-# Show help
-./run.sh -help
-
-# Run with configuration
-./run.sh -config config.yaml
-
-# Clustering
-./run.sh -cluster -config config-hazelcast.yaml
-
-# Debug logging
-./run.sh -log FINE -config config.yaml
-```
-
-### Archive Configuration Import
-
-```bash
-# Import archive groups from YAML into database
-./run.sh -archiveConfig archive-setup.yaml
-
-# Combined with regular config
-./run.sh -config config.yaml -archiveConfig archive-setup.yaml
-```
-
-### Log Levels
-
-| Level | Description | Usage |
-|-------|-------------|--------|
-| SEVERE | Errors only | Production |
-| WARNING | Warnings and errors | Production |
-| INFO | General information | Production |
-| FINE | Debug information | Development |
-| FINER | Detailed debugging | Troubleshooting |
-| FINEST | Maximum detail | Development |
-
-## Environment Variables
-
-### Docker Environment
-
-```bash
-# Hazelcast configuration
-HAZELCAST_CONFIG=hazelcast.xml
-PUBLIC_ADDRESS=192.168.1.10
-
-# Java options
-JAVA_OPTS="-Xms1g -Xmx2g"
-```
-
-### Java System Properties
-
-```bash
-# Hazelcast configuration
--Dvertx.hazelcast.config=hazelcast.xml
--Dhazelcast.local.publicAddress=192.168.1.10
-
-# Logging configuration
--Djava.util.logging.config.file=logging.properties
-
-# Memory settings
--Xms1g -Xmx2g -XX:+UseG1GC
-```
-
-## Validation and Troubleshooting
-
-### Configuration Validation
-
-1. **Use JSON schema** for auto-completion and validation
-2. **Check syntax** with YAML linter
-3. **Verify database connections** before starting
-4. **Test with minimal configuration** first
-
-### Common Issues
-
-**1. Invalid YAML Syntax**
-```bash
-# Validate YAML syntax
-python -c "import yaml; yaml.safe_load(open('config.yaml'))"
-```
-
-**2. Database Connection Errors**
-```bash
-# Test PostgreSQL connection
-psql -h localhost -U system -d monster
-
-# Test MongoDB connection
-mongo mongodb://system:manager@localhost:27017/monster
-```
-
-**3. Port Conflicts**
-```bash
-# Check port usage
-sudo netstat -tulpn | grep 1883
-sudo lsof -i :1883
-```
-
-**4. Memory Issues**
-```bash
-# Increase heap size
-export JAVA_OPTS="-Xms2g -Xmx4g"
-./run.sh -config config.yaml
-```
-
-## Performance Tuning
-
-### Database Optimization
-
-**PostgreSQL:**
-```sql
--- Create indexes for better performance
-CREATE INDEX idx_archive_topic_time ON archive_table(topic, time);
-CREATE INDEX idx_archive_time ON archive_table(time);
-```
-
-**Memory Settings:**
-```yaml
-# Increase message size for larger payloads
-MaxMessageSizeKb: 1024
-
-# Adjust database connection pools (implementation specific)
-```
-
-### JVM Tuning
-
-```bash
-# Production JVM settings
-export JAVA_OPTS="-Xms2g -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
-```
-
-## Related Documentation
-
-- **[Installation & Setup](installation.md)** - Getting started guide
-- **[Database Setup](databases.md)** - Database-specific configuration
-- **[User Management](user-management.md)** - Authentication and ACL
-- **[OPC UA Integration](opcua.md)** - Industrial protocol configuration
-- **[Security](security.md)** - TLS and security configuration
+- Stick to the keys documented above—older options such as `PlaygroundEnabled`, `Authentication`, `MaxPoolSize`, or custom Hazelcast blocks are not consumed by the current implementation.
+- Database performance tuning (pool sizes, replication, etc.) must be configured on the database side.
+- Keep `Kafka`, `MCP`, and `GraphQL` sections minimal; each module reads only its `Enabled` flag plus the connection port/path.

@@ -48,11 +48,10 @@ GraphQL:
 
 ```graphql
 mutation {
-  updateUserPassword(
+  setPassword(input: {
     username: "Admin"
-    oldPassword: "Admin"
-    newPassword: "NewSecurePassword123!"
-  ) {
+    password: "NewSecurePassword123!"
+  }) {
     success
     message
   }
@@ -184,20 +183,20 @@ mutation {
 ```graphql
 # Get all users
 query {
-  getAllUsers {
+  users {
     username
     enabled
     canSubscribe
     canPublish
     isAdmin
     createdAt
-    lastLogin
+    updatedAt
   }
 }
 
-# Get specific user
+# Get specific user (with ACL rules)
 query {
-  getUser(username: "sensor_device") {
+  users(username: "sensor_device") {
     username
     enabled
     canSubscribe
@@ -277,30 +276,7 @@ mutation {
 
 #### Query ACL Rules
 
-```graphql
-# Get user's ACL rules
-query {
-  getUserAclRules(username: "sensor_device") {
-    id
-    topicPattern
-    canPublish
-    canSubscribe
-    priority
-  }
-}
-
-# Get all ACL rules
-query {
-  getAllAclRules {
-    id
-    username
-    topicPattern
-    canPublish
-    canSubscribe
-    priority
-  }
-}
-```
+Use the `users` query to inspect ACL rules; the current schema does not expose the legacy `getAllAclRules` or `getUserAclRules` fields (`broker/src/main/resources/schema.graphqls:300-356`).
 
 ## Real-World Examples
 
@@ -472,23 +448,12 @@ mutation ProductionOwnAccess {
 
 ## Anonymous Access
 
-Configure anonymous user access for unauthenticated clients:
-
-```yaml
-# In config.yaml
-UserManagement:
-  Enabled: true
-  AnonymousEnabled: true
-  AnonymousCanSubscribe: true
-  AnonymousCanPublish: false
-```
-
-Or create ACL rules for anonymous user:
+The anonymous account is always present when user management is enabled. It is created with global permissions disabled (`canSubscribe=false`, `canPublish=false`). Grant access by adding ACL rules for the `Anonymous` username:
 
 ```graphql
 mutation {
   createAclRule(input: {
-    username: "_anonymous"  # Special username
+    username: "Anonymous"
     topicPattern: "public/#"
     canPublish: false
     canSubscribe: true
@@ -513,16 +478,21 @@ mutation {
 
 ### Audit and Monitoring
 
-Track user activity:
+The current schema exposes account metadata (created/updated timestamps and ACL rules). Query the `users` field to review this information:
 
 ```graphql
 query {
-  getUser(username: "sensor_001") {
-    lastLogin
-    lastActivity
-    connectionCount
-    messagesPublished
-    messagesReceived
+  users(username: "sensor_001") {
+    username
+    enabled
+    createdAt
+    updatedAt
+    aclRules {
+      topicPattern
+      canPublish
+      canSubscribe
+      priority
+    }
   }
 }
 ```

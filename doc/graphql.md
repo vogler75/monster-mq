@@ -1,782 +1,84 @@
 # GraphQL API
 
-MonsterMQ provides a GraphQL API for real-time data access, management, and monitoring. The API enables querying current values, historical data, managing users, and controlling the broker.
+The GraphQL extension exposes MonsterMQ state and control operations over HTTP/WebSocket (`broker/src/main/kotlin/extensions/graphql/GraphQLServer.kt`). This page documents the configuration switches and the queries/mutations that exist today.
 
-## Overview
-
-The GraphQL API provides:
-- **Real-time Queries** - Access current topic values and subscriptions
-- **Historical Data** - Query archived messages with filtering
-- **User Management** - CRUD operations for users and ACLs
-- **Broker Control** - Monitor stats, manage connections
-- **Subscriptions** - Real-time updates via WebSocket
-
-## Quick Start
-
-### Enable GraphQL
+## Enabling the Server
 
 ```yaml
-# config.yaml
 GraphQL:
   Enabled: true
-  Port: 4000
-  Path: /graphql
-  PlaygroundEnabled: true  # GraphQL Playground UI
-  Authentication: true     # Require authentication
+  Port: 4000      # Defaults to 8080 when omitted
+  Path: /graphql  # Defaults to /graphql
 ```
 
-### Access GraphQL Playground
+Once enabled the server listens on `http://<host>:<port><path>` and serves both the HTTP API and a WebSocket endpoint for subscriptions (`ws://<host>:<port><path>ws`).
 
-Open browser: `http://localhost:4000/graphql`
+## Authentication
 
-### Basic Query Examples
+- User management disabled? `login` returns `success: true` with `token = null` and no further checks are enforced (`broker/src/main/kotlin/extensions/graphql/AuthenticationResolver.kt:20-80`).
+- User management enabled? Call the `login` mutation and supply the returned JWT in the `Authorization: Bearer <token>` header for subsequent requests.
+- Admin-only mutations/queries (user management, ACLs, archive administration, etc.) are enforced through `GraphQLAuthContext` (`broker/src/main/kotlin/extensions/graphql/GraphQLServer.kt:205-356`).
 
-```graphql
-# Get current value of a topic
-query {
-  currentValue(topic: "sensors/temperature") {
-    topic
-    payload
-    qos
-    timestamp
-  }
-}
-
-# Get multiple current values
-query {
-  currentValues(pattern: "sensors/*") {
-    topic
-    payload
-    timestamp
-  }
-}
-
-# Query archived messages
-query {
-  archivedMessages(
-    topic: "sensors/temperature"
-    from: "2024-01-01T00:00:00Z"
-    to: "2024-01-02T00:00:00Z"
-    limit: 100
-  ) {
-    topic
-    payload
-    timestamp
-    qos
-  }
-}
-```
-
-## Schema Definition
-
-### Types
+Example login:
 
 ```graphql
-type Message {
-  topic: String!
-  payload: String!
-  qos: Int!
-  timestamp: DateTime!
-  retained: Boolean!
-  clientId: String
-}
-
-type CurrentValue {
-  topic: String!
-  payload: String!
-  qos: Int!
-  timestamp: DateTime!
-}
-
-type User {
-  id: ID!
-  username: String!
-  roles: [String!]!
-  createdAt: DateTime!
-  lastLogin: DateTime
-  acls: [ACL!]!
-}
-
-type ACL {
-  id: ID!
-  userId: ID!
-  topic: String!
-  action: ACLAction!
-  allow: Boolean!
-}
-
-enum ACLAction {
-  PUBLISH
-  SUBSCRIBE
-  ALL
-}
-
-type BrokerStats {
-  uptime: Int!
-  messagesReceived: Int!
-  messagesSent: Int!
-  clientsConnected: Int!
-  subscriptions: Int!
-  retainedMessages: Int!
-}
-
-type Client {
-  clientId: String!
-  username: String
-  ipAddress: String!
-  connectedAt: DateTime!
-  lastActivity: DateTime!
-  subscriptions: [String!]!
+mutation {
+  login(username: "Admin", password: "Admin") {
+    success
+    token
+    isAdmin
+  }
 }
 ```
 
 ## Queries
 
-### Current Values
+The top-level `Query` type exposes the following fields (`broker/src/main/resources/schema.graphqls:141-356`):
 
-```graphql
-# Single topic
-query GetCurrentValue {
-  currentValue(topic: "sensors/temp1") {
-    topic
-    payload
-    timestamp
-  }
-}
-
-# Multiple topics with pattern
-query GetMultipleValues {
-  currentValues(pattern: "sensors/*") {
-    topic
-    payload
-    timestamp
-  }
-}
-
-# With JSON parsing
-query GetParsedValue {
-  currentValue(topic: "sensors/data") {
-    topic
-    payload
-    payloadJson  # Parsed JSON object
-    timestamp
-  }
-}
-```
-
-### Historical Data
-
-```graphql
-# Time range query
-query GetHistoricalData {
-  archivedMessages(
-    topic: "sensors/temperature"
-    from: "2024-01-01T00:00:00Z"
-    to: "2024-01-01T12:00:00Z"
-    limit: 1000
-  ) {
-    timestamp
-    payload
-  }
-}
-
-# Aggregated data
-query GetAggregatedData {
-  aggregateMessages(
-    topic: "sensors/temperature"
-    from: "2024-01-01T00:00:00Z"
-    to: "2024-01-02T00:00:00Z"
-    interval: "1h"
-    function: AVG
-  ) {
-    timestamp
-    value
-    count
-  }
-}
-
-# Pattern matching
-query SearchMessages {
-  searchMessages(
-    topicPattern: "sensors/*"
-    payloadPattern: "error"
-    from: "2024-01-01T00:00:00Z"
-    limit: 100
-  ) {
-    topic
-    payload
-    timestamp
-  }
-}
-```
-
-### User Management
-
-```graphql
-# List users
-query ListUsers {
-  users {
-    id
-    username
-    roles
-    createdAt
-    lastLogin
-  }
-}
-
-# Get user with ACLs
-query GetUser {
-  user(id: "123") {
-    username
-    roles
-    acls {
-      topic
-      action
-      allow
-    }
-  }
-}
-
-# Check permissions
-query CheckPermission {
-  hasPermission(
-    username: "john"
-    topic: "sensors/temp1"
-    action: PUBLISH
-  )
-}
-```
-
-### Broker Statistics
-
-```graphql
-# Broker stats
-query GetStats {
-  brokerStats {
-    uptime
-    messagesReceived
-    messagesSent
-    clientsConnected
-    subscriptions
-    retainedMessages
-  }
-}
-
-# Connected clients
-query GetClients {
-  clients {
-    clientId
-    username
-    ipAddress
-    connectedAt
-    subscriptions
-  }
-}
-
-# Topic statistics
-query TopicStats {
-  topicStats(pattern: "sensors/*") {
-    topic
-    messageCount
-    lastMessage
-    subscriberCount
-  }
-}
-```
+| Category | Field | Description |
+|----------|-------|-------------|
+| Current values | `currentValue(topic, archiveGroup)` | Latest retained value for a single topic. |
+| | `currentValues(topicFilter, archiveGroup, limit)` | Latest values for topics matching the MQTT filter. |
+| Retained messages | `retainedMessage(topic)` / `retainedMessages(topicFilter)` | Access the retained store. |
+| Historical data | `archivedMessages(topicFilter, startTime, endTime, limit, archiveGroup)` | Query time-series data from archive groups. |
+| Topic discovery | `searchTopics(pattern, archiveGroup)` | SQL-like wildcard search against topic names. |
+| | `browseTopics(topic, archiveGroup)` | Browse one level of the topic tree. |
+| Monitoring | `broker(nodeId)` / `brokers` | Cluster/node metrics and status. |
+| | `sessions(nodeId, cleanSession, connected)` / `session(clientId, nodeId)` | MQTT session information. |
+| User management | `users(username)` | List users and their ACL rules (admin only). |
+| Archive groups | `archiveGroups` / `archiveGroup(name)` | Inspect archive configuration and connection status. |
+| OPC UA client | `opcUaDevices`, `opcUaDevice`, `opcUaDevicesByNode`, `clusterNodes` | Available when a device config store is configured. |
+| OPC UA server | `opcUaServers`, `opcUaServer`, `opcUaServersByNode`, `opcUaServerCertificates` | Available when the config store supports server records. |
 
 ## Mutations
 
-### User Management
+Available mutations are wired in `GraphQLServer.buildRuntimeWiring()` (`broker/src/main/kotlin/extensions/graphql/GraphQLServer.kt:236-356`). Highlights:
 
-```graphql
-# Create user
-mutation CreateUser {
-  createUser(input: {
-    username: "john"
-    password: "secure123"
-    roles: ["user"]
-  }) {
-    id
-    username
-    roles
-  }
-}
+| Category | Mutations |
+|----------|-----------|
+| Authentication | `login` |
+| Publishing | `publish`, `publishBatch` |
+| Queued messages | `purgeQueuedMessages(clientId)` |
+| User management | `createUser`, `updateUser`, `deleteUser`, `setPassword` |
+| ACL management | `createAclRule`, `updateAclRule`, `deleteAclRule` |
+| Archive groups | `createArchiveGroup`, `updateArchiveGroup`, `deleteArchiveGroup`, `enableArchiveGroup`, `disableArchiveGroup` |
+| OPC UA client | `addOpcUaDevice`, `updateOpcUaDevice`, `deleteOpcUaDevice`, `toggleOpcUaDevice`, `reassignOpcUaDevice`, `addOpcUaAddress`, `deleteOpcUaAddress` |
+| OPC UA server | `createOpcUaServer`, `startOpcUaServer`, `stopOpcUaServer`, `deleteOpcUaServer`, `addOpcUaServerAddress`, `removeOpcUaServerAddress`, `trustOpcUaServerCertificates`, `deleteOpcUaServerCertificates` |
 
-# Update user
-mutation UpdateUser {
-  updateUser(id: "123", input: {
-    roles: ["user", "admin"]
-  }) {
-    id
-    roles
-  }
-}
+All user and archive mutations require an admin-level JWT. Publishing requires publish permission for the target topic (enforced through the ACL system).
 
-# Delete user
-mutation DeleteUser {
-  deleteUser(id: "123")
-}
+## Subscriptions
 
-# Change password
-mutation ChangePassword {
-  changePassword(
-    username: "john"
-    oldPassword: "secure123"
-    newPassword: "newsecure456"
-  )
-}
-```
+Two WebSocket subscriptions stream MQTT data via the configured message bus (`broker/src/main/kotlin/extensions/graphql/GraphQLServer.kt:358-365`):
 
-### ACL Management
+- `topicUpdates(topicFilter: String!)`
+- `multiTopicUpdates(topicFilters: [String!]!)`
 
-```graphql
-# Add ACL rule
-mutation AddACL {
-  addACL(input: {
-    userId: "123"
-    topic: "sensors/+"
-    action: PUBLISH
-    allow: true
-  }) {
-    id
-    topic
-    action
-    allow
-  }
-}
+Authentication rules for subscriptions mirror the ones used for queries and mutations.
 
-# Update ACL
-mutation UpdateACL {
-  updateACL(id: "456", input: {
-    allow: false
-  }) {
-    id
-    allow
-  }
-}
+## Usage Notes
 
-# Delete ACL
-mutation DeleteACL {
-  deleteACL(id: "456")
-}
-```
-
-### Message Publishing
-
-```graphql
-# Publish message
-mutation PublishMessage {
-  publish(input: {
-    topic: "sensors/temp1"
-    payload: "23.5"
-    qos: 1
-    retained: false
-  })
-}
-
-# Publish multiple
-mutation PublishBatch {
-  publishBatch(messages: [
-    { topic: "sensors/temp1", payload: "23.5" },
-    { topic: "sensors/temp2", payload: "24.1" }
-  ])
-}
-```
-
-### Client Management
-
-```graphql
-# Disconnect client
-mutation DisconnectClient {
-  disconnectClient(clientId: "client123")
-}
-
-# Clear retained messages
-mutation ClearRetained {
-  clearRetainedMessages(topicPattern: "sensors/*")
-}
-```
-
-## Subscriptions (Real-time)
-
-### WebSocket Subscriptions
-
-```graphql
-# Subscribe to topic updates
-subscription TopicUpdates {
-  messageReceived(topicPattern: "sensors/+") {
-    topic
-    payload
-    timestamp
-    clientId
-  }
-}
-
-# Monitor client connections
-subscription ClientEvents {
-  clientStatusChanged {
-    clientId
-    event  # CONNECTED, DISCONNECTED
-    timestamp
-  }
-}
-
-# Real-time stats
-subscription StatsUpdate {
-  statsUpdate {
-    messagesPerSecond
-    clientsConnected
-    activeSubscriptions
-  }
-}
-```
-
-### WebSocket Client Example
-
-```javascript
-// Using Apollo Client
-import { ApolloClient, InMemoryCache } from '@apollo/client';
-import { WebSocketLink } from '@apollo/client/link/ws';
-
-const wsLink = new WebSocketLink({
-  uri: 'ws://localhost:4000/graphql',
-  options: {
-    reconnect: true,
-    connectionParams: {
-      authorization: 'Bearer YOUR_TOKEN',
-    },
-  },
-});
-
-const client = new ApolloClient({
-  link: wsLink,
-  cache: new InMemoryCache(),
-});
-
-// Subscribe to messages
-const subscription = client.subscribe({
-  query: gql`
-    subscription OnMessage {
-      messageReceived(topicPattern: "sensors/+") {
-        topic
-        payload
-        timestamp
-      }
-    }
-  `,
-}).subscribe({
-  next: (data) => console.log('Message:', data),
-  error: (err) => console.error('Error:', err),
-});
-```
-
-## Authentication
-
-### Token-based Authentication
-
-```yaml
-# Enable authentication
-GraphQL:
-  Authentication: true
-  TokenSecret: "your-secret-key"
-  TokenExpiry: 3600  # seconds
-```
-
-### Login Mutation
-
-```graphql
-mutation Login {
-  login(username: "admin", password: "password") {
-    token
-    expiresIn
-    user {
-      id
-      username
-      roles
-    }
-  }
-}
-```
-
-### Using Token
-
-```bash
-# HTTP header
-curl -X POST http://localhost:4000/graphql \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "{ brokerStats { uptime } }"}'
-```
-
-### Role-based Access
-
-```graphql
-# Admin only queries
-query AdminStats @requireRole(role: "admin") {
-  systemMetrics {
-    cpuUsage
-    memoryUsage
-    diskUsage
-  }
-}
-```
-
-## Advanced Features
-
-### Pagination
-
-```graphql
-query PaginatedMessages {
-  archivedMessages(
-    topic: "sensors/temperature"
-    first: 20
-    after: "cursor123"
-  ) {
-    edges {
-      node {
-        payload
-        timestamp
-      }
-      cursor
-    }
-    pageInfo {
-      hasNextPage
-      endCursor
-    }
-  }
-}
-```
-
-### Filtering
-
-```graphql
-query FilteredMessages {
-  messages(
-    where: {
-      topic: { startsWith: "sensors/" }
-      timestamp: { gte: "2024-01-01T00:00:00Z" }
-      payload: { contains: "error" }
-    }
-    orderBy: TIMESTAMP_DESC
-    limit: 100
-  ) {
-    topic
-    payload
-    timestamp
-  }
-}
-```
-
-### Aggregations
-
-```graphql
-query Aggregations {
-  messageStats(
-    groupBy: HOUR
-    from: "2024-01-01T00:00:00Z"
-    to: "2024-01-02T00:00:00Z"
-  ) {
-    timestamp
-    count
-    topics
-    averageSize
-  }
-}
-```
-
-### Batch Operations
-
-```graphql
-query BatchQuery {
-  batch {
-    temp1: currentValue(topic: "sensors/temp1") {
-      payload
-    }
-    temp2: currentValue(topic: "sensors/temp2") {
-      payload
-    }
-    stats: brokerStats {
-      clientsConnected
-    }
-  }
-}
-```
-
-## Client Libraries
-
-### JavaScript/TypeScript
-
-```javascript
-// Apollo Client
-import { ApolloClient, InMemoryCache, gql } from '@apollo/client';
-
-const client = new ApolloClient({
-  uri: 'http://localhost:4000/graphql',
-  cache: new InMemoryCache(),
-  headers: {
-    authorization: 'Bearer YOUR_TOKEN',
-  },
-});
-
-// Query
-const result = await client.query({
-  query: gql`
-    query GetValue {
-      currentValue(topic: "sensors/temp1") {
-        payload
-        timestamp
-      }
-    }
-  `,
-});
-```
-
-### Python
-
-```python
-from gql import gql, Client
-from gql.transport.requests import RequestsHTTPTransport
-
-transport = RequestsHTTPTransport(
-    url="http://localhost:4000/graphql",
-    headers={'Authorization': 'Bearer YOUR_TOKEN'}
-)
-
-client = Client(transport=transport, fetch_schema_from_transport=True)
-
-query = gql("""
-    query GetValue {
-        currentValue(topic: "sensors/temp1") {
-            payload
-            timestamp
-        }
-    }
-""")
-
-result = client.execute(query)
-```
-
-### cURL Examples
-
-```bash
-# Simple query
-curl -X POST http://localhost:4000/graphql \
-  -H "Content-Type: application/json" \
-  -d '{"query": "{ currentValue(topic: \"sensors/temp1\") { payload } }"}'
-
-# With variables
-curl -X POST http://localhost:4000/graphql \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "query": "query GetValue($topic: String!) { currentValue(topic: $topic) { payload } }",
-    "variables": {"topic": "sensors/temp1"}
-  }'
-```
-
-## Performance Optimization
-
-### Query Optimization
-
-```graphql
-# Use field selection
-query OptimizedQuery {
-  messages(limit: 100) {
-    payload  # Only request needed fields
-    timestamp
-    # Don't request unnecessary fields
-  }
-}
-
-# Use aliases for parallel queries
-query ParallelQueries {
-  recent: messages(limit: 10, orderBy: TIMESTAMP_DESC) {
-    payload
-  }
-  stats: brokerStats {
-    messagesReceived
-  }
-}
-```
-
-### Caching
-
-```yaml
-GraphQL:
-  Caching:
-    Enabled: true
-    TTL: 60  # seconds
-    MaxSize: 1000  # entries
-```
-
-### Rate Limiting
-
-```yaml
-GraphQL:
-  RateLimit:
-    Enabled: true
-    RequestsPerMinute: 100
-    BurstSize: 20
-```
-
-## Monitoring
-
-### Query Logging
-
-```yaml
-GraphQL:
-  Logging:
-    Queries: true
-    SlowQueryThreshold: 1000  # ms
-    IncludeVariables: false
-```
-
-### Metrics
-
-```graphql
-query Metrics {
-  graphqlMetrics {
-    totalQueries
-    totalMutations
-    totalSubscriptions
-    averageQueryTime
-    errorRate
-    activeSubscriptions
-  }
-}
-```
-
-## Security Best Practices
-
-1. **Always enable authentication** in production
-2. **Use HTTPS** for GraphQL endpoint
-3. **Implement query depth limiting** to prevent DoS
-4. **Set query timeout** for long-running queries
-5. **Use field-level authorization** for sensitive data
-6. **Implement rate limiting** per user/IP
-7. **Validate and sanitize** all inputs
-8. **Log and monitor** suspicious queries
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Connection refused:**
-   - Verify GraphQL is enabled in config
-   - Check port is not blocked
-   - Ensure service is running
-
-2. **Authentication errors:**
-   - Check token validity
-   - Verify token secret matches
-   - Ensure user has required permissions
-
-3. **Slow queries:**
-   - Add indexes to database
-   - Limit query depth
-   - Use pagination for large datasets
-
-4. **WebSocket issues:**
-   - Check firewall allows WebSocket
-   - Verify WebSocket endpoint
-   - Check for proxy configuration
+1. Payloads are returned according to the `DataFormat` argument (`JSON` or `BINARY`). JSON mode automatically parses payloads that contain valid JSON strings.
+2. When user management is disabled you can still call `login`; it simply announces that authentication is off.
+3. The OPC UA fields appear only when a device configuration store is available. If you run without a persistent config store those queries/mutations are absent from the schema at runtime.
+4. The HTTP endpoint also serves the static dashboard under `/dashboard` (see `GraphQLServer.start()` for details).
