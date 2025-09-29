@@ -216,6 +216,11 @@ function createServerRow(server) {
                         '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
                     }
                 </button>
+                <button class="btn-action btn-cert" onclick="manageCertificates('${escapeHtml(server.name)}')" title="Manage Certificates">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                    </svg>
+                </button>
                 <button class="btn-action btn-delete" onclick="deleteServer('${escapeHtml(server.name)}')" title="Delete Server">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
@@ -776,6 +781,11 @@ function hideErrorMessage() {
 function showSuccessMessage(message) {
     // TODO: Implement success notification
     console.log('Success:', message);
+}
+
+function manageCertificates(serverName) {
+    // Navigate to the certificate management page for the specific server
+    window.location.href = `/pages/opcua-server-certificates.html?server=${encodeURIComponent(serverName)}`;
 }
 
 function escapeHtml(text) {

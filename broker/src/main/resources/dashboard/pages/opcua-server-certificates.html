@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - OPC UA Server Certificates</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <style>
+        /* Certificate Management Page Styles */
+        .page-header .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .breadcrumb a {
+            color: var(--monster-purple);
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            border-radius: 12px 12px 0 0;
+        }
+
+        .table-title h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .btn-icon {
+            padding: 0.6rem;
+            min-width: auto;
+            width: auto;
+        }
+
+        .btn-icon svg {
+            margin: 0;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            padding: 0.75rem 1rem;
+        }
+
+        .btn svg {
+            flex-shrink: 0;
+        }
+
+        /* Enhanced table styling */
+        .data-table {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+            margin-bottom: 2rem;
+        }
+
+        .data-table table {
+            margin: 0;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+            width: 100%;
+        }
+
+        .data-table thead th {
+            background: var(--dark-surface-2);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--dark-border);
+            text-align: left;
+        }
+
+        .data-table tbody td {
+            padding: 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+        }
+
+        .data-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Certificate selection styling */
+        .cert-checkbox {
+            margin-right: 0.5rem;
+            accent-color: var(--monster-purple);
+            transform: scale(1.2);
+        }
+
+        .cert-row.selected {
+            background: rgba(124, 58, 237, 0.1);
+        }
+
+        .cert-fingerprint {
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .cert-subject {
+            color: var(--text-primary);
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .cert-details {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .cert-validity {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .cert-first-seen {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Action buttons */
+        .action-buttons {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .btn-primary {
+            background: var(--monster-purple);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--monster-light);
+        }
+
+        .btn-primary:disabled {
+            background: var(--dark-border);
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background: var(--monster-red);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-danger:disabled {
+            background: var(--dark-border);
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--dark-surface-2);
+            color: var(--text-primary);
+            border: 1px solid var(--dark-border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--dark-border);
+        }
+
+        /* Bulk selection */
+        .bulk-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+        }
+
+        .selection-info {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .selection-info .count {
+            color: var(--monster-purple);
+            font-weight: 600;
+        }
+
+        /* Loading and error states */
+        .loading-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+
+        .loading-spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--dark-border);
+            border-top: 2px solid var(--monster-purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 0.75rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+            color: #f87171;
+        }
+
+        .success-message {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+            color: #4ade80;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state svg {
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        /* Section styling */
+        .certificate-section {
+            margin-bottom: 2rem;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .section-badge {
+            background: var(--dark-surface-2);
+            color: var(--text-secondary);
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .trusted-badge {
+            background: rgba(34, 197, 94, 0.1);
+            color: rgb(34, 197, 94);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .rejected-badge {
+            background: rgba(251, 191, 36, 0.1);
+            color: rgb(251, 191, 36);
+            border: 1px solid rgba(251, 191, 36, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <div class="nav-links">
+                <a href="/pages/dashboard.html">Dashboard</a>
+                <a href="/pages/sessions.html">Sessions</a>
+                <a href="/pages/archive-groups.html">Archives</a>
+                <a href="/pages/topic-browser.html">Topics</a>
+                <a href="/pages/opcua-devices.html">OPC UA Clients</a>
+                <a href="/pages/opcua-servers.html">OPC UA Servers</a>
+                <a href="/pages/users.html" id="users-link" style="display: none;">Users</a>
+                <a href="#" id="logout-link">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <div class="page-header">
+                <div class="breadcrumb">
+                    <a href="/pages/opcua-servers.html">OPC UA Servers</a>
+                    <span>›</span>
+                    <span id="server-name-breadcrumb">Certificate Management</span>
+                </div>
+                <h1 class="page-title">Certificate Management</h1>
+                <p class="page-subtitle" id="server-subtitle">Manage trusted and rejected certificates for OPC UA server</p>
+            </div>
+
+            <!-- Success/Error Messages -->
+            <div id="success-message" class="success-message" style="display: none;"></div>
+            <div id="error-message" class="error-message" style="display: none;"></div>
+
+            <!-- Rejected Certificates Section -->
+            <div class="certificate-section">
+                <div class="section-header">
+                    <h2 class="section-title">Rejected Certificates</h2>
+                    <span class="section-badge rejected-badge" id="rejected-count">0</span>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn btn-primary" id="trust-selected-btn" onclick="trustSelectedCertificates()" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        Trust Selected
+                    </button>
+                    <button class="btn btn-danger" id="delete-rejected-btn" onclick="deleteSelectedRejectedCertificates()" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                        Delete Selected
+                    </button>
+                    <button class="btn btn-secondary btn-icon" onclick="refreshCertificates()" title="Refresh certificates">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div id="rejected-certificates-table" class="data-table">
+                    <div class="bulk-actions">
+                        <div class="selection-info">
+                            <span class="count" id="rejected-selected-count">0</span> of <span id="rejected-total-count">0</span> certificates selected
+                        </div>
+                        <label>
+                            <input type="checkbox" id="select-all-rejected" onchange="toggleSelectAllRejected()">
+                            Select All
+                        </label>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th width="50px">Select</th>
+                                <th>Certificate Details</th>
+                                <th>Fingerprint</th>
+                                <th>Validity Period</th>
+                                <th>First Seen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rejected-certificates-tbody">
+                            <!-- Rejected certificate rows will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="no-rejected-certificates" class="empty-state" style="display: none;">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z"/>
+                    </svg>
+                    <h3>No rejected certificates</h3>
+                    <p>All client certificates are currently trusted or no clients have connected yet.</p>
+                </div>
+            </div>
+
+            <!-- Trusted Certificates Section -->
+            <div class="certificate-section">
+                <div class="section-header">
+                    <h2 class="section-title">Trusted Certificates</h2>
+                    <span class="section-badge trusted-badge" id="trusted-count">0</span>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn btn-danger" id="delete-trusted-btn" onclick="deleteSelectedTrustedCertificates()" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                        Delete Selected
+                    </button>
+                </div>
+
+                <div id="trusted-certificates-table" class="data-table">
+                    <div class="bulk-actions">
+                        <div class="selection-info">
+                            <span class="count" id="trusted-selected-count">0</span> of <span id="trusted-total-count">0</span> certificates selected
+                        </div>
+                        <label>
+                            <input type="checkbox" id="select-all-trusted" onchange="toggleSelectAllTrusted()">
+                            Select All
+                        </label>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th width="50px">Select</th>
+                                <th>Certificate Details</th>
+                                <th>Fingerprint</th>
+                                <th>Validity Period</th>
+                                <th>First Seen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trusted-certificates-tbody">
+                            <!-- Trusted certificate rows will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="no-trusted-certificates" class="empty-state" style="display: none;">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                    </svg>
+                    <h3>No trusted certificates</h3>
+                    <p>No client certificates have been trusted yet. Trust rejected certificates to add them here.</p>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading certificates...</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/opcua-server-certificates.js"></script>
+</body>
+</html>
