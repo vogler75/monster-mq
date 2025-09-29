@@ -4,7 +4,6 @@ import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigException
 import at.rocworks.stores.IDeviceConfigStore
-import at.rocworks.stores.OpcUaConnectionConfig
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
@@ -295,7 +294,7 @@ class DeviceConfigStorePostgres(
                 stmt.setString(1, device.name)
                 stmt.setString(2, device.namespace)
                 stmt.setString(3, device.nodeId)
-                stmt.setString(4, device.config.toJsonObject().toString())
+                stmt.setString(4, device.config.toString())
                 stmt.setBoolean(5, device.enabled)
                 stmt.setString(6, device.type)
                 stmt.setTimestamp(7, Timestamp.from(device.createdAt))
@@ -461,22 +460,21 @@ class DeviceConfigStorePostgres(
             throw DeviceConfigException("Updated timestamp is null for device name: $name")
         }
 
-        val configJson = JsonObject(configString)
-        logger.info("Config JSON for device $name: $configString")
-
-        val opcUaConfig = try {
-            OpcUaConnectionConfig.Companion.fromJsonObject(configJson)
+        val configJson = try {
+            JsonObject(configString)
         } catch (e: Exception) {
-            logger.severe("Failed to parse OpcUaConnectionConfig for device $name: ${e.message}")
+            logger.severe("Failed to parse config JSON for device $name: ${e.message}")
             logger.severe("Config JSON content: $configString")
             throw DeviceConfigException("Failed to parse config JSON for device $name", e)
         }
+
+        logger.info("Config JSON for device $name: $configString")
 
         return DeviceConfig(
             name = name!!,
             namespace = namespace!!,
             nodeId = nodeId!!,
-            config = opcUaConfig,
+            config = configJson,
             enabled = rs.getBoolean("enabled"),
             type = type ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,
             createdAt = createdAt!!.toInstant(),

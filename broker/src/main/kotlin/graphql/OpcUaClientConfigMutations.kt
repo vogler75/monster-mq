@@ -213,20 +213,24 @@ class OpcUaClientConfigMutations(
                             return@onComplete
                         }
 
+                        // Parse existing config from JsonObject
+                        val existingConfig = OpcUaConnectionConfig.fromJsonObject(existingDevice.config)
+                        val requestConfig = OpcUaConnectionConfig.fromJsonObject(request.config)
+
                         // Update device (preserve creation time, existing addresses, and passwords if not provided)
-                        val newConfig = request.config.copy(
-                            addresses = existingDevice.config.addresses,
+                        val newConfig = requestConfig.copy(
+                            addresses = existingConfig.addresses,
                             // Preserve existing password if not provided in update
-                            password = request.config.password ?: existingDevice.config.password,
+                            password = requestConfig.password ?: existingConfig.password,
                             // Preserve existing keystore password if not provided in update
-                            certificateConfig = request.config.certificateConfig.copy(
-                                keystorePassword = request.config.certificateConfig.keystorePassword
-                                    ?: existingDevice.config.certificateConfig.keystorePassword
+                            certificateConfig = requestConfig.certificateConfig.copy(
+                                keystorePassword = requestConfig.certificateConfig.keystorePassword
+                                    ?: existingConfig.certificateConfig.keystorePassword
                             )
                         )
                         val updatedDevice = request.toDeviceConfig().copy(
                             createdAt = existingDevice.createdAt,
-                            config = newConfig
+                            config = newConfig.toJsonObject()
                         )
                         deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
                             if (saveResult.succeeded()) {
@@ -481,7 +485,7 @@ class OpcUaClientConfigMutations(
         val changeData = JsonObject()
             .put("operation", operation)
             .put("deviceName", device.name)
-            .put("device", device.toJsonObject())
+            .put("device", deviceToJson(device))
 
         vertx.eventBus().publish(OpcUaExtension.Companion.ADDRESS_DEVICE_CONFIG_CHANGED, changeData)
         logger.info("Notified device config change: $operation for device ${device.name}")
@@ -543,7 +547,7 @@ class OpcUaClientConfigMutations(
             name = input["name"] as String,
             namespace = input["namespace"] as String,
             nodeId = input["nodeId"] as String,
-            config = config,
+            config = config.toJsonObject(),  // Convert to JsonObject
             enabled = input["enabled"] as? Boolean ?: true,
             type = DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT  // Always use OPCUA-Client type
         )
@@ -624,8 +628,11 @@ class OpcUaClientConfigMutations(
                         return@onComplete
                     }
 
+                    // Parse existing config from JsonObject
+                    val existingConfig = OpcUaConnectionConfig.fromJsonObject(existingDevice.config)
+
                     // Check if address already exists
-                    if (existingDevice.config.addresses.any { it.address == address.address }) {
+                    if (existingConfig.addresses.any { it.address == address.address }) {
                         future.complete(
                             mapOf(
                                 "success" to false,
@@ -636,9 +643,9 @@ class OpcUaClientConfigMutations(
                     }
 
                     // Add the new address
-                    val updatedAddresses = existingDevice.config.addresses + address
-                    val updatedConfig = existingDevice.config.copy(addresses = updatedAddresses)
-                    val updatedDevice = existingDevice.copy(config = updatedConfig, updatedAt = Instant.now())
+                    val updatedAddresses = existingConfig.addresses + address
+                    val updatedConfig = existingConfig.copy(addresses = updatedAddresses)
+                    val updatedDevice = existingDevice.copy(config = updatedConfig.toJsonObject(), updatedAt = Instant.now())
 
                     deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
                         if (saveResult.succeeded()) {
@@ -720,8 +727,11 @@ class OpcUaClientConfigMutations(
                         return@onComplete
                     }
 
+                    // Parse existing config from JsonObject
+                    val existingConfig = OpcUaConnectionConfig.fromJsonObject(existingDevice.config)
+
                     // Check if address exists
-                    if (!existingDevice.config.addresses.any { it.address == address }) {
+                    if (!existingConfig.addresses.any { it.address == address }) {
                         future.complete(
                             mapOf(
                                 "success" to false,
@@ -732,9 +742,9 @@ class OpcUaClientConfigMutations(
                     }
 
                     // Remove the address
-                    val updatedAddresses = existingDevice.config.addresses.filter { it.address != address }
-                    val updatedConfig = existingDevice.config.copy(addresses = updatedAddresses)
-                    val updatedDevice = existingDevice.copy(config = updatedConfig, updatedAt = Instant.now())
+                    val updatedAddresses = existingConfig.addresses.filter { it.address != address }
+                    val updatedConfig = existingConfig.copy(addresses = updatedAddresses)
+                    val updatedDevice = existingDevice.copy(config = updatedConfig.toJsonObject(), updatedAt = Instant.now())
 
                     deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
                         if (saveResult.succeeded()) {
@@ -775,29 +785,44 @@ class OpcUaClientConfigMutations(
         }
     }
 
+    private fun deviceToJson(device: DeviceConfig): JsonObject {
+        return JsonObject()
+            .put("name", device.name)
+            .put("namespace", device.namespace)
+            .put("nodeId", device.nodeId)
+            .put("config", device.config)
+            .put("enabled", device.enabled)
+            .put("type", device.type)
+            .put("createdAt", device.createdAt.toString())
+            .put("updatedAt", device.updatedAt.toString())
+    }
+
     private fun deviceToMap(device: DeviceConfig): Map<String, Any?> {
         val currentNodeId = Monster.Companion.getClusterNodeId(vertx) ?: "local"
+
+        // Parse config from JsonObject for OPC UA Client devices
+        val config = OpcUaConnectionConfig.fromJsonObject(device.config)
 
         return mapOf(
             "name" to device.name,
             "namespace" to device.namespace,
             "nodeId" to device.nodeId,
             "config" to mapOf(
-                "endpointUrl" to device.config.endpointUrl,
-                "updateEndpointUrl" to device.config.updateEndpointUrl,
-                "securityPolicy" to device.config.securityPolicy,
-                "username" to device.config.username,
-                "subscriptionSamplingInterval" to device.config.subscriptionSamplingInterval,
-                "keepAliveFailuresAllowed" to device.config.keepAliveFailuresAllowed,
-                "reconnectDelay" to device.config.reconnectDelay,
-                "connectionTimeout" to device.config.connectionTimeout,
-                "requestTimeout" to device.config.requestTimeout,
+                "endpointUrl" to config.endpointUrl,
+                "updateEndpointUrl" to config.updateEndpointUrl,
+                "securityPolicy" to config.securityPolicy,
+                "username" to config.username,
+                "subscriptionSamplingInterval" to config.subscriptionSamplingInterval,
+                "keepAliveFailuresAllowed" to config.keepAliveFailuresAllowed,
+                "reconnectDelay" to config.reconnectDelay,
+                "connectionTimeout" to config.connectionTimeout,
+                "requestTimeout" to config.requestTimeout,
                 "monitoringParameters" to mapOf(
-                    "bufferSize" to device.config.monitoringParameters.bufferSize,
-                    "samplingInterval" to device.config.monitoringParameters.samplingInterval,
-                    "discardOldest" to device.config.monitoringParameters.discardOldest
+                    "bufferSize" to config.monitoringParameters.bufferSize,
+                    "samplingInterval" to config.monitoringParameters.samplingInterval,
+                    "discardOldest" to config.monitoringParameters.discardOldest
                 ),
-                "addresses" to device.config.addresses.map { address ->
+                "addresses" to config.addresses.map { address ->
                     mapOf(
                         "address" to address.address,
                         "topic" to address.topic,
@@ -806,15 +831,15 @@ class OpcUaClientConfigMutations(
                     )
                 },
                 "certificateConfig" to mapOf(
-                    "securityDir" to device.config.certificateConfig.securityDir,
-                    "applicationName" to device.config.certificateConfig.applicationName,
-                    "applicationUri" to device.config.certificateConfig.applicationUri,
-                    "organization" to device.config.certificateConfig.organization,
-                    "organizationalUnit" to device.config.certificateConfig.organizationalUnit,
-                    "localityName" to device.config.certificateConfig.localityName,
-                    "countryCode" to device.config.certificateConfig.countryCode,
-                    "createSelfSigned" to device.config.certificateConfig.createSelfSigned,
-                    "keystorePassword" to device.config.certificateConfig.keystorePassword
+                    "securityDir" to config.certificateConfig.securityDir,
+                    "applicationName" to config.certificateConfig.applicationName,
+                    "applicationUri" to config.certificateConfig.applicationUri,
+                    "organization" to config.certificateConfig.organization,
+                    "organizationalUnit" to config.certificateConfig.organizationalUnit,
+                    "localityName" to config.certificateConfig.localityName,
+                    "countryCode" to config.certificateConfig.countryCode,
+                    "createSelfSigned" to config.certificateConfig.createSelfSigned,
+                    "keystorePassword" to config.certificateConfig.keystorePassword
                 )
             ),
             "enabled" to device.enabled,

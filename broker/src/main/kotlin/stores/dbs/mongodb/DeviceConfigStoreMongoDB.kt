@@ -4,7 +4,6 @@ import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigException
 import at.rocworks.stores.IDeviceConfigStore
-import at.rocworks.stores.OpcUaConnectionConfig
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
@@ -298,7 +297,7 @@ class DeviceConfigStoreMongoDB(
     }
 
     private fun mapDeviceToDocument(device: DeviceConfig): Document {
-        val configJson = device.config.toJsonObject()
+        val configJson = device.config
 
         return Document().apply {
             put("name", device.name)
@@ -338,7 +337,7 @@ class DeviceConfigStoreMongoDB(
             name = name,
             namespace = namespace,
             nodeId = nodeId,
-            config = OpcUaConnectionConfig.fromJsonObject(configJson),
+            config = configJson,
             enabled = document.getBoolean("enabled", true),
             type = document.getString("type") ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,
             createdAt = document.getDate("created_at")?.toInstant() ?: Instant.now(),

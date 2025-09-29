@@ -138,27 +138,30 @@ class OpcUaClientConfigQueries(
     private fun deviceToMap(device: DeviceConfig): Map<String, Any> {
         val currentNodeId = Monster.Companion.getClusterNodeId(vertx) ?: "local"
 
+        // Parse config from JsonObject for OPC UA Client devices
+        val config = at.rocworks.stores.OpcUaConnectionConfig.fromJsonObject(device.config)
+
         return mapOf(
             "name" to device.name,
             "namespace" to device.namespace,
             "nodeId" to device.nodeId,
             "config" to mapOf(
-                "endpointUrl" to device.config.endpointUrl,
-                "updateEndpointUrl" to device.config.updateEndpointUrl,
-                "securityPolicy" to device.config.securityPolicy,
-                "username" to (device.config.username ?: ""),
-                "password" to (device.config.password ?: ""),
-                "subscriptionSamplingInterval" to device.config.subscriptionSamplingInterval,
-                "keepAliveFailuresAllowed" to device.config.keepAliveFailuresAllowed,
-                "reconnectDelay" to device.config.reconnectDelay,
-                "connectionTimeout" to device.config.connectionTimeout,
-                "requestTimeout" to device.config.requestTimeout,
+                "endpointUrl" to config.endpointUrl,
+                "updateEndpointUrl" to config.updateEndpointUrl,
+                "securityPolicy" to config.securityPolicy,
+                "username" to (config.username ?: ""),
+                "password" to (config.password ?: ""),
+                "subscriptionSamplingInterval" to config.subscriptionSamplingInterval,
+                "keepAliveFailuresAllowed" to config.keepAliveFailuresAllowed,
+                "reconnectDelay" to config.reconnectDelay,
+                "connectionTimeout" to config.connectionTimeout,
+                "requestTimeout" to config.requestTimeout,
                 "monitoringParameters" to mapOf(
-                    "bufferSize" to device.config.monitoringParameters.bufferSize,
-                    "samplingInterval" to device.config.monitoringParameters.samplingInterval,
-                    "discardOldest" to device.config.monitoringParameters.discardOldest
+                    "bufferSize" to config.monitoringParameters.bufferSize,
+                    "samplingInterval" to config.monitoringParameters.samplingInterval,
+                    "discardOldest" to config.monitoringParameters.discardOldest
                 ),
-                "addresses" to device.config.addresses.map { address ->
+                "addresses" to config.addresses.map { address ->
                     mapOf(
                         "address" to address.address,
                         "topic" to address.topic,
@@ -167,17 +170,17 @@ class OpcUaClientConfigQueries(
                     )
                 },
                 "certificateConfig" to mapOf(
-                    "securityDir" to device.config.certificateConfig.securityDir,
-                    "applicationName" to device.config.certificateConfig.applicationName,
-                    "applicationUri" to device.config.certificateConfig.applicationUri,
-                    "organization" to device.config.certificateConfig.organization,
-                    "organizationalUnit" to device.config.certificateConfig.organizationalUnit,
-                    "localityName" to device.config.certificateConfig.localityName,
-                    "countryCode" to device.config.certificateConfig.countryCode,
-                    "createSelfSigned" to device.config.certificateConfig.createSelfSigned,
-                    "keystorePassword" to device.config.certificateConfig.keystorePassword,
-                    "validateServerCertificate" to device.config.certificateConfig.validateServerCertificate,
-                    "autoAcceptServerCertificates" to device.config.certificateConfig.autoAcceptServerCertificates
+                    "securityDir" to config.certificateConfig.securityDir,
+                    "applicationName" to config.certificateConfig.applicationName,
+                    "applicationUri" to config.certificateConfig.applicationUri,
+                    "organization" to config.certificateConfig.organization,
+                    "organizationalUnit" to config.certificateConfig.organizationalUnit,
+                    "localityName" to config.certificateConfig.localityName,
+                    "countryCode" to config.certificateConfig.countryCode,
+                    "createSelfSigned" to config.certificateConfig.createSelfSigned,
+                    "keystorePassword" to config.certificateConfig.keystorePassword,
+                    "validateServerCertificate" to config.certificateConfig.validateServerCertificate,
+                    "autoAcceptServerCertificates" to config.certificateConfig.autoAcceptServerCertificates
                 )
             ),
             "enabled" to device.enabled,

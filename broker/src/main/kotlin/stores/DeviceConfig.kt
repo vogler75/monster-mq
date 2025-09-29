@@ -8,12 +8,12 @@ import java.time.Instant
  * OPC UA device configuration with cluster node assignment
  */
 data class DeviceConfig(
-    val name: String,                       // Device identifier (e.g., "plc01")
-    val namespace: String,                  // MQTT topic namespace (e.g., "opcua/plc01")
+    val name: String,                       // Device identifier (e.g., "plc01", "server")
+    val namespace: String,                  // MQTT topic namespace (e.g., "opcua/plc01", "server")
     val nodeId: String,                     // Cluster node ID that handles this device
-    val config: OpcUaConnectionConfig,      // OPC UA connection configuration
+    val config: JsonObject,                 // Device-specific configuration as JSON
     val enabled: Boolean = true,
-    val type: String = DEVICE_TYPE_OPCUA_CLIENT, // Device type
+    val type: String = DEVICE_TYPE_OPCUA_CLIENT, // Device type (OPCUA-Client, OPCUA-Server, etc.)
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now()
 ) {
@@ -26,7 +26,7 @@ data class DeviceConfig(
                 name = json.getString("name"),
                 namespace = json.getString("namespace"),
                 nodeId = json.getString("nodeId"),
-                config = OpcUaConnectionConfig.fromJsonObject(json.getJsonObject("config")),
+                config = json.getJsonObject("config") ?: JsonObject(),
                 enabled = json.getBoolean("enabled", true),
                 type = json.getString("type", DEVICE_TYPE_OPCUA_CLIENT),
                 createdAt = json.getString("createdAt")?.let { Instant.parse(it) } ?: Instant.now(),
@@ -40,7 +40,7 @@ data class DeviceConfig(
             .put("name", name)
             .put("namespace", namespace)
             .put("nodeId", nodeId)
-            .put("config", config.toJsonObject())
+            .put("config", config)
             .put("enabled", enabled)
             .put("type", type)
             .put("createdAt", createdAt.toString())
@@ -329,22 +329,8 @@ data class OpcUaConnectionConfig(
                     certificateConfig = certificateConfig
                 )
 
-                // Preserve any extra fields not part of the standard config
-                val standardFields = setOf(
-                    "endpointUrl", "updateEndpointUrl", "securityPolicy", "username", "password",
-                    "subscriptionSamplingInterval", "keepAliveFailuresAllowed", "reconnectDelay",
-                    "connectionTimeout", "requestTimeout", "monitoringParameters", "addresses", "certificateConfig"
-                )
-
-                try {
-                    json.forEach { entry ->
-                        if (!standardFields.contains(entry.key)) {
-                            config.extraFields.put(entry.key, entry.value)
-                        }
-                    }
-                } catch (e: Exception) {
-                    println("Error processing extra fields: ${e.message}")
-                }
+                // DeviceConfig is only for OPC UA Client devices
+                // OPC UA Server devices should use a separate configuration system
 
                 return config
             } catch (e: Exception) {
@@ -354,15 +340,7 @@ data class OpcUaConnectionConfig(
         }
     }
 
-    // Store extra fields that are not part of the data class
-    var extraFields: JsonObject = JsonObject()
-
     fun toJsonObject(): JsonObject {
-        val addressArray = JsonArray()
-        addresses.forEach { address ->
-            addressArray.add(address.toJsonObject())
-        }
-
         val result = JsonObject()
             .put("endpointUrl", endpointUrl)
             .put("updateEndpointUrl", updateEndpointUrl)
@@ -375,12 +353,15 @@ data class OpcUaConnectionConfig(
             .put("connectionTimeout", connectionTimeout)
             .put("requestTimeout", requestTimeout)
             .put("monitoringParameters", monitoringParameters.toJsonObject())
-            .put("addresses", addressArray)
             .put("certificateConfig", certificateConfig.toJsonObject())
 
-        // Merge any extra fields (like opcUaServerConfig)
-        extraFields.forEach { entry ->
-            result.put(entry.key, entry.value)
+        // Add addresses array if we have addresses
+        if (addresses.isNotEmpty()) {
+            val addressArray = JsonArray()
+            addresses.forEach { address ->
+                addressArray.add(address.toJsonObject())
+            }
+            result.put("addresses", addressArray)
         }
 
         return result
@@ -504,7 +485,7 @@ data class DeviceConfigRequest(
     val name: String,
     val namespace: String,
     val nodeId: String,
-    val config: OpcUaConnectionConfig,
+    val config: JsonObject,
     val enabled: Boolean = true,
     val type: String = DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT
 ) {
@@ -544,7 +525,10 @@ data class DeviceConfigRequest(
             errors.add("nodeId cannot be blank")
         }
 
-        errors.addAll(config.validate())
+        // Basic config validation - ensure it's not empty
+        if (config.isEmpty) {
+            errors.add("config cannot be empty")
+        }
 
         return errors
     }

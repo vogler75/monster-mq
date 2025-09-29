@@ -4,9 +4,6 @@ import at.rocworks.devices.opcuaserver.*
 import at.rocworks.extensions.graphql.GraphQLAuthContext
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.DeviceConfig
-import at.rocworks.stores.OpcUaConnectionConfig
-import at.rocworks.stores.MonitoringParameters
-import at.rocworks.stores.CertificateConfig
 import at.rocworks.Monster
 import at.rocworks.Utils
 import graphql.schema.DataFetcher
@@ -116,7 +113,7 @@ class OpcUaServerMutations(
                 if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
                     try {
                         val deviceConfig = result.result()!!
-                        val configJson = JsonObject(deviceConfig.config.toJsonObject().toString())
+                        val configJson = deviceConfig.config
 
                         // Load server config using helper method (handles both old and new formats)
                         val serverConfig = loadServerConfigFromDeviceConfig(deviceConfig).copy(enabled = true) // Enable when starting
@@ -243,7 +240,7 @@ class OpcUaServerMutations(
                 if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
                     try {
                         val deviceConfig = result.result()!!
-                        val configJson = JsonObject(deviceConfig.config.toJsonObject().toString())
+                        val configJson = deviceConfig.config
 
                         // Load server config using helper method (handles both old and new formats)
                         val serverConfig = loadServerConfigFromDeviceConfig(deviceConfig)
@@ -313,7 +310,7 @@ class OpcUaServerMutations(
                 if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
                     try {
                         val deviceConfig = result.result()!!
-                        val configJson = JsonObject(deviceConfig.config.toJsonObject().toString())
+                        val configJson = deviceConfig.config
 
                         // Load server config using helper method (handles both old and new formats)
                         val serverConfig = loadServerConfigFromDeviceConfig(deviceConfig)
@@ -421,40 +418,18 @@ class OpcUaServerMutations(
      * Convert OpcUaServerConfig to DeviceConfig
      */
     private fun convertToDeviceConfig(serverConfig: OpcUaServerConfig): DeviceConfig {
-        // Create a flattened config structure by merging OpcUaConnectionConfig with OpcUaServerConfig
-        // and remove nodeId/enabled (stored in DeviceConfig table directly)
-        val connectionConfig = OpcUaConnectionConfig(
-            endpointUrl = "opc.tcp://localhost:${serverConfig.port}/${serverConfig.path}",
-            updateEndpointUrl = false,
-            securityPolicy = "None",
-            username = null,
-            password = null,
-            subscriptionSamplingInterval = 0.0,
-            keepAliveFailuresAllowed = 3,
-            reconnectDelay = 5000L,
-            connectionTimeout = 10000L,
-            requestTimeout = 5000L,
-            monitoringParameters = MonitoringParameters(),
-            addresses = emptyList(), // No addresses at this level
-            certificateConfig = CertificateConfig()
-        )
-
-        // Flatten all OPC UA server fields to the top level (removing nodeId and enabled)
-        val serverConfigJson = serverConfig.toJsonObject().apply {
+        // Create a flattened config structure with all OPC UA server fields
+        // Remove nodeId and enabled (stored in DeviceConfig table directly)
+        val configJson = serverConfig.toJsonObject().apply {
             remove("nodeId")
             remove("enabled")
-        }
-
-        // Merge all server config fields directly into extraFields for flat structure
-        serverConfigJson.forEach { entry ->
-            connectionConfig.extraFields.put(entry.key, entry.value)
         }
 
         return DeviceConfig(
             name = serverConfig.name,
             namespace = serverConfig.namespace,
             nodeId = serverConfig.nodeId,
-            config = connectionConfig,
+            config = configJson,
             enabled = serverConfig.enabled,
             type = DEVICE_TYPE
         )
@@ -464,8 +439,8 @@ class OpcUaServerMutations(
      * Convert DeviceConfig to OpcUaServerInfo
      */
     private fun convertToOpcUaServerInfo(deviceConfig: DeviceConfig): OpcUaServerInfo {
-        // Get the flattened config JSON (OPC UA server fields are at top level now)
-        val configJson = JsonObject(deviceConfig.config.toJsonObject().toString())
+        // Get the config JSON directly
+        val configJson = deviceConfig.config
 
         // All OPC UA server fields are now flattened to the top level
         return OpcUaServerInfo(
@@ -659,7 +634,7 @@ class OpcUaServerMutations(
      * Load OpcUaServerConfig from DeviceConfig, handling both legacy nested format and new flattened format
      */
     private fun loadServerConfigFromDeviceConfig(deviceConfig: DeviceConfig): OpcUaServerConfig {
-        val configJson = JsonObject(deviceConfig.config.toJsonObject().toString())
+        val configJson = deviceConfig.config
 
         return if (configJson.containsKey("opcUaServerConfig")) {
             // Legacy nested format - extract from opcUaServerConfig field

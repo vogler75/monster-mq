@@ -85,7 +85,7 @@ class OpcUaConnector : AbstractVerticle() {
             // Load device configuration
             val deviceJson = config().getJsonObject("device")
             deviceConfig = DeviceConfig.fromJsonObject(deviceJson)
-            opcUaConfig = deviceConfig.config
+            opcUaConfig = OpcUaConnectionConfig.fromJsonObject(deviceConfig.config)
 
             logger.info("Starting OpcUaConnector for device: ${deviceConfig.name}")
 
@@ -172,7 +172,7 @@ class OpcUaConnector : AbstractVerticle() {
             return promise.future()
         }
 
-        val addresses = deviceConfig.config.addresses
+        val addresses = opcUaConfig.addresses
         if (addresses.isEmpty()) {
             logger.info("No addresses configured for device ${deviceConfig.name}")
             promise.complete()

@@ -177,8 +177,8 @@ class OpcUaServerExtension(
 
                     configs.forEach { device ->
                         try {
-                            // Parse the configuration - the device.config should have extraFields with opcUaServerConfig
-                            val configJson = device.config.toJsonObject()
+                            // Parse the configuration - the device.config is already a JsonObject
+                            val configJson = device.config
 
                             // Handle both old nested format and new flattened format
                             val serverConfig = if (configJson.containsKey("opcUaServerConfig")) {
@@ -213,7 +213,7 @@ class OpcUaServerExtension(
                             }
 
                             if (serverConfig.enabled) {
-                                startServerInternal(serverConfig)
+                                startServerInternal(serverConfig, skipSave = true) // Don't save back during startup
                             }
 
                         } catch (e: Exception) {
@@ -371,40 +371,18 @@ class OpcUaServerExtension(
     private fun saveServerConfig(config: OpcUaServerConfig) {
         deviceConfigStore?.let { store ->
             try {
-                // Create a flattened config structure by merging OpcUaConnectionConfig with OpcUaServerConfig
-                // and remove nodeId/enabled (stored in DeviceConfig table directly)
-                val connectionConfig = at.rocworks.stores.OpcUaConnectionConfig(
-                    endpointUrl = "opc.tcp://localhost:${config.port}/${config.path}",
-                    updateEndpointUrl = false,
-                    securityPolicy = "None",
-                    username = null,
-                    password = null,
-                    subscriptionSamplingInterval = 0.0,
-                    keepAliveFailuresAllowed = 3,
-                    reconnectDelay = 5000L,
-                    connectionTimeout = 10000L,
-                    requestTimeout = 5000L,
-                    monitoringParameters = at.rocworks.stores.MonitoringParameters(),
-                    addresses = emptyList(), // No addresses at this level
-                    certificateConfig = at.rocworks.stores.CertificateConfig()
-                )
-
-                // Flatten all OPC UA server fields to the top level (removing nodeId and enabled)
-                val serverConfigJson = config.toJsonObject().apply {
+                // Create a flattened config structure with all OPC UA server fields
+                // Remove nodeId and enabled (stored in DeviceConfig table directly)
+                val configJson = config.toJsonObject().apply {
                     remove("nodeId")
                     remove("enabled")
-                }
-
-                // Merge all server config fields directly into extraFields for flat structure
-                serverConfigJson.forEach { entry ->
-                    connectionConfig.extraFields.put(entry.key, entry.value)
                 }
 
                 val deviceConfig = at.rocworks.stores.DeviceConfig(
                     name = config.name,
                     namespace = config.namespace,
                     nodeId = config.nodeId,
-                    config = connectionConfig,
+                    config = configJson,
                     enabled = config.enabled,
                     type = DEVICE_TYPE
                 )

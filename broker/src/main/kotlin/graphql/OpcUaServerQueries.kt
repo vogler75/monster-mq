@@ -133,57 +133,34 @@ class OpcUaServerQueries(
      * Convert DeviceConfig to OpcUaServerInfo
      */
     private fun convertToOpcUaServerInfo(device: DeviceConfig): OpcUaServerInfo {
-        // Get the connection config JSON
-        val configJson = JsonObject(device.config.toJsonObject().toString())
+        // Get the config JSON directly
+        val configJson = device.config
 
-        // Check if we have the full OPC UA server config stored
-        val serverConfigJson = configJson.getJsonObject("opcUaServerConfig")
 
-        return if (serverConfigJson != null) {
-            // Use the stored OPC UA server configuration
-            OpcUaServerInfo(
-                name = device.name,
-                namespace = device.namespace,
-                nodeId = device.nodeId,
-                enabled = device.enabled,
-                port = serverConfigJson.getInteger("port", 4840),
-                path = serverConfigJson.getString("path", "server"),
-                namespaceIndex = serverConfigJson.getInteger("namespaceIndex", 1),
-                namespaceUri = serverConfigJson.getString("namespaceUri", "urn:MonsterMQ:OpcUaServer"),
-                addresses = parseAddresses(serverConfigJson),
-                security = parseSecurity(serverConfigJson),
-                bufferSize = serverConfigJson.getInteger("bufferSize", 1000),
-                updateInterval = serverConfigJson.getLong("updateInterval", 100L),
-                createdAt = serverConfigJson.getString("createdAt") ?: "",
-                updatedAt = serverConfigJson.getString("updatedAt") ?: "",
-                isOnCurrentNode = device.nodeId == "*" || device.nodeId == currentNodeId,
-                status = null // Will be populated later
-            )
-        } else {
-            // Fallback for legacy data or missing config - extract port from endpointUrl
-            val endpointUrl = configJson.getString("endpointUrl", "opc.tcp://localhost:4840/server")
-            val port = extractPortFromEndpointUrl(endpointUrl)
-            val path = extractPathFromEndpointUrl(endpointUrl)
+        // After flattening, all config is directly in the main JSON object
+        // Extract port from endpointUrl if available, otherwise use the port field
+        val endpointUrl = configJson.getString("endpointUrl", "opc.tcp://localhost:4840/server")
+        val port = configJson.getInteger("port") ?: extractPortFromEndpointUrl(endpointUrl)
+        val path = configJson.getString("path") ?: extractPathFromEndpointUrl(endpointUrl)
 
-            OpcUaServerInfo(
-                name = device.name,
-                namespace = device.namespace,
-                nodeId = device.nodeId,
-                enabled = device.enabled,
-                port = port,
-                path = path,
-                namespaceIndex = configJson.getInteger("namespaceIndex", 1),
-                namespaceUri = configJson.getString("namespaceUri", "urn:MonsterMQ:OpcUaServer"),
-                addresses = parseAddresses(configJson),
-                security = parseSecurity(configJson),
-                bufferSize = configJson.getInteger("bufferSize", 1000),
-                updateInterval = configJson.getLong("updateInterval", 100L),
-                createdAt = device.config.toJsonObject().getString("createdAt") ?: "",
-                updatedAt = device.config.toJsonObject().getString("updatedAt") ?: "",
-                isOnCurrentNode = device.nodeId == "*" || device.nodeId == currentNodeId,
-                status = null // Will be populated later
-            )
-        }
+        return OpcUaServerInfo(
+            name = device.name,
+            namespace = device.namespace,
+            nodeId = device.nodeId,
+            enabled = device.enabled,
+            port = port,
+            path = path,
+            namespaceIndex = configJson.getInteger("namespaceIndex", 1),
+            namespaceUri = configJson.getString("namespaceUri", "urn:MonsterMQ:OpcUaServer"),
+            addresses = parseAddresses(configJson),
+            security = parseSecurity(configJson),
+            bufferSize = configJson.getInteger("bufferSize", 1000),
+            updateInterval = configJson.getLong("updateInterval", 100L),
+            createdAt = configJson.getString("createdAt") ?: "",
+            updatedAt = configJson.getString("updatedAt") ?: "",
+            isOnCurrentNode = device.nodeId == "*" || device.nodeId == currentNodeId,
+            status = null // Will be populated later
+        )
     }
 
     /**
@@ -215,7 +192,9 @@ class OpcUaServerQueries(
     }
 
     private fun parseAddresses(configJson: JsonObject): List<OpcUaServerAddressInfo> {
-        return configJson.getJsonArray("addresses", io.vertx.core.json.JsonArray())
+        val addressesArray = configJson.getJsonArray("addresses", io.vertx.core.json.JsonArray())
+
+        val result = addressesArray
             .filterIsInstance<JsonObject>()
             .map { addrJson ->
                 OpcUaServerAddressInfo(
@@ -228,6 +207,8 @@ class OpcUaServerQueries(
                     unit = addrJson.getString("unit")
                 )
             }
+
+        return result
     }
 
     private fun parseSecurity(configJson: JsonObject): OpcUaServerSecurityInfo {

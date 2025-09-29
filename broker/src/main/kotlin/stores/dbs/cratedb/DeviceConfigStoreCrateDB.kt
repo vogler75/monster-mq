@@ -4,7 +4,6 @@ import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigException
 import at.rocworks.stores.IDeviceConfigStore
-import at.rocworks.stores.OpcUaConnectionConfig
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
@@ -270,7 +269,7 @@ class DeviceConfigStoreCrateDB(
                 stmt.setString(1, device.name)
                 stmt.setString(2, device.namespace)
                 stmt.setString(3, device.nodeId)
-                stmt.setString(4, device.config.toJsonObject().toString())
+                stmt.setString(4, device.config.toString())
                 stmt.setBoolean(5, device.enabled)
                 stmt.setString(6, device.type)
                 stmt.setTimestamp(7, Timestamp.from(device.createdAt))
@@ -410,7 +409,7 @@ class DeviceConfigStoreCrateDB(
             name = name,
             namespace = namespace,
             nodeId = nodeId,
-            config = OpcUaConnectionConfig.Companion.fromJsonObject(configJson),
+            config = configJson,
             enabled = rs.getBoolean("enabled"),
             type = rs.getString("type") ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,
             createdAt = rs.getTimestamp("created_at").toInstant(),

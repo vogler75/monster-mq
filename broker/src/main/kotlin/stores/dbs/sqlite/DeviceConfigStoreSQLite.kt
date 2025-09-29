@@ -323,26 +323,8 @@ class DeviceConfigStoreSQLite(
                 val exists = result.result() != null
 
                 try {
-                    val addressesArray = JsonArray()
-                    device.config.addresses.forEach { address ->
-                        addressesArray.add(
-                            JsonObject()
-                            .put("address", address.address)
-                            .put("topic", address.topic)
-                            .put("publishMode", address.publishMode))
-                    }
-
-                    val configJson = JsonObject()
-                        .put("endpointUrl", device.config.endpointUrl)
-                        .put("securityPolicy", device.config.securityPolicy)
-                        .put("username", device.config.username)
-                        .put("password", device.config.password)
-                        .put("subscriptionSamplingInterval", device.config.subscriptionSamplingInterval)
-                        .put("keepAliveFailuresAllowed", device.config.keepAliveFailuresAllowed)
-                        .put("reconnectDelay", device.config.reconnectDelay)
-                        .put("connectionTimeout", device.config.connectionTimeout)
-                        .put("requestTimeout", device.config.requestTimeout)
-                        .put("addresses", addressesArray)
+                    // Config is already a JsonObject, use it directly
+                    val configJson = device.config
 
                     val sql = if (exists) UPDATE_DEVICE else INSERT_DEVICE
                     val params = if (exists) {
@@ -507,35 +489,6 @@ class DeviceConfigStoreSQLite(
     private fun mapJsonToDeviceConfig(row: JsonObject): DeviceConfig {
         val configJson = JsonObject(row.getString("config"))
 
-        // Parse addresses array from JSON
-        val addresses = mutableListOf<OpcUaAddress>()
-        val addressesArray = configJson.getJsonArray("addresses")
-        if (addressesArray != null) {
-            addressesArray.forEach { addressObj ->
-                val addressJson = addressObj as JsonObject
-                addresses.add(
-                    OpcUaAddress(
-                    address = addressJson.getString("address"),
-                    topic = addressJson.getString("topic"),
-                    publishMode = addressJson.getString("publishMode", "SINGLE")?.uppercase() ?: "SINGLE"
-                )
-                )
-            }
-        }
-
-        val config = OpcUaConnectionConfig(
-            endpointUrl = configJson.getString("endpointUrl"),
-            securityPolicy = configJson.getString("securityPolicy", "None"),
-            username = configJson.getString("username"),
-            password = configJson.getString("password"),
-            subscriptionSamplingInterval = configJson.getDouble("subscriptionSamplingInterval", 1000.0),
-            keepAliveFailuresAllowed = configJson.getInteger("keepAliveFailuresAllowed", 3),
-            reconnectDelay = configJson.getLong("reconnectDelay", 5000L),
-            connectionTimeout = configJson.getLong("connectionTimeout", 10000L),
-            requestTimeout = configJson.getLong("requestTimeout", 5000L),
-            addresses = addresses
-        )
-
         // Parse SQLite datetime strings to Instant
         val createdAtStr = row.getString("created_at")
         val updatedAtStr = row.getString("updated_at")
@@ -568,7 +521,7 @@ class DeviceConfigStoreSQLite(
             name = row.getString("name"),
             namespace = row.getString("namespace"),
             nodeId = row.getString("node_id"),
-            config = config,
+            config = configJson,
             enabled = row.getInteger("enabled") == 1,
             type = row.getString("type") ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT,
             createdAt = createdAt,

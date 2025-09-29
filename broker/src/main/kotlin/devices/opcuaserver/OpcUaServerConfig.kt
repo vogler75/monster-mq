@@ -26,6 +26,12 @@ data class OpcUaServerConfig(
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): OpcUaServerConfig {
+            println("DEBUG OpcUaServerConfig.fromJsonObject: input JSON keys: ${json.fieldNames()}")
+            println("DEBUG OpcUaServerConfig.fromJsonObject: addresses field present: ${json.containsKey("addresses")}")
+            val addressesArray = json.getJsonArray("addresses", JsonArray())
+            println("DEBUG OpcUaServerConfig.fromJsonObject: addresses array size: ${addressesArray.size()}")
+            println("DEBUG OpcUaServerConfig.fromJsonObject: addresses array content: $addressesArray")
+
             return OpcUaServerConfig(
                 name = json.getString("name"),
                 namespace = json.getString("namespace"),
@@ -35,7 +41,7 @@ data class OpcUaServerConfig(
                 path = json.getString("path", "server"),
                 namespaceIndex = json.getInteger("namespaceIndex", 1),
                 namespaceUri = json.getString("namespaceUri", "urn:MonsterMQ:OpcUaServer"),
-                addresses = json.getJsonArray("addresses", JsonArray())
+                addresses = addressesArray
                     .filterIsInstance<JsonObject>()
                     .map { OpcUaServerAddress.fromJsonObject(it) },
                 security = OpcUaServerSecurity.fromJsonObject(
@@ -85,16 +91,20 @@ data class OpcUaServerAddress(
     companion object {
         fun fromJsonObject(json: JsonObject): OpcUaServerAddress {
             return OpcUaServerAddress(
-                mqttTopic = json.getString("mqttTopic"),
+                mqttTopic = json.getString("mqttTopic") ?: throw IllegalArgumentException("mqttTopic is required"),
                 displayName = json.getString("displayName")?.takeIf { it.isNotBlank() },
                 browseName = json.getString("browseName"),
                 description = json.getString("description"),
-                dataType = OpcUaServerDataType.valueOf(
-                    json.getString("dataType", OpcUaServerDataType.TEXT.name)
-                ),
-                accessLevel = OpcUaAccessLevel.valueOf(
-                    json.getString("accessLevel", OpcUaAccessLevel.READ_ONLY.name)
-                ),
+                dataType = try {
+                    OpcUaServerDataType.valueOf(json.getString("dataType", OpcUaServerDataType.TEXT.name))
+                } catch (e: Exception) {
+                    OpcUaServerDataType.TEXT
+                },
+                accessLevel = try {
+                    OpcUaAccessLevel.valueOf(json.getString("accessLevel", OpcUaAccessLevel.READ_ONLY.name))
+                } catch (e: Exception) {
+                    OpcUaAccessLevel.READ_ONLY
+                },
                 unit = json.getString("unit")
             )
         }
