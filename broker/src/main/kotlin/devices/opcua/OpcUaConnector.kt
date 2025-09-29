@@ -200,6 +200,45 @@ class OpcUaConnector : AbstractVerticle() {
         return promise.future()
     }
 
+    /**
+     * Updates endpoint URL based on the updateEndpointUrl configuration flag
+     * This is useful when connecting through load balancers or when the server advertises
+     * internal addresses that are not reachable from the client.
+     */
+    private fun endpointUpdater(endpoint: EndpointDescription): EndpointDescription {
+        return if (opcUaConfig.updateEndpointUrl) {
+            val parts = opcUaConfig.endpointUrl.split("://", ":", "/")
+            when {
+                parts.size == 1 -> {
+                    logger.fine("Update endpoint to host [${parts[0]}]!")
+                    EndpointUtil.updateUrl(endpoint, parts[0])
+                }
+                parts.size > 1 -> {
+                    val hostname = parts[1]
+                    if (parts.size > 2) {
+                        val port = parts[2].toIntOrNull()
+                        if (port != null) {
+                            logger.fine("Update endpoint to host [$hostname] and port [$port]!")
+                            EndpointUtil.updateUrl(endpoint, hostname, port)
+                        } else {
+                            logger.fine("Update endpoint to host [$hostname]!")
+                            EndpointUtil.updateUrl(endpoint, hostname)
+                        }
+                    } else {
+                        logger.fine("Update endpoint to host [$hostname]!")
+                        EndpointUtil.updateUrl(endpoint, hostname)
+                    }
+                }
+                else -> {
+                    logger.warning("Cannot split endpoint url [${opcUaConfig.endpointUrl}]")
+                    endpoint
+                }
+            }
+        } else {
+            endpoint
+        }
+    }
+
     private fun createOpcUaClient(identityProvider: IdentityProvider): OpcUaClient {
         val securityPolicy = when (opcUaConfig.securityPolicy.uppercase()) {
             "NONE" -> SecurityPolicy.None
@@ -214,9 +253,30 @@ class OpcUaConnector : AbstractVerticle() {
         val certificateConfig = opcUaConfig.certificateConfig
 
         return if (securityPolicy == SecurityPolicy.None || keyStoreLoader?.clientCertificate == null) {
-            // Create simple client without certificates for unsecured connections
+            // Create client without certificates for unsecured connections
             logger.info("Creating OPC UA client without certificates (security policy: ${opcUaConfig.securityPolicy})")
-            OpcUaClient.create(opcUaConfig.endpointUrl)
+
+            if (opcUaConfig.updateEndpointUrl) {
+                // For unsecured connections with endpoint updating
+                OpcUaClient.create(
+                    opcUaConfig.endpointUrl,
+                    { endpoints: List<EndpointDescription> ->
+                        endpoints.stream()
+                            .filter { endpoint -> endpoint.securityPolicyUri == securityPolicy.uri }
+                            .map { endpoint -> endpointUpdater(endpoint) }
+                            .findFirst()
+                    }
+                ) { configBuilder: OpcUaClientConfigBuilder ->
+                    configBuilder
+                        .setIdentityProvider(identityProvider)
+                        .setRequestTimeout(UInteger.valueOf(opcUaConfig.requestTimeout))
+                        .setConnectTimeout(UInteger.valueOf(opcUaConfig.connectionTimeout))
+                        .build()
+                }
+            } else {
+                // Simple client creation without endpoint updating
+                OpcUaClient.create(opcUaConfig.endpointUrl)
+            }
         } else {
             // Create client with certificates for secured connections
             logger.info("Creating OPC UA client with certificates (security policy: ${opcUaConfig.securityPolicy})")
@@ -226,6 +286,7 @@ class OpcUaConnector : AbstractVerticle() {
                 { endpoints: List<EndpointDescription> ->
                     endpoints.stream()
                         .filter { endpoint -> endpoint.securityPolicyUri == securityPolicy.uri }
+                        .map { endpoint -> endpointUpdater(endpoint) }
                         .findFirst()
                 }
             ) { configBuilder: OpcUaClientConfigBuilder ->
