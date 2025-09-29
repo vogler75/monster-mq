@@ -1,0 +1,17 @@
+Release v1.6.11
+Built from commit: 6d8387b
+Date: 2025-09-29 16:33:47
+
+Changes since v1.6.10:
+---
+6d8387b Merge branch 'development'
+6b6a8dd Update docs
+88f6794 Update OpcUaServerConfig.kt
+9f90d4c Use X500Principal for certificate subject and issuer
+7e55eb1 Add OPC UA server certificate management UI
+101d276 Remove support for removing trusted OPC UA certificates
+15f3b90 Add OPC UA server certificate management
+47bfa22 Use unique trusted directory per OPC UA server
+1f1cf46 Add OPC UA server certificate management and security options
+45db452 Use namespace as root folder name in OPC UA server
+8d6996e Remove OPC UA server config store and Postgres impl
