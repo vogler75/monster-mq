@@ -24,10 +24,10 @@ import java.util.concurrent.Callable
 /**
  * MongoDB implementation of IConfigStore for archive group configuration management
  */
-class ConfigStoreMongoDB(
+class ArchiveConfigStoreMongoDB(
     private val connectionString: String,
     private val databaseName: String
-) : AbstractVerticle(), IConfigStore {
+) : AbstractVerticle(), IArchiveConfigStore {
 
     private val logger: Logger = Utils.getLogger(this::class.java)
     private val collectionName = "archiveconfigs"

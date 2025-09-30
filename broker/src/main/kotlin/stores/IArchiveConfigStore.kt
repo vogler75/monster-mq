@@ -8,7 +8,7 @@ data class ArchiveGroupConfig(
     val enabled: Boolean
 )
 
-interface IConfigStore {
+interface IArchiveConfigStore {
     fun getType(): String
 
     fun getAllArchiveGroups(): Future<List<ArchiveGroupConfig>>

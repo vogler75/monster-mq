@@ -5,7 +5,7 @@ import at.rocworks.Utils
 import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.stores.ArchiveGroupConfig
 import at.rocworks.stores.DatabaseConnection
-import at.rocworks.stores.IConfigStore
+import at.rocworks.stores.IArchiveConfigStore
 import at.rocworks.stores.MessageStoreType
 import at.rocworks.stores.MessageArchiveType
 import at.rocworks.utils.DurationParser
@@ -17,11 +17,11 @@ import io.vertx.core.json.JsonArray
 import java.sql.*
 import java.util.concurrent.Callable
 
-class ConfigStorePostgres(
+class ArchiveConfigStorePostgres(
     private val url: String,
     private val username: String,
     private val password: String
-): AbstractVerticle(), IConfigStore {
+): AbstractVerticle(), IArchiveConfigStore {
     private val logger = Utils.getLogger(this::class.java)
 
     private val configTableName = "archiveconfigs"
