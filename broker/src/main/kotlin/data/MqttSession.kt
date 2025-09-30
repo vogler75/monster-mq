@@ -7,7 +7,7 @@ data class MqttSession(
     val clientId: String,
     var cleanSession: Boolean,
     var connected: Boolean? = null,
-    var lastWill: MqttMessage? = null,
+    var lastWill: BrokerMessage? = null,
     val messagesIn: AtomicLong = AtomicLong(0),
     val messagesOut: AtomicLong = AtomicLong(0),
     var nodeId: String? = null,

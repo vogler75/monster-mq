@@ -2,7 +2,7 @@ package at.rocworks.handlers
 
 import at.rocworks.Monster
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import com.hazelcast.cluster.MembershipEvent
 import com.hazelcast.cluster.MembershipListener
 import com.hazelcast.map.IMap

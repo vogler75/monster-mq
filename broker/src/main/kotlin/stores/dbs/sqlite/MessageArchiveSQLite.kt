@@ -2,7 +2,7 @@ package at.rocworks.stores.sqlite
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.MessageArchiveType
 import at.rocworks.data.PurgeResult
@@ -67,7 +67,7 @@ class MessageArchiveSQLite(
         }
     }
 
-    override fun addHistory(messages: List<MqttMessage>) {
+    override fun addHistory(messages: List<BrokerMessage>) {
         if (messages.isEmpty()) return
         
         val sql = """INSERT INTO $tableName (topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid) 

@@ -14,7 +14,7 @@ import java.io.Serializable
 import java.time.Instant
 import java.util.*
 
-class MqttMessage(
+class BrokerMessage(
     val messageUuid: String = Utils.getUuid(),
     val messageId: Int,
     val topicName: String,
@@ -64,8 +64,8 @@ class MqttMessage(
         clientId
     )
 
-    fun cloneWithNewQoS(qosLevel: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender)
-    fun cloneWithNewMessageId(messageId: Int): MqttMessage = MqttMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender)
+    fun cloneWithNewQoS(qosLevel: Int): BrokerMessage = BrokerMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender)
+    fun cloneWithNewMessageId(messageId: Int): BrokerMessage = BrokerMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 

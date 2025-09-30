@@ -17,6 +17,8 @@ import at.rocworks.graphql.OpcUaServerQueries
 import at.rocworks.graphql.OpcUaServerMutations
 import at.rocworks.graphql.OpcUaServerInfo
 import at.rocworks.graphql.OpcUaServerCertificateInfo
+import at.rocworks.graphql.MqttClientConfigQueries
+import at.rocworks.graphql.MqttClientConfigMutations
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
@@ -241,6 +243,10 @@ class GraphQLServer(
         val opcUaServerQueries = deviceStore?.let { OpcUaServerQueries(vertx, it) }
         val opcUaServerMutations = deviceStore?.let { OpcUaServerMutations(vertx, it) }
 
+        // Initialize MQTT Client resolvers
+        val mqttClientQueries = deviceStore?.let { MqttClientConfigQueries(vertx, it) }
+        val mqttClientMutations = deviceStore?.let { MqttClientConfigMutations(vertx, it) }
+
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
             .scalar(ExtendedScalars.GraphQLLong)
@@ -300,6 +306,14 @@ class GraphQLServer(
                             dataFetcher("opcUaServerCertificates", resolver.opcUaServerCertificates())
                         }
                     }
+                    // MQTT Client queries
+                    .apply {
+                        mqttClientQueries?.let { resolver ->
+                            dataFetcher("mqttClients", resolver.mqttClients())
+                            dataFetcher("mqttClient", resolver.mqttClient())
+                            dataFetcher("mqttClientsByNode", resolver.mqttClientsByNode())
+                        }
+                    }
             }
             // Register mutation resolvers
             .type("Mutation") { builder ->
@@ -353,6 +367,20 @@ class GraphQLServer(
                             // Certificate management mutations
                             dataFetcher("trustOpcUaServerCertificates", resolver.trustOpcUaServerCertificates())
                             dataFetcher("deleteOpcUaServerCertificates", resolver.deleteOpcUaServerCertificates())
+                        }
+                    }
+                    // MQTT Client mutations
+                    .apply {
+                        mqttClientMutations?.let { resolver ->
+                            dataFetcher("createMqttClient", resolver.createMqttClient())
+                            dataFetcher("updateMqttClient", resolver.updateMqttClient())
+                            dataFetcher("deleteMqttClient", resolver.deleteMqttClient())
+                            dataFetcher("startMqttClient", resolver.startMqttClient())
+                            dataFetcher("stopMqttClient", resolver.stopMqttClient())
+                            dataFetcher("toggleMqttClient", resolver.toggleMqttClient())
+                            dataFetcher("reassignMqttClient", resolver.reassignMqttClient())
+                            dataFetcher("addMqttClientAddress", resolver.addMqttClientAddress())
+                            dataFetcher("deleteMqttClientAddress", resolver.deleteMqttClientAddress())
                         }
                     }
             }

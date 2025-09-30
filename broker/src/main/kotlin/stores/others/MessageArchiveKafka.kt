@@ -2,8 +2,8 @@ package at.rocworks.stores
 
 import at.rocworks.Utils
 import at.rocworks.bus.KafkaConfigBuilder
-import at.rocworks.data.MqttMessage
-import at.rocworks.data.MqttMessageCodec
+import at.rocworks.data.BrokerMessage
+import at.rocworks.data.BrokerMessageCodec
 import at.rocworks.data.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
@@ -81,8 +81,8 @@ class MessageArchiveKafka(
         }
     }
 
-    override fun addHistory(messages: List<MqttMessage>) {
-        val codec = MqttMessageCodec()
+    override fun addHistory(messages: List<BrokerMessage>) {
+        val codec = BrokerMessageCodec()
         messages.forEach { message ->
             val buffer = Buffer.buffer()
             codec.encodeToWire(buffer, message)

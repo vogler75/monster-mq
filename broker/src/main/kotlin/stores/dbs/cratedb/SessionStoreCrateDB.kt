@@ -2,7 +2,7 @@ package at.rocworks.stores.cratedb
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.ISessionStoreSync
@@ -205,7 +205,7 @@ class SessionStoreCrateDB(
         }
     }
 
-    override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit) {
+    override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: BrokerMessage) -> Unit) {
         try {
             db.connection?.let { connection ->
                 ("SELECT client_id, clean_session, last_will_topic, last_will_message, last_will_qos, last_will_retain "+
@@ -223,10 +223,10 @@ class SessionStoreCrateDB(
                             callback(
                                 clientId,
                                 cleanSession,
-                                MqttMessage(
+                                BrokerMessage(
                                     messageId = 0,
                                     topicName = topic,
-                                    payload = MqttMessage.getPayloadFromBase64(payload),
+                                    payload = BrokerMessage.getPayloadFromBase64(payload),
                                     qosLevel = qos,
                                     isRetain = retained,
                                     isDup = false,
@@ -321,7 +321,7 @@ class SessionStoreCrateDB(
         return false
     }
 
-    override fun setLastWill(clientId: String, message: MqttMessage?) {
+    override fun setLastWill(clientId: String, message: BrokerMessage?) {
         val sql = "UPDATE $sessionsTableName "+
                 "SET last_will_topic = ?, last_will_message = ?, last_will_qos = ?, last_will_retain = ? "+
                 "WHERE client_id = ?"
@@ -438,7 +438,7 @@ class SessionStoreCrateDB(
         }
     }
 
-    override fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>) {
+    override fun enqueueMessages(messages: List<Pair<BrokerMessage, List<String>>>) {
         val sql1 = "INSERT INTO $queuedMessagesTableName "+
                    "(message_uuid, message_id, topic, payload, qos, retained, client_id) VALUES (?, ?, ?, ?, ?, ?, ?) "+
                    "ON CONFLICT (message_uuid) DO NOTHING"
@@ -478,7 +478,7 @@ class SessionStoreCrateDB(
         }
     }
 
-    override fun dequeueMessages(clientId: String, callback: (MqttMessage)->Boolean) {
+    override fun dequeueMessages(clientId: String, callback: (BrokerMessage)->Boolean) {
         val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id "+
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) "+
                   "WHERE c.client_id = ? "+
@@ -496,12 +496,12 @@ class SessionStoreCrateDB(
                         val messageUuid = resultSet.getString(1)
                         val messageId = resultSet.getInt(2)
                         val topic = resultSet.getString(3)
-                        val payload = MqttMessage.getPayloadFromBase64(resultSet.getString(4))
+                        val payload = BrokerMessage.getPayloadFromBase64(resultSet.getString(4))
                         val qos = resultSet.getInt(5)
                         val retained = resultSet.getBoolean(6)
                         val clientIdPublisher = resultSet.getString(6)
                         val continueProcessing = callback(
-                            MqttMessage(
+                            BrokerMessage(
                                 messageUuid = messageUuid,
                                 messageId = messageId,
                                 topicName = topic,

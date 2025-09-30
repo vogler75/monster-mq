@@ -1,6 +1,6 @@
 package at.rocworks.stores
 
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.PurgeResult
 import java.time.Instant
 
@@ -8,14 +8,14 @@ object MessageStoreNone : IMessageStore {
     override fun getName(): String = "NONE"
     override fun getType(): MessageStoreType = MessageStoreType.NONE
     
-    override fun get(topicName: String): MqttMessage? = null
-    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) = callback(null)
+    override fun get(topicName: String): BrokerMessage? = null
+    override fun getAsync(topicName: String, callback: (BrokerMessage?) -> Unit) = callback(null)
     
-    override fun addAll(messages: List<MqttMessage>) {}
+    override fun addAll(messages: List<BrokerMessage>) {}
     
     override fun delAll(topics: List<String>) {}
     
-    override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {}
+    override fun findMatchingMessages(topicName: String, callback: (BrokerMessage) -> Boolean) {}
 
     override fun findMatchingTopics(topicPattern: String, callback: (String) -> Boolean) {}
 

@@ -2,7 +2,7 @@ package at.rocworks.stores.mongodb
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.stores.ISessionStoreSync
 import at.rocworks.stores.SessionStoreType
@@ -117,7 +117,7 @@ class SessionStoreMongoDB(
         }
     }
 
-    override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit) {
+    override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: BrokerMessage) -> Unit) {
         try {
             val clients = sessionsCollection.find(eq("node_id", nodeId))
             for (doc in clients) {
@@ -130,7 +130,7 @@ class SessionStoreMongoDB(
                     val payload = lastWillDoc.get("payload", Binary::class.java).data
                     val qos = lastWillDoc.getInteger("qos")
                     val retain = lastWillDoc.getBoolean("retain")
-                    MqttMessage(
+                    BrokerMessage(
                         messageId = 0,
                         topicName = topic,
                         payload = payload,
@@ -141,7 +141,7 @@ class SessionStoreMongoDB(
                         clientId = clientId
                     )
                 } else {
-                    MqttMessage(
+                    BrokerMessage(
                         messageId = 0,
                         topicName = "",
                         payload = ByteArray(0),
@@ -208,7 +208,7 @@ class SessionStoreMongoDB(
         }
     }
 
-    override fun setLastWill(clientId: String, message: MqttMessage?) {
+    override fun setLastWill(clientId: String, message: BrokerMessage?) {
         try {
             val update = if (message != null) {
                 Document("\$set", Document(mapOf(
@@ -281,7 +281,7 @@ class SessionStoreMongoDB(
         }
     }
 
-    override fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>) {
+    override fun enqueueMessages(messages: List<Pair<BrokerMessage, List<String>>>) {
         try {
             messages.forEach { (message, clientIds) ->
                 val messageDocument = Document(mapOf(
@@ -319,7 +319,7 @@ class SessionStoreMongoDB(
         }
     }
 
-    override fun dequeueMessages(clientId: String, callback: (MqttMessage) -> Boolean) {
+    override fun dequeueMessages(clientId: String, callback: (BrokerMessage) -> Boolean) {
         try {
             val pipeline = listOf(
                 Document("\$match", Document("client_id", clientId)),
@@ -347,7 +347,7 @@ class SessionStoreMongoDB(
                 val clientIdPublisher = messageDoc.getString("client_id")
 
                 val continueProcessing = callback(
-                    MqttMessage(
+                    BrokerMessage(
                         messageUuid = messageUuid,
                         messageId = messageId,
                         topicName = topic,

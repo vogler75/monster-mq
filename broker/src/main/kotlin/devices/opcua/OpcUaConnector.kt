@@ -1,7 +1,7 @@
 package at.rocworks.devices.opcua
 
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -873,7 +873,7 @@ class OpcUaConnector : AbstractVerticle() {
             )
 
             // Publish to the generated MQTT topic
-            val mqttMessage = MqttMessage(
+            val mqttMessage = BrokerMessage(
                 messageId = 0,
                 topicName = mqttTopic,
                 payload = payload.encode().toByteArray(),

@@ -2,7 +2,7 @@ package at.rocworks.stores.cratedb
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
@@ -83,7 +83,7 @@ class MessageStoreCrateDB(
         db.start(vertx, startPromise)
     }
 
-    override fun get(topicName: String): MqttMessage? {
+    override fun get(topicName: String): BrokerMessage? {
         try {
             db.connection?.let { connection ->
                 val sql = "SELECT payload_b64, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?"
@@ -93,7 +93,7 @@ class MessageStoreCrateDB(
                     val resultSet = preparedStatement.executeQuery()
 
                     if (resultSet.next()) {
-                        val payload = MqttMessage.getPayloadFromBase64(resultSet.getString(1))
+                        val payload = BrokerMessage.getPayloadFromBase64(resultSet.getString(1))
                         val qos = resultSet.getInt(2)
                         val retained = resultSet.getBoolean(3)
                         val clientId = resultSet.getString(4)
@@ -104,7 +104,7 @@ class MessageStoreCrateDB(
                             lastGetError = 0
                         }
 
-                        return MqttMessage(
+                        return BrokerMessage(
                             messageUuid = messageUuid,
                             messageId = 0,
                             topicName = topicName,
@@ -127,9 +127,9 @@ class MessageStoreCrateDB(
         return null
     }
 
-    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
+    override fun getAsync(topicName: String, callback: (BrokerMessage?) -> Unit) {
         // Use Vertx to execute database query asynchronously
-        vertx.executeBlocking<MqttMessage?> {
+        vertx.executeBlocking<BrokerMessage?> {
             get(topicName)
         }.onComplete { result ->
             if (result.succeeded()) {
@@ -141,7 +141,7 @@ class MessageStoreCrateDB(
         }
     }
 
-    override fun addAll(messages: List<MqttMessage>) {
+    override fun addAll(messages: List<BrokerMessage>) {
         val fixedColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")
         val fixedPlaceholders = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "?" }
         val sql = "INSERT INTO $tableName (topic, $fixedColumns, topic_r, topic_l, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid) "+
@@ -213,7 +213,7 @@ class MessageStoreCrateDB(
         }
     }
 
-    override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
+    override fun findMatchingMessages(topicName: String, callback: (BrokerMessage) -> Boolean) {
         val levels = Utils.getTopicLevels(topicName)
         val filter = levels.mapIndexed { index, level ->
             when (level) {
@@ -246,11 +246,11 @@ class MessageStoreCrateDB(
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
                         val topic = resultSet.getString(1)
-                        val payload = MqttMessage.getPayloadFromBase64(resultSet.getString(2))
+                        val payload = BrokerMessage.getPayloadFromBase64(resultSet.getString(2))
                         val qos = resultSet.getInt(3)
                         val clientId = resultSet.getString(4)
                         val messageUuid = resultSet.getString(5)
-                        val message = MqttMessage(
+                        val message = BrokerMessage(
                             messageUuid = messageUuid,
                             messageId = 0,
                             topicName = topic,

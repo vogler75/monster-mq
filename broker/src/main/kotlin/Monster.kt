@@ -3,8 +3,8 @@ package at.rocworks
 import at.rocworks.bus.IMessageBus
 import at.rocworks.bus.MessageBusKafka
 import at.rocworks.bus.MessageBusVertx
-import at.rocworks.data.MqttMessage
-import at.rocworks.data.MqttMessageCodec
+import at.rocworks.data.BrokerMessage
+import at.rocworks.data.BrokerMessageCodec
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
 import at.rocworks.extensions.graphql.GraphQLServer
@@ -33,6 +33,7 @@ import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import com.hazelcast.config.Config
 import at.rocworks.devices.opcua.OpcUaExtension
 import at.rocworks.devices.opcuaserver.OpcUaServerExtension
+import at.rocworks.devices.mqttclient.MqttClientExtension
 import at.rocworks.stores.DeviceConfigStoreFactory
 import handlers.MetricsHandler
 import java.io.File
@@ -452,7 +453,7 @@ MORE INFO:
         val retainedStoreType = MessageStoreType.valueOf(Monster.getRetainedStoreType(configJson))
         logger.info("RetainedMessageStoreType [${retainedStoreType}]")
 
-        vertx.eventBus().registerDefaultCodec(MqttMessage::class.java, MqttMessageCodec())
+        vertx.eventBus().registerDefaultCodec(BrokerMessage::class.java, BrokerMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
 
         getSessionStore(vertx).onSuccess { sessionStore ->
@@ -489,6 +490,9 @@ MORE INFO:
 
                 // OPC UA Extension
                 val opcUaExtension = OpcUaExtension()
+
+                // MQTT Client Extension
+                val mqttClientExtension = MqttClientExtension()
 
                 // User management
                 val userManager = at.rocworks.auth.UserManager(configJson)
@@ -624,6 +628,10 @@ MORE INFO:
                         } else {
                             Future.succeededFuture<String>()
                         }
+                    }
+                    .compose {
+                        val mqttClientDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(mqttClientExtension, mqttClientDeploymentOptions)
                     }
                     .compose {
                         if (metricsCollector != null) {

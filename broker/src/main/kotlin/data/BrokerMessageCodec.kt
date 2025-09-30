@@ -4,9 +4,9 @@ import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.MessageCodec
 import java.time.Instant
 
-class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
+class BrokerMessageCodec : MessageCodec<BrokerMessage, BrokerMessage> {
 
-    override fun encodeToWire(buffer: Buffer, s: MqttMessage) {
+    override fun encodeToWire(buffer: Buffer, s: BrokerMessage) {
         fun addString(text: String) {
             val str = text.toByteArray(Charsets.UTF_8)
             buffer.appendInt(str.size)
@@ -33,7 +33,7 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
         buffer.appendBuffer(Buffer.buffer(s.payload))
     }
 
-    override fun decodeFromWire(pos: Int, buffer: Buffer): MqttMessage {
+    override fun decodeFromWire(pos: Int, buffer: Buffer): BrokerMessage {
         var position = pos
 
         fun readString(): String {
@@ -71,7 +71,7 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
         position += 8
         val payload = buffer.slice(position, buffer.length())
 
-        return MqttMessage(
+        return BrokerMessage(
             messageUuid,
             messageId,
             topicName,
@@ -85,7 +85,7 @@ class MqttMessageCodec : MessageCodec<MqttMessage, MqttMessage> {
         )
     }
 
-    override fun transform(s: MqttMessage): MqttMessage {
+    override fun transform(s: BrokerMessage): BrokerMessage {
         // Return the original message (no transformation needed)
         return s
     }

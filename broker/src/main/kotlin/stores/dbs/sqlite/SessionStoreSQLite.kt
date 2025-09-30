@@ -2,7 +2,7 @@ package at.rocworks.stores.sqlite
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.stores.ISessionStoreSync
 import at.rocworks.stores.SessionStoreType
@@ -145,7 +145,7 @@ class SessionStoreSQLite(
         }
     }
 
-    override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit) {
+    override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: BrokerMessage) -> Unit) {
         val sql = "SELECT client_id, clean_session, last_will_topic, last_will_message, last_will_qos, last_will_retain FROM $sessionsTableName WHERE node_id = ?"
         val params = JsonArray().add(nodeId)
         try {
@@ -161,7 +161,7 @@ class SessionStoreSQLite(
                     val payload = rowObj.getBinary("last_will_message") ?: ByteArray(0)
                     val qos = rowObj.getInteger("last_will_qos", 0)
                     val retain = rowObj.getBoolean("last_will_retain", false)
-                    MqttMessage(
+                    BrokerMessage(
                         messageUuid = "",
                         messageId = 0,
                         topicName = lastWillTopic,
@@ -173,7 +173,7 @@ class SessionStoreSQLite(
                         isDup = false
                     )
                 } else {
-                    MqttMessage(
+                    BrokerMessage(
                         messageUuid = "",
                         messageId = 0,
                         topicName = "",
@@ -242,7 +242,7 @@ class SessionStoreSQLite(
         return results.size() > 0
     }
 
-    override fun setLastWill(clientId: String, message: MqttMessage?) {
+    override fun setLastWill(clientId: String, message: BrokerMessage?) {
         logger.fine { "Setting last will for client [$clientId] [setLastWill]" }
 
         val sql = """
@@ -345,7 +345,7 @@ class SessionStoreSQLite(
     }
 
     // Simplified implementations for other methods - can be enhanced later
-    override fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>) {
+    override fun enqueueMessages(messages: List<Pair<BrokerMessage, List<String>>>) {
         if (messages.isEmpty()) return
         
         val insertMessageSql = """INSERT INTO $queuedMessagesTableName 
@@ -385,7 +385,7 @@ class SessionStoreSQLite(
         logger.fine("Enqueued ${messages.size} messages for ${messages.sumOf { it.second.size }} client mappings")
     }
 
-    override fun dequeueMessages(clientId: String, callback: (MqttMessage) -> Boolean) {
+    override fun dequeueMessages(clientId: String, callback: (BrokerMessage) -> Boolean) {
         val sql = """SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id
                     FROM $queuedMessagesTableName m
                     JOIN $queuedMessagesClientsTableName c ON m.message_uuid = c.message_uuid
@@ -408,7 +408,7 @@ class SessionStoreSQLite(
                 val retained = rowObj.getBoolean("retained", false)
                 val originalClientId = rowObj.getString("client_id")
 
-                val message = MqttMessage(
+                val message = BrokerMessage(
                     messageUuid = messageUuid,
                     messageId = messageId,
                     topicName = topic,

@@ -2,7 +2,7 @@ package at.rocworks.extensions.graphql
 
 import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.ISessionStoreAsync
 import graphql.schema.DataFetcher
 import graphql.GraphQLException
@@ -55,7 +55,7 @@ class MutationResolver(
                 val payloadBytes = PayloadConverter.decode(payloadStr, format)
                 
                 // Create MQTT message
-                val message = MqttMessage(
+                val message = BrokerMessage(
                     messageUuid = at.rocworks.Utils.getUuid(),
                     messageId = 0,
                     topicName = topic,
@@ -131,7 +131,7 @@ class MutationResolver(
                     val payloadBytes = PayloadConverter.decode(payloadStr, format)
                     
                     // Create MQTT message
-                    val message = MqttMessage(
+                    val message = BrokerMessage(
                         messageUuid = at.rocworks.Utils.getUuid(),
                         messageId = 0,
                         topicName = topic,

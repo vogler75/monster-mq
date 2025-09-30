@@ -2,7 +2,7 @@ package at.rocworks.stores.postgres
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.MqttSubscription
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.ISessionStoreSync
@@ -192,7 +192,7 @@ class SessionStorePostgres(
         }
     }
 
-    override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit) {
+    override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: BrokerMessage) -> Unit) {
         try {
             db.connection?.let { connection ->
                 ("SELECT client_id, clean_session, last_will_topic, last_will_message, last_will_qos, last_will_retain "+
@@ -210,7 +210,7 @@ class SessionStorePostgres(
                             callback(
                                 clientId,
                                 cleanSession,
-                                MqttMessage(
+                                BrokerMessage(
                                     messageId = 0,
                                     topicName = topic,
                                     payload = payload,
@@ -308,7 +308,7 @@ class SessionStorePostgres(
         return false
     }
 
-    override fun setLastWill(clientId: String, message: MqttMessage?) {
+    override fun setLastWill(clientId: String, message: BrokerMessage?) {
         val sql = "UPDATE $sessionsTableName "+
                 "SET last_will_topic = ?, last_will_message = ?, last_will_qos = ?, last_will_retain = ? "+
                 "WHERE client_id = ?"
@@ -415,7 +415,7 @@ class SessionStorePostgres(
         }
     }
 
-    override fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>) {
+    override fun enqueueMessages(messages: List<Pair<BrokerMessage, List<String>>>) {
         val sql1 = "INSERT INTO $queuedMessagesTableName "+
                    "(message_uuid, message_id, topic, payload, qos, retained, client_id) VALUES (?, ?, ?, ?, ?, ?, ?) "+
                    "ON CONFLICT (message_uuid) DO NOTHING"
@@ -455,7 +455,7 @@ class SessionStorePostgres(
         }
     }
 
-    override fun dequeueMessages(clientId: String, callback: (MqttMessage)->Boolean) {
+    override fun dequeueMessages(clientId: String, callback: (BrokerMessage)->Boolean) {
         val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id "+
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) "+
                   "WHERE c.client_id = ? "+
@@ -474,7 +474,7 @@ class SessionStorePostgres(
                         val retained = resultSet.getBoolean(6)
                         val clientIdPublisher = resultSet.getString(6)
                         val continueProcessing = callback(
-                            MqttMessage(
+                            BrokerMessage(
                                 messageUuid = messageUuid,
                                 messageId = messageId,
                                 topicName = topic,
