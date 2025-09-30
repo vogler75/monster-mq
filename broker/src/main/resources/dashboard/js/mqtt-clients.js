@@ -79,6 +79,7 @@ class MqttClientManager {
                                 remoteTopic
                                 localTopic
                                 removePath
+                                qos
                             }
                         }
                     }

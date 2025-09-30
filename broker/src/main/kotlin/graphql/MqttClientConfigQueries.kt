@@ -137,7 +137,8 @@ class MqttClientConfigQueries(
                         "mode" to address.mode,
                         "remoteTopic" to address.remoteTopic,
                         "localTopic" to address.localTopic,
-                        "removePath" to address.removePath
+                        "removePath" to address.removePath,
+                        "qos" to address.qos
                     )
                 }
             ),

@@ -505,6 +505,7 @@ class MqttClientConfigMutations(
                 val remoteTopic = inputMap["remoteTopic"] as? String
                 val localTopic = inputMap["localTopic"] as? String
                 val removePath = inputMap["removePath"] as? Boolean ?: true
+                val qos = inputMap["qos"] as? Int ?: 0
 
                 if (mode == null || remoteTopic == null || localTopic == null) {
                     future.complete(
@@ -521,7 +522,8 @@ class MqttClientConfigMutations(
                     mode = mode,
                     remoteTopic = remoteTopic,
                     localTopic = localTopic,
-                    removePath = removePath
+                    removePath = removePath,
+                    qos = qos
                 )
 
                 val validationErrors = address.validate()
@@ -792,7 +794,8 @@ class MqttClientConfigMutations(
                         "mode" to address.mode,
                         "remoteTopic" to address.remoteTopic,
                         "localTopic" to address.localTopic,
-                        "removePath" to address.removePath
+                        "removePath" to address.removePath,
+                        "qos" to address.qos
                     )
                 }
             ),

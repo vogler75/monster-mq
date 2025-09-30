@@ -1349,6 +1349,8 @@ type MqttClientAddress {
     # Whether to remove the base path from topic names when mapping
     # Example: remoteTopic="sensor/#" with removePath=true maps "sensor/temp/1" to "temp/1"
     removePath: Boolean!
+    # QoS level for MQTT messages (0=At most once, 1=At least once, 2=Exactly once)
+    qos: Int
 }
 
 # MQTT Client connection configuration
@@ -1453,4 +1455,6 @@ input MqttClientAddressInput {
     localTopic: String!
     # Whether to remove the base path from topic names
     removePath: Boolean = true
+    # QoS level for MQTT messages (0, 1, or 2)
+    qos: Int = 0
 }

@@ -542,7 +542,8 @@ data class MqttClientAddress(
     val mode: String,              // "SUBSCRIBE" or "PUBLISH"
     val remoteTopic: String,       // Remote MQTT topic (with wildcards)
     val localTopic: String,        // Local MQTT topic destination/source
-    val removePath: Boolean = true // Remove base path before wildcard
+    val removePath: Boolean = true, // Remove base path before wildcard
+    val qos: Int = 0               // QoS level (0, 1, or 2)
 ) {
     companion object {
         const val MODE_SUBSCRIBE = "SUBSCRIBE"
@@ -553,7 +554,8 @@ data class MqttClientAddress(
                 mode = json.getString("mode"),
                 remoteTopic = json.getString("remoteTopic"),
                 localTopic = json.getString("localTopic"),
-                removePath = json.getBoolean("removePath", true)
+                removePath = json.getBoolean("removePath", true),
+                qos = json.getInteger("qos", 0)
             )
         }
     }
@@ -564,6 +566,7 @@ data class MqttClientAddress(
             .put("remoteTopic", remoteTopic)
             .put("localTopic", localTopic)
             .put("removePath", removePath)
+            .put("qos", qos)
     }
 
     fun validate(): List<String> {
@@ -583,6 +586,10 @@ data class MqttClientAddress(
 
         if (localTopic.isBlank()) {
             errors.add("localTopic cannot be blank")
+        }
+
+        if (qos !in 0..2) {
+            errors.add("qos must be 0, 1, or 2")
         }
 
         return errors

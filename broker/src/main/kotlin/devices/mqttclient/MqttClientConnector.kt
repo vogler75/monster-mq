@@ -274,13 +274,13 @@ class MqttClientConnector : AbstractVerticle() {
         try {
             subscribeAddresses.forEach { address ->
                 val topic = address.remoteTopic
-                val qos = 0 // QoS 0 for now
+                val qos = address.qos
 
                 client!!.subscribe(topic, qos, null, object : IMqttActionListener {
                     override fun onSuccess(asyncActionToken: IMqttToken?) {
                         vertx.runOnContext {
                             subscribedAddresses[topic] = address
-                            logger.info("Subscribed to remote topic: $topic for device ${deviceConfig.name}")
+                            logger.info("Subscribed to remote topic: $topic with QoS $qos for device ${deviceConfig.name}")
                         }
                     }
 
@@ -318,9 +318,10 @@ class MqttClientConnector : AbstractVerticle() {
             publishAddrs.forEach { address ->
                 val clientId = "mqttclient-${deviceConfig.name}"
                 val topicFilter = address.localTopic
-                logger.info("Internal subscription for MQTT client '$clientId' to local topic '$topicFilter'")
+                val qos = address.qos
+                logger.info("Internal subscription for MQTT client '$clientId' to local topic '$topicFilter' with QoS $qos")
 
-                sessionHandler.subscribeInternal(clientId, topicFilter, 0) { message ->
+                sessionHandler.subscribeInternal(clientId, topicFilter, qos) { message ->
                     handleLocalMqttMessage(message)
                 }
             }
@@ -400,14 +401,17 @@ class MqttClientConnector : AbstractVerticle() {
         }
 
         try {
+            // Use configured QoS from address, but respect the message QoS if it's lower
+            val effectiveQos = minOf(address.qos, localMessage.qosLevel)
+
             val message = PahoMqttMessage(localMessage.payload).apply {
-                qos = localMessage.qosLevel
+                qos = effectiveQos
                 isRetained = localMessage.isRetain
             }
 
             client!!.publish(remoteTopic, message, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
-                    logger.fine("Published message to remote topic: $remoteTopic")
+                    logger.fine("Published message to remote topic: $remoteTopic with QoS $effectiveQos")
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {

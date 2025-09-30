@@ -83,6 +83,7 @@ class MqttClientDetailManager {
                                 remoteTopic
                                 localTopic
                                 removePath
+                                qos
                             }
                         }
                     }
@@ -194,6 +195,7 @@ class MqttClientDetailManager {
                 <td><code>${this.escapeHtml(address.remoteTopic)}</code></td>
                 <td><code>${this.escapeHtml(address.localTopic)}</code></td>
                 <td>${address.removePath ? 'Yes' : 'No'}</td>
+                <td><span class="qos-badge">QoS ${address.qos ?? 0}</span></td>
                 <td>
                     <button class="btn-action btn-delete"
                             onclick="mqttClientDetailManager.deleteAddress('${this.escapeHtml(address.remoteTopic)}')"
@@ -312,7 +314,8 @@ class MqttClientDetailManager {
             mode: document.getElementById('address-mode').value,
             remoteTopic: document.getElementById('address-remote-topic').value.trim(),
             localTopic: document.getElementById('address-local-topic').value.trim(),
-            removePath: document.getElementById('address-remove-path').checked
+            removePath: document.getElementById('address-remove-path').checked,
+            qos: parseInt(document.getElementById('address-qos').value)
         };
 
         try {
