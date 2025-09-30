@@ -41,5 +41,5 @@ log/*
 monstermq.db*
 config*.yaml
 hazelcast.xml
-sqlite/
-security/
+/sqlite/
+/security/
