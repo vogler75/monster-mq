@@ -1,0 +1,11 @@
+Release v1.6.13
+Built from commit: 2894603
+Date: 2025-09-30 13:39:00
+
+Changes since v1.6.12:
+---
+2894603 Add Kafka config builder and improve config handling
+f6aeec1 Implement topic search by config for CrateDB and MongoDB
+ec1a9c5 Implement iterateConnectedClients for CrateDB and MongoDB
+0cb5108 Update mcp.md
+bd5197c Update mcp.md
