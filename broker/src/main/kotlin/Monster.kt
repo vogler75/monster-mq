@@ -665,6 +665,7 @@ MORE INFO:
     private fun getMessageBus(vertx: Vertx): Pair<IMessageBus, Future<String>> {
         val kafka = configJson.getJsonObject("Kafka", JsonObject())
         val kafkaServers = kafka.getString("Servers", "")
+        val kafkaConfig = kafka.getJsonObject("Config")
 
         val kafkaBus = kafka.getJsonObject("Bus", JsonObject())
         val kafkaBusEnabled = kafkaBus.getBoolean("Enabled", false)
@@ -675,7 +676,7 @@ MORE INFO:
             val busReady = vertx.deployVerticle(bus)
             bus to busReady
         } else {
-            val bus = MessageBusKafka(kafkaServers, kafkaBusTopic)
+            val bus = MessageBusKafka(kafkaServers, kafkaBusTopic, kafkaConfig)
             val busReady = vertx.deployVerticle(bus)
             bus to busReady
         }

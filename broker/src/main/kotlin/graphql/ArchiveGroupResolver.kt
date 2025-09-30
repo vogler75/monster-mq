@@ -863,7 +863,8 @@ class ArchiveGroupResolver(
             MessageArchiveType.KAFKA -> {
                 val kafka = databaseConfig.getJsonObject("Kafka")
                 val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
-                MessageArchiveKafka(archiveName, bootstrapServers)
+                val kafkaConfig = kafka?.getJsonObject("Config")
+                MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig)
             }
             MessageArchiveType.SQLITE -> {
                 val sqlite = databaseConfig.getJsonObject("SQLite")

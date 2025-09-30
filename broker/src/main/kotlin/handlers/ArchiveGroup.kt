@@ -8,7 +8,6 @@ import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.MessageArchiveKafka
 import at.rocworks.stores.MessageArchiveNone
 import at.rocworks.stores.MessageArchiveType
-import at.rocworks.stores.MessageStoreHazelcastDisconnected
 import at.rocworks.stores.MessageStoreMemory
 import at.rocworks.stores.MessageStoreNone
 import at.rocworks.stores.MessageStoreType
@@ -304,7 +303,8 @@ class ArchiveGroup(
             MessageArchiveType.KAFKA -> {
                 val kafka = databaseConfig.getJsonObject("Kafka")
                 val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
-                val archive = MessageArchiveKafka(archiveName, bootstrapServers)
+                val kafkaConfig = kafka?.getJsonObject("Config")
+                val archive = MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig)
                 archiveStore = archive
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(archive, options).onComplete { result ->
@@ -370,22 +370,23 @@ class ArchiveGroup(
                 }
             }
             MessageStoreType.HAZELCAST -> {
-                val store = MessageStoreHazelcastDisconnected(storeName)
+                logger.warning("Hazelcast store type requested for [$storeName] but clustering is not enabled. Falling back to MEMORY store. Use -cluster flag to enable Hazelcast.")
+                val store = MessageStoreMemory(storeName)
                 lastValStore = store
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onComplete { result ->
                     if (result.succeeded()) {
                         if (!isStopping) {
                             childDeployments.add(result.result())
-                            logger.info("Hazelcast MessageStore [$storeName] deployed as disconnected")
+                            logger.info("Memory MessageStore [$storeName] deployed as fallback for Hazelcast")
                             callback(true)
                         } else {
                             vertx.undeploy(result.result())
-                            logger.info("Hazelcast MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                            logger.info("Memory MessageStore [$storeName] deployed but immediately undeployed due to stop")
                             callback(false)
                         }
                     } else {
-                        logger.warning("Failed to deploy disconnected Hazelcast MessageStore [$storeName]: ${result.cause()?.message}")
+                        logger.warning("Failed to deploy Memory MessageStore [$storeName]: ${result.cause()?.message}")
                         lastValStore = null
                         callback(false)
                     }
@@ -503,22 +504,23 @@ class ArchiveGroup(
                 }
             }
             MessageStoreType.HAZELCAST -> {
-                // Create disconnected Hazelcast store when clustering is not enabled
-                val store = MessageStoreHazelcastDisconnected(storeName)
+                // Fall back to Memory store when clustering is not enabled
+                logger.warning("Hazelcast store type requested for [$storeName] but clustering is not enabled. Falling back to MEMORY store. Use -cluster flag to enable Hazelcast.")
+                val store = MessageStoreMemory(storeName)
                 lastValStore = store
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onComplete { result ->
                     if (result.succeeded()) {
                         if (!isStopping) {
                             childDeployments.add(result.result())
-                            logger.info("Hazelcast MessageStore [$storeName] deployed as disconnected")
+                            logger.info("Memory MessageStore [$storeName] deployed as fallback for Hazelcast")
                         } else {
                             // ArchiveGroup is stopping, immediately undeploy
                             vertx.undeploy(result.result())
-                            logger.info("Hazelcast MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                            logger.info("Memory MessageStore [$storeName] deployed but immediately undeployed due to stop")
                         }
                     } else {
-                        logger.warning("Failed to deploy disconnected Hazelcast MessageStore [$storeName]: ${result.cause()?.message}")
+                        logger.warning("Failed to deploy Memory MessageStore [$storeName]: ${result.cause()?.message}")
                         lastValStore = null
                     }
                 }
@@ -700,7 +702,8 @@ class ArchiveGroup(
                 MessageArchiveType.KAFKA -> {
                     val kafka = databaseConfig.getJsonObject("Kafka")
                     val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
-                    MessageArchiveKafka(archiveName, bootstrapServers)
+                    val kafkaConfig = kafka?.getJsonObject("Config")
+                    MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig)
                 }
                 MessageArchiveType.SQLITE -> {
                     val sqlite = databaseConfig.getJsonObject("SQLite")
@@ -848,7 +851,8 @@ class ArchiveGroup(
                 try {
                     val kafka = databaseConfig.getJsonObject("Kafka")
                     val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
-                    val archive = MessageArchiveKafka(archiveName, bootstrapServers)
+                    val kafkaConfig = kafka?.getJsonObject("Config")
+                    val archive = MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig)
                     archiveStore = archive
                     val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                     vertx.deployVerticle(archive, options).onComplete { result ->
@@ -1090,7 +1094,7 @@ class ArchiveGroup(
                 }
                 MessageStoreType.HAZELCAST -> {
                     if (!isClustered) {
-                        // Warning will be logged when the disconnected store is created
+                        // Will fall back to MEMORY store at runtime with warning
                         // Cannot log here as this is a companion object function
                     }
                 }

@@ -6,34 +6,31 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.json.JsonObject
 import io.vertx.kafka.client.consumer.KafkaConsumer
 import io.vertx.kafka.client.producer.KafkaProducer
 import io.vertx.kafka.client.producer.KafkaProducerRecord
 
 class MessageBusKafka(
     private val bootstrapServers: String,
-    private val topicName: String
+    private val topicName: String,
+    private val userConfig: JsonObject? = null
 ): AbstractVerticle(), IMessageBus {
     private val groupId = "Monster"
-    private val configConsumer: MutableMap<String, String> = HashMap()
+    private val configConsumer: Map<String, String>
     private var kafkaProducer: KafkaProducer<String, ByteArray>? = null
     private var kafkaConsumer: KafkaConsumer<String, ByteArray>? = null
 
+    init {
+        // Build consumer config at initialization time
+        configConsumer = KafkaConfigBuilder.buildConsumerConfig(bootstrapServers, groupId, userConfig)
+    }
+
     override fun start(startPromise: Promise<Void>) {
-        val configProducer: MutableMap<String, String> = HashMap()
-        configProducer["bootstrap.servers"] = bootstrapServers
-        configProducer["key.serializer"] = "org.apache.kafka.common.serialization.StringSerializer"
-        configProducer["value.serializer"] = "org.apache.kafka.common.serialization.ByteArraySerializer"
-        configProducer["acks"] = "1"
+        // Build producer config
+        val configProducer = KafkaConfigBuilder.buildProducerConfig(bootstrapServers, userConfig)
 
         kafkaProducer = KafkaProducer.create(vertx, configProducer)
-
-        configConsumer["bootstrap.servers"] = bootstrapServers
-        configConsumer["key.deserializer"] = "org.apache.kafka.common.serialization.StringDeserializer"
-        configConsumer["value.deserializer"] = "org.apache.kafka.common.serialization.ByteArrayDeserializer"
-        configConsumer["group.id"] = groupId
-        configConsumer["auto.offset.reset"] = "earliest"
-        configConsumer["enable.auto.commit"] = "true"
         startPromise.complete()
     }
 

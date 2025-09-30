@@ -431,7 +431,8 @@ class ArchiveHandler(
                 store
             }
             MessageArchiveType.KAFKA -> {
-                val store = MessageArchiveKafka(name, kafkaServers)
+                val kafkaConfig = configJson.getJsonObject("Kafka")?.getJsonObject("Config")
+                val store = MessageArchiveKafka(name, kafkaServers, kafkaConfig)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 store

@@ -23,11 +23,41 @@ Postgres:
 
 # Kafka Configuration
 Kafka:
-  # Kafka broker addresses (comma-separated for multiple brokers)
+  # Required: Kafka broker addresses (comma-separated for multiple brokers)
   Servers: localhost:9092
   # Alternative for multiple brokers:
   # Servers: kafka1:9092,kafka2:9092,kafka3:9092
-  
+
+  # Optional: Kafka client configuration (applies to all producers and consumers)
+  # All standard Kafka properties are supported
+  Config:
+    # Performance tuning
+    compression.type: "snappy"        # Compress messages (none, gzip, snappy, lz4, zstd)
+    batch.size: "32768"               # Batch size in bytes (32KB)
+    linger.ms: "10"                   # Wait time for batching (milliseconds)
+
+    # Reliability
+    acks: "1"                         # Acknowledgment level (0, 1, all)
+    retries: "3"                      # Number of retries on failure
+
+    # Example: Security configuration (uncomment and configure as needed)
+    # security.protocol: "SASL_SSL"
+    # sasl.mechanism: "SCRAM-SHA-256"
+    # sasl.jaas.config: |
+    #   org.apache.kafka.common.security.scram.ScramLoginModule required
+    #   username="myuser"
+    #   password="mypassword";
+    #
+    # SSL/TLS configuration
+    # ssl.truststore.location: "/path/to/truststore.jks"
+    # ssl.truststore.password: "truststore-password"
+    # ssl.keystore.location: "/path/to/keystore.jks"
+    # ssl.keystore.password: "keystore-password"
+    #
+    # Connection tuning
+    # request.timeout.ms: "30000"
+    # connections.max.idle.ms: "540000"
+
   # Optional: Use Kafka as internal message bus between MonsterMQ nodes
   Bus:
     Enabled: false      # Set to true to use Kafka instead of Vert.x EventBus

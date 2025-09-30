@@ -1,12 +1,14 @@
 package at.rocworks.stores
 
 import at.rocworks.Utils
+import at.rocworks.bus.KafkaConfigBuilder
 import at.rocworks.data.MqttMessage
 import at.rocworks.data.MqttMessageCodec
 import at.rocworks.data.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.json.JsonObject
 import io.vertx.kafka.client.producer.KafkaProducer
 import io.vertx.kafka.client.producer.KafkaProducerRecord
 import java.time.Instant
@@ -15,7 +17,8 @@ import kotlin.collections.forEach
 
 class MessageArchiveKafka(
     private val name: String,
-    private val bootstrapServers: String
+    private val bootstrapServers: String,
+    private val userConfig: JsonObject? = null
 ): AbstractVerticle(), IMessageArchive {
     private val logger = Utils.getLogger(this::class.java, name)
     private val topicName = name
@@ -28,14 +31,8 @@ class MessageArchiveKafka(
     override fun start(startPromise: Promise<Void>) {
         vertx.executeBlocking(Callable {
             try {
-                val configProducer: MutableMap<String, String> = HashMap()
-                configProducer["bootstrap.servers"] = bootstrapServers
-                configProducer["key.serializer"] = "org.apache.kafka.common.serialization.StringSerializer"
-                configProducer["value.serializer"] = "org.apache.kafka.common.serialization.ByteArraySerializer"
-                configProducer["acks"] = "1"
-                configProducer["retries"] = "3"
-                configProducer["retry.backoff.ms"] = "1000"
-                configProducer["max.block.ms"] = "5000" // 5 second timeout for metadata fetch
+                // Build producer config using KafkaConfigBuilder
+                val configProducer = KafkaConfigBuilder.buildProducerConfig(bootstrapServers, userConfig)
 
                 kafkaProducer = KafkaProducer.create(vertx, configProducer)
 
