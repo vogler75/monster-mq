@@ -2,7 +2,7 @@ package at.rocworks.stores.postgres
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageArchive
 import at.rocworks.stores.IMessageArchiveExtended
@@ -90,7 +90,7 @@ class MessageArchivePostgres (
         db.start(vertx, startPromise)
     }
 
-    override fun addHistory(messages: List<MqttMessage>) {
+    override fun addHistory(messages: List<BrokerMessage>) {
         val sql = "INSERT INTO $tableName (topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid) "+
                 "VALUES (?, ?, ?, ?::JSONB, ?, ?, ?, ?) "+
                 "ON CONFLICT (topic, time) DO NOTHING" // TODO: ignore duplicates, what if time resolution is not enough?

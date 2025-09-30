@@ -2,7 +2,7 @@ package at.rocworks.stores
 
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.PurgeResult
 import at.rocworks.data.TopicTree
 import io.vertx.core.AbstractVerticle
@@ -15,7 +15,7 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
     private val logger = Utils.getLogger(this::class.java, name)
 
     private val index = TopicTree<Void, Void>()
-    private val store = mutableMapOf<String, MqttMessage>()
+    private val store = mutableMapOf<String, BrokerMessage>()
 
     private val addAddress = EventBusAddresses.Store.add(name)
     private val delAddress = EventBusAddresses.Store.delete(name)
@@ -39,14 +39,14 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
     }
 
 
-    override fun get(topicName: String): MqttMessage? = store[topicName]
+    override fun get(topicName: String): BrokerMessage? = store[topicName]
     
-    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
+    override fun getAsync(topicName: String, callback: (BrokerMessage?) -> Unit) {
         // Memory store can respond immediately
         callback(store[topicName])
     }
 
-    override fun addAll(messages: List<MqttMessage>) {
+    override fun addAll(messages: List<BrokerMessage>) {
         val topics = messages.map { it.topicName }.distinct()
         vertx.eventBus().publish(addAddress, JsonArray(topics))
         store.putAll(messages.map { Pair(it.topicName, it) })
@@ -57,7 +57,7 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
         topics.forEach { store.remove(it) } // there is no delAll
     }
 
-    override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
+    override fun findMatchingMessages(topicName: String, callback: (BrokerMessage) -> Boolean) {
         index.findMatchingTopicNames(topicName) { foundTopicName ->
             val message = store[foundTopicName]
             if (message != null) callback(message)

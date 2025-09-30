@@ -52,7 +52,7 @@ open class SessionHandler(
     private val subAddQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
     private val subDelQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
 
-    private val msgAddQueue: ArrayBlockingQueue<Pair<MqttMessage, List<String>>> = ArrayBlockingQueue(10_000) // TODO: configurable
+    private val msgAddQueue: ArrayBlockingQueue<Pair<BrokerMessage, List<String>>> = ArrayBlockingQueue(10_000) // TODO: configurable
     private val msgDelQueue: ArrayBlockingQueue<Pair<String, String>> = ArrayBlockingQueue(10_000) // TODO: configurable
     private var waitForFlush: Promise<Void>? = null
 
@@ -67,7 +67,7 @@ open class SessionHandler(
 
     private val sparkplugHandler = Monster.getSparkplugExtension()
 
-    private val inFlightMessages = HashMap<String, ArrayBlockingQueue<MqttMessage>>()
+    private val inFlightMessages = HashMap<String, ArrayBlockingQueue<BrokerMessage>>()
 
     private fun commandAddress() = EventBusAddresses.Node.commands(deploymentID())
     private fun metricsAddress() = EventBusAddresses.Node.metrics(Monster.getClusterNodeId(vertx))
@@ -324,7 +324,7 @@ open class SessionHandler(
         }
 
         // Subscribe to node-specific message address for targeted messages
-        vertx.eventBus().consumer<MqttMessage>(localNodeMessageAddress()) { message ->
+        vertx.eventBus().consumer<BrokerMessage>(localNodeMessageAddress()) { message ->
             message.body()?.let { payload ->
                 messageBusIn.incrementAndGet()
                 logger.finest { "Received targeted message [${payload.topicName}] [${Utils.getCurrentFunctionName()}]" }
@@ -540,7 +540,7 @@ open class SessionHandler(
 
     fun setLastWill(clientId: String, will: MqttWill): Future<Void> {
         if (will.isWillFlag) {
-            val message = MqttMessage(clientId, will)
+            val message = BrokerMessage(clientId, will)
             return sessionStore.setLastWill(clientId, message)
         } else {
             return sessionStore.setLastWill(clientId, null)
@@ -549,11 +549,11 @@ open class SessionHandler(
 
     fun isPresent(clientId: String): Future<Boolean> = sessionStore.isPresent(clientId)
 
-    private fun enqueueMessage(message: MqttMessage, clientIds: List<String>) {
+    private fun enqueueMessage(message: BrokerMessage, clientIds: List<String>) {
         if (enqueueMessages) msgAddQueue.add(Pair(message, clientIds))
     }
 
-    fun dequeueMessages(clientId: String, callback: (MqttMessage)->Boolean) = sessionStore.dequeueMessages(clientId, callback)
+    fun dequeueMessages(clientId: String, callback: (BrokerMessage)->Boolean) = sessionStore.dequeueMessages(clientId, callback)
 
     fun removeMessage(clientId: String, messageUuid: String) {
         msgDelQueue.add(Pair(clientId, messageUuid))
@@ -587,7 +587,7 @@ open class SessionHandler(
 
     fun purgeQueuedMessages() = sessionStore.purgeQueuedMessages()
 
-    fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit)
+    fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: BrokerMessage) -> Unit)
     = sessionStore.iterateNodeClients(nodeId, callback)
 
     // Public method for node failure handling
@@ -604,7 +604,7 @@ open class SessionHandler(
     }
 
 
-    private fun sendMessageToClient(clientId: String, message: MqttMessage): Future<Boolean> {
+    private fun sendMessageToClient(clientId: String, message: BrokerMessage): Future<Boolean> {
         if (message.qosLevel == 0) {
             vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), message)
             return Future.succeededFuture(true)
@@ -618,7 +618,7 @@ open class SessionHandler(
         }
     }
 
-    private fun addInFlightMessage(clientId: String, message: MqttMessage) {
+    private fun addInFlightMessage(clientId: String, message: BrokerMessage) {
         logger.fine { "Adding in-flight message to queue [${message.topicName}] [${message.getPayloadAsJson()}]}" }
         inFlightMessages[clientId]?.let { queue ->
             if (queue.remainingCapacity() == 0) {
@@ -627,7 +627,7 @@ open class SessionHandler(
                 queue.put(message)
             }
         } ?: run {
-            ArrayBlockingQueue<MqttMessage>(10_000).let { // TODO: configurable
+            ArrayBlockingQueue<BrokerMessage>(10_000).let { // TODO: configurable
                 inFlightMessages[clientId] = it
                 it.put(message)
             }
@@ -692,7 +692,7 @@ open class SessionHandler(
 
     //----------------------------------------------------------------------------------------------------
 
-    fun publishMessage(message: MqttMessage) {
+    fun publishMessage(message: BrokerMessage) {
         // Determine which nodes need this message based on topic subscriptions
         val targetNodes = getTargetNodesForTopic(message.topicName)
         val localNodeId = Monster.getClusterNodeId(vertx)
@@ -722,7 +722,7 @@ open class SessionHandler(
         }
     }
 
-    private fun messageWithQos(message: MqttMessage, qos: Int): MqttMessage {
+    private fun messageWithQos(message: BrokerMessage, qos: Int): BrokerMessage {
         return if (qos < message.qosLevel) {
             message.cloneWithNewQoS(qos)
         } else {
@@ -734,7 +734,7 @@ open class SessionHandler(
     // External messages from Kafka now go through publishMessage() for targeted distribution
 
     // Process messages for local clients only (used for both external and targeted internal messages)
-    private fun processMessageForLocalClients(message: MqttMessage) {
+    private fun processMessageForLocalClients(message: BrokerMessage) {
         val localNodeId = Monster.getClusterNodeId(vertx)
 
         findClients(message.topicName).groupBy { (clientId, subscriptionQos) ->
@@ -820,7 +820,7 @@ open class SessionHandler(
     // --------------------------------------------------------------------------------------------------------
 
     // Internal message handlers for each internal client
-    private val internalSubscriptions = ConcurrentHashMap<String, ConcurrentHashMap<String, (MqttMessage) -> Unit>>()
+    private val internalSubscriptions = ConcurrentHashMap<String, ConcurrentHashMap<String, (BrokerMessage) -> Unit>>()
 
     /**
      * Subscribe internally to MQTT topics (for OPC UA Server, etc.)
@@ -833,7 +833,7 @@ open class SessionHandler(
         clientId: String,
         topicFilter: String,
         qos: Int,
-        messageHandler: (MqttMessage) -> Unit
+        messageHandler: (BrokerMessage) -> Unit
     ) {
         logger.info("Internal subscription: Client '$clientId' subscribing to '$topicFilter' with QoS $qos")
 
@@ -882,11 +882,11 @@ open class SessionHandler(
      * @param clientId Internal client identifier (for sender tracking)
      * @param message The MQTT message to publish
      */
-    fun publishInternal(clientId: String, message: MqttMessage) {
+    fun publishInternal(clientId: String, message: BrokerMessage) {
         logger.finest("Internal publish: Client '$clientId' publishing to '${message.topicName}'")
 
         // Create message with sender identification for loop prevention
-        val messageWithSender = MqttMessage(
+        val messageWithSender = BrokerMessage(
             messageUuid = message.messageUuid,
             messageId = message.messageId,
             topicName = message.topicName,
@@ -907,7 +907,7 @@ open class SessionHandler(
     /**
      * Check if message should be delivered to internal clients
      */
-    private fun deliverToInternalClients(message: MqttMessage) {
+    private fun deliverToInternalClients(message: BrokerMessage) {
         internalSubscriptions.forEach { (clientId, subscriptions) ->
             subscriptions.forEach { (topicFilter, handler) ->
                 if (matchesTopicFilter(message.topicName, topicFilter)) {

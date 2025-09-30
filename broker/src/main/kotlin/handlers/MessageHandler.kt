@@ -18,9 +18,9 @@ class MessageHandler(
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
-    private val retainedQueueStore: ArrayBlockingQueue<MqttMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
+    private val retainedQueueStore: ArrayBlockingQueue<BrokerMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
 
-    private val archiveQueues = mutableMapOf<String, ArrayBlockingQueue<MqttMessage>>()
+    private val archiveQueues = mutableMapOf<String, ArrayBlockingQueue<BrokerMessage>>()
 
     // Runtime list of active archive groups (includes both startup and dynamically added ones)
     private val activeArchiveGroups = mutableMapOf<String, ArchiveGroup>()
@@ -49,7 +49,7 @@ class MessageHandler(
         activeArchiveGroups[archiveGroup.name] = archiveGroup
 
         // Create queue for this archive group
-        val queue = ArrayBlockingQueue<MqttMessage>(100_000) // TODO: configurable
+        val queue = ArrayBlockingQueue<BrokerMessage>(100_000) // TODO: configurable
         archiveQueues[archiveGroup.name] = queue
 
         // Start writer thread for this archive group
@@ -76,9 +76,9 @@ class MessageHandler(
         logger.info("Archive group [$archiveGroupName] unregistered successfully")
     }
 
-    private fun retainedQueueWriter(list: List<MqttMessage>) {
+    private fun retainedQueueWriter(list: List<BrokerMessage>) {
         val set = mutableSetOf<String>()
-        val add = arrayListOf<MqttMessage>()
+        val add = arrayListOf<BrokerMessage>()
         val del = arrayListOf<String>()
         var i = list.size-1
         while (i >= 0) {
@@ -95,8 +95,8 @@ class MessageHandler(
         if (del.isNotEmpty()) retainedStore.delAll(del)
     }
 
-    private fun getLastMessages(list: List<MqttMessage>): List<MqttMessage> {
-        val map = mutableMapOf<String, MqttMessage>()
+    private fun getLastMessages(list: List<BrokerMessage>): List<BrokerMessage> {
+        val map = mutableMapOf<String, BrokerMessage>()
         var i = list.size-1
         while (i >= 0) {
             val it = list[i]; i--
@@ -132,7 +132,7 @@ class MessageHandler(
         }
     }
 
-    fun saveMessage(message: MqttMessage): Future<Void> {
+    fun saveMessage(message: BrokerMessage): Future<Void> {
         if (message.isRetain) {
             try {
                 retainedQueueStore.add(message)
@@ -156,7 +156,7 @@ class MessageHandler(
         return Future.succeededFuture()
     }
 
-    fun findRetainedMessages(topicName: String, max: Int, callback: (message: MqttMessage)->Unit): Future<Int> {
+    fun findRetainedMessages(topicName: String, max: Int, callback: (message: BrokerMessage)->Unit): Future<Int> {
         val promise = Promise.promise<Int>()
         vertx.executeBlocking(Callable {
             var counter = 0

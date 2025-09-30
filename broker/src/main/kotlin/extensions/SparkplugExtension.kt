@@ -2,7 +2,7 @@ package at.rocworks.extensions
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import io.vertx.core.json.JsonObject
 import org.eclipse.tahu.message.SparkplugBPayloadDecoder
 
@@ -30,13 +30,13 @@ class SparkplugExtension(config: JsonObject) {
         logger.info("Initialize Sparkplug Handler")
     }
 
-    fun metricExpansion(message: MqttMessage, callback: (MqttMessage) -> Unit) {
+    fun metricExpansion(message: BrokerMessage, callback: (BrokerMessage) -> Unit) {
         if (message.topicName.startsWith(sourceNamespace))
         try {
             val levels = message.topicName.split("/") // spBv1.0/namespace/group_id/message_type/edge_node_id/[device_id]
             if (levels.size>3 && levels[3] == "STATE") { // STATE is not a protobuf message
                 val topic = message.topicName.replaceFirst(sourceNamespace, expandedNamespace)
-                val mqttMessage = MqttMessage(
+                val mqttMessage = BrokerMessage(
                     messageId = 0,
                     topicName = topic,
                     payload = message.payload,
@@ -63,7 +63,7 @@ class SparkplugExtension(config: JsonObject) {
                         payload.put("Value", null)
                     }
 
-                    val mqttMessage = MqttMessage(
+                    val mqttMessage = BrokerMessage(
                         messageId = 0,
                         topicName = topic,
                         payload = payload.encode().toByteArray(),

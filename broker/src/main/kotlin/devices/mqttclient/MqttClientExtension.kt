@@ -1,11 +1,11 @@
-package at.rocworks.devices.opcua
+package at.rocworks.devices.mqttclient
 
 import at.rocworks.Monster
 import at.rocworks.Utils
-import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
-import at.rocworks.stores.IDeviceConfigStore
+import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigStoreFactory
+import at.rocworks.stores.IDeviceConfigStore
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.DeploymentOptions
 import io.vertx.core.Future
@@ -13,20 +13,19 @@ import io.vertx.core.Promise
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
 import io.vertx.core.shareddata.LocalMap
-import at.rocworks.stores.DeviceConfig
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
 
 /**
- * OPC UA Extension - Main coordination verticle for OPC UA device management
+ * MQTT Client Extension - Main coordination verticle for MQTT client device management
  *
  * Responsibilities:
  * - Cluster-aware device management (only manages devices assigned to current node)
- * - Deploys/undeploys OpcUaConnector verticles per device
+ * - Deploys/undeploys MqttClientConnector verticles per device
  * - Handles configuration changes via EventBus
- * - Routes MQTT subscriptions to appropriate connectors
+ * - Routes MQTT messages between local and remote brokers
  */
-class OpcUaExtension : AbstractVerticle() {
+class MqttClientExtension : AbstractVerticle() {
 
     private val logger: Logger = Utils.getLogger(this::class.java)
 
@@ -47,20 +46,20 @@ class OpcUaExtension : AbstractVerticle() {
 
     companion object {
         // EventBus addresses
-        const val ADDRESS_DEVICE_CONFIG_CHANGED = "opcua.device.config.changed"
-        const val ADDRESS_OPCUA_VALUE_PUBLISH = "opcua.value.publish"
+        const val ADDRESS_DEVICE_CONFIG_CHANGED = "mqttclient.device.config.changed"
+        const val ADDRESS_MQTT_VALUE_PUBLISH = "mqttclient.value.publish"
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting OpcUaExtension...")
+        logger.info("Starting MqttClientExtension...")
 
         try {
             // Get current node ID
             currentNodeId = Monster.getClusterNodeId(vertx)
-            logger.info("OpcUaExtension running on node: $currentNodeId")
+            logger.info("MqttClientExtension running on node: $currentNodeId")
 
             // Initialize shared data
-            deviceRegistry = vertx.sharedData().getLocalMap("opcua.device.registry")
+            deviceRegistry = vertx.sharedData().getLocalMap("mqttclient.device.registry")
 
             // Initialize device store
             initializeDeviceStore()
@@ -68,22 +67,22 @@ class OpcUaExtension : AbstractVerticle() {
                 .compose { setupEventBusHandlers() }
                 .onComplete { result ->
                     if (result.succeeded()) {
-                        logger.info("OpcUaExtension started successfully")
+                        logger.info("MqttClientExtension started successfully")
                         startPromise.complete()
                     } else {
-                        logger.severe("Failed to start OpcUaExtension: ${result.cause()?.message}")
+                        logger.severe("Failed to start MqttClientExtension: ${result.cause()?.message}")
                         startPromise.fail(result.cause())
                     }
                 }
 
         } catch (e: Exception) {
-            logger.severe("Exception during OpcUaExtension startup: ${e.message}")
+            logger.severe("Exception during MqttClientExtension startup: ${e.message}")
             startPromise.fail(e)
         }
     }
 
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("Stopping OpcUaExtension...")
+        logger.info("Stopping MqttClientExtension...")
 
         // Undeploy all connectors
         val undeployFutures = deployedConnectors.values.map { deploymentId ->
@@ -94,10 +93,10 @@ class OpcUaExtension : AbstractVerticle() {
             .compose { deviceStore.close() }
             .onComplete { result ->
                 if (result.succeeded()) {
-                    logger.info("OpcUaExtension stopped successfully")
+                    logger.info("MqttClientExtension stopped successfully")
                     stopPromise.complete()
                 } else {
-                    logger.warning("Error during OpcUaExtension shutdown: ${result.cause()?.message}")
+                    logger.warning("Error during MqttClientExtension shutdown: ${result.cause()?.message}")
                     stopPromise.complete() // Complete anyway
                 }
             }
@@ -115,12 +114,13 @@ class OpcUaExtension : AbstractVerticle() {
             } else {
                 null
             }
+
             if (store != null) {
                 deviceStore = store
                 deviceStore.initialize()
                     .onComplete { result ->
                         if (result.succeeded()) {
-                            logger.info("OPC UA device store initialized successfully")
+                            logger.info("MQTT Client device store initialized successfully")
                             promise.complete()
                         } else {
                             logger.severe("Failed to initialize DeviceConfigStore: ${result.cause()?.message}")
@@ -134,7 +134,7 @@ class OpcUaExtension : AbstractVerticle() {
             }
 
         } catch (e: NotImplementedError) {
-            logger.warning("DeviceConfigStore not implemented for this store type, OPC UA features will be disabled")
+            logger.warning("DeviceConfigStore not implemented for this store type, MQTT Client features will be disabled")
             promise.fail(RuntimeException("Store type not implemented"))
         } catch (e: Exception) {
             logger.severe("Failed to create DeviceConfigStore: ${e.message}")
@@ -151,11 +151,11 @@ class OpcUaExtension : AbstractVerticle() {
         deviceStore.getEnabledDevicesByNode(currentNodeId)
             .onComplete { result ->
                 if (result.succeeded()) {
-                    // Filter to only include OPC UA Client devices, not Server devices
+                    // Filter to only include MQTT Client devices
                     val devices = result.result().filter { device ->
-                        device.type == DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT
+                        device.type == DeviceConfig.DEVICE_TYPE_MQTT_CLIENT
                     }
-                    logger.info("Found ${devices.size} enabled OPC UA Client devices assigned to node $currentNodeId")
+                    logger.info("Found ${devices.size} enabled MQTT Client devices assigned to node $currentNodeId")
 
                     if (devices.isEmpty()) {
                         promise.complete()
@@ -179,7 +179,7 @@ class OpcUaExtension : AbstractVerticle() {
 
                                 // Complete when all devices have been processed (regardless of success/failure)
                                 if (completedCount == devices.size) {
-                                    logger.info("OPC UA device deployment completed: $successCount/$completedCount devices deployed successfully")
+                                    logger.info("MQTT Client device deployment completed: $successCount/$completedCount devices deployed successfully")
                                     promise.complete()
                                 }
                             }
@@ -208,7 +208,7 @@ class OpcUaExtension : AbstractVerticle() {
 
             // Deploy connector verticle
             val options = DeploymentOptions().setConfig(connectorConfig)
-            vertx.deployVerticle(OpcUaConnector(), options)
+            vertx.deployVerticle(MqttClientConnector(), options)
                 .onComplete { result ->
                     if (result.succeeded()) {
                         val deploymentId = result.result()
@@ -216,7 +216,7 @@ class OpcUaExtension : AbstractVerticle() {
                         activeDevices[device.name] = device
                         deviceRegistry[device.namespace] = device.name
 
-                        logger.info("Deployed OpcUaConnector for device ${device.name} (${deploymentId})")
+                        logger.info("Deployed MqttClientConnector for device ${device.name} (${deploymentId})")
                         promise.complete(deploymentId)
                     } else {
                         logger.severe("Failed to deploy connector for device ${device.name}: ${result.cause()?.message}")
@@ -245,7 +245,7 @@ class OpcUaExtension : AbstractVerticle() {
                     }
 
                     if (result.succeeded()) {
-                        logger.info("Undeployed OpcUaConnector for device $deviceName")
+                        logger.info("Undeployed MqttClientConnector for device $deviceName")
                         promise.complete()
                     } else {
                         logger.warning("Failed to undeploy connector for device $deviceName: ${result.cause()?.message}")
@@ -269,9 +269,9 @@ class OpcUaExtension : AbstractVerticle() {
                 handleDeviceConfigChange(message)
             }
 
-            // Handle OPC UA value publishing to MQTT bus
-            vertx.eventBus().consumer<BrokerMessage>(ADDRESS_OPCUA_VALUE_PUBLISH) { message ->
-                handleOpcUaValuePublish(message)
+            // Handle MQTT value publishing from remote brokers to local MQTT bus
+            vertx.eventBus().consumer<BrokerMessage>(ADDRESS_MQTT_VALUE_PUBLISH) { message ->
+                handleMqttValuePublish(message)
             }
 
             promise.complete()
@@ -283,10 +283,10 @@ class OpcUaExtension : AbstractVerticle() {
         return promise.future()
     }
 
-    private fun handleOpcUaValuePublish(message: Message<BrokerMessage>) {
+    private fun handleMqttValuePublish(message: Message<BrokerMessage>) {
         try {
             val mqttMessage = message.body()
-            logger.fine("Forwarding OPC UA value to MQTT bus: ${mqttMessage.topicName} = ${String(mqttMessage.payload)}")
+            logger.fine("Forwarding MQTT Client value to MQTT bus: ${mqttMessage.topicName} = ${String(mqttMessage.payload)}")
 
             // Use the shared SessionHandler to ensure proper archiving and distribution
             // This follows the same pattern as regular MQTT client publishing
@@ -294,11 +294,11 @@ class OpcUaExtension : AbstractVerticle() {
             if (sessionHandler != null) {
                 sessionHandler.publishMessage(mqttMessage)
             } else {
-                logger.severe("SessionHandler not available for OPC UA message publishing")
+                logger.severe("SessionHandler not available for MQTT Client message publishing")
             }
 
         } catch (e: Exception) {
-            logger.severe("Error forwarding OPC UA value to MQTT bus: ${e.message}")
+            logger.severe("Error forwarding MQTT Client value to MQTT bus: ${e.message}")
         }
     }
 
@@ -409,7 +409,6 @@ class OpcUaExtension : AbstractVerticle() {
             message.fail(500, e.message)
         }
     }
-
 
     /**
      * Get list of currently active devices on this node

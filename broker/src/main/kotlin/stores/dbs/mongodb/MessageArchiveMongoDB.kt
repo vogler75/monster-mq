@@ -2,7 +2,7 @@ package at.rocworks.stores.mongodb
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.MessageArchiveType
 import at.rocworks.data.PurgeResult
@@ -217,7 +217,7 @@ class MessageArchiveMongoDB(
         }
     }
 
-    override fun addHistory(messages: List<MqttMessage>) {
+    override fun addHistory(messages: List<BrokerMessage>) {
         if (messages.isEmpty()) return
 
         try {

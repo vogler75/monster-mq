@@ -2,7 +2,7 @@ package at.rocworks.stores
 
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.PurgeResult
 import at.rocworks.data.TopicTree
 import com.hazelcast.core.HazelcastInstance
@@ -21,7 +21,7 @@ class MessageStoreHazelcast(
     private val logger = Utils.getLogger(this::class.java, name)
 
     private val index = TopicTree<Void, Void>()
-    private val store = hazelcast.getMap<String, MqttMessage>(name)
+    private val store = hazelcast.getMap<String, BrokerMessage>(name)
 
     private val addAddress = EventBusAddresses.Store.add(name)
     private val delAddress = EventBusAddresses.Store.delete(name)
@@ -44,14 +44,14 @@ class MessageStoreHazelcast(
         })
     }
 
-    override fun get(topicName: String): MqttMessage? = store[topicName]
+    override fun get(topicName: String): BrokerMessage? = store[topicName]
     
-    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
+    override fun getAsync(topicName: String, callback: (BrokerMessage?) -> Unit) {
         // Hazelcast store can respond immediately
         callback(store[topicName])
     }
 
-    override fun addAll(messages: List<MqttMessage>) {
+    override fun addAll(messages: List<BrokerMessage>) {
         val startTime = Instant.now()
 
         val topics = messages.map { it.topicName }.distinct()
@@ -67,7 +67,7 @@ class MessageStoreHazelcast(
         topics.forEach { store.remove(it) } // there is no delAll
     }
 
-    override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
+    override fun findMatchingMessages(topicName: String, callback: (BrokerMessage) -> Boolean) {
         index.findMatchingTopicNames(topicName) { foundTopicName ->
             val message = store[foundTopicName]
             if (message != null) callback(message)
@@ -86,7 +86,7 @@ class MessageStoreHazelcast(
         logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
         
         // Use Hazelcast predicates for efficient distributed filtering
-        val predicate = Predicates.lessThan<String, MqttMessage>("time", olderThan)
+        val predicate = Predicates.lessThan<String, BrokerMessage>("time", olderThan)
         val entriesToDelete = store.entrySet(predicate)
         
         val topicsToDelete = entriesToDelete.map { it.key }

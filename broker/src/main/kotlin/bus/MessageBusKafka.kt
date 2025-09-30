@@ -1,7 +1,7 @@
 package at.rocworks.bus
 
-import at.rocworks.data.MqttMessage
-import at.rocworks.data.MqttMessageCodec
+import at.rocworks.data.BrokerMessage
+import at.rocworks.data.BrokerMessageCodec
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -34,9 +34,9 @@ class MessageBusKafka(
         startPromise.complete()
     }
 
-    override fun subscribeToMessageBus(callback: (MqttMessage)->Unit): Future<Void> {
+    override fun subscribeToMessageBus(callback: (BrokerMessage)->Unit): Future<Void> {
         try {
-            val codec = MqttMessageCodec()
+            val codec = BrokerMessageCodec()
             KafkaConsumer.create<String, ByteArray>(vertx, configConsumer).let { consumer ->
                 this.kafkaConsumer = consumer
                 consumer.handler { record ->
@@ -51,8 +51,8 @@ class MessageBusKafka(
         return Future.succeededFuture()
     }
 
-    override fun publishMessageToBus(message: MqttMessage) {
-            val codec = MqttMessageCodec()
+    override fun publishMessageToBus(message: BrokerMessage) {
+            val codec = BrokerMessageCodec()
             val buffer = Buffer.buffer()
             codec.encodeToWire(buffer, message)
             val record = KafkaProducerRecord.create<String, ByteArray>(topicName, message.topicName, buffer.bytes)

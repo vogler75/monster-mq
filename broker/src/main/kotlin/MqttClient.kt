@@ -2,7 +2,7 @@ package at.rocworks
 
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.auth.UserManager
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.handlers.SessionHandler
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
 import io.netty.handler.codec.mqtt.MqttQoS
@@ -41,7 +41,7 @@ class MqttClient(
     } else ++nextMessageId
 
     private data class InFlightMessage(
-        val message: MqttMessage,
+        val message: BrokerMessage,
         var stage: Int = 1,
         var lastTryTime: Instant = Instant.now(),
         var retryCount: Int = 0
@@ -399,7 +399,7 @@ class MqttClient(
         val payload = data.encode()
         if (lastStatisticsMessage != payload) {
             lastStatisticsMessage = payload
-            val message = MqttMessage(clientId, "\$SYS/clients/${clientId}/statistics", payload)
+            val message = BrokerMessage(clientId, "\$SYS/clients/${clientId}/statistics", payload)
             sessionHandler.publishMessage(message)
         }
     }
@@ -445,23 +445,23 @@ class MqttClient(
         }
         
         logger.finest { "Client [$clientId] Publish ALLOWED for [$topicName] - user [$username]" }
-        
+
         // Handle QoS levels
         when (message.qosLevel()) {
             MqttQoS.AT_MOST_ONCE -> { // Level 0
                 logger.finest { "Client [$clientId] Publish: no acknowledge needed [${Utils.getCurrentFunctionName()}]" }
-                sessionHandler.publishMessage(MqttMessage(clientId, message))
+                sessionHandler.publishMessage(BrokerMessage(clientId, message))
             }
             MqttQoS.AT_LEAST_ONCE -> { // Level 1
                 logger.finest { "Client [$clientId] Publish: sending acknowledge for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
-                sessionHandler.publishMessage(MqttMessage(clientId, message))
+                sessionHandler.publishMessage(BrokerMessage(clientId, message))
                 // TODO: check the result of the publishMessage and send the acknowledge only if the message was delivered
                 endpoint.publishAcknowledge(message.messageId())
             }
             MqttQoS.EXACTLY_ONCE -> { // Level 2
                 logger.finest { "Client [$clientId] Publish: sending received for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
                 endpoint.publishReceived(message.messageId())
-                inFlightMessagesRcv[message.messageId()] = InFlightMessage(MqttMessage(clientId, message))
+                inFlightMessagesRcv[message.messageId()] = InFlightMessage(BrokerMessage(clientId, message))
             }
             else -> {
                 logger.warning { "Client [$clientId] Publish: unknown QoS level [${message.qosLevel()}] [${Utils.getCurrentFunctionName()}]" }
@@ -500,7 +500,7 @@ class MqttClient(
     // Sending messages to client (subscribe)
     // -----------------------------------------------------------------------------------------------------------------
 
-    private fun consumeMessage(busMessage: Message<MqttMessage>) {
+    private fun consumeMessage(busMessage: Message<BrokerMessage>) {
         if (!ready) {
             busMessage.reply(false)
         }
@@ -514,7 +514,7 @@ class MqttClient(
         }
     }
 
-    private fun consumeMessageQoS0(busMessage: Message<MqttMessage>) {
+    private fun consumeMessageQoS0(busMessage: Message<BrokerMessage>) {
         val message = busMessage.body().cloneWithNewMessageId(0)
         if (endpoint.isConnected) {
             publishMessage(message)
@@ -524,7 +524,7 @@ class MqttClient(
         }
     }
 
-    private fun publishMessage(message: MqttMessage) {
+    private fun publishMessage(message: BrokerMessage) {
         if (!endpoint.isConnected) {
             logger.finest("Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]")
         } else {
@@ -557,12 +557,12 @@ class MqttClient(
         }
     }
 
-    private fun publishMessageCompleted(message: MqttMessage) {
+    private fun publishMessageCompleted(message: BrokerMessage) {
         inFlightMessagesSnd.removeFirst()
         if (message.isQueued) sessionHandler.removeMessage(clientId, message.messageUuid)
     }
 
-    private fun consumeMessageQoS1(busMessage: Message<MqttMessage>) {
+    private fun consumeMessageQoS1(busMessage: Message<BrokerMessage>) {
         val message = busMessage.body().cloneWithNewMessageId(getNextMessageId())
         if (endpoint.isConnected) {
             publishMessage(message)
@@ -589,7 +589,7 @@ class MqttClient(
         }
     }
 
-    private fun consumeMessageQoS2(busMessage: Message<MqttMessage>) {
+    private fun consumeMessageQoS2(busMessage: Message<BrokerMessage>) {
         val message = busMessage.body().cloneWithNewMessageId(getNextMessageId())
         if (endpoint.isConnected) {
             publishMessage(message)
@@ -666,7 +666,7 @@ class MqttClient(
         endpoint.will()?.let { will ->
             if (will.isWillFlag) {
                 logger.fine("Client [$clientId] Sending Last-Will message [${Utils.getCurrentFunctionName()}]")
-                sessionHandler.publishMessage(MqttMessage(clientId, will))
+                sessionHandler.publishMessage(BrokerMessage(clientId, will))
             }
         }
     }

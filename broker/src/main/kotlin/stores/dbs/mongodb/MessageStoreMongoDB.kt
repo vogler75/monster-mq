@@ -2,7 +2,7 @@ package at.rocworks.stores.mongodb
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
 import at.rocworks.data.PurgeResult
@@ -218,7 +218,7 @@ class MessageStoreMongoDB(
         return document
     }
 
-    override fun get(topicName: String): MqttMessage? {
+    override fun get(topicName: String): BrokerMessage? {
         try {
             val activeCollection = getActiveCollection() ?: run {
                 logger.fine("MongoDB not connected, returning null for topic [$topicName]")
@@ -233,7 +233,7 @@ class MessageStoreMongoDB(
                     else -> ByteArray(0)
                 }
 
-                return MqttMessage(
+                return BrokerMessage(
                     messageUuid = it.getString("message_uuid"),
                     messageId = 0,
                     topicName = topicName,
@@ -254,9 +254,9 @@ class MessageStoreMongoDB(
         return null
     }
 
-    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
+    override fun getAsync(topicName: String, callback: (BrokerMessage?) -> Unit) {
         // Use Vertx to execute MongoDB query asynchronously
-        vertx.executeBlocking<MqttMessage?> {
+        vertx.executeBlocking<BrokerMessage?> {
             get(topicName)
         }.onComplete { result ->
             if (result.succeeded()) {
@@ -268,7 +268,7 @@ class MessageStoreMongoDB(
         }
     }
 
-    override fun addAll(messages: List<MqttMessage>) {
+    override fun addAll(messages: List<BrokerMessage>) {
         if (messages.isEmpty()) return
 
         try {
@@ -322,7 +322,7 @@ class MessageStoreMongoDB(
         }
     }
 
-    override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
+    override fun findMatchingMessages(topicName: String, callback: (BrokerMessage) -> Boolean) {
         try {
             val activeCollection = getActiveCollection() ?: run {
                 logger.warning("MongoDB not connected, skipping find for [$name]")
@@ -344,7 +344,7 @@ class MessageStoreMongoDB(
                     else -> ByteArray(0)
                 }
 
-                val message = MqttMessage(
+                val message = BrokerMessage(
                     messageUuid = document.getString("message_uuid") ?: "",
                     messageId = 0,
                     topicName = topic,

@@ -1,4 +1,4 @@
-package at.rocworks.stores.sqlite
+package at.rocworks.stores.cratedb
 
 import at.rocworks.Const
 import at.rocworks.Utils
@@ -6,32 +6,32 @@ import at.rocworks.stores.*
 import at.rocworks.utils.DurationParser
 import at.rocworks.handlers.ArchiveGroup
 import io.vertx.core.AbstractVerticle
-import io.vertx.core.Future
 import io.vertx.core.Promise
-import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.sql.*
-import java.util.concurrent.Callable
 import java.util.logging.Logger
+import java.util.concurrent.Callable
 
 /**
- * SQLite implementation of IConfigStore for archive group configuration management
+ * CrateDB implementation of IConfigStore for archive group configuration management
  */
-class ConfigStoreSQLite(
-    private val dbPath: String
-) : AbstractVerticle(), IConfigStore {
+class ArchiveConfigStoreCrateDB(
+    private val url: String,
+    private val username: String,
+    private val password: String
+) : AbstractVerticle(), IArchiveConfigStore {
 
     private val logger: Logger = Utils.getLogger(this::class.java)
     private val configTableName = "archiveconfigs"
 
-    private val db = object : DatabaseConnection(logger, "jdbc:sqlite:$dbPath", "", "") {
+    private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun init(connection: Connection): io.vertx.core.Future<Void> {
             val promise = Promise.promise<Void>()
             try {
                 createConfigTable(connection)
                 promise.complete()
             } catch (e: Exception) {
-                logger.severe("Failed to initialize ConfigStoreSQLite: ${e.message}")
+                logger.severe("Failed to initialize ConfigStoreCrateDB: ${e.message}")
                 promise.fail(e)
             }
             return promise.future()
@@ -49,10 +49,10 @@ class ConfigStoreSQLite(
     override fun stop(stopPromise: Promise<Void>) {
         try {
             db.connection?.close()
-            logger.info("SQLite ConfigStore stopped")
+            logger.info("CrateDB ConfigStore stopped")
             stopPromise.complete()
         } catch (e: Exception) {
-            logger.warning("Error stopping SQLite ConfigStore: ${e.message}")
+            logger.warning("Error stopping CrateDB ConfigStore: ${e.message}")
             stopPromise.complete() // Complete anyway
         }
     }
@@ -60,17 +60,17 @@ class ConfigStoreSQLite(
     private fun createConfigTable(connection: Connection) {
         val sql = """
             CREATE TABLE IF NOT EXISTS $configTableName (
-                name TEXT PRIMARY KEY,
-                enabled INTEGER NOT NULL DEFAULT 0,
-                topic_filter TEXT NOT NULL,
-                retained_only INTEGER NOT NULL DEFAULT 0,
-                last_val_type TEXT NOT NULL,
-                archive_type TEXT NOT NULL,
-                last_val_retention TEXT,
-                archive_retention TEXT,
-                purge_interval TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                name STRING PRIMARY KEY,
+                enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                topic_filter ARRAY(STRING) NOT NULL,
+                retained_only BOOLEAN NOT NULL DEFAULT FALSE,
+                last_val_type STRING NOT NULL,
+                archive_type STRING NOT NULL,
+                last_val_retention STRING,
+                archive_retention STRING,
+                purge_interval STRING,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
         """.trimIndent()
 
@@ -79,22 +79,22 @@ class ConfigStoreSQLite(
 
             // Insert default archive config if it doesn't exist
             val insertDefaultSQL = """
-                INSERT OR IGNORE INTO $configTableName (
+                INSERT INTO $configTableName (
                     name, enabled, topic_filter, retained_only,
                     last_val_type, archive_type, last_val_retention,
                     archive_retention, purge_interval
                 ) VALUES (
-                    'Default', 1, '["#"]', 0,
+                    'Default', true, ['#'], false,
                     'MEMORY', 'NONE', '1h', '1h', '1h'
-                )
+                ) ON CONFLICT (name) DO NOTHING
             """.trimIndent()
 
             statement.execute(insertDefaultSQL)
         }
-        logger.info("Archive config table created/verified with default entry in SQLite")
+        logger.info("Archive config table created/verified with default entry in CrateDB")
     }
 
-    override fun getAllArchiveGroups(): Future<List<ArchiveGroupConfig>> {
+    override fun getAllArchiveGroups(): io.vertx.core.Future<List<ArchiveGroupConfig>> {
         val promise = Promise.promise<List<ArchiveGroupConfig>>()
 
         vertx.executeBlocking(Callable {
@@ -109,14 +109,14 @@ class ConfigStoreSQLite(
                         while (resultSet.next()) {
                             try {
                                 val archiveGroup = resultSetToArchiveGroup(resultSet)
-                                val enabled = resultSet.getInt("enabled") == 1
+                                val enabled = resultSet.getBoolean("enabled")
                                 results.add(ArchiveGroupConfig(archiveGroup, enabled))
                             } catch (e: Exception) {
-                                logger.warning("Error parsing archive group from SQLite: ${e.message}")
+                                logger.warning("Error parsing archive group from CrateDB: ${e.message}")
                             }
                         }
 
-                        logger.fine("Retrieved ${results.size} archive groups from SQLite")
+                        logger.info("Retrieved ${results.size} archive groups from CrateDB")
                         results
                     }
                 } ?: run {
@@ -124,7 +124,7 @@ class ConfigStoreSQLite(
                     emptyList()
                 }
             } catch (e: SQLException) {
-                logger.severe("Error retrieving archive groups from SQLite: ${e.message}")
+                logger.severe("Error retrieving archive groups from CrateDB: ${e.message}")
                 emptyList()
             }
         }).onComplete { result ->
@@ -139,7 +139,7 @@ class ConfigStoreSQLite(
         return promise.future()
     }
 
-    override fun getArchiveGroup(name: String): Future<ArchiveGroupConfig?> {
+    override fun getArchiveGroup(name: String): io.vertx.core.Future<ArchiveGroupConfig?> {
         val promise = Promise.promise<ArchiveGroupConfig?>()
 
         vertx.executeBlocking(Callable {
@@ -153,7 +153,7 @@ class ConfigStoreSQLite(
 
                         if (resultSet.next()) {
                             val archiveGroup = resultSetToArchiveGroup(resultSet)
-                            val enabled = resultSet.getInt("enabled") == 1
+                            val enabled = resultSet.getBoolean("enabled")
                             ArchiveGroupConfig(archiveGroup, enabled)
                         } else {
                             null
@@ -164,7 +164,7 @@ class ConfigStoreSQLite(
                     null
                 }
             } catch (e: SQLException) {
-                logger.severe("Error retrieving archive group '$name' from SQLite: ${e.message}")
+                logger.severe("Error retrieving archive group '$name' from CrateDB: ${e.message}")
                 null
             }
         }).onComplete { result ->
@@ -179,14 +179,24 @@ class ConfigStoreSQLite(
         return promise.future()
     }
 
-    override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
+    override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): io.vertx.core.Future<Boolean> {
         val promise = Promise.promise<Boolean>()
 
         vertx.executeBlocking(Callable {
             val sql = """
-                INSERT OR REPLACE INTO $configTableName
+                INSERT INTO $configTableName
                 (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (name) DO UPDATE SET
+                    enabled = EXCLUDED.enabled,
+                    topic_filter = EXCLUDED.topic_filter,
+                    retained_only = EXCLUDED.retained_only,
+                    last_val_type = EXCLUDED.last_val_type,
+                    archive_type = EXCLUDED.archive_type,
+                    last_val_retention = EXCLUDED.last_val_retention,
+                    archive_retention = EXCLUDED.archive_retention,
+                    purge_interval = EXCLUDED.purge_interval,
+                    updated_at = CURRENT_TIMESTAMP
             """.trimIndent()
 
             try {
@@ -197,13 +207,13 @@ class ConfigStoreSQLite(
                         val purgeInterval = archiveGroup.getPurgeIntervalMs()?.let { DurationParser.formatDuration(it) }
 
                         preparedStatement.setString(1, archiveGroup.name)
-                        preparedStatement.setInt(2, if (enabled) 1 else 0)
+                        preparedStatement.setBoolean(2, enabled)
 
-                        // Convert topic filter list to JSON string for SQLite storage
-                        val topicFilterJson = JsonArray(archiveGroup.topicFilter).encode()
-                        preparedStatement.setString(3, topicFilterJson)
+                        // Convert topic filter list to CrateDB array format
+                        val topicFilterArray = connection.createArrayOf("STRING", archiveGroup.topicFilter.toTypedArray())
+                        preparedStatement.setArray(3, topicFilterArray)
 
-                        preparedStatement.setInt(4, if (archiveGroup.retainedOnly) 1 else 0)
+                        preparedStatement.setBoolean(4, archiveGroup.retainedOnly)
                         preparedStatement.setString(5, archiveGroup.getLastValType().name)
                         preparedStatement.setString(6, archiveGroup.getArchiveType().name)
                         preparedStatement.setString(7, lastValRetention)
@@ -214,7 +224,7 @@ class ConfigStoreSQLite(
                         val success = rowsAffected > 0
 
                         if (success) {
-                            logger.info("Archive group '${archiveGroup.name}' saved successfully to SQLite")
+                            logger.info("Archive group '${archiveGroup.name}' saved successfully to CrateDB")
                         }
                         success
                     }
@@ -223,7 +233,7 @@ class ConfigStoreSQLite(
                     false
                 }
             } catch (e: SQLException) {
-                logger.severe("Error saving archive group '${archiveGroup.name}' to SQLite: ${e.message}")
+                logger.severe("Error saving archive group '${archiveGroup.name}' to CrateDB: ${e.message}")
                 false
             }
         }).onComplete { result ->
@@ -238,11 +248,11 @@ class ConfigStoreSQLite(
         return promise.future()
     }
 
-    override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
-        return saveArchiveGroup(archiveGroup, enabled) // SQLite UPSERT handles both insert and update
+    override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): io.vertx.core.Future<Boolean> {
+        return saveArchiveGroup(archiveGroup, enabled) // CrateDB UPSERT handles both insert and update
     }
 
-    override fun deleteArchiveGroup(name: String): Future<Boolean> {
+    override fun deleteArchiveGroup(name: String): io.vertx.core.Future<Boolean> {
         val promise = Promise.promise<Boolean>()
 
         vertx.executeBlocking(Callable {
@@ -256,9 +266,9 @@ class ConfigStoreSQLite(
                         val success = rowsAffected > 0
 
                         if (success) {
-                            logger.info("Archive group '$name' deleted successfully from SQLite")
+                            logger.info("Archive group '$name' deleted successfully from CrateDB")
                         } else {
-                            logger.warning("Archive group '$name' not found in SQLite for deletion")
+                            logger.warning("Archive group '$name' not found in CrateDB for deletion")
                         }
                         success
                     }
@@ -267,7 +277,7 @@ class ConfigStoreSQLite(
                     false
                 }
             } catch (e: SQLException) {
-                logger.severe("Error deleting archive group '$name' from SQLite: ${e.message}")
+                logger.severe("Error deleting archive group '$name' from CrateDB: ${e.message}")
                 false
             }
         }).onComplete { result ->
@@ -285,20 +295,15 @@ class ConfigStoreSQLite(
     private fun resultSetToArchiveGroup(resultSet: ResultSet): ArchiveGroup {
         val name = resultSet.getString("name")
 
-        // Parse topic filter from JSON string
-        val topicFilterJson = resultSet.getString("topic_filter")
-        val topicFilter = if (topicFilterJson != null) {
-            try {
-                JsonArray(topicFilterJson).map { it.toString() }
-            } catch (e: Exception) {
-                logger.warning("Error parsing topic filter JSON: ${e.message}")
-                emptyList()
-            }
+        // Parse topic filter from CrateDB array
+        val topicFilterArray = resultSet.getArray("topic_filter")
+        val topicFilter = if (topicFilterArray != null) {
+            (topicFilterArray.array as Array<*>).map { it.toString() }
         } else {
             emptyList()
         }
 
-        val retainedOnly = resultSet.getInt("retained_only") == 1
+        val retainedOnly = resultSet.getBoolean("retained_only")
         val lastValType = MessageStoreType.valueOf(resultSet.getString("last_val_type"))
         val archiveType = MessageArchiveType.valueOf(resultSet.getString("archive_type"))
 
@@ -319,5 +324,5 @@ class ConfigStoreSQLite(
         )
     }
 
-    override fun getType(): String = "ConfigStoreSQLite"
+    override fun getType(): String = "ConfigStoreCrateDB"
 }

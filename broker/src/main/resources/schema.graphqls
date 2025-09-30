@@ -1164,6 +1164,18 @@ extend type Query {
         # Filter by trust status: true=trusted, false=untrusted, null=all
         trusted: Boolean
     ): [OpcUaServerCertificate!]!
+
+    # Get all MQTT client configurations across the entire cluster
+    # Returns clients from all cluster nodes, showing their assignment and connection status
+    mqttClients: [MqttClient!]!
+
+    # Get a specific MQTT client configuration by its unique name
+    # Client names must be unique across the entire MonsterMQ cluster
+    mqttClient(name: String!): MqttClient
+
+    # Get MQTT clients assigned to a specific cluster node
+    # Useful for monitoring client distribution and cluster load balancing
+    mqttClientsByNode(nodeId: String!): [MqttClient!]!
 }
 
 # Extend existing Mutation type
@@ -1259,4 +1271,190 @@ extend type Mutation {
         serverName: String!,
         fingerprints: [String!]!
     ): CertificateManagementResult!
+
+    # Create a new MQTT client configuration to connect to a remote MQTT broker
+    # Creates a client connector that will be deployed on the specified cluster node
+    # The client will automatically connect and synchronize topics with the remote broker
+    createMqttClient(input: MqttClientInput!): MqttClientResult!
+
+    # Update an existing MQTT client configuration
+    # Changes take effect immediately - the client connector will be redeployed with new settings
+    # Useful for modifying connection parameters, credentials, or topic mappings
+    updateMqttClient(name: String!, input: MqttClientInput!): MqttClientResult!
+
+    # Delete an MQTT client configuration permanently
+    # Stops the client connector and removes all configuration data
+    # Returns true if deletion was successful, false if client was not found
+    deleteMqttClient(name: String!): Boolean!
+
+    # Start an MQTT client connection
+    # Enables a previously stopped client and establishes connection to remote broker
+    startMqttClient(name: String!): MqttClientResult!
+
+    # Stop an MQTT client connection
+    # Disables the client and disconnects from remote broker while preserving configuration
+    stopMqttClient(name: String!): MqttClientResult!
+
+    # Toggle MQTT client enabled state
+    # Enable or disable an MQTT client without deleting its configuration
+    toggleMqttClient(name: String!, enabled: Boolean!): MqttClientResult!
+
+    # Reassign an MQTT client to a different cluster node
+    # Moves the client connector from one node to another for load balancing
+    # The client configuration remains unchanged, only the deployment location changes
+    reassignMqttClient(name: String!, nodeId: String!): MqttClientResult!
+
+    # Add a new address mapping to an existing MQTT client
+    # Defines how topics are mapped between local and remote brokers (subscribe/publish)
+    # New mappings will immediately start synchronizing data
+    addMqttClientAddress(deviceName: String!, input: MqttClientAddressInput!): MqttClientResult!
+
+    # Remove an address mapping from an MQTT client
+    # Stops data synchronization for the specified remote topic while keeping other mappings active
+    deleteMqttClientAddress(deviceName: String!, remoteTopic: String!): MqttClientResult!
+}
+
+# MQTT Client Configuration Types
+#
+# MQTT Clients allow MonsterMQ to act as a bridge between this broker and remote MQTT brokers.
+# Each client establishes an outbound connection and can:
+# 1. Subscribe to topics on the remote broker and republish them locally (SUBSCRIBE mode)
+# 2. Subscribe to local topics and publish them to the remote broker (PUBLISH mode)
+#
+# Common use cases:
+# - Bridging data between different MQTT infrastructures
+# - Aggregating data from multiple remote brokers into a central MonsterMQ instance
+# - Distributing data from MonsterMQ to multiple remote brokers
+# - Creating hierarchical broker topologies for large-scale IoT deployments
+
+# Connection mode for MQTT client address mappings
+enum MqttClientMode {
+    # Subscribe to remote broker topics and republish locally
+    # Data flows: Remote Broker → MonsterMQ
+    SUBSCRIBE
+    # Subscribe to local topics and publish to remote broker
+    # Data flows: MonsterMQ → Remote Broker
+    PUBLISH
+}
+
+# MQTT Client address mapping configuration
+# Defines how topics are mapped between local and remote brokers
+type MqttClientAddress {
+    # Connection mode: SUBSCRIBE (remote→local) or PUBLISH (local→remote)
+    mode: String!
+    # Topic pattern on the remote broker (supports MQTT wildcards: +, #)
+    remoteTopic: String!
+    # Topic pattern on the local broker (supports MQTT wildcards: +, #)
+    localTopic: String!
+    # Whether to remove the base path from topic names when mapping
+    # Example: remoteTopic="sensor/#" with removePath=true maps "sensor/temp/1" to "temp/1"
+    removePath: Boolean!
+    # QoS level for MQTT messages (0=At most once, 1=At least once, 2=Exactly once)
+    qos: Int
+}
+
+# MQTT Client connection configuration
+type MqttClientConnectionConfig {
+    # Connection protocol: "tcp", "tcps" (TLS), "ws" (WebSocket), "wss" (WebSocket Secure)
+    protocol: String!
+    # Remote broker hostname or IP address
+    hostname: String!
+    # Remote broker port (typically 1883 for TCP, 8883 for TLS)
+    port: Int!
+    # Username for authentication (optional)
+    username: String
+    # Client ID to use when connecting to remote broker
+    clientId: String!
+    # Whether to use a clean session (false = persistent session)
+    cleanSession: Boolean!
+    # Keep-alive interval in seconds
+    keepAlive: Int!
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long!
+    # Connection timeout in milliseconds
+    connectionTimeout: Long!
+    # Topic mappings between local and remote brokers
+    addresses: [MqttClientAddress!]!
+}
+
+# MQTT Client configuration
+type MqttClient {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Cluster node ID where this client runs
+    nodeId: String!
+    # Connection and mapping configuration
+    config: MqttClientConnectionConfig!
+    # Whether this client is enabled and should connect
+    enabled: Boolean!
+    # Client creation timestamp
+    createdAt: String!
+    # Client last update timestamp
+    updatedAt: String!
+    # Whether this client is running on the current node
+    isOnCurrentNode: Boolean!
+}
+
+# Result type for MQTT Client operations
+type MqttClientResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected MQTT client (null if operation failed)
+    client: MqttClient
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+# Input for creating or updating an MQTT client
+input MqttClientInput {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (e.g., "mqtt/client1")
+    namespace: String!
+    # Target cluster node (use "*" for automatic assignment)
+    nodeId: String!
+    # Whether the client should be enabled
+    enabled: Boolean = true
+    # Connection configuration
+    config: MqttClientConnectionConfigInput!
+}
+
+# Input for MQTT client connection configuration
+input MqttClientConnectionConfigInput {
+    # Connection protocol: "tcp", "tcps", "ws", "wss"
+    protocol: String = "tcp"
+    # Remote broker hostname or IP address
+    hostname: String!
+    # Remote broker port
+    port: Int = 1883
+    # Username for authentication (optional)
+    username: String
+    # Password for authentication (optional)
+    password: String
+    # Client ID to use when connecting
+    clientId: String = "monstermq-client"
+    # Whether to use a clean session
+    cleanSession: Boolean = true
+    # Keep-alive interval in seconds
+    keepAlive: Int = 60
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long = 5000
+    # Connection timeout in milliseconds
+    connectionTimeout: Long = 30000
+}
+
+# Input for MQTT client address mapping
+input MqttClientAddressInput {
+    # Connection mode: "SUBSCRIBE" or "PUBLISH"
+    mode: String!
+    # Topic pattern on the remote broker
+    remoteTopic: String!
+    # Topic pattern on the local broker
+    localTopic: String!
+    # Whether to remove the base path from topic names
+    removePath: Boolean = true
+    # QoS level for MQTT messages (0, 1, or 2)
+    qos: Int = 0
 }

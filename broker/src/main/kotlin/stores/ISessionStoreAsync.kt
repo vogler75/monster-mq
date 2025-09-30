@@ -1,6 +1,6 @@
 package at.rocworks.stores
 
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.MqttSubscription
 import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
@@ -13,11 +13,11 @@ interface ISessionStoreAsync {
     fun iterateOfflineClients(callback: (clientId: String) -> Unit): Future<Void>
     fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit): Future<Void>
     fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit): Future<Void>
-    fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit): Future<Void>
+    fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: BrokerMessage) -> Unit): Future<Void>
     fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int) -> Unit): Future<Void>
 
     fun setClient(clientId: String, nodeId: String, cleanSession: Boolean, connected: Boolean, information: JsonObject): Future<Void>
-    fun setLastWill(clientId: String, message: MqttMessage?): Future<Void>
+    fun setLastWill(clientId: String, message: BrokerMessage?): Future<Void>
 
     fun setConnected(clientId: String, connected: Boolean): Future<Void>
     fun isConnected(clientId: String): Future<Boolean>
@@ -27,8 +27,8 @@ interface ISessionStoreAsync {
     fun delSubscriptions(subscriptions: List<MqttSubscription>): Future<Void>
     fun delClient(clientId: String, callback: (MqttSubscription) -> Unit): Future<Void>
 
-    fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>): Future<Void>
-    fun dequeueMessages(clientId: String, callback: (MqttMessage) -> Boolean): Future<Void>
+    fun enqueueMessages(messages: List<Pair<BrokerMessage, List<String>>>): Future<Void>
+    fun dequeueMessages(clientId: String, callback: (BrokerMessage) -> Boolean): Future<Void>
     fun removeMessages(messages: List<Pair<String, String>>): Future<Void>
 
     fun purgeQueuedMessages(): Future<Void>

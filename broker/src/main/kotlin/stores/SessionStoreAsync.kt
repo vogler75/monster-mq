@@ -1,6 +1,6 @@
 package at.rocworks.stores
 
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.MqttSubscription
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -44,7 +44,7 @@ class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(
         return promise.future()
     }
 
-    override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: MqttMessage) -> Unit): Future<Void> {
+    override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: BrokerMessage) -> Unit): Future<Void> {
         val promise = Promise.promise<Void>()
         vertx.executeBlocking(Callable {
             store.iterateNodeClients(nodeId, callback)
@@ -71,7 +71,7 @@ class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(
         return promise.future()
     }
 
-    override fun setLastWill(clientId: String, message: MqttMessage?): Future<Void> {
+    override fun setLastWill(clientId: String, message: BrokerMessage?): Future<Void> {
         val promise = Promise.promise<Void>()
         vertx.executeBlocking(Callable {
             store.setLastWill(clientId, message)
@@ -132,7 +132,7 @@ class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(
         return promise.future()
     }
 
-    override fun enqueueMessages(messages: List<Pair<MqttMessage, List<String>>>): Future<Void> {
+    override fun enqueueMessages(messages: List<Pair<BrokerMessage, List<String>>>): Future<Void> {
         val promise = Promise.promise<Void>()
         vertx.executeBlocking(Callable {
             store.enqueueMessages(messages)
@@ -141,7 +141,7 @@ class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(
         return promise.future()
     }
 
-    override fun dequeueMessages(clientId: String, callback: (MqttMessage)->Boolean): Future<Void> {
+    override fun dequeueMessages(clientId: String, callback: (BrokerMessage)->Boolean): Future<Void> {
         val promise = Promise.promise<Void>()
         vertx.executeBlocking(Callable {
             store.dequeueMessages(clientId, callback)

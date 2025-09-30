@@ -2,7 +2,7 @@ package at.rocworks.extensions.graphql
 
 import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
 import org.reactivestreams.Publisher
@@ -107,7 +107,7 @@ class SubscriptionResolver(
             }
         }
 
-        private fun handleMessage(message: MqttMessage) {
+        private fun handleMessage(message: BrokerMessage) {
             vertx.runOnContext {
                 if (cancelled.get()) return@runOnContext
 

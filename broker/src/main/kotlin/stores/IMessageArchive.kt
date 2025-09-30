@@ -1,6 +1,6 @@
 package at.rocworks.stores
 
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.PurgeResult
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -19,7 +19,7 @@ enum class MessageArchiveType {
 interface IMessageArchive {
     fun getName(): String
     fun getType(): MessageArchiveType
-    fun addHistory(messages: List<MqttMessage>)
+    fun addHistory(messages: List<BrokerMessage>)
 
     fun purgeOldMessages(olderThan: Instant): PurgeResult
 

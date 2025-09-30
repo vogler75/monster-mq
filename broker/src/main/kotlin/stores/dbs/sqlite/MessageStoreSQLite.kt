@@ -2,7 +2,7 @@ package at.rocworks.stores.sqlite
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
 import at.rocworks.data.PurgeResult
@@ -81,7 +81,7 @@ class MessageStoreSQLite(
         }
     }
 
-    override fun get(topicName: String): MqttMessage? {
+    override fun get(topicName: String): BrokerMessage? {
         val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
                      WHERE topic = ?"""
         val params = JsonArray().add(topicName)
@@ -96,7 +96,7 @@ class MessageStoreSQLite(
                 val clientId = row.getString("client_id") ?: ""
                 val messageUuid = row.getString("message_uuid") ?: ""
 
-                MqttMessage(
+                BrokerMessage(
                     messageUuid = messageUuid,
                     messageId = 0,
                     topicName = topicName,
@@ -119,7 +119,7 @@ class MessageStoreSQLite(
     /**
      * Async version of get() for better performance with GraphQL queries
      */
-    override fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit) {
+    override fun getAsync(topicName: String, callback: (BrokerMessage?) -> Unit) {
         val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
                      WHERE topic = ?"""
         val params = JsonArray().add(topicName)
@@ -136,7 +136,7 @@ class MessageStoreSQLite(
                         val clientId = row.getString("client_id") ?: ""
                         val messageUuid = row.getString("message_uuid") ?: ""
 
-                        val message = MqttMessage(
+                        val message = BrokerMessage(
                             messageUuid = messageUuid,
                             messageId = 0,
                             topicName = topicName,
@@ -162,7 +162,7 @@ class MessageStoreSQLite(
         }
     }
 
-    override fun addAll(messages: List<MqttMessage>) {
+    override fun addAll(messages: List<BrokerMessage>) {
         if (messages.isEmpty()) return
         
         val fixedColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")
@@ -236,7 +236,7 @@ class MessageStoreSQLite(
         }
     }
 
-    override fun findMatchingMessages(topicName: String, callback: (MqttMessage) -> Boolean) {
+    override fun findMatchingMessages(topicName: String, callback: (BrokerMessage) -> Boolean) {
         val levels = Utils.getTopicLevels(topicName)
         val filter = levels.mapIndexed { index, level ->
             when (level) {
@@ -281,7 +281,7 @@ class MessageStoreSQLite(
                     val qos = rowObj.getInteger("qos", 0)
                     val clientId = rowObj.getString("client_id", "")
                     val messageUuid = rowObj.getString("message_uuid", "")
-                    val message = MqttMessage(
+                    val message = BrokerMessage(
                         messageUuid = messageUuid,
                         messageId = 0,
                         topicName = topic,

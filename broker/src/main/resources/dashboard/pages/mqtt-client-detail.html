@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - MQTT Client Detail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .section-card {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            margin-bottom: 2rem;
+            box-shadow: var(--card-shadow);
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+        }
+        .section-title h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .section-content {
+            padding: 1.5rem;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            background: var(--dark-bg);
+            border-radius: 8px;
+            border: 1px solid var(--dark-border);
+        }
+        .info-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+        .info-value {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        .status-badge {
+            display: inline-flex;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-enabled {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--monster-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .status-disabled {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--monster-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--monster-purple), var(--monster-teal));
+            color: white;
+        }
+        .btn-secondary {
+            background: var(--dark-surface-2);
+            border: 1px solid var(--dark-border);
+            color: var(--text-primary);
+        }
+        .btn-success {
+            background: var(--monster-green);
+            color: white;
+        }
+        .btn-warning {
+            background: var(--monster-orange);
+            color: white;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .data-table thead th {
+            background: var(--dark-bg);
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 2px solid var(--dark-border);
+        }
+        .data-table tbody td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+        .data-table tbody tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+        }
+        .mode-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.3rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .mode-subscribe {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--monster-green);
+        }
+        .mode-publish {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--monster-teal);
+        }
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--dark-surface-2);
+            border: 1px solid var(--dark-border);
+        }
+        .btn-delete {
+            color: var(--monster-red);
+        }
+        .btn-delete:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--monster-red);
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            padding: 2rem;
+        }
+        .modal-content {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        .modal-body {
+            padding: 2rem;
+        }
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        .form-control, input[type="text"], input[type="password"], input[type="number"], select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            box-sizing: border-box;
+        }
+        .form-control:focus, input:focus, select:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .checkbox-group input[type="checkbox"] {
+            accent-color: var(--monster-purple);
+        }
+        code {
+            background: var(--dark-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: var(--monster-teal);
+        }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <button class="sidebar-toggle" onclick="toggleSidebar()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15,18 9,12 15,6"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="nav-section">
+                <div class="nav-section-title">Monitoring</div>
+                <a href="/pages/dashboard.html" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                    <span class="nav-text">Dashboard</span>
+                </a>
+                <a href="/pages/sessions.html" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <span class="nav-text">Sessions</span>
+                </a>
+                <a href="/pages/topic-browser.html" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="M21 21l-4.35-4.35"></path>
+                    </svg>
+                    <span class="nav-text">Topics</span>
+                </a>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">Configuration</div>
+                <a href="/pages/archive-groups.html" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"></polyline>
+                    </svg>
+                    <span class="nav-text">Archives</span>
+                </a>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">OPC UA</div>
+                <a href="/pages/opcua-devices.html" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                    <span class="nav-text">OPC UA Clients</span>
+                </a>
+                <a href="/pages/opcua-servers.html" class="nav-item">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+                        <line x1="7" y1="2" x2="7" y2="22"></line>
+                        <line x1="17" y1="2" x2="17" y2="22"></line>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <line x1="2" y1="7" x2="7" y2="7"></line>
+                        <line x1="2" y1="17" x2="7" y2="17"></line>
+                        <line x1="17" y1="17" x2="22" y2="17"></line>
+                        <line x1="17" y1="7" x2="22" y2="7"></line>
+                    </svg>
+                    <span class="nav-text">OPC UA Servers</span>
+                </a>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">MQTT Bridging</div>
+                <a href="/pages/mqtt-clients.html" class="nav-item active">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 18l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    <span class="nav-text">MQTT Clients</span>
+                </a>
+            </div>
+
+            <div class="nav-section">
+                <div class="nav-section-title">System</div>
+                <a href="/pages/users.html" class="nav-item" id="users-nav-link" style="display: none;">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <span class="nav-text">Users</span>
+                </a>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">
+                    U
+                </div>
+                <div class="user-details">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-role">Administrator</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <div>
+                    <button class="btn btn-secondary" onclick="goBack()" style="margin-bottom: 1rem;">
+                        ← Back to Clients
+                    </button>
+                    <h1 class="page-title" id="page-title">MQTT Client</h1>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" onclick="showEditModal()">Edit Configuration</button>
+                    <button class="btn btn-success" id="toggle-client-btn" onclick="toggleClient()">Start Client</button>
+                </div>
+            </div>
+
+            <!-- Client Info Section -->
+            <div class="section-card">
+                <div class="section-header">
+                    <div class="section-title">
+                        <h2>Client Information</h2>
+                    </div>
+                    <span class="status-badge status-enabled" id="client-status">ENABLED</span>
+                </div>
+                <div class="section-content">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Client Name</div>
+                            <div class="info-value" id="client-name-display">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Namespace</div>
+                            <div class="info-value" id="client-namespace">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Broker URL</div>
+                            <div class="info-value" id="client-broker-url">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Node Assignment</div>
+                            <div class="info-value" id="client-node-id">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Client ID</div>
+                            <div class="info-value" id="client-client-id">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Username</div>
+                            <div class="info-value" id="client-username">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Clean Session</div>
+                            <div class="info-value" id="client-clean-session">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Keep Alive</div>
+                            <div class="info-value" id="client-keep-alive">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Reconnect Delay</div>
+                            <div class="info-value" id="client-reconnect-delay">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Connection Timeout</div>
+                            <div class="info-value" id="client-connection-timeout">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Created At</div>
+                            <div class="info-value" id="client-created-at">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Updated At</div>
+                            <div class="info-value" id="client-updated-at">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Address Mappings Section -->
+            <div class="section-card">
+                <div class="section-header">
+                    <div class="section-title">
+                        <h2>Topic Address Mappings</h2>
+                    </div>
+                    <button class="btn btn-primary" onclick="showAddAddressModal()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                        Add Address
+                    </button>
+                </div>
+                <div class="section-content">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Mode</th>
+                                <th>Remote Topic</th>
+                                <th>Local Topic</th>
+                                <th>Remove Path</th>
+                                <th>QoS</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="addresses-table-body">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Client Modal -->
+    <div id="edit-client-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit MQTT Client</h3>
+                <button class="modal-close" onclick="hideEditModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-client-form">
+                    <div class="form-group">
+                        <label for="edit-client-name">Client Name *</label>
+                        <input type="text" id="edit-client-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-namespace">Namespace *</label>
+                        <input type="text" id="edit-client-namespace" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-protocol">Protocol *</label>
+                        <select id="edit-client-protocol" required>
+                            <option value="tcp">TCP</option>
+                            <option value="tcps">TCP+TLS</option>
+                            <option value="ws">WebSocket</option>
+                            <option value="wss">WebSocket+TLS</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-hostname">Hostname *</label>
+                        <input type="text" id="edit-client-hostname" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-port">Port *</label>
+                        <input type="number" id="edit-client-port" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-id">Client ID *</label>
+                        <input type="text" id="edit-client-id" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-username">Username</label>
+                        <input type="text" id="edit-client-username">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-password">Password</label>
+                        <input type="password" id="edit-client-password" placeholder="Leave blank to keep current">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-node">Cluster Node *</label>
+                        <select id="edit-client-node" required>
+                            <option value="">Select Node...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-keep-alive">Keep Alive (seconds)</label>
+                        <input type="number" id="edit-client-keep-alive">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-reconnect-delay">Reconnect Delay (ms)</label>
+                        <input type="number" id="edit-client-reconnect-delay">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-connection-timeout">Connection Timeout (ms)</label>
+                        <input type="number" id="edit-client-connection-timeout">
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="edit-client-enabled">
+                            <label for="edit-client-enabled">Enabled</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="edit-client-clean-session">
+                            <label for="edit-client-clean-session">Clean Session</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideEditModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" onclick="updateClient()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Address Modal -->
+    <div id="add-address-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Address Mapping</h3>
+                <button class="modal-close" onclick="hideAddAddressModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-address-form">
+                    <div class="form-group">
+                        <label for="address-mode">Mode *</label>
+                        <select id="address-mode" required>
+                            <option value="SUBSCRIBE">SUBSCRIBE (Remote → Local)</option>
+                            <option value="PUBLISH">PUBLISH (Local → Remote)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="address-remote-topic">Remote Topic *</label>
+                        <input type="text" id="address-remote-topic" required placeholder="e.g., sensor/+/temperature">
+                        <small style="color: var(--text-muted);">Supports MQTT wildcards: + (single level), # (multi-level)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="address-local-topic">Local Topic *</label>
+                        <input type="text" id="address-local-topic" required placeholder="e.g., remote/sensor/+/temperature">
+                        <small style="color: var(--text-muted);">Supports MQTT wildcards: + (single level), # (multi-level)</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="address-remove-path" checked>
+                            <label for="address-remove-path">Remove Base Path</label>
+                        </div>
+                        <small style="color: var(--text-muted);">Remove the base path before wildcards from topic names</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="address-qos">QoS Level *</label>
+                        <select id="address-qos" required>
+                            <option value="0">QoS 0 - At most once</option>
+                            <option value="1">QoS 1 - At least once</option>
+                            <option value="2">QoS 2 - Exactly once</option>
+                        </select>
+                        <small style="color: var(--text-muted);">Quality of Service level for MQTT messages</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" onclick="addAddress()">Add Address</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Address Modal -->
+    <div id="confirm-delete-address-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideConfirmDeleteAddressModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the address mapping for "<span id="delete-address-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteAddressModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteAddress()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/mqtt-client-detail.js"></script>
+</body>
+</html>

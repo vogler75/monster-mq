@@ -1,6 +1,6 @@
 package at.rocworks.devices.opcuaserver
 
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 import at.rocworks.handlers.SessionHandler
@@ -373,7 +373,7 @@ class OpcUaServerInstance(
         topicsToAdd.forEach { topic ->
             try {
                 sessionHandler.subscribeInternal(internalClientId, topic, 0) { message ->
-                    handleMqttMessage(message, newConfig.addresses.find { it.mqttTopic == topic })
+                    handleBrokerMessage(message, newConfig.addresses.find { it.mqttTopic == topic })
                 }
                 subscribedTopics[topic] = internalClientId
                 logger.fine("Subscribed OPC UA server '${config.name}' to new topic: $topic")
@@ -393,7 +393,7 @@ class OpcUaServerInstance(
         config.addresses.forEach { address ->
             try {
                 sessionHandler.subscribeInternal(internalClientId, address.mqttTopic, 0) { message ->
-                    handleMqttMessage(message, address)
+                    handleBrokerMessage(message, address)
                 }
                 subscribedTopics[address.mqttTopic] = internalClientId
                 logger.fine("Subscribed OPC UA server '${config.name}' to MQTT topic: ${address.mqttTopic}")
@@ -421,7 +421,7 @@ class OpcUaServerInstance(
     /**
      * Handle incoming MQTT messages and update OPC UA nodes
      */
-    private fun handleMqttMessage(message: MqttMessage, addressConfig: OpcUaServerAddress? = null) {
+    private fun handleBrokerMessage(message: BrokerMessage, addressConfig: OpcUaServerAddress? = null) {
         // Skip messages from this OPC UA server to prevent loops
         if (message.sender == internalClientId) {
             logger.fine("Skipping message from self: ${message.topicName}")
@@ -540,7 +540,7 @@ class OpcUaServerInstance(
                 logger.fine("Publishing OPC UA write to MQTT topic: $topic")
 
                 // Publish directly to MQTT (sessionHandler.publishInternal is already async)
-                val message = MqttMessage(
+                val message = BrokerMessage(
                     messageId = 0,
                     topicName = topic,
                     payload = payload,

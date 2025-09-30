@@ -1,13 +1,13 @@
 package at.rocworks.stores
 
-import at.rocworks.stores.postgres.ConfigStorePostgres
-import at.rocworks.stores.mongodb.ConfigStoreMongoDB
-import at.rocworks.stores.cratedb.ConfigStoreCrateDB
-import at.rocworks.stores.sqlite.ConfigStoreSQLite
+import at.rocworks.stores.postgres.ArchiveConfigStorePostgres
+import at.rocworks.stores.mongodb.ArchiveConfigStoreMongoDB
+import at.rocworks.stores.cratedb.ArchiveConfigStoreCrateDB
+import at.rocworks.stores.sqlite.ArchiveConfigStoreSQLite
 import io.vertx.core.json.JsonObject
 
-object ConfigStoreFactory {
-    fun createConfigStore(config: JsonObject, storeType: String?): IConfigStore? {
+object ArchiveConfigStoreFactory {
+    fun createConfigStore(config: JsonObject, storeType: String?): IArchiveConfigStore? {
         return when (storeType?.uppercase()) {
             "POSTGRES" -> {
                 val postgresConfig = config.getJsonObject("Postgres")
@@ -16,7 +16,7 @@ object ConfigStoreFactory {
                     val user = postgresConfig.getString("User")
                     val pass = postgresConfig.getString("Pass")
                     if (url != null && user != null && pass != null) {
-                        ConfigStorePostgres(url, user, pass)
+                        ArchiveConfigStorePostgres(url, user, pass)
                     } else {
                         null
                     }
@@ -30,7 +30,7 @@ object ConfigStoreFactory {
                     val connectionString = mongoConfig.getString("ConnectionString")
                     val databaseName = mongoConfig.getString("Database")
                     if (connectionString != null && databaseName != null) {
-                        ConfigStoreMongoDB(connectionString, databaseName)
+                        ArchiveConfigStoreMongoDB(connectionString, databaseName)
                     } else {
                         null
                     }
@@ -45,7 +45,7 @@ object ConfigStoreFactory {
                     val username = crateConfig.getString("Username")
                     val password = crateConfig.getString("Password")
                     if (url != null && username != null && password != null) {
-                        ConfigStoreCrateDB(url, username, password)
+                        ArchiveConfigStoreCrateDB(url, username, password)
                     } else {
                         null
                     }
@@ -58,7 +58,7 @@ object ConfigStoreFactory {
                 if (sqliteConfig != null) {
                     val directory = sqliteConfig.getString("Path", ".")
                     val dbPath = "$directory/monstermq.db"
-                    ConfigStoreSQLite(dbPath)
+                    ArchiveConfigStoreSQLite(dbPath)
                 } else {
                     null
                 }

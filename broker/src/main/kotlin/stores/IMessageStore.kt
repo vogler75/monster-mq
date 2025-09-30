@@ -1,6 +1,6 @@
 package at.rocworks.stores
 
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.PurgeResult
 import java.time.Instant
 
@@ -18,12 +18,12 @@ interface IMessageStore {
     fun getName(): String
     fun getType(): MessageStoreType
 
-    operator fun get(topicName: String): MqttMessage?
-    fun getAsync(topicName: String, callback: (MqttMessage?) -> Unit)
+    operator fun get(topicName: String): BrokerMessage?
+    fun getAsync(topicName: String, callback: (BrokerMessage?) -> Unit)
 
-    fun addAll(messages: List<MqttMessage>)
+    fun addAll(messages: List<BrokerMessage>)
     fun delAll(topics: List<String>)
-    fun findMatchingMessages(topicName: String, callback: (MqttMessage)->Boolean)
+    fun findMatchingMessages(topicName: String, callback: (BrokerMessage)->Boolean)
 
     /**
      * Find topic names that match the given pattern for efficient topic tree browsing.

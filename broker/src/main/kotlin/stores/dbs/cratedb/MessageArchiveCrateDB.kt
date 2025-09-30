@@ -2,7 +2,7 @@ package at.rocworks.stores.cratedb
 
 import at.rocworks.Const
 import at.rocworks.Utils
-import at.rocworks.data.MqttMessage
+import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.MessageArchiveType
@@ -69,7 +69,7 @@ class MessageArchiveCrateDB (
         db.start(vertx, startPromise)
     }
 
-    override fun addHistory(messages: List<MqttMessage>) {
+    override fun addHistory(messages: List<BrokerMessage>) {
         val sql = "INSERT INTO $tableName (topic, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid) "+
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "+
                 "ON CONFLICT (topic, time) DO NOTHING" // TODO: ignore duplicates, what if time resolution is not enough?

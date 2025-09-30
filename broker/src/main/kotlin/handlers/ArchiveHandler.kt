@@ -3,7 +3,7 @@ package at.rocworks.handlers
 import at.rocworks.Utils
 import at.rocworks.stores.*
 import at.rocworks.Monster
-import at.rocworks.stores.ConfigStoreFactory
+import at.rocworks.stores.ArchiveConfigStoreFactory
 import at.rocworks.stores.MessageArchiveType
 import at.rocworks.stores.cratedb.MessageArchiveCrateDB
 import at.rocworks.stores.mongodb.MessageArchiveMongoDB
@@ -34,7 +34,7 @@ class ArchiveHandler(
     private val deployedArchiveGroups = ConcurrentHashMap<String, ArchiveGroupInfo>()
 
     // Keep reference to deployed ConfigStore if using database
-    private var deployedConfigStore: IConfigStore? = null
+    private var deployedConfigStore: IArchiveConfigStore? = null
 
     // Reference to MessageHandler for dynamic registration
     private var messageHandler: MessageHandler? = null
@@ -159,7 +159,7 @@ class ArchiveHandler(
 
     private fun importArchiveConfigToDatabase(archiveGroups: JsonArray, configStoreType: String): Future<Void> {
         val promise = Promise.promise<Void>()
-        val configStore = ConfigStoreFactory.createConfigStore(configJson, configStoreType)
+        val configStore = ArchiveConfigStoreFactory.createConfigStore(configJson, configStoreType)
 
         if (configStore == null) {
             logger.severe("Failed to create ConfigStore of type $configStoreType for import")
@@ -246,7 +246,7 @@ class ArchiveHandler(
     }
 
     private fun loadArchiveGroupsFromDatabase(configStoreType: String, promise: Promise<List<ArchiveGroup>>) {
-        val configStore = ConfigStoreFactory.createConfigStore(configJson, configStoreType)
+        val configStore = ArchiveConfigStoreFactory.createConfigStore(configJson, configStoreType)
 
         if (configStore == null) {
             logger.severe("Failed to create ConfigStore of type $configStoreType")
@@ -568,7 +568,7 @@ class ArchiveHandler(
         }
     }
 
-    fun getConfigStore(): IConfigStore? {
+    fun getConfigStore(): IArchiveConfigStore? {
         // Return the deployed ConfigStore instance if available
         // Otherwise return null (no database configuration)
         return deployedConfigStore
@@ -739,7 +739,7 @@ class ArchiveHandler(
         }
 
         // Fallback: create a new ConfigStore (shouldn't normally happen)
-        val newConfigStore = ConfigStoreFactory.createConfigStore(configJson, configStoreType)
+        val newConfigStore = ArchiveConfigStoreFactory.createConfigStore(configJson, configStoreType)
 
         if (newConfigStore == null) {
             promise.fail("Failed to create ConfigStore of type $configStoreType")
