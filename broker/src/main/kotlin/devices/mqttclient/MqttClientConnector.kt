@@ -105,9 +105,16 @@ class MqttClientConnector : AbstractVerticle() {
             logger.info("Cancelled pending reconnection timer for device ${deviceConfig.name}")
         }
 
-        // Unregister event bus consumer
-        eventBusConsumerRegistration?.unregister()
-        eventBusConsumerRegistration = null
+        // Unsubscribe from internal topics
+        val sessionHandler = Monster.getSessionHandler()
+        if (sessionHandler != null) {
+            publishAddresses.values.forEach { address ->
+                val clientId = "mqttclient-${deviceConfig.name}"
+                val topicFilter = address.localTopic
+                logger.info("Unsubscribing internal client '$clientId' from local topic '$topicFilter'")
+                sessionHandler.unsubscribeInternal(clientId, topicFilter)
+            }
+        }
 
         // Disconnect from remote broker
         vertx.executeBlocking(Callable {
@@ -305,9 +312,20 @@ class MqttClientConnector : AbstractVerticle() {
             publishAddresses[address.localTopic] = address
         }
 
-        // Subscribe to local MQTT publish address from MqttClientExtension
-        eventBusConsumerRegistration = vertx.eventBus().consumer<BrokerMessage>(MqttClientExtension.ADDRESS_MQTT_VALUE_PUBLISH) { message ->
-            handleLocalMqttMessage(message.body())
+        // Subscribe to local topics using internal subscription mechanism
+        val sessionHandler = Monster.getSessionHandler()
+        if (sessionHandler != null) {
+            publishAddrs.forEach { address ->
+                val clientId = "mqttclient-${deviceConfig.name}"
+                val topicFilter = address.localTopic
+                logger.info("Internal subscription for MQTT client '$clientId' to local topic '$topicFilter'")
+
+                sessionHandler.subscribeInternal(clientId, topicFilter, 0) { message ->
+                    handleLocalMqttMessage(message)
+                }
+            }
+        } else {
+            logger.severe("SessionHandler not available for internal subscriptions")
         }
     }
 
@@ -329,6 +347,8 @@ class MqttClientConnector : AbstractVerticle() {
             val localTopic = MqttTopicTransformer.remoteToLocal(topic, matchingAddress)
 
             // Create BrokerMessage for local broker
+            // Set sender to our clientId to prevent loop (won't be delivered back to us)
+            val clientId = "mqttclient-${deviceConfig.name}"
             val localMessage = BrokerMessage(
                 messageId = 0,
                 topicName = localTopic,
@@ -337,7 +357,8 @@ class MqttClientConnector : AbstractVerticle() {
                 isRetain = message.isRetained,
                 isDup = message.isDuplicate,
                 isQueued = false,
-                clientId = "mqttclient-${deviceConfig.name}"
+                clientId = clientId,
+                sender = clientId
             )
 
             // Publish to local MQTT through SessionHandler to ensure proper archiving

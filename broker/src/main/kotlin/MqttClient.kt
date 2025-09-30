@@ -445,7 +445,7 @@ class MqttClient(
         }
         
         logger.finest { "Client [$clientId] Publish ALLOWED for [$topicName] - user [$username]" }
-        
+
         // Handle QoS levels
         when (message.qosLevel()) {
             MqttQoS.AT_MOST_ONCE -> { // Level 0
