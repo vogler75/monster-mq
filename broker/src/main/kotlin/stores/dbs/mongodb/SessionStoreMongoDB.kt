@@ -89,7 +89,17 @@ class SessionStoreMongoDB(
     }
 
     override fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit) {
-        logger.warning("iterateConnectedClients feature not implemented yet for MongoDB [${Utils.getCurrentFunctionName()}]")
+        try {
+            val filter = Document("connected", true)
+            val sessions = sessionsCollection.find(filter)
+            for (doc in sessions) {
+                val clientId = doc.getString("client_id")
+                val nodeId = doc.getString("node_id") ?: ""
+                callback(clientId, nodeId)
+            }
+        } catch (e: Exception) {
+            logger.warning("Error while retrieving connected clients: ${e.message}")
+        }
     }
 
     override fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit) {

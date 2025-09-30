@@ -162,7 +162,24 @@ class SessionStoreCrateDB(
     }
 
     override fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit) {
-        logger.warning("iterateConnectedClients feature not implemented yet for CrateDB [${Utils.getCurrentFunctionName()}]")
+        try {
+            db.connection?.let { connection ->
+                "SELECT client_id, node_id FROM $sessionsTableName WHERE connected = true".let { sql ->
+                    connection.prepareStatement(sql).use { preparedStatement ->
+                        val resultSet = preparedStatement.executeQuery()
+                        while (resultSet.next()) {
+                            val clientId = resultSet.getString(1)
+                            val nodeId = resultSet.getString(2) ?: ""
+                            callback(clientId, nodeId)
+                        }
+                    }
+                }
+            } ?: run {
+                logger.severe("Iterating connected clients not possible without database connection! [${Utils.getCurrentFunctionName()}]")
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error at fetching connected clients [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
     }
 
     override fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit) {
