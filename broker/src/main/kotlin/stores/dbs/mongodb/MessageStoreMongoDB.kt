@@ -537,10 +537,62 @@ class MessageStoreMongoDB(
     }
 
     override fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean, namespace: String): List<Pair<String, String>> {
-        // This would require a separate config collection
-        // For now, return empty list
-        logger.warning("findTopicsByConfig not fully implemented for MongoDB")
-        return emptyList()
+        val resultTopics = mutableListOf<Pair<String, String>>()
+
+        try {
+            val activeCollection = getActiveCollection() ?: run {
+                logger.warning("MongoDB not connected, returning empty list")
+                return emptyList()
+            }
+
+            // Build filters
+            val filters = mutableListOf<Bson>()
+
+            // Filter for topics ending with MCP_CONFIG_TOPIC
+            val topicLevels = Utils.getTopicLevels(Const.MCP_CONFIG_TOPIC)
+            if (topicLevels.isNotEmpty()) {
+                val lastLevel = topicLevels.last()
+                filters.add(Filters.regex("topic", ".*/${lastLevel}$"))
+            }
+
+            // Namespace filter
+            if (namespace.isNotEmpty()) {
+                if (ignoreCase) {
+                    filters.add(Filters.regex("topic", "^$namespace/.*", "i"))
+                } else {
+                    filters.add(Filters.regex("topic", "^$namespace/.*"))
+                }
+            }
+
+            // Config field contains description pattern
+            if (description.isNotEmpty()) {
+                val regexPattern = if (ignoreCase) {
+                    Filters.regex("payload_json.$config", ".*$description.*", "i")
+                } else {
+                    Filters.regex("payload_json.$config", ".*$description.*")
+                }
+                filters.add(regexPattern)
+            }
+
+            val query = if (filters.isNotEmpty()) Filters.and(filters) else Document()
+
+            logger.fine { "findTopicsByConfig query: $query [${Utils.getCurrentFunctionName()}]" }
+
+            val cursor = activeCollection.find(query).sort(Document("topic", 1))
+
+            for (doc in cursor) {
+                val topic = doc.getString("topic") ?: ""
+                // Remove the config topic suffix
+                val cleanTopic = topic.replace("/${Const.MCP_CONFIG_TOPIC}", "")
+                val configJson = doc.getString("payload_json") ?: ""
+                resultTopics.add(Pair(cleanTopic, configJson))
+            }
+        } catch (e: Exception) {
+            logger.severe("Error finding topics by config in MongoDB: ${e.message}")
+        }
+
+        logger.fine("findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        return resultTopics
     }
 
     override fun getName(): String = name

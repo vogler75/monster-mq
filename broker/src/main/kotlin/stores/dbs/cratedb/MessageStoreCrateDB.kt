@@ -4,7 +4,7 @@ import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.MqttMessage
 import at.rocworks.stores.DatabaseConnection
-import at.rocworks.stores.IMessageStore
+import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
 import at.rocworks.data.PurgeResult
 import io.vertx.core.AbstractVerticle
@@ -18,7 +18,7 @@ class MessageStoreCrateDB(
     private val url: String,
     private val username: String,
     private val password: String
-): AbstractVerticle(), IMessageStore {
+): AbstractVerticle(), IMessageStoreExtended {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
     private var lastAddAllError: Int = 0
@@ -419,5 +419,81 @@ class MessageStoreCrateDB(
             false
         }
     }
+
     override fun getConnectionStatus(): Boolean = db.check()
+
+    override fun findTopicsByName(name: String, ignoreCase: Boolean, namespace: String): List<String> {
+        val resultTopics = mutableListOf<String>()
+        val sqlSearchPattern = name.replace("*", "%").replace("+", "_")
+        val sqlNamespacePattern = if (namespace.isEmpty()) "%" else "$namespace/%"
+
+        val sql = """
+        SELECT topic
+        FROM $tableName AS t
+        WHERE topic_l <> '${Const.MCP_CONFIG_TOPIC}'
+        AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
+        AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
+        ORDER BY topic
+        """.trimIndent()
+
+        logger.fine { "findTopicsByName SQL: $sql with pattern '$sqlSearchPattern' [${Utils.getCurrentFunctionName()}]" }
+
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, sqlNamespacePattern)
+                    preparedStatement.setString(2, sqlSearchPattern)
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        val fullTopic = resultSet.getString("topic") ?: ""
+                        resultTopics.add(fullTopic)
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error finding topics by name: ${e.message}")
+        }
+
+        logger.fine("findTopicsByName result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        return resultTopics
+    }
+
+    override fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean, namespace: String): List<Pair<String, String>> {
+        val resultTopics = mutableListOf<Pair<String, String>>()
+        val sqlSearchPattern = description
+        val sqlNamespacePattern = if (namespace.isEmpty()) "%" else "$namespace/%"
+
+        // CrateDB uses different JSON operators than PostgreSQL
+        // CrateDB: payload_json['config'] ~ 'pattern'
+        val sql = """
+        SELECT RTRIM(topic, '/${Const.MCP_CONFIG_TOPIC}') AS topic, payload_json AS config
+        FROM $tableName
+        WHERE topic_l = '${Const.MCP_CONFIG_TOPIC}'
+        AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
+        AND ${if (ignoreCase) "LOWER(payload_json['${config}'])" else "payload_json['${config}']"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
+        ORDER BY topic
+        """.trimIndent()
+
+        logger.fine { "findTopicsByConfig SQL: $sql with pattern '$sqlSearchPattern' [${Utils.getCurrentFunctionName()}]" }
+
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, sqlNamespacePattern)
+                    preparedStatement.setString(2, "%$sqlSearchPattern%")
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        val fullTopic = resultSet.getString("topic") ?: ""
+                        val configJson = resultSet.getString("config") ?: ""
+                        resultTopics.add(Pair(fullTopic, configJson))
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error finding topics by config: ${e.message}")
+        }
+
+        logger.fine("findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        return resultTopics
+    }
 }
