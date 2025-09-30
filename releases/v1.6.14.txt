@@ -1,0 +1,12 @@
+Release v1.6.14
+Built from commit: e562abd
+Date: 2025-09-30 22:41:12
+
+Changes since v1.6.13:
+---
+e562abd Merge branch 'development'
+f341282 Add QoS support to MQTT client address configuration
+833d16b Refactor internal topic subscription in MqttClientConnector
+ed09851 Add MQTT client management UI and navigation
+b30c0e0 Rename ConfigStore to ArchiveConfigStore and update references
+b8d9aad Add MQTT client connector and unify message model
