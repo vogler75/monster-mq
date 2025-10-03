@@ -1,9 +1,9 @@
 package auth
 
+import at.rocworks.data.TopicTree
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.AclRule
-import at.rocworks.data.TopicTree
 import at.rocworks.data.User
 import at.rocworks.stores.IUserStore
 import io.vertx.core.Future
@@ -194,51 +194,13 @@ class AclCache {
      * Check if a topic matches an MQTT topic pattern (supports + and # wildcards)
      */
     private fun topicMatches(pattern: String, topic: String): Boolean {
-        val patternLevels = Utils.getTopicLevels(pattern)
-        val topicLevels = Utils.getTopicLevels(topic)
-        
-        return topicMatchesRecursive(patternLevels, topicLevels, 0, 0)
+        return TopicTree.matches(pattern, topic)
     }
     
     /**
      * Recursive topic matching implementation
      */
-    private fun topicMatchesRecursive(
-        pattern: List<String>, 
-        topic: List<String>, 
-        pIndex: Int, 
-        tIndex: Int
-    ): Boolean {
-        // If we've consumed all pattern levels
-        if (pIndex >= pattern.size) {
-            return tIndex >= topic.size // Pattern matches if topic is also consumed
-        }
-        
-        // If we've consumed all topic levels but pattern has more
-        if (tIndex >= topic.size) {
-            // Only match if remaining pattern is just "#"
-            return pIndex == pattern.size - 1 && pattern[pIndex] == "#"
-        }
-        
-        val currentPattern = pattern[pIndex]
-        val currentTopic = topic[tIndex]
-        
-        return when (currentPattern) {
-            "#" -> true // Multi-level wildcard matches everything remaining
-            "+" -> {
-                // Single-level wildcard, continue with next level
-                topicMatchesRecursive(pattern, topic, pIndex + 1, tIndex + 1)
-            }
-            else -> {
-                // Exact match required
-                if (currentPattern == currentTopic) {
-                    topicMatchesRecursive(pattern, topic, pIndex + 1, tIndex + 1)
-                } else {
-                    false
-                }
-            }
-        }
-    }
+    // Unified matching now via TopicTree.matches
     
     /**
      * Clear the permission cache (useful after ACL updates)

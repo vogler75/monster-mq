@@ -19,6 +19,45 @@ class TopicTree<K, V> : ITopicTree<K, V> {
 
     private val root = Node<K, V>()
 
+    companion object {
+        /**
+         * MQTT topic filter matcher implementing MQTT 3.1.1 wildcard semantics.
+         * Single-level wildcard '+' matches exactly one topic level.
+         * Multi-level wildcard '#' matches remaining topic levels and must be the last level.
+         */
+        fun matches(topicFilter: String, topic: String): Boolean {
+            if (topicFilter === topic) return true
+            if (!topicFilter.contains('+') && !topicFilter.contains('#')) return topicFilter == topic
+
+            val filterLevels = topicFilter.split('/')
+            val topicLevels = topic.split('/')
+
+            var fi = 0
+            var ti = 0
+            while (fi < filterLevels.size) {
+                val f = filterLevels[fi]
+                when {
+                    f == "#" -> {
+                        return fi == filterLevels.lastIndex
+                    }
+                    f == "+" -> {
+                        if (ti >= topicLevels.size) return false
+                        fi++; ti++
+                    }
+                    else -> {
+                        if (ti >= topicLevels.size) return false
+                        if (f != topicLevels[ti]) return false
+                        fi++; ti++
+                    }
+                }
+            }
+            return ti == topicLevels.size
+        }
+
+        fun firstMatch(filters: Iterable<String>, topic: String): String? = filters.firstOrNull { matches(it, topic) }
+        fun anyMatch(filters: Iterable<String>, topic: String): Boolean = filters.any { matches(it, topic) }
+    }
+
     override fun getType(): TopicTreeType = TopicTreeType.LOCAL
 
     override fun add(topicName: String) = add(topicName, null, null)

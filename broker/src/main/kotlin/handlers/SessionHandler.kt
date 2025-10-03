@@ -1,5 +1,7 @@
 package at.rocworks.handlers
 
+import at.rocworks.data.TopicTree
+
 import at.rocworks.Const
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.Monster
@@ -803,17 +805,9 @@ open class SessionHandler(
         return targetNodes
     }
 
-    // Simple topic filter matching (supports + and # wildcards)
-    private fun matchesTopicFilter(topicName: String, topicFilter: String): Boolean {
-        if (topicFilter == topicName) return true
-        if (topicFilter.contains('#') || topicFilter.contains('+')) {
-            // Create a temporary topic tree with the filter to test matching
-            val tempTree = TopicTree<String, String>()
-            tempTree.add(topicFilter, "test", "value")
-            return tempTree.isTopicNameMatching(topicName)
-        }
-        return false
-    }
+    // Simple topic filter matching using unified matcher
+    private fun matchesTopicFilter(topicName: String, topicFilter: String): Boolean =
+        TopicTree.matches(topicFilter, topicName)
 
     // --------------------------------------------------------------------------------------------------------
     // Internal subscription methods for OPC UA Server and other internal components

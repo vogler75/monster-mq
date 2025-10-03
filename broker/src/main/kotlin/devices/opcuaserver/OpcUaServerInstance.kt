@@ -4,6 +4,7 @@ import at.rocworks.data.BrokerMessage
 import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 import at.rocworks.handlers.SessionHandler
+import at.rocworks.data.TopicTree
 import io.vertx.core.Vertx
 import org.eclipse.milo.opcua.sdk.server.OpcUaServer
 import org.eclipse.milo.opcua.sdk.server.api.config.OpcUaServerConfigBuilder
@@ -433,10 +434,7 @@ class OpcUaServerInstance(
         try {
             // Use the provided address config, or find one that matches
             val matchingAddress = addressConfig ?: config.addresses.find { address ->
-                address.mqttTopic == message.topicName ||
-                // Simple wildcard check for patterns ending with #
-                (address.mqttTopic.endsWith("#") &&
-                 message.topicName.startsWith(address.mqttTopic.dropLast(1)))
+                TopicTree.matches(address.mqttTopic, message.topicName)
             }
 
             if (matchingAddress != null) {
@@ -481,36 +479,6 @@ class OpcUaServerInstance(
         }
     }
 
-    /**
-     * Check if a topic matches a wildcard pattern
-     */
-    private fun matchesWildcardPattern(topic: String, pattern: String): Boolean {
-        if (!pattern.contains("+") && !pattern.contains("#")) {
-            return false
-        }
-
-        val topicParts = topic.split("/")
-        val patternParts = pattern.split("/")
-
-        // Handle multi-level wildcard (#) - should be at the end
-        if (pattern.endsWith("#")) {
-            val basePattern = pattern.dropLast(1) // Remove the #
-            return topic.startsWith(basePattern)
-        }
-
-        // Handle single-level wildcards (+)
-        if (topicParts.size != patternParts.size) {
-            return false
-        }
-
-        for (i in patternParts.indices) {
-            if (patternParts[i] != "+" && patternParts[i] != topicParts[i]) {
-                return false
-            }
-        }
-
-        return true
-    }
 
     /**
      * Handle OPC UA node writes and publish to MQTT
@@ -528,10 +496,7 @@ class OpcUaServerInstance(
             // Find any address configuration that matches this topic pattern
             // We only need this to get the dataType for conversion
             val address = config.addresses.find { addressConfig ->
-                addressConfig.mqttTopic == topic ||
-                (addressConfig.mqttTopic.endsWith("/#") &&
-                 topic.startsWith(addressConfig.mqttTopic.dropLast(2))) ||
-                matchesWildcardPattern(topic, addressConfig.mqttTopic)
+                TopicTree.matches(addressConfig.mqttTopic, topic)
             }
 
             if (address != null) {
