@@ -664,7 +664,8 @@ open class SessionHandler(
 
         messageHandler.findRetainedMessages(topicName, 0) { message -> // TODO: max must be configurable
             logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-            sendMessageToClient(clientId, message)
+            val effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
+            sendMessageToClient(clientId, effectiveMessage)
         }.onComplete {
             logger.finest { "Retained messages published [${it.result()}] [${Utils.getCurrentFunctionName()}]" }
             addSubscription(MqttSubscription(clientId, topicName, qos))
