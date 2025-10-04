@@ -397,6 +397,17 @@ class SessionManager {
                 </table>
             </div>
 
+            ${session.information ? `
+            <div class="data-table" style="margin-top: 1.5rem;">
+                <div style="padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
+                    <h3 style="margin: 0; color: var(--text-primary);">Connection Information</h3>
+                </div>
+                <div style="padding: 1rem;">
+                    <pre style="background: var(--dark-card); padding: 1rem; border-radius: 6px; margin: 0; overflow-x: auto; font-size: 0.9rem; color: var(--text-primary);">${this.formatJson(session.information)}</pre>
+                </div>
+            </div>
+            ` : ''}
+
             ${subscriptions.length > 0 ? `
                 <div class="data-table" style="margin-top: 2rem;">
                     <div style="padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
@@ -442,6 +453,15 @@ class SessionManager {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    formatJson(jsonString) {
+        try {
+            const parsed = JSON.parse(jsonString);
+            return JSON.stringify(parsed, null, 2);
+        } catch (e) {
+            return jsonString; // Return as-is if not valid JSON
+        }
     }
 
     showError(message) {

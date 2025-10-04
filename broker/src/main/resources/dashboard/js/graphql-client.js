@@ -180,6 +180,7 @@ class GraphQLDashboardClient {
                     clientAddress
                     connected
                     queuedMessageCount
+                    information
                 }
             }
         `;
@@ -208,6 +209,7 @@ class GraphQLDashboardClient {
                     clientAddress
                     connected
                     queuedMessageCount
+                    information
                 }
             }
         `;

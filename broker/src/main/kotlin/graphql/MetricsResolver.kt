@@ -179,7 +179,8 @@ class MetricsResolver(
                         cleanSession = clientDetails.cleanSession,
                         sessionExpiryInterval = clientDetails.sessionExpiryInterval?.toLong() ?: 0L,
                         clientAddress = clientDetails.clientAddress,
-                        connected = sessionHandler.getClientStatus(clientId) == at.rocworks.handlers.SessionHandler.ClientStatus.ONLINE
+                        connected = sessionHandler.getClientStatus(clientId) == at.rocworks.handlers.SessionHandler.ClientStatus.ONLINE,
+                        information = clientDetails.information
                     )
                     future.complete(session)
                 }.exceptionally { e ->
@@ -231,7 +232,8 @@ class MetricsResolver(
                                         cleanSession = response.getBoolean("cleanSession", sessionCleanSession),
                                         sessionExpiryInterval = response.getLong("sessionExpiryInterval", 0L),
                                         clientAddress = response.getString("clientAddress"),
-                                        connected = response.getBoolean("connected", sessionConnected)
+                                        connected = response.getBoolean("connected", sessionConnected),
+                                        information = response.getString("information")
                                     )
                                     future.complete(session)
                                 }.exceptionally { e ->
@@ -293,7 +295,8 @@ class MetricsResolver(
                                 cleanSession = cleanSession,
                                 sessionExpiryInterval = clientDetails?.sessionExpiryInterval?.toLong() ?: 0L,
                                 clientAddress = clientDetails?.clientAddress,
-                                connected = connected
+                                connected = connected,
+                                information = clientDetails?.information
                             )
                             sessionFuture.complete(session)
                         } catch (e: Exception) {

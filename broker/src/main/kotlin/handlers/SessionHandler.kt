@@ -98,7 +98,8 @@ open class SessionHandler(
         val nodeId: String,
         val clientAddress: String?,
         val cleanSession: Boolean,
-        val sessionExpiryInterval: Int?
+        val sessionExpiryInterval: Int?,
+        val information: String?
     )
 
     override fun start(startPromise: Promise<Void>) {
@@ -296,6 +297,7 @@ open class SessionHandler(
                         .put("cleanSession", clientDetails.cleanSession)
                         .put("sessionExpiryInterval", clientDetails.sessionExpiryInterval ?: 0)
                         .put("connected", clientStatus == ClientStatus.ONLINE)
+                        .put("information", clientDetails.information)
                         .put("found", true)
                     message.reply(response)
                 } else {
@@ -484,9 +486,10 @@ open class SessionHandler(
         val nodeId = Monster.getClusterNodeId(vertx)
         clientDetails[clientId] = ClientDetails(
             nodeId = nodeId,
-            clientAddress = information.getString("clientAddress"),
+            clientAddress = information.getString("RemoteAddress"),
             cleanSession = cleanSession,
-            sessionExpiryInterval = information.getInteger("sessionExpiryInterval")
+            sessionExpiryInterval = information.getInteger("sessionExpiryInterval"),
+            information = information.encode()
         )
 
         // Set client-to-node mapping using replicator

@@ -179,7 +179,8 @@ data class Session(
     val cleanSession: Boolean,
     val sessionExpiryInterval: Long,
     val clientAddress: String?,
-    val connected: Boolean
+    val connected: Boolean,
+    val information: String?
 )
 
 object PayloadConverter {

@@ -118,6 +118,8 @@ type Session {
     connected: Boolean!
     # Number of queued messages for this session
     queuedMessageCount: Long!
+    # Additional session information as JSON
+    information: String
 }
 
 # Metrics for a single session
