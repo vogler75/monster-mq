@@ -32,7 +32,14 @@ class UserStorePostgres(
 
     private var connection: java.sql.Connection? = null
 
-    
+    private fun rollbackQuietly() {
+        try { connection?.rollback() } catch (_: SQLException) { }
+    }
+
+    private fun logSqlException(operation: String, e: SQLException) {
+        logger.warning("$operation failed: ${e.message} sqlState=${e.sqlState} errorCode=${e.errorCode} [${Utils.getCurrentFunctionName()}]")
+    }
+
     private fun createTablesSync(connection: java.sql.Connection): Boolean {
         return try {
             val createTableSQL = listOf("""
@@ -71,6 +78,7 @@ class UserStorePostgres(
             logger.info("PostgreSQL user management tables created")
             true
         } catch (e: java.sql.SQLException) {
+            rollbackQuietly()
             logger.severe("Error creating PostgreSQL user management tables: ${e.message}")
             false
         }
@@ -143,7 +151,8 @@ class UserStorePostgres(
                     }
                 } ?: false
             } catch (e: SQLException) {
-                logger.warning("Error creating user [${user.username}]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                rollbackQuietly()
+                logSqlException("Error creating user [${user.username}]", e)
                 false
             }
         }).onComplete { result ->
@@ -178,7 +187,8 @@ class UserStorePostgres(
                     }
                 } ?: false
             } catch (e: SQLException) {
-                logger.warning("Error updating user [${user.username}]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                rollbackQuietly()
+                logSqlException("Error updating user [${user.username}]", e)
                 false
             }
         }).onComplete { result ->
@@ -208,7 +218,8 @@ class UserStorePostgres(
                     }
                 } ?: false
             } catch (e: SQLException) {
-                logger.warning("Error deleting user [$username]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                rollbackQuietly()
+                logSqlException("Error deleting user [$username]", e)
                 false
             }
         }).onComplete { result ->
@@ -248,7 +259,8 @@ class UserStorePostgres(
                     }
                 }
             } catch (e: SQLException) {
-                logger.warning("Error getting user [$username]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                rollbackQuietly()
+                logSqlException("Error getting user [$username]", e)
                 null
             }
         }).onComplete { result ->
@@ -289,7 +301,8 @@ class UserStorePostgres(
                     }
                 } ?: emptyList()
             } catch (e: SQLException) {
-                logger.warning("Error getting all users: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                rollbackQuietly()
+                logSqlException("Error getting all users", e)
                 emptyList()
             }
         }).onComplete { result ->
@@ -343,7 +356,8 @@ class UserStorePostgres(
                     }
                 } ?: false
             } catch (e: SQLException) {
-                logger.warning("Error creating ACL rule for user [${rule.username}]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                rollbackQuietly()
+                logSqlException("Error creating ACL rule for user [${rule.username}]", e)
                 false
             }
         }).onComplete { result ->
@@ -364,6 +378,11 @@ class UserStorePostgres(
         vertx.executeBlocking(Callable {
             val sql = "UPDATE $usersAclTableName SET username = ?, topic_pattern = ?, can_subscribe = ?, can_publish = ?, priority = ? WHERE id = ?"
             try {
+                val idInt = rule.id.toIntOrNull()
+                if (idInt == null) {
+                    logger.warning("updateAclRule invalid id [${rule.id}]")
+                    return@Callable false
+                }
                 connection?.let { connection ->
                     connection.prepareStatement(sql).use { stmt ->
                         stmt.setString(1, rule.username)
@@ -371,14 +390,15 @@ class UserStorePostgres(
                         stmt.setBoolean(3, rule.canSubscribe)
                         stmt.setBoolean(4, rule.canPublish)
                         stmt.setInt(5, rule.priority)
-                        stmt.setString(6, rule.id)
+                        stmt.setInt(6, idInt)
                         val result = stmt.executeUpdate() > 0
                         connection.commit()
                         result
                     }
                 } ?: false
             } catch (e: SQLException) {
-                logger.warning("Error updating ACL rule [${rule.id}]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                rollbackQuietly()
+                logSqlException("Error updating ACL rule [${rule.id}]", e)
                 false
             }
         }).onComplete { result ->
@@ -399,16 +419,22 @@ class UserStorePostgres(
         vertx.executeBlocking(Callable {
             val sql = "DELETE FROM $usersAclTableName WHERE id = ?"
             try {
+                val idInt = id.toIntOrNull()
+                if (idInt == null) {
+                    logger.warning("deleteAclRule invalid id [$id]")
+                    return@Callable false
+                }
                 connection?.let { connection ->
                     connection.prepareStatement(sql).use { stmt ->
-                        stmt.setString(1, id)
+                        stmt.setInt(1, idInt)
                         val result = stmt.executeUpdate() > 0
                         connection.commit()
                         result
                     }
                 } ?: false
             } catch (e: SQLException) {
-                logger.warning("Error deleting ACL rule [$id]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                rollbackQuietly()
+                logSqlException("Error deleting ACL rule [$id]", e)
                 false
             }
         }).onComplete { result ->
@@ -429,9 +455,14 @@ class UserStorePostgres(
         vertx.executeBlocking(Callable {
             val sql = "SELECT id, username, topic_pattern, can_subscribe, can_publish, priority, created_at FROM $usersAclTableName WHERE id = ?"
             try {
+                val idInt = id.toIntOrNull()
+                if (idInt == null) {
+                    logger.warning("getAclRule invalid id [$id]")
+                    return@Callable null
+                }
                 connection?.let { connection ->
                     connection.prepareStatement(sql).use { stmt ->
-                        stmt.setString(1, id)
+                        stmt.setInt(1, idInt)
                         val rs = stmt.executeQuery()
                         if (rs.next()) {
                             AclRule(
@@ -447,7 +478,8 @@ class UserStorePostgres(
                     }
                 }
             } catch (e: SQLException) {
-                logger.warning("Error getting ACL rule [$id]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                rollbackQuietly()
+                logSqlException("Error getting ACL rule [$id]", e)
                 null
             }
         }).onComplete { result ->
@@ -488,7 +520,8 @@ class UserStorePostgres(
                     }
                 } ?: emptyList()
             } catch (e: SQLException) {
-                logger.warning("Error getting ACL rules for user [$username]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                rollbackQuietly()
+                logSqlException("Error getting ACL rules for user [$username]", e)
                 emptyList()
             }
         }).onComplete { result ->
@@ -528,7 +561,8 @@ class UserStorePostgres(
                     }
                 } ?: emptyList()
             } catch (e: SQLException) {
-                logger.warning("Error getting all ACL rules: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                rollbackQuietly()
+                logSqlException("Error getting all ACL rules", e)
                 emptyList()
             }
         }).onComplete { result ->
