@@ -5,6 +5,9 @@ class SessionManager {
         this.currentNodeFilter = '';
         this.currentConnectionFilter = '';
 
+        // Load filters from URL parameters
+        this.loadFiltersFromURL();
+
         this.init();
     }
 
@@ -17,6 +20,25 @@ class SessionManager {
         this.setupUI();
         this.setupChart();
         this.loadSessions();
+    }
+
+    loadFiltersFromURL() {
+        const urlParams = new URLSearchParams(window.location.search);
+        this.currentNodeFilter = urlParams.get('nodeId') || '';
+        this.currentConnectionFilter = urlParams.get('connected') || '';
+    }
+
+    updateURL() {
+        const urlParams = new URLSearchParams();
+        if (this.currentNodeFilter) {
+            urlParams.set('nodeId', this.currentNodeFilter);
+        }
+        if (this.currentConnectionFilter !== '') {
+            urlParams.set('connected', this.currentConnectionFilter);
+        }
+        
+        const newUrl = `${window.location.pathname}${urlParams.toString() ? '?' + urlParams.toString() : ''}`;
+        window.history.replaceState({}, '', newUrl);
     }
 
     isLoggedIn() {
@@ -58,12 +80,14 @@ class SessionManager {
 
         document.getElementById('node-filter').addEventListener('change', (e) => {
             this.currentNodeFilter = e.target.value;
-            this.filterSessions();
+            this.updateURL();
+            this.loadSessions();
         });
 
         document.getElementById('connection-filter').addEventListener('change', (e) => {
             this.currentConnectionFilter = e.target.value;
-            this.filterSessions();
+            this.updateURL();
+            this.loadSessions();
         });
 
         document.getElementById('close-modal').addEventListener('click', () => {
@@ -77,6 +101,21 @@ class SessionManager {
                 this.showSessionDetails(clientId, nodeId);
             }
         });
+
+        // Restore filter values from URL to UI
+        this.restoreFilterUI();
+    }
+
+    restoreFilterUI() {
+        const nodeFilter = document.getElementById('node-filter');
+        const connectionFilter = document.getElementById('connection-filter');
+        
+        if (nodeFilter && this.currentNodeFilter) {
+            nodeFilter.value = this.currentNodeFilter;
+        }
+        if (connectionFilter && this.currentConnectionFilter) {
+            connectionFilter.value = this.currentConnectionFilter;
+        }
     }
 
     logout() {
@@ -127,8 +166,12 @@ class SessionManager {
         try {
             this.setRefreshLoading(true);
 
-            // Use GraphQL client directly
-            this.sessions = await window.graphqlClient.getSessions();
+            // Prepare GraphQL parameters from current filters
+            const nodeId = this.currentNodeFilter || null;
+            const connected = this.currentConnectionFilter !== '' ? (this.currentConnectionFilter === 'true') : null;
+
+            // Use GraphQL client with server-side filtering
+            this.sessions = await window.graphqlClient.getSessions(nodeId, connected);
             this.updateMetrics();
             this.updateChart();
             this.updateNodeFilter();
@@ -180,31 +223,34 @@ class SessionManager {
         this.distributionChart.update();
     }
 
-    updateNodeFilter() {
+    async updateNodeFilter() {
         const nodeFilter = document.getElementById('node-filter');
-        const nodes = [...new Set(this.sessions.map(s => s.nodeId))].sort();
+        
+        try {
+            // Get all sessions to populate node filter options
+            const allSessions = await window.graphqlClient.getSessions();
+            const nodes = [...new Set(allSessions.map(s => s.nodeId))].sort();
 
-        nodeFilter.innerHTML = '<option value="">All Nodes</option>' +
-            nodes.map(node => `<option value="${node}">${node}</option>`).join('');
+            nodeFilter.innerHTML = '<option value="">All Nodes</option>' +
+                nodes.map(node => `<option value="${node}">${node}</option>`).join('');
+                
+            // Restore the current filter value
+            if (this.currentNodeFilter) {
+                nodeFilter.value = this.currentNodeFilter;
+            }
+        } catch (error) {
+            console.error('Error updating node filter:', error);
+            // Fallback to using current session data if available
+            const nodes = [...new Set(this.sessions.map(s => s.nodeId))].sort();
+            nodeFilter.innerHTML = '<option value="">All Nodes</option>' +
+                nodes.map(node => `<option value="${node}">${node}</option>`).join('');
+        }
     }
 
-    filterSessions() {
-        let filtered = [...this.sessions];
 
-        if (this.currentNodeFilter) {
-            filtered = filtered.filter(s => s.nodeId === this.currentNodeFilter);
-        }
 
-        if (this.currentConnectionFilter !== '') {
-            const isConnected = this.currentConnectionFilter === 'true';
-            filtered = filtered.filter(s => s.connected === isConnected);
-        }
-
-        this.renderSessions(filtered);
-    }
-
-    renderSessions(sessions = null) {
-        const sessionsToRender = sessions || this.sessions;
+    renderSessions() {
+        const sessionsToRender = this.sessions;
         const tableBody = document.getElementById('sessions-table-body');
 
         if (sessionsToRender.length === 0) {
