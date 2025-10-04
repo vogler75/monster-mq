@@ -71,16 +71,16 @@ class MetricsHandler(
                     val nodeMetrics = reply.result().body()
                     try {
                         val brokerMetrics = BrokerMetrics(
-                            messagesIn = nodeMetrics.getLong("messagesIn", 0L),
-                            messagesOut = nodeMetrics.getLong("messagesOut", 0L),
+                            messagesIn = nodeMetrics.getDouble("messagesInRate", 0.0),
+                            messagesOut = nodeMetrics.getDouble("messagesOutRate", 0.0),
                             nodeSessionCount = nodeMetrics.getInteger("nodeSessionCount", 0),
                             clusterSessionCount = sessionHandler.getSessionCount(),
                             queuedMessagesCount = 0L, // TODO: Get from session store if needed
                             topicIndexSize = nodeMetrics.getInteger("topicIndexSize", 0),
                             clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
                             topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
-                            messageBusIn = nodeMetrics.getLong("messageBusIn", 0L),
-                            messageBusOut = nodeMetrics.getLong("messageBusOut", 0L),
+                            messageBusIn = nodeMetrics.getDouble("messageBusInRate", 0.0),
+                            messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
                             timestamp = TimestampConverter.instantToIsoString(timestamp)
                         )
 
@@ -98,12 +98,12 @@ class MetricsHandler(
                             sessionMetricsArray.forEach { sessionMetricObj ->
                                 val sessionMetric = sessionMetricObj as JsonObject
                                 val clientId = sessionMetric.getString("clientId")
-                                val messagesIn = sessionMetric.getLong("messagesIn", 0L)
-                                val messagesOut = sessionMetric.getLong("messagesOut", 0L)
+                                val messagesInRate = sessionMetric.getDouble("messagesInRate", 0.0)
+                                val messagesOutRate = sessionMetric.getDouble("messagesOutRate", 0.0)
 
                                 val sessionMetrics = SessionMetrics(
-                                    messagesIn = messagesIn,
-                                    messagesOut = messagesOut,
+                                    messagesIn = messagesInRate,
+                                    messagesOut = messagesOutRate,
                                     timestamp = TimestampConverter.instantToIsoString(timestamp)
                                 )
 

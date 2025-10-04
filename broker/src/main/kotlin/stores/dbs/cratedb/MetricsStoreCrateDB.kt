@@ -216,21 +216,21 @@ class MetricsStoreCrateDB(
                     @Suppress("UNCHECKED_CAST")
                     val metricsMap = resultSet.getObject("metrics") as? Map<String, Any> ?: emptyMap()
                     BrokerMetrics(
-                        messagesIn = (metricsMap["messagesIn"] as? Number)?.toLong() ?: 0L,
-                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toLong() ?: 0L,
+                        messagesIn = (metricsMap["messagesIn"] as? Number)?.toDouble() ?: 0.0,
+                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toDouble() ?: 0.0,
                         nodeSessionCount = (metricsMap["nodeSessionCount"] as? Number)?.toInt() ?: 0,
                         clusterSessionCount = (metricsMap["clusterSessionCount"] as? Number)?.toInt() ?: 0,
                         queuedMessagesCount = (metricsMap["queuedMessagesCount"] as? Number)?.toLong() ?: 0L,
                         topicIndexSize = (metricsMap["topicIndexSize"] as? Number)?.toInt() ?: 0,
                         clientNodeMappingSize = (metricsMap["clientNodeMappingSize"] as? Number)?.toInt() ?: 0,
                         topicNodeMappingSize = (metricsMap["topicNodeMappingSize"] as? Number)?.toInt() ?: 0,
-                        messageBusIn = (metricsMap["messageBusIn"] as? Number)?.toLong() ?: 0L,
-                        messageBusOut = (metricsMap["messageBusOut"] as? Number)?.toLong() ?: 0L,
+                        messageBusIn = (metricsMap["messageBusIn"] as? Number)?.toDouble() ?: 0.0,
+                        messageBusOut = (metricsMap["messageBusOut"] as? Number)?.toDouble() ?: 0.0,
                         timestamp = (metricsMap["timestamp"] as? String) ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                     )
                 } else {
                     // No historical data found, return zero metrics
-                    BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
+                    BrokerMetrics(0.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
                 }
             }
         })
@@ -285,13 +285,13 @@ class MetricsStoreCrateDB(
                     @Suppress("UNCHECKED_CAST")
                     val metricsMap = resultSet.getObject("metrics") as? Map<String, Any> ?: emptyMap()
                     SessionMetrics(
-                        messagesIn = (metricsMap["messagesIn"] as? Number)?.toLong() ?: 0L,
-                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toLong() ?: 0L,
+                        messagesIn = (metricsMap["messagesIn"] as? Number)?.toDouble() ?: 0.0,
+                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toDouble() ?: 0.0,
                         timestamp = (metricsMap["timestamp"] as? String) ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                     )
                 } else {
                     // No historical data found, return zero metrics
-                    SessionMetrics(0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
+                    SessionMetrics(0.0, 0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
                 }
             }
         })
@@ -353,16 +353,16 @@ class MetricsStoreCrateDB(
                     @Suppress("UNCHECKED_CAST")
                     val metricsMap = resultSet.getObject("metrics") as? Map<String, Any> ?: emptyMap()
                     val metrics = BrokerMetrics(
-                        messagesIn = (metricsMap["messagesIn"] as? Number)?.toLong() ?: 0L,
-                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toLong() ?: 0L,
+                        messagesIn = (metricsMap["messagesIn"] as? Number)?.toDouble() ?: 0.0,
+                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toDouble() ?: 0.0,
                         nodeSessionCount = (metricsMap["nodeSessionCount"] as? Number)?.toInt() ?: 0,
                         clusterSessionCount = (metricsMap["clusterSessionCount"] as? Number)?.toInt() ?: 0,
                         queuedMessagesCount = (metricsMap["queuedMessagesCount"] as? Number)?.toLong() ?: 0L,
                         topicIndexSize = (metricsMap["topicIndexSize"] as? Number)?.toInt() ?: 0,
                         clientNodeMappingSize = (metricsMap["clientNodeMappingSize"] as? Number)?.toInt() ?: 0,
                         topicNodeMappingSize = (metricsMap["topicNodeMappingSize"] as? Number)?.toInt() ?: 0,
-                        messageBusIn = (metricsMap["messageBusIn"] as? Number)?.toLong() ?: 0L,
-                        messageBusOut = (metricsMap["messageBusOut"] as? Number)?.toLong() ?: 0L,
+                        messageBusIn = (metricsMap["messageBusIn"] as? Number)?.toDouble() ?: 0.0,
+                        messageBusOut = (metricsMap["messageBusOut"] as? Number)?.toDouble() ?: 0.0,
                         timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(resultSet.getTimestamp("timestamp").toInstant())
                     )
                     results.add(timestamp to metrics)
@@ -429,8 +429,8 @@ class MetricsStoreCrateDB(
                     @Suppress("UNCHECKED_CAST")
                     val metricsMap = resultSet.getObject("metrics") as? Map<String, Any> ?: emptyMap()
                     val metrics = SessionMetrics(
-                        messagesIn = (metricsMap["messagesIn"] as? Number)?.toLong() ?: 0L,
-                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toLong() ?: 0L,
+                        messagesIn = (metricsMap["messagesIn"] as? Number)?.toDouble() ?: 0.0,
+                        messagesOut = (metricsMap["messagesOut"] as? Number)?.toDouble() ?: 0.0,
                         timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(resultSet.getTimestamp("timestamp").toInstant())
                     )
                     results.add(timestamp to metrics)

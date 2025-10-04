@@ -222,21 +222,21 @@ class MetricsStoreMongoDB(
             if (document != null) {
                 val metricsDoc = document.get("metrics", Document::class.java)
                 BrokerMetrics(
-                    messagesIn = metricsDoc.getLong("messagesIn") ?: 0L,
-                    messagesOut = metricsDoc.getLong("messagesOut") ?: 0L,
+                    messagesIn = metricsDoc.getDouble("messagesIn") ?: 0.0,
+                    messagesOut = metricsDoc.getDouble("messagesOut") ?: 0.0,
                     nodeSessionCount = metricsDoc.getInteger("nodeSessionCount") ?: 0,
                     clusterSessionCount = metricsDoc.getInteger("clusterSessionCount") ?: 0,
                     queuedMessagesCount = metricsDoc.getLong("queuedMessagesCount") ?: 0L,
                     topicIndexSize = metricsDoc.getInteger("topicIndexSize") ?: 0,
                     clientNodeMappingSize = metricsDoc.getInteger("clientNodeMappingSize") ?: 0,
                     topicNodeMappingSize = metricsDoc.getInteger("topicNodeMappingSize") ?: 0,
-                    messageBusIn = metricsDoc.getLong("messageBusIn") ?: 0L,
-                    messageBusOut = metricsDoc.getLong("messageBusOut") ?: 0L,
+                    messageBusIn = metricsDoc.getDouble("messageBusIn") ?: 0.0,
+                    messageBusOut = metricsDoc.getDouble("messageBusOut") ?: 0.0,
                     timestamp = metricsDoc.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                 )
             } else {
                 // No historical data found, return zero metrics
-                BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
+                BrokerMetrics(0.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
             }
         })
     }
@@ -276,13 +276,13 @@ class MetricsStoreMongoDB(
             if (document != null) {
                 val metricsDoc = document.get("metrics", Document::class.java)
                 SessionMetrics(
-                    messagesIn = metricsDoc.getLong("messagesIn") ?: 0L,
-                    messagesOut = metricsDoc.getLong("messagesOut") ?: 0L,
+                    messagesIn = metricsDoc.getDouble("messagesIn") ?: 0.0,
+                    messagesOut = metricsDoc.getDouble("messagesOut") ?: 0.0,
                     timestamp = metricsDoc.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                 )
             } else {
                 // No historical data found, return zero metrics
-                SessionMetrics(0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
+                SessionMetrics(0.0, 0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
             }
         })
     }
@@ -324,16 +324,16 @@ class MetricsStoreMongoDB(
                 val timestamp = document.getDate("timestamp").toInstant()
                 val metricsDoc = document.get("metrics", Document::class.java)
                 val metrics = BrokerMetrics(
-                    messagesIn = metricsDoc.getLong("messagesIn") ?: 0L,
-                    messagesOut = metricsDoc.getLong("messagesOut") ?: 0L,
+                    messagesIn = metricsDoc.getDouble("messagesIn") ?: 0.0,
+                    messagesOut = metricsDoc.getDouble("messagesOut") ?: 0.0,
                     nodeSessionCount = metricsDoc.getInteger("nodeSessionCount") ?: 0,
                     clusterSessionCount = metricsDoc.getInteger("clusterSessionCount") ?: 0,
                     queuedMessagesCount = metricsDoc.getLong("queuedMessagesCount") ?: 0L,
                     topicIndexSize = metricsDoc.getInteger("topicIndexSize") ?: 0,
                     clientNodeMappingSize = metricsDoc.getInteger("clientNodeMappingSize") ?: 0,
                     topicNodeMappingSize = metricsDoc.getInteger("topicNodeMappingSize") ?: 0,
-                    messageBusIn = metricsDoc.getLong("messageBusIn") ?: 0L,
-                    messageBusOut = metricsDoc.getLong("messageBusOut") ?: 0L,
+                    messageBusIn = metricsDoc.getDouble("messageBusIn") ?: 0.0,
+                    messageBusOut = metricsDoc.getDouble("messageBusOut") ?: 0.0,
                     timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(document.getDate("timestamp").toInstant())
                 )
                 timestamp to metrics
@@ -378,8 +378,8 @@ class MetricsStoreMongoDB(
                 val timestamp = document.getDate("timestamp").toInstant()
                 val metricsDoc = document.get("metrics", Document::class.java)
                 val metrics = SessionMetrics(
-                    messagesIn = metricsDoc.getLong("messagesIn") ?: 0L,
-                    messagesOut = metricsDoc.getLong("messagesOut") ?: 0L,
+                    messagesIn = metricsDoc.getDouble("messagesIn") ?: 0.0,
+                    messagesOut = metricsDoc.getDouble("messagesOut") ?: 0.0,
                     timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(document.getDate("timestamp").toInstant())
                 )
                 timestamp to metrics

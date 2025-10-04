@@ -51,6 +51,10 @@ open class SessionHandler(
     private val messageBusOut = AtomicLong(0) // Messages sent to other nodes
     private val messageBusIn = AtomicLong(0)  // Messages received from other nodes
 
+    // Timestamp tracking for rate calculations
+    private var lastMetricsResetTime = System.currentTimeMillis()
+    private val messageBusLastResetTime = AtomicLong(System.currentTimeMillis())
+
     private val subAddQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
     private val subDelQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
 
@@ -91,7 +95,8 @@ open class SessionHandler(
 
     data class SessionMetrics(
         val messagesIn: AtomicLong = AtomicLong(0),
-        val messagesOut: AtomicLong = AtomicLong(0)
+        val messagesOut: AtomicLong = AtomicLong(0),
+        var lastResetTime: Long = System.currentTimeMillis()
     )
 
     data class ClientDetails(
@@ -227,31 +232,59 @@ open class SessionHandler(
 
         // Metrics and reset handler - returns current values and resets counters to 0
         vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Node.metricsAndReset(Monster.getClusterNodeId(vertx))) { message ->
+            val currentTime = System.currentTimeMillis()
             val metrics = JsonObject()
             var totalMessagesIn = 0L
             var totalMessagesOut = 0L
+            var totalMessagesInRate = 0.0
+            var totalMessagesOutRate = 0.0
             val sessionMetricsArray = io.vertx.core.json.JsonArray()
 
-            // Get and reset session metrics
+            // Get and reset session metrics with rate calculation
             clientMetrics.forEach { (clientId, sessionMetrics) ->
                 val inCount = sessionMetrics.messagesIn.getAndSet(0)
                 val outCount = sessionMetrics.messagesOut.getAndSet(0)
+                
+                // Calculate duration since last reset for this client
+                val duration = (currentTime - sessionMetrics.lastResetTime) / 1000.0 // seconds
+                val inRate = if (duration > 0) kotlin.math.round(inCount / duration) else 0.0
+                val outRate = if (duration > 0) kotlin.math.round(outCount / duration) else 0.0
+                
+                // Update last reset time
+                sessionMetrics.lastResetTime = currentTime
+                
                 totalMessagesIn += inCount
                 totalMessagesOut += outCount
+                totalMessagesInRate += inRate
+                totalMessagesOutRate += outRate
 
                 // Add individual client metrics to the response
                 sessionMetricsArray.add(JsonObject()
                     .put("clientId", clientId)
                     .put("messagesIn", inCount)
                     .put("messagesOut", outCount)
+                    .put("messagesInRate", inRate)
+                    .put("messagesOutRate", outRate)
                 )
             }
 
+            // Calculate message bus rates
+            val messageBusInCount = messageBusIn.getAndSet(0)
+            val messageBusOutCount = messageBusOut.getAndSet(0)
+            val lastBusResetTime = messageBusLastResetTime.getAndSet(currentTime)
+            val busDuration = (currentTime - lastBusResetTime) / 1000.0 // seconds
+            val messageBusInRate = if (busDuration > 0) kotlin.math.round(messageBusInCount / busDuration) else 0.0
+            val messageBusOutRate = if (busDuration > 0) kotlin.math.round(messageBusOutCount / busDuration) else 0.0
+
             metrics.put("messagesIn", totalMessagesIn)
                    .put("messagesOut", totalMessagesOut)
+                   .put("messagesInRate", totalMessagesInRate)
+                   .put("messagesOutRate", totalMessagesOutRate)
                    .put("nodeSessionCount", clientMetrics.size)
-                   .put("messageBusIn", messageBusIn.getAndSet(0))
-                   .put("messageBusOut", messageBusOut.getAndSet(0))
+                   .put("messageBusIn", messageBusInCount)
+                   .put("messageBusOut", messageBusOutCount)
+                   .put("messageBusInRate", messageBusInRate)
+                   .put("messageBusOutRate", messageBusOutRate)
                    .put("topicIndexSize", topicIndex.size())
                    .put("clientNodeMappingSize", clientNodeMapping.size())
                    .put("topicNodeMappingSize", topicNodeMapping.size())
@@ -455,13 +488,48 @@ open class SessionHandler(
     fun getAllClientMetrics(): Map<String, SessionMetrics> = clientMetrics.toMap()
 
     fun getAllClientMetricsAndReset(): Map<String, at.rocworks.extensions.graphql.SessionMetrics> {
-        return clientMetrics.mapValues { (_, sessionMetrics) ->
+        val currentTime = System.currentTimeMillis()
+        return clientMetrics.mapValues { (clientId, sessionMetrics) ->
+            val inCount = sessionMetrics.messagesIn.getAndSet(0)
+            val outCount = sessionMetrics.messagesOut.getAndSet(0)
+            
+            // Calculate duration since last reset
+            val duration = (currentTime - sessionMetrics.lastResetTime) / 1000.0 // seconds
+            val inRate = if (duration > 0) kotlin.math.round(inCount / duration) else 0.0
+            val outRate = if (duration > 0) kotlin.math.round(outCount / duration) else 0.0
+            
+            // Debug logging to understand rate calculation
+            logger.fine("Client [$clientId]: inCount=$inCount, outCount=$outCount, duration=$duration, inRate=$inRate, outRate=$outRate")
+            
+            // Update last reset time
+            sessionMetrics.lastResetTime = currentTime
+            
             at.rocworks.extensions.graphql.SessionMetrics(
-                messagesIn = sessionMetrics.messagesIn.getAndSet(0),
-                messagesOut = sessionMetrics.messagesOut.getAndSet(0),
+                messagesIn = inRate,
+                messagesOut = outRate,
                 timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
             )
         }
+    }
+
+    fun getClientMetricsWithRate(clientId: String): at.rocworks.extensions.graphql.SessionMetrics? {
+        val sessionMetrics = clientMetrics[clientId] ?: return null
+        val currentTime = System.currentTimeMillis()
+        
+        // Get counts without resetting (for individual client queries)
+        val inCount = sessionMetrics.messagesIn.get()
+        val outCount = sessionMetrics.messagesOut.get()
+        
+        // Calculate duration since last reset
+        val duration = (currentTime - sessionMetrics.lastResetTime) / 1000.0 // seconds
+        val inRate = if (duration > 0) kotlin.math.round(inCount / duration) else 0.0
+        val outRate = if (duration > 0) kotlin.math.round(outCount / duration) else 0.0
+        
+        return at.rocworks.extensions.graphql.SessionMetrics(
+            messagesIn = inRate,
+            messagesOut = outRate,
+            timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+        )
     }
 
     fun getClientDetails(clientId: String): ClientDetails? = clientDetails[clientId]

@@ -226,21 +226,21 @@ class MetricsStorePostgres(
                 if (resultSet.next()) {
                     val metricsJson = JsonObject(resultSet.getString("metrics"))
                     BrokerMetrics(
-                        messagesIn = metricsJson.getLong("messagesIn", 0L),
-                        messagesOut = metricsJson.getLong("messagesOut", 0L),
+                        messagesIn = metricsJson.getDouble("messagesIn", 0.0),
+                        messagesOut = metricsJson.getDouble("messagesOut", 0.0),
                         nodeSessionCount = metricsJson.getInteger("nodeSessionCount", 0),
                         clusterSessionCount = metricsJson.getInteger("clusterSessionCount", 0),
                         queuedMessagesCount = metricsJson.getLong("queuedMessagesCount", 0L),
                         topicIndexSize = metricsJson.getInteger("topicIndexSize", 0),
                         clientNodeMappingSize = metricsJson.getInteger("clientNodeMappingSize", 0),
                         topicNodeMappingSize = metricsJson.getInteger("topicNodeMappingSize", 0),
-                        messageBusIn = metricsJson.getLong("messageBusIn", 0L),
-                        messageBusOut = metricsJson.getLong("messageBusOut", 0L),
+                        messageBusIn = metricsJson.getDouble("messageBusIn", 0.0),
+                        messageBusOut = metricsJson.getDouble("messageBusOut", 0.0),
                         timestamp = metricsJson.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                     )
                 } else {
                     // No historical data found, return zero metrics
-                    BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
+                    BrokerMetrics(0.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
                 }
             }
         })
@@ -294,13 +294,13 @@ class MetricsStorePostgres(
                 if (resultSet.next()) {
                     val metricsJson = JsonObject(resultSet.getString("metrics"))
                     SessionMetrics(
-                        messagesIn = metricsJson.getLong("messagesIn", 0L),
-                        messagesOut = metricsJson.getLong("messagesOut", 0L),
+                        messagesIn = metricsJson.getDouble("messagesIn", 0.0),
+                        messagesOut = metricsJson.getDouble("messagesOut", 0.0),
                         timestamp = metricsJson.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
                     )
                 } else {
                     // No historical data found, return zero metrics
-                    SessionMetrics(0, 0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
+                    SessionMetrics(0.0, 0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
                 }
             }
         })
@@ -361,16 +361,16 @@ class MetricsStorePostgres(
                     val timestamp = resultSet.getTimestamp("timestamp").toInstant()
                     val metricsJson = JsonObject(resultSet.getString("metrics"))
                     val metrics = BrokerMetrics(
-                        messagesIn = metricsJson.getLong("messagesIn", 0L),
-                        messagesOut = metricsJson.getLong("messagesOut", 0L),
+                        messagesIn = metricsJson.getDouble("messagesIn", 0.0),
+                        messagesOut = metricsJson.getDouble("messagesOut", 0.0),
                         nodeSessionCount = metricsJson.getInteger("nodeSessionCount", 0),
                         clusterSessionCount = metricsJson.getInteger("clusterSessionCount", 0),
                         queuedMessagesCount = metricsJson.getLong("queuedMessagesCount", 0L),
                         topicIndexSize = metricsJson.getInteger("topicIndexSize", 0),
                         clientNodeMappingSize = metricsJson.getInteger("clientNodeMappingSize", 0),
                         topicNodeMappingSize = metricsJson.getInteger("topicNodeMappingSize", 0),
-                        messageBusIn = metricsJson.getLong("messageBusIn", 0L),
-                        messageBusOut = metricsJson.getLong("messageBusOut", 0L),
+                        messageBusIn = metricsJson.getDouble("messageBusIn", 0.0),
+                        messageBusOut = metricsJson.getDouble("messageBusOut", 0.0),
                         timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(resultSet.getTimestamp("timestamp").toInstant())
                     )
                     results.add(timestamp to metrics)
@@ -436,8 +436,8 @@ class MetricsStorePostgres(
                     val timestamp = resultSet.getTimestamp("timestamp").toInstant()
                     val metricsJson = JsonObject(resultSet.getString("metrics"))
                     val metrics = SessionMetrics(
-                        messagesIn = metricsJson.getLong("messagesIn", 0L),
-                        messagesOut = metricsJson.getLong("messagesOut", 0L),
+                        messagesIn = metricsJson.getDouble("messagesIn", 0.0),
+                        messagesOut = metricsJson.getDouble("messagesOut", 0.0),
                         timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(resultSet.getTimestamp("timestamp").toInstant())
                     )
                     results.add(timestamp to metrics)

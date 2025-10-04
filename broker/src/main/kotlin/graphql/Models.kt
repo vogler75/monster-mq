@@ -143,16 +143,16 @@ data class LoginResult(
 
 // Metrics data classes
 data class BrokerMetrics(
-    val messagesIn: Long,
-    val messagesOut: Long,
+    val messagesIn: Double,
+    val messagesOut: Double,
     val nodeSessionCount: Int,
     val clusterSessionCount: Int,
     val queuedMessagesCount: Long,
     val topicIndexSize: Int,
     val clientNodeMappingSize: Int,
     val topicNodeMappingSize: Int,
-    val messageBusIn: Long,
-    val messageBusOut: Long,
+    val messageBusIn: Double,
+    val messageBusOut: Double,
     val timestamp: String
 )
 
@@ -162,8 +162,8 @@ data class Broker(
 )
 
 data class SessionMetrics(
-    val messagesIn: Long,
-    val messagesOut: Long,
+    val messagesIn: Double,
+    val messagesOut: Double,
     val timestamp: String
 )
 

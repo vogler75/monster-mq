@@ -35,10 +35,10 @@ enum MessageArchiveType {
 
 # Metrics for the broker
 type BrokerMetrics {
-    # Total messages received from clients on this node
-    messagesIn: Long!
-    # Total messages sent to clients on this node
-    messagesOut: Long!
+    # Messages per second received from clients on this node
+    messagesIn: Float!
+    # Messages per second sent to clients on this node
+    messagesOut: Float!
     # Number of sessions on this node
     nodeSessionCount: Int!
     # Total number of sessions in the cluster
@@ -51,10 +51,10 @@ type BrokerMetrics {
     clientNodeMappingSize: Int!
     # Total size of topic-to-node mapping sets
     topicNodeMappingSize: Int!
-    # Messages received from other nodes via message bus
-    messageBusIn: Long!
-    # Messages sent to other nodes via message bus
-    messageBusOut: Long!
+    # Messages per second received from other nodes via message bus
+    messageBusIn: Float!
+    # Messages per second sent to other nodes via message bus
+    messageBusOut: Float!
     # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
     timestamp: String!
 }
@@ -124,10 +124,10 @@ type Session {
 
 # Metrics for a single session
 type SessionMetrics {
-    # Messages received from this client
-    messagesIn: Long!
-    # Messages sent to this client
-    messagesOut: Long!
+    # Messages per second received from this client
+    messagesIn: Float!
+    # Messages per second sent to this client
+    messagesOut: Float!
     # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
     timestamp: String!
 }

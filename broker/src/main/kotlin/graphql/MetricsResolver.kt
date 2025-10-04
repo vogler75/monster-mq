@@ -46,16 +46,16 @@ class MetricsResolver(
                             val queuedMessagesCount = getQueuedMessagesCount()
 
                             BrokerMetrics(
-                                messagesIn = nodeMetrics.getLong("messagesIn", 0L),
-                                messagesOut = nodeMetrics.getLong("messagesOut", 0L),
+                                messagesIn = nodeMetrics.getDouble("messagesInRate", 0.0),
+                                messagesOut = nodeMetrics.getDouble("messagesOutRate", 0.0),
                                 nodeSessionCount = nodeMetrics.getInteger("nodeSessionCount", 0),
                                 clusterSessionCount = clusterSessionCount,
                                 queuedMessagesCount = queuedMessagesCount,
                                 topicIndexSize = nodeMetrics.getInteger("topicIndexSize", 0),
                                 clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
                                 topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
-                                messageBusIn = nodeMetrics.getLong("messageBusIn", 0L),
-                                messageBusOut = nodeMetrics.getLong("messageBusOut", 0L),
+                                messageBusIn = nodeMetrics.getDouble("messageBusInRate", 0.0),
+                                messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
                                 timestamp = TimestampConverter.currentTimeIsoString()
                             )
                         } catch (e: Exception) {
@@ -99,16 +99,16 @@ class MetricsResolver(
                                 val queuedMessagesCount = getQueuedMessagesCount()
 
                                 BrokerMetrics(
-                                    messagesIn = nodeMetrics.getLong("messagesIn", 0L),
-                                    messagesOut = nodeMetrics.getLong("messagesOut", 0L),
+                                    messagesIn = nodeMetrics.getDouble("messagesInRate", 0.0),
+                                    messagesOut = nodeMetrics.getDouble("messagesOutRate", 0.0),
                                     nodeSessionCount = nodeMetrics.getInteger("nodeSessionCount", 0),
                                     clusterSessionCount = clusterSessionCount,
                                     queuedMessagesCount = queuedMessagesCount,
                                     topicIndexSize = nodeMetrics.getInteger("topicIndexSize", 0),
                                     clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
                                     topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
-                                    messageBusIn = nodeMetrics.getLong("messageBusIn", 0L),
-                                    messageBusOut = nodeMetrics.getLong("messageBusOut", 0L),
+                                    messageBusIn = nodeMetrics.getDouble("messageBusInRate", 0.0),
+                                    messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
                                     timestamp = TimestampConverter.currentTimeIsoString()
                                 )
                             } catch (e: Exception) {
@@ -531,24 +531,15 @@ class MetricsResolver(
             val nodeId = session?.nodeId
 
             if (clientId == null || nodeId == null) {
-                future.complete(listOf(SessionMetrics(0, 0, TimestampConverter.currentTimeIsoString())))
+                future.complete(listOf(SessionMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
                 return@DataFetcher future
             }
 
             val currentNodeId = Monster.getClusterNodeId(vertx)
 
             if (nodeId == currentNodeId) {
-                // Local node - get directly from session handler
-                val clientMetrics = sessionHandler.getClientMetrics(clientId)
-                val metrics = if (clientMetrics != null) {
-                    SessionMetrics(
-                        messagesIn = clientMetrics.messagesIn.get(),
-                        messagesOut = clientMetrics.messagesOut.get(),
-                        timestamp = TimestampConverter.currentTimeIsoString()
-                    )
-                } else {
-                    SessionMetrics(0, 0, TimestampConverter.currentTimeIsoString())
-                }
+                // Local node - get directly from session handler with rate calculation
+                val metrics = sessionHandler.getClientMetricsWithRate(clientId) ?: SessionMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())
                 future.complete(listOf(metrics))
             } else {
                 // Remote node - request via message bus
@@ -563,17 +554,17 @@ class MetricsResolver(
 
                         val metrics = if (found) {
                             SessionMetrics(
-                                messagesIn = response.getLong("messagesIn", 0L),
-                                messagesOut = response.getLong("messagesOut", 0L),
+                                messagesIn = response.getDouble("messagesIn", 0.0),
+                                messagesOut = response.getDouble("messagesOut", 0.0),
                                 timestamp = TimestampConverter.currentTimeIsoString()
                             )
                         } else {
-                            SessionMetrics(0, 0, TimestampConverter.currentTimeIsoString())
+                            SessionMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())
                         }
                         future.complete(listOf(metrics))
                     } else {
                         logger.warning("Failed to get session metrics for client $clientId from node $nodeId: ${reply.cause().message}")
-                        future.complete(listOf(SessionMetrics(0, 0, TimestampConverter.currentTimeIsoString())))
+                        future.complete(listOf(SessionMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
                     }
                 }
             }
@@ -622,6 +613,23 @@ class MetricsResolver(
     }
 
     private fun getCurrentBrokerMetrics(nodeId: String, callback: (BrokerMetrics) -> Unit) {
+        if (metricsStore != null) {
+            // Use most recent stored metrics for smooth UI updates
+            metricsStore.getBrokerMetricsList(nodeId, null, null, 1).onComplete { result ->
+                if (result.succeeded() && result.result().isNotEmpty()) {
+                    callback(result.result().first())
+                } else {
+                    // Fallback to live metrics if no stored data
+                    getLiveBrokerMetrics(nodeId, callback)
+                }
+            }
+        } else {
+            // No metrics store - use live metrics
+            getLiveBrokerMetrics(nodeId, callback)
+        }
+    }
+
+    private fun getLiveBrokerMetrics(nodeId: String, callback: (BrokerMetrics) -> Unit) {
         val metricsAddress = getMetricsAddress(nodeId)
 
         vertx.eventBus().request<JsonObject>(metricsAddress, JsonObject()).onComplete { reply ->
@@ -635,16 +643,17 @@ class MetricsResolver(
                         val queuedMessagesCount = getQueuedMessagesCount()
 
                         BrokerMetrics(
-                            messagesIn = nodeMetrics.getLong("messagesIn", 0L),
-                            messagesOut = nodeMetrics.getLong("messagesOut", 0L),
+                            // Use raw counts and set rates to 0 for live metrics (prevents sawtooth)
+                            messagesIn = 0.0,
+                            messagesOut = 0.0,
                             nodeSessionCount = nodeMetrics.getInteger("nodeSessionCount", 0),
                             clusterSessionCount = clusterSessionCount,
                             queuedMessagesCount = queuedMessagesCount,
                             topicIndexSize = nodeMetrics.getInteger("topicIndexSize", 0),
                             clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
                             topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
-                            messageBusIn = nodeMetrics.getLong("messageBusIn", 0L),
-                            messageBusOut = nodeMetrics.getLong("messageBusOut", 0L),
+                            messageBusIn = 0.0,
+                            messageBusOut = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         )
                     } catch (e: Exception) {
@@ -656,12 +665,12 @@ class MetricsResolver(
                         callback(result.result())
                     } else {
                         logger.warning("Failed to get cluster metrics: ${result.cause()?.message}")
-                        callback(BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, TimestampConverter.currentTimeIsoString()))
+                        callback(BrokerMetrics(0.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, TimestampConverter.currentTimeIsoString()))
                     }
                 }
             } else {
                 logger.warning("Failed to get metrics from node $nodeId: ${reply.cause().message}")
-                callback(BrokerMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, TimestampConverter.currentTimeIsoString()))
+                callback(BrokerMetrics(0.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, TimestampConverter.currentTimeIsoString()))
             }
         }
     }
