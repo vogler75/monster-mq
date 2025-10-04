@@ -5,6 +5,7 @@ import at.rocworks.extensions.graphql.BrokerMetrics
 import at.rocworks.extensions.graphql.SessionMetrics
 import at.rocworks.stores.IMetricsStoreAsync
 import at.rocworks.stores.MetricsStoreType
+import at.rocworks.stores.MetricKind
 import io.vertx.core.Vertx
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -88,92 +89,44 @@ class MetricsStoreSQLite(
 
     override fun getType(): MetricsStoreType = MetricsStoreType.SQLITE
 
-    override fun storeBrokerMetrics(timestamp: Instant, nodeId: String, metrics: BrokerMetrics): Future<Void> {
+    // Generic store method
+    override fun storeMetrics(kind: MetricKind, timestamp: Instant, identifier: String, metricsJson: JsonObject): Future<Void> {
         return vertx.executeBlocking<Void>(Callable {
             try {
-                val metricsJson = JsonObject()
-                    .put("messagesIn", metrics.messagesIn)
-                    .put("messagesOut", metrics.messagesOut)
-                    .put("nodeSessionCount", metrics.nodeSessionCount)
-                    .put("clusterSessionCount", metrics.clusterSessionCount)
-                    .put("queuedMessagesCount", metrics.queuedMessagesCount)
-                    .put("topicIndexSize", metrics.topicIndexSize)
-                    .put("clientNodeMappingSize", metrics.clientNodeMappingSize)
-                    .put("topicNodeMappingSize", metrics.topicNodeMappingSize)
-                    .put("messageBusIn", metrics.messageBusIn)
-                    .put("messageBusOut", metrics.messageBusOut)
-                    .put("timestamp", metrics.timestamp)
-
                 val insertSQL = """
                     INSERT OR REPLACE INTO metrics (timestamp, metric_type, identifier, metrics)
                     VALUES (?, ?, ?, ?)
                 """.trimIndent()
-
                 val params = JsonArray()
                     .add(timestamp.toString())
-                    .add("broker")
-                    .add(nodeId)
+                    .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" })
+                    .add(identifier)
                     .add(metricsJson.encode())
-
-                val updateResult = sqlClient.executeUpdate(insertSQL, params)
+                sqlClient.executeUpdate(insertSQL, params)
                     .toCompletionStage().toCompletableFuture().get(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
-
             } catch (e: Exception) {
-                logger.warning("Error storing broker metrics: ${e.message}")
+                logger.warning("Error storing $kind metrics for $identifier: ${e.message}")
                 throw e
             }
             null
         })
     }
 
-    override fun storeSessionMetrics(timestamp: Instant, clientId: String, metrics: SessionMetrics): Future<Void> {
-        return vertx.executeBlocking<Void>(Callable {
-            try {
-                val metricsJson = JsonObject()
-                    .put("messagesIn", metrics.messagesIn)
-                    .put("messagesOut", metrics.messagesOut)
-                    .put("timestamp", metrics.timestamp)
+    override fun storeBrokerMetrics(timestamp: Instant, nodeId: String, metrics: BrokerMetrics): Future<Void> =
+        storeMetrics(MetricKind.BROKER, timestamp, nodeId, brokerMetricsToJson(metrics))
 
-                val insertSQL = """
-                    INSERT OR REPLACE INTO metrics (timestamp, metric_type, identifier, metrics)
-                    VALUES (?, ?, ?, ?)
-                """.trimIndent()
+    override fun storeSessionMetrics(timestamp: Instant, clientId: String, metrics: SessionMetrics): Future<Void> =
+        storeMetrics(MetricKind.SESSION, timestamp, clientId, sessionMetricsToJson(metrics))
 
-                val params = JsonArray()
-                    .add(timestamp.toString())
-                    .add("session")
-                    .add(clientId)
-                    .add(metricsJson.encode())
-
-                val updateResult = sqlClient.executeUpdate(insertSQL, params)
-                    .toCompletionStage().toCompletableFuture().get(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
-
-            } catch (e: Exception) {
-                logger.warning("Error storing session metrics for client $clientId: ${e.message}")
-                throw e
-            }
-            null
-        })
-    }
-
-    override fun getBrokerMetrics(
-        nodeId: String,
-        from: Instant?,
-        to: Instant?,
-        lastMinutes: Int?
-    ): Future<BrokerMetrics> {
-        return vertx.executeBlocking<BrokerMetrics>(Callable {
+    override fun getLatestMetrics(kind: MetricKind, identifier: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<JsonObject> {
+        return vertx.executeBlocking<JsonObject>(Callable {
             val (fromTimestamp, toTimestamp) = calculateTimeRange(from, to, lastMinutes)
-
-            if (fromTimestamp == null) {
-                throw IllegalArgumentException("Historical query requires time range")
-            }
-
+            if (fromTimestamp == null) throw IllegalArgumentException("Historical query requires time range")
             val sql = if (toTimestamp != null) {
                 """
                     SELECT metrics
                     FROM metrics
-                    WHERE metric_type = 'broker'
+                    WHERE metric_type = ?
                     AND identifier = ?
                     AND timestamp BETWEEN ? AND ?
                     ORDER BY timestamp DESC
@@ -183,96 +136,72 @@ class MetricsStoreSQLite(
                 """
                     SELECT metrics
                     FROM metrics
-                    WHERE metric_type = 'broker'
+                    WHERE metric_type = ?
                     AND identifier = ?
                     AND timestamp >= ?
                     ORDER BY timestamp DESC
                     LIMIT 1
                 """.trimIndent()
             }
-
-            val params = JsonArray().add(nodeId).add(fromTimestamp.toString())
-            if (toTimestamp != null) {
-                params.add(toTimestamp.toString())
-            }
-
+            val params = JsonArray()
+                .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" })
+                .add(identifier)
+                .add(fromTimestamp.toString())
+            if (toTimestamp != null) params.add(toTimestamp.toString())
             val results = sqlClient.executeQuerySync(sql, params)
             if (results.size() > 0) {
                 val row = results.getJsonObject(0)
-                val metricsJson = JsonObject(row.getString("metrics"))
-                BrokerMetrics(
-                    messagesIn = metricsJson.getDouble("messagesIn", 0.0),
-                    messagesOut = metricsJson.getDouble("messagesOut", 0.0),
-                    nodeSessionCount = metricsJson.getInteger("nodeSessionCount", 0),
-                    clusterSessionCount = metricsJson.getInteger("clusterSessionCount", 0),
-                    queuedMessagesCount = metricsJson.getLong("queuedMessagesCount", 0L),
-                    topicIndexSize = metricsJson.getInteger("topicIndexSize", 0),
-                    clientNodeMappingSize = metricsJson.getInteger("clientNodeMappingSize", 0),
-                    topicNodeMappingSize = metricsJson.getInteger("topicNodeMappingSize", 0),
-                    messageBusIn = metricsJson.getDouble("messageBusIn", 0.0),
-                    messageBusOut = metricsJson.getDouble("messageBusOut", 0.0),
-                    timestamp = metricsJson.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
-                )
-            } else {
-                // No historical data found, return zero metrics
-                BrokerMetrics(0.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
-            }
+                JsonObject(row.getString("metrics"))
+            } else JsonObject()
         })
     }
 
-    override fun getSessionMetrics(
-        clientId: String,
-        from: Instant?,
-        to: Instant?,
-        lastMinutes: Int?
-    ): Future<SessionMetrics> {
-        return vertx.executeBlocking<SessionMetrics>(Callable {
+    override fun getBrokerMetrics(nodeId: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<BrokerMetrics> =
+        getLatestMetrics(MetricKind.BROKER, nodeId, from, to, lastMinutes).map { jsonToBrokerMetrics(it) }
+
+    override fun getSessionMetrics(clientId: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<SessionMetrics> =
+        getLatestMetrics(MetricKind.SESSION, clientId, from, to, lastMinutes).map { jsonToSessionMetrics(it) }
+
+    override fun getMetricsHistory(kind: MetricKind, identifier: String, from: Instant?, to: Instant?, lastMinutes: Int?, limit: Int): Future<List<Pair<Instant, JsonObject>>> {
+        return vertx.executeBlocking<List<Pair<Instant, JsonObject>>>(Callable {
             val (fromTimestamp, toTimestamp) = calculateTimeRange(from, to, lastMinutes)
-
-            if (fromTimestamp == null) {
-                throw IllegalArgumentException("Historical query requires time range")
-            }
-
+            if (fromTimestamp == null) throw IllegalArgumentException("Historical query requires time range")
             val sql = if (toTimestamp != null) {
                 """
-                    SELECT metrics
+                    SELECT timestamp, metrics
                     FROM metrics
-                    WHERE metric_type = 'session'
+                    WHERE metric_type = ?
                     AND identifier = ?
                     AND timestamp BETWEEN ? AND ?
                     ORDER BY timestamp DESC
-                    LIMIT 1
+                    LIMIT ?
                 """.trimIndent()
             } else {
                 """
-                    SELECT metrics
+                    SELECT timestamp, metrics
                     FROM metrics
-                    WHERE metric_type = 'session'
+                    WHERE metric_type = ?
                     AND identifier = ?
                     AND timestamp >= ?
                     ORDER BY timestamp DESC
-                    LIMIT 1
+                    LIMIT ?
                 """.trimIndent()
             }
-
-            val params = JsonArray().add(clientId).add(fromTimestamp.toString())
-            if (toTimestamp != null) {
-                params.add(toTimestamp.toString())
-            }
-
+            val params = JsonArray()
+                .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" })
+                .add(identifier)
+                .add(fromTimestamp.toString())
+            if (toTimestamp != null) params.add(toTimestamp.toString())
+            params.add(limit)
             val results = sqlClient.executeQuerySync(sql, params)
-            if (results.size() > 0) {
-                val row = results.getJsonObject(0)
-                val metricsJson = JsonObject(row.getString("metrics"))
-                SessionMetrics(
-                    messagesIn = metricsJson.getDouble("messagesIn", 0.0),
-                    messagesOut = metricsJson.getDouble("messagesOut", 0.0),
-                    timestamp = metricsJson.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
-                )
-            } else {
-                // No historical data found, return zero metrics
-                SessionMetrics(0.0, 0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
+            val list = mutableListOf<Pair<Instant, JsonObject>>()
+            for (i in 0 until results.size()) {
+                val row = results.getJsonObject(i)
+                val ts = Instant.parse(row.getString("timestamp"))
+                val json = JsonObject(row.getString("metrics"))
+                list.add(ts to json)
             }
+            list
         })
     }
 
@@ -282,68 +211,8 @@ class MetricsStoreSQLite(
         to: Instant?,
         lastMinutes: Int?,
         limit: Int
-    ): Future<List<Pair<Instant, BrokerMetrics>>> {
-        return vertx.executeBlocking<List<Pair<Instant, BrokerMetrics>>>(Callable {
-            val (fromTimestamp, toTimestamp) = calculateTimeRange(from, to, lastMinutes)
-
-            if (fromTimestamp == null) {
-                throw IllegalArgumentException("Historical query requires time range")
-            }
-
-            val sql = if (toTimestamp != null) {
-                """
-                    SELECT timestamp, metrics
-                    FROM metrics
-                    WHERE metric_type = 'broker'
-                    AND identifier = ?
-                    AND timestamp BETWEEN ? AND ?
-                    ORDER BY timestamp DESC
-                    LIMIT ?
-                """.trimIndent()
-            } else {
-                """
-                    SELECT timestamp, metrics
-                    FROM metrics
-                    WHERE metric_type = 'broker'
-                    AND identifier = ?
-                    AND timestamp >= ?
-                    ORDER BY timestamp DESC
-                    LIMIT ?
-                """.trimIndent()
-            }
-
-            val params = JsonArray().add(nodeId).add(fromTimestamp.toString())
-            if (toTimestamp != null) {
-                params.add(toTimestamp.toString())
-            }
-            params.add(limit)
-
-            val results = sqlClient.executeQuerySync(sql, params)
-            val resultList = mutableListOf<Pair<Instant, BrokerMetrics>>()
-
-            for (i in 0 until results.size()) {
-                val row = results.getJsonObject(i)
-                val timestamp = Instant.parse(row.getString("timestamp"))
-                val metricsJson = JsonObject(row.getString("metrics"))
-                val metrics = BrokerMetrics(
-                    messagesIn = metricsJson.getDouble("messagesIn", 0.0),
-                    messagesOut = metricsJson.getDouble("messagesOut", 0.0),
-                    nodeSessionCount = metricsJson.getInteger("nodeSessionCount", 0),
-                    clusterSessionCount = metricsJson.getInteger("clusterSessionCount", 0),
-                    queuedMessagesCount = metricsJson.getLong("queuedMessagesCount", 0L),
-                    topicIndexSize = metricsJson.getInteger("topicIndexSize", 0),
-                    clientNodeMappingSize = metricsJson.getInteger("clientNodeMappingSize", 0),
-                    topicNodeMappingSize = metricsJson.getInteger("topicNodeMappingSize", 0),
-                    messageBusIn = metricsJson.getDouble("messageBusIn", 0.0),
-                    messageBusOut = metricsJson.getDouble("messageBusOut", 0.0),
-                    timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(timestamp)
-                )
-                resultList.add(timestamp to metrics)
-            }
-
-            resultList
-        })
-    }
+    ): Future<List<Pair<Instant, BrokerMetrics>>> =
+        getMetricsHistory(MetricKind.BROKER, nodeId, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToBrokerMetrics(it.second) } }
 
     override fun getSessionMetricsHistory(
         clientId: String,
@@ -351,82 +220,24 @@ class MetricsStoreSQLite(
         to: Instant?,
         lastMinutes: Int?,
         limit: Int
-    ): Future<List<Pair<Instant, SessionMetrics>>> {
-        return vertx.executeBlocking<List<Pair<Instant, SessionMetrics>>>(Callable {
-            val (fromTimestamp, toTimestamp) = calculateTimeRange(from, to, lastMinutes)
-
-            if (fromTimestamp == null) {
-                throw IllegalArgumentException("Historical query requires time range")
-            }
-
-            val sql = if (toTimestamp != null) {
-                """
-                    SELECT timestamp, metrics
-                    FROM metrics
-                    WHERE metric_type = 'session'
-                    AND identifier = ?
-                    AND timestamp BETWEEN ? AND ?
-                    ORDER BY timestamp DESC
-                    LIMIT ?
-                """.trimIndent()
-            } else {
-                """
-                    SELECT timestamp, metrics
-                    FROM metrics
-                    WHERE metric_type = 'session'
-                    AND identifier = ?
-                    AND timestamp >= ?
-                    ORDER BY timestamp DESC
-                    LIMIT ?
-                """.trimIndent()
-            }
-
-            val params = JsonArray().add(clientId).add(fromTimestamp.toString())
-            if (toTimestamp != null) {
-                params.add(toTimestamp.toString())
-            }
-            params.add(limit)
-
-            val results = sqlClient.executeQuerySync(sql, params)
-            val resultList = mutableListOf<Pair<Instant, SessionMetrics>>()
-
-            for (i in 0 until results.size()) {
-                val row = results.getJsonObject(i)
-                val timestamp = Instant.parse(row.getString("timestamp"))
-                val metricsJson = JsonObject(row.getString("metrics"))
-                val metrics = SessionMetrics(
-                    messagesIn = metricsJson.getDouble("messagesIn", 0.0),
-                    messagesOut = metricsJson.getDouble("messagesOut", 0.0),
-                    timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(timestamp)
-                )
-                resultList.add(timestamp to metrics)
-            }
-
-            resultList
-        })
-    }
+    ): Future<List<Pair<Instant, SessionMetrics>>> =
+        getMetricsHistory(MetricKind.SESSION, clientId, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToSessionMetrics(it.second) } }
 
     override fun getBrokerMetricsList(
         nodeId: String,
         from: Instant?,
         to: Instant?,
         lastMinutes: Int?
-    ): Future<List<BrokerMetrics>> {
-        return getBrokerMetricsHistory(nodeId, from, to, lastMinutes, Int.MAX_VALUE).map { history ->
-            history.map { it.second }
-        }
-    }
+    ): Future<List<BrokerMetrics>> =
+        getBrokerMetricsHistory(nodeId, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { it.second } }
 
     override fun getSessionMetricsList(
         clientId: String,
         from: Instant?,
         to: Instant?,
         lastMinutes: Int?
-    ): Future<List<SessionMetrics>> {
-        return getSessionMetricsHistory(clientId, from, to, lastMinutes, Int.MAX_VALUE).map { history ->
-            history.map { it.second }
-        }
-    }
+    ): Future<List<SessionMetrics>> =
+        getSessionMetricsHistory(clientId, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { it.second } }
 
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {
         return vertx.executeBlocking<Long>(Callable {
@@ -449,17 +260,51 @@ class MetricsStoreSQLite(
         })
     }
 
-    private fun calculateTimeRange(from: Instant?, to: Instant?, lastMinutes: Int?): Pair<Instant?, Instant?> {
-        return when {
-            lastMinutes != null -> {
-                val toTime = Instant.now()
-                val fromTime = toTime.minus(lastMinutes.toLong(), ChronoUnit.MINUTES)
-                Pair(fromTime, toTime)
-            }
-            from != null -> {
-                Pair(from, to)
-            }
-            else -> Pair(null, null)
+    private fun brokerMetricsToJson(m: BrokerMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
+        .put("messagesOut", m.messagesOut)
+        .put("nodeSessionCount", m.nodeSessionCount)
+        .put("clusterSessionCount", m.clusterSessionCount)
+        .put("queuedMessagesCount", m.queuedMessagesCount)
+        .put("topicIndexSize", m.topicIndexSize)
+        .put("clientNodeMappingSize", m.clientNodeMappingSize)
+        .put("topicNodeMappingSize", m.topicNodeMappingSize)
+        .put("messageBusIn", m.messageBusIn)
+        .put("messageBusOut", m.messageBusOut)
+        .put("timestamp", m.timestamp)
+
+    private fun sessionMetricsToJson(m: SessionMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
+        .put("messagesOut", m.messagesOut)
+        .put("timestamp", m.timestamp)
+
+    private fun jsonToBrokerMetrics(j: JsonObject) = if (j.isEmpty) BrokerMetrics(0.0,0.0,0,0,0,0,0,0,0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else BrokerMetrics(
+        messagesIn = j.getDouble("messagesIn",0.0),
+        messagesOut = j.getDouble("messagesOut",0.0),
+        nodeSessionCount = j.getInteger("nodeSessionCount",0),
+        clusterSessionCount = j.getInteger("clusterSessionCount",0),
+        queuedMessagesCount = j.getLong("queuedMessagesCount",0),
+        topicIndexSize = j.getInteger("topicIndexSize",0),
+        clientNodeMappingSize = j.getInteger("clientNodeMappingSize",0),
+        topicNodeMappingSize = j.getInteger("topicNodeMappingSize",0),
+        messageBusIn = j.getDouble("messageBusIn",0.0),
+        messageBusOut = j.getDouble("messageBusOut",0.0),
+        timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    )
+
+    private fun jsonToSessionMetrics(j: JsonObject) = if (j.isEmpty) SessionMetrics(0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else SessionMetrics(
+        messagesIn = j.getDouble("messagesIn",0.0),
+        messagesOut = j.getDouble("messagesOut",0.0),
+        timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    )
+
+    private fun calculateTimeRange(from: Instant?, to: Instant?, lastMinutes: Int?): Pair<Instant?, Instant?> = when {
+        lastMinutes != null -> {
+            val toTime = Instant.now()
+            val fromTime = toTime.minus(lastMinutes.toLong(), ChronoUnit.MINUTES)
+            Pair(fromTime, toTime)
         }
+        from != null -> Pair(from, to)
+        else -> Pair(null, null)
     }
 }

@@ -5,6 +5,8 @@ import at.rocworks.extensions.graphql.BrokerMetrics
 import at.rocworks.extensions.graphql.SessionMetrics
 import at.rocworks.stores.IMetricsStoreAsync
 import at.rocworks.stores.MetricsStoreType
+import at.rocworks.stores.MetricKind
+import io.vertx.core.json.JsonObject
 import com.mongodb.ConnectionString
 import com.mongodb.MongoClientSettings
 import com.mongodb.WriteConcern
@@ -111,178 +113,81 @@ class MetricsStoreMongoDB(
 
     override fun getType(): MetricsStoreType = MetricsStoreType.MONGODB
 
-    override fun storeBrokerMetrics(timestamp: Instant, nodeId: String, metrics: BrokerMetrics): Future<Void> {
+    // Generic store method
+    override fun storeMetrics(kind: MetricKind, timestamp: Instant, identifier: String, metricsJson: JsonObject): Future<Void> {
         return vertx.executeBlocking<Void>(Callable {
             try {
                 val metricsDoc = Document()
-                    .append("messagesIn", metrics.messagesIn)
-                    .append("messagesOut", metrics.messagesOut)
-                    .append("nodeSessionCount", metrics.nodeSessionCount)
-                    .append("clusterSessionCount", metrics.clusterSessionCount)
-                    .append("queuedMessagesCount", metrics.queuedMessagesCount)
-                    .append("topicIndexSize", metrics.topicIndexSize)
-                    .append("clientNodeMappingSize", metrics.clientNodeMappingSize)
-                    .append("topicNodeMappingSize", metrics.topicNodeMappingSize)
-                    .append("messageBusIn", metrics.messageBusIn)
-                    .append("messageBusOut", metrics.messageBusOut)
-                    .append("timestamp", metrics.timestamp)
-
+                metricsJson.forEach { (k,v) -> metricsDoc.append(k, v) }
                 val document = Document()
                     .append("timestamp", Date.from(timestamp))
-                    .append("metric_type", "broker")
-                    .append("identifier", nodeId)
+                    .append("metric_type", when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" })
+                    .append("identifier", identifier)
                     .append("metrics", metricsDoc)
-
-                // Use upsert to replace existing document with same timestamp, type, and identifier
                 val filter = Filters.and(
                     Filters.eq("timestamp", Date.from(timestamp)),
-                    Filters.eq("metric_type", "broker"),
-                    Filters.eq("identifier", nodeId)
+                    Filters.eq("metric_type", when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" }),
+                    Filters.eq("identifier", identifier)
                 )
-
-                collection.replaceOne(
-                    filter,
-                    document,
-                    ReplaceOptions().upsert(true)
-                )
+                collection.replaceOne(filter, document, ReplaceOptions().upsert(true))
             } catch (e: Exception) {
-                logger.warning("Error storing broker metrics: ${e.message}")
+                logger.warning("Error storing $kind metrics for $identifier: ${e.message}")
                 throw e
             }
             null
         })
     }
 
-    override fun storeSessionMetrics(timestamp: Instant, clientId: String, metrics: SessionMetrics): Future<Void> {
-        return vertx.executeBlocking<Void>(Callable {
-            try {
-                val metricsDoc = Document()
-                    .append("messagesIn", metrics.messagesIn)
-                    .append("messagesOut", metrics.messagesOut)
-                    .append("timestamp", metrics.timestamp)
+    override fun storeBrokerMetrics(timestamp: Instant, nodeId: String, metrics: BrokerMetrics): Future<Void> =
+        storeMetrics(MetricKind.BROKER, timestamp, nodeId, brokerMetricsToJson(metrics))
 
-                val document = Document()
-                    .append("timestamp", Date.from(timestamp))
-                    .append("metric_type", "session")
-                    .append("identifier", clientId)
-                    .append("metrics", metricsDoc)
+    override fun storeSessionMetrics(timestamp: Instant, clientId: String, metrics: SessionMetrics): Future<Void> =
+        storeMetrics(MetricKind.SESSION, timestamp, clientId, sessionMetricsToJson(metrics))
 
-                // Use upsert to replace existing document with same timestamp, type, and identifier
-                val filter = Filters.and(
-                    Filters.eq("timestamp", Date.from(timestamp)),
-                    Filters.eq("metric_type", "session"),
-                    Filters.eq("identifier", clientId)
-                )
-
-                collection.replaceOne(
-                    filter,
-                    document,
-                    ReplaceOptions().upsert(true)
-                )
-            } catch (e: Exception) {
-                logger.warning("Error storing session metrics for client $clientId: ${e.message}")
-                throw e
-            }
-            null
+    override fun getLatestMetrics(kind: MetricKind, identifier: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<JsonObject> {
+        return vertx.executeBlocking<JsonObject>(Callable {
+            val (fromTime, toTime) = calculateTimeRange(from, to, lastMinutes)
+            if (fromTime == null) throw IllegalArgumentException("Historical query requires time range")
+            val filterList = mutableListOf<Bson>()
+            filterList.addAll(listOf(
+                Filters.eq("metric_type", when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" }),
+                Filters.eq("identifier", identifier),
+                Filters.gte("timestamp", Date.from(fromTime))
+            ))
+            if (toTime != null) filterList.add(Filters.lte("timestamp", Date.from(toTime)))
+            val filter = Filters.and(filterList)
+            val document = collection.find(filter).sort(Sorts.descending("timestamp")).limit(1).firstOrNull()
+            if (document != null) {
+                val metricsDoc = document.get("metrics", Document::class.java)
+                JsonObject(metricsDoc.entries.associate { it.key to it.value })
+            } else JsonObject()
         })
     }
 
-    override fun getBrokerMetrics(
-        nodeId: String,
-        from: Instant?,
-        to: Instant?,
-        lastMinutes: Int?
-    ): Future<BrokerMetrics> {
-        return vertx.executeBlocking<BrokerMetrics>(Callable {
+    override fun getBrokerMetrics(nodeId: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<BrokerMetrics> =
+        getLatestMetrics(MetricKind.BROKER, nodeId, from, to, lastMinutes).map { jsonToBrokerMetrics(it) }
+
+    override fun getSessionMetrics(clientId: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<SessionMetrics> =
+        getLatestMetrics(MetricKind.SESSION, clientId, from, to, lastMinutes).map { jsonToSessionMetrics(it) }
+
+    override fun getMetricsHistory(kind: MetricKind, identifier: String, from: Instant?, to: Instant?, lastMinutes: Int?, limit: Int): Future<List<Pair<Instant, JsonObject>>> {
+        return vertx.executeBlocking<List<Pair<Instant, JsonObject>>>(Callable {
             val (fromTime, toTime) = calculateTimeRange(from, to, lastMinutes)
-
-            if (fromTime == null) {
-                throw IllegalArgumentException("Historical query requires time range")
-            }
-
+            if (fromTime == null) throw IllegalArgumentException("Historical query requires time range")
             val filterList = mutableListOf<Bson>()
             filterList.addAll(listOf(
-                Filters.eq("metric_type", "broker"),
-                Filters.eq("identifier", nodeId),
+                Filters.eq("metric_type", when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" }),
+                Filters.eq("identifier", identifier),
                 Filters.gte("timestamp", Date.from(fromTime))
             ))
-
-            if (toTime != null) {
-                filterList.add(Filters.lte("timestamp", Date.from(toTime)))
-            }
-
+            if (toTime != null) filterList.add(Filters.lte("timestamp", Date.from(toTime)))
             val filter = Filters.and(filterList)
-
-            val document = collection
-                .find(filter)
-                .sort(Sorts.descending("timestamp"))
-                .limit(1)
-                .firstOrNull()
-
-            if (document != null) {
+            val documents = collection.find(filter).sort(Sorts.descending("timestamp")).limit(limit).toList()
+            documents.map { document ->
+                val ts = document.getDate("timestamp").toInstant()
                 val metricsDoc = document.get("metrics", Document::class.java)
-                BrokerMetrics(
-                    messagesIn = metricsDoc.getDouble("messagesIn") ?: 0.0,
-                    messagesOut = metricsDoc.getDouble("messagesOut") ?: 0.0,
-                    nodeSessionCount = metricsDoc.getInteger("nodeSessionCount") ?: 0,
-                    clusterSessionCount = metricsDoc.getInteger("clusterSessionCount") ?: 0,
-                    queuedMessagesCount = metricsDoc.getLong("queuedMessagesCount") ?: 0L,
-                    topicIndexSize = metricsDoc.getInteger("topicIndexSize") ?: 0,
-                    clientNodeMappingSize = metricsDoc.getInteger("clientNodeMappingSize") ?: 0,
-                    topicNodeMappingSize = metricsDoc.getInteger("topicNodeMappingSize") ?: 0,
-                    messageBusIn = metricsDoc.getDouble("messageBusIn") ?: 0.0,
-                    messageBusOut = metricsDoc.getDouble("messageBusOut") ?: 0.0,
-                    timestamp = metricsDoc.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
-                )
-            } else {
-                // No historical data found, return zero metrics
-                BrokerMetrics(0.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
-            }
-        })
-    }
-
-    override fun getSessionMetrics(
-        clientId: String,
-        from: Instant?,
-        to: Instant?,
-        lastMinutes: Int?
-    ): Future<SessionMetrics> {
-        return vertx.executeBlocking<SessionMetrics>(Callable {
-            val (fromTime, toTime) = calculateTimeRange(from, to, lastMinutes)
-
-            if (fromTime == null) {
-                throw IllegalArgumentException("Historical query requires time range")
-            }
-
-            val filterList = mutableListOf<Bson>()
-            filterList.addAll(listOf(
-                Filters.eq("metric_type", "session"),
-                Filters.eq("identifier", clientId),
-                Filters.gte("timestamp", Date.from(fromTime))
-            ))
-
-            if (toTime != null) {
-                filterList.add(Filters.lte("timestamp", Date.from(toTime)))
-            }
-
-            val filter = Filters.and(filterList)
-
-            val document = collection
-                .find(filter)
-                .sort(Sorts.descending("timestamp"))
-                .limit(1)
-                .firstOrNull()
-
-            if (document != null) {
-                val metricsDoc = document.get("metrics", Document::class.java)
-                SessionMetrics(
-                    messagesIn = metricsDoc.getDouble("messagesIn") ?: 0.0,
-                    messagesOut = metricsDoc.getDouble("messagesOut") ?: 0.0,
-                    timestamp = metricsDoc.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
-                )
-            } else {
-                // No historical data found, return zero metrics
-                SessionMetrics(0.0, 0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString())
+                val json = JsonObject(metricsDoc.entries.associate { it.key to it.value })
+                ts to json
             }
         })
     }
@@ -293,53 +198,8 @@ class MetricsStoreMongoDB(
         to: Instant?,
         lastMinutes: Int?,
         limit: Int
-    ): Future<List<Pair<Instant, BrokerMetrics>>> {
-        return vertx.executeBlocking<List<Pair<Instant, BrokerMetrics>>>(Callable {
-            val (fromTime, toTime) = calculateTimeRange(from, to, lastMinutes)
-
-            if (fromTime == null) {
-                throw IllegalArgumentException("Historical query requires time range")
-            }
-
-            val filterList = mutableListOf<Bson>()
-            filterList.addAll(listOf(
-                Filters.eq("metric_type", "broker"),
-                Filters.eq("identifier", nodeId),
-                Filters.gte("timestamp", Date.from(fromTime))
-            ))
-
-            if (toTime != null) {
-                filterList.add(Filters.lte("timestamp", Date.from(toTime)))
-            }
-
-            val filter = Filters.and(filterList)
-
-            val documents = collection
-                .find(filter)
-                .sort(Sorts.descending("timestamp"))
-                .limit(limit)
-                .toList()
-
-            documents.map { document ->
-                val timestamp = document.getDate("timestamp").toInstant()
-                val metricsDoc = document.get("metrics", Document::class.java)
-                val metrics = BrokerMetrics(
-                    messagesIn = metricsDoc.getDouble("messagesIn") ?: 0.0,
-                    messagesOut = metricsDoc.getDouble("messagesOut") ?: 0.0,
-                    nodeSessionCount = metricsDoc.getInteger("nodeSessionCount") ?: 0,
-                    clusterSessionCount = metricsDoc.getInteger("clusterSessionCount") ?: 0,
-                    queuedMessagesCount = metricsDoc.getLong("queuedMessagesCount") ?: 0L,
-                    topicIndexSize = metricsDoc.getInteger("topicIndexSize") ?: 0,
-                    clientNodeMappingSize = metricsDoc.getInteger("clientNodeMappingSize") ?: 0,
-                    topicNodeMappingSize = metricsDoc.getInteger("topicNodeMappingSize") ?: 0,
-                    messageBusIn = metricsDoc.getDouble("messageBusIn") ?: 0.0,
-                    messageBusOut = metricsDoc.getDouble("messageBusOut") ?: 0.0,
-                    timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(document.getDate("timestamp").toInstant())
-                )
-                timestamp to metrics
-            }
-        })
-    }
+    ): Future<List<Pair<Instant, BrokerMetrics>>> =
+        getMetricsHistory(MetricKind.BROKER, nodeId, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToBrokerMetrics(it.second) } }
 
     override fun getSessionMetricsHistory(
         clientId: String,
@@ -347,67 +207,24 @@ class MetricsStoreMongoDB(
         to: Instant?,
         lastMinutes: Int?,
         limit: Int
-    ): Future<List<Pair<Instant, SessionMetrics>>> {
-        return vertx.executeBlocking<List<Pair<Instant, SessionMetrics>>>(Callable {
-            val (fromTime, toTime) = calculateTimeRange(from, to, lastMinutes)
-
-            if (fromTime == null) {
-                throw IllegalArgumentException("Historical query requires time range")
-            }
-
-            val filterList = mutableListOf<Bson>()
-            filterList.addAll(listOf(
-                Filters.eq("metric_type", "session"),
-                Filters.eq("identifier", clientId),
-                Filters.gte("timestamp", Date.from(fromTime))
-            ))
-
-            if (toTime != null) {
-                filterList.add(Filters.lte("timestamp", Date.from(toTime)))
-            }
-
-            val filter = Filters.and(filterList)
-
-            val documents = collection
-                .find(filter)
-                .sort(Sorts.descending("timestamp"))
-                .limit(limit)
-                .toList()
-
-            documents.map { document ->
-                val timestamp = document.getDate("timestamp").toInstant()
-                val metricsDoc = document.get("metrics", Document::class.java)
-                val metrics = SessionMetrics(
-                    messagesIn = metricsDoc.getDouble("messagesIn") ?: 0.0,
-                    messagesOut = metricsDoc.getDouble("messagesOut") ?: 0.0,
-                    timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(document.getDate("timestamp").toInstant())
-                )
-                timestamp to metrics
-            }
-        })
-    }
+    ): Future<List<Pair<Instant, SessionMetrics>>> =
+        getMetricsHistory(MetricKind.SESSION, clientId, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToSessionMetrics(it.second) } }
 
     override fun getBrokerMetricsList(
         nodeId: String,
         from: Instant?,
         to: Instant?,
         lastMinutes: Int?
-    ): Future<List<BrokerMetrics>> {
-        return getBrokerMetricsHistory(nodeId, from, to, lastMinutes, Int.MAX_VALUE).map { history ->
-            history.map { it.second }
-        }
-    }
+    ): Future<List<BrokerMetrics>> =
+        getBrokerMetricsHistory(nodeId, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { it.second } }
 
     override fun getSessionMetricsList(
         clientId: String,
         from: Instant?,
         to: Instant?,
         lastMinutes: Int?
-    ): Future<List<SessionMetrics>> {
-        return getSessionMetricsHistory(clientId, from, to, lastMinutes, Int.MAX_VALUE).map { history ->
-            history.map { it.second }
-        }
-    }
+    ): Future<List<SessionMetrics>> =
+        getSessionMetricsHistory(clientId, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { it.second } }
 
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {
         return vertx.executeBlocking<Long>(Callable {
@@ -422,17 +239,51 @@ class MetricsStoreMongoDB(
         })
     }
 
-    private fun calculateTimeRange(from: Instant?, to: Instant?, lastMinutes: Int?): Pair<Instant?, Instant?> {
-        return when {
-            lastMinutes != null -> {
-                val toTime = Instant.now()
-                val fromTime = toTime.minus(lastMinutes.toLong(), ChronoUnit.MINUTES)
-                Pair(fromTime, toTime)
-            }
-            from != null -> {
-                Pair(from, to)
-            }
-            else -> Pair(null, null)
+    private fun brokerMetricsToJson(m: BrokerMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
+        .put("messagesOut", m.messagesOut)
+        .put("nodeSessionCount", m.nodeSessionCount)
+        .put("clusterSessionCount", m.clusterSessionCount)
+        .put("queuedMessagesCount", m.queuedMessagesCount)
+        .put("topicIndexSize", m.topicIndexSize)
+        .put("clientNodeMappingSize", m.clientNodeMappingSize)
+        .put("topicNodeMappingSize", m.topicNodeMappingSize)
+        .put("messageBusIn", m.messageBusIn)
+        .put("messageBusOut", m.messageBusOut)
+        .put("timestamp", m.timestamp)
+
+    private fun sessionMetricsToJson(m: SessionMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
+        .put("messagesOut", m.messagesOut)
+        .put("timestamp", m.timestamp)
+
+    private fun jsonToBrokerMetrics(j: JsonObject) = if (j.isEmpty) BrokerMetrics(0.0,0.0,0,0,0,0,0,0,0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else BrokerMetrics(
+        messagesIn = j.getDouble("messagesIn",0.0),
+        messagesOut = j.getDouble("messagesOut",0.0),
+        nodeSessionCount = j.getInteger("nodeSessionCount",0),
+        clusterSessionCount = j.getInteger("clusterSessionCount",0),
+        queuedMessagesCount = j.getLong("queuedMessagesCount",0),
+        topicIndexSize = j.getInteger("topicIndexSize",0),
+        clientNodeMappingSize = j.getInteger("clientNodeMappingSize",0),
+        topicNodeMappingSize = j.getInteger("topicNodeMappingSize",0),
+        messageBusIn = j.getDouble("messageBusIn",0.0),
+        messageBusOut = j.getDouble("messageBusOut",0.0),
+        timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    )
+
+    private fun jsonToSessionMetrics(j: JsonObject) = if (j.isEmpty) SessionMetrics(0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else SessionMetrics(
+        messagesIn = j.getDouble("messagesIn",0.0),
+        messagesOut = j.getDouble("messagesOut",0.0),
+        timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    )
+
+    private fun calculateTimeRange(from: Instant?, to: Instant?, lastMinutes: Int?): Pair<Instant?, Instant?> = when {
+        lastMinutes != null -> {
+            val toTime = Instant.now()
+            val fromTime = toTime.minus(lastMinutes.toLong(), ChronoUnit.MINUTES)
+            Pair(fromTime, toTime)
         }
+        from != null -> Pair(from, to)
+        else -> Pair(null, null)
     }
 }

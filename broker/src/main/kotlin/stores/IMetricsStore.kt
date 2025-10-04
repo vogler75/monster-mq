@@ -12,12 +12,19 @@ enum class MetricsStoreType {
     SQLITE
 }
 
+enum class MetricKind { BROKER, SESSION }
+
 interface IMetricsStore {
     fun getName(): String
     fun getType(): MetricsStoreType
 
     fun storeBrokerMetrics(timestamp: Instant, nodeId: String, metrics: BrokerMetrics): Future<Void>
     fun storeSessionMetrics(timestamp: Instant, clientId: String, metrics: SessionMetrics): Future<Void>
+
+    // Generic JSON based API (metric_type + identifier + metrics JSON)
+    fun storeMetrics(kind: MetricKind, timestamp: Instant, identifier: String, metricsJson: io.vertx.core.json.JsonObject): Future<Void>
+    fun getLatestMetrics(kind: MetricKind, identifier: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<io.vertx.core.json.JsonObject>
+    fun getMetricsHistory(kind: MetricKind, identifier: String, from: Instant?, to: Instant?, lastMinutes: Int?, limit: Int = 100): Future<List<Pair<Instant, io.vertx.core.json.JsonObject>>>
 
     fun getBrokerMetrics(
         nodeId: String,
