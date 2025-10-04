@@ -496,7 +496,7 @@ class DashboardManager {
         overviewContainer.innerHTML = `
             <div class="metric-card">
                 <div class="metric-header">
-                    <span class="metric-title">Total Messages In</span>
+                    <span class="metric-title">MQTT Messages In</span>
                     <div class="metric-icon">📥</div>
                 </div>
                 <div class="metric-value">${this.formatNumber(clusterTotals.messagesIn)}</div>
@@ -505,7 +505,7 @@ class DashboardManager {
 
             <div class="metric-card">
                 <div class="metric-header">
-                    <span class="metric-title">Total Messages Out</span>
+                    <span class="metric-title">MQTT Messages Out</span>
                     <div class="metric-icon">📤</div>
                 </div>
                 <div class="metric-value">${this.formatNumber(clusterTotals.messagesOut)}</div>
