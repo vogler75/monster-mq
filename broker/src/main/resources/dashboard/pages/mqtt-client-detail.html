@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MonsterMQ - MQTT Client Detail</title>
+    <title>MonsterMQ - MQTT Bridge Detail</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -354,7 +354,7 @@
                         <path d="M16 18l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
                         <path d="M12 5v14M5 12h14"/>
                     </svg>
-                    <span class="nav-text">MQTT Clients</span>
+                    <span class="nav-text">MQTT Bridges</span>
                 </a>
             </div>
 
@@ -390,13 +390,13 @@
             <div class="page-header">
                 <div>
                     <button class="btn btn-secondary" onclick="goBack()" style="margin-bottom: 1rem;">
-                        ← Back to Clients
+                        ← Back to Bridges
                     </button>
-                    <h1 class="page-title" id="page-title">MQTT Client</h1>
+                    <h1 class="page-title" id="page-title">MQTT Bridge</h1>
                 </div>
                 <div class="action-buttons">
                     <button class="btn btn-secondary" onclick="showEditModal()">Edit Configuration</button>
-                    <button class="btn btn-success" id="toggle-client-btn" onclick="toggleClient()">Start Client</button>
+                    <button class="btn btn-success" id="toggle-client-btn" onclick="toggleClient()">Start Bridge</button>
                 </div>
             </div>
 
@@ -404,14 +404,14 @@
             <div class="section-card">
                 <div class="section-header">
                     <div class="section-title">
-                        <h2>Client Information</h2>
+                        <h2>Bridge Information</h2>
                     </div>
                     <span class="status-badge status-enabled" id="client-status">ENABLED</span>
                 </div>
                 <div class="section-content">
                     <div class="info-grid">
                         <div class="info-item">
-                            <div class="info-label">Client Name</div>
+                            <div class="info-label">Bridge Name</div>
                             <div class="info-value" id="client-name-display">-</div>
                         </div>
                         <div class="info-item">
@@ -511,13 +511,13 @@
     <div id="edit-client-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Edit MQTT Client</h3>
+                <h3>Edit MQTT Bridge</h3>
                 <button class="modal-close" onclick="hideEditModal()">×</button>
             </div>
             <div class="modal-body">
                 <form id="edit-client-form">
                     <div class="form-group">
-                        <label for="edit-client-name">Client Name *</label>
+                        <label for="edit-client-name">Bridge Name *</label>
                         <input type="text" id="edit-client-name" required>
                     </div>
                     <div class="form-group">

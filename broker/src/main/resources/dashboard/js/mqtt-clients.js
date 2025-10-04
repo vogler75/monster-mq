@@ -1,4 +1,4 @@
-// MQTT Client Management JavaScript
+// MQTT Bridge Management JavaScript
 
 class MqttClientManager {
     constructor() {
@@ -10,7 +10,7 @@ class MqttClientManager {
     }
 
     async init() {
-        console.log('Initializing MQTT Client Manager...');
+        console.log('Initializing MQTT Bridge Manager...');
         // Load initial data
         await this.loadClusterNodes();
         await this.loadClients();
@@ -82,6 +82,10 @@ class MqttClientManager {
                                 qos
                             }
                         }
+                        metrics {
+                            messagesIn
+                            messagesOut
+                        }
                     }
                 }
             `;
@@ -99,7 +103,7 @@ class MqttClientManager {
 
         } catch (error) {
             console.error('Error loading clients:', error);
-            this.showError('Failed to load MQTT clients: ' + error.message);
+            this.showError('Failed to load MQTT bridges: ' + error.message);
         } finally {
             this.showLoading(false);
         }
@@ -126,8 +130,8 @@ class MqttClientManager {
         if (this.clients.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="no-data">
-                        No MQTT clients configured. Click "Add Client" to get started.
+                    <td colspan="9" class="no-data">
+                        No MQTT bridges configured. Click \"Add Bridge\" to get started.
                     </td>
                 </tr>
             `;
@@ -167,22 +171,24 @@ class MqttClientManager {
                         ${client.config.addresses.length} mappings
                     </div>
                 </td>
+                <td>${(client.metrics && client.metrics.length>0 ? Math.round(client.metrics[0].messagesIn) : 0)}</td>
+                <td>${(client.metrics && client.metrics.length>0 ? Math.round(client.metrics[0].messagesOut) : 0)}</td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-action btn-view" onclick="mqttClientManager.viewClient('${client.name}')" title="Edit Client">
+                        <button class="btn-action btn-view" onclick="mqttClientManager.viewClient('${client.name}')" title=\"Edit Bridge\">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
                             </svg>
                         </button>
                         <button class="btn-action ${client.enabled ? 'btn-pause' : 'btn-play'}"
                                 onclick="mqttClientManager.toggleClient('${client.name}', ${!client.enabled})"
-                                title="${client.enabled ? 'Stop Client' : 'Start Client'}">
+                                title="${client.enabled ? 'Stop Bridge' : 'Start Bridge'}">
                             ${client.enabled ?
                                 '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>' :
                                 '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
                             }
                         </button>
-                        <button class="btn-action btn-delete" onclick="mqttClientManager.deleteClient('${client.name}')" title="Delete Client">
+                        <button class="btn-action btn-delete" onclick="mqttClientManager.deleteClient('${client.name}')" title="Delete Bridge">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                             </svg>
@@ -240,15 +246,15 @@ class MqttClientManager {
             if (result.createMqttClient.success) {
                 this.hideAddClientModal();
                 await this.loadClients();
-                this.showSuccess(`Client "${clientData.name}" added successfully`);
+                this.showSuccess(`Bridge \"${clientData.name}\" added successfully`);
             } else {
                 const errors = result.createMqttClient.errors || ['Unknown error'];
-                this.showError('Failed to add client: ' + errors.join(', '));
+                this.showError('Failed to add bridge: ' + errors.join(', '));
             }
 
         } catch (error) {
             console.error('Error adding client:', error);
-            this.showError('Failed to add client: ' + error.message);
+            this.showError('Failed to add bridge: ' + error.message);
         }
     }
 
@@ -271,15 +277,15 @@ class MqttClientManager {
 
             if (result.toggleMqttClient.success) {
                 await this.loadClients();
-                this.showSuccess(`Client "${clientName}" ${enabled ? 'started' : 'stopped'} successfully`);
+                this.showSuccess(`Bridge \"${clientName}\" ${enabled ? 'started' : 'stopped'} successfully`);
             } else {
                 const errors = result.toggleMqttClient.errors || ['Unknown error'];
-                this.showError('Failed to toggle client: ' + errors.join(', '));
+                this.showError('Failed to toggle bridge: ' + errors.join(', '));
             }
 
         } catch (error) {
             console.error('Error toggling client:', error);
-            this.showError('Failed to toggle client: ' + error.message);
+            this.showError('Failed to toggle bridge: ' + error.message);
         }
     }
 
@@ -304,14 +310,14 @@ class MqttClientManager {
             if (result.deleteMqttClient) {
                 this.hideConfirmDeleteModal();
                 await this.loadClients();
-                this.showSuccess(`Client "${this.deleteClientName}" deleted successfully`);
+                this.showSuccess(`Bridge \"${this.deleteClientName}\" deleted successfully`);
             } else {
-                this.showError('Failed to delete client');
+                this.showError('Failed to delete bridge');
             }
 
         } catch (error) {
             console.error('Error deleting client:', error);
-            this.showError('Failed to delete client: ' + error.message);
+            this.showError('Failed to delete bridge: ' + error.message);
         }
 
         this.deleteClientName = null;

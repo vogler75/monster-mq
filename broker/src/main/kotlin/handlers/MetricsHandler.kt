@@ -47,15 +47,127 @@ class MetricsHandler(
         try {
             val timestamp = Instant.now()
             val nodeId = Monster.Companion.getClusterNodeId(vertx)
+            logger.fine("Collecting metrics at $timestamp for nodeId: $nodeId (concurrent aggregation)")
 
-            logger.fine("Collecting metrics at $timestamp for nodeId: $nodeId")
+            // Placeholders for concurrent aggregation
+            var nodeMetrics: JsonObject? = null
+            var bridgeInTotal = 0.0
+            var bridgeOutTotal = 0.0
+            var brokerDone = false
+            var bridgeDone = false
 
-            // Collect broker metrics (includes session metrics in the same call to avoid double reset)
-            collectBrokerMetrics(timestamp, nodeId)
+            fun tryAssembleAndStore() {
+                if (brokerDone && bridgeDone && nodeMetrics != null) {
+                    try {
+                        val nm = nodeMetrics!!
+                        val brokerMetrics = BrokerMetrics(
+                            messagesIn = nm.getDouble("messagesInRate", 0.0),
+                            messagesOut = nm.getDouble("messagesOutRate", 0.0),
+                            nodeSessionCount = nm.getInteger("nodeSessionCount", 0),
+                            clusterSessionCount = sessionHandler.getSessionCount(),
+                            queuedMessagesCount = 0L, // TODO: integrate queued messages if needed
+                            topicIndexSize = nm.getInteger("topicIndexSize", 0),
+                            clientNodeMappingSize = nm.getInteger("clientNodeMappingSize", 0),
+                            topicNodeMappingSize = nm.getInteger("topicNodeMappingSize", 0),
+                            messageBusIn = nm.getDouble("messageBusInRate", 0.0),
+                            messageBusOut = nm.getDouble("messageBusOutRate", 0.0),
+                            mqttBridgeIn = bridgeInTotal,
+                            mqttBridgeOut = bridgeOutTotal,
+                            timestamp = TimestampConverter.instantToIsoString(timestamp)
+                        )
 
-            // Collect MQTT bridge (client connector) metrics
-            collectMqttBridgeMetrics(timestamp)
+                        metricsStore.storeBrokerMetrics(timestamp, nodeId, brokerMetrics).onComplete { result ->
+                            if (result.succeeded()) {
+                                logger.fine("Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal) for nodeId: $nodeId")
+                            } else {
+                                logger.warning("Error storing broker metrics: ${result.cause()?.message}")
+                            }
+                        }
 
+                        // Store session metrics from nodeMetrics response
+                        nm.getJsonArray("sessionMetrics")?.forEach { sessionMetricObj ->
+                            val sessionMetric = sessionMetricObj as JsonObject
+                            val clientId = sessionMetric.getString("clientId")
+                            val messagesInRate = sessionMetric.getDouble("messagesInRate", 0.0)
+                            val messagesOutRate = sessionMetric.getDouble("messagesOutRate", 0.0)
+                            val sessionMetrics = SessionMetrics(
+                                messagesIn = messagesInRate,
+                                messagesOut = messagesOutRate,
+                                timestamp = TimestampConverter.instantToIsoString(timestamp)
+                            )
+                            metricsStore.storeSessionMetrics(timestamp, clientId, sessionMetrics).onComplete { res ->
+                                if (!res.succeeded()) {
+                                    logger.warning("Error storing session metrics for client $clientId: ${res.cause()?.message}")
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logger.warning("Error assembling aggregated broker metrics: ${e.message}")
+                    }
+                }
+            }
+
+            // Broker metrics request (with reset)
+            val metricsAddress = EventBusAddresses.Node.metricsAndReset(nodeId)
+            vertx.eventBus().request<JsonObject>(metricsAddress, JsonObject()).onComplete { reply ->
+                if (reply.succeeded()) {
+                    nodeMetrics = reply.result().body()
+                } else {
+                    logger.warning("Failed to get broker metrics: ${reply.cause()?.message}")
+                }
+                brokerDone = true
+                tryAssembleAndStore()
+            }
+
+            // MQTT bridge metrics aggregation
+            val listAddress = EventBusAddresses.MqttBridge.CONNECTORS_LIST
+            vertx.eventBus().request<JsonObject>(listAddress, JsonObject()).onComplete { listReply ->
+                if (listReply.succeeded()) {
+                    val body = listReply.result().body()
+                    val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
+                    if (devices.isEmpty) {
+                        bridgeDone = true
+                        tryAssembleAndStore()
+                    } else {
+                        var remaining = devices.size()
+                        devices.forEach { d ->
+                            val deviceName = d as String
+                            val mAddr = EventBusAddresses.MqttBridge.connectorMetrics(deviceName)
+                            vertx.eventBus().request<JsonObject>(mAddr, JsonObject()).onComplete { mReply ->
+                                if (mReply.succeeded()) {
+                                    try {
+                                        val m = mReply.result().body()
+                                        val inRate = m.getDouble("messagesInRate", 0.0)
+                                        val outRate = m.getDouble("messagesOutRate", 0.0)
+                                        bridgeInTotal += inRate
+                                        bridgeOutTotal += outRate
+                                        // Store individual client metrics as before
+                                        val mqttMetrics = at.rocworks.extensions.graphql.MqttClientMetrics(
+                                            messagesIn = inRate,
+                                            messagesOut = outRate,
+                                            timestamp = TimestampConverter.instantToIsoString(timestamp)
+                                        )
+                                        metricsStore.storeMqttClientMetrics(timestamp, deviceName, mqttMetrics)
+                                    } catch (e: Exception) {
+                                        logger.warning("Error processing MQTT bridge metrics for $deviceName: ${e.message}")
+                                    }
+                                } else {
+                                    logger.fine("No metrics for MQTT bridge $deviceName: ${mReply.cause()?.message}")
+                                }
+                                remaining -= 1
+                                if (remaining == 0) {
+                                    bridgeDone = true
+                                    tryAssembleAndStore()
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    logger.fine("Could not retrieve MQTT bridge connector list: ${listReply.cause()?.message}")
+                    bridgeDone = true
+                    tryAssembleAndStore()
+                }
+            }
         } catch (e: Exception) {
             logger.warning("Error collecting metrics: ${e.message}")
             e.printStackTrace()

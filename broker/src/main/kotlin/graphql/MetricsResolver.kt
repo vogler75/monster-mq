@@ -27,6 +27,10 @@ class MetricsResolver(
         }
     }
 
+    private fun round2(value: Double): Double {
+        return kotlin.math.round(value)
+    }
+
     fun broker(): DataFetcher<CompletableFuture<Broker?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Broker?>()
@@ -56,6 +60,8 @@ class MetricsResolver(
                                 topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
                                 messageBusIn = nodeMetrics.getDouble("messageBusInRate", 0.0),
                                 messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
+                                mqttBridgeIn = 0.0,
+                                mqttBridgeOut = 0.0,
                                 timestamp = TimestampConverter.currentTimeIsoString()
                             )
                         } catch (e: Exception) {
@@ -109,6 +115,8 @@ class MetricsResolver(
                                     topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
                                     messageBusIn = nodeMetrics.getDouble("messageBusInRate", 0.0),
                                     messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
+                                    mqttBridgeIn = 0.0,
+                                    mqttBridgeOut = 0.0,
                                     timestamp = TimestampConverter.currentTimeIsoString()
                                 )
                             } catch (e: Exception) {
@@ -506,7 +514,23 @@ class MetricsResolver(
 
                 metricsStore.getBrokerMetricsList(nodeId, fromInstant, toInstant, lastMinutes).onComplete { result ->
                     if (result.succeeded()) {
-                        future.complete(result.result())
+                        future.complete(result.result().map { bm ->
+                            BrokerMetrics(
+                                messagesIn = round2(bm.messagesIn),
+                                messagesOut = round2(bm.messagesOut),
+                                nodeSessionCount = bm.nodeSessionCount,
+                                clusterSessionCount = bm.clusterSessionCount,
+                                queuedMessagesCount = bm.queuedMessagesCount,
+                                topicIndexSize = bm.topicIndexSize,
+                                clientNodeMappingSize = bm.clientNodeMappingSize,
+                                topicNodeMappingSize = bm.topicNodeMappingSize,
+                                messageBusIn = round2(bm.messageBusIn),
+                                messageBusOut = round2(bm.messageBusOut),
+                                mqttBridgeIn = round2(bm.mqttBridgeIn),
+                                mqttBridgeOut = round2(bm.mqttBridgeOut),
+                                timestamp = bm.timestamp
+                            )
+                        })
                     } else {
                         logger.warning("Failed to get historical broker metrics: ${result.cause()?.message}")
                         future.complete(emptyList())
@@ -613,19 +637,37 @@ class MetricsResolver(
     }
 
     private fun getCurrentBrokerMetrics(nodeId: String, callback: (BrokerMetrics) -> Unit) {
+        fun roundBrokerMetrics(bm: BrokerMetrics): BrokerMetrics {
+            return BrokerMetrics(
+                messagesIn = round2(bm.messagesIn),
+                messagesOut = round2(bm.messagesOut),
+                nodeSessionCount = bm.nodeSessionCount,
+                clusterSessionCount = bm.clusterSessionCount,
+                queuedMessagesCount = bm.queuedMessagesCount,
+                topicIndexSize = bm.topicIndexSize,
+                clientNodeMappingSize = bm.clientNodeMappingSize,
+                topicNodeMappingSize = bm.topicNodeMappingSize,
+                messageBusIn = round2(bm.messageBusIn),
+                messageBusOut = round2(bm.messageBusOut),
+                mqttBridgeIn = round2(bm.mqttBridgeIn),
+                mqttBridgeOut = round2(bm.mqttBridgeOut),
+                timestamp = bm.timestamp
+            )
+        }
+
         if (metricsStore != null) {
             // Use most recent stored metrics for smooth UI updates
             metricsStore.getBrokerMetricsList(nodeId, null, null, 1).onComplete { result ->
                 if (result.succeeded() && result.result().isNotEmpty()) {
-                    callback(result.result().first())
+                     callback(roundBrokerMetrics(result.result().first()))
                 } else {
                     // Fallback to live metrics if no stored data
-                    getLiveBrokerMetrics(nodeId, callback)
+                     getLiveBrokerMetrics(nodeId) { callback(roundBrokerMetrics(it)) }
                 }
             }
         } else {
             // No metrics store - use live metrics
-            getLiveBrokerMetrics(nodeId, callback)
+            getLiveBrokerMetrics(nodeId) { callback(roundBrokerMetrics(it)) }
         }
     }
 
@@ -665,12 +707,40 @@ class MetricsResolver(
                         callback(result.result())
                     } else {
                         logger.warning("Failed to get cluster metrics: ${result.cause()?.message}")
-                        callback(BrokerMetrics(0.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, TimestampConverter.currentTimeIsoString()))
+                        callback(BrokerMetrics(
+                            messagesIn = 0.0,
+                            messagesOut = 0.0,
+                            nodeSessionCount = 0,
+                            clusterSessionCount = 0,
+                            queuedMessagesCount = 0,
+                            topicIndexSize = 0,
+                            clientNodeMappingSize = 0,
+                            topicNodeMappingSize = 0,
+                            messageBusIn = 0.0,
+                            messageBusOut = 0.0,
+                            mqttBridgeIn = 0.0,
+                            mqttBridgeOut = 0.0,
+                            timestamp = TimestampConverter.currentTimeIsoString()
+                        ))
                     }
                 }
             } else {
                 logger.warning("Failed to get metrics from node $nodeId: ${reply.cause().message}")
-                callback(BrokerMetrics(0.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, TimestampConverter.currentTimeIsoString()))
+                callback(BrokerMetrics(
+                            messagesIn = 0.0,
+                            messagesOut = 0.0,
+                            nodeSessionCount = 0,
+                            clusterSessionCount = 0,
+                            queuedMessagesCount = 0,
+                            topicIndexSize = 0,
+                            clientNodeMappingSize = 0,
+                            topicNodeMappingSize = 0,
+                            messageBusIn = 0.0,
+                            messageBusOut = 0.0,
+                            mqttBridgeIn = 0.0,
+                            mqttBridgeOut = 0.0,
+                            timestamp = TimestampConverter.currentTimeIsoString()
+                        ))
             }
         }
     }
@@ -689,7 +759,8 @@ class MetricsResolver(
             if (metricsStore != null) {
                 metricsStore.getMqttClientMetricsList(clientName, null, null, 1).onComplete { result ->
                     if (result.succeeded() && result.result().isNotEmpty()) {
-                        future.complete(listOf(result.result().first()))
+                        val m = result.result().first()
+                        future.complete(listOf(MqttClientMetrics(round2(m.messagesIn), round2(m.messagesOut), m.timestamp)))
                     } else {
                         future.complete(listOf(MqttClientMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
                     }
@@ -723,7 +794,7 @@ class MetricsResolver(
 
                 metricsStore.getMqttClientMetricsList(clientName, fromInstant, toInstant, lastMinutes).onComplete { result ->
                     if (result.succeeded()) {
-                        future.complete(result.result())
+                        future.complete(result.result().map { MqttClientMetrics(round2(it.messagesIn), round2(it.messagesOut), it.timestamp) })
                     } else {
                         logger.warning("Failed to get historical MQTT client metrics: ${result.cause()?.message}")
                         future.complete(emptyList())

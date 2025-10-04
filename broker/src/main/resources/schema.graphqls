@@ -55,6 +55,10 @@ type BrokerMetrics {
     messageBusIn: Float!
     # Messages per second sent to other nodes via message bus
     messageBusOut: Float!
+    # Messages per second received via MQTT bridge clients (remote -> local)
+    mqttBridgeIn: Float!
+    # Messages per second sent via MQTT bridge clients (local -> remote)
+    mqttBridgeOut: Float!
     # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
     timestamp: String!
 }

@@ -50,3 +50,14 @@ mvn clean package -DskipTests
 mvn clean package -Pproduction
 ```
 
+## MQTT Bridging Terminology
+
+The UI refers to MQTT "Bridges" when configuring outbound connections to remote brokers. Internally (GraphQL schema names, REST/JS identifiers, existing config fields) the historical term "mqttClient" / "client" is retained to avoid breaking existing integrations. Only user-facing labels, headings, buttons, tooltips, and notifications have been updated to say "Bridge" or "Bridges".
+
+Retained internal identifiers (examples):
+- GraphQL query names: `mqttClients`, mutations: `createMqttClient`, `toggleMqttClient`, etc.
+- URL/query params: `?client=<name>`
+- Element IDs / variable names: `client-*`
+
+When extending functionality prefer continuing this pattern until a versioned API change can deprecate the old names.
+

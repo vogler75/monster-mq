@@ -16,7 +16,7 @@ class MqttClientDetailManager {
         this.clientName = urlParams.get('client');
 
         if (!this.clientName) {
-            this.showError('No client specified');
+            this.showError('No bridge specified');
             return;
         }
 
@@ -93,7 +93,7 @@ class MqttClientDetailManager {
             const result = await this.client.query(query, { name: this.clientName });
 
             if (!result.mqttClient) {
-                throw new Error('Client not found');
+                throw new Error('Bridge not found');
             }
 
             this.clientData = result.mqttClient;
@@ -101,8 +101,8 @@ class MqttClientDetailManager {
             this.renderAddressesList();
 
         } catch (error) {
-            console.error('Error loading client:', error);
-            this.showError('Failed to load client: ' + error.message);
+            console.error('Error loading bridge:', error);
+            this.showError('Failed to load bridge: ' + error.message);
         } finally {
             this.showLoading(false);
         }
@@ -111,7 +111,7 @@ class MqttClientDetailManager {
     renderClientInfo() {
         if (!this.clientData) return;
 
-        document.getElementById('page-title').textContent = `MQTT Client: ${this.clientData.name}`;
+        document.getElementById('page-title').textContent = `MQTT Bridge: ${this.clientData.name}`;
         document.getElementById('client-name-display').textContent = this.clientData.name;
         document.getElementById('client-namespace').textContent = this.clientData.namespace;
         document.getElementById('client-broker-url').textContent =
@@ -138,7 +138,7 @@ class MqttClientDetailManager {
         // Update action buttons
         const toggleBtn = document.getElementById('toggle-client-btn');
         if (toggleBtn) {
-            toggleBtn.textContent = this.clientData.enabled ? 'Stop Client' : 'Start Client';
+            toggleBtn.textContent = this.clientData.enabled ? 'Stop Bridge' : 'Start Bridge';
             toggleBtn.className = this.clientData.enabled ? 'btn btn-warning' : 'btn btn-success';
         }
 
@@ -257,15 +257,15 @@ class MqttClientDetailManager {
             if (result.updateMqttClient.success) {
                 this.hideEditModal();
                 await this.loadClientData();
-                this.showSuccess('Client updated successfully');
+                this.showSuccess('Bridge updated successfully');
             } else {
                 const errors = result.updateMqttClient.errors || ['Unknown error'];
-                this.showError('Failed to update client: ' + errors.join(', '));
+                this.showError('Failed to update bridge: ' + errors.join(', '));
             }
 
         } catch (error) {
             console.error('Error updating client:', error);
-            this.showError('Failed to update client: ' + error.message);
+            this.showError('Failed to update bridge: ' + error.message);
         }
     }
 
@@ -291,15 +291,15 @@ class MqttClientDetailManager {
 
             if (result.toggleMqttClient.success) {
                 await this.loadClientData();
-                this.showSuccess(`Client ${newState ? 'started' : 'stopped'} successfully`);
+                this.showSuccess(`Bridge ${newState ? 'started' : 'stopped'} successfully`);
             } else {
                 const errors = result.toggleMqttClient.errors || ['Unknown error'];
-                this.showError('Failed to toggle client: ' + errors.join(', '));
+                this.showError('Failed to toggle bridge: ' + errors.join(', '));
             }
 
         } catch (error) {
             console.error('Error toggling client:', error);
-            this.showError('Failed to toggle client: ' + error.message);
+            this.showError('Failed to toggle bridge: ' + error.message);
         }
     }
 

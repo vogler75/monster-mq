@@ -110,6 +110,8 @@ class GraphQLDashboardClient {
                         topicNodeMappingSize
                         messageBusIn
                         messageBusOut
+                        mqttBridgeIn
+                        mqttBridgeOut
                         timestamp
                     }
                 }
@@ -137,6 +139,8 @@ class GraphQLDashboardClient {
                         topicNodeMappingSize
                         messageBusIn
                         messageBusOut
+                        mqttBridgeIn
+                        mqttBridgeOut
                         timestamp
                     }
                     metricsHistory(lastMinutes: $lastMinutes, from: $from, to: $to) {
@@ -150,6 +154,8 @@ class GraphQLDashboardClient {
                         topicNodeMappingSize
                         messageBusIn
                         messageBusOut
+                        mqttBridgeIn
+                        mqttBridgeOut
                         timestamp
                     }
                 }

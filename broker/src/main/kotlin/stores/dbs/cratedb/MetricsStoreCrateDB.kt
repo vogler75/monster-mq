@@ -256,6 +256,8 @@ class MetricsStoreCrateDB(
         .put("topicNodeMappingSize", m.topicNodeMappingSize)
         .put("messageBusIn", m.messageBusIn)
         .put("messageBusOut", m.messageBusOut)
+        .put("mqttBridgeIn", m.mqttBridgeIn)
+        .put("mqttBridgeOut", m.mqttBridgeOut)
         .put("timestamp", m.timestamp)
 
     private fun sessionMetricsToJson(m: SessionMetrics) = JsonObject()
@@ -263,7 +265,21 @@ class MetricsStoreCrateDB(
         .put("messagesOut", m.messagesOut)
         .put("timestamp", m.timestamp)
 
-    private fun jsonToBrokerMetrics(j: JsonObject) = if (j.isEmpty) BrokerMetrics(0.0,0.0,0,0,0,0,0,0,0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else BrokerMetrics(
+    private fun jsonToBrokerMetrics(j: JsonObject) = if (j.isEmpty) BrokerMetrics(
+        messagesIn = 0.0,
+        messagesOut = 0.0,
+        nodeSessionCount = 0,
+        clusterSessionCount = 0,
+        queuedMessagesCount = 0,
+        topicIndexSize = 0,
+        clientNodeMappingSize = 0,
+        topicNodeMappingSize = 0,
+        messageBusIn = 0.0,
+        messageBusOut = 0.0,
+        mqttBridgeIn = 0.0,
+        mqttBridgeOut = 0.0,
+        timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    ) else BrokerMetrics(
         messagesIn = j.getDouble("messagesIn",0.0),
         messagesOut = j.getDouble("messagesOut",0.0),
         nodeSessionCount = j.getInteger("nodeSessionCount",0),
@@ -274,6 +290,8 @@ class MetricsStoreCrateDB(
         topicNodeMappingSize = j.getInteger("topicNodeMappingSize",0),
         messageBusIn = j.getDouble("messageBusIn",0.0),
         messageBusOut = j.getDouble("messageBusOut",0.0),
+        mqttBridgeIn = j.getDouble("mqttBridgeIn",0.0),
+        mqttBridgeOut = j.getDouble("mqttBridgeOut",0.0),
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 
