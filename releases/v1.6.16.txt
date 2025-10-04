@@ -1,0 +1,18 @@
+Release v1.6.16
+Built from commit: 1d221f7
+Date: 2025-10-04 22:32:50
+
+Changes since v1.6.15:
+---
+1d221f7 Unify sidebar bridging section in dashboard
+582eb95 Add message metrics to OPC UA devices table
+4019cd5 Update metric titles in dashboard overview
+4fd10d1 Add OPC UA metrics to dashboard and GraphQL client
+b361491 Embed OPC UA device metrics as fields on OpcUaDevice
+cf3c585 feat(opcua-metrics): add OPC UA device metrics collection, storage, and GraphQL queries; enhance broker metrics with opcUaIn/opcUaOut
+b46a476 Add MQTT bridge metrics and update dashboard terminology
+b8c7ad0 Add MQTT bridge client metrics collection and GraphQL API
+9c1d1c7 Add generic JSON metrics API to IMetricsStore
+b7cf820 Switch broker metrics to rate-based (Float) values
+9b98c5b Add session information field to Session model
+c71132f Sync session filters with URL and server-side filtering
