@@ -131,17 +131,27 @@ def main():
         print(f"ERROR: publish() returned rc={rc2} for forbidden topic (may indicate immediate rejection)")
     state["current_mid_forbidden"] = mid_forbidden
 
-    # Wait to see outcome
-    time.sleep(0.2)  # Small delay to allow immediate disconnect
+    # Observe outcome: watch for disconnect or PUBACK within FORBIDDEN_WAIT
+    start = time.time()
+    outcome_reported = False
+    while time.time() - start < FORBIDDEN_WAIT:
+        if state["disconnect_flag"]:
+            print("INFO: Client disconnected after forbidden publish -> Disconnect-on-unauthorized enforced")
+            outcome_reported = True
+            break
+        if state["forbidden_puback"]:
+            print("WARN: Received PUBACK for forbidden topic (ACL allows it or disconnect policy disabled)")
+            outcome_reported = True
+            break
+        time.sleep(0.05)
 
-    if state["disconnect_flag"]:
-        print("INFO: Client disconnected after forbidden publish -> Broker likely configured to disconnect on unauthorized publish")
-    else:
-        # If not disconnected, check for PUBACK or silent drop
-        if wait_for("forbidden_puback", FORBIDDEN_WAIT):
-            print("WARN: Received PUBACK for forbidden topic (ACL may allow it or ACL disabled)")
+    if not outcome_reported:
+        if state["disconnect_flag"]:
+            print("INFO: Client disconnected after forbidden publish (late in window)")
+        elif state["forbidden_puback"]:
+            print("WARN: Received PUBACK for forbidden topic (late)")
         else:
-            print("OK: No PUBACK for forbidden topic and still connected -> Silent drop behavior confirmed")
+            print("OK: No PUBACK and no disconnect -> Silent drop behavior confirmed (policy: no disconnect)")
 
     if not state["disconnect_flag"]:
         print("Disconnecting cleanly...")
