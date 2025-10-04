@@ -53,6 +53,9 @@ class MetricsHandler(
             // Collect broker metrics (includes session metrics in the same call to avoid double reset)
             collectBrokerMetrics(timestamp, nodeId)
 
+            // Collect MQTT bridge (client connector) metrics
+            collectMqttBridgeMetrics(timestamp)
+
         } catch (e: Exception) {
             logger.warning("Error collecting metrics: ${e.message}")
             e.printStackTrace()
@@ -148,6 +151,50 @@ class MetricsHandler(
             }
         } catch (e: Exception) {
             logger.warning("Error collecting session metrics: ${e.message}")
+        }
+    }
+
+    private fun collectMqttBridgeMetrics(timestamp: java.time.Instant) {
+        try {
+            val listAddress = EventBusAddresses.MqttBridge.CONNECTORS_LIST
+            vertx.eventBus().request<io.vertx.core.json.JsonObject>(listAddress, io.vertx.core.json.JsonObject()).onComplete { listReply ->
+                if (listReply.succeeded()) {
+                    val body = listReply.result().body()
+                    val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
+                    if (devices.isEmpty) return@onComplete
+                    devices.forEach { d ->
+                        val deviceName = d as String
+                        val metricsAddress = EventBusAddresses.MqttBridge.connectorMetrics(deviceName)
+                        vertx.eventBus().request<io.vertx.core.json.JsonObject>(metricsAddress, io.vertx.core.json.JsonObject()).onComplete { mReply ->
+                            if (mReply.succeeded()) {
+                                try {
+                                    val m = mReply.result().body()
+                                    val inRate = m.getDouble("messagesInRate", 0.0)
+                                    val outRate = m.getDouble("messagesOutRate", 0.0)
+                                    val mqttMetrics = at.rocworks.extensions.graphql.MqttClientMetrics(
+                                        messagesIn = inRate,
+                                        messagesOut = outRate,
+                                        timestamp = at.rocworks.extensions.graphql.TimestampConverter.instantToIsoString(timestamp)
+                                    )
+                                    metricsStore.storeMqttClientMetrics(timestamp, deviceName, mqttMetrics).onComplete { storeRes ->
+                                        if (!storeRes.succeeded()) {
+                                            logger.warning("Error storing MQTT bridge metrics for $deviceName: ${storeRes.cause()?.message}")
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    logger.warning("Error processing MQTT bridge metrics for $deviceName: ${e.message}")
+                                }
+                            } else {
+                                logger.fine("No metrics response from $metricsAddress: ${mReply.cause()?.message}")
+                            }
+                        }
+                    }
+                } else {
+                    logger.fine("Could not retrieve MQTT bridge connector list: ${listReply.cause()?.message}")
+                }
+            }
+        } catch (e: Exception) {
+            logger.warning("Error collecting MQTT bridge metrics: ${e.message}")
         }
     }
 

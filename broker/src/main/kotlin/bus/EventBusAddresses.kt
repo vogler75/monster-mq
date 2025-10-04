@@ -70,6 +70,13 @@ object EventBusAddresses {
         const val SQLITE_BATCH = "$STORE_NS.sqlite.batch"
     }
 
+    // MQTT Bridge (client connectors)
+    object MqttBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.mqtt"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // System Operations
     object System {
         // Can be used for system-wide broadcasts, health checks, etc.

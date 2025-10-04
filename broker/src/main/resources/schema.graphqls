@@ -132,6 +132,16 @@ type SessionMetrics {
     timestamp: String!
 }
 
+# Metrics for a MQTT bridge client
+ type MqttClientMetrics {
+     # Messages per second received from remote broker (SUBSCRIBE flow)
+     messagesIn: Float!
+     # Messages per second published to remote broker (PUBLISH flow)
+     messagesOut: Float!
+     # ISO 8601 timestamp when these metrics were captured
+     timestamp: String!
+ }
+
 # Represents an MQTT subscription
 type MqttSubscription {
     # The topic filter
@@ -1397,6 +1407,14 @@ type MqttClient {
     updatedAt: String!
     # Whether this client is running on the current node
     isOnCurrentNode: Boolean!
+    # Current metrics for this MQTT bridge client (single most recent entry)
+    metrics: [MqttClientMetrics!]!
+    # Historical metrics data for this MQTT bridge client
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [MqttClientMetrics!]!
 }
 
 # Result type for MQTT Client operations

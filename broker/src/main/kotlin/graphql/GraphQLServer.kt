@@ -403,6 +403,11 @@ class GraphQLServer(
                     .dataFetcher("metrics", metricsResolver.sessionMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.sessionMetricsHistory())
             }
+            .type("MqttClient") { builder ->
+                builder
+                    .dataFetcher("metrics", metricsResolver.mqttClientMetrics())
+                    .dataFetcher("metricsHistory", metricsResolver.mqttClientMetricsHistory())
+            }
             .type("ArchiveGroupInfo") { builder ->
                 builder.apply {
                     archiveGroupResolver?.let { resolver ->

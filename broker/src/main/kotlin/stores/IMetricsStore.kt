@@ -2,6 +2,7 @@ package at.rocworks.stores
 
 import at.rocworks.extensions.graphql.BrokerMetrics
 import at.rocworks.extensions.graphql.SessionMetrics
+import at.rocworks.extensions.graphql.MqttClientMetrics
 import io.vertx.core.Future
 import java.time.Instant
 
@@ -12,7 +13,7 @@ enum class MetricsStoreType {
     SQLITE
 }
 
-enum class MetricKind { BROKER, SESSION }
+enum class MetricKind { BROKER, SESSION, MQTTBRIDGE }
 
 interface IMetricsStore {
     fun getName(): String
@@ -20,6 +21,7 @@ interface IMetricsStore {
 
     fun storeBrokerMetrics(timestamp: Instant, nodeId: String, metrics: BrokerMetrics): Future<Void>
     fun storeSessionMetrics(timestamp: Instant, clientId: String, metrics: SessionMetrics): Future<Void>
+    fun storeMqttClientMetrics(timestamp: Instant, clientName: String, metrics: MqttClientMetrics): Future<Void>
 
     // Generic JSON based API (metric_type + identifier + metrics JSON)
     fun storeMetrics(kind: MetricKind, timestamp: Instant, identifier: String, metricsJson: io.vertx.core.json.JsonObject): Future<Void>
@@ -54,6 +56,20 @@ interface IMetricsStore {
         lastMinutes: Int?
     ): Future<List<SessionMetrics>>
 
+    fun getMqttClientMetrics(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<MqttClientMetrics>
+
+    fun getMqttClientMetricsList(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<MqttClientMetrics>>
+
     fun getBrokerMetricsHistory(
         nodeId: String,
         from: Instant?,
@@ -69,6 +85,14 @@ interface IMetricsStore {
         lastMinutes: Int?,
         limit: Int = 100
     ): Future<List<Pair<Instant, SessionMetrics>>>
+
+    fun getMqttClientMetricsHistory(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?,
+        limit: Int = 100
+    ): Future<List<Pair<Instant, MqttClientMetrics>>>
 
     fun purgeOldMetrics(olderThan: Instant): Future<Long>
 }

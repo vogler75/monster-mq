@@ -29,6 +29,12 @@ import org.eclipse.paho.client.mqttv3.MqttMessage as PahoMqttMessage
  */
 class MqttClientConnector : AbstractVerticle() {
 
+    // Metrics counters
+    private val messagesInCounter = java.util.concurrent.atomic.AtomicLong(0) // remote -> local
+    private val messagesOutCounter = java.util.concurrent.atomic.AtomicLong(0) // local -> remote
+    private var lastMetricsReset = System.currentTimeMillis()
+
+
     private val logger: Logger = Utils.getLogger(this::class.java)
 
     // Device configuration
@@ -78,6 +84,9 @@ class MqttClientConnector : AbstractVerticle() {
 
             // Start promise is completed immediately
             startPromise.complete()
+
+            // Register metrics endpoint
+            setupMetricsEndpoint()
 
             // Attempt initial connection in the background
             vertx.executeBlocking(Callable {
@@ -366,6 +375,7 @@ class MqttClientConnector : AbstractVerticle() {
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
                 sessionHandler.publishMessage(localMessage)
+                messagesInCounter.incrementAndGet()
                 logger.fine("Forwarded remote message from $topic to local topic $localTopic")
             } else {
                 logger.warning("SessionHandler not available for message publishing")
@@ -411,6 +421,7 @@ class MqttClientConnector : AbstractVerticle() {
 
             client!!.publish(remoteTopic, message, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
+                    messagesOutCounter.incrementAndGet()
                     logger.fine("Published message to remote topic: $remoteTopic with QoS $effectiveQos")
                 }
 
@@ -421,5 +432,28 @@ class MqttClientConnector : AbstractVerticle() {
         } catch (e: Exception) {
             logger.severe("Error publishing to remote broker: ${e.message}")
         }
+    }
+
+    private fun setupMetricsEndpoint() {
+        val addr = EventBusAddresses.MqttBridge.connectorMetrics(deviceConfig.name)
+        vertx.eventBus().consumer<io.vertx.core.json.JsonObject>(addr) { msg ->
+            try {
+                val now = System.currentTimeMillis()
+                val elapsedMs = now - lastMetricsReset
+                val elapsedSec = if (elapsedMs > 0) elapsedMs / 1000.0 else 1.0
+                val inCount = messagesInCounter.getAndSet(0)
+                val outCount = messagesOutCounter.getAndSet(0)
+                lastMetricsReset = now
+                val json = io.vertx.core.json.JsonObject()
+                    .put("device", deviceConfig.name)
+                    .put("messagesInRate", inCount / elapsedSec)
+                    .put("messagesOutRate", outCount / elapsedSec)
+                    .put("elapsedMs", elapsedMs)
+                msg.reply(json)
+            } catch (e: Exception) {
+                msg.fail(500, e.message)
+            }
+        }
+        logger.info("Registered metrics endpoint for device ${deviceConfig.name} at address $addr")
     }
 }

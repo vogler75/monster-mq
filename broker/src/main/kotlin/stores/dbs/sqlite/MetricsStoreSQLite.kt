@@ -3,6 +3,7 @@ package at.rocworks.stores.sqlite
 import at.rocworks.Utils
 import at.rocworks.extensions.graphql.BrokerMetrics
 import at.rocworks.extensions.graphql.SessionMetrics
+import at.rocworks.extensions.graphql.MqttClientMetrics
 import at.rocworks.stores.IMetricsStoreAsync
 import at.rocworks.stores.MetricsStoreType
 import at.rocworks.stores.MetricKind
@@ -97,9 +98,9 @@ class MetricsStoreSQLite(
                     INSERT OR REPLACE INTO metrics (timestamp, metric_type, identifier, metrics)
                     VALUES (?, ?, ?, ?)
                 """.trimIndent()
-                val params = JsonArray()
+val params = JsonArray()
                     .add(timestamp.toString())
-                    .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" })
+                    .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session"; MetricKind.MQTTBRIDGE->"mqttbridge" })
                     .add(identifier)
                     .add(metricsJson.encode())
                 sqlClient.executeUpdate(insertSQL, params)
@@ -144,7 +145,7 @@ class MetricsStoreSQLite(
                 """.trimIndent()
             }
             val params = JsonArray()
-                .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" })
+                .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session"; MetricKind.MQTTBRIDGE->"mqttbridge" })
                 .add(identifier)
                 .add(fromTimestamp.toString())
             if (toTimestamp != null) params.add(toTimestamp.toString())
@@ -161,6 +162,12 @@ class MetricsStoreSQLite(
 
     override fun getSessionMetrics(clientId: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<SessionMetrics> =
         getLatestMetrics(MetricKind.SESSION, clientId, from, to, lastMinutes).map { jsonToSessionMetrics(it) }
+
+    override fun storeMqttClientMetrics(timestamp: Instant, clientName: String, metrics: MqttClientMetrics): Future<Void> =
+        storeMetrics(MetricKind.MQTTBRIDGE, timestamp, clientName, mqttClientMetricsToJson(metrics))
+
+    override fun getMqttClientMetrics(clientName: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<MqttClientMetrics> =
+        getLatestMetrics(MetricKind.MQTTBRIDGE, clientName, from, to, lastMinutes).map { jsonToMqttClientMetrics(it) }
 
     override fun getMetricsHistory(kind: MetricKind, identifier: String, from: Instant?, to: Instant?, lastMinutes: Int?, limit: Int): Future<List<Pair<Instant, JsonObject>>> {
         return vertx.executeBlocking<List<Pair<Instant, JsonObject>>>(Callable {
@@ -188,7 +195,7 @@ class MetricsStoreSQLite(
                 """.trimIndent()
             }
             val params = JsonArray()
-                .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" })
+                .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session"; MetricKind.MQTTBRIDGE->"mqttbridge" })
                 .add(identifier)
                 .add(fromTimestamp.toString())
             if (toTimestamp != null) params.add(toTimestamp.toString())
@@ -223,6 +230,15 @@ class MetricsStoreSQLite(
     ): Future<List<Pair<Instant, SessionMetrics>>> =
         getMetricsHistory(MetricKind.SESSION, clientId, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToSessionMetrics(it.second) } }
 
+    override fun getMqttClientMetricsHistory(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?,
+        limit: Int
+    ): Future<List<Pair<Instant, MqttClientMetrics>>> =
+        getMetricsHistory(MetricKind.MQTTBRIDGE, clientName, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToMqttClientMetrics(it.second) } }
+
     override fun getBrokerMetricsList(
         nodeId: String,
         from: Instant?,
@@ -238,6 +254,14 @@ class MetricsStoreSQLite(
         lastMinutes: Int?
     ): Future<List<SessionMetrics>> =
         getSessionMetricsHistory(clientId, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { it.second } }
+
+    override fun getMqttClientMetricsList(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<MqttClientMetrics>> =
+        getMqttClientMetricsHistory(clientName, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { it.second } }
 
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {
         return vertx.executeBlocking<Long>(Callable {
@@ -293,6 +317,17 @@ class MetricsStoreSQLite(
     )
 
     private fun jsonToSessionMetrics(j: JsonObject) = if (j.isEmpty) SessionMetrics(0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else SessionMetrics(
+        messagesIn = j.getDouble("messagesIn",0.0),
+        messagesOut = j.getDouble("messagesOut",0.0),
+        timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    )
+
+    private fun mqttClientMetricsToJson(m: MqttClientMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
+        .put("messagesOut", m.messagesOut)
+        .put("timestamp", m.timestamp)
+
+    private fun jsonToMqttClientMetrics(j: JsonObject) = if (j.isEmpty) MqttClientMetrics(0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else MqttClientMetrics(
         messagesIn = j.getDouble("messagesIn",0.0),
         messagesOut = j.getDouble("messagesOut",0.0),
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()

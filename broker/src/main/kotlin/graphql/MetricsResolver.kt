@@ -674,4 +674,66 @@ class MetricsResolver(
             }
         }
     }
+
+    fun mqttClientMetrics(): DataFetcher<CompletableFuture<List<MqttClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<MqttClientMetrics>>()
+            val mqttClient = env.getSource<Map<String, Any>>()
+            val clientName = mqttClient?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(listOf(MqttClientMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
+                return@DataFetcher future
+            }
+
+            if (metricsStore != null) {
+                metricsStore.getMqttClientMetricsList(clientName, null, null, 1).onComplete { result ->
+                    if (result.succeeded() && result.result().isNotEmpty()) {
+                        future.complete(listOf(result.result().first()))
+                    } else {
+                        future.complete(listOf(MqttClientMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
+                    }
+                }
+            } else {
+                future.complete(listOf(MqttClientMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
+            }
+
+            future
+        }
+    }
+
+    fun mqttClientMetricsHistory(): DataFetcher<CompletableFuture<List<MqttClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<MqttClientMetrics>>()
+            val mqttClient = env.getSource<Map<String, Any>>()
+            val clientName = mqttClient?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            val from = env.getArgument<String?>("from")
+            val to = env.getArgument<String?>("to")
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+
+            if (metricsStore != null) {
+                val fromInstant = from?.let { java.time.Instant.parse(it) }
+                val toInstant = to?.let { java.time.Instant.parse(it) }
+
+                metricsStore.getMqttClientMetricsList(clientName, fromInstant, toInstant, lastMinutes).onComplete { result ->
+                    if (result.succeeded()) {
+                        future.complete(result.result())
+                    } else {
+                        logger.warning("Failed to get historical MQTT client metrics: ${result.cause()?.message}")
+                        future.complete(emptyList())
+                    }
+                }
+            } else {
+                future.complete(emptyList())
+            }
+
+            future
+        }
+    }
 }

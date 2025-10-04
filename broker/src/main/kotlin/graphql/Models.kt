@@ -167,6 +167,12 @@ data class SessionMetrics(
     val timestamp: String
 )
 
+data class MqttClientMetrics(
+    val messagesIn: Double,
+    val messagesOut: Double,
+    val timestamp: String
+)
+
 data class MqttSubscription(
     val topicFilter: String,
     val qos: Int

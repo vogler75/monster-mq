@@ -3,6 +3,7 @@ package at.rocworks.stores.postgres
 import at.rocworks.Utils
 import at.rocworks.extensions.graphql.BrokerMetrics
 import at.rocworks.extensions.graphql.SessionMetrics
+import at.rocworks.extensions.graphql.MqttClientMetrics
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMetricsStoreAsync
 import at.rocworks.stores.MetricsStoreType
@@ -101,11 +102,17 @@ class MetricsStorePostgres(
     override fun storeSessionMetrics(timestamp: Instant, clientId: String, metrics: SessionMetrics): Future<Void> =
         storeMetrics(MetricKind.SESSION, timestamp, clientId, sessionMetricsToJson(metrics))
 
+    override fun storeMqttClientMetrics(timestamp: Instant, clientName: String, metrics: MqttClientMetrics): Future<Void> =
+        storeMetrics(MetricKind.MQTTBRIDGE, timestamp, clientName, mqttClientMetricsToJson(metrics))
+
     override fun getBrokerMetrics(nodeId: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<BrokerMetrics> =
         getLatestMetrics(MetricKind.BROKER, nodeId, from, to, lastMinutes).map { jsonToBrokerMetrics(it) }
 
     override fun getSessionMetrics(clientId: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<SessionMetrics> =
         getLatestMetrics(MetricKind.SESSION, clientId, from, to, lastMinutes).map { jsonToSessionMetrics(it) }
+
+    override fun getMqttClientMetrics(clientName: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<MqttClientMetrics> =
+        getLatestMetrics(MetricKind.MQTTBRIDGE, clientName, from, to, lastMinutes).map { jsonToMqttClientMetrics(it) }
 
     override fun getBrokerMetricsHistory(nodeId: String, from: Instant?, to: Instant?, lastMinutes: Int?, limit: Int): Future<List<Pair<Instant, BrokerMetrics>>> =
         getMetricsHistory(MetricKind.BROKER, nodeId, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToBrokerMetrics(it.second) } }
@@ -114,6 +121,9 @@ class MetricsStorePostgres(
     override fun getSessionMetricsHistory(clientId: String, from: Instant?, to: Instant?, lastMinutes: Int?, limit: Int): Future<List<Pair<Instant, SessionMetrics>>> =
         getMetricsHistory(MetricKind.SESSION, clientId, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToSessionMetrics(it.second) } }
 
+    override fun getMqttClientMetricsHistory(clientName: String, from: Instant?, to: Instant?, lastMinutes: Int?, limit: Int): Future<List<Pair<Instant, MqttClientMetrics>>> =
+        getMetricsHistory(MetricKind.MQTTBRIDGE, clientName, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToMqttClientMetrics(it.second) } }
+
 
     override fun getBrokerMetricsList(nodeId: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<List<BrokerMetrics>> =
         getBrokerMetricsHistory(nodeId, from, to, lastMinutes, Int.MAX_VALUE).map { history -> history.map { it.second } }
@@ -121,6 +131,9 @@ class MetricsStorePostgres(
 
     override fun getSessionMetricsList(clientId: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<List<SessionMetrics>> =
         getSessionMetricsHistory(clientId, from, to, lastMinutes, Int.MAX_VALUE).map { history -> history.map { it.second } }
+
+    override fun getMqttClientMetricsList(clientName: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<List<MqttClientMetrics>> =
+        getMqttClientMetricsHistory(clientName, from, to, lastMinutes, Int.MAX_VALUE).map { history -> history.map { it.second } }
 
 
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {
@@ -163,7 +176,7 @@ class MetricsStorePostgres(
                 """.trimIndent()
                 connection.prepareStatement(insertSQL).use { statement ->
                     statement.setTimestamp(1, Timestamp.from(timestamp))
-                    statement.setString(2, when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" })
+                     statement.setString(2, when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session"; MetricKind.MQTTBRIDGE->"mqttbridge" })
                     statement.setString(3, identifier)
                     statement.setString(4, metricsJson.encode())
                     statement.executeUpdate()
@@ -201,7 +214,7 @@ class MetricsStorePostgres(
                 """.trimIndent()
             }
             connection.prepareStatement(sql).use { st ->
-                st.setString(1, when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" })
+                st.setString(1, when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session"; MetricKind.MQTTBRIDGE->"mqttbridge" })
                 st.setString(2, identifier)
                 st.setTimestamp(3, Timestamp.from(fromTs))
                 if (toTs != null) st.setTimestamp(4, Timestamp.from(toTs))
@@ -234,7 +247,7 @@ class MetricsStorePostgres(
                 """.trimIndent()
             }
             connection.prepareStatement(sql).use { st ->
-                st.setString(1, when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session" })
+                st.setString(1, when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session"; MetricKind.MQTTBRIDGE->"mqttbridge" })
                 st.setString(2, identifier)
                 st.setTimestamp(3, Timestamp.from(fromTs))
                 if (toTs != null) {
@@ -288,6 +301,17 @@ class MetricsStorePostgres(
     )
 
     private fun jsonToSessionMetrics(j: JsonObject) = if (j.isEmpty) SessionMetrics(0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else SessionMetrics(
+        messagesIn = j.getDouble("messagesIn",0.0),
+        messagesOut = j.getDouble("messagesOut",0.0),
+        timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    )
+
+    private fun mqttClientMetricsToJson(m: MqttClientMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
+        .put("messagesOut", m.messagesOut)
+        .put("timestamp", m.timestamp)
+
+    private fun jsonToMqttClientMetrics(j: JsonObject) = if (j.isEmpty) MqttClientMetrics(0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else MqttClientMetrics(
         messagesIn = j.getDouble("messagesIn",0.0),
         messagesOut = j.getDouble("messagesOut",0.0),
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()

@@ -274,6 +274,16 @@ class MqttClientExtension : AbstractVerticle() {
                 handleMqttValuePublish(message)
             }
 
+            // Provide list of active connector device names
+            vertx.eventBus().consumer<JsonObject>(at.rocworks.bus.EventBusAddresses.MqttBridge.CONNECTORS_LIST) { msg ->
+                try {
+                    val list = activeDevices.keys.toList()
+                    msg.reply(JsonObject().put("devices", list))
+                } catch (e: Exception) {
+                    msg.fail(500, e.message)
+                }
+            }
+
             promise.complete()
 
         } catch (e: Exception) {

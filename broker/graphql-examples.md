@@ -262,3 +262,29 @@ The API supports two data formats:
 - **BINARY**: Payload is Base64 encoded binary data. Use this for non-text data like images, protocol buffers, etc.
 
 When querying, if you request JSON format but the data is binary, it will automatically be returned as Base64 encoded with format set to BINARY.
+
+### Get MQTT Client Metrics
+
+```graphql
+query GetMqttClientMetrics {
+  mqttClients {
+    name
+    metrics { messagesIn messagesOut timestamp }
+  }
+}
+```
+
+### Get MQTT Client Metrics History (Last 60 Minutes)
+
+```graphql
+query GetMqttClientMetricsHistory {
+  mqttClient(name: "bridge-client-1") {
+    name
+    metricsHistory(lastMinutes: 60) {
+      messagesIn
+      messagesOut
+      timestamp
+    }
+  }
+}
+```
