@@ -2,6 +2,7 @@ class UserManager {
     constructor() {
         this.users = [];
         this.currentEditingUser = null;
+        this.currentAclUsername = null;
 
         this.init();
     }
@@ -78,6 +79,15 @@ class UserManager {
             this.hideAclModal();
         });
 
+        // Add ACL rule button (delegated inside modal after open)
+        document.addEventListener('click', (e) => {
+            if (e.target && e.target.id === 'add-acl-rule-btn') {
+                if (this.currentAclUsername) {
+                    this.addAclRule(this.currentAclUsername);
+                }
+            }
+        });
+
         document.getElementById('user-form').addEventListener('submit', (e) => {
             this.handleUserSubmit(e);
         });
@@ -93,6 +103,10 @@ class UserManager {
             } else if (e.target.classList.contains('view-acl-btn')) {
                 const username = e.target.dataset.username;
                 this.showAclRules(username);
+            } else if (e.target.classList.contains('delete-acl-btn')) {
+                const ruleId = e.target.dataset.id;
+                const username = e.target.dataset.username;
+                this.deleteAclRule(username, ruleId);
             }
         });
     }
@@ -241,13 +255,13 @@ class UserManager {
         // Populate form if editing
         if (isEditing) {
             document.getElementById('user-username').value = user.username;
-            document.getElementById('user-username').disabled = true;
+            document.getElementById('user-username').setAttribute('readonly', '');
             document.getElementById('user-enabled').checked = user.enabled;
             document.getElementById('user-can-subscribe').checked = user.canSubscribe;
             document.getElementById('user-can-publish').checked = user.canPublish;
             document.getElementById('user-is-admin').checked = user.isAdmin;
         } else {
-            document.getElementById('user-username').disabled = false;
+            document.getElementById('user-username').removeAttribute('readonly');
             document.getElementById('user-enabled').checked = true;
             document.getElementById('user-can-subscribe').checked = true;
             document.getElementById('user-can-publish').checked = true;
@@ -266,8 +280,16 @@ class UserManager {
         e.preventDefault();
 
         const formData = new FormData(e.target);
+        let usernameField = formData.get('username');
+        if (!usernameField && this.currentEditingUser) {
+            usernameField = this.currentEditingUser.username;
+        }
+        if (!usernameField) {
+            this.showAlert('Username is required', 'error');
+            return;
+        }
         const userData = {
-            username: formData.get('username'),
+            username: usernameField,
             enabled: formData.get('enabled') === 'on',
             canSubscribe: formData.get('canSubscribe') === 'on',
             canPublish: formData.get('canPublish') === 'on',
@@ -349,7 +371,64 @@ class UserManager {
         }
     }
 
+    async addAclRule(username) {
+        const topicPattern = document.getElementById('acl-topic-pattern').value.trim();
+        const priority = parseInt(document.getElementById('acl-priority').value.trim() || '0', 10);
+        const canSubscribe = document.getElementById('acl-can-subscribe').checked;
+        const canPublish = document.getElementById('acl-can-publish').checked;
+
+        if (!topicPattern) {
+            this.showAlert('Topic pattern is required', 'error');
+            return;
+        }
+        if (!canSubscribe && !canPublish) {
+            this.showAlert('Select at least one permission (Subscribe or Publish)', 'error');
+            return;
+        }
+
+        try {
+            document.getElementById('add-acl-rule-btn').disabled = true;
+            const input = { username, topicPattern, canSubscribe, canPublish, priority };
+            const result = await window.graphqlClient.createAclRule(input);
+            if (result.success) {
+                this.showAlert('ACL rule added', 'success');
+                await this.loadUsers(); // refresh list
+                this.showAclRules(username); // re-open / refresh modal content
+                // reset minimal fields
+                document.getElementById('acl-topic-pattern').value = '';
+                document.getElementById('acl-can-subscribe').checked = false;
+                document.getElementById('acl-can-publish').checked = false;
+                document.getElementById('acl-priority').value = '0';
+            } else {
+                this.showAlert(result.message || 'Failed to add rule', 'error');
+            }
+        } catch (err) {
+            console.error('Add ACL rule error', err);
+            this.showAlert('Error adding rule: ' + err.message, 'error');
+        } finally {
+            document.getElementById('add-acl-rule-btn').disabled = false;
+        }
+    }
+
+    async deleteAclRule(username, ruleId) {
+        if (!confirm('Delete this ACL rule?')) return;
+        try {
+            const result = await window.graphqlClient.deleteAclRule(ruleId);
+            if (result.success) {
+                this.showAlert('ACL rule deleted', 'success');
+                await this.loadUsers();
+                this.showAclRules(username);
+            } else {
+                this.showAlert(result.message || 'Failed to delete rule', 'error');
+            }
+        } catch (err) {
+            console.error('Delete ACL rule error', err);
+            this.showAlert('Error deleting rule: ' + err.message, 'error');
+        }
+    }
+
     showAclRules(username) {
+        this.currentAclUsername = username;
         const user = this.users.find(u => u.username === username);
         if (!user) return;
 
@@ -375,6 +454,7 @@ class UserManager {
                                 <th>Publish</th>
                                 <th>Priority</th>
                                 <th>Created</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -395,6 +475,9 @@ class UserManager {
                                     </td>
                                     <td>${rule.priority}</td>
                                     <td>${rule.createdAt ? new Date(rule.createdAt).toLocaleDateString() : 'N/A'}</td>
+                                    <td>
+                                        <button class="btn btn-secondary delete-acl-btn" data-id="${rule.id}" data-username="${this.escapeHtml(username)}" style="padding: 0.25rem 0.5rem; font-size: 0.65rem; background: var(--monster-red); border: 1px solid var(--monster-red); color: #fff;">Delete</button>
+                                    </td>
                                 </tr>
                             `).join('')}
                         </tbody>

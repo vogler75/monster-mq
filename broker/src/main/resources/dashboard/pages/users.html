@@ -293,6 +293,29 @@
                 <button id="close-acl-modal" class="btn btn-secondary">Close</button>
             </div>
             <div style="padding: 2rem;">
+                <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end;">
+                    <div style="flex:1 1 240px;">
+                        <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Topic Pattern</label>
+                        <input type="text" id="acl-topic-pattern" class="form-control" placeholder="sensors/+/temp" />
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Priority</label>
+                        <input type="number" id="acl-priority" class="form-control" value="0" style="width:100px;" />
+                    </div>
+                    <div style="display:flex; gap:0.75rem;">
+                        <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                            <input type="checkbox" id="acl-can-subscribe" />
+                            <span style="font-size:0.8rem;">Subscribe</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                            <input type="checkbox" id="acl-can-publish" />
+                            <span style="font-size:0.8rem;">Publish</span>
+                        </label>
+                    </div>
+                    <div>
+                        <button id="add-acl-rule-btn" class="btn btn-primary" style="margin-top:0.25rem;">Add Rule</button>
+                    </div>
+                </div>
                 <div id="acl-rules-content">
                     <!-- ACL rules will be populated here -->
                 </div>

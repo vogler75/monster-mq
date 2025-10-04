@@ -300,6 +300,76 @@ class GraphQLDashboardClient {
         const result = await this.query(mutation, { username });
         return result.deleteUser;
     }
+
+    // ===================== ACL RULES =====================
+    async createAclRule(input) {
+        const mutation = `
+            mutation CreateAclRule($input: CreateAclRuleInput!) {
+                createAclRule(input: $input) {
+                    success
+                    message
+                    aclRule {
+                        id
+                        username
+                        topicPattern
+                        canSubscribe
+                        canPublish
+                        priority
+                        createdAt
+                    }
+                    user {
+                        username
+                        aclRules {
+                            id
+                            topicPattern
+                            canSubscribe
+                            canPublish
+                            priority
+                            createdAt
+                        }
+                    }
+                }
+            }
+        `;
+        const result = await this.query(mutation, { input });
+        return result.createAclRule;
+    }
+
+    async updateAclRule(input) {
+        const mutation = `
+            mutation UpdateAclRule($input: UpdateAclRuleInput!) {
+                updateAclRule(input: $input) {
+                    success
+                    message
+                    aclRule {
+                        id
+                        username
+                        topicPattern
+                        canSubscribe
+                        canPublish
+                        priority
+                        createdAt
+                    }
+                }
+            }
+        `;
+        const result = await this.query(mutation, { input });
+        return result.updateAclRule;
+    }
+
+    async deleteAclRule(id) {
+        const mutation = `
+            mutation DeleteAclRule($id: String!) {
+                deleteAclRule(id: $id) {
+                    success
+                    message
+                    aclRule { id }
+                }
+            }
+        `;
+        const result = await this.query(mutation, { id });
+        return result.deleteAclRule;
+    }
 }
 
 // Global instance
