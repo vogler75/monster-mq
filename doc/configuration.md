@@ -17,10 +17,13 @@ WS: 9000       # MQTT WebSocket listener
 WSS: 9001      # MQTT Secure WebSocket listener
 MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
+AllowRootWildcardSubscription: true  # When false, SUBSCRIBE to '#' yields failure (0x80) per-topic
 NodeName: node-a        # Optional, used in cluster mode
 ```
 
 All ports default to `0` (disabled) except `TCP`, which defaults to 1883 if omitted (`broker/src/main/kotlin/Monster.kt:447-472`). `NodeName` is only used when the broker runs with `-cluster`.
+
+If `AllowRootWildcardSubscription` is set to `false`, any client requesting a subscription to the root wildcard topic filter `#` receives a SUBACK failure (0x80) for that specific topic while the connection stays open. Internal components (e.g. OPC UA extensions) are unaffected.
 
 ## Store Selection
 

@@ -80,7 +80,7 @@ open class SessionHandler(
     }
 
     companion object {
-        const val COMMAND_KEY = "C"
+        // Use global command key from Const to ensure interoperability with clients (e.g., MqttClient.consumeCommand)
         const val COMMAND_SUBSCRIBE = "S"
         const val COMMAND_UNSUBSCRIBE = "U"
     }
@@ -193,7 +193,7 @@ open class SessionHandler(
         vertx.eventBus().consumer<JsonObject>(commandAddress()) { message ->
             message.body()?.let { payload ->
                 logger.finest { "Received request [${payload}] [${Utils.getCurrentFunctionName()}]" }
-                when (payload.getString(COMMAND_KEY)) {
+                when (payload.getString(Const.COMMAND_KEY)) {
                     COMMAND_SUBSCRIBE -> subscribeCommand(message)
                     COMMAND_UNSUBSCRIBE -> unsubscribeCommand(message)
                     else -> logger.warning("Unknown command [${payload}] [${Utils.getCurrentFunctionName()}]")
@@ -431,6 +431,14 @@ open class SessionHandler(
 
     fun getClientStatus(clientId: String): ClientStatus = clientStatus[clientId] ?: ClientStatus.UNKNOWN
 
+    // Forcefully disconnect a client via command dispatch
+    fun disconnectClient(clientId: String, reason: String? = null) {
+        val payload = JsonObject().put(Const.COMMAND_KEY, Const.COMMAND_DISCONNECT)
+        reason?.let { payload.put("Reason", it) }
+        logger.warning("Disconnecting client [$clientId] via SessionHandler" + (reason?.let { ": $it" } ?: ""))
+        vertx.eventBus().send(MqttClient.getCommandAddress(clientId), payload)
+    }
+
     // Metrics tracking methods
     fun incrementMessagesIn(clientId: String) {
         clientMetrics[clientId]?.messagesIn?.incrementAndGet()
@@ -647,7 +655,7 @@ open class SessionHandler(
 
     fun subscribeRequest(client: MqttClient, topicName: String, qos: MqttQoS) {
         val request = JsonObject()
-            .put(COMMAND_KEY, COMMAND_SUBSCRIBE)
+            .put(Const.COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
             .put(Const.CLIENT_KEY, client.clientId)
             .put(Const.QOS_KEY, qos.value())
@@ -661,6 +669,13 @@ open class SessionHandler(
         val clientId = command.body().getString(Const.CLIENT_KEY)
         val topicName = command.body().getString(Const.TOPIC_KEY)
         val qos = MqttQoS.valueOf(command.body().getInteger(Const.QOS_KEY))
+
+        // Defensive guard: prevent adding root wildcard subscription when disabled
+        if (topicName == "#" && !Monster.allowRootWildcardSubscription()) {
+            logger.warning("Client [$clientId] attempted to add root wildcard subscription '#' which is disabled by configuration. Rejecting.")
+            command.reply(false)
+            return
+        }
 
         messageHandler.findRetainedMessages(topicName, 0) { message -> // TODO: max must be configurable
             logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
@@ -677,7 +692,7 @@ open class SessionHandler(
 
     fun unsubscribeRequest(client: MqttClient, topicName: String) {
         val request = JsonObject()
-            .put(COMMAND_KEY, COMMAND_UNSUBSCRIBE)
+            .put(Const.COMMAND_KEY, COMMAND_UNSUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
             .put(Const.CLIENT_KEY, client.clientId)
         vertx.eventBus().request<Boolean>(commandAddress(), request)

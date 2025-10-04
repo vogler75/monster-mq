@@ -76,6 +76,11 @@
       "type": "boolean",
       "default": true
     },
+    "AllowRootWildcardSubscription": {
+      "type": "boolean",
+      "default": true,
+      "description": "Allow clients to subscribe to '#' (root wildcard). If false, SUBSCRIBE acknowledgements for '#' return failure (0x80) and the client remains connected."
+    },
     "ConfigStoreType": {
       "type": "string",
       "enum": [

@@ -316,51 +316,42 @@ class MqttClient(
     }
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
-        // Check ACL permissions for each subscription
-        val allowedSubscriptions = mutableListOf<io.vertx.mqtt.MqttTopicSubscription>()
-        val deniedTopics = mutableListOf<String>()
-        
+        val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
+
+        val acknowledgements = mutableListOf<MqttQoS>()
+
         subscribe.topicSubscriptions().forEach { subscription ->
-            val topicName = subscription.topicName()
-            val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
-            
-            val canSubscribe = if (userManager.isUserManagementEnabled()) {
-                userManager.canSubscribe(username, topicName)
-            } else {
-                true // Allow all if user management is disabled
+            val topic = subscription.topicName()
+            var allowed = true
+
+            // Root wildcard policy
+            if (topic == "#" && !Monster.allowRootWildcardSubscription()) {
+                allowed = false
+                logger.warning("Client [$clientId] Root wildcard subscription '#' rejected (AllowRootWildcardSubscription=false)")
             }
-            
-            if (canSubscribe) {
-                allowedSubscriptions.add(subscription)
-                logger.fine("Client [$clientId] Subscription ALLOWED for [$topicName] with QoS ${subscription.qualityOfService()}")
+
+            // ACL check (only if still allowed so far and user management enabled)
+            if (allowed && userManager.isUserManagementEnabled()) {
+                if (!userManager.canSubscribe(username, topic)) {
+                    allowed = false
+                    logger.warning("Client [$clientId] Subscription DENIED for [$topic] - user [$username] lacks permission")
+                }
+            }
+
+            // Build acknowledgement list
+            acknowledgements.add(if (allowed) subscription.qualityOfService() else MqttQoS.FAILURE)
+
+            // Forward allowed subscriptions to SessionHandler
+            if (allowed) {
+                logger.fine("Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()}")
+                sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService())
             } else {
-                deniedTopics.add(topicName)
-                logger.warning("Client [$clientId] Subscription DENIED for [$topicName] - user [$username] lacks permission")
+                logger.fine("Client [$clientId] Subscription REJECTED for [$topic]")
             }
         }
 
-        // Acknowledge the subscriptions (with appropriate QoS or failure codes)
-        val acknowledge = subscribe.topicSubscriptions().map { subscription ->
-            val canSubscribe = if (userManager.isUserManagementEnabled()) {
-                val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
-                userManager.canSubscribe(username, subscription.topicName())
-            } else {
-                true
-            }
-            if (canSubscribe) subscription.qualityOfService() else MqttQoS.FAILURE
-        }
-        endpoint.subscribeAcknowledge(subscribe.messageId(), acknowledge)
-
-        // Process allowed subscriptions
-        allowedSubscriptions.forEach { subscription ->
-            sessionHandler.subscribeRequest(this, subscription.topicName(), subscription.qualityOfService())
-        }
-        
-        // Disconnect client if configured and any subscription was denied
-        if (deniedTopics.isNotEmpty() && userManager.shouldDisconnectOnUnauthorized()) {
-            logger.warning("Client [$clientId] Disconnecting due to unauthorized subscription attempts: $deniedTopics")
-            closeConnection()
-        }
+        // Send SUBACK with per-subscription results
+        endpoint.subscribeAcknowledge(subscribe.messageId(), acknowledgements)
     }
 
     private fun consumeCommand(message: Message<JsonObject>) {
@@ -371,7 +362,8 @@ class MqttClient(
                 message.reply(JsonObject().put("Connected", endpoint.isConnected))
             }
             Const.COMMAND_DISCONNECT -> {
-                logger.info("Client [$clientId] Disconnect command received [${Utils.getCurrentFunctionName()}]")
+                val reason = command.getString("Reason")
+                logger.info("Client [$clientId] Disconnect command received" + (reason?.let { ": $it" } ?: "") + " [${Utils.getCurrentFunctionName()}]")
                 closeConnection()
                 message.reply(JsonObject().put("Connected", false))
             }
@@ -436,8 +428,8 @@ class MqttClient(
             // Disconnect client if configured
             if (userManager.shouldDisconnectOnUnauthorized()) {
                 logger.warning("Client [$clientId] Disconnecting due to unauthorized publish attempt: $topicName")
-                closeConnection()
-                return
+            sessionHandler.disconnectClient(clientId, "Unauthorized publish to $topicName")
+            return
             }
             
             // Otherwise, just ignore the message (silent drop)

@@ -159,6 +159,11 @@ class Monster(args: Array<String>) {
         fun getSessionHandler(): SessionHandler? {
             return getInstance().sessionHandler
         }
+
+        @Volatile
+        private var allowRootWildcardSubscriptionFlag: Boolean = true
+        @JvmStatic
+        fun allowRootWildcardSubscription(): Boolean = allowRootWildcardSubscriptionFlag
         
         private fun ensureSQLiteVerticleDeployed(vertx: Vertx): Future<String> {
             return if (sqliteVerticleDeploymentId == null) {
@@ -354,6 +359,15 @@ MORE INFO:
 
                 // Validate SQLite directory if SQLite is used for any store
                 validateSQLiteDirectory(configJson)
+
+                // Read AllowRootWildcardSubscription once at startup (default true)
+                allowRootWildcardSubscriptionFlag = try {
+                    configJson.getBoolean("AllowRootWildcardSubscription", true)
+                } catch (e: Exception) {
+                    logger.warning("Config: AllowRootWildcardSubscription read failed: ${e.message}")
+                    true
+                }
+                logger.info("Config: AllowRootWildcardSubscription=$allowRootWildcardSubscriptionFlag")
 
                 startMonster(vertx)
             } else {

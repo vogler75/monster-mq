@@ -5,6 +5,7 @@ WSS: 9001
 
 MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
+AllowRootWildcardSubscription: true
 
 SessionStoreType: SQLITE
 RetainedStoreType: SQLITE
