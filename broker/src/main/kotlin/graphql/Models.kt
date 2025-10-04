@@ -169,11 +169,6 @@ data class BrokerMetrics(
      val timestamp: String
  )
  
- data class TimedOpcUaDeviceMetrics(
-     val timestamp: String,
-     val metrics: OpcUaDeviceMetrics
- )
- 
  data class Broker(
      val nodeId: String,
      val version: String

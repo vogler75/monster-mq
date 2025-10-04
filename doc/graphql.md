@@ -35,6 +35,22 @@ mutation {
 
 The top-level `Query` type exposes the following fields (`broker/src/main/resources/schema.graphqls:141-356`):
 
+### OPC UA Device Metrics (Embedded Fields)
+
+OPC UA device metrics are now accessed as embedded fields on `OpcUaDevice`:
+
+```graphql
+{
+  opcUaDevice(name: "MyDevice") {
+    name
+    metrics { messagesIn messagesOut timestamp }
+    metricsHistory(lastMinutes: 15) { messagesIn messagesOut timestamp }
+  }
+}
+```
+
+Previously exposed root queries `opcUaDeviceMetrics` and `opcUaDeviceMetricsHistory` have been removed. Use `OpcUaDevice.metrics` and `OpcUaDevice.metricsHistory` instead.
+
 | Category | Field | Description |
 |----------|-------|-------------|
 | Current values | `currentValue(topic, archiveGroup)` | Latest retained value for a single topic. |
@@ -82,3 +98,4 @@ Authentication rules for subscriptions mirror the ones used for queries and muta
 2. When user management is disabled you can still call `login`; it simply announces that authentication is off.
 3. The OPC UA fields appear only when a device configuration store is available. If you run without a persistent config store those queries/mutations are absent from the schema at runtime.
 4. The HTTP endpoint also serves the static dashboard under `/dashboard` (see `GraphQLServer.start()` for details).
+5. Migration: Root queries `opcUaDeviceMetrics` and `opcUaDeviceMetricsHistory` were removed in favor of embedded fields on `OpcUaDevice` (`metrics` and `metricsHistory`). Update clients accordingly.

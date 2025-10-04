@@ -529,6 +529,8 @@ class MetricsResolver(
                                 messageBusOut = round2(bm.messageBusOut),
                                 mqttBridgeIn = round2(bm.mqttBridgeIn),
                                 mqttBridgeOut = round2(bm.mqttBridgeOut),
+                                opcUaIn = round2(bm.opcUaIn),
+                                opcUaOut = round2(bm.opcUaOut),
                                 timestamp = bm.timestamp
                             )
                         })
@@ -652,6 +654,8 @@ class MetricsResolver(
                 messageBusOut = round2(bm.messageBusOut),
                 mqttBridgeIn = round2(bm.mqttBridgeIn),
                 mqttBridgeOut = round2(bm.mqttBridgeOut),
+                opcUaIn = round2(bm.opcUaIn),
+                opcUaOut = round2(bm.opcUaOut),
                 timestamp = bm.timestamp
             )
         }
@@ -697,6 +701,10 @@ class MetricsResolver(
                             topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
                             messageBusIn = 0.0,
                             messageBusOut = 0.0,
+                            mqttBridgeIn = 0.0,
+                            mqttBridgeOut = 0.0,
+                            opcUaIn = 0.0,
+                            opcUaOut = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         )
                     } catch (e: Exception) {
@@ -708,7 +716,7 @@ class MetricsResolver(
                         callback(result.result())
                     } else {
                         logger.warning("Failed to get cluster metrics: ${result.cause()?.message}")
-                        callback(BrokerMetrics(
+callback(BrokerMetrics(
                             messagesIn = 0.0,
                             messagesOut = 0.0,
                             nodeSessionCount = 0,
@@ -721,6 +729,8 @@ class MetricsResolver(
                             messageBusOut = 0.0,
                             mqttBridgeIn = 0.0,
                             mqttBridgeOut = 0.0,
+                            opcUaIn = 0.0,
+                            opcUaOut = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         ))
                     }
@@ -809,47 +819,44 @@ class MetricsResolver(
         }
     }
 
-    // OPC UA Device Metrics (new resolvers)
-    fun opcUaDeviceMetrics(): DataFetcher<CompletableFuture<OpcUaDeviceMetrics?>> {
+    // OPC UA Device Metrics (embedded field resolvers)
+    fun opcUaDeviceMetricsField(): DataFetcher<CompletableFuture<List<OpcUaDeviceMetrics>>> {
         return DataFetcher { env ->
-            val future = CompletableFuture<OpcUaDeviceMetrics?>()
-            val deviceName = env.getArgument<String?>("deviceName")
+            val future = CompletableFuture<List<OpcUaDeviceMetrics>>()
+            val device = env.getSource<Map<String, Any>>()
+            val deviceName = device?.get("name") as? String
             if (deviceName == null) {
-                future.complete(null)
+                future.complete(emptyList())
                 return@DataFetcher future
             }
-            val from = env.getArgument<String?>("from")
-            val to = env.getArgument<String?>("to")
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
-
             if (metricsStore == null) {
-                logger.warning("opcUaDeviceMetrics requested but metricsStore is null")
-                future.complete(null)
+future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
                 return@DataFetcher future
             }
-
-            val fromInstant = from?.let { java.time.Instant.parse(it) }
-            val toInstant = to?.let { java.time.Instant.parse(it) }
-
-            metricsStore.getOpcUaDeviceMetrics(deviceName, fromInstant, toInstant, lastMinutes).onComplete { result ->
+            // Get most recent metrics (limit 1 by using lastMinutes=1 or store-specific latest fetch)
+            metricsStore.getOpcUaDeviceMetrics(deviceName, null, null, 1).onComplete { result ->
                 if (result.succeeded()) {
                     val m = result.result()
-                    future.complete(OpcUaDeviceMetrics(round2(m.messagesIn), round2(m.messagesOut), m.timestamp))
+                    future.complete(listOf(OpcUaDeviceMetrics(m.messagesIn, m.messagesOut, m.timestamp)))
                 } else {
                     logger.warning("Failed to get OPC UA device metrics for $deviceName: ${result.cause()?.message}")
-                    future.complete(null)
+                future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
                 }
             }
-
             future
         }
     }
 
-    fun opcUaDeviceMetricsHistory(): DataFetcher<CompletableFuture<List<TimedOpcUaDeviceMetrics>>> {
+    fun opcUaDeviceMetricsHistoryField(): DataFetcher<CompletableFuture<List<OpcUaDeviceMetrics>>> {
         return DataFetcher { env ->
-            val future = CompletableFuture<List<TimedOpcUaDeviceMetrics>>()
-            val deviceName = env.getArgument<String?>("deviceName")
+            val future = CompletableFuture<List<OpcUaDeviceMetrics>>()
+            val device = env.getSource<Map<String, Any>>()
+            val deviceName = device?.get("name") as? String
             if (deviceName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+            if (metricsStore == null) {
                 future.complete(emptyList())
                 return@DataFetcher future
             }
@@ -857,23 +864,12 @@ class MetricsResolver(
             val to = env.getArgument<String?>("to")
             val lastMinutes = env.getArgument<Int?>("lastMinutes")
             val limit = env.getArgument<Int?>("limit") ?: 100
-
-            if (metricsStore == null) {
-                logger.warning("opcUaDeviceMetricsHistory requested but metricsStore is null")
-                future.complete(emptyList())
-                return@DataFetcher future
-            }
-
             val fromInstant = from?.let { java.time.Instant.parse(it) }
             val toInstant = to?.let { java.time.Instant.parse(it) }
-
             metricsStore.getOpcUaDeviceMetricsHistory(deviceName, fromInstant, toInstant, lastMinutes, limit).onComplete { result ->
                 if (result.succeeded()) {
-                    val list = result.result().map { (instant, metrics) ->
-                        TimedOpcUaDeviceMetrics(
-                            timestamp = TimestampConverter.instantToIsoString(instant),
-                            metrics = OpcUaDeviceMetrics(round2(metrics.messagesIn), round2(metrics.messagesOut), metrics.timestamp)
-                        )
+                    val list = result.result().map { (_, metrics) ->
+                        OpcUaDeviceMetrics(round2(metrics.messagesIn), round2(metrics.messagesOut), metrics.timestamp)
                     }
                     future.complete(list)
                 } else {
@@ -881,7 +877,6 @@ class MetricsResolver(
                     future.complete(emptyList())
                 }
             }
-
             future
         }
     }
