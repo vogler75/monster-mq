@@ -88,6 +88,10 @@ class OpcUaDeviceManager {
                                 removePath
                             }
                         }
+                        metrics {
+                            messagesIn
+                            messagesOut
+                        }
                     }
                 }
             `;
@@ -138,7 +142,7 @@ class OpcUaDeviceManager {
         if (this.devices.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="no-data">
+                    <td colspan="8" class="no-data">
                         No OPC UA devices configured. Click "Add Device" to get started.
                     </td>
                 </tr>
@@ -177,6 +181,10 @@ class OpcUaDeviceManager {
                     <div class="address-count">
                         ${device.config.addresses.length} addresses
                     </div>
+                </td>
+                <td>
+                    <span style="color: #06B6D4;">${(device.metrics && device.metrics.length>0 ? Math.round(device.metrics[0].messagesIn) : 0)}</span> /
+                    <span style="color: #9333EA;">${(device.metrics && device.metrics.length>0 ? Math.round(device.metrics[0].messagesOut) : 0)}</span>
                 </td>
                 <td>
                     <div class="action-buttons">
