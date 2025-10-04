@@ -77,6 +77,13 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // OPC UA Bridge (client connectors)
+    object OpcUaBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.opcua"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // System Operations
     object System {
         // Can be used for system-wide broadcasts, health checks, etc.

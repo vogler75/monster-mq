@@ -59,9 +59,28 @@ type BrokerMetrics {
     mqttBridgeIn: Float!
     # Messages per second sent via MQTT bridge clients (local -> remote)
     mqttBridgeOut: Float!
+    # Messages per second received from OPC UA devices (value changes)
+    opcUaIn: Float!
+    # Messages per second sent to OPC UA devices (writes)
+    opcUaOut: Float!
     # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
     timestamp: String!
 }
+
+# Metrics for an OPC UA device connector
+# messagesIn: value changes received from OPC UA server into broker
+# messagesOut: values written from broker to OPC UA server
+ type OpcUaDeviceMetrics {
+     messagesIn: Float!
+     messagesOut: Float!
+     timestamp: String!
+ }
+ 
+ # Time-series entry for OPC UA device metrics (explicit timestamp association)
+ type TimedOpcUaDeviceMetrics {
+     timestamp: String!
+     metrics: OpcUaDeviceMetrics!
+ }
 
 # Represents a broker node in the MonsterMQ cluster
 # Each broker node runs independently and can handle MQTT clients, message processing, and data storage
@@ -1192,7 +1211,27 @@ extend type Query {
     # Get MQTT clients assigned to a specific cluster node
     # Useful for monitoring client distribution and cluster load balancing
     mqttClientsByNode(nodeId: String!): [MqttClient!]!
-}
+
+    # Get current OPC UA device metrics (latest snapshot)
+    # Rates of value changes (messagesIn) received from OPC UA server and writes (messagesOut)
+    opcUaDeviceMetrics(
+        deviceName: String!,
+        # Optional time filters (ignored for current snapshot unless lastMinutes provided)
+        from: String,
+        to: String,
+        lastMinutes: Int
+    ): OpcUaDeviceMetrics
+
+    # Get historical OPC UA device metrics as time-series entries
+    # Returns timestamped list ordered by newest first (database dependent)
+    opcUaDeviceMetricsHistory(
+        deviceName: String!,
+        from: String,
+        to: String,
+        lastMinutes: Int,
+        limit: Int = 100
+    ): [TimedOpcUaDeviceMetrics!]!
+    }
 
 # Extend existing Mutation type
 extend type Mutation {

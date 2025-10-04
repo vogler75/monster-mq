@@ -13,7 +13,7 @@ enum class MetricsStoreType {
     SQLITE
 }
 
-enum class MetricKind { BROKER, SESSION, MQTTBRIDGE }
+enum class MetricKind { BROKER, SESSION, MQTTBRIDGE, OPCUADEVICE }
 
 interface IMetricsStore {
     fun getName(): String
@@ -93,6 +93,29 @@ interface IMetricsStore {
         lastMinutes: Int?,
         limit: Int = 100
     ): Future<List<Pair<Instant, MqttClientMetrics>>>
+
+    // OPC UA Device Metrics
+    fun getOpcUaDeviceMetrics(
+        deviceName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<at.rocworks.extensions.graphql.OpcUaDeviceMetrics>
+
+    fun getOpcUaDeviceMetricsList(
+        deviceName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<at.rocworks.extensions.graphql.OpcUaDeviceMetrics>>
+
+    fun getOpcUaDeviceMetricsHistory(
+        deviceName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?,
+        limit: Int = 100
+    ): Future<List<Pair<Instant, at.rocworks.extensions.graphql.OpcUaDeviceMetrics>>>
 
     fun purgeOldMetrics(olderThan: Instant): Future<Long>
 }

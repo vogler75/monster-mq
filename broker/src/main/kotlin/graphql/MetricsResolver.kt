@@ -28,7 +28,8 @@ class MetricsResolver(
     }
 
     private fun round2(value: Double): Double {
-        return kotlin.math.round(value)
+        // Round to 2 decimal places for rate values
+        return kotlin.math.round(value * 100.0) / 100.0
     }
 
     fun broker(): DataFetcher<CompletableFuture<Broker?>> {
@@ -166,7 +167,7 @@ class MetricsResolver(
     fun session(): DataFetcher<CompletableFuture<Session?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Session?>()
-            val clientId = env.getArgument<String>("clientId")
+            val clientId = env.getArgument<String?>("clientId")
 
             if (clientId == null) {
                 future.complete(null)
@@ -802,6 +803,83 @@ class MetricsResolver(
                 }
             } else {
                 future.complete(emptyList())
+            }
+
+            future
+        }
+    }
+
+    // OPC UA Device Metrics (new resolvers)
+    fun opcUaDeviceMetrics(): DataFetcher<CompletableFuture<OpcUaDeviceMetrics?>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<OpcUaDeviceMetrics?>()
+            val deviceName = env.getArgument<String?>("deviceName")
+            if (deviceName == null) {
+                future.complete(null)
+                return@DataFetcher future
+            }
+            val from = env.getArgument<String?>("from")
+            val to = env.getArgument<String?>("to")
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+
+            if (metricsStore == null) {
+                logger.warning("opcUaDeviceMetrics requested but metricsStore is null")
+                future.complete(null)
+                return@DataFetcher future
+            }
+
+            val fromInstant = from?.let { java.time.Instant.parse(it) }
+            val toInstant = to?.let { java.time.Instant.parse(it) }
+
+            metricsStore.getOpcUaDeviceMetrics(deviceName, fromInstant, toInstant, lastMinutes).onComplete { result ->
+                if (result.succeeded()) {
+                    val m = result.result()
+                    future.complete(OpcUaDeviceMetrics(round2(m.messagesIn), round2(m.messagesOut), m.timestamp))
+                } else {
+                    logger.warning("Failed to get OPC UA device metrics for $deviceName: ${result.cause()?.message}")
+                    future.complete(null)
+                }
+            }
+
+            future
+        }
+    }
+
+    fun opcUaDeviceMetricsHistory(): DataFetcher<CompletableFuture<List<TimedOpcUaDeviceMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<TimedOpcUaDeviceMetrics>>()
+            val deviceName = env.getArgument<String?>("deviceName")
+            if (deviceName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+            val from = env.getArgument<String?>("from")
+            val to = env.getArgument<String?>("to")
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            val limit = env.getArgument<Int?>("limit") ?: 100
+
+            if (metricsStore == null) {
+                logger.warning("opcUaDeviceMetricsHistory requested but metricsStore is null")
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            val fromInstant = from?.let { java.time.Instant.parse(it) }
+            val toInstant = to?.let { java.time.Instant.parse(it) }
+
+            metricsStore.getOpcUaDeviceMetricsHistory(deviceName, fromInstant, toInstant, lastMinutes, limit).onComplete { result ->
+                if (result.succeeded()) {
+                    val list = result.result().map { (instant, metrics) ->
+                        TimedOpcUaDeviceMetrics(
+                            timestamp = TimestampConverter.instantToIsoString(instant),
+                            metrics = OpcUaDeviceMetrics(round2(metrics.messagesIn), round2(metrics.messagesOut), metrics.timestamp)
+                        )
+                    }
+                    future.complete(list)
+                } else {
+                    logger.warning("Failed to get OPC UA device metrics history for $deviceName: ${result.cause()?.message}")
+                    future.complete(emptyList())
+                }
             }
 
             future

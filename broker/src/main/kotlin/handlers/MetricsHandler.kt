@@ -53,11 +53,14 @@ class MetricsHandler(
             var nodeMetrics: JsonObject? = null
             var bridgeInTotal = 0.0
             var bridgeOutTotal = 0.0
+            var opcUaInTotal = 0.0
+            var opcUaOutTotal = 0.0
             var brokerDone = false
             var bridgeDone = false
+            var opcUaDone = false
 
             fun tryAssembleAndStore() {
-                if (brokerDone && bridgeDone && nodeMetrics != null) {
+                if (brokerDone && bridgeDone && opcUaDone && nodeMetrics != null) {
                     try {
                         val nm = nodeMetrics!!
                         val brokerMetrics = BrokerMetrics(
@@ -72,7 +75,9 @@ class MetricsHandler(
                             messageBusIn = nm.getDouble("messageBusInRate", 0.0),
                             messageBusOut = nm.getDouble("messageBusOutRate", 0.0),
                             mqttBridgeIn = bridgeInTotal,
-                            mqttBridgeOut = bridgeOutTotal,
+                             mqttBridgeOut = bridgeOutTotal,
+                             opcUaIn = opcUaInTotal,
+                             opcUaOut = opcUaOutTotal,
                             timestamp = TimestampConverter.instantToIsoString(timestamp)
                         )
 
@@ -156,18 +161,66 @@ class MetricsHandler(
                                 }
                                 remaining -= 1
                                 if (remaining == 0) {
-                                    bridgeDone = true
-                                    tryAssembleAndStore()
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    logger.fine("Could not retrieve MQTT bridge connector list: ${listReply.cause()?.message}")
-                    bridgeDone = true
-                    tryAssembleAndStore()
-                }
-            }
+                                     bridgeDone = true
+                                     tryAssembleAndStore()
+                                 }
+                             }
+                         }
+                     }
+                 } else {
+                     logger.fine("Could not retrieve MQTT bridge connector list: ${listReply.cause()?.message}")
+                     bridgeDone = true
+                     tryAssembleAndStore()
+                 }
+             }
+
+             // OPC UA bridge metrics aggregation
+             val opcuaListAddress = EventBusAddresses.OpcUaBridge.CONNECTORS_LIST
+             vertx.eventBus().request<JsonObject>(opcuaListAddress, JsonObject()).onComplete { listReply ->
+                 if (listReply.succeeded()) {
+                     val body = listReply.result().body()
+                     val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
+                     if (devices.isEmpty) {
+                         opcUaDone = true
+                         tryAssembleAndStore()
+                     } else {
+                         var remaining = devices.size()
+                         devices.forEach { d ->
+                             val deviceName = d as String
+                             val mAddr = EventBusAddresses.OpcUaBridge.connectorMetrics(deviceName)
+                             vertx.eventBus().request<JsonObject>(mAddr, JsonObject()).onComplete { mReply ->
+                                 if (mReply.succeeded()) {
+                                     try {
+                                         val m = mReply.result().body()
+                                         val inRate = m.getDouble("messagesInRate", 0.0)
+                                         val outRate = m.getDouble("messagesOutRate", 0.0)
+                                         opcUaInTotal += inRate
+                                         opcUaOutTotal += outRate
+                                         // Store individual OPC UA device metrics
+                                         val opcUaMetricsJson = JsonObject()
+                                             .put("messagesIn", inRate)
+                                             .put("messagesOut", outRate)
+                                         metricsStore.storeMetrics(at.rocworks.stores.MetricKind.OPCUADEVICE, timestamp, deviceName, opcUaMetricsJson)
+                                     } catch (e: Exception) {
+                                         logger.warning("Error processing OPC UA metrics for $deviceName: ${e.message}")
+                                     }
+                                 } else {
+                                     logger.fine("No metrics for OPC UA connector $deviceName: ${mReply.cause()?.message}")
+                                 }
+                                 remaining -= 1
+                                 if (remaining == 0) {
+                                     opcUaDone = true
+                                     tryAssembleAndStore()
+                                 }
+                             }
+                         }
+                     }
+                 } else {
+                     logger.fine("Could not retrieve OPC UA connector list: ${listReply.cause()?.message}")
+                     opcUaDone = true
+                     tryAssembleAndStore()
+                 }
+             }
         } catch (e: Exception) {
             logger.warning("Error collecting metrics: ${e.message}")
             e.printStackTrace()

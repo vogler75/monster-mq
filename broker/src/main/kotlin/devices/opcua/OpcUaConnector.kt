@@ -2,6 +2,7 @@ package at.rocworks.devices.opcua
 
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
+import at.rocworks.bus.EventBusAddresses
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -51,6 +52,11 @@ import kotlin.concurrent.thread
  * - Handles reconnection and error recovery
  */
 class OpcUaConnector : AbstractVerticle() {
+
+    // Metrics counters (OPC UA -> MQTT is messagesIn; MQTT -> OPC UA future writes would be messagesOut)
+    private val messagesInCounter = java.util.concurrent.atomic.AtomicLong(0)
+    private val messagesOutCounter = java.util.concurrent.atomic.AtomicLong(0)
+    private var lastMetricsReset = System.currentTimeMillis()
 
     private val logger: Logger = Utils.getLogger(this::class.java)
 
@@ -124,6 +130,10 @@ class OpcUaConnector : AbstractVerticle() {
 
             // Start connector successfully regardless of initial connection status
             logger.info("OpcUaConnector for device ${deviceConfig.name} started successfully")
+
+            // Register metrics endpoint
+            setupMetricsEndpoint()
+
             startPromise.complete()
 
             // Attempt initial connection in the background - if it fails, reconnection will be scheduled
@@ -162,6 +172,29 @@ class OpcUaConnector : AbstractVerticle() {
                 }
                 stopPromise.complete()
             }
+        }
+
+    private fun setupMetricsEndpoint() {
+        val addr = EventBusAddresses.OpcUaBridge.connectorMetrics(deviceConfig.name)
+        vertx.eventBus().consumer<JsonObject>(addr) { msg ->
+            try {
+                val now = System.currentTimeMillis()
+                val elapsedMs = now - lastMetricsReset
+                val elapsedSec = if (elapsedMs > 0) elapsedMs / 1000.0 else 1.0
+                val inCount = messagesInCounter.getAndSet(0)
+                val outCount = messagesOutCounter.getAndSet(0)
+                lastMetricsReset = now
+                val json = JsonObject()
+                    .put("device", deviceConfig.name)
+                    .put("messagesInRate", inCount / elapsedSec)
+                    .put("messagesOutRate", outCount / elapsedSec)
+                    .put("elapsedMs", elapsedMs)
+                msg.reply(json)
+            } catch (e: Exception) {
+                msg.fail(500, e.message)
+            }
+        }
+        logger.info("Registered OPC UA metrics endpoint for device ${deviceConfig.name} at address $addr")
     }
 
     private fun setupStaticSubscriptions(): Future<Void> {
@@ -887,6 +920,7 @@ class OpcUaConnector : AbstractVerticle() {
             // Send to OPC UA extension for proper message bus publishing
             vertx.eventBus().publish(OpcUaExtension.Companion.ADDRESS_OPCUA_VALUE_PUBLISH, mqttMessage)
 
+            messagesInCounter.incrementAndGet()
             logger.fine("Published OPC UA value change: $mqttTopic = $value (from ${address.address})")
 
         } catch (e: Exception) {

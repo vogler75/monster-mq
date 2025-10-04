@@ -180,7 +180,18 @@ class OpcUaExtension : AbstractVerticle() {
                                 // Complete when all devices have been processed (regardless of success/failure)
                                 if (completedCount == devices.size) {
                                     logger.info("OPC UA device deployment completed: $successCount/$completedCount devices deployed successfully")
-                                    promise.complete()
+            // Provide list of active connector device names (OPC UA clients)
+            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.OpcUaBridge.CONNECTORS_LIST) { msg ->
+                try {
+                    val list = activeDevices.keys.toList()
+                    msg.reply(JsonObject().put("devices", list))
+                } catch (e: Exception) {
+                    msg.fail(500, e.message)
+                }
+            }
+
+            promise.complete()
+
                                 }
                             }
                     }

@@ -153,13 +153,31 @@ data class BrokerMetrics(
     val topicNodeMappingSize: Int,
     val messageBusIn: Double,
     val messageBusOut: Double,
+    val mqttBridgeIn: Double = 0.0,
+    val mqttBridgeOut: Double = 0.0,
+    val opcUaIn: Double = 0.0,
+    val opcUaOut: Double = 0.0,
     val timestamp: String
 )
 
-data class Broker(
-    val nodeId: String,
-    val version: String
-)
+// OPC UA Device Metrics
+// messagesIn: values received from OPC UA server into broker
+// messagesOut: values written from broker to OPC UA server (future use, currently may remain 0)
+ data class OpcUaDeviceMetrics(
+     val messagesIn: Double,
+     val messagesOut: Double,
+     val timestamp: String
+ )
+ 
+ data class TimedOpcUaDeviceMetrics(
+     val timestamp: String,
+     val metrics: OpcUaDeviceMetrics
+ )
+ 
+ data class Broker(
+     val nodeId: String,
+     val version: String
+ )
 
 data class SessionMetrics(
     val messagesIn: Double,

@@ -4,6 +4,7 @@ import at.rocworks.Utils
 import at.rocworks.extensions.graphql.BrokerMetrics
 import at.rocworks.extensions.graphql.SessionMetrics
 import at.rocworks.extensions.graphql.MqttClientMetrics
+import at.rocworks.extensions.graphql.OpcUaDeviceMetrics
 import at.rocworks.stores.IMetricsStoreAsync
 import at.rocworks.stores.MetricsStoreType
 import at.rocworks.stores.MetricKind
@@ -16,10 +17,6 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.Callable
 
-/**
- * SQLite implementation of IMetricsStoreAsync for broker and session metrics storage
- * Uses SQLiteVerticle for database operations via event bus communication
- */
 class MetricsStoreSQLite(
     private val name: String,
     private val dbPath: String
@@ -32,12 +29,8 @@ class MetricsStoreSQLite(
     override fun startStore(vertx: Vertx): Future<Void> {
         this.vertx = vertx
         val promise = Promise.promise<Void>()
-
         try {
-            // Initialize SQLiteClient - assumes SQLiteVerticle is already deployed
             sqlClient = SQLiteClient(vertx, dbPath)
-
-            // Create metrics table
             val createTableSQL = JsonArray()
                 .add("""
                 CREATE TABLE IF NOT EXISTS metrics (
@@ -56,7 +49,6 @@ class MetricsStoreSQLite(
                 CREATE INDEX IF NOT EXISTS metrics_type_identifier_idx
                 ON metrics (metric_type, identifier, timestamp)
                 """.trimIndent())
-
             sqlClient.initDatabase(createTableSQL).onComplete { result ->
                 if (result.succeeded()) {
                     logger.info("SQLite MetricsStore [$name] initialized successfully")
@@ -70,7 +62,6 @@ class MetricsStoreSQLite(
             logger.severe("Error starting SQLite MetricsStore [$name]: ${e.message}")
             promise.fail(e)
         }
-
         return promise.future()
     }
 
@@ -87,10 +78,8 @@ class MetricsStoreSQLite(
     }
 
     override fun getName(): String = name
-
     override fun getType(): MetricsStoreType = MetricsStoreType.SQLITE
 
-    // Generic store method
     override fun storeMetrics(kind: MetricKind, timestamp: Instant, identifier: String, metricsJson: JsonObject): Future<Void> {
         return vertx.executeBlocking<Void>(Callable {
             try {
@@ -98,9 +87,14 @@ class MetricsStoreSQLite(
                     INSERT OR REPLACE INTO metrics (timestamp, metric_type, identifier, metrics)
                     VALUES (?, ?, ?, ?)
                 """.trimIndent()
-val params = JsonArray()
+                val params = JsonArray()
                     .add(timestamp.toString())
-                    .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session"; MetricKind.MQTTBRIDGE->"mqttbridge" })
+                    .add(when(kind){
+                        MetricKind.BROKER->"broker";
+                        MetricKind.SESSION->"session";
+                        MetricKind.MQTTBRIDGE->"mqttbridge";
+                        MetricKind.OPCUADEVICE->"opcua"
+                    })
                     .add(identifier)
                     .add(metricsJson.encode())
                 sqlClient.executeUpdate(insertSQL, params)
@@ -118,6 +112,9 @@ val params = JsonArray()
 
     override fun storeSessionMetrics(timestamp: Instant, clientId: String, metrics: SessionMetrics): Future<Void> =
         storeMetrics(MetricKind.SESSION, timestamp, clientId, sessionMetricsToJson(metrics))
+
+    override fun storeMqttClientMetrics(timestamp: Instant, clientName: String, metrics: MqttClientMetrics): Future<Void> =
+        storeMetrics(MetricKind.MQTTBRIDGE, timestamp, clientName, mqttClientMetricsToJson(metrics))
 
     override fun getLatestMetrics(kind: MetricKind, identifier: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<JsonObject> {
         return vertx.executeBlocking<JsonObject>(Callable {
@@ -145,7 +142,12 @@ val params = JsonArray()
                 """.trimIndent()
             }
             val params = JsonArray()
-                .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session"; MetricKind.MQTTBRIDGE->"mqttbridge" })
+                .add(when(kind){
+                    MetricKind.BROKER->"broker";
+                    MetricKind.SESSION->"session";
+                    MetricKind.MQTTBRIDGE->"mqttbridge";
+                    MetricKind.OPCUADEVICE->"opcua"
+                })
                 .add(identifier)
                 .add(fromTimestamp.toString())
             if (toTimestamp != null) params.add(toTimestamp.toString())
@@ -160,11 +162,11 @@ val params = JsonArray()
     override fun getBrokerMetrics(nodeId: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<BrokerMetrics> =
         getLatestMetrics(MetricKind.BROKER, nodeId, from, to, lastMinutes).map { jsonToBrokerMetrics(it) }
 
+    override fun getOpcUaDeviceMetrics(deviceName: String, from: Instant?, to: Instant?, lastMinutes: Int?) =
+        getLatestMetrics(MetricKind.OPCUADEVICE, deviceName, from, to, lastMinutes).map { jsonToOpcUaDeviceMetrics(it) }
+
     override fun getSessionMetrics(clientId: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<SessionMetrics> =
         getLatestMetrics(MetricKind.SESSION, clientId, from, to, lastMinutes).map { jsonToSessionMetrics(it) }
-
-    override fun storeMqttClientMetrics(timestamp: Instant, clientName: String, metrics: MqttClientMetrics): Future<Void> =
-        storeMetrics(MetricKind.MQTTBRIDGE, timestamp, clientName, mqttClientMetricsToJson(metrics))
 
     override fun getMqttClientMetrics(clientName: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<MqttClientMetrics> =
         getLatestMetrics(MetricKind.MQTTBRIDGE, clientName, from, to, lastMinutes).map { jsonToMqttClientMetrics(it) }
@@ -195,7 +197,12 @@ val params = JsonArray()
                 """.trimIndent()
             }
             val params = JsonArray()
-                .add(when(kind){ MetricKind.BROKER->"broker"; MetricKind.SESSION->"session"; MetricKind.MQTTBRIDGE->"mqttbridge" })
+                .add(when(kind){
+                    MetricKind.BROKER->"broker";
+                    MetricKind.SESSION->"session";
+                    MetricKind.MQTTBRIDGE->"mqttbridge";
+                    MetricKind.OPCUADEVICE->"opcua"
+                })
                 .add(identifier)
                 .add(fromTimestamp.toString())
             if (toTimestamp != null) params.add(toTimestamp.toString())
@@ -220,6 +227,14 @@ val params = JsonArray()
         limit: Int
     ): Future<List<Pair<Instant, BrokerMetrics>>> =
         getMetricsHistory(MetricKind.BROKER, nodeId, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToBrokerMetrics(it.second) } }
+
+    override fun getOpcUaDeviceMetricsHistory(
+        deviceName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?,
+        limit: Int
+    ) = getMetricsHistory(MetricKind.OPCUADEVICE, deviceName, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToOpcUaDeviceMetrics(it.second) } }
 
     override fun getSessionMetricsHistory(
         clientId: String,
@@ -247,6 +262,13 @@ val params = JsonArray()
     ): Future<List<BrokerMetrics>> =
         getBrokerMetricsHistory(nodeId, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { it.second } }
 
+    override fun getOpcUaDeviceMetricsList(
+        deviceName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ) = getOpcUaDeviceMetricsHistory(deviceName, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { it.second } }
+
     override fun getSessionMetricsList(
         clientId: String,
         from: Instant?,
@@ -270,11 +292,9 @@ val params = JsonArray()
                     DELETE FROM metrics
                     WHERE timestamp < ?
                 """.trimIndent()
-
                 val params = JsonArray().add(olderThan.toString())
                 val deletedCount = sqlClient.executeUpdate(deleteSQL, params)
                     .toCompletionStage().toCompletableFuture().get(5000, java.util.concurrent.TimeUnit.MILLISECONDS).toLong()
-
                 logger.fine("Purged $deletedCount old metrics records older than $olderThan")
                 deletedCount
             } catch (e: Exception) {
@@ -297,6 +317,8 @@ val params = JsonArray()
         .put("messageBusOut", m.messageBusOut)
         .put("mqttBridgeIn", m.mqttBridgeIn)
         .put("mqttBridgeOut", m.mqttBridgeOut)
+        .put("opcUaIn", m.opcUaIn)
+        .put("opcUaOut", m.opcUaOut)
         .put("timestamp", m.timestamp)
 
     private fun sessionMetricsToJson(m: SessionMetrics) = JsonObject()
@@ -317,6 +339,8 @@ val params = JsonArray()
         messageBusOut = 0.0,
         mqttBridgeIn = 0.0,
         mqttBridgeOut = 0.0,
+        opcUaIn = 0.0,
+        opcUaOut = 0.0,
         timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     ) else BrokerMetrics(
         messagesIn = j.getDouble("messagesIn",0.0),
@@ -331,6 +355,8 @@ val params = JsonArray()
         messageBusOut = j.getDouble("messageBusOut",0.0),
         mqttBridgeIn = j.getDouble("mqttBridgeIn",0.0),
         mqttBridgeOut = j.getDouble("mqttBridgeOut",0.0),
+        opcUaIn = j.getDouble("opcUaIn",0.0),
+        opcUaOut = j.getDouble("opcUaOut",0.0),
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 
@@ -346,6 +372,17 @@ val params = JsonArray()
         .put("timestamp", m.timestamp)
 
     private fun jsonToMqttClientMetrics(j: JsonObject) = if (j.isEmpty) MqttClientMetrics(0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else MqttClientMetrics(
+        messagesIn = j.getDouble("messagesIn",0.0),
+        messagesOut = j.getDouble("messagesOut",0.0),
+        timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    )
+
+    private fun opcUaDeviceMetricsToJson(m: OpcUaDeviceMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
+        .put("messagesOut", m.messagesOut)
+        .put("timestamp", m.timestamp)
+
+    private fun jsonToOpcUaDeviceMetrics(j: JsonObject) = if (j.isEmpty) OpcUaDeviceMetrics(0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else OpcUaDeviceMetrics(
         messagesIn = j.getDouble("messagesIn",0.0),
         messagesOut = j.getDouble("messagesOut",0.0),
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()

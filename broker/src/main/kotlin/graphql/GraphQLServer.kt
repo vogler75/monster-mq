@@ -279,6 +279,8 @@ class GraphQLServer(
                     .dataFetcher("brokers", metricsResolver.brokers())
                     .dataFetcher("sessions", metricsResolver.sessions())
                     .dataFetcher("session", metricsResolver.session())
+                    .dataFetcher("opcUaDeviceMetrics", metricsResolver.opcUaDeviceMetrics())
+                    .dataFetcher("opcUaDeviceMetricsHistory", metricsResolver.opcUaDeviceMetricsHistory())
                     // User management queries
                     .dataFetcher("users", userManagementResolver.users())
                     // ArchiveGroup queries
