@@ -43,7 +43,7 @@ PASSWORD: Optional[str] = "Test"
 
 # Timeouts (seconds)
 PUBACK_TIMEOUT = 3.0   # Wait this long for PUBACK for QoS1 allowed publish
-FORBIDDEN_WAIT = 3.0   # Wait this long to detect silent drop
+FORBIDDEN_WAIT = 10.0   # Wait this long to detect silent drop
 
 state = {
     "connected": False,

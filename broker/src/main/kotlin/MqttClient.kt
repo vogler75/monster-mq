@@ -687,6 +687,10 @@ class MqttClient(
         if (!gracefulDisconnected) { // if there was no disconnect before
             sendLastWill()
         }
+        if (endpoint.isConnected) {
+            logger.fine("Client [$clientId] Send close  [${Utils.getCurrentFunctionName()}]")
+            endpoint.close()
+        }
         stopEndpoint()
     }
 }
