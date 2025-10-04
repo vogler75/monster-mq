@@ -35,7 +35,7 @@ class AclCache {
      */
     fun loadFromStore(store: IUserStore): Future<Void> {
         val startTime = System.currentTimeMillis()
-        logger.info("Loading users and ACL rules into memory cache...")
+        logger.fine("Loading users and ACL rules into memory cache...")
 
         return store.loadAllUsersAndAcls().compose { (allUsers, allAcls) ->
             try {
@@ -67,7 +67,7 @@ class AclCache {
 
                 val endTime = System.currentTimeMillis()
                 val duration = endTime - startTime
-                logger.info("Loaded ${allUsers.size} users and ${allAcls.size} ACL rules in ${duration}ms")
+                logger.fine("Loaded ${allUsers.size} users and ${allAcls.size} ACL rules in ${duration}ms")
                 Future.succeededFuture<Void>()
             } catch (e: Exception) {
                 logger.severe("Failed to load users and ACL rules: ${e.message}")
