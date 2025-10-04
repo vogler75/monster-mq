@@ -112,6 +112,8 @@ class GraphQLDashboardClient {
                         messageBusOut
                         mqttBridgeIn
                         mqttBridgeOut
+                        opcUaIn
+                        opcUaOut
                         timestamp
                     }
                 }
@@ -141,6 +143,8 @@ class GraphQLDashboardClient {
                         messageBusOut
                         mqttBridgeIn
                         mqttBridgeOut
+                        opcUaIn
+                        opcUaOut
                         timestamp
                     }
                     metricsHistory(lastMinutes: $lastMinutes, from: $from, to: $to) {
@@ -156,6 +160,8 @@ class GraphQLDashboardClient {
                         messageBusOut
                         mqttBridgeIn
                         mqttBridgeOut
+                        opcUaIn
+                        opcUaOut
                         timestamp
                     }
                 }

@@ -125,6 +125,22 @@ class DashboardManager {
                         backgroundColor: 'rgba(245, 158, 11, 0.1)',
                         tension: 0.4,
                         fill: true
+                    },
+                    {
+                        label: 'OPC UA In',
+                        data: [],
+                        borderColor: '#06B6D4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: 'OPC UA Out',
+                        data: [],
+                        borderColor: '#9333EA',
+                        backgroundColor: 'rgba(147, 51, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true
                     }
                 ]
             },
@@ -279,6 +295,10 @@ class DashboardManager {
         this.trafficChart.data.labels = [];
         this.trafficChart.data.datasets[0].data = [];
         this.trafficChart.data.datasets[1].data = [];
+        this.trafficChart.data.datasets[2].data = [];
+        this.trafficChart.data.datasets[3].data = [];
+        this.trafficChart.data.datasets[4].data = [];
+        this.trafficChart.data.datasets[5].data = [];
 
         console.log('Initializing charts with brokers:', brokers);
 
@@ -311,7 +331,9 @@ class DashboardManager {
                     messageBusIn: 0,
                     messageBusOut: 0,
                     mqttBridgeIn: 0,
-                    mqttBridgeOut: 0
+                    mqttBridgeOut: 0,
+                    opcUaIn: 0,
+                    opcUaOut: 0
                 };
             }
             aggregatedData[timeKey].messagesIn += point.messagesIn || 0;
@@ -320,6 +342,8 @@ class DashboardManager {
             aggregatedData[timeKey].messageBusOut += point.messageBusOut || 0;
             aggregatedData[timeKey].mqttBridgeIn += point.mqttBridgeIn || 0;
             aggregatedData[timeKey].mqttBridgeOut += point.mqttBridgeOut || 0;
+            aggregatedData[timeKey].opcUaIn += point.opcUaIn || 0;
+            aggregatedData[timeKey].opcUaOut += point.opcUaOut || 0;
         });
 
         console.log('Aggregated data:', aggregatedData);
@@ -336,6 +360,8 @@ class DashboardManager {
             this.trafficChart.data.datasets[1].data.push(data.messagesOut);
             this.trafficChart.data.datasets[2].data.push(data.mqttBridgeIn);
             this.trafficChart.data.datasets[3].data.push(data.mqttBridgeOut);
+            this.trafficChart.data.datasets[4].data.push(data.opcUaIn);
+            this.trafficChart.data.datasets[5].data.push(data.opcUaOut);
         });
 
         // Update message bus chart with current broker distribution
@@ -372,9 +398,11 @@ class DashboardManager {
                 messageBusIn: acc.messageBusIn + (metrics.messageBusIn || 0),
                 messageBusOut: acc.messageBusOut + (metrics.messageBusOut || 0),
                 mqttBridgeIn: acc.mqttBridgeIn + (metrics.mqttBridgeIn || 0),
-                mqttBridgeOut: acc.mqttBridgeOut + (metrics.mqttBridgeOut || 0)
+                mqttBridgeOut: acc.mqttBridgeOut + (metrics.mqttBridgeOut || 0),
+                opcUaIn: acc.opcUaIn + (metrics.opcUaIn || 0),
+                opcUaOut: acc.opcUaOut + (metrics.opcUaOut || 0)
             };
-        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttBridgeIn: 0, mqttBridgeOut: 0 });
+        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttBridgeIn: 0, mqttBridgeOut: 0, opcUaIn: 0, opcUaOut: 0 });
 
         console.log('Cluster totals for realtime update:', clusterTotals);
 
@@ -385,6 +413,8 @@ class DashboardManager {
             this.trafficChart.data.datasets[1].data.shift();
             this.trafficChart.data.datasets[2].data.shift();
             this.trafficChart.data.datasets[3].data.shift();
+            this.trafficChart.data.datasets[4].data.shift();
+            this.trafficChart.data.datasets[5].data.shift();
         }
 
         console.log(`Adding realtime point: ${timeLabel} - In: ${clusterTotals.messagesIn}, Out: ${clusterTotals.messagesOut}, BridgeIn: ${clusterTotals.mqttBridgeIn}, BridgeOut: ${clusterTotals.mqttBridgeOut}`);
@@ -394,6 +424,8 @@ class DashboardManager {
         this.trafficChart.data.datasets[1].data.push(clusterTotals.messagesOut);
         this.trafficChart.data.datasets[2].data.push(clusterTotals.mqttBridgeIn);
         this.trafficChart.data.datasets[3].data.push(clusterTotals.mqttBridgeOut);
+        this.trafficChart.data.datasets[4].data.push(clusterTotals.opcUaIn);
+        this.trafficChart.data.datasets[5].data.push(clusterTotals.opcUaOut);
         this.trafficChart.update('none');
 
         // Update message bus chart with current data
@@ -443,7 +475,9 @@ class DashboardManager {
                 messageBusIn: acc.messageBusIn + (metrics.messageBusIn || 0),
                 messageBusOut: acc.messageBusOut + (metrics.messageBusOut || 0),
                 mqttBridgeIn: acc.mqttBridgeIn + (metrics.mqttBridgeIn || 0),
-                mqttBridgeOut: acc.mqttBridgeOut + (metrics.mqttBridgeOut || 0)
+                mqttBridgeOut: acc.mqttBridgeOut + (metrics.mqttBridgeOut || 0),
+                opcUaIn: acc.opcUaIn + (metrics.opcUaIn || 0),
+                opcUaOut: acc.opcUaOut + (metrics.opcUaOut || 0)
             };
         }, {
             messagesIn: 0,
@@ -453,7 +487,9 @@ class DashboardManager {
             messageBusIn: 0,
             messageBusOut: 0,
             mqttBridgeIn: 0,
-            mqttBridgeOut: 0
+            mqttBridgeOut: 0,
+            opcUaIn: 0,
+            opcUaOut: 0
         });
 
         const overviewContainer = document.getElementById('cluster-overview');
@@ -496,24 +532,6 @@ class DashboardManager {
 
             <div class="metric-card">
                 <div class="metric-header">
-                    <span class="metric-title">Bus Messages In</span>
-                    <div class="metric-icon">🔄</div>
-                </div>
-                <div class="metric-value">${this.formatNumber(clusterTotals.messageBusIn)}</div>
-                <div class="metric-label">Inter-node Communication</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">Bus Messages Out</span>
-                    <div class="metric-icon">📡</div>
-                </div>
-                <div class="metric-value">${this.formatNumber(clusterTotals.messageBusOut)}</div>
-                <div class="metric-label">Inter-node Communication</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
                     <span class="metric-title">Bridge Messages In</span>
                     <div class="metric-icon">🛬</div>
                 </div>
@@ -528,6 +546,24 @@ class DashboardManager {
                 </div>
                 <div class="metric-value">${this.formatNumber(clusterTotals.mqttBridgeOut)}</div>
                 <div class="metric-label">External Bridges</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">OPC UA In</span>
+                    <div class="metric-icon">⚙️</div>
+                </div>
+                <div class="metric-value">${this.formatNumber(clusterTotals.opcUaIn)}</div>
+                <div class="metric-label">Industrial Protocol</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">OPC UA Out</span>
+                    <div class="metric-icon">⚙️</div>
+                </div>
+                <div class="metric-value">${this.formatNumber(clusterTotals.opcUaOut)}</div>
+                <div class="metric-label">Industrial Protocol</div>
             </div>
         `;
     }
