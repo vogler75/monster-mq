@@ -1,0 +1,19 @@
+Release v1.6.15
+Built from commit: 4841635
+Date: 2025-10-04 10:20:33
+
+Changes since v1.6.14:
+---
+4841635 Change ACL cache logging level from info to fine
+60c42d1 Improve error handling in UserStorePostgres
+b700fe8 Add ACL rule management to user dashboard
+aa3441d Ensure endpoint is closed on client disconnect
+b5a751c test: refine publish rejection test to actively poll for disconnect/PUBACK
+b0cf91f Remove MQTT publish rejection disconnect test
+9024762 test: add disconnect-on-unauthorized publish test using Test/Test user
+a9626ef feat: return per-topic failure (0x80) for denied subscriptions instead of disconnect
+a724bf8 feat: downgrade retained message QoS to subscription level on delivery
+4191218 Refactor topic matching logic and add tests
+11d3c4d Remove OpcUaServerNodeManager implementation
+12fcc3d Update .gitignore
+c179bd8 Create ArchiveConfigStoreSQLite.kt
