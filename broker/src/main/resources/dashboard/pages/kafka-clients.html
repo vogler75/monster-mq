@@ -248,8 +248,7 @@
                     <thead>
                         <tr>
                             <th>Name</th>
-                            <th>Topic</th>
-                            <th>Namespace</th>
+                            <th>Namespace / Topic</th>
                             <th>Node Assignment</th>
                             <th>Status</th>
                             <th>In (msg/s)</th>
@@ -290,17 +289,19 @@
                     </div>
                     <div class="form-group">
                         <label for="kafka-client-namespace">Namespace *</label>
-                        <input type="text" id="kafka-client-namespace" required placeholder="e.g., kafka/ns1">
+                        <input type="text" id="kafka-client-namespace" required placeholder="e.g., kafka/telemetry">
+                        <span class="json-hint" style="font-size:0.7rem;color:var(--text-muted);display:block;margin-top:0.25rem;">Kafka topic will be this Namespace value.</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="kafka-client-destination-prefix">Destination Topic Prefix</label>
+                        <input type="text" id="kafka-client-destination-prefix" placeholder="e.g., plant1/lineA/">
+                        <span class="json-hint" style="font-size:0.7rem;color:var(--text-muted);display:block;margin-top:0.25rem;">Optional; must not contain + or #; trailing / added automatically.</span>
                     </div>
                     <div class="form-group">
                         <label for="kafka-client-node">Cluster Node *</label>
                         <select id="kafka-client-node" required>
                             <option value="">Select Node...</option>
                         </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="kafka-client-topic">Topic *</label>
-                        <input type="text" id="kafka-client-topic" required placeholder="e.g., telemetry.sensors">
                     </div>
                     <div class="form-group">
                         <label for="kafka-client-group-id">Group ID</label>

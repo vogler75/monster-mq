@@ -59,7 +59,7 @@ class KafkaClientDetailManager {
                 query GetKafkaClient($name: String!) {
                     kafkaClient(name: $name) {
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
-                        config { bootstrapServers topic groupId clientId qos retain payloadFormat keyTopicPrefix extraConsumerConfig pollIntervalMs maxPollRecords reconnectDelayMs }
+                        config { bootstrapServers groupId payloadFormat destinationTopicPrefix extraConsumerConfig pollIntervalMs maxPollRecords reconnectDelayMs }
                         metrics { messagesIn messagesOut timestamp }
                     }
                 }
@@ -86,13 +86,13 @@ class KafkaClientDetailManager {
         this.setText('client-namespace', d.namespace);
         this.setText('client-node-id', d.nodeId + (d.isOnCurrentNode ? ' (Current)' : ''));
         this.setText('client-bootstrap', cfg.bootstrapServers);
-        this.setText('client-topic', cfg.topic);
+
         this.setText('client-group-id', cfg.groupId);
-        this.setText('client-client-id', cfg.clientId && cfg.clientId.length>0 ? cfg.clientId : '(auto)');
-        this.setText('client-qos', cfg.qos);
-        this.setText('client-retain', cfg.retain ? 'Yes' : 'No');
+
         this.setText('client-payload-format', cfg.payloadFormat);
-        this.setText('client-key-prefix', cfg.keyTopicPrefix || '(none)');
+        const destPref = cfg.destinationTopicPrefix ? cfg.destinationTopicPrefix : '(none)';
+        this.setText('client-destination-prefix', destPref);
+ 
         this.setText('client-poll-interval', `${cfg.pollIntervalMs} ms`);
         this.setText('client-max-poll', cfg.maxPollRecords);
         this.setText('client-reconnect-delay', `${cfg.reconnectDelayMs} ms`);
@@ -152,19 +152,22 @@ class KafkaClientDetailManager {
         this.setValue('edit-client-namespace', d.namespace);
         this.setValue('edit-client-node', d.nodeId);
         this.setValue('edit-client-bootstrap', cfg.bootstrapServers);
-        this.setValue('edit-client-topic', cfg.topic);
+
         this.setValue('edit-client-group-id', cfg.groupId);
-        this.setValue('edit-client-client-id', cfg.clientId);
-        this.setValue('edit-client-qos', cfg.qos);
-        document.getElementById('edit-client-retain').checked = cfg.retain;
+        this.setValue('edit-client-destination-prefix', cfg.destinationTopicPrefix || '');
+ 
         this.setValue('edit-client-payload-format', cfg.payloadFormat);
-        this.setValue('edit-client-key-prefix', cfg.keyTopicPrefix || '');
+
+
         this.setValue('edit-client-poll-interval', cfg.pollIntervalMs);
         this.setValue('edit-client-max-poll', cfg.maxPollRecords);
         this.setValue('edit-client-reconnect-delay', cfg.reconnectDelayMs);
         document.getElementById('edit-client-enabled').checked = d.enabled;
         const extra = cfg.extraConsumerConfig ? JSON.stringify(cfg.extraConsumerConfig, null, 2) : '';
         this.setValue('edit-client-extra', extra);
+        // Ensure trailing slash visually (normalization handled server-side)
+        const destInput = document.getElementById('edit-client-destination-prefix');
+        if(destInput && destInput.value && !destInput.value.endsWith('/')) destInput.value = destInput.value + '/';
     }
 
     async updateClient() {
@@ -184,20 +187,17 @@ class KafkaClientDetailManager {
             namespace: document.getElementById('edit-client-namespace').value.trim(),
             nodeId: document.getElementById('edit-client-node').value,
             enabled: document.getElementById('edit-client-enabled').checked,
-            config: {
-                bootstrapServers: document.getElementById('edit-client-bootstrap').value.trim(),
-                topic: document.getElementById('edit-client-topic').value.trim(),
-                groupId: document.getElementById('edit-client-group-id').value.trim(),
-                clientId: document.getElementById('edit-client-client-id').value.trim(),
-                qos: parseInt(document.getElementById('edit-client-qos').value),
-                retain: document.getElementById('edit-client-retain').checked,
-                payloadFormat: document.getElementById('edit-client-payload-format').value,
-                keyTopicPrefix: document.getElementById('edit-client-key-prefix').value.trim() || null,
-                extraConsumerConfig: extraConfig,
-                pollIntervalMs: parseInt(document.getElementById('edit-client-poll-interval').value),
-                maxPollRecords: parseInt(document.getElementById('edit-client-max-poll').value),
-                reconnectDelayMs: parseInt(document.getElementById('edit-client-reconnect-delay').value)
-            }
+                config: {
+                    bootstrapServers: document.getElementById('edit-client-bootstrap').value.trim(),
+                    groupId: document.getElementById('edit-client-group-id').value.trim(),
+                    destinationTopicPrefix: (function(){ const v=document.getElementById('edit-client-destination-prefix').value.trim(); return v.length>0? v : null; })(),
+                    payloadFormat: document.getElementById('edit-client-payload-format').value,
+                    extraConsumerConfig: extraConfig,
+                    pollIntervalMs: parseInt(document.getElementById('edit-client-poll-interval').value),
+                    maxPollRecords: parseInt(document.getElementById('edit-client-max-poll').value),
+                    reconnectDelayMs: parseInt(document.getElementById('edit-client-reconnect-delay').value)
+                }
+
         };
 
         const prevNodeId = this.clientData ? this.clientData.nodeId : null;
@@ -287,7 +287,7 @@ class KafkaClientDetailManager {
     }
 
     // UI helpers
-    showEditModal() { this.populateEditForm(); document.getElementById('edit-client-modal').style.display = 'flex'; }
+    showEditModal() { this.populateEditForm(); document.getElementById('edit-client-modal').style.display = 'flex'; const input=document.getElementById('edit-client-destination-prefix'); if(input && input.value && !input.value.endsWith('/')) { input.value = input.value + '/'; }}
     hideEditModal() { document.getElementById('edit-client-modal').style.display = 'none'; }
     showDeleteModal() { const span=document.getElementById('delete-client-name'); if(span && this.clientData) span.textContent=this.clientData.name; document.getElementById('delete-client-modal').style.display = 'flex'; }
     hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }

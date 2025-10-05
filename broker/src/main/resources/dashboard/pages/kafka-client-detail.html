@@ -201,13 +201,10 @@
                     <div class="info-item"><div class="info-label">Namespace</div><div class="info-value" id="client-namespace">-</div></div>
                     <div class="info-item"><div class="info-label">Node Assignment</div><div class="info-value" id="client-node-id">-</div></div>
                     <div class="info-item"><div class="info-label">Bootstrap Servers</div><div class="info-value" id="client-bootstrap">-</div></div>
-                    <div class="info-item"><div class="info-label">Topic</div><div class="info-value" id="client-topic">-</div></div>
                     <div class="info-item"><div class="info-label">Group ID</div><div class="info-value" id="client-group-id">-</div></div>
-                    <div class="info-item"><div class="info-label">Client ID</div><div class="info-value" id="client-client-id">-</div></div>
-                    <div class="info-item"><div class="info-label">QoS</div><div class="info-value" id="client-qos">-</div></div>
-                    <div class="info-item"><div class="info-label">Retain</div><div class="info-value" id="client-retain">-</div></div>
                     <div class="info-item"><div class="info-label">Payload Format</div><div class="info-value" id="client-payload-format">-</div></div>
-                    <div class="info-item"><div class="info-label">Key Topic Prefix</div><div class="info-value" id="client-key-prefix">-</div></div>
+                    <div class="info-item"><div class="info-label">Destination Topic Prefix</div><div class="info-value" id="client-destination-prefix">-</div></div>
+
                     <div class="info-item"><div class="info-label">Poll Interval</div><div class="info-value" id="client-poll-interval">-</div></div>
                     <div class="info-item"><div class="info-label">Max Poll Records</div><div class="info-value" id="client-max-poll">-</div></div>
                     <div class="info-item"><div class="info-label">Reconnect Delay</div><div class="info-value" id="client-reconnect-delay">-</div></div>
@@ -272,36 +269,24 @@
                 <div class="form-group">
                     <label for="edit-client-namespace">Namespace *</label>
                     <input type="text" id="edit-client-namespace" required>
-                </div>
-                <div class="form-group">
-                    <label for="edit-client-node">Cluster Node *</label>
-                    <select id="edit-client-node" required><option value="">Select Node...</option></select>
+                    <span class="json-hint">Kafka topic is now always the Namespace value.</span>
                 </div>
                 <div class="form-group">
                     <label for="edit-client-bootstrap">Bootstrap Servers *</label>
                     <input type="text" id="edit-client-bootstrap" required>
                 </div>
                 <div class="form-group">
-                    <label for="edit-client-topic">Topic *</label>
-                    <input type="text" id="edit-client-topic" required>
+                    <label for="edit-client-node">Cluster Node *</label>
+                    <select id="edit-client-node" required><option value="">Select Node...</option></select>
                 </div>
                 <div class="form-group">
                     <label for="edit-client-group-id">Group ID *</label>
                     <input type="text" id="edit-client-group-id" required>
                 </div>
                 <div class="form-group">
-                    <label for="edit-client-client-id">Client ID</label>
-                    <input type="text" id="edit-client-client-id" placeholder="(optional, blank = auto)">
-                </div>
-                <div class="form-group">
-                    <label for="edit-client-qos">QoS</label>
-                    <select id="edit-client-qos"><option value="0">0</option><option value="1">1</option><option value="2">2</option></select>
-                </div>
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="edit-client-retain">
-                        <label for="edit-client-retain">Retain Published Messages</label>
-                    </div>
+                    <label for="edit-client-destination-prefix">Destination Topic Prefix</label>
+                    <input type="text" id="edit-client-destination-prefix" placeholder="e.g., plant1/lineA/">
+                    <span class="json-hint">Optional; must not contain + or #; trailing / added automatically.</span>
                 </div>
                 <div class="form-group">
                     <label for="edit-client-payload-format">Payload Format</label>
@@ -312,10 +297,7 @@
                         <option value="TEXT">TEXT</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label for="edit-client-key-prefix">Key Topic Prefix</label>
-                    <input type="text" id="edit-client-key-prefix" placeholder="(optional)">
-                </div>
+
                 <div class="form-group">
                     <label for="edit-client-poll-interval">Poll Interval (ms)</label>
                     <input type="number" id="edit-client-poll-interval" min="1" value="500">

@@ -1562,10 +1562,10 @@ Kafka client bridge connects to an external Kafka cluster and republishes consum
 records as MQTT messages inside MonsterMQ. A single Kafka topic is consumed and each
 record is polled periodically then published to MQTT.
 
-Simplified topic mapping strategy:
-- The MQTT topic is formed as: <keyTopicPrefix><record key>
-- If the Kafka record key is null the record is skipped (no publish)
-- keyTopicPrefix is optional; when omitted the topic is just the key value
+Topic mapping strategy:
+- The Kafka topic consumed is the device namespace
+- For BINARY/TEXT formats: MQTT topic = record key (record dropped if key null)
+- For DEFAULT/JSON formats: value encodes a BrokerMessage whose internal topicName is used
 """
 
 enum KafkaPayloadFormat {
@@ -1582,20 +1582,11 @@ enum KafkaPayloadFormat {
 type KafkaClientConfig {
     # Comma separated host:port list
     bootstrapServers: String!
-    # Kafka topic to consume from
-    topic: String!
     # Kafka consumer group id
     groupId: String!
-    # Kafka client id (optional; auto-generated when empty)
-    clientId: String!
-    # MQTT publish QoS
-    qos: Int!
-    # MQTT retain flag for published messages
-    retain: Boolean!
     # Payload transformation/serialization strategy
     payloadFormat: KafkaPayloadFormat!
-    # Optional static prefix added before the Kafka record key to form MQTT topic
-    keyTopicPrefix: String
+
     # Additional arbitrary Kafka consumer properties
     extraConsumerConfig: JSON
     # Poll interval in milliseconds
@@ -1604,6 +1595,14 @@ type KafkaClientConfig {
     maxPollRecords: Int!
     # Reconnect delay to Kafka in milliseconds
     reconnectDelayMs: Long!
+    # Optional prefix applied to all published MQTT topics.
+    # Rules:
+    # - Blank or whitespace disables prefixing
+    # - Trailing slash automatically appended when missing
+    # - Must not contain MQTT wildcards '+' or '#'
+    # - Legacy keyTopicPrefix input still accepted for backward compatibility
+    destinationTopicPrefix: String
+    # NOTE: Kafka topic is now derived from the device namespace
 }
 
 type KafkaClientMetrics {
@@ -1637,17 +1636,15 @@ type KafkaClientResult {
 
 input KafkaClientConfigInput {
     bootstrapServers: String = "localhost:9092"
-    topic: String!
     groupId: String = "monstermq-subscriber"
-    clientId: String = ""
-    qos: Int = 0
-    retain: Boolean = false
     payloadFormat: KafkaPayloadFormat = DEFAULT
-    keyTopicPrefix: String
     extraConsumerConfig: JSON
     pollIntervalMs: Long = 500
     maxPollRecords: Int = 100
     reconnectDelayMs: Long = 5000
+    # Optional prefix applied to all published MQTT topics (see KafkaClientConfig.destinationTopicPrefix)
+    destinationTopicPrefix: String
+    # NOTE: Kafka topic is now derived from the device namespace
 }
 
 input KafkaClientInput {

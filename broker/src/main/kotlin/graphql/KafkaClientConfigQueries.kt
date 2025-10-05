@@ -3,7 +3,7 @@ package at.rocworks.graphql
 import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.devices.kafkaclient.KafkaClientConfig
-import at.rocworks.devices.kafkaclient.KeyTransformConfig
+
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
 import graphql.schema.DataFetcher
@@ -99,13 +99,8 @@ class KafkaClientConfigQueries(
         val config = try { KafkaClientConfig.fromJson(device.config) } catch (e: Exception) {
             logger.severe("Failed to parse KafkaClientConfig for ${device.name}: ${e.message}")
             // Provide minimal fallback so the UI can still show something
-            KafkaClientConfig(topic = device.config.getString("topic", ""))
+            KafkaClientConfig()
         }
-
-        // Derive keyTopicPrefix from existing key transform if mode is KEY_PREFIX
-        val keyTopicPrefix = if (config.keyTransform.mode == KeyTransformConfig.Mode.KEY_PREFIX) {
-            config.keyTransform.prefix.ifBlank { null }
-        } else null
 
         return mapOf(
             "name" to device.name,
@@ -113,17 +108,13 @@ class KafkaClientConfigQueries(
             "nodeId" to device.nodeId,
             "config" to mapOf(
                 "bootstrapServers" to config.bootstrapServers,
-                "topic" to config.topic,
                 "groupId" to config.groupId,
-                "clientId" to config.clientId,
-                "qos" to config.qos,
-                "retain" to config.retain,
                 "payloadFormat" to config.payloadFormat,
-                "keyTopicPrefix" to keyTopicPrefix,
                 "extraConsumerConfig" to config.extraConsumerConfig,
                 "pollIntervalMs" to config.pollIntervalMs,
                 "maxPollRecords" to config.maxPollRecords,
-                "reconnectDelayMs" to config.reconnectDelayMs
+                "reconnectDelayMs" to config.reconnectDelayMs,
+                "destinationTopicPrefix" to config.destinationTopicPrefix
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

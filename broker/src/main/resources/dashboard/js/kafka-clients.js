@@ -46,7 +46,7 @@ class KafkaClientManager {
                 query GetKafkaClients {
                     kafkaClients { 
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
-                        config { topic groupId bootstrapServers pollIntervalMs maxPollRecords reconnectDelayMs }
+                        config { groupId bootstrapServers destinationTopicPrefix pollIntervalMs maxPollRecords reconnectDelayMs }
                         metrics { messagesIn messagesOut }
                     }
                 }
@@ -68,11 +68,9 @@ class KafkaClientManager {
         const totalClients = this.clients.length;
         const enabledClients = this.clients.filter(c => c.enabled).length;
         const currentNodeClients = this.clients.filter(c => c.isOnCurrentNode).length;
-        const totalTopics = this.clients.filter(c => c.config && c.config.topic).length;
         document.getElementById('total-clients').textContent = totalClients;
         document.getElementById('enabled-clients').textContent = enabledClients;
         document.getElementById('current-node-clients').textContent = currentNodeClients;
-        document.getElementById('total-topics').textContent = totalTopics;
     }
 
     renderClientsTable() {
@@ -80,7 +78,7 @@ class KafkaClientManager {
         if (!tbody) return;
         tbody.innerHTML = '';
         if (this.clients.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" class="no-data">No Kafka clients configured. Click "Add Client" to get started.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" class="no-data">No Kafka clients configured. Click "Add Client" to get started.</td></tr>`;
             return;
         }
         this.clients.forEach(client => {
@@ -89,13 +87,9 @@ class KafkaClientManager {
             const statusText = client.enabled ? 'Enabled' : 'Disabled';
             const nodeIndicator = client.isOnCurrentNode ? '📍 ' : '';
             row.innerHTML = `
-                <td>
-                    <div class="client-name">${this.escapeHtml(client.name)}</div>
-                    <small class="client-namespace">${this.escapeHtml(client.namespace)}</small>
-                </td>
-                <td>${client.config && client.config.topic ? this.escapeHtml(client.config.topic) : '-'}</td>
-                <td>${this.escapeHtml(client.namespace)}</td>
-                <td>${nodeIndicator}${this.escapeHtml(client.nodeId)}</td>
+                <td><div class="client-name">${this.escapeHtml(client.name)}</div></td>
+                <td><small class="client-namespace">${this.escapeHtml(client.namespace)}</small></td>
+                <td>${nodeIndicator}${this.escapeHtml(client.nodeId || '')}</td>
                 <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                 <td>${(client.metrics && client.metrics.length>0 ? Math.round(client.metrics[0].messagesIn) : 0)}</td>
                 <td>${(client.metrics && client.metrics.length>0 ? Math.round(client.metrics[0].messagesOut) : 0)}</td>
@@ -126,9 +120,9 @@ class KafkaClientManager {
             nodeId: document.getElementById('kafka-client-node').value,
             enabled: document.getElementById('kafka-client-enabled').checked,
             config: {
-                topic: document.getElementById('kafka-client-topic').value.trim(),
                 groupId: document.getElementById('kafka-client-group-id').value.trim() || null,
                 bootstrapServers: document.getElementById('kafka-client-bootstrap').value.trim(),
+                destinationTopicPrefix: (function(){ const v=document.getElementById('kafka-client-destination-prefix').value.trim(); return v.length>0? v : null; })(),
                 pollIntervalMs: parseInt(document.getElementById('kafka-client-poll-interval').value),
                 maxPollRecords: parseInt(document.getElementById('kafka-client-max-poll').value),
                 reconnectDelayMs: parseInt(document.getElementById('kafka-client-reconnect-delay').value)
@@ -206,7 +200,7 @@ class KafkaClientManager {
     }
 
     // UI helpers
-    showAddClientModal() { document.getElementById('add-kafka-client-modal').style.display = 'flex'; document.getElementById('add-kafka-client-form').reset(); document.getElementById('kafka-client-enabled').checked = true; }
+    showAddClientModal() { document.getElementById('add-kafka-client-modal').style.display = 'flex'; document.getElementById('add-kafka-client-form').reset(); document.getElementById('kafka-client-enabled').checked = true; const input=document.getElementById('kafka-client-destination-prefix'); if(input) input.value=''; }
     hideAddClientModal() { document.getElementById('add-kafka-client-modal').style.display = 'none'; }
     showConfirmDeleteModal() { document.getElementById('confirm-delete-kafka-client-modal').style.display = 'flex'; }
     hideConfirmDeleteModal() { document.getElementById('confirm-delete-kafka-client-modal').style.display = 'none'; }

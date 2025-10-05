@@ -3,7 +3,7 @@ package at.rocworks.graphql
 import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.devices.kafkaclient.KafkaClientConfig
-import at.rocworks.devices.kafkaclient.KeyTransformConfig
+
 import at.rocworks.devices.kafkaclient.KafkaClientExtension
 import at.rocworks.devices.kafkaclient.PayloadFormat
 import at.rocworks.stores.DeviceConfig
@@ -125,10 +125,7 @@ class KafkaClientConfigMutations(
 
                         val existingConfig = KafkaClientConfig.fromJson(existingDevice.config)
                         val requestConfig = KafkaClientConfig.fromJson(request.config)
-                        val newConfig = requestConfig.copy(
-                            // currently no secret fields to preserve beyond what user sends; if future adds, preserve here
-                            keyTransform = requestConfig.keyTransform
-                        )
+                        val newConfig = requestConfig
                         val updatedDevice = request.toDeviceConfig().copy(
                             createdAt = existingDevice.createdAt,
                             config = JsonObject.mapFrom(newConfig),
@@ -278,30 +275,19 @@ class KafkaClientConfigMutations(
         val configMap = (input["config"] as? Map<*, *>)?.let { @Suppress("UNCHECKED_CAST") it as Map<String, Any> }
             ?: throw IllegalArgumentException("Invalid or missing 'config' field")
 
-        val keyTopicPrefix = configMap["keyTopicPrefix"] as? String
-        val keyTransform = if (!keyTopicPrefix.isNullOrBlank()) {
-            JsonObject().put("mode", KeyTransformConfig.Mode.KEY_PREFIX).put("prefix", keyTopicPrefix)
-        } else {
-            JsonObject().put("mode", KeyTransformConfig.Mode.NONE)
-        }
-
         val kafkaConfig = KafkaClientConfig(
             bootstrapServers = configMap["bootstrapServers"] as? String ?: "localhost:9092",
-            topic = configMap["topic"] as? String ?: "",
             groupId = configMap["groupId"] as? String ?: "monstermq-subscriber",
-            clientId = configMap["clientId"] as? String ?: (configMap["groupId"] as? String ?: "monstermq-subscriber"),
-            qos = (configMap["qos"] as? Number)?.toInt() ?: 0,
-            retain = configMap["retain"] as? Boolean ?: false,
             payloadFormat = configMap["payloadFormat"] as? String ?: PayloadFormat.DEFAULT,
-            keyTransform = KeyTransformConfig.fromJson(keyTransform),
-            keyFallbackTopic = null, // not exposed via GraphQL currently
             extraConsumerConfig = (configMap["extraConsumerConfig"] as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value.toString() } ?: emptyMap(),
             pollIntervalMs = (configMap["pollIntervalMs"] as? Number)?.toLong() ?: 500L,
             maxPollRecords = (configMap["maxPollRecords"] as? Number)?.toInt() ?: 100,
-            reconnectDelayMs = (configMap["reconnectDelayMs"] as? Number)?.toLong() ?: 5000L
+            reconnectDelayMs = (configMap["reconnectDelayMs"] as? Number)?.toLong() ?: 5000L,
+            destinationTopicPrefix = (configMap["destinationTopicPrefix"] as? String)?.takeIf { it.isNotBlank() }
         )
 
-        val configJson = JsonObject.mapFrom(kafkaConfig).put("keyTransform", keyTransform)
+        val configJson = JsonObject.mapFrom(kafkaConfig)
+            .also { it.remove("namespace") }
         return DeviceConfigRequest(
             name = input["name"] as String,
             namespace = input["namespace"] as String,
@@ -335,26 +321,21 @@ class KafkaClientConfigMutations(
         val currentNodeId = Monster.getClusterNodeId(vertx) ?: "local"
         val config = try { KafkaClientConfig.fromJson(device.config) } catch (e: Exception) {
             logger.severe("Failed to parse KafkaClientConfig for ${device.name}: ${e.message}")
-            KafkaClientConfig(topic = device.config.getString("topic", ""))
+            KafkaClientConfig()
         }
-        val keyTopicPrefix = if (config.keyTransform.mode == KeyTransformConfig.Mode.KEY_PREFIX) config.keyTransform.prefix.ifBlank { null } else null
         return mapOf(
             "name" to device.name,
             "namespace" to device.namespace,
             "nodeId" to device.nodeId,
             "config" to mapOf(
                 "bootstrapServers" to config.bootstrapServers,
-                "topic" to config.topic,
                 "groupId" to config.groupId,
-                "clientId" to config.clientId,
-                "qos" to config.qos,
-                "retain" to config.retain,
                 "payloadFormat" to config.payloadFormat,
-                "keyTopicPrefix" to keyTopicPrefix,
                 "extraConsumerConfig" to config.extraConsumerConfig,
                 "pollIntervalMs" to config.pollIntervalMs,
                 "maxPollRecords" to config.maxPollRecords,
-                "reconnectDelayMs" to config.reconnectDelayMs
+                "reconnectDelayMs" to config.reconnectDelayMs,
+                "destinationTopicPrefix" to config.destinationTopicPrefix
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

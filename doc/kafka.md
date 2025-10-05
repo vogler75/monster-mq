@@ -73,6 +73,42 @@ Both the message bus and archive producer send the same structure:
 
 Downstream consumers must decode this binary format using the same codec or a compatible implementation.
 
+## Kafka Client Bridge
+
+MonsterMQ provides a unidirectional Kafka Client bridge device that subscribes to a single Kafka topic and republishes records as MQTT messages.
+
+Key characteristics:
+- Topic Selection: The Kafka topic name is always the device Namespace value.
+- Simplicity: No per-device override of the Kafka topic name; create one device per topic.
+- Consumer Group: Configurable `groupId` (defaults to `monstermq-subscriber`).
+- Extra Config: Optional JSON map of raw Kafka consumer properties (string values only) merged over defaults.
+
+Payload formats (`payloadFormat`):
+- DEFAULT: Kafka record value is the binary `BrokerMessage` encoded with `BrokerMessageCodec` (record key ignored). Republished exactly.
+- JSON: Kafka record value is a JSON object representing a `BrokerMessage` (see structure below). Republished.
+- BINARY: Record key = MQTT topic, record value bytes = payload. Record dropped if key is null.
+- TEXT: Record key = MQTT topic, record value (UTF-8) = payload bytes. Record dropped if key is null.
+
+JSON BrokerMessage fields (bridge accepts superset):
+- topicName (or legacy topic): MQTT topic (required)
+- payloadBase64 or payload: One of base64 encoded payload or plain text payload
+- messageUuid: optional, generated if absent
+- messageId: integer (default 0)
+- qosLevel: integer 0..2 (default 0)
+- isRetain, isDup, isQueued: booleans (default false)
+- clientId: origin id (default `kafkaclient-<device>`)
+- time: ISO-8601 timestamp (default now)
+
+Unsupported / ignored legacy fields: topic, keyTransform, keyFallbackTopic, keyTopicPrefix.
+
+Error Handling & Metrics:
+- Malformed records increment internal dropped/error counters (available via metrics endpoint; UI partly displays them — error metric UI addition pending).
+
+Recommended usage:
+- Use DEFAULT when producing from another MonsterMQ instance (lossless round-trip).
+- Use JSON for language-agnostic integrations without implementing the binary codec.
+- Use BINARY/TEXT for simple key->topic mirroring.
+
 ## Limitations
 
 - PLAINTEXT Kafka only (no SASL, SCRAM, or TLS).
