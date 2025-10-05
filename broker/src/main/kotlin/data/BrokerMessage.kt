@@ -79,6 +79,14 @@ class BrokerMessage(
         }
     }
 
+    fun getPayloadAsJsonValue(): Any? {
+        return try {
+            Json.decodeValue(String(payload))
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun getPayloadAsBase64(): String = Base64.getEncoder().encodeToString(payload)
 
     private fun getQoS(): MqttQoS = MqttQoS.valueOf(qosLevel)

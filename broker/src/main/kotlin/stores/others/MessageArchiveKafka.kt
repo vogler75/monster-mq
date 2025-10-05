@@ -23,7 +23,7 @@ class MessageArchiveKafka(
     private val payloadFormat: PayloadFormat = PayloadFormat.DEFAULT
 ): AbstractVerticle(), IMessageArchive {
     private val logger = Utils.getLogger(this::class.java, name)
-    private val topicName = name
+    private val topicName = name.removeSuffix("Archive")
     private var kafkaProducer: KafkaProducer<String, ByteArray>? = null
     private var isConnected: Boolean = false
 
@@ -106,9 +106,9 @@ class MessageArchiveKafka(
                         .put("sender", message.sender)
 
                     // Handle payload - check if it's valid JSON
-                    val payloadJson = message.getPayloadAsJson()
-                    if (payloadJson != null) {
-                        jsonObject.put("payload_json", payloadJson)
+                    val payloadJsonValue = message.getPayloadAsJsonValue()
+                    if (payloadJsonValue != null) {
+                        jsonObject.put("payload_json", payloadJsonValue)
                     } else {
                         jsonObject.put("payload_base64", message.getPayloadAsBase64())
                     }
