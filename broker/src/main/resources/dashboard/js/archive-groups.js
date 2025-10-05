@@ -132,7 +132,7 @@ class ArchiveGroupsManager {
         if (this.archiveGroups.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="10" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                    <td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
                         No archive groups found. Create your first archive group to get started.
                     </td>
                 </tr>
@@ -179,12 +179,23 @@ class ArchiveGroupsManager {
                         }
                     </div>
                 </td>
-                <td>${this.escapeHtml(group.lastValType)}</td>
-                <td>${this.escapeHtml(group.archiveType)}</td>
+                <td>${(() => {
+                    const lv = group.lastValType;
+                    const ar = group.archiveType;
+                    const showLv = lv && lv !== 'NONE';
+                    const showAr = ar && ar !== 'NONE';
+                    if (showLv && showAr) return this.escapeHtml(`${lv}`) + '<br>' + this.escapeHtml(`${ar}`);
+                    if (showLv) return this.escapeHtml(lv);
+                    if (showAr) return this.escapeHtml(ar);
+                    return 'NONE';
+                })()}</td>
                 <td>${this.escapeHtml(group.payloadFormat || 'DEFAULT')}</td>
                 <td>${group.retainedOnly ? 'Yes' : 'No'}</td>
-                <td style="color: #9333EA;">${group.metrics && group.metrics.length > 0 ? Math.round(group.metrics[0].messagesOut) : 0}</td>
-                <td style="color: var(--text-secondary);">${group.metrics && group.metrics.length > 0 ? group.metrics[0].bufferSize : 0}</td>
+                <td style="color: #9333EA; white-space: nowrap;">${(() => {
+                    const msgs = group.metrics && group.metrics.length > 0 ? Math.round(group.metrics[0].messagesOut) : 0;
+                    const buf = group.metrics && group.metrics.length > 0 ? group.metrics[0].bufferSize : 0;
+                    return `${msgs} msg/s<br><span style=\"color: var(--text-secondary);\">${buf} buf</span>`;
+                })()}</td>
                 <td>
                     <div class="action-buttons">
                         ${group.enabled ?
