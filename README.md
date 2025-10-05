@@ -214,81 +214,6 @@ MCP:
 | GraphQL API | 4000 | Management and real-time data |
 | MCP Server | 3000 | AI model integration |
 
-## 🏭 OPC UA Server
-
-MonsterMQ includes a built-in **OPC UA Server** that bridges MQTT and OPC UA protocols, enabling seamless integration between modern IoT systems and industrial automation.
-
-### Key Features
-
-- **MQTT-to-OPC UA Bridge** - Automatically creates OPC UA nodes from MQTT topics
-- **Real-time Subscriptions** - OPC UA clients receive live updates when MQTT messages arrive
-- **Multiple Data Types** - Support for TEXT, NUMERIC, BOOLEAN, BINARY, and JSON data types
-- **Hierarchical Structure** - MQTT topic paths become OPC UA folder hierarchies
-- **Eclipse Milo Foundation** - Built on industry-standard Eclipse Milo OPC UA SDK
-- **Web-based Configuration** - Configure address mappings through the GraphQL dashboard
-
-### Configuration
-
-Configure OPC UA servers through the GraphQL API or dashboard:
-
-```yaml
-# Example configuration (via GraphQL API)
-mutation {
-  createOpcUaServer(input: {
-    name: "test"
-    enabled: true
-    port: 4840
-    namespaceUri: "urn:MonsterMQ:OpcUaServer"
-    addressMappings: [
-      {
-        topicPattern: "sensors/temperature/#"
-        browseName: "temperature"
-        dataType: NUMERIC
-        accessLevel: READ_ONLY
-      }
-      {
-        topicPattern: "devices/status/#"
-        browseName: "status"
-        dataType: TEXT
-        accessLevel: READ_WRITE
-      }
-    ]
-  }) {
-    success
-  }
-}
-```
-
-### Data Type Mapping
-
-| MQTT Payload | OPC UA Data Type | Example |
-|-------------|------------------|---------|
-| `"23.5"` | Double (NUMERIC) | Temperature sensor |
-| `"true"` | Boolean (BOOLEAN) | Status flags |
-| `"Hello World"` | String (TEXT) | Status messages |
-| `"base64data"` | ByteString (BINARY) | File transfers |
-| `{"temp":23.5}` | String (JSON) | Complex data |
-
-### Address Space Structure
-
-MQTT topics are automatically mapped to OPC UA nodes:
-
-```
-MQTT Topic: sensors/temperature/room1
-OPC UA Path: Objects/MonsterMQ/sensors/temperature/room1
-
-MQTT Topic: factory/line1/status
-OPC UA Path: Objects/MonsterMQ/factory/line1/status
-```
-
-### Real-time Updates
-
-When MQTT messages are published, OPC UA subscribers receive immediate notifications:
-
-1. **MQTT Message Published** → `sensors/temp1` with payload `"24.5"`
-2. **OPC UA Node Updated** → `MonsterMQ/sensors/temp1` value becomes `24.5`
-3. **Subscriptions Notified** → All OPC UA clients subscribed to the node receive the update
-
 ## 🧪 Example Usage
 
 ### MQTT Operations
@@ -298,18 +223,6 @@ mosquitto_pub -h localhost -p 1883 -t "sensors/temp1" -m "23.5"
 
 # Subscribe to topics
 mosquitto_sub -h localhost -p 1883 -t "sensors/#"
-```
-
-### OPC UA Operations
-```bash
-# Connect with OPC UA client
-opc.tcp://localhost:4840/server
-
-# Browse namespace
-Objects/MonsterMQ/sensors/temp1
-
-# Subscribe to data changes
-# (Temperature updates will be received in real-time)
 ```
 
 ### GraphQL Queries
