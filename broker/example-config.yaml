@@ -56,3 +56,16 @@ GraphQL:
   Enabled: true
   Port: 4000
   Path: /graphql
+
+# Archive group examples (import via -archiveConfig or GraphQL mutations)
+ArchiveGroups:
+  - Name: Default
+    Enabled: true
+    TopicFilter: ["#"]
+    RetainedOnly: false
+    LastValType: POSTGRES
+    ArchiveType: POSTGRES
+    PayloadFormat: DEFAULT
+    LastValRetention: "7d"
+    ArchiveRetention: "30d"
+    PurgeInterval: "1h"

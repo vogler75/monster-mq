@@ -54,6 +54,16 @@ mutation {
 | `lastValRetention` | How long to keep current values | `"7d"`, `"24h"`, `"30m"` |
 | `archiveRetention` | How long to keep historical data | `"30d"`, `"1y"`, `"6M"` |
 | `purgeInterval` | How often to run cleanup | `"1h"`, `"6h"`, `"24h"` |
+| `payloadFormat` | Message encoding: `DEFAULT` (recommended) or `JSON` | `DEFAULT` |
+
+## Payload Format
+
+Archive groups store raw MQTT payloads. The `payloadFormat` setting controls how data is interpreted when archiving:
+
+- `DEFAULT` (recommended): Internal binary/base64 representation.
+- `JSON`: Parse payload as JSON and store structured representation where supported.
+
+If omitted, the system uses `DEFAULT`.
 
 ## Storage Backends
 

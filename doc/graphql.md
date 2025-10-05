@@ -99,3 +99,4 @@ Authentication rules for subscriptions mirror the ones used for queries and muta
 3. The OPC UA fields appear only when a device configuration store is available. If you run without a persistent config store those queries/mutations are absent from the schema at runtime.
 4. The HTTP endpoint also serves the static dashboard under `/dashboard` (see `GraphQLServer.start()` for details).
 5. Migration: Root queries `opcUaDeviceMetrics` and `opcUaDeviceMetricsHistory` were removed in favor of embedded fields on `OpcUaDevice` (`metrics` and `metricsHistory`). Update clients accordingly.
+6. PayloadFormat enum: Supported values are `DEFAULT` and `JSON`. The former `JAVA` name has been removed; use `DEFAULT`.

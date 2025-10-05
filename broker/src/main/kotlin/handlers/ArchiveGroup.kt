@@ -36,7 +36,7 @@ class ArchiveGroup(
     val retainedOnly: Boolean,
     private val lastValType: MessageStoreType,
     private val archiveType: MessageArchiveType,
-    val payloadFormat: PayloadFormat = PayloadFormat.JAVA,
+    val payloadFormat: PayloadFormat = PayloadFormat.DEFAULT,
     private val lastValRetentionMs: Long? = null,
     private val archiveRetentionMs: Long? = null,
     private val purgeIntervalMs: Long? = null,
@@ -1061,9 +1061,7 @@ class ArchiveGroup(
             val archiveRetentionMs = DurationParser.parse(archiveRetentionStr)
             val purgeIntervalMs = DurationParser.parse(purgeIntervalStr)
 
-            val payloadFormat = try {
-                PayloadFormat.valueOf(config.getString("PayloadFormat", "JAVA"))
-            } catch (e: Exception) { PayloadFormat.JAVA }
+            val payloadFormat = PayloadFormat.parse(config.getString("PayloadFormat", "DEFAULT"))
 
             return ArchiveGroup(
                 name = name,

@@ -71,7 +71,7 @@ class ArchiveConfigStoreCrateDB(
                 purge_interval STRING,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                payload_format STRING DEFAULT 'JAVA'
+                payload_format STRING DEFAULT 'DEFAULT'
             )
         """.trimIndent()
 
@@ -86,7 +86,7 @@ class ArchiveConfigStoreCrateDB(
                     archive_retention, purge_interval, payload_format
                 ) VALUES (
                     'Default', true, ['#'], false,
-                    'MEMORY', 'NONE', '1h', '1h', '1h', 'JAVA'
+                    'MEMORY', 'NONE', '1h', '1h', '1h', 'DEFAULT'
                 ) ON CONFLICT (name) DO NOTHING
             """.trimIndent()
 
@@ -315,7 +315,7 @@ class ArchiveConfigStoreCrateDB(
         val purgeInterval = resultSet.getString("purge_interval")
 
         val payloadFormatStr = try { resultSet.getString("payload_format") } catch (e: Exception) { null }
-        val payloadFormat = try { if (payloadFormatStr != null) at.rocworks.stores.PayloadFormat.valueOf(payloadFormatStr) else at.rocworks.stores.PayloadFormat.JAVA } catch (e: Exception) { at.rocworks.stores.PayloadFormat.JAVA }
+        val payloadFormat = at.rocworks.stores.PayloadFormat.parse(payloadFormatStr)
 
         return ArchiveGroup(
             name = name,

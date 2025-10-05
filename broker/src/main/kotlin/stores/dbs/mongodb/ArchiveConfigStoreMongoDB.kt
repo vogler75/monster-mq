@@ -229,7 +229,7 @@ class ArchiveConfigStoreMongoDB(
                     .append("last_val_retention", "1h")
                     .append("archive_retention", "1h")
                     .append("purge_interval", "1h")
-                    .append("payload_format", "JAVA")
+                    .append("payload_format", "DEFAULT")
                     .append("created_at", Instant.now())
                     .append("updated_at", Instant.now())
 
@@ -265,7 +265,7 @@ class ArchiveConfigStoreMongoDB(
         val purgeInterval = document.getString("purge_interval")
 
         val payloadFormatStr = document.getString("payload_format")
-        val payloadFormat = try { if (payloadFormatStr != null) PayloadFormat.valueOf(payloadFormatStr) else PayloadFormat.JAVA } catch (e: Exception) { PayloadFormat.JAVA }
+        val payloadFormat = PayloadFormat.parse(payloadFormatStr)
 
         return ArchiveGroup(
             name = name,

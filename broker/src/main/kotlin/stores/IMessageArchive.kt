@@ -17,8 +17,18 @@ enum class MessageArchiveType {
 }
 
 enum class PayloadFormat {
-    JAVA,
-    JSON
+    DEFAULT,
+    JSON;
+
+    companion object {
+        fun parse(value: String?): PayloadFormat {
+            return when (value?.uppercase()) {
+                null, "", "DEFAULT" -> DEFAULT
+                "JSON" -> JSON
+                else -> DEFAULT
+            }
+        }
+    }
 }
 
 interface IMessageArchive {

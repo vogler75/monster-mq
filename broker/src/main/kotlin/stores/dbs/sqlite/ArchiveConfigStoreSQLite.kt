@@ -71,7 +71,7 @@ class ArchiveConfigStoreSQLite(
                 purge_interval TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                payload_format TEXT DEFAULT 'JAVA'
+                payload_format TEXT DEFAULT 'DEFAULT'
             )
         """.trimIndent()
 
@@ -86,7 +86,7 @@ class ArchiveConfigStoreSQLite(
                     archive_retention, purge_interval, payload_format
                 ) VALUES (
                     'Default', 1, '["#"]', 0,
-                    'MEMORY', 'NONE', '1h', '1h', '1h', 'JAVA'
+                    'MEMORY', 'NONE', '1h', '1h', '1h', 'DEFAULT'
                 )
             """.trimIndent()
 
@@ -309,7 +309,7 @@ class ArchiveConfigStoreSQLite(
         val purgeInterval = resultSet.getString("purge_interval")
 
         val payloadFormatStr = try { resultSet.getString("payload_format") } catch (e: Exception) { null }
-        val payloadFormat = try { if (payloadFormatStr != null) PayloadFormat.valueOf(payloadFormatStr) else PayloadFormat.JAVA } catch (e: Exception) { PayloadFormat.JAVA }
+        val payloadFormat = PayloadFormat.parse(payloadFormatStr)
 
         return ArchiveGroup(
             name = name,

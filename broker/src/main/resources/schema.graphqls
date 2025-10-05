@@ -34,7 +34,7 @@ enum MessageArchiveType {
 }
 
 enum PayloadFormat {
-    JAVA
+    DEFAULT
     JSON
 }
 
@@ -687,7 +687,7 @@ input CreateArchiveGroupInput {
     retainedOnly: Boolean = false
     lastValType: MessageStoreType!
     archiveType: MessageArchiveType!
-    payloadFormat: PayloadFormat = JAVA
+    payloadFormat: PayloadFormat = DEFAULT
     lastValRetention: String
     archiveRetention: String
     purgeInterval: String

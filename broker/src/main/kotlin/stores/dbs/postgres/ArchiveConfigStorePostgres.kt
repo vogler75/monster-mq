@@ -51,7 +51,7 @@ class ArchiveConfigStorePostgres(
                     purge_interval VARCHAR(50),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    payload_format VARCHAR(20) DEFAULT 'JAVA'
+                    payload_format VARCHAR(20) DEFAULT 'DEFAULT'
                 );
                 """.trimIndent()
 
@@ -117,8 +117,8 @@ class ArchiveConfigStorePostgres(
                                 JsonObject(topicFilterJson).getJsonArray("filters")?.list?.map { it.toString() } ?: emptyList()
                             }
 
-                            val payloadFormatStr = resultSet.getString("payload_format") ?: "JAVA"
-                            val payloadFormat = try { at.rocworks.stores.PayloadFormat.valueOf(payloadFormatStr) } catch (e: Exception) { at.rocworks.stores.PayloadFormat.JAVA }
+                            val payloadFormatStr = resultSet.getString("payload_format")
+                            val payloadFormat = at.rocworks.stores.PayloadFormat.parse(payloadFormatStr)
 
                             val archiveGroup = ArchiveGroup(
                                 name = name,
@@ -187,8 +187,8 @@ class ArchiveConfigStorePostgres(
                                 JsonObject(topicFilterJson).getJsonArray("filters")?.list?.map { it.toString() } ?: emptyList()
                             }
 
-                            val payloadFormatStr = resultSet.getString("payload_format") ?: "JAVA"
-                            val payloadFormat = try { at.rocworks.stores.PayloadFormat.valueOf(payloadFormatStr) } catch (e: Exception) { at.rocworks.stores.PayloadFormat.JAVA }
+                            val payloadFormatStr = resultSet.getString("payload_format")
+                            val payloadFormat = at.rocworks.stores.PayloadFormat.parse(payloadFormatStr)
 
                             val archiveGroup = ArchiveGroup(
                                 name = name,

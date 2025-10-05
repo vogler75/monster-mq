@@ -20,7 +20,7 @@ class MessageArchiveKafka(
     private val name: String,
     private val bootstrapServers: String,
     private val userConfig: JsonObject? = null,
-    private val payloadFormat: PayloadFormat = PayloadFormat.JAVA
+    private val payloadFormat: PayloadFormat = PayloadFormat.DEFAULT
 ): AbstractVerticle(), IMessageArchive {
     private val logger = Utils.getLogger(this::class.java, name)
     private val topicName = name
@@ -86,7 +86,7 @@ class MessageArchiveKafka(
     override fun addHistory(messages: List<BrokerMessage>) {
         messages.forEach { message ->
             val data = when (payloadFormat) {
-                PayloadFormat.JAVA -> {
+                PayloadFormat.DEFAULT -> {
                     val codec = BrokerMessageCodec()
                     val buffer = Buffer.buffer()
                     codec.encodeToWire(buffer, message)
