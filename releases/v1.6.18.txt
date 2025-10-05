@@ -1,0 +1,20 @@
+Release v1.6.18
+Built from commit: 2ac6241
+Date: 2025-10-05 11:37:08
+
+Changes since v1.6.17:
+---
+2ac6241 Update archive groups table columns and display
+304234a Improve payload JSON handling in message archiving
+9aadb0f Add payload format option to archive groups UI
+0e6c59b Replace JAVA payload format with DEFAULT
+1108f38 Merge branch 'main' into dev-2
+547b1d9 Bump version to 1.6.17
+0cb6586 Add payloadFormat support to ArchiveGroup and Kafka archive
+7c11678 Move OPC UA Server documentation to dedicated file
+7b210dd Add disconnected buffer config to MQTT client UI
+edaf317 Add disconnected buffer config to MQTT client
+a8b841a Swap chart titles and canvas IDs in dashboard
+d6013f5 Add archive groups throughput chart to dashboard
+70370a7 Add archive group metrics to GraphQL API
+6d6dc93 Add archive group metrics collection and storage
