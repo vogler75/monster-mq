@@ -819,6 +819,69 @@ callback(BrokerMetrics(
         }
     }
 
+    fun kafkaClientMetrics(): DataFetcher<CompletableFuture<List<KafkaClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<KafkaClientMetrics>>()
+            val kafkaClient = env.getSource<Map<String, Any>>()
+            val clientName = kafkaClient?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(listOf(KafkaClientMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
+                return@DataFetcher future
+            }
+
+            if (metricsStore != null) {
+                metricsStore.getKafkaClientMetricsList(clientName, null, null, 1).onComplete { result ->
+                    if (result.succeeded() && result.result().isNotEmpty()) {
+                        val m = result.result().first()
+                        future.complete(listOf(KafkaClientMetrics(round2(m.messagesIn), round2(m.messagesOut), m.timestamp)))
+                    } else {
+                        future.complete(listOf(KafkaClientMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
+                    }
+                }
+            } else {
+                future.complete(listOf(KafkaClientMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
+            }
+
+            future
+        }
+    }
+
+    fun kafkaClientMetricsHistory(): DataFetcher<CompletableFuture<List<KafkaClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<KafkaClientMetrics>>()
+            val kafkaClient = env.getSource<Map<String, Any>>()
+            val clientName = kafkaClient?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            val from = env.getArgument<String?>("from")
+            val to = env.getArgument<String?>("to")
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+
+            if (metricsStore != null) {
+                val fromInstant = from?.let { java.time.Instant.parse(it) }
+                val toInstant = to?.let { java.time.Instant.parse(it) }
+
+                metricsStore.getKafkaClientMetricsList(clientName, fromInstant, toInstant, lastMinutes).onComplete { result ->
+                    if (result.succeeded()) {
+                        future.complete(result.result().map { KafkaClientMetrics(round2(it.messagesIn), round2(it.messagesOut), it.timestamp) })
+                    } else {
+                        logger.warning("Failed to get historical Kafka client metrics: ${result.cause()?.message}")
+                        future.complete(emptyList())
+                    }
+                }
+            } else {
+                future.complete(emptyList())
+            }
+
+            future
+        }
+    }
+
     // Archive Group Metrics (embedded field resolvers)
     fun archiveGroupMetricsField(): DataFetcher<CompletableFuture<List<ArchiveGroupMetrics>>> {
         return DataFetcher { env ->

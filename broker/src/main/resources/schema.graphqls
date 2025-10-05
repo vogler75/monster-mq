@@ -1552,3 +1552,129 @@ input MqttClientAddressInput {
     # QoS level for MQTT messages (0, 1, or 2)
     qos: Int = 0
 }
+
+#############################################
+# Kafka Client Bridge Configuration (NEW)  #
+#############################################
+
+"""
+Kafka client bridge connects to an external Kafka cluster and republishes consumed
+records as MQTT messages inside MonsterMQ. A single Kafka topic is consumed and each
+record is polled periodically then published to MQTT.
+
+Simplified topic mapping strategy:
+- The MQTT topic is formed as: <keyTopicPrefix><record key>
+- If the Kafka record key is null the record is skipped (no publish)
+- keyTopicPrefix is optional; when omitted the topic is just the key value
+"""
+
+enum KafkaPayloadFormat {
+    # Internal encoded BrokerMessage format (default)
+    DEFAULT
+    # BrokerMessage serialized as JSON text
+    JSON
+    # Raw Kafka record value bytes -> published as binary payload (topic derived from key)
+    BINARY
+    # UTF-8 decoded Kafka record value string -> published as text payload (topic derived from key)
+    TEXT
+}
+
+type KafkaClientConfig {
+    # Comma separated host:port list
+    bootstrapServers: String!
+    # Kafka topic to consume from
+    topic: String!
+    # Kafka consumer group id
+    groupId: String!
+    # Kafka client id (optional; auto-generated when empty)
+    clientId: String!
+    # MQTT publish QoS
+    qos: Int!
+    # MQTT retain flag for published messages
+    retain: Boolean!
+    # Payload transformation/serialization strategy
+    payloadFormat: KafkaPayloadFormat!
+    # Optional static prefix added before the Kafka record key to form MQTT topic
+    keyTopicPrefix: String
+    # Additional arbitrary Kafka consumer properties
+    extraConsumerConfig: JSON
+    # Poll interval in milliseconds
+    pollIntervalMs: Long!
+    # Max records per poll
+    maxPollRecords: Int!
+    # Reconnect delay to Kafka in milliseconds
+    reconnectDelayMs: Long!
+}
+
+type KafkaClientMetrics {
+    messagesIn: Float!
+    messagesOut: Float!
+    timestamp: String!
+}
+
+type KafkaClient {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    config: KafkaClientConfig!
+    enabled: Boolean!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    metrics: [KafkaClientMetrics!]!
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [KafkaClientMetrics!]!
+}
+
+type KafkaClientResult {
+    success: Boolean!
+    client: KafkaClient
+    errors: [String!]!
+}
+
+input KafkaClientConfigInput {
+    bootstrapServers: String = "localhost:9092"
+    topic: String!
+    groupId: String = "monstermq-subscriber"
+    clientId: String = ""
+    qos: Int = 0
+    retain: Boolean = false
+    payloadFormat: KafkaPayloadFormat = DEFAULT
+    keyTopicPrefix: String
+    extraConsumerConfig: JSON
+    pollIntervalMs: Long = 500
+    maxPollRecords: Int = 100
+    reconnectDelayMs: Long = 5000
+}
+
+input KafkaClientInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean = true
+    config: KafkaClientConfigInput!
+}
+
+# Extend Queries for Kafka clients
+extend type Query {
+    # List all Kafka client bridge configurations
+    kafkaClients: [KafkaClient!]!
+    # Get single Kafka client bridge by name
+    kafkaClient(name: String!): KafkaClient
+    # List Kafka clients assigned to a specific node
+    kafkaClientsByNode(nodeId: String!): [KafkaClient!]!
+}
+
+# Extend Mutations for Kafka clients
+extend type Mutation {
+    createKafkaClient(input: KafkaClientInput!): KafkaClientResult!
+    updateKafkaClient(name: String!, input: KafkaClientInput!): KafkaClientResult!
+    deleteKafkaClient(name: String!): Boolean!
+    startKafkaClient(name: String!): KafkaClientResult!
+    stopKafkaClient(name: String!): KafkaClientResult!
+    toggleKafkaClient(name: String!, enabled: Boolean!): KafkaClientResult!
+    reassignKafkaClient(name: String!, nodeId: String!): KafkaClientResult!
+}

@@ -108,6 +108,15 @@ class MetricsStoreMongoDB(
 
     override fun getType(): MetricsStoreType = MetricsStoreType.MONGODB
 
+    private fun kindToString(kind: MetricKind) = when(kind){
+        MetricKind.BROKER->"broker"
+        MetricKind.SESSION->"session"
+        MetricKind.MQTTBRIDGE->"mqttbridge"
+        MetricKind.KAFKACLIENT->"kafkaclient"
+        MetricKind.OPCUADEVICE->"opcua"
+        MetricKind.ARCHIVEGROUP->"archive" // unify naming (was "archivegroup" in retrieval; store always used "archive")
+    }
+
     // Generic store method
     override fun storeMetrics(kind: MetricKind, timestamp: Instant, identifier: String, metricsJson: JsonObject): Future<Void> {
         return vertx.executeBlocking<Void>(Callable {
@@ -116,24 +125,12 @@ class MetricsStoreMongoDB(
                 metricsJson.forEach { (k,v) -> metricsDoc.append(k, v) }
                 val document = Document()
                     .append("timestamp", Date.from(timestamp))
-                    .append("metric_type", when(kind){
-                        MetricKind.BROKER->"broker";
-                        MetricKind.SESSION->"session";
-                        MetricKind.MQTTBRIDGE->"mqttbridge";
-                        MetricKind.OPCUADEVICE->"opcua"
-                        MetricKind.ARCHIVEGROUP->"archive"
-                    })
+                    .append("metric_type", kindToString(kind))
                     .append("identifier", identifier)
                     .append("metrics", metricsDoc)
                 val filter = Filters.and(
                     Filters.eq("timestamp", Date.from(timestamp)),
-                    Filters.eq("metric_type", when(kind){
-                        MetricKind.BROKER->"broker";
-                        MetricKind.SESSION->"session";
-                        MetricKind.MQTTBRIDGE->"mqttbridge";
-                        MetricKind.OPCUADEVICE->"opcua"
-                        MetricKind.ARCHIVEGROUP->"archive"
-                    }),
+                    Filters.eq("metric_type", kindToString(kind)),
                     Filters.eq("identifier", identifier)
                 )
                 collection.replaceOne(filter, document, ReplaceOptions().upsert(true))
@@ -154,19 +151,16 @@ class MetricsStoreMongoDB(
     override fun storeMqttClientMetrics(timestamp: Instant, clientName: String, metrics: MqttClientMetrics): Future<Void> =
         storeMetrics(MetricKind.MQTTBRIDGE, timestamp, clientName, mqttClientMetricsToJson(metrics))
 
+    override fun storeKafkaClientMetrics(timestamp: Instant, clientName: String, metrics: at.rocworks.extensions.graphql.KafkaClientMetrics): Future<Void> =
+        storeMetrics(MetricKind.KAFKACLIENT, timestamp, clientName, kafkaClientMetricsToJson(metrics))
+
     override fun getLatestMetrics(kind: MetricKind, identifier: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<JsonObject> {
         return vertx.executeBlocking<JsonObject>(Callable {
             val (fromTime, toTime) = calculateTimeRange(from, to, lastMinutes)
             if (fromTime == null) throw IllegalArgumentException("Historical query requires time range")
             val filterList = mutableListOf<Bson>()
             filterList.addAll(listOf(
-                Filters.eq("metric_type", when(kind){
-                    MetricKind.BROKER->"broker";
-                    MetricKind.SESSION->"session";
-                    MetricKind.MQTTBRIDGE->"mqttbridge";
-                    MetricKind.OPCUADEVICE->"opcua"
-                    MetricKind.ARCHIVEGROUP->"archivegroup"
-                }),
+                Filters.eq("metric_type", kindToString(kind)),
                 Filters.eq("identifier", identifier),
                 Filters.gte("timestamp", Date.from(fromTime))
             ))
@@ -192,19 +186,16 @@ class MetricsStoreMongoDB(
     override fun getMqttClientMetrics(clientName: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<MqttClientMetrics> =
         getLatestMetrics(MetricKind.MQTTBRIDGE, clientName, from, to, lastMinutes).map { jsonToMqttClientMetrics(it) }
 
+    override fun getKafkaClientMetrics(clientName: String, from: Instant?, to: Instant?, lastMinutes: Int?) =
+        getLatestMetrics(MetricKind.KAFKACLIENT, clientName, from, to, lastMinutes).map { jsonToKafkaClientMetrics(it) }
+
     override fun getMetricsHistory(kind: MetricKind, identifier: String, from: Instant?, to: Instant?, lastMinutes: Int?, limit: Int): Future<List<Pair<Instant, JsonObject>>> {
         return vertx.executeBlocking<List<Pair<Instant, JsonObject>>>(Callable {
             val (fromTime, toTime) = calculateTimeRange(from, to, lastMinutes)
             if (fromTime == null) throw IllegalArgumentException("Historical query requires time range")
             val filterList = mutableListOf<Bson>()
             filterList.addAll(listOf(
-                Filters.eq("metric_type", when(kind){
-                    MetricKind.BROKER->"broker";
-                    MetricKind.SESSION->"session";
-                    MetricKind.MQTTBRIDGE->"mqttbridge";
-                    MetricKind.OPCUADEVICE->"opcua"
-                    MetricKind.ARCHIVEGROUP->"archivegroup"
-                }),
+                Filters.eq("metric_type", kindToString(kind)),
                 Filters.eq("identifier", identifier),
                 Filters.gte("timestamp", Date.from(fromTime))
             ))
@@ -255,6 +246,14 @@ class MetricsStoreMongoDB(
     ): Future<List<Pair<Instant, MqttClientMetrics>>> =
         getMetricsHistory(MetricKind.MQTTBRIDGE, clientName, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToMqttClientMetrics(it.second) } }
 
+    override fun getKafkaClientMetricsHistory(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?,
+        limit: Int
+    ) = getMetricsHistory(MetricKind.KAFKACLIENT, clientName, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToKafkaClientMetrics(it.second) } }
+
     override fun getBrokerMetricsList(
         nodeId: String,
         from: Instant?,
@@ -285,6 +284,13 @@ class MetricsStoreMongoDB(
         lastMinutes: Int?
     ): Future<List<MqttClientMetrics>> =
         getMqttClientMetricsHistory(clientName, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { it.second } }
+
+    override fun getKafkaClientMetricsList(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ) = getKafkaClientMetricsHistory(clientName, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { it.second } }
 
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {
         return vertx.executeBlocking<Long>(Callable {
@@ -317,6 +323,21 @@ class MetricsStoreMongoDB(
         .put("timestamp", m.timestamp)
 
     private fun sessionMetricsToJson(m: SessionMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
+        .put("messagesOut", m.messagesOut)
+        .put("timestamp", m.timestamp)
+
+    private fun mqttClientMetricsToJson(m: MqttClientMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
+        .put("messagesOut", m.messagesOut)
+        .put("timestamp", m.timestamp)
+
+    private fun kafkaClientMetricsToJson(m: at.rocworks.extensions.graphql.KafkaClientMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
+        .put("messagesOut", m.messagesOut)
+        .put("timestamp", m.timestamp)
+
+    private fun opcUaDeviceMetricsToJson(m: OpcUaDeviceMetrics) = JsonObject()
         .put("messagesIn", m.messagesIn)
         .put("messagesOut", m.messagesOut)
         .put("timestamp", m.timestamp)
@@ -361,21 +382,17 @@ class MetricsStoreMongoDB(
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 
-    private fun mqttClientMetricsToJson(m: MqttClientMetrics) = JsonObject()
-        .put("messagesIn", m.messagesIn)
-        .put("messagesOut", m.messagesOut)
-        .put("timestamp", m.timestamp)
-
     private fun jsonToMqttClientMetrics(j: JsonObject) = if (j.isEmpty) MqttClientMetrics(0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else MqttClientMetrics(
         messagesIn = j.getDouble("messagesIn",0.0),
         messagesOut = j.getDouble("messagesOut",0.0),
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 
-    private fun opcUaDeviceMetricsToJson(m: OpcUaDeviceMetrics) = JsonObject()
-        .put("messagesIn", m.messagesIn)
-        .put("messagesOut", m.messagesOut)
-        .put("timestamp", m.timestamp)
+    private fun jsonToKafkaClientMetrics(j: JsonObject) = if (j.isEmpty) at.rocworks.extensions.graphql.KafkaClientMetrics(0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else at.rocworks.extensions.graphql.KafkaClientMetrics(
+        messagesIn = j.getDouble("messagesIn",0.0),
+        messagesOut = j.getDouble("messagesOut",0.0),
+        timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    )
 
     private fun jsonToOpcUaDeviceMetrics(j: JsonObject) = if (j.isEmpty) OpcUaDeviceMetrics(0.0,0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else OpcUaDeviceMetrics(
         messagesIn = j.getDouble("messagesIn",0.0),

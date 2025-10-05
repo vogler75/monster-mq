@@ -13,7 +13,7 @@ enum class MetricsStoreType {
     SQLITE
 }
 
-enum class MetricKind { BROKER, SESSION, MQTTBRIDGE, OPCUADEVICE, ARCHIVEGROUP }
+enum class MetricKind { BROKER, SESSION, MQTTBRIDGE, KAFKACLIENT, OPCUADEVICE, ARCHIVEGROUP }
 
 interface IMetricsStore {
     fun getName(): String
@@ -93,6 +93,28 @@ interface IMetricsStore {
         lastMinutes: Int?,
         limit: Int = 100
     ): Future<List<Pair<Instant, MqttClientMetrics>>>
+
+    // Kafka Client Metrics
+    fun storeKafkaClientMetrics(timestamp: Instant, clientName: String, metrics: at.rocworks.extensions.graphql.KafkaClientMetrics): Future<Void>
+    fun getKafkaClientMetrics(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<at.rocworks.extensions.graphql.KafkaClientMetrics>
+    fun getKafkaClientMetricsList(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<at.rocworks.extensions.graphql.KafkaClientMetrics>>
+    fun getKafkaClientMetricsHistory(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?,
+        limit: Int = 100
+    ): Future<List<Pair<Instant, at.rocworks.extensions.graphql.KafkaClientMetrics>>>
 
     // OPC UA Device Metrics
     fun getOpcUaDeviceMetrics(

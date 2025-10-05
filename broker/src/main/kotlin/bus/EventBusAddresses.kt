@@ -84,6 +84,13 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // Kafka Subscriber Bridge (inbound Kafka -> MQTT)
+    object KafkaBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.kafka"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // Archive Groups
     object Archive {
         private const val ARCHIVE_NS = "$BASE.archive"

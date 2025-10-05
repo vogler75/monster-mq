@@ -22,6 +22,7 @@ data class DeviceConfig(
         const val DEVICE_TYPE_OPCUA_CLIENT = "OPCUA-Client"
         const val DEVICE_TYPE_OPCUA_SERVER = "OPCUA-Server"
         const val DEVICE_TYPE_MQTT_CLIENT = "MQTT-Client"
+        const val DEVICE_TYPE_KAFKA_CLIENT = "KAFKA-Client"
         fun fromJsonObject(json: JsonObject): DeviceConfig {
             return DeviceConfig(
                 name = json.getString("name"),

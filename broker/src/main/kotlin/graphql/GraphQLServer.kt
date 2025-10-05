@@ -19,6 +19,8 @@ import at.rocworks.graphql.OpcUaServerInfo
 import at.rocworks.graphql.OpcUaServerCertificateInfo
 import at.rocworks.graphql.MqttClientConfigQueries
 import at.rocworks.graphql.MqttClientConfigMutations
+import at.rocworks.graphql.KafkaClientConfigQueries
+import at.rocworks.graphql.KafkaClientConfigMutations
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
@@ -247,6 +249,10 @@ class GraphQLServer(
         val mqttClientQueries = deviceStore?.let { MqttClientConfigQueries(vertx, it) }
         val mqttClientMutations = deviceStore?.let { MqttClientConfigMutations(vertx, it) }
 
+        // Initialize Kafka Client resolvers
+        val kafkaClientQueries = deviceStore?.let { KafkaClientConfigQueries(vertx, it) }
+        val kafkaClientMutations = deviceStore?.let { KafkaClientConfigMutations(vertx, it) }
+
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
             .scalar(ExtendedScalars.GraphQLLong)
@@ -312,6 +318,14 @@ class GraphQLServer(
                             dataFetcher("mqttClients", resolver.mqttClients())
                             dataFetcher("mqttClient", resolver.mqttClient())
                             dataFetcher("mqttClientsByNode", resolver.mqttClientsByNode())
+                        }
+                    }
+                    // Kafka Client queries
+                    .apply {
+                        kafkaClientQueries?.let { resolver ->
+                            dataFetcher("kafkaClients", resolver.kafkaClients())
+                            dataFetcher("kafkaClient", resolver.kafkaClient())
+                            dataFetcher("kafkaClientsByNode", resolver.kafkaClientsByNode())
                         }
                     }
             }
@@ -383,6 +397,18 @@ class GraphQLServer(
                             dataFetcher("deleteMqttClientAddress", resolver.deleteMqttClientAddress())
                         }
                     }
+                    // Kafka Client mutations
+                    .apply {
+                        kafkaClientMutations?.let { resolver ->
+                            dataFetcher("createKafkaClient", resolver.createKafkaClient())
+                            dataFetcher("updateKafkaClient", resolver.updateKafkaClient())
+                            dataFetcher("deleteKafkaClient", resolver.deleteKafkaClient())
+                            dataFetcher("startKafkaClient", resolver.startKafkaClient())
+                            dataFetcher("stopKafkaClient", resolver.stopKafkaClient())
+                            dataFetcher("toggleKafkaClient", resolver.toggleKafkaClient())
+                            dataFetcher("reassignKafkaClient", resolver.reassignKafkaClient())
+                        }
+                    }
             }
             // Register subscription resolvers
             .type("Subscription") { builder ->
@@ -407,6 +433,11 @@ class GraphQLServer(
                 builder
                     .dataFetcher("metrics", metricsResolver.mqttClientMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.mqttClientMetricsHistory())
+            }
+            .type("KafkaClient") { builder ->
+                builder
+                    .dataFetcher("metrics", metricsResolver.kafkaClientMetrics())
+                    .dataFetcher("metricsHistory", metricsResolver.kafkaClientMetricsHistory())
             }
             .type("ArchiveGroupInfo") { builder ->
                 builder.apply {

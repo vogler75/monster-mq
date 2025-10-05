@@ -186,6 +186,13 @@ data class MqttClientMetrics(
     val timestamp: String
 )
 
+// Kafka Client Metrics (similar structure to MQTT bridge metrics)
+data class KafkaClientMetrics(
+    val messagesIn: Double,
+    val messagesOut: Double,
+    val timestamp: String
+)
+
 data class ArchiveGroupMetrics(
     val messagesOut: Double,  // Messages written to database per second
     val bufferSize: Int,      // Average size of the write buffer

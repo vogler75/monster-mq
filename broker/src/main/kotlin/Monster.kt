@@ -34,6 +34,7 @@ import com.hazelcast.config.Config
 import at.rocworks.devices.opcua.OpcUaExtension
 import at.rocworks.devices.opcuaserver.OpcUaServerExtension
 import at.rocworks.devices.mqttclient.MqttClientExtension
+import at.rocworks.devices.kafkaclient.KafkaClientExtension
 import at.rocworks.stores.DeviceConfigStoreFactory
 import handlers.MetricsHandler
 import java.io.File
@@ -646,6 +647,12 @@ MORE INFO:
                     .compose {
                         val mqttClientDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(mqttClientExtension, mqttClientDeploymentOptions)
+                    }
+                    .compose {
+                        // Kafka Subscriber Extension
+                        val kafkaClientExtension = KafkaClientExtension()
+                        val kafkaDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(kafkaClientExtension, kafkaDeploymentOptions)
                     }
                     .compose {
                         if (metricsCollector != null) {
