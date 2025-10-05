@@ -11,6 +11,8 @@ class DashboardManager {
         this.pollingIntervalMs = 5000; // Poll every 5 seconds
         this.historicalDataLoaded = false;
         this.liveUpdatesEnabled = true;
+        this.archiveLiveUpdatesEnabled = true;
+        this.archiveCurrentTimeframe = '5m';
 
         this.init();
     }
@@ -23,6 +25,7 @@ class DashboardManager {
 
         this.setupUI();
         this.setupCharts();
+        this.setupArchiveGroupsControls();
         this.loadInitialDataWithHistory();
         this.startPolling();
     }
@@ -58,7 +61,8 @@ class DashboardManager {
     }
 
     setupUI() {
-        document.querySelectorAll('.chart-controls button').forEach(btn => {
+        // Global traffic timeframe buttons
+        document.querySelectorAll('.chart-controls button[data-timeframe]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.chart-controls button').forEach(b => b.classList.remove('active'));
                 e.target.classList.add('active');
@@ -67,10 +71,10 @@ class DashboardManager {
             });
         });
 
-        // Live updates toggle
+        // Live updates toggle (traffic chart)
         document.getElementById('live-updates-toggle').addEventListener('change', (e) => {
             this.liveUpdatesEnabled = e.target.checked;
-            console.log('Live updates', this.liveUpdatesEnabled ? 'enabled' : 'disabled');
+            console.log('Traffic live updates', this.liveUpdatesEnabled ? 'enabled' : 'disabled');
         });
     }
 
@@ -156,6 +160,7 @@ class DashboardManager {
                 responsive: true,
                 maintainAspectRatio: false,
                 aspectRatio: 2,
+                spanGaps: true,
                 scales: {
                     y: {
                         beginAtZero: true,
@@ -237,6 +242,26 @@ class DashboardManager {
         }
     }
 
+    setupArchiveGroupsControls() {
+        // Archive groups timeframe buttons
+        document.querySelectorAll('#archive-groups-controls button[data-arch-timeframe]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('#archive-groups-controls button').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.archiveCurrentTimeframe = e.target.dataset.archTimeframe;
+                this.loadArchiveGroupsHistorical();
+            });
+        });
+        // Archive live updates toggle
+        const liveToggle = document.getElementById('archive-live-updates-toggle');
+        if (liveToggle) {
+            liveToggle.addEventListener('change', (e) => {
+                this.archiveLiveUpdatesEnabled = e.target.checked;
+                console.log('Archive live updates', this.archiveLiveUpdatesEnabled ? 'enabled' : 'disabled');
+            });
+        }
+    }
+
     async loadInitialDataWithHistory() {
         try {
             await this.loadHistoricalDataForTimeframe();
@@ -254,7 +279,9 @@ class DashboardManager {
             const archiveGroups = await this.loadArchiveGroups();
             if (this.historicalDataLoaded) {
                 this.addRealtimeDataPoint(brokers);
-                this.addArchiveGroupsRealtimeDataPoint(archiveGroups);
+                if (this.archiveLiveUpdatesEnabled) {
+                    this.addArchiveGroupsRealtimeDataPoint(archiveGroups);
+                }
             }
         } catch (error) {
             console.error('Failed to load real-time data:', error);
@@ -274,6 +301,17 @@ class DashboardManager {
             console.log('Current data (for comparison):', currentBrokers);
         } catch (error) {
             console.error('Failed to load historical data:', error);
+        }
+    }
+
+    async loadArchiveGroupsHistorical() {
+        try {
+            const minutes = this.getMinutesForTimeframe(this.archiveCurrentTimeframe);
+            console.log(`Loading archive groups historical data for ${this.archiveCurrentTimeframe} (${minutes} minutes)`);
+            const archiveGroups = await this.loadArchiveGroupsWithHistory(minutes);
+            this.initializeArchiveGroupsChart(archiveGroups);
+        } catch (error) {
+            console.error('Failed to load archive groups historical data:', error);
         }
     }
 
@@ -330,23 +368,37 @@ class DashboardManager {
             aggregatedData[timeKey].opcUaOut += point.opcUaOut || 0;
         });
 
-        Object.keys(aggregatedData).forEach(timestamp => {
+        // Preserve chronological order by iterating sorted allHistoricalData sequence
+        const orderedTimestamps = allHistoricalData.map(p => p.timestamp).filter((v, i, a) => a.indexOf(v) === i);
+        orderedTimestamps.forEach(timestamp => {
             const data = aggregatedData[timestamp];
-            const timeLabel = this.formatTimestamp(timestamp);
+            if (!data) return; // safety guard
+            const timeLabel = this.formatTimestampFor(this.currentTimeframe, timestamp);
             this.trafficChart.data.labels.push(timeLabel);
             this.trafficChart.data.datasets[0].data.push(data.messagesIn);
             this.trafficChart.data.datasets[1].data.push(data.messagesOut);
             this.trafficChart.data.datasets[2].data.push(data.mqttBridgeIn);
             this.trafficChart.data.datasets[3].data.push(data.mqttBridgeOut);
             this.trafficChart.data.datasets[4].data.push(data.kafkaBridgeIn);
-            // Removed dataset push for kafkaBridgeOut
             this.trafficChart.data.datasets[5].data.push(data.opcUaIn);
             this.trafficChart.data.datasets[6].data.push(data.opcUaOut);
+        });
+
+        console.debug('Traffic history loaded', {
+            timeframe: this.currentTimeframe,
+            points: this.trafficChart.data.labels.length,
+            sampleLast5KafkaIn: this.trafficChart.data.datasets[4].data.slice(-5),
+            sampleLast5OpcUaIn: this.trafficChart.data.datasets[5].data.slice(-5)
         });
 
         this.messageBusChart.data.labels = brokers.map(b => b.nodeId);
         this.messageBusChart.data.datasets[0].data = brokers.map(b => (b.metrics && b.metrics.length > 0 ? b.metrics[0].messageBusIn : 0) || 0);
         this.messageBusChart.data.datasets[1].data = brokers.map(b => (b.metrics && b.metrics.length > 0 ? b.metrics[0].messageBusOut : 0) || 0);
+
+        if (this.trafficChart.data.labels.length === 0) {
+            this.trafficChart.data.labels = ['No Data'];
+            this.trafficChart.data.datasets.forEach(ds => ds.data = [0]);
+        }
 
         this.trafficChart.update();
         this.messageBusChart.update();
@@ -396,16 +448,19 @@ class DashboardManager {
         this.messageBusChart.update('none');
     }
 
-    formatTimestamp(isoString) {
+    formatTimestampFor(timeframe, isoString) {
         const date = new Date(isoString);
-        if (this.currentTimeframe === '24h') {
+        if (timeframe === '24h') {
             return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        } else if (this.currentTimeframe === '1h') {
+        } else if (timeframe === '1h') {
             return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         } else {
             return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         }
     }
+
+    // Backward compatibility (legacy calls)
+    formatTimestamp(isoString) { return this.formatTimestampFor(this.currentTimeframe, isoString); }
 
     updateOverviewCards(brokers) {
         const clusterTotals = brokers.reduce((acc, broker) => {
@@ -514,20 +569,44 @@ class DashboardManager {
         this.archiveGroupsChart.data.labels = [];
         this.archiveGroupsChart.data.datasets = [];
         const colors = ['#10B981','#3B82F6','#F59E0B','#EF4444','#8B5CF6','#14B8A6','#06B6D4','#F97316','#EC4899','#6366F1'];
-        archiveGroups.forEach((group, index) => {
-            if (!group.enabled || !group.metricsHistory || group.metricsHistory.length === 0) return;
+
+        // Build dataset shells for enabled groups with any history
+        const enabledWithHistory = archiveGroups.filter(g => g.enabled && g.metricsHistory && g.metricsHistory.length > 0);
+        enabledWithHistory.forEach((group, index) => {
             const color = colors[index % colors.length];
-            this.archiveGroupsChart.data.datasets.push({ label: group.name, data: [], borderColor: color, backgroundColor: color + '20', fill: false, tension: 0.4 });
+            this.archiveGroupsChart.data.datasets.push({ label: group.name, data: [], borderColor: color, backgroundColor: color + '20', fill: false, tension: 0.4, spanGaps: true });
         });
-        if (archiveGroups.length > 0 && archiveGroups[0].metricsHistory) {
-            const timestamps = archiveGroups[0].metricsHistory.map(m => this.formatTimestamp(m.timestamp));
-            this.archiveGroupsChart.data.labels = timestamps;
-            archiveGroups.forEach(group => {
-                if (!group.enabled || !group.metricsHistory) return;
-                const idx = this.archiveGroupsChart.data.datasets.findIndex(ds => ds.label === group.name);
-                if (idx >= 0) this.archiveGroupsChart.data.datasets[idx].data = group.metricsHistory.map(m => m.messagesOut || 0);
-            });
+
+        if (enabledWithHistory.length === 0) {
+            // No data available
+            this.archiveGroupsChart.data.labels = ['No Data'];
+        this.archiveGroupsChart.update();
+        console.debug('Archive groups history loaded', {
+            timeframe: timeframe,
+            labels: this.archiveGroupsChart.data.labels.length,
+            datasets: this.archiveGroupsChart.data.datasets.map(d => ({ label: d.label, points: d.data.length, last5: d.data.slice(-5) }))
+        });
+            return;
         }
+
+        // Collect unique timestamps across all enabled groups
+        const timestampSet = new Set();
+        enabledWithHistory.forEach(group => group.metricsHistory.forEach(m => timestampSet.add(m.timestamp)));
+        const sortedTimestamps = Array.from(timestampSet).sort((a, b) => new Date(a) - new Date(b));
+
+        const timeframe = this.archiveCurrentTimeframe || this.currentTimeframe;
+        this.archiveGroupsChart.data.labels = sortedTimestamps.map(ts => this.formatTimestampFor(timeframe, ts));
+
+        // Map each group's history by timestamp for quick lookup
+        enabledWithHistory.forEach(group => {
+            const historyMap = {};
+            group.metricsHistory.forEach(m => { historyMap[m.timestamp] = m.messagesOut || 0; });
+            const dsIndex = this.archiveGroupsChart.data.datasets.findIndex(ds => ds.label === group.name);
+            if (dsIndex >= 0) {
+                this.archiveGroupsChart.data.datasets[dsIndex].data = sortedTimestamps.map(ts => historyMap[ts] !== undefined ? historyMap[ts] : null);
+            }
+        });
+
         this.archiveGroupsChart.update();
     }
 
@@ -546,7 +625,7 @@ class DashboardManager {
             } else {
                 const colors = ['#10B981','#3B82F6','#F59E0B','#EF4444','#8B5CF6','#14B8A6','#06B6D4','#F97316','#EC4899','#6366F1'];
                 const color = colors[this.archiveGroupsChart.data.datasets.length % colors.length];
-                this.archiveGroupsChart.data.datasets.push({ label: group.name, data: [currentMetric.messagesOut || 0], borderColor: color, backgroundColor: color + '20', fill: false, tension: 0.4 });
+                this.archiveGroupsChart.data.datasets.push({ label: group.name, data: [currentMetric.messagesOut || 0], borderColor: color, backgroundColor: color + '20', fill: false, tension: 0.4, spanGaps: true });
             }
         });
         this.archiveGroupsChart.update('none');

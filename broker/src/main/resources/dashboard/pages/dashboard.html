@@ -188,6 +188,15 @@
             <div class="chart-container">
                 <div class="chart-header">
                     <h2 class="chart-title">Archive Groups Throughput</h2>
+                    <div class="chart-controls" id="archive-groups-controls">
+                        <button class="active" data-arch-timeframe="5m">5min</button>
+                        <button data-arch-timeframe="1h">1hour</button>
+                        <button data-arch-timeframe="24h">24hours</button>
+                        <label style="margin-left: 20px; display: flex; align-items: center; gap: 8px; color: var(--text-primary);">
+                            <input type="checkbox" id="archive-live-updates-toggle" checked style="margin: 0;">
+                            Live Updates
+                        </label>
+                    </div>
                 </div>
                 <canvas id="archiveGroupsChart" width="400" height="200"></canvas>
             </div>
