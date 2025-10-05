@@ -68,6 +68,7 @@ class ArchiveGroupsManager {
                         retainedOnly
                         lastValType
                         archiveType
+                        payloadFormat
                         lastValRetention
                         archiveRetention
                         purgeInterval
@@ -131,7 +132,7 @@ class ArchiveGroupsManager {
         if (this.archiveGroups.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                    <td colspan="10" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
                         No archive groups found. Create your first archive group to get started.
                     </td>
                 </tr>
@@ -180,6 +181,7 @@ class ArchiveGroupsManager {
                 </td>
                 <td>${this.escapeHtml(group.lastValType)}</td>
                 <td>${this.escapeHtml(group.archiveType)}</td>
+                <td>${this.escapeHtml(group.payloadFormat || 'DEFAULT')}</td>
                 <td>${group.retainedOnly ? 'Yes' : 'No'}</td>
                 <td style="color: #9333EA;">${group.metrics && group.metrics.length > 0 ? Math.round(group.metrics[0].messagesOut) : 0}</td>
                 <td style="color: var(--text-secondary);">${group.metrics && group.metrics.length > 0 ? group.metrics[0].bufferSize : 0}</td>
@@ -194,8 +196,7 @@ class ArchiveGroupsManager {
                             </button>`
                         }
                         <button class="btn-action btn-edit"
-                                onclick="archiveGroupsManager.editArchiveGroup('${this.escapeHtml(group.name)}')"
-                                ${group.enabled ? 'disabled title="Disable the archive group first to edit"' : ''}>
+                                onclick="archiveGroupsManager.editArchiveGroup('${this.escapeHtml(group.name)}')">
                             Edit
                         </button>
                         <button class="btn-action btn-delete"
@@ -294,6 +295,7 @@ class ArchiveGroupsManager {
         document.getElementById('topicFilter').value = group.topicFilter.join('\n');
         document.getElementById('lastValType').value = group.lastValType;
         document.getElementById('archiveType').value = group.archiveType;
+        document.getElementById('payloadFormat').value = group.payloadFormat || 'DEFAULT';
         document.getElementById('retainedOnly').checked = group.retainedOnly;
         document.getElementById('lastValRetention').value = group.lastValRetention || '';
         document.getElementById('archiveRetention').value = group.archiveRetention || '';
@@ -316,6 +318,7 @@ class ArchiveGroupsManager {
         const lastValType = document.getElementById('lastValType').value;
         const archiveType = document.getElementById('archiveType').value;
         const retainedOnly = document.getElementById('retainedOnly').checked;
+        const payloadFormat = document.getElementById('payloadFormat').value;
         const lastValRetention = document.getElementById('lastValRetention').value.trim();
         const archiveRetention = document.getElementById('archiveRetention').value.trim();
         const purgeInterval = document.getElementById('purgeInterval').value.trim();
@@ -342,6 +345,7 @@ class ArchiveGroupsManager {
                 topicFilter,
                 lastValType,
                 archiveType,
+                payloadFormat,
                 retainedOnly
             };
 
@@ -367,6 +371,7 @@ class ArchiveGroupsManager {
                     lastValType: input.lastValType,
                     archiveType: input.archiveType,
                     retainedOnly: input.retainedOnly,
+                    payloadFormat: input.payloadFormat,
                     lastValRetention: input.lastValRetention,
                     archiveRetention: input.archiveRetention,
                     purgeInterval: input.purgeInterval
@@ -454,6 +459,7 @@ if (window.graphqlClient) {
                     retainedOnly
                     lastValType
                     archiveType
+                    payloadFormat
                     lastValRetention
                     archiveRetention
                     purgeInterval

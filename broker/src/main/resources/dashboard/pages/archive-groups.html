@@ -509,6 +509,7 @@
                             <th>Topic Filters</th>
                             <th>Last Val Type</th>
                             <th>Archive Type</th>
+                            <th>Payload Format</th>
                             <th>Retained Only</th>
                             <th>Out (msg/s)</th>
                             <th>Buffer</th>
@@ -517,7 +518,7 @@
                     </thead>
                     <tbody id="archive-groups-tbody">
                         <tr>
-                            <td colspan="9" style="text-align: center; padding: 2rem;">
+                            <td colspan="10" style="text-align: center; padding: 2rem;">
                                 Loading archive groups...
                             </td>
                         </tr>
@@ -577,6 +578,15 @@
                                 </select>
                                 <div class="help-text">Note: MEMORY is only available for Last Value Type, not Archive Type</div>
                             </div>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label class="form-label" for="payloadFormat">Payload Format</label>
+                            <select id="payloadFormat" name="payloadFormat" class="form-select">
+                                <option value="DEFAULT">DEFAULT (binary-safe)</option>
+                                <option value="JSON">JSON (store as JSON text)</option>
+                            </select>
+                            <div class="help-text">Select how payload bytes are stored; DEFAULT is recommended.</div>
                         </div>
 
                         <div class="form-group full-width">
