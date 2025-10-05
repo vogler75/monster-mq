@@ -2,14 +2,17 @@ package at.rocworks.handlers
 
 import at.rocworks.Const
 import at.rocworks.Utils
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.*
 import at.rocworks.stores.IMessageStore
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.json.JsonObject
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
 class MessageHandler(
@@ -25,6 +28,15 @@ class MessageHandler(
     // Runtime list of active archive groups (includes both startup and dynamically added ones)
     private val activeArchiveGroups = mutableMapOf<String, ArchiveGroup>()
 
+    // Metrics tracking: messages written per archive group
+    private val archiveWriteCounters = mutableMapOf<String, AtomicLong>()
+    private val archiveWriteCountersSnapshot = mutableMapOf<String, Long>()
+    private val archiveTimestampSnapshot = mutableMapOf<String, Long>()
+
+    // Buffer size averaging
+    private val archiveBufferSizeAccumulator = mutableMapOf<String, AtomicLong>()
+    private val archiveBufferSampleCount = mutableMapOf<String, AtomicLong>()
+
     private val maxWriteBlockSize = 4000 // TODO: configurable
 
     init {
@@ -37,6 +49,81 @@ class MessageHandler(
         archiveGroups.forEach { group ->
             registerArchiveGroup(group)
         }
+
+        // Setup event bus handlers for archive metrics
+        setupArchiveMetricsHandlers()
+
+        // Start periodic buffer size sampling (every 100ms to get good average)
+        vertx.setPeriodic(100) {
+            sampleArchiveBufferSizes()
+        }
+    }
+
+    private fun sampleArchiveBufferSizes() {
+        activeArchiveGroups.keys.forEach { groupName ->
+            val bufferSize = archiveQueues[groupName]?.size ?: 0
+            archiveBufferSizeAccumulator[groupName]?.addAndGet(bufferSize.toLong())
+            archiveBufferSampleCount[groupName]?.incrementAndGet()
+        }
+    }
+
+    private fun setupArchiveMetricsHandlers() {
+        // Handler for archive groups list
+        vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Archive.GROUPS_LIST) { message ->
+            val groupNames = io.vertx.core.json.JsonArray(activeArchiveGroups.keys.toList())
+            message.reply(JsonObject().put("groups", groupNames))
+        }
+
+        // Handler for metrics collection for each archive group
+        activeArchiveGroups.keys.forEach { groupName ->
+            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Archive.groupMetrics(groupName)) { message ->
+                val metrics = getArchiveGroupMetricsAndReset(groupName)
+                message.reply(metrics)
+            }
+
+            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Archive.groupBufferSize(groupName)) { message ->
+                val bufferSize = archiveQueues[groupName]?.size ?: 0
+                message.reply(JsonObject().put("bufferSize", bufferSize))
+            }
+        }
+    }
+
+    private fun getArchiveGroupMetricsAndReset(groupName: String): JsonObject {
+        val counter = archiveWriteCounters[groupName] ?: return JsonObject()
+        val currentCount = counter.get()
+        val lastSnapshot = archiveWriteCountersSnapshot[groupName] ?: 0L
+        val valuesSinceLastReset = currentCount - lastSnapshot
+
+        // Calculate time delta
+        val currentTimestamp = System.currentTimeMillis()
+        val lastTimestamp = archiveTimestampSnapshot[groupName] ?: currentTimestamp
+        val elapsedSeconds = (currentTimestamp - lastTimestamp) / 1000.0
+
+        // Calculate values per second (rate)
+        val valuesPerSecond = if (elapsedSeconds > 0) {
+            valuesSinceLastReset / elapsedSeconds
+        } else {
+            0.0
+        }
+
+        // Calculate average buffer size
+        val bufferAccum = archiveBufferSizeAccumulator[groupName]?.get() ?: 0L
+        val sampleCount = archiveBufferSampleCount[groupName]?.get() ?: 0L
+        val avgBufferSize = if (sampleCount > 0) {
+            (bufferAccum.toDouble() / sampleCount.toDouble()).toInt()
+        } else {
+            archiveQueues[groupName]?.size ?: 0
+        }
+
+        // Update snapshots for next calculation
+        archiveWriteCountersSnapshot[groupName] = currentCount
+        archiveTimestampSnapshot[groupName] = currentTimestamp
+        archiveBufferSizeAccumulator[groupName]?.set(0)
+        archiveBufferSampleCount[groupName]?.set(0)
+
+        return JsonObject()
+            .put("valuesPerSecond", valuesPerSecond)
+            .put("bufferSize", avgBufferSize)
     }
 
     /**
@@ -48,6 +135,15 @@ class MessageHandler(
         // Add to active groups
         activeArchiveGroups[archiveGroup.name] = archiveGroup
 
+        // Initialize metrics counters
+        archiveWriteCounters[archiveGroup.name] = AtomicLong(0)
+        archiveWriteCountersSnapshot[archiveGroup.name] = 0L
+        archiveTimestampSnapshot[archiveGroup.name] = System.currentTimeMillis()
+
+        // Initialize buffer size tracking
+        archiveBufferSizeAccumulator[archiveGroup.name] = AtomicLong(0)
+        archiveBufferSampleCount[archiveGroup.name] = AtomicLong(0)
+
         // Create queue for this archive group
         val queue = ArrayBlockingQueue<BrokerMessage>(100_000) // TODO: configurable
         archiveQueues[archiveGroup.name] = queue
@@ -56,6 +152,21 @@ class MessageHandler(
         writerThread("AG-${archiveGroup.name}", queue) { list ->
             archiveGroup.lastValStore?.addAll(getLastMessages(list))
             archiveGroup.archiveStore?.addHistory(list)
+            // Track number of messages written
+            archiveWriteCounters[archiveGroup.name]?.addAndGet(list.size.toLong())
+        }
+
+        // Register event bus handlers for this archive group (for dynamically added groups)
+        if (vertx != null) {
+            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Archive.groupMetrics(archiveGroup.name)) { message ->
+                val metrics = getArchiveGroupMetricsAndReset(archiveGroup.name)
+                message.reply(metrics)
+            }
+
+            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Archive.groupBufferSize(archiveGroup.name)) { message ->
+                val bufferSize = archiveQueues[archiveGroup.name]?.size ?: 0
+                message.reply(JsonObject().put("bufferSize", bufferSize))
+            }
         }
 
         logger.info("Archive group [${archiveGroup.name}] registered successfully")
@@ -65,10 +176,19 @@ class MessageHandler(
      * Unregister an archive group from message routing
      */
     fun unregisterArchiveGroup(archiveGroupName: String) {
-        logger.info("Unregistering archive group [$archiveGroupName] from MessageHandler")
+        logger.info("Unregister archive group [$archiveGroupName] from MessageHandler")
 
         // Remove from active groups
         activeArchiveGroups.remove(archiveGroupName)
+
+        // Remove metrics tracking
+        archiveWriteCounters.remove(archiveGroupName)
+        archiveWriteCountersSnapshot.remove(archiveGroupName)
+        archiveTimestampSnapshot.remove(archiveGroupName)
+
+        // Remove buffer size tracking
+        archiveBufferSizeAccumulator.remove(archiveGroupName)
+        archiveBufferSampleCount.remove(archiveGroupName)
 
         // Remove queue (the writer thread will terminate when queue is empty and not used)
         archiveQueues.remove(archiveGroupName)

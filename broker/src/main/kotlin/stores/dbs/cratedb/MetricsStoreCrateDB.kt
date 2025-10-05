@@ -91,10 +91,11 @@ class MetricsStoreCrateDB(
                 connection.prepareStatement(insertSQL).use { statement ->
                     statement.setTimestamp(1, Timestamp.from(timestamp))
                     statement.setString(2, when(kind){
-                        MetricKind.BROKER->"broker"; 
-                        MetricKind.SESSION->"session"; 
-                        MetricKind.MQTTBRIDGE->"mqttbridge"; 
-                        MetricKind.OPCUADEVICE->"opcua" 
+                        MetricKind.BROKER->"broker";
+                        MetricKind.SESSION->"session";
+                        MetricKind.MQTTBRIDGE->"mqttbridge";
+                        MetricKind.OPCUADEVICE->"opcua"
+                        MetricKind.ARCHIVEGROUP->"archive"
                     })
                     statement.setString(3, identifier)
                     statement.setObject(4, metricsJson.map)
@@ -134,10 +135,11 @@ class MetricsStoreCrateDB(
             }
             connection.prepareStatement(sql).use { st ->
                 st.setString(1, when(kind){
-                    MetricKind.BROKER->"broker"; 
-                    MetricKind.SESSION->"session"; 
-                    MetricKind.MQTTBRIDGE->"mqttbridge"; 
-                    MetricKind.OPCUADEVICE->"opcua" 
+                    MetricKind.BROKER->"broker";
+                    MetricKind.SESSION->"session";
+                    MetricKind.MQTTBRIDGE->"mqttbridge";
+                    MetricKind.OPCUADEVICE->"opcua"
+                    MetricKind.ARCHIVEGROUP->"archivegroup"
                 })
                 st.setString(2, identifier)
                 st.setTimestamp(3, Timestamp.from(fromTs))
@@ -176,10 +178,11 @@ class MetricsStoreCrateDB(
             }
             connection.prepareStatement(sql).use { st ->
                 st.setString(1, when(kind){
-                    MetricKind.BROKER->"broker"; 
-                    MetricKind.SESSION->"session"; 
-                    MetricKind.MQTTBRIDGE->"mqttbridge"; 
-                    MetricKind.OPCUADEVICE->"opcua" 
+                    MetricKind.BROKER->"broker";
+                    MetricKind.SESSION->"session";
+                    MetricKind.MQTTBRIDGE->"mqttbridge";
+                    MetricKind.OPCUADEVICE->"opcua"
+                    MetricKind.ARCHIVEGROUP->"archivegroup"
                 })
                 st.setString(2, identifier)
                 st.setTimestamp(3, Timestamp.from(fromTs))

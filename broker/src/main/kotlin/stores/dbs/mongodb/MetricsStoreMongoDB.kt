@@ -117,20 +117,22 @@ class MetricsStoreMongoDB(
                 val document = Document()
                     .append("timestamp", Date.from(timestamp))
                     .append("metric_type", when(kind){
-                        MetricKind.BROKER->"broker"; 
-                        MetricKind.SESSION->"session"; 
-                        MetricKind.MQTTBRIDGE->"mqttbridge"; 
-                        MetricKind.OPCUADEVICE->"opcua" 
+                        MetricKind.BROKER->"broker";
+                        MetricKind.SESSION->"session";
+                        MetricKind.MQTTBRIDGE->"mqttbridge";
+                        MetricKind.OPCUADEVICE->"opcua"
+                        MetricKind.ARCHIVEGROUP->"archive"
                     })
                     .append("identifier", identifier)
                     .append("metrics", metricsDoc)
                 val filter = Filters.and(
                     Filters.eq("timestamp", Date.from(timestamp)),
                     Filters.eq("metric_type", when(kind){
-                        MetricKind.BROKER->"broker"; 
-                        MetricKind.SESSION->"session"; 
-                        MetricKind.MQTTBRIDGE->"mqttbridge"; 
-                        MetricKind.OPCUADEVICE->"opcua" 
+                        MetricKind.BROKER->"broker";
+                        MetricKind.SESSION->"session";
+                        MetricKind.MQTTBRIDGE->"mqttbridge";
+                        MetricKind.OPCUADEVICE->"opcua"
+                        MetricKind.ARCHIVEGROUP->"archive"
                     }),
                     Filters.eq("identifier", identifier)
                 )
@@ -159,10 +161,11 @@ class MetricsStoreMongoDB(
             val filterList = mutableListOf<Bson>()
             filterList.addAll(listOf(
                 Filters.eq("metric_type", when(kind){
-                    MetricKind.BROKER->"broker"; 
-                    MetricKind.SESSION->"session"; 
-                    MetricKind.MQTTBRIDGE->"mqttbridge"; 
-                    MetricKind.OPCUADEVICE->"opcua" 
+                    MetricKind.BROKER->"broker";
+                    MetricKind.SESSION->"session";
+                    MetricKind.MQTTBRIDGE->"mqttbridge";
+                    MetricKind.OPCUADEVICE->"opcua"
+                    MetricKind.ARCHIVEGROUP->"archivegroup"
                 }),
                 Filters.eq("identifier", identifier),
                 Filters.gte("timestamp", Date.from(fromTime))
@@ -196,10 +199,11 @@ class MetricsStoreMongoDB(
             val filterList = mutableListOf<Bson>()
             filterList.addAll(listOf(
                 Filters.eq("metric_type", when(kind){
-                    MetricKind.BROKER->"broker"; 
-                    MetricKind.SESSION->"session"; 
-                    MetricKind.MQTTBRIDGE->"mqttbridge"; 
-                    MetricKind.OPCUADEVICE->"opcua" 
+                    MetricKind.BROKER->"broker";
+                    MetricKind.SESSION->"session";
+                    MetricKind.MQTTBRIDGE->"mqttbridge";
+                    MetricKind.OPCUADEVICE->"opcua"
+                    MetricKind.ARCHIVEGROUP->"archivegroup"
                 }),
                 Filters.eq("identifier", identifier),
                 Filters.gte("timestamp", Date.from(fromTime))

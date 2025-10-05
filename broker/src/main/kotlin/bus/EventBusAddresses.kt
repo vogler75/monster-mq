@@ -84,6 +84,14 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // Archive Groups
+    object Archive {
+        private const val ARCHIVE_NS = "$BASE.archive"
+        const val GROUPS_LIST = "$ARCHIVE_NS.groups.list"
+        fun groupMetrics(groupName: String) = "$ARCHIVE_NS.metrics.$groupName"
+        fun groupBufferSize(groupName: String) = "$ARCHIVE_NS.buffer.$groupName"
+    }
+
     // System Operations
     object System {
         // Can be used for system-wide broadcasts, health checks, etc.

@@ -58,9 +58,10 @@ class MetricsHandler(
             var brokerDone = false
             var bridgeDone = false
             var opcUaDone = false
+            var archiveDone = false
 
             fun tryAssembleAndStore() {
-                if (brokerDone && bridgeDone && opcUaDone && nodeMetrics != null) {
+                if (brokerDone && bridgeDone && opcUaDone && archiveDone && nodeMetrics != null) {
                     try {
                         val nm = nodeMetrics!!
                         val brokerMetrics = BrokerMetrics(
@@ -221,6 +222,52 @@ class MetricsHandler(
                      tryAssembleAndStore()
                  }
              }
+
+            // Archive group metrics aggregation
+            val archiveListAddress = EventBusAddresses.Archive.GROUPS_LIST
+            vertx.eventBus().request<JsonObject>(archiveListAddress, JsonObject()).onComplete { listReply ->
+                if (listReply.succeeded()) {
+                    val body = listReply.result().body()
+                    val groups = body.getJsonArray("groups") ?: io.vertx.core.json.JsonArray()
+                    if (groups.isEmpty) {
+                        archiveDone = true
+                        tryAssembleAndStore()
+                    } else {
+                        var remaining = groups.size()
+                        groups.forEach { g ->
+                            val groupName = g as String
+                            val mAddr = EventBusAddresses.Archive.groupMetrics(groupName)
+                            vertx.eventBus().request<JsonObject>(mAddr, JsonObject()).onComplete { mReply ->
+                                if (mReply.succeeded()) {
+                                    try {
+                                        val m = mReply.result().body()
+                                        val valuesPerSecond = m.getDouble("valuesPerSecond", 0.0)
+                                        val bufferSize = m.getInteger("bufferSize", 0)
+                                        // Store individual archive group metrics
+                                        val archiveMetricsJson = JsonObject()
+                                            .put("valuesPerSecond", valuesPerSecond)
+                                            .put("bufferSize", bufferSize)
+                                        metricsStore.storeMetrics(at.rocworks.stores.MetricKind.ARCHIVEGROUP, timestamp, groupName, archiveMetricsJson)
+                                    } catch (e: Exception) {
+                                        logger.warning("Error processing archive group metrics for $groupName: ${e.message}")
+                                    }
+                                } else {
+                                    logger.fine("No metrics for archive group $groupName: ${mReply.cause()?.message}")
+                                }
+                                remaining -= 1
+                                if (remaining == 0) {
+                                    archiveDone = true
+                                    tryAssembleAndStore()
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    logger.fine("Could not retrieve archive groups list: ${listReply.cause()?.message}")
+                    archiveDone = true
+                    tryAssembleAndStore()
+                }
+            }
         } catch (e: Exception) {
             logger.warning("Error collecting metrics: ${e.message}")
             e.printStackTrace()

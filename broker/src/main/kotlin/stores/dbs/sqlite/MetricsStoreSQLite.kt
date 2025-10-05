@@ -94,6 +94,7 @@ class MetricsStoreSQLite(
                         MetricKind.SESSION->"session";
                         MetricKind.MQTTBRIDGE->"mqttbridge";
                         MetricKind.OPCUADEVICE->"opcua"
+                        MetricKind.ARCHIVEGROUP->"archive"
                     })
                     .add(identifier)
                     .add(metricsJson.encode())
@@ -147,6 +148,7 @@ class MetricsStoreSQLite(
                     MetricKind.SESSION->"session";
                     MetricKind.MQTTBRIDGE->"mqttbridge";
                     MetricKind.OPCUADEVICE->"opcua"
+                    MetricKind.ARCHIVEGROUP->"archivegroup"
                 })
                 .add(identifier)
                 .add(fromTimestamp.toString())
@@ -202,6 +204,7 @@ class MetricsStoreSQLite(
                     MetricKind.SESSION->"session";
                     MetricKind.MQTTBRIDGE->"mqttbridge";
                     MetricKind.OPCUADEVICE->"opcua"
+                    MetricKind.ARCHIVEGROUP->"archivegroup"
                 })
                 .add(identifier)
                 .add(fromTimestamp.toString())

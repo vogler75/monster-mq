@@ -13,7 +13,7 @@ enum class MetricsStoreType {
     SQLITE
 }
 
-enum class MetricKind { BROKER, SESSION, MQTTBRIDGE, OPCUADEVICE }
+enum class MetricKind { BROKER, SESSION, MQTTBRIDGE, OPCUADEVICE, ARCHIVEGROUP }
 
 interface IMetricsStore {
     fun getName(): String
