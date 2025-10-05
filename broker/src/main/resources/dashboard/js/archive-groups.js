@@ -78,6 +78,11 @@ class ArchiveGroupsManager {
                             messageArchive
                             lastValueStore
                         }
+                        metrics {
+                            messagesOut
+                            bufferSize
+                            timestamp
+                        }
                     }
                 }
             `);
@@ -126,7 +131,7 @@ class ArchiveGroupsManager {
         if (this.archiveGroups.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                    <td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
                         No archive groups found. Create your first archive group to get started.
                     </td>
                 </tr>
@@ -176,6 +181,8 @@ class ArchiveGroupsManager {
                 <td>${this.escapeHtml(group.lastValType)}</td>
                 <td>${this.escapeHtml(group.archiveType)}</td>
                 <td>${group.retainedOnly ? 'Yes' : 'No'}</td>
+                <td style="color: #9333EA;">${group.metrics && group.metrics.length > 0 ? Math.round(group.metrics[0].messagesOut) : 0}</td>
+                <td style="color: var(--text-secondary);">${group.metrics && group.metrics.length > 0 ? group.metrics[0].bufferSize : 0}</td>
                 <td>
                     <div class="action-buttons">
                         ${group.enabled ?

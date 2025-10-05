@@ -3,6 +3,7 @@ class DashboardManager {
         this.pollingInterval = null;
         this.trafficChart = null;
         this.messageBusChart = null;
+        this.archiveGroupsChart = null;
         this.trafficData = [];
         this.messageBusData = [];
         this.maxDataPoints = 50;
@@ -85,6 +86,7 @@ class DashboardManager {
     setupCharts() {
         const trafficCtx = document.getElementById('trafficChart').getContext('2d');
         const messageBusCtx = document.getElementById('messageBusChart').getContext('2d');
+        const archiveGroupsCtx = document.getElementById('archiveGroupsChart').getContext('2d');
 
         Chart.defaults.color = '#CBD5E1';
         Chart.defaults.borderColor = '#475569';
@@ -206,6 +208,37 @@ class DashboardManager {
                 }
             }
         });
+
+        this.archiveGroupsChart = new Chart(archiveGroupsCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: []  // Will be populated dynamically based on archive groups
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                aspectRatio: 2,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#334155' },
+                        title: {
+                            display: true,
+                            text: 'Messages/sec'
+                        }
+                    },
+                    x: {
+                        grid: { color: '#334155' }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                }
+            }
+        });
     }
 
     startPolling() {
@@ -246,9 +279,13 @@ class DashboardManager {
             const brokers = await window.graphqlClient.getBrokers();
             this.updateMetrics(brokers);
 
+            // Load archive groups for real-time chart update
+            const archiveGroups = await this.loadArchiveGroups();
+
             // Add real-time data point to charts if historical data is loaded
             if (this.historicalDataLoaded) {
                 this.addRealtimeDataPoint(brokers);
+                this.addArchiveGroupsRealtimeDataPoint(archiveGroups);
             }
         } catch (error) {
             console.error('Failed to load real-time data:', error);
@@ -263,8 +300,13 @@ class DashboardManager {
             const brokers = await window.graphqlClient.getBrokersWithHistory(minutes);
             console.log('Historical data received:', brokers);
 
+            // Load archive groups with history
+            const archiveGroups = await this.loadArchiveGroupsWithHistory(minutes);
+            console.log('Archive groups historical data received:', archiveGroups);
+
             this.updateMetrics(brokers);
             this.initializeChartsWithHistory(brokers);
+            this.initializeArchiveGroupsChart(archiveGroups);
 
             // Also show current vs historical comparison
             const currentBrokers = await window.graphqlClient.getBrokers();
@@ -638,6 +680,145 @@ class DashboardManager {
             return (num / 1000).toFixed(1) + 'K';
         }
         return num.toString();
+    }
+
+    async loadArchiveGroups() {
+        try {
+            const result = await window.graphqlClient.query(`
+                query GetArchiveGroups {
+                    archiveGroups {
+                        name
+                        enabled
+                        metrics {
+                            messagesOut
+                            bufferSize
+                            timestamp
+                        }
+                    }
+                }
+            `);
+            return result.archiveGroups || [];
+        } catch (error) {
+            console.error('Failed to load archive groups:', error);
+            return [];
+        }
+    }
+
+    async loadArchiveGroupsWithHistory(minutes) {
+        try {
+            const result = await window.graphqlClient.query(`
+                query GetArchiveGroupsWithHistory($lastMinutes: Int) {
+                    archiveGroups {
+                        name
+                        enabled
+                        metricsHistory(lastMinutes: $lastMinutes) {
+                            messagesOut
+                            bufferSize
+                            timestamp
+                        }
+                    }
+                }
+            `, { lastMinutes: minutes });
+            return result.archiveGroups || [];
+        } catch (error) {
+            console.error('Failed to load archive groups with history:', error);
+            return [];
+        }
+    }
+
+    initializeArchiveGroupsChart(archiveGroups) {
+        // Clear existing chart data
+        this.archiveGroupsChart.data.labels = [];
+        this.archiveGroupsChart.data.datasets = [];
+
+        // Generate colors for each archive group
+        const colors = [
+            '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6',
+            '#14B8A6', '#06B6D4', '#F97316', '#EC4899', '#6366F1'
+        ];
+
+        // Create a dataset for each archive group
+        archiveGroups.forEach((group, index) => {
+            if (!group.enabled || !group.metricsHistory || group.metricsHistory.length === 0) {
+                return;
+            }
+
+            const color = colors[index % colors.length];
+            this.archiveGroupsChart.data.datasets.push({
+                label: group.name,
+                data: [],
+                borderColor: color,
+                backgroundColor: color + '20',
+                fill: false,
+                tension: 0.4
+            });
+        });
+
+        // Populate timestamps and data points
+        if (archiveGroups.length > 0 && archiveGroups[0].metricsHistory) {
+            const timestamps = archiveGroups[0].metricsHistory.map(m => this.formatTimestamp(m.timestamp));
+            this.archiveGroupsChart.data.labels = timestamps;
+
+            archiveGroups.forEach((group, groupIndex) => {
+                if (!group.enabled || !group.metricsHistory) return;
+
+                const datasetIndex = this.archiveGroupsChart.data.datasets.findIndex(ds => ds.label === group.name);
+                if (datasetIndex >= 0) {
+                    this.archiveGroupsChart.data.datasets[datasetIndex].data =
+                        group.metricsHistory.map(m => m.messagesOut || 0);
+                }
+            });
+        }
+
+        this.archiveGroupsChart.update();
+    }
+
+    addArchiveGroupsRealtimeDataPoint(archiveGroups) {
+        const now = new Date();
+        const timeLabel = now.toLocaleTimeString();
+
+        // Add new label
+        this.archiveGroupsChart.data.labels.push(timeLabel);
+
+        // Limit data points
+        if (this.archiveGroupsChart.data.labels.length > this.maxDataPoints) {
+            this.archiveGroupsChart.data.labels.shift();
+        }
+
+        // Update each dataset with new data
+        archiveGroups.forEach(group => {
+            if (!group.enabled) return;
+
+            const datasetIndex = this.archiveGroupsChart.data.datasets.findIndex(ds => ds.label === group.name);
+            if (datasetIndex >= 0) {
+                const currentMetric = group.metrics && group.metrics.length > 0 ? group.metrics[0] : { messagesOut: 0 };
+                this.archiveGroupsChart.data.datasets[datasetIndex].data.push(currentMetric.messagesOut || 0);
+
+                // Limit data points
+                if (this.archiveGroupsChart.data.datasets[datasetIndex].data.length > this.maxDataPoints) {
+                    this.archiveGroupsChart.data.datasets[datasetIndex].data.shift();
+                }
+            } else {
+                // New archive group appeared, add a new dataset
+                const colors = [
+                    '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6',
+                    '#14B8A6', '#06B6D4', '#F97316', '#EC4899', '#6366F1'
+                ];
+                const color = colors[this.archiveGroupsChart.data.datasets.length % colors.length];
+                const currentMetric = group.metrics && group.metrics.length > 0 ? group.metrics[0] : { messagesOut: 0 };
+
+                this.archiveGroupsChart.data.datasets.push({
+                    label: group.name,
+                    data: [currentMetric.messagesOut || 0],
+                    borderColor: color,
+                    backgroundColor: color + '20',
+                    fill: false,
+                    tension: 0.4
+                });
+            }
+        });
+
+        this.archiveGroupsChart.update('none');
     }
 }
 
