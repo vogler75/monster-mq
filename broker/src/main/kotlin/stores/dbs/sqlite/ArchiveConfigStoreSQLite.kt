@@ -70,7 +70,8 @@ class ArchiveConfigStoreSQLite(
                 archive_retention TEXT,
                 purge_interval TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                payload_format TEXT DEFAULT 'JAVA'
             )
         """.trimIndent()
 
@@ -82,10 +83,10 @@ class ArchiveConfigStoreSQLite(
                 INSERT OR IGNORE INTO $configTableName (
                     name, enabled, topic_filter, retained_only,
                     last_val_type, archive_type, last_val_retention,
-                    archive_retention, purge_interval
+                    archive_retention, purge_interval, payload_format
                 ) VALUES (
                     'Default', 1, '["#"]', 0,
-                    'MEMORY', 'NONE', '1h', '1h', '1h'
+                    'MEMORY', 'NONE', '1h', '1h', '1h', 'JAVA'
                 )
             """.trimIndent()
 
@@ -185,8 +186,8 @@ class ArchiveConfigStoreSQLite(
         vertx.executeBlocking(Callable {
             val sql = """
                 INSERT OR REPLACE INTO $configTableName
-                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             """.trimIndent()
 
             try {
@@ -209,6 +210,7 @@ class ArchiveConfigStoreSQLite(
                         preparedStatement.setString(7, lastValRetention)
                         preparedStatement.setString(8, archiveRetention)
                         preparedStatement.setString(9, purgeInterval)
+                        preparedStatement.setString(10, archiveGroup.payloadFormat.name)
 
                         val rowsAffected = preparedStatement.executeUpdate()
                         val success = rowsAffected > 0
@@ -306,12 +308,16 @@ class ArchiveConfigStoreSQLite(
         val archiveRetention = resultSet.getString("archive_retention")
         val purgeInterval = resultSet.getString("purge_interval")
 
+        val payloadFormatStr = try { resultSet.getString("payload_format") } catch (e: Exception) { null }
+        val payloadFormat = try { if (payloadFormatStr != null) PayloadFormat.valueOf(payloadFormatStr) else PayloadFormat.JAVA } catch (e: Exception) { PayloadFormat.JAVA }
+
         return ArchiveGroup(
             name = name,
             topicFilter = topicFilter,
             retainedOnly = retainedOnly,
             lastValType = lastValType,
             archiveType = archiveType,
+            payloadFormat = payloadFormat,
             lastValRetentionMs = lastValRetention?.let { DurationParser.parse(it) },
             archiveRetentionMs = archiveRetention?.let { DurationParser.parse(it) },
             purgeIntervalMs = purgeInterval?.let { DurationParser.parse(it) },

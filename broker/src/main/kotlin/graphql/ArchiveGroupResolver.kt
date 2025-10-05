@@ -50,7 +50,8 @@ class ArchiveGroupResolver(
                             "archiveType" to jsonObj.getString("archiveType"),
                             "lastValRetention" to jsonObj.getString("lastValRetention"),
                             "archiveRetention" to jsonObj.getString("archiveRetention"),
-                            "purgeInterval" to jsonObj.getString("purgeInterval")
+                             "purgeInterval" to jsonObj.getString("purgeInterval"),
+                             "payloadFormat" to jsonObj.getString("payloadFormat", "JAVA")
                         )
                     }
                     future.complete(result)
@@ -74,7 +75,9 @@ class ArchiveGroupResolver(
                                         "archiveType" to config.archiveGroup.getArchiveType().name,
                                         "lastValRetention" to config.archiveGroup.getLastValRetention(),
                                         "archiveRetention" to config.archiveGroup.getArchiveRetention(),
-                                        "purgeInterval" to config.archiveGroup.getPurgeInterval()
+                                         "purgeInterval" to config.archiveGroup.getPurgeInterval(),
+                                         "payloadFormat" to config.archiveGroup.payloadFormat.name,
+                                         "payloadFormat" to config.archiveGroup.payloadFormat.name
                                     )
                                 }
                                 future.complete(result)
@@ -120,7 +123,8 @@ class ArchiveGroupResolver(
                             "archiveType" to runtimeStatus.getString("archiveType"),
                             "lastValRetention" to runtimeStatus.getString("lastValRetention"),
                             "archiveRetention" to runtimeStatus.getString("archiveRetention"),
-                            "purgeInterval" to runtimeStatus.getString("purgeInterval")
+                             "purgeInterval" to runtimeStatus.getString("purgeInterval"),
+                             "payloadFormat" to runtimeStatus.getString("payloadFormat", "JAVA")
                         )
                     } else {
                         null
@@ -145,7 +149,9 @@ class ArchiveGroupResolver(
                                         "archiveType" to archiveGroup.archiveGroup.getArchiveType().name,
                                         "lastValRetention" to archiveGroup.archiveGroup.getLastValRetention(),
                                         "archiveRetention" to archiveGroup.archiveGroup.getArchiveRetention(),
-                                        "purgeInterval" to archiveGroup.archiveGroup.getPurgeInterval()
+                                         "purgeInterval" to archiveGroup.archiveGroup.getPurgeInterval(),
+                                         "payloadFormat" to archiveGroup.archiveGroup.payloadFormat.name,
+                                         "payloadFormat" to archiveGroup.archiveGroup.payloadFormat.name
                                     )
                                 } else {
                                     null
@@ -218,6 +224,7 @@ class ArchiveGroupResolver(
                     ))
                     return@DataFetcher future
                 }
+                val payloadFormatStr = input["payloadFormat"] as? String ?: "JAVA"
 
                 // Parse optional durations
                 val lastValRetention = input["lastValRetention"] as? String
@@ -241,6 +248,16 @@ class ArchiveGroupResolver(
                     future.complete(mapOf(
                         "success" to false,
                         "message" to "Invalid input: Invalid archiveType: $archiveTypeStr"
+                    ))
+                    return@DataFetcher future
+                }
+
+                val payloadFormat = try {
+                    PayloadFormat.valueOf(payloadFormatStr)
+                } catch (e: Exception) {
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to "Invalid input: Invalid payloadFormat: $payloadFormatStr"
                     ))
                     return@DataFetcher future
                 }
@@ -281,6 +298,7 @@ class ArchiveGroupResolver(
                     retainedOnly = retainedOnly,
                     lastValType = lastValType,
                     archiveType = archiveType,
+                    payloadFormat = payloadFormat,
                     lastValRetentionMs = lastValRetentionMs,
                     archiveRetentionMs = archiveRetentionMs,
                     purgeIntervalMs = purgeIntervalMs,
@@ -296,18 +314,20 @@ class ArchiveGroupResolver(
                         future.complete(mapOf(
                             "success" to true,
                             "message" to "Archive group '$name' created successfully (disabled by default)",
-                            "archiveGroup" to mapOf(
-                                "name" to name,
-                                "enabled" to false,
-                                "deployed" to false,
-                                "topicFilter" to topicFilter,
-                                "retainedOnly" to retainedOnly,
-                                "lastValType" to lastValType.name,
-                                "archiveType" to archiveType.name,
-                                "lastValRetention" to lastValRetention,
-                                "archiveRetention" to archiveRetention,
-                                "purgeInterval" to purgeInterval
-                            )
+                                         "archiveGroup" to mapOf(
+                                             "name" to name,
+                                             "enabled" to false,
+                                             "deployed" to false,
+                                             "topicFilter" to topicFilter,
+                                             "retainedOnly" to retainedOnly,
+                                             "lastValType" to lastValType.name,
+                                             "archiveType" to archiveType.name,
+                                             "payloadFormat" to payloadFormat.name,
+                                 "payloadFormat" to payloadFormat.name,
+                                 "lastValRetention" to lastValRetention,
+                                 "archiveRetention" to archiveRetention,
+                                 "purgeInterval" to purgeInterval
+                             )
                         ))
                     } else {
                         future.complete(mapOf(
@@ -422,11 +442,26 @@ class ArchiveGroupResolver(
                                     ))
                                     return@onComplete
                                 }
-                            } else {
-                                existingArchiveGroup.getArchiveType()
-                            }
+                             } else {
+                                 existingArchiveGroup.getArchiveType()
+                             }
 
-                            // Parse optional durations if provided, otherwise keep existing
+                             val payloadFormatStr = input["payloadFormat"] as? String
+                             val payloadFormat = if (payloadFormatStr != null) {
+                                 try {
+                                     PayloadFormat.valueOf(payloadFormatStr)
+                                 } catch (e: Exception) {
+                                     future.complete(mapOf(
+                                         "success" to false,
+                                         "message" to "Invalid input: Invalid payloadFormat: $payloadFormatStr"
+                                     ))
+                                     return@onComplete
+                                 }
+                             } else {
+                                 existingArchiveGroup.payloadFormat
+                             }
+
+                             // Parse optional durations if provided, otherwise keep existing
                             val lastValRetention = input["lastValRetention"] as? String
                             val archiveRetention = input["archiveRetention"] as? String
                             val purgeInterval = input["purgeInterval"] as? String
@@ -471,21 +506,22 @@ class ArchiveGroupResolver(
                                 existingArchiveGroup.getPurgeIntervalMs()
                             }
 
-                            // Create the updated ArchiveGroup
-                            val updatedArchiveGroup = ArchiveGroup(
-                                name = name,
-                                topicFilter = topicFilter,
-                                retainedOnly = retainedOnly,
-                                lastValType = lastValType,
-                                archiveType = archiveType,
-                                lastValRetentionMs = lastValRetentionMs,
-                                archiveRetentionMs = archiveRetentionMs,
-                                purgeIntervalMs = purgeIntervalMs,
-                                lastValRetentionStr = lastValRetention ?: existingArchiveGroup.getLastValRetention(),
-                                archiveRetentionStr = archiveRetention ?: existingArchiveGroup.getArchiveRetention(),
-                                purgeIntervalStr = purgeInterval ?: existingArchiveGroup.getPurgeInterval(),
-                                databaseConfig = JsonObject() // Will be populated from config
-                            )
+                             // Create the updated ArchiveGroup
+                             val updatedArchiveGroup = ArchiveGroup(
+                                 name = name,
+                                 topicFilter = topicFilter,
+                                 retainedOnly = retainedOnly,
+                                 lastValType = lastValType,
+                                 archiveType = archiveType,
+                                 payloadFormat = payloadFormat,
+                                 lastValRetentionMs = lastValRetentionMs,
+                                 archiveRetentionMs = archiveRetentionMs,
+                                 purgeIntervalMs = purgeIntervalMs,
+                                 lastValRetentionStr = lastValRetention ?: existingArchiveGroup.getLastValRetention(),
+                                 archiveRetentionStr = archiveRetention ?: existingArchiveGroup.getArchiveRetention(),
+                                 purgeIntervalStr = purgeInterval ?: existingArchiveGroup.getPurgeInterval(),
+                                 databaseConfig = JsonObject() // Will be populated from config
+                             )
 
                             // Update in database (keep the same enabled state - false) using async call
                             configStore.updateArchiveGroup(updatedArchiveGroup, enabled = false).onComplete { updateResult ->

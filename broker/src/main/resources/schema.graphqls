@@ -33,6 +33,11 @@ enum MessageArchiveType {
     SQLITE
 }
 
+enum PayloadFormat {
+    JAVA
+    JSON
+}
+
 # Metrics for the broker
 type BrokerMetrics {
     # Messages per second received from clients on this node
@@ -655,6 +660,7 @@ type ArchiveGroupInfo {
     retainedOnly: Boolean!
     lastValType: MessageStoreType!
     archiveType: MessageArchiveType!
+    payloadFormat: PayloadFormat!
     lastValRetention: String
     archiveRetention: String
     purgeInterval: String
@@ -681,6 +687,7 @@ input CreateArchiveGroupInput {
     retainedOnly: Boolean = false
     lastValType: MessageStoreType!
     archiveType: MessageArchiveType!
+    payloadFormat: PayloadFormat = JAVA
     lastValRetention: String
     archiveRetention: String
     purgeInterval: String
@@ -692,6 +699,7 @@ input UpdateArchiveGroupInput {
     retainedOnly: Boolean
     lastValType: MessageStoreType
     archiveType: MessageArchiveType
+    payloadFormat: PayloadFormat
     lastValRetention: String
     archiveRetention: String
     purgeInterval: String

@@ -16,6 +16,11 @@ enum class MessageArchiveType {
     SQLITE
 }
 
+enum class PayloadFormat {
+    JAVA,
+    JSON
+}
+
 interface IMessageArchive {
     fun getName(): String
     fun getType(): MessageArchiveType

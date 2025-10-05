@@ -229,6 +229,7 @@ class ArchiveConfigStoreMongoDB(
                     .append("last_val_retention", "1h")
                     .append("archive_retention", "1h")
                     .append("purge_interval", "1h")
+                    .append("payload_format", "JAVA")
                     .append("created_at", Instant.now())
                     .append("updated_at", Instant.now())
 
@@ -263,12 +264,16 @@ class ArchiveConfigStoreMongoDB(
         val archiveRetention = document.getString("archive_retention")
         val purgeInterval = document.getString("purge_interval")
 
+        val payloadFormatStr = document.getString("payload_format")
+        val payloadFormat = try { if (payloadFormatStr != null) PayloadFormat.valueOf(payloadFormatStr) else PayloadFormat.JAVA } catch (e: Exception) { PayloadFormat.JAVA }
+
         return ArchiveGroup(
             name = name,
             topicFilter = topicFilter,
             retainedOnly = retainedOnly,
             lastValType = lastValType,
             archiveType = archiveType,
+            payloadFormat = payloadFormat,
             lastValRetentionMs = lastValRetention?.let { DurationParser.parse(it) },
             archiveRetentionMs = archiveRetention?.let { DurationParser.parse(it) },
             purgeIntervalMs = purgeInterval?.let { DurationParser.parse(it) },
@@ -287,6 +292,7 @@ class ArchiveConfigStoreMongoDB(
             .append("retained_only", archiveGroup.retainedOnly)
             .append("last_val_type", archiveGroup.getLastValType().name)
             .append("archive_type", archiveGroup.getArchiveType().name)
+            .append("payload_format", archiveGroup.payloadFormat.name)
             .append("updated_at", Instant.now())
 
         // Add optional duration fields

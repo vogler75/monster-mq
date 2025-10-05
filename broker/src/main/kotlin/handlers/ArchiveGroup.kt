@@ -11,6 +11,7 @@ import at.rocworks.stores.MessageArchiveType
 import at.rocworks.stores.MessageStoreMemory
 import at.rocworks.stores.MessageStoreNone
 import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.PayloadFormat
 import at.rocworks.stores.cratedb.MessageArchiveCrateDB
 import at.rocworks.stores.cratedb.MessageStoreCrateDB
 import at.rocworks.stores.mongodb.MessageArchiveMongoDB
@@ -35,6 +36,7 @@ class ArchiveGroup(
     val retainedOnly: Boolean,
     private val lastValType: MessageStoreType,
     private val archiveType: MessageArchiveType,
+    val payloadFormat: PayloadFormat = PayloadFormat.JAVA,
     private val lastValRetentionMs: Long? = null,
     private val archiveRetentionMs: Long? = null,
     private val purgeIntervalMs: Long? = null,
@@ -703,7 +705,7 @@ class ArchiveGroup(
                     val kafka = databaseConfig.getJsonObject("Kafka")
                     val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
                     val kafkaConfig = kafka?.getJsonObject("Config")
-                    MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig)
+                    MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig, payloadFormat)
                 }
                 MessageArchiveType.SQLITE -> {
                     val sqlite = databaseConfig.getJsonObject("SQLite")
@@ -1035,6 +1037,8 @@ class ArchiveGroup(
         }
     }
 
+
+
     companion object {
         fun fromConfig(config: JsonObject, databaseConfig: JsonObject, isClustered: Boolean = false): ArchiveGroup {
             val name = config.getString("Name", "ArchiveGroup")
@@ -1057,12 +1061,24 @@ class ArchiveGroup(
             val archiveRetentionMs = DurationParser.parse(archiveRetentionStr)
             val purgeIntervalMs = DurationParser.parse(purgeIntervalStr)
 
+            val payloadFormat = try {
+                PayloadFormat.valueOf(config.getString("PayloadFormat", "JAVA"))
+            } catch (e: Exception) { PayloadFormat.JAVA }
+
             return ArchiveGroup(
-                name, topicFilter, retainedOnly,
-                lastValType, archiveType,
-                lastValRetentionMs, archiveRetentionMs, purgeIntervalMs,
-                lastValRetentionStr, archiveRetentionStr, purgeIntervalStr,
-                databaseConfig
+                name = name,
+                topicFilter = topicFilter,
+                retainedOnly = retainedOnly,
+                lastValType = lastValType,
+                archiveType = archiveType,
+                payloadFormat = payloadFormat,
+                lastValRetentionMs = lastValRetentionMs,
+                archiveRetentionMs = archiveRetentionMs,
+                purgeIntervalMs = purgeIntervalMs,
+                lastValRetentionStr = lastValRetentionStr,
+                archiveRetentionStr = archiveRetentionStr,
+                purgeIntervalStr = purgeIntervalStr,
+                databaseConfig = databaseConfig
             )
         }
 

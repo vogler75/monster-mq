@@ -5,6 +5,7 @@ import at.rocworks.bus.KafkaConfigBuilder
 import at.rocworks.data.BrokerMessage
 import at.rocworks.data.BrokerMessageCodec
 import at.rocworks.data.PurgeResult
+import at.rocworks.stores.PayloadFormat
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
@@ -18,7 +19,8 @@ import kotlin.collections.forEach
 class MessageArchiveKafka(
     private val name: String,
     private val bootstrapServers: String,
-    private val userConfig: JsonObject? = null
+    private val userConfig: JsonObject? = null,
+    private val payloadFormat: PayloadFormat = PayloadFormat.JAVA
 ): AbstractVerticle(), IMessageArchive {
     private val logger = Utils.getLogger(this::class.java, name)
     private val topicName = name
@@ -82,11 +84,39 @@ class MessageArchiveKafka(
     }
 
     override fun addHistory(messages: List<BrokerMessage>) {
-        val codec = BrokerMessageCodec()
         messages.forEach { message ->
-            val buffer = Buffer.buffer()
-            codec.encodeToWire(buffer, message)
-            kafkaProducer?.write(KafkaProducerRecord.create(topicName, message.topicName, buffer.bytes))
+            val data = when (payloadFormat) {
+                PayloadFormat.JAVA -> {
+                    val codec = BrokerMessageCodec()
+                    val buffer = Buffer.buffer()
+                    codec.encodeToWire(buffer, message)
+                    buffer.bytes
+                }
+                PayloadFormat.JSON -> {
+                    val jsonObject = JsonObject()
+                        .put("messageUuid", message.messageUuid)
+                        .put("messageId", message.messageId)
+                        .put("topicName", message.topicName)
+                        .put("qosLevel", message.qosLevel)
+                        .put("isRetain", message.isRetain)
+                        .put("isDup", message.isDup)
+                        .put("isQueued", message.isQueued)
+                        .put("clientId", message.clientId)
+                        .put("time", message.time.toString())
+                        .put("sender", message.sender)
+
+                    // Handle payload - check if it's valid JSON
+                    val payloadJson = message.getPayloadAsJson()
+                    if (payloadJson != null) {
+                        jsonObject.put("payload_json", payloadJson)
+                    } else {
+                        jsonObject.put("payload_base64", message.getPayloadAsBase64())
+                    }
+
+                    jsonObject.toString().toByteArray()
+                }
+            }
+            kafkaProducer?.write(KafkaProducerRecord.create(topicName, message.topicName, data))
         }
     }
 

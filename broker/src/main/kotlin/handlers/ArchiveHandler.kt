@@ -10,6 +10,7 @@ import at.rocworks.stores.mongodb.MessageArchiveMongoDB
 import at.rocworks.stores.postgres.MessageArchivePostgres
 import at.rocworks.stores.sqlite.MessageArchiveSQLite
 import at.rocworks.stores.MessageArchiveKafka
+import at.rocworks.stores.PayloadFormat
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
@@ -272,12 +273,13 @@ class ArchiveHandler(
                         val archiveGroups = archiveGroupConfigs.map { config ->
                             // Recreate ArchiveGroup with proper database config
                             val ag = config.archiveGroup
-                            ArchiveGroup(
+ArchiveGroup(
                                 name = ag.name,
                                 topicFilter = ag.topicFilter,
                                 retainedOnly = ag.retainedOnly,
                                 lastValType = ag.getLastValType(), // Use actual store type from database
                                 archiveType = ag.getArchiveType(), // Use actual store type from database
+                                payloadFormat = ag.payloadFormat,
                                 lastValRetentionMs = ag.getLastValRetentionMs(),
                                 archiveRetentionMs = ag.getArchiveRetentionMs(),
                                 purgeIntervalMs = ag.getPurgeIntervalMs(),
@@ -285,7 +287,7 @@ class ArchiveHandler(
                                 archiveRetentionStr = ag.getArchiveRetention(),
                                 purgeIntervalStr = ag.getPurgeInterval(),
                                 databaseConfig = databaseConfig
-                            )
+                             )
                         }
 
                         if (archiveGroups.isEmpty()) {
@@ -432,7 +434,7 @@ class ArchiveHandler(
             }
             MessageArchiveType.KAFKA -> {
                 val kafkaConfig = configJson.getJsonObject("Kafka")?.getJsonObject("Config")
-                val store = MessageArchiveKafka(name, kafkaServers, kafkaConfig)
+                val store = MessageArchiveKafka(name, kafkaServers, kafkaConfig, payloadFormat = PayloadFormat.JAVA)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 store
@@ -564,6 +566,12 @@ class ArchiveHandler(
                 put("enabled", archiveInfo.enabled)
                 put("topicFilter", JsonArray(archiveInfo.archiveGroup.topicFilter))
                 put("retainedOnly", archiveInfo.archiveGroup.retainedOnly)
+                put("lastValType", archiveInfo.archiveGroup.getLastValType().name)
+                put("archiveType", archiveInfo.archiveGroup.getArchiveType().name)
+                put("payloadFormat", archiveInfo.archiveGroup.payloadFormat.name)
+                put("lastValRetention", archiveInfo.archiveGroup.getLastValRetentionMs()?.toString())
+                put("archiveRetention", archiveInfo.archiveGroup.getArchiveRetentionMs()?.toString())
+                put("purgeInterval", archiveInfo.archiveGroup.getPurgeIntervalMs()?.toString())
             }
         }
     }
@@ -593,7 +601,8 @@ class ArchiveHandler(
                 put("topicFilter", JsonArray(archiveInfo.archiveGroup.topicFilter))
                 put("retainedOnly", archiveInfo.archiveGroup.retainedOnly)
                 put("lastValType", archiveInfo.archiveGroup.getLastValType().name)
-                put("archiveType", archiveInfo.archiveGroup.getArchiveType().name)
+                 put("archiveType", archiveInfo.archiveGroup.getArchiveType().name)
+                put("payloadFormat", archiveInfo.archiveGroup.payloadFormat.name)
                 put("lastValRetention", archiveInfo.archiveGroup.getLastValRetentionMs()?.toString())
                 put("archiveRetention", archiveInfo.archiveGroup.getArchiveRetentionMs()?.toString())
                 put("purgeInterval", archiveInfo.archiveGroup.getPurgeIntervalMs()?.toString())
@@ -712,12 +721,13 @@ class ArchiveHandler(
                         // Don't check enabled flag here - we want to load it regardless
                         val databaseConfig = createDatabaseConfig()
                         val ag = archiveGroupConfig.archiveGroup
-                        val archiveGroup = ArchiveGroup(
+val archiveGroup = ArchiveGroup(
                             name = ag.name,
                             topicFilter = ag.topicFilter,
                             retainedOnly = ag.retainedOnly,
                             lastValType = ag.getLastValType(),
                             archiveType = ag.getArchiveType(),
+                            payloadFormat = ag.payloadFormat,
                             lastValRetentionMs = ag.getLastValRetentionMs(),
                             archiveRetentionMs = ag.getArchiveRetentionMs(),
                             purgeIntervalMs = ag.getPurgeIntervalMs(),
@@ -756,12 +766,13 @@ class ArchiveHandler(
                             // Don't check enabled flag here - we want to load it regardless
                             val databaseConfig = createDatabaseConfig()
                             val ag = archiveGroupConfig.archiveGroup
-                            val archiveGroup = ArchiveGroup(
+val archiveGroup = ArchiveGroup(
                                 name = ag.name,
                                 topicFilter = ag.topicFilter,
                                 retainedOnly = ag.retainedOnly,
                                 lastValType = ag.getLastValType(),
                                 archiveType = ag.getArchiveType(),
+                                payloadFormat = ag.payloadFormat,
                                 lastValRetentionMs = ag.getLastValRetentionMs(),
                                 archiveRetentionMs = ag.getArchiveRetentionMs(),
                                 purgeIntervalMs = ag.getPurgeIntervalMs(),
@@ -769,7 +780,7 @@ class ArchiveHandler(
                                 archiveRetentionStr = ag.getArchiveRetention(),
                                 purgeIntervalStr = ag.getPurgeInterval(),
                                 databaseConfig = databaseConfig
-                            )
+                             )
                             promise.complete(archiveGroup)
                         } else {
                             promise.complete(null)

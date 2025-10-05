@@ -70,7 +70,8 @@ class ArchiveConfigStoreCrateDB(
                 archive_retention STRING,
                 purge_interval STRING,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                payload_format STRING DEFAULT 'JAVA'
             )
         """.trimIndent()
 
@@ -82,10 +83,10 @@ class ArchiveConfigStoreCrateDB(
                 INSERT INTO $configTableName (
                     name, enabled, topic_filter, retained_only,
                     last_val_type, archive_type, last_val_retention,
-                    archive_retention, purge_interval
+                    archive_retention, purge_interval, payload_format
                 ) VALUES (
                     'Default', true, ['#'], false,
-                    'MEMORY', 'NONE', '1h', '1h', '1h'
+                    'MEMORY', 'NONE', '1h', '1h', '1h', 'JAVA'
                 ) ON CONFLICT (name) DO NOTHING
             """.trimIndent()
 
@@ -185,8 +186,8 @@ class ArchiveConfigStoreCrateDB(
         vertx.executeBlocking(Callable {
             val sql = """
                 INSERT INTO $configTableName
-                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (name) DO UPDATE SET
                     enabled = EXCLUDED.enabled,
                     topic_filter = EXCLUDED.topic_filter,
@@ -196,6 +197,7 @@ class ArchiveConfigStoreCrateDB(
                     last_val_retention = EXCLUDED.last_val_retention,
                     archive_retention = EXCLUDED.archive_retention,
                     purge_interval = EXCLUDED.purge_interval,
+                    payload_format = EXCLUDED.payload_format,
                     updated_at = CURRENT_TIMESTAMP
             """.trimIndent()
 
@@ -219,6 +221,7 @@ class ArchiveConfigStoreCrateDB(
                         preparedStatement.setString(7, lastValRetention)
                         preparedStatement.setString(8, archiveRetention)
                         preparedStatement.setString(9, purgeInterval)
+                        preparedStatement.setString(10, archiveGroup.payloadFormat.name)
 
                         val rowsAffected = preparedStatement.executeUpdate()
                         val success = rowsAffected > 0
@@ -311,12 +314,16 @@ class ArchiveConfigStoreCrateDB(
         val archiveRetention = resultSet.getString("archive_retention")
         val purgeInterval = resultSet.getString("purge_interval")
 
+        val payloadFormatStr = try { resultSet.getString("payload_format") } catch (e: Exception) { null }
+        val payloadFormat = try { if (payloadFormatStr != null) at.rocworks.stores.PayloadFormat.valueOf(payloadFormatStr) else at.rocworks.stores.PayloadFormat.JAVA } catch (e: Exception) { at.rocworks.stores.PayloadFormat.JAVA }
+
         return ArchiveGroup(
             name = name,
             topicFilter = topicFilter,
             retainedOnly = retainedOnly,
             lastValType = lastValType,
             archiveType = archiveType,
+            payloadFormat = payloadFormat,
             lastValRetentionMs = lastValRetention?.let { DurationParser.parse(it) },
             archiveRetentionMs = archiveRetention?.let { DurationParser.parse(it) },
             purgeIntervalMs = purgeInterval?.let { DurationParser.parse(it) },

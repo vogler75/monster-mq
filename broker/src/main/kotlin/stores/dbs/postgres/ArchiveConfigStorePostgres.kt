@@ -50,7 +50,8 @@ class ArchiveConfigStorePostgres(
                     archive_retention VARCHAR(50),
                     purge_interval VARCHAR(50),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    payload_format VARCHAR(20) DEFAULT 'JAVA'
                 );
                 """.trimIndent()
 
@@ -91,7 +92,7 @@ class ArchiveConfigStorePostgres(
 
         vertx.executeBlocking(Callable {
             val archiveGroups = mutableListOf<ArchiveGroupConfig>()
-            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval FROM $configTableName ORDER BY name"
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format FROM $configTableName ORDER BY name"
 
             try {
                 db.connection?.let { connection ->
@@ -116,12 +117,16 @@ class ArchiveConfigStorePostgres(
                                 JsonObject(topicFilterJson).getJsonArray("filters")?.list?.map { it.toString() } ?: emptyList()
                             }
 
+                            val payloadFormatStr = resultSet.getString("payload_format") ?: "JAVA"
+                            val payloadFormat = try { at.rocworks.stores.PayloadFormat.valueOf(payloadFormatStr) } catch (e: Exception) { at.rocworks.stores.PayloadFormat.JAVA }
+
                             val archiveGroup = ArchiveGroup(
                                 name = name,
                                 topicFilter = topicFilter,
                                 retainedOnly = retainedOnly,
                                 lastValType = MessageStoreType.valueOf(lastValType),
                                 archiveType = MessageArchiveType.valueOf(archiveType),
+                                payloadFormat = payloadFormat,
                                 lastValRetentionMs = DurationParser.parse(lastValRetention),
                                 archiveRetentionMs = DurationParser.parse(archiveRetention),
                                 purgeIntervalMs = DurationParser.parse(purgeInterval),
@@ -157,7 +162,7 @@ class ArchiveConfigStorePostgres(
         val promise = Promise.promise<ArchiveGroupConfig?>()
 
         vertx.executeBlocking(Callable {
-            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval FROM $configTableName WHERE name = ?"
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format FROM $configTableName WHERE name = ?"
 
             try {
                 db.connection?.let { connection ->
@@ -182,12 +187,16 @@ class ArchiveConfigStorePostgres(
                                 JsonObject(topicFilterJson).getJsonArray("filters")?.list?.map { it.toString() } ?: emptyList()
                             }
 
+                            val payloadFormatStr = resultSet.getString("payload_format") ?: "JAVA"
+                            val payloadFormat = try { at.rocworks.stores.PayloadFormat.valueOf(payloadFormatStr) } catch (e: Exception) { at.rocworks.stores.PayloadFormat.JAVA }
+
                             val archiveGroup = ArchiveGroup(
                                 name = name,
                                 topicFilter = topicFilter,
                                 retainedOnly = retainedOnly,
                                 lastValType = MessageStoreType.valueOf(lastValType),
                                 archiveType = MessageArchiveType.valueOf(archiveType),
+                                payloadFormat = payloadFormat,
                                 lastValRetentionMs = DurationParser.parse(lastValRetention),
                                 archiveRetentionMs = DurationParser.parse(archiveRetention),
                                 purgeIntervalMs = DurationParser.parse(purgeInterval),
@@ -227,8 +236,8 @@ class ArchiveConfigStorePostgres(
         vertx.executeBlocking(Callable {
             val sql = """
                 INSERT INTO $configTableName
-                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, updated_at)
-                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, updated_at)
+                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (name) DO UPDATE SET
                     enabled = EXCLUDED.enabled,
                     topic_filter = EXCLUDED.topic_filter,
@@ -238,6 +247,7 @@ class ArchiveConfigStorePostgres(
                     last_val_retention = EXCLUDED.last_val_retention,
                     archive_retention = EXCLUDED.archive_retention,
                     purge_interval = EXCLUDED.purge_interval,
+                    payload_format = EXCLUDED.payload_format,
                     updated_at = CURRENT_TIMESTAMP
             """.trimIndent()
 
@@ -260,6 +270,7 @@ class ArchiveConfigStorePostgres(
                         preparedStatement.setString(7, lastValRetention)
                         preparedStatement.setString(8, archiveRetention)
                         preparedStatement.setString(9, purgeInterval)
+                        preparedStatement.setString(10, archiveGroup.payloadFormat.name)
 
                         val rowsAffected = preparedStatement.executeUpdate()
                         connection.commit()
