@@ -123,6 +123,10 @@ class MqttClientDetailManager {
         document.getElementById('client-keep-alive').textContent = `${this.clientData.config.keepAlive}s`;
         document.getElementById('client-reconnect-delay').textContent = `${this.clientData.config.reconnectDelay}ms`;
         document.getElementById('client-connection-timeout').textContent = `${this.clientData.config.connectionTimeout}ms`;
+        document.getElementById('client-buffer-enabled').textContent = this.clientData.config.bufferEnabled ? 'Yes' : 'No';
+        document.getElementById('client-buffer-size').textContent = `${this.clientData.config.bufferSize || 5000} messages`;
+        document.getElementById('client-persist-buffer').textContent = this.clientData.config.persistBuffer ? 'Yes' : 'No';
+        document.getElementById('client-delete-oldest').textContent = (this.clientData.config.deleteOldestMessages !== undefined ? this.clientData.config.deleteOldestMessages : true) ? 'Yes' : 'No';
         document.getElementById('client-created-at').textContent = new Date(this.clientData.createdAt).toLocaleString();
         document.getElementById('client-updated-at').textContent = new Date(this.clientData.updatedAt).toLocaleString();
 
@@ -162,6 +166,10 @@ class MqttClientDetailManager {
         document.getElementById('edit-client-connection-timeout').value = this.clientData.config.connectionTimeout;
         document.getElementById('edit-client-enabled').checked = this.clientData.enabled;
         document.getElementById('edit-client-clean-session').checked = this.clientData.config.cleanSession;
+        document.getElementById('edit-client-buffer-enabled').checked = this.clientData.config.bufferEnabled || false;
+        document.getElementById('edit-client-buffer-size').value = this.clientData.config.bufferSize || 5000;
+        document.getElementById('edit-client-persist-buffer').checked = this.clientData.config.persistBuffer || false;
+        document.getElementById('edit-client-delete-oldest').checked = this.clientData.config.deleteOldestMessages !== undefined ? this.clientData.config.deleteOldestMessages : true;
     }
 
     renderAddressesList() {
@@ -232,7 +240,11 @@ class MqttClientDetailManager {
                 cleanSession: document.getElementById('edit-client-clean-session').checked,
                 keepAlive: parseInt(document.getElementById('edit-client-keep-alive').value),
                 reconnectDelay: parseInt(document.getElementById('edit-client-reconnect-delay').value),
-                connectionTimeout: parseInt(document.getElementById('edit-client-connection-timeout').value)
+                connectionTimeout: parseInt(document.getElementById('edit-client-connection-timeout').value),
+                bufferEnabled: document.getElementById('edit-client-buffer-enabled').checked,
+                bufferSize: parseInt(document.getElementById('edit-client-buffer-size').value),
+                persistBuffer: document.getElementById('edit-client-persist-buffer').checked,
+                deleteOldestMessages: document.getElementById('edit-client-delete-oldest').checked
             }
         };
 

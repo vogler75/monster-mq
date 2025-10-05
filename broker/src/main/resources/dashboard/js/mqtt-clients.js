@@ -223,7 +223,11 @@ class MqttClientManager {
                 cleanSession: document.getElementById('client-clean-session').checked,
                 keepAlive: parseInt(document.getElementById('client-keep-alive').value),
                 reconnectDelay: parseInt(document.getElementById('client-reconnect-delay').value),
-                connectionTimeout: parseInt(document.getElementById('client-connection-timeout').value)
+                connectionTimeout: parseInt(document.getElementById('client-connection-timeout').value),
+                bufferEnabled: document.getElementById('client-buffer-enabled').checked,
+                bufferSize: parseInt(document.getElementById('client-buffer-size').value),
+                persistBuffer: document.getElementById('client-persist-buffer').checked,
+                deleteOldestMessages: document.getElementById('client-delete-oldest').checked
             }
         };
 

@@ -447,6 +447,22 @@
                             <div class="info-value" id="client-connection-timeout">-</div>
                         </div>
                         <div class="info-item">
+                            <div class="info-label">Buffer Enabled</div>
+                            <div class="info-value" id="client-buffer-enabled">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Buffer Size</div>
+                            <div class="info-value" id="client-buffer-size">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Persist Buffer</div>
+                            <div class="info-value" id="client-persist-buffer">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Delete Oldest</div>
+                            <div class="info-value" id="client-delete-oldest">-</div>
+                        </div>
+                        <div class="info-item">
                             <div class="info-label">Created At</div>
                             <div class="info-value" id="client-created-at">-</div>
                         </div>
@@ -578,6 +594,36 @@
                             <input type="checkbox" id="edit-client-clean-session">
                             <label for="edit-client-clean-session">Clean Session</label>
                         </div>
+                    </div>
+
+                    <!-- Disconnected Buffer Configuration -->
+                    <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Disconnected Buffer</h4>
+
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="edit-client-buffer-enabled">
+                            <label for="edit-client-buffer-enabled">Enable Message Buffering</label>
+                        </div>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Buffer messages when connection to remote broker is lost</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-client-buffer-size">Buffer Size (messages)</label>
+                        <input type="number" id="edit-client-buffer-size" value="5000" min="1" max="100000">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Maximum number of messages to buffer (1-100,000)</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="edit-client-persist-buffer">
+                            <label for="edit-client-persist-buffer">Persist Buffer to Disk</label>
+                        </div>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Save buffer to disk (unchecked = memory only)</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="edit-client-delete-oldest">
+                            <label for="edit-client-delete-oldest">Delete Oldest Messages When Full</label>
+                        </div>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">FIFO mode (unchecked = reject new messages when buffer is full)</small>
                     </div>
                 </form>
             </div>
