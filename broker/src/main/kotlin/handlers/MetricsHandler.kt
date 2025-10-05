@@ -241,11 +241,11 @@ class MetricsHandler(
                                 if (mReply.succeeded()) {
                                     try {
                                         val m = mReply.result().body()
-                                        val valuesPerSecond = m.getDouble("valuesPerSecond", 0.0)
+                                        val messagesOut = m.getDouble("messagesOut", 0.0)
                                         val bufferSize = m.getInteger("bufferSize", 0)
                                         // Store individual archive group metrics
                                         val archiveMetricsJson = JsonObject()
-                                            .put("valuesPerSecond", valuesPerSecond)
+                                            .put("messagesOut", messagesOut)
                                             .put("bufferSize", bufferSize)
                                         metricsStore.storeMetrics(at.rocworks.stores.MetricKind.ARCHIVEGROUP, timestamp, groupName, archiveMetricsJson)
                                     } catch (e: Exception) {

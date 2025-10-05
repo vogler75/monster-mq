@@ -413,6 +413,8 @@ class GraphQLServer(
                     archiveGroupResolver?.let { resolver ->
                         dataFetcher("connectionStatus", resolver.connectionStatus())
                     }
+                    dataFetcher("metrics", metricsResolver.archiveGroupMetricsField())
+                    dataFetcher("metricsHistory", metricsResolver.archiveGroupMetricsHistoryField())
                 }
             }
             .type("Topic") { builder ->

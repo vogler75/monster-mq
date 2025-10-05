@@ -187,8 +187,8 @@ data class MqttClientMetrics(
 )
 
 data class ArchiveGroupMetrics(
-    val valuesPerSecond: Double,  // Values written to database per second
-    val bufferSize: Int,           // Current size of the write buffer
+    val messagesOut: Double,  // Messages written to database per second
+    val bufferSize: Int,      // Average size of the write buffer
     val timestamp: String
 )
 

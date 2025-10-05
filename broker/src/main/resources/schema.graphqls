@@ -160,6 +160,16 @@ type SessionMetrics {
      timestamp: String!
  }
 
+# Metrics for an archive group
+type ArchiveGroupMetrics {
+    # Messages per second being written to the archive database
+    messagesOut: Float!
+    # Average buffer size (number of queued messages waiting to be written)
+    bufferSize: Int!
+    # ISO 8601 timestamp when these metrics were captured
+    timestamp: String!
+}
+
 # Represents an MQTT subscription
 type MqttSubscription {
     # The topic filter
@@ -652,6 +662,17 @@ type ArchiveGroupInfo {
     updatedAt: String
     # Database connection status from all nodes in the cluster
     connectionStatus: [NodeConnectionStatus!]!
+    # Current metrics for this archive group (single most recent entry)
+    metrics: [ArchiveGroupMetrics!]!
+    # Historical metrics data for this archive group
+    metricsHistory(
+        # ISO 8601 timestamp for start of time range (e.g., "2024-01-15T10:00:00Z")
+        from: String
+        # ISO 8601 timestamp for end of time range (e.g., "2024-01-15T11:00:00Z")
+        to: String
+        # Alternative to from/to: get metrics from the last N minutes
+        lastMinutes: Int
+    ): [ArchiveGroupMetrics!]!
 }
 
 input CreateArchiveGroupInput {

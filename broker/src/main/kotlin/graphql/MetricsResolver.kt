@@ -819,6 +819,72 @@ callback(BrokerMetrics(
         }
     }
 
+    // Archive Group Metrics (embedded field resolvers)
+    fun archiveGroupMetricsField(): DataFetcher<CompletableFuture<List<ArchiveGroupMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<ArchiveGroupMetrics>>()
+            val archiveGroup = env.getSource<Map<String, Any>>()
+            val groupName = archiveGroup?.get("name") as? String
+            if (groupName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+            if (metricsStore == null) {
+                future.complete(listOf(ArchiveGroupMetrics(0.0, 0, TimestampConverter.currentTimeIsoString())))
+                return@DataFetcher future
+            }
+            // Get most recent metrics
+            metricsStore.getLatestMetrics(at.rocworks.stores.MetricKind.ARCHIVEGROUP, groupName, null, null, 1).onComplete { result ->
+                if (result.succeeded()) {
+                    val metricsJson = result.result()
+                    val messagesOut = metricsJson.getDouble("messagesOut", 0.0)
+                    val bufferSize = metricsJson.getInteger("bufferSize", 0)
+                    future.complete(listOf(ArchiveGroupMetrics(messagesOut, bufferSize, TimestampConverter.currentTimeIsoString())))
+                } else {
+                    logger.warning("Failed to get archive group metrics for $groupName: ${result.cause()?.message}")
+                    future.complete(listOf(ArchiveGroupMetrics(0.0, 0, TimestampConverter.currentTimeIsoString())))
+                }
+            }
+            future
+        }
+    }
+
+    fun archiveGroupMetricsHistoryField(): DataFetcher<CompletableFuture<List<ArchiveGroupMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<ArchiveGroupMetrics>>()
+            val archiveGroup = env.getSource<Map<String, Any>>()
+            val groupName = archiveGroup?.get("name") as? String
+            if (groupName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+            if (metricsStore == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+            val from = env.getArgument<String?>("from")
+            val to = env.getArgument<String?>("to")
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            val limit = env.getArgument<Int?>("limit") ?: 100
+            val fromInstant = from?.let { java.time.Instant.parse(it) }
+            val toInstant = to?.let { java.time.Instant.parse(it) }
+            metricsStore.getMetricsHistory(at.rocworks.stores.MetricKind.ARCHIVEGROUP, groupName, fromInstant, toInstant, lastMinutes, limit).onComplete { result ->
+                if (result.succeeded()) {
+                    val list = result.result().map { (timestamp, metricsJson) ->
+                        val messagesOut = metricsJson.getDouble("messagesOut", 0.0)
+                        val bufferSize = metricsJson.getInteger("bufferSize", 0)
+                        ArchiveGroupMetrics(round2(messagesOut), bufferSize, TimestampConverter.instantToIsoString(timestamp))
+                    }
+                    future.complete(list)
+                } else {
+                    logger.warning("Failed to get archive group metrics history for $groupName: ${result.cause()?.message}")
+                    future.complete(emptyList())
+                }
+            }
+            future
+        }
+    }
+
     // OPC UA Device Metrics (embedded field resolvers)
     fun opcUaDeviceMetricsField(): DataFetcher<CompletableFuture<List<OpcUaDeviceMetrics>>> {
         return DataFetcher { env ->

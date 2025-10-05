@@ -122,7 +122,7 @@ class MessageHandler(
         archiveBufferSampleCount[groupName]?.set(0)
 
         return JsonObject()
-            .put("valuesPerSecond", valuesPerSecond)
+            .put("messagesOut", valuesPerSecond)
             .put("bufferSize", avgBufferSize)
     }
 
