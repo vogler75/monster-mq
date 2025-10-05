@@ -140,7 +140,11 @@ class MqttClientConfigQueries(
                         "removePath" to address.removePath,
                         "qos" to address.qos
                     )
-                }
+                },
+                "bufferEnabled" to config.bufferEnabled,
+                "bufferSize" to config.bufferSize,
+                "persistBuffer" to config.persistBuffer,
+                "deleteOldestMessages" to config.deleteOldestMessages
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

@@ -620,7 +620,12 @@ data class MqttClientConnectionConfig(
     val keepAlive: Int = 60,
     val reconnectDelay: Long = 5000,
     val connectionTimeout: Long = 30000,
-    val addresses: List<MqttClientAddress> = emptyList()
+    val addresses: List<MqttClientAddress> = emptyList(),
+    // Disconnected buffer configuration (for handling messages when connection is lost)
+    val bufferEnabled: Boolean = false,
+    val bufferSize: Int = 5000,
+    val persistBuffer: Boolean = false,
+    val deleteOldestMessages: Boolean = true
 ) {
     companion object {
         const val PROTOCOL_TCP = "tcp"
@@ -650,7 +655,11 @@ data class MqttClientConnectionConfig(
                     keepAlive = json.getInteger("keepAlive", 60),
                     reconnectDelay = json.getLong("reconnectDelay", 5000L),
                     connectionTimeout = json.getLong("connectionTimeout", 30000L),
-                    addresses = addresses
+                    addresses = addresses,
+                    bufferEnabled = json.getBoolean("bufferEnabled", false),
+                    bufferSize = json.getInteger("bufferSize", 5000),
+                    persistBuffer = json.getBoolean("persistBuffer", false),
+                    deleteOldestMessages = json.getBoolean("deleteOldestMessages", true)
                 )
             } catch (e: Exception) {
                 println("Overall error in fromJsonObject: ${e.message}")
@@ -671,6 +680,10 @@ data class MqttClientConnectionConfig(
             .put("keepAlive", keepAlive)
             .put("reconnectDelay", reconnectDelay)
             .put("connectionTimeout", connectionTimeout)
+            .put("bufferEnabled", bufferEnabled)
+            .put("bufferSize", bufferSize)
+            .put("persistBuffer", persistBuffer)
+            .put("deleteOldestMessages", deleteOldestMessages)
 
         // Add addresses array if we have addresses
         if (addresses.isNotEmpty()) {
@@ -717,6 +730,10 @@ data class MqttClientConnectionConfig(
 
         if (connectionTimeout < 1000) {
             errors.add("connectionTimeout should be at least 1000ms")
+        }
+
+        if (bufferSize < 1 || bufferSize > 100000) {
+            errors.add("bufferSize must be between 1 and 100000")
         }
 
         // Validate addresses

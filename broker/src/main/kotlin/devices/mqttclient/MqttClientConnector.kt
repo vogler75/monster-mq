@@ -173,6 +173,18 @@ class MqttClientConnector : AbstractVerticle() {
                 }
             }
 
+            // Configure disconnected buffer to handle messages when connection is lost
+            if (mqttConfig.bufferEnabled) {
+                val bufferOpts = org.eclipse.paho.client.mqttv3.DisconnectedBufferOptions().apply {
+                    isBufferEnabled = mqttConfig.bufferEnabled
+                    bufferSize = mqttConfig.bufferSize
+                    isPersistBuffer = mqttConfig.persistBuffer
+                    isDeleteOldestMessages = mqttConfig.deleteOldestMessages
+                }
+                client!!.setBufferOpts(bufferOpts)
+                logger.info("Configured disconnected buffer: size=${mqttConfig.bufferSize}, deleteOldest=${mqttConfig.deleteOldestMessages}")
+            }
+
             // Set callback for connection events
             client!!.setCallback(object : MqttCallback {
                 override fun connectionLost(cause: Throwable?) {

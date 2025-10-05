@@ -1437,6 +1437,14 @@ type MqttClientConnectionConfig {
     connectionTimeout: Long!
     # Topic mappings between local and remote brokers
     addresses: [MqttClientAddress!]!
+    # Whether to enable message buffering when disconnected
+    bufferEnabled: Boolean!
+    # Maximum number of messages to buffer when disconnected (1-100000)
+    bufferSize: Int!
+    # Whether to persist the buffer to disk (false = memory only)
+    persistBuffer: Boolean!
+    # Whether to delete oldest messages when buffer is full (true = FIFO, false = reject new)
+    deleteOldestMessages: Boolean!
 }
 
 # MQTT Client configuration
@@ -1513,6 +1521,14 @@ input MqttClientConnectionConfigInput {
     reconnectDelay: Long = 5000
     # Connection timeout in milliseconds
     connectionTimeout: Long = 30000
+    # Whether to enable message buffering when disconnected (default: false)
+    bufferEnabled: Boolean = false
+    # Maximum number of messages to buffer when disconnected (default: 5000, max: 100000)
+    bufferSize: Int = 5000
+    # Whether to persist the buffer to disk (default: false = memory only)
+    persistBuffer: Boolean = false
+    # Whether to delete oldest messages when buffer is full (default: true = FIFO, false = reject new)
+    deleteOldestMessages: Boolean = true
 }
 
 # Input for MQTT client address mapping
