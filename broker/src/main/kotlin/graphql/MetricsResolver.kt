@@ -62,8 +62,12 @@ class MetricsResolver(
                                 messageBusIn = nodeMetrics.getDouble("messageBusInRate", 0.0),
                                 messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
                                 mqttBridgeIn = 0.0,
-                                mqttBridgeOut = 0.0,
-                                timestamp = TimestampConverter.currentTimeIsoString()
+                            mqttBridgeOut = 0.0,
+                            opcUaIn = 0.0,
+                            opcUaOut = 0.0,
+                            kafkaBridgeIn = 0.0,
+                            kafkaBridgeOut = 0.0,
+                            timestamp = TimestampConverter.currentTimeIsoString()
                             )
                         } catch (e: Exception) {
                             logger.severe("Error getting cluster metrics: ${e.message}")
@@ -118,6 +122,10 @@ class MetricsResolver(
                                     messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
                                     mqttBridgeIn = 0.0,
                                     mqttBridgeOut = 0.0,
+                                    opcUaIn = 0.0,
+                                    opcUaOut = 0.0,
+                                    kafkaBridgeIn = 0.0,
+                                    kafkaBridgeOut = 0.0,
                                     timestamp = TimestampConverter.currentTimeIsoString()
                                 )
                             } catch (e: Exception) {
@@ -531,6 +539,8 @@ class MetricsResolver(
                                 mqttBridgeOut = round2(bm.mqttBridgeOut),
                                 opcUaIn = round2(bm.opcUaIn),
                                 opcUaOut = round2(bm.opcUaOut),
+                                kafkaBridgeIn = round2(bm.kafkaBridgeIn),
+                                kafkaBridgeOut = round2(bm.kafkaBridgeOut),
                                 timestamp = bm.timestamp
                             )
                         })
@@ -656,6 +666,8 @@ class MetricsResolver(
                 mqttBridgeOut = round2(bm.mqttBridgeOut),
                 opcUaIn = round2(bm.opcUaIn),
                 opcUaOut = round2(bm.opcUaOut),
+                kafkaBridgeIn = round2(bm.kafkaBridgeIn),
+                kafkaBridgeOut = round2(bm.kafkaBridgeOut),
                 timestamp = bm.timestamp
             )
         }
@@ -705,6 +717,8 @@ class MetricsResolver(
                             mqttBridgeOut = 0.0,
                             opcUaIn = 0.0,
                             opcUaOut = 0.0,
+                            kafkaBridgeIn = 0.0,
+                            kafkaBridgeOut = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         )
                     } catch (e: Exception) {
@@ -731,6 +745,8 @@ callback(BrokerMetrics(
                             mqttBridgeOut = 0.0,
                             opcUaIn = 0.0,
                             opcUaOut = 0.0,
+                            kafkaBridgeIn = 0.0,
+                            kafkaBridgeOut = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         ))
                     }

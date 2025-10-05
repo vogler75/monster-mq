@@ -248,14 +248,20 @@ class KafkaClientConnector : AbstractVerticle() {
                 val totalIn = messagesIn.get()
                 val deltaIn = totalIn - lastMessagesInSnapshot
                 val elapsedSec = (now - lastMetricsResetTime) / 1000.0
-                val rate = if (elapsedSec > 0) deltaIn / elapsedSec else 0.0
+                val inRate = if (elapsedSec > 0) deltaIn / elapsedSec else 0.0
+                val outRate = 0.0 // Currently no outbound path implemented
                 val obj = JsonObject()
                     .put("device", device.name)
+                    // Cumulative counters (backward compatibility / diagnostics)
                     .put("messagesIn", totalIn)
                     .put("messagesDropped", messagesDropped.get())
                     .put("errors", errors.get())
                     .put("lastRecordTs", lastRecordTs)
-                    .put("ratePerSec", rate)
+                    // New standardized rate fields (align with MQTT & OPC UA connectors)
+                    .put("messagesInRate", inRate)
+                    .put("messagesOutRate", outRate)
+                    // Legacy field kept temporarily for compatibility
+                    .put("ratePerSec", inRate)
                 msg.reply(obj)
                 // Reset snapshot each metrics call
                 lastMessagesInSnapshot = totalIn

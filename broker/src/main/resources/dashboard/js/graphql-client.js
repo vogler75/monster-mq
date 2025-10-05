@@ -112,6 +112,8 @@ class GraphQLDashboardClient {
                         messageBusOut
                         mqttBridgeIn
                         mqttBridgeOut
+                        kafkaBridgeIn
+                        kafkaBridgeOut
                         opcUaIn
                         opcUaOut
                         timestamp
@@ -143,6 +145,8 @@ class GraphQLDashboardClient {
                         messageBusOut
                         mqttBridgeIn
                         mqttBridgeOut
+                        kafkaBridgeIn
+                        kafkaBridgeOut
                         opcUaIn
                         opcUaOut
                         timestamp
@@ -160,6 +164,8 @@ class GraphQLDashboardClient {
                         messageBusOut
                         mqttBridgeIn
                         mqttBridgeOut
+                        kafkaBridgeIn
+                        kafkaBridgeOut
                         opcUaIn
                         opcUaOut
                         timestamp

@@ -58,8 +58,6 @@ class DashboardManager {
     }
 
     setupUI() {
-        // Dashboard-specific UI setup
-
         document.querySelectorAll('.chart-controls button').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.chart-controls button').forEach(b => b.classList.remove('active'));
@@ -96,7 +94,7 @@ class DashboardManager {
             data: {
                 labels: [],
                 datasets: [
-                    {
+                    {   // 0
                         label: 'Messages In',
                         data: [],
                         borderColor: '#10B981',
@@ -104,7 +102,7 @@ class DashboardManager {
                         tension: 0.4,
                         fill: true
                     },
-                    {
+                    {   // 1
                         label: 'Messages Out',
                         data: [],
                         borderColor: '#7C3AED',
@@ -112,23 +110,39 @@ class DashboardManager {
                         tension: 0.4,
                         fill: true
                     },
-                    {
-                        label: 'Bridge In',
+                    {   // 2
+                        label: 'MQTT Bridge In',
                         data: [],
                         borderColor: '#0EA5E9',
                         backgroundColor: 'rgba(14, 165, 233, 0.1)',
                         tension: 0.4,
                         fill: true
                     },
-                    {
-                        label: 'Bridge Out',
+                    {   // 3
+                        label: 'MQTT Bridge Out',
                         data: [],
                         borderColor: '#F59E0B',
                         backgroundColor: 'rgba(245, 158, 11, 0.1)',
                         tension: 0.4,
                         fill: true
                     },
-                    {
+                    {   // 4
+                        label: 'Kafka Bridge In',
+                        data: [],
+                        borderColor: '#DC2626',
+                        backgroundColor: 'rgba(220, 38, 38, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {   // 5
+                        label: 'Kafka Bridge Out',
+                        data: [],
+                        borderColor: '#F43F5E',
+                        backgroundColor: 'rgba(244, 63, 94, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {   // 6
                         label: 'OPC UA In',
                         data: [],
                         borderColor: '#06B6D4',
@@ -136,7 +150,7 @@ class DashboardManager {
                         tension: 0.4,
                         fill: true
                     },
-                    {
+                    {   // 7
                         label: 'OPC UA Out',
                         data: [],
                         borderColor: '#9333EA',
@@ -160,9 +174,7 @@ class DashboardManager {
                     }
                 },
                 plugins: {
-                    legend: {
-                        position: 'top',
-                    }
+                    legend: { position: 'top' }
                 }
             }
         });
@@ -193,28 +205,16 @@ class DashboardManager {
                 maintainAspectRatio: false,
                 aspectRatio: 2,
                 scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: '#334155' }
-                    },
-                    x: {
-                        grid: { color: '#334155' }
-                    }
+                    y: { beginAtZero: true, grid: { color: '#334155' } },
+                    x: { grid: { color: '#334155' } }
                 },
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    }
-                }
+                plugins: { legend: { position: 'top' } }
             }
         });
 
         this.archiveGroupsChart = new Chart(archiveGroupsCtx, {
             type: 'line',
-            data: {
-                labels: [],
-                datasets: []  // Will be populated dynamically based on archive groups
-            },
+            data: { labels: [], datasets: [] }, // populated dynamically
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -223,31 +223,18 @@ class DashboardManager {
                     y: {
                         beginAtZero: true,
                         grid: { color: '#334155' },
-                        title: {
-                            display: true,
-                            text: 'Messages/sec'
-                        }
+                        title: { display: true, text: 'Messages/sec' }
                     },
-                    x: {
-                        grid: { color: '#334155' }
-                    }
+                    x: { grid: { color: '#334155' } }
                 },
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    }
-                }
+                plugins: { legend: { position: 'top' } }
             }
         });
     }
 
     startPolling() {
         console.log('Starting metrics polling every', this.pollingIntervalMs, 'ms');
-
-        // Start polling for real-time updates
-        this.pollingInterval = setInterval(() => {
-            this.loadRealtimeUpdate();
-        }, this.pollingIntervalMs);
+        this.pollingInterval = setInterval(() => { this.loadRealtimeUpdate(); }, this.pollingIntervalMs);
     }
 
     stopPolling() {
@@ -260,7 +247,6 @@ class DashboardManager {
 
     async loadInitialDataWithHistory() {
         try {
-            // Load historical data based on current timeframe
             await this.loadHistoricalDataForTimeframe();
             this.historicalDataLoaded = true;
         } catch (error) {
@@ -270,19 +256,10 @@ class DashboardManager {
 
     async loadRealtimeUpdate() {
         try {
-            // Only proceed if live updates are enabled
-            if (!this.liveUpdatesEnabled) {
-                return;
-            }
-
-            // Only load current metrics for real-time updates
+            if (!this.liveUpdatesEnabled) return;
             const brokers = await window.graphqlClient.getBrokers();
             this.updateMetrics(brokers);
-
-            // Load archive groups for real-time chart update
             const archiveGroups = await this.loadArchiveGroups();
-
-            // Add real-time data point to charts if historical data is loaded
             if (this.historicalDataLoaded) {
                 this.addRealtimeDataPoint(brokers);
                 this.addArchiveGroupsRealtimeDataPoint(archiveGroups);
@@ -296,22 +273,13 @@ class DashboardManager {
         try {
             const minutes = this.getMinutesForTimeframe(this.currentTimeframe);
             console.log(`Loading historical data for ${this.currentTimeframe} (${minutes} minutes)`);
-
             const brokers = await window.graphqlClient.getBrokersWithHistory(minutes);
-            console.log('Historical data received:', brokers);
-
-            // Load archive groups with history
             const archiveGroups = await this.loadArchiveGroupsWithHistory(minutes);
-            console.log('Archive groups historical data received:', archiveGroups);
-
             this.updateMetrics(brokers);
             this.initializeChartsWithHistory(brokers);
             this.initializeArchiveGroupsChart(archiveGroups);
-
-            // Also show current vs historical comparison
             const currentBrokers = await window.graphqlClient.getBrokers();
             console.log('Current data (for comparison):', currentBrokers);
-
         } catch (error) {
             console.error('Failed to load historical data:', error);
         }
@@ -333,49 +301,29 @@ class DashboardManager {
     }
 
     initializeChartsWithHistory(brokers) {
-        // Clear existing chart data
         this.trafficChart.data.labels = [];
-        this.trafficChart.data.datasets[0].data = [];
-        this.trafficChart.data.datasets[1].data = [];
-        this.trafficChart.data.datasets[2].data = [];
-        this.trafficChart.data.datasets[3].data = [];
-        this.trafficChart.data.datasets[4].data = [];
-        this.trafficChart.data.datasets[5].data = [];
+        for (let i = 0; i < this.trafficChart.data.datasets.length; i++) {
+            this.trafficChart.data.datasets[i].data = [];
+        }
 
-        console.log('Initializing charts with brokers:', brokers);
-
-        // Aggregate all historical data from all brokers
         const allHistoricalData = [];
-
         brokers.forEach(broker => {
-            console.log(`Broker ${broker.nodeId} metricsHistory:`, broker.metricsHistory);
             if (broker.metricsHistory && broker.metricsHistory.length > 0) {
-                broker.metricsHistory.forEach(historicalPoint => {
-                    console.log('Historical point:', historicalPoint);
-                    allHistoricalData.push(historicalPoint);
-                });
+                broker.metricsHistory.forEach(h => allHistoricalData.push(h));
             }
         });
-
-        console.log('All historical data:', allHistoricalData);
-
-        // Sort by timestamp
         allHistoricalData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-        // Aggregate data by timestamp (combine metrics from all brokers for each time point)
         const aggregatedData = {};
         allHistoricalData.forEach(point => {
             const timeKey = point.timestamp;
             if (!aggregatedData[timeKey]) {
                 aggregatedData[timeKey] = {
-                    messagesIn: 0,
-                    messagesOut: 0,
-                    messageBusIn: 0,
-                    messageBusOut: 0,
-                    mqttBridgeIn: 0,
-                    mqttBridgeOut: 0,
-                    opcUaIn: 0,
-                    opcUaOut: 0
+                    messagesIn: 0, messagesOut: 0,
+                    messageBusIn: 0, messageBusOut: 0,
+                    mqttBridgeIn: 0, mqttBridgeOut: 0,
+                    kafkaBridgeIn: 0, kafkaBridgeOut: 0,
+                    opcUaIn: 0, opcUaOut: 0
                 };
             }
             aggregatedData[timeKey].messagesIn += point.messagesIn || 0;
@@ -384,42 +332,29 @@ class DashboardManager {
             aggregatedData[timeKey].messageBusOut += point.messageBusOut || 0;
             aggregatedData[timeKey].mqttBridgeIn += point.mqttBridgeIn || 0;
             aggregatedData[timeKey].mqttBridgeOut += point.mqttBridgeOut || 0;
+            aggregatedData[timeKey].kafkaBridgeIn += point.kafkaBridgeIn || 0;
+            aggregatedData[timeKey].kafkaBridgeOut += point.kafkaBridgeOut || 0;
             aggregatedData[timeKey].opcUaIn += point.opcUaIn || 0;
             aggregatedData[timeKey].opcUaOut += point.opcUaOut || 0;
         });
 
-        console.log('Aggregated data:', aggregatedData);
-
-        // Populate charts with aggregated historical data
         Object.keys(aggregatedData).forEach(timestamp => {
             const data = aggregatedData[timestamp];
             const timeLabel = this.formatTimestamp(timestamp);
-
-            console.log(`Adding chart data: ${timeLabel} - In: ${data.messagesIn}, Out: ${data.messagesOut}, BridgeIn: ${data.mqttBridgeIn}, BridgeOut: ${data.mqttBridgeOut}`);
-
             this.trafficChart.data.labels.push(timeLabel);
             this.trafficChart.data.datasets[0].data.push(data.messagesIn);
             this.trafficChart.data.datasets[1].data.push(data.messagesOut);
             this.trafficChart.data.datasets[2].data.push(data.mqttBridgeIn);
             this.trafficChart.data.datasets[3].data.push(data.mqttBridgeOut);
-            this.trafficChart.data.datasets[4].data.push(data.opcUaIn);
-            this.trafficChart.data.datasets[5].data.push(data.opcUaOut);
+            this.trafficChart.data.datasets[4].data.push(data.kafkaBridgeIn);
+            this.trafficChart.data.datasets[5].data.push(data.kafkaBridgeOut);
+            this.trafficChart.data.datasets[6].data.push(data.opcUaIn);
+            this.trafficChart.data.datasets[7].data.push(data.opcUaOut);
         });
 
-        // Update message bus chart with current broker distribution
         this.messageBusChart.data.labels = brokers.map(b => b.nodeId);
-        this.messageBusChart.data.datasets[0].data = brokers.map(b => {
-            const metrics = b.metrics && b.metrics.length > 0 ? b.metrics[0] : {};
-            return metrics.messageBusIn || 0;
-        });
-        this.messageBusChart.data.datasets[1].data = brokers.map(b => {
-            const metrics = b.metrics && b.metrics.length > 0 ? b.metrics[0] : {};
-            return metrics.messageBusOut || 0;
-        });
-
-        console.log('Chart datasets after population:');
-        console.log('Messages In data:', this.trafficChart.data.datasets[0].data);
-        console.log('Messages Out data:', this.trafficChart.data.datasets[1].data);
+        this.messageBusChart.data.datasets[0].data = brokers.map(b => (b.metrics && b.metrics.length > 0 ? b.metrics[0].messageBusIn : 0) || 0);
+        this.messageBusChart.data.datasets[1].data = brokers.map(b => (b.metrics && b.metrics.length > 0 ? b.metrics[0].messageBusOut : 0) || 0);
 
         this.trafficChart.update();
         this.messageBusChart.update();
@@ -429,11 +364,8 @@ class DashboardManager {
         const now = new Date();
         const timeLabel = now.toLocaleTimeString();
 
-        console.log('Adding realtime data point with brokers:', brokers);
-
         const clusterTotals = brokers.reduce((acc, broker) => {
             const metrics = broker.metrics && broker.metrics.length > 0 ? broker.metrics[0] : {};
-            console.log(`Broker ${broker.nodeId} metrics:`, metrics);
             return {
                 messagesIn: acc.messagesIn + (metrics.messagesIn || 0),
                 messagesOut: acc.messagesOut + (metrics.messagesOut || 0),
@@ -441,68 +373,45 @@ class DashboardManager {
                 messageBusOut: acc.messageBusOut + (metrics.messageBusOut || 0),
                 mqttBridgeIn: acc.mqttBridgeIn + (metrics.mqttBridgeIn || 0),
                 mqttBridgeOut: acc.mqttBridgeOut + (metrics.mqttBridgeOut || 0),
+                kafkaBridgeIn: acc.kafkaBridgeIn + (metrics.kafkaBridgeIn || 0),
+                kafkaBridgeOut: acc.kafkaBridgeOut + (metrics.kafkaBridgeOut || 0),
                 opcUaIn: acc.opcUaIn + (metrics.opcUaIn || 0),
                 opcUaOut: acc.opcUaOut + (metrics.opcUaOut || 0)
             };
-        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttBridgeIn: 0, mqttBridgeOut: 0, opcUaIn: 0, opcUaOut: 0 });
+        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttBridgeIn: 0, mqttBridgeOut: 0, kafkaBridgeIn: 0, kafkaBridgeOut: 0, opcUaIn: 0, opcUaOut: 0 });
 
-        console.log('Cluster totals for realtime update:', clusterTotals);
-
-        // Remove oldest point if we have too many
         if (this.trafficChart.data.labels.length >= this.maxDataPoints) {
             this.trafficChart.data.labels.shift();
-            this.trafficChart.data.datasets[0].data.shift();
-            this.trafficChart.data.datasets[1].data.shift();
-            this.trafficChart.data.datasets[2].data.shift();
-            this.trafficChart.data.datasets[3].data.shift();
-            this.trafficChart.data.datasets[4].data.shift();
-            this.trafficChart.data.datasets[5].data.shift();
+            for (let i = 0; i < this.trafficChart.data.datasets.length; i++) {
+                this.trafficChart.data.datasets[i].data.shift();
+            }
         }
-
-        console.log(`Adding realtime point: ${timeLabel} - In: ${clusterTotals.messagesIn}, Out: ${clusterTotals.messagesOut}, BridgeIn: ${clusterTotals.mqttBridgeIn}, BridgeOut: ${clusterTotals.mqttBridgeOut}`);
 
         this.trafficChart.data.labels.push(timeLabel);
         this.trafficChart.data.datasets[0].data.push(clusterTotals.messagesIn);
         this.trafficChart.data.datasets[1].data.push(clusterTotals.messagesOut);
         this.trafficChart.data.datasets[2].data.push(clusterTotals.mqttBridgeIn);
         this.trafficChart.data.datasets[3].data.push(clusterTotals.mqttBridgeOut);
-        this.trafficChart.data.datasets[4].data.push(clusterTotals.opcUaIn);
-        this.trafficChart.data.datasets[5].data.push(clusterTotals.opcUaOut);
+        this.trafficChart.data.datasets[4].data.push(clusterTotals.kafkaBridgeIn);
+        this.trafficChart.data.datasets[5].data.push(clusterTotals.kafkaBridgeOut);
+        this.trafficChart.data.datasets[6].data.push(clusterTotals.opcUaIn);
+        this.trafficChart.data.datasets[7].data.push(clusterTotals.opcUaOut);
         this.trafficChart.update('none');
 
-        // Update message bus chart with current data
         this.messageBusChart.data.labels = brokers.map(b => b.nodeId);
-        this.messageBusChart.data.datasets[0].data = brokers.map(b => {
-            const metrics = b.metrics && b.metrics.length > 0 ? b.metrics[0] : {};
-            return metrics.messageBusIn || 0;
-        });
-        this.messageBusChart.data.datasets[1].data = brokers.map(b => {
-            const metrics = b.metrics && b.metrics.length > 0 ? b.metrics[0] : {};
-            return metrics.messageBusOut || 0;
-        });
+        this.messageBusChart.data.datasets[0].data = brokers.map(b => (b.metrics && b.metrics.length > 0 ? b.metrics[0].messageBusIn : 0) || 0);
+        this.messageBusChart.data.datasets[1].data = brokers.map(b => (b.metrics && b.metrics.length > 0 ? b.metrics[0].messageBusOut : 0) || 0);
         this.messageBusChart.update('none');
     }
 
     formatTimestamp(isoString) {
         const date = new Date(isoString);
         if (this.currentTimeframe === '24h') {
-            return date.toLocaleString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+            return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         } else if (this.currentTimeframe === '1h') {
-            return date.toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         } else {
-            return date.toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         }
     }
 
@@ -518,185 +427,79 @@ class DashboardManager {
                 messageBusOut: acc.messageBusOut + (metrics.messageBusOut || 0),
                 mqttBridgeIn: acc.mqttBridgeIn + (metrics.mqttBridgeIn || 0),
                 mqttBridgeOut: acc.mqttBridgeOut + (metrics.mqttBridgeOut || 0),
+                kafkaBridgeIn: acc.kafkaBridgeIn + (metrics.kafkaBridgeIn || 0),
+                kafkaBridgeOut: acc.kafkaBridgeOut + (metrics.kafkaBridgeOut || 0),
                 opcUaIn: acc.opcUaIn + (metrics.opcUaIn || 0),
                 opcUaOut: acc.opcUaOut + (metrics.opcUaOut || 0)
             };
         }, {
-            messagesIn: 0,
-            messagesOut: 0,
-            totalSessions: 0,
-            queuedMessages: 0,
-            messageBusIn: 0,
-            messageBusOut: 0,
-            mqttBridgeIn: 0,
-            mqttBridgeOut: 0,
-            opcUaIn: 0,
-            opcUaOut: 0
+            messagesIn: 0, messagesOut: 0, totalSessions: 0, queuedMessages: 0,
+            messageBusIn: 0, messageBusOut: 0,
+            mqttBridgeIn: 0, mqttBridgeOut: 0,
+            kafkaBridgeIn: 0, kafkaBridgeOut: 0,
+            opcUaIn: 0, opcUaOut: 0
         });
 
         const overviewContainer = document.getElementById('cluster-overview');
         overviewContainer.innerHTML = `
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">MQTT Messages In</span>
-                    <div class="metric-icon">📥</div>
-                </div>
-                <div class="metric-value">${this.formatNumber(clusterTotals.messagesIn)}</div>
-                <div class="metric-label">Cluster Total</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">MQTT Messages Out</span>
-                    <div class="metric-icon">📤</div>
-                </div>
-                <div class="metric-value">${this.formatNumber(clusterTotals.messagesOut)}</div>
-                <div class="metric-label">Cluster Total</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">Active Sessions</span>
-                    <div class="metric-icon">👥</div>
-                </div>
-                <div class="metric-value">${clusterTotals.totalSessions}</div>
-                <div class="metric-label">${brokers.length} Node${brokers.length !== 1 ? 's' : ''}</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">Queued Messages</span>
-                    <div class="metric-icon">⏳</div>
-                </div>
-                <div class="metric-value">${this.formatNumber(clusterTotals.queuedMessages)}</div>
-                <div class="metric-label">Pending Delivery</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">Bridge Messages In</span>
-                    <div class="metric-icon">🛬</div>
-                </div>
-                <div class="metric-value">${this.formatNumber(clusterTotals.mqttBridgeIn)}</div>
-                <div class="metric-label">External Bridges</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">Bridge Messages Out</span>
-                    <div class="metric-icon">🛫</div>
-                </div>
-                <div class="metric-value">${this.formatNumber(clusterTotals.mqttBridgeOut)}</div>
-                <div class="metric-label">External Bridges</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">OPC UA In</span>
-                    <div class="metric-icon">⚙️</div>
-                </div>
-                <div class="metric-value">${this.formatNumber(clusterTotals.opcUaIn)}</div>
-                <div class="metric-label">Industrial Protocol</div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <span class="metric-title">OPC UA Out</span>
-                    <div class="metric-icon">⚙️</div>
-                </div>
-                <div class="metric-value">${this.formatNumber(clusterTotals.opcUaOut)}</div>
-                <div class="metric-label">Industrial Protocol</div>
-            </div>
-        `;
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Messages In</span><div class="metric-icon">📥</div></div><div class="metric-value">${this.formatNumber(clusterTotals.messagesIn)}</div><div class="metric-label">Cluster Total</div></div>
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Messages Out</span><div class="metric-icon">📤</div></div><div class="metric-value">${this.formatNumber(clusterTotals.messagesOut)}</div><div class="metric-label">Cluster Total</div></div>
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">Active Sessions</span><div class="metric-icon">👥</div></div><div class="metric-value">${clusterTotals.totalSessions}</div><div class="metric-label">${brokers.length} Node${brokers.length !== 1 ? 's' : ''}</div></div>
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">Queued Messages</span><div class="metric-icon">⏳</div></div><div class="metric-value">${this.formatNumber(clusterTotals.queuedMessages)}</div><div class="metric-label">Pending Delivery</div></div>
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Bridge In</span><div class="metric-icon">🛬</div></div><div class="metric-value">${this.formatNumber(clusterTotals.mqttBridgeIn)}</div><div class="metric-label">External Bridges</div></div>
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Bridge Out</span><div class="metric-icon">🛫</div></div><div class="metric-value">${this.formatNumber(clusterTotals.mqttBridgeOut)}</div><div class="metric-label">External Bridges</div></div>
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">Kafka Bridge In</span><div class="metric-icon">📦</div></div><div class="metric-value">${this.formatNumber(clusterTotals.kafkaBridgeIn)}</div><div class="metric-label">Kafka</div></div>
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">Kafka Bridge Out</span><div class="metric-icon">📦</div></div><div class="metric-value">${this.formatNumber(clusterTotals.kafkaBridgeOut)}</div><div class="metric-label">Kafka</div></div>
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">OPC UA In</span><div class="metric-icon">⚙️</div></div><div class="metric-value">${this.formatNumber(clusterTotals.opcUaIn)}</div><div class="metric-label">Industrial Protocol</div></div>
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">OPC UA Out</span><div class="metric-icon">⚙️</div></div><div class="metric-value">${this.formatNumber(clusterTotals.opcUaOut)}</div><div class="metric-label">Industrial Protocol</div></div>`;
     }
 
     updateBrokerTable(brokers) {
         const tableBody = document.getElementById('broker-table-body');
         tableBody.innerHTML = brokers.map(broker => {
             const metrics = broker.metrics && broker.metrics.length > 0 ? broker.metrics[0] : {};
-            const isHealthy = metrics.nodeSessionCount >= 0; // Simple health check
-
+            const isHealthy = metrics.nodeSessionCount >= 0;
             return `
                 <tr>
                     <td><strong>${broker.nodeId}</strong></td>
                     <td><code style="font-size: 0.875rem; background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px;">${broker.version || 'unknown'}</code></td>
-                    <td>
-                        <span class="status-indicator ${isHealthy ? 'status-online' : 'status-offline'}">
-                            <span class="status-dot"></span>
-                            ${isHealthy ? 'Online' : 'Offline'}
-                        </span>
-                    </td>
+                    <td><span class="status-indicator ${isHealthy ? 'status-online' : 'status-offline'}"><span class="status-dot"></span>${isHealthy ? 'Online' : 'Offline'}</span></td>
                     <td>${this.formatNumber(metrics.messagesIn || 0)}</td>
                     <td>${this.formatNumber(metrics.messagesOut || 0)}</td>
                     <td>${metrics.nodeSessionCount || 0}</td>
                     <td>${this.formatNumber(metrics.queuedMessagesCount || 0)}</td>
-                    <td>
-                        <span style="color: #14B8A6;">${this.formatNumber(metrics.messageBusIn || 0)}</span> /
-                        <span style="color: #F97316;">${this.formatNumber(metrics.messageBusOut || 0)}</span>
-                    </td>
-                    <td>
-                        <span style="color: #0EA5E9;">${this.formatNumber(metrics.mqttBridgeIn || 0)}</span> /
-                        <span style="color: #F59E0B;">${this.formatNumber(metrics.mqttBridgeOut || 0)}</span>
-                    </td>
-                </tr>
-            `;
+                    <td><span style="color: #14B8A6;">${this.formatNumber(metrics.messageBusIn || 0)}</span> / <span style="color: #F97316;">${this.formatNumber(metrics.messageBusOut || 0)}</span></td>
+                    <td><span style="color: #0EA5E9;">${this.formatNumber(metrics.mqttBridgeIn || 0)}</span> / <span style="color: #F59E0B;">${this.formatNumber(metrics.mqttBridgeOut || 0)}</span></td>
+                    <td><span style="color: #DC2626;">${this.formatNumber(metrics.kafkaBridgeIn || 0)}</span> / <span style="color: #F43F5E;">${this.formatNumber(metrics.kafkaBridgeOut || 0)}</span></td>
+                </tr>`;
         }).join('');
     }
 
     updateVersionInfo(brokers) {
         const versionElement = document.getElementById('version-info');
-
         if (brokers && brokers.length > 0) {
-            // Get the version from the first broker (assuming all nodes have the same version)
             const version = brokers[0].version || 'unknown';
-
-            // Check if all brokers have the same version
-            const allSameVersion = brokers.every(broker => broker.version === version);
-
+            const allSameVersion = brokers.every(b => b.version === version);
             if (allSameVersion) {
-                versionElement.innerHTML = `
-                    <div style="color: var(--text-secondary);">MonsterMQ</div>
-                    <div style="font-family: 'Courier New', monospace; color: var(--text-primary); font-weight: 500;">${version}</div>
-                `;
+                versionElement.innerHTML = `<div style="color: var(--text-secondary);">MonsterMQ</div><div style="font-family: 'Courier New', monospace; color: var(--text-primary); font-weight: 500;">${version}</div>`;
             } else {
-                // Mixed versions in cluster
-                versionElement.innerHTML = `
-                    <div style="color: var(--text-secondary);">MonsterMQ</div>
-                    <div style="font-family: 'Courier New', monospace; color: #F59E0B; font-weight: 500;">Mixed Versions</div>
-                `;
+                versionElement.innerHTML = `<div style="color: var(--text-secondary);">MonsterMQ</div><div style=\"font-family: 'Courier New', monospace; color: #F59E0B; font-weight: 500;\">Mixed Versions</div>`;
             }
         } else {
-            versionElement.innerHTML = `
-                <div style="color: var(--text-secondary);">MonsterMQ</div>
-                <div style="font-family: 'Courier New', monospace; color: var(--text-tertiary); font-weight: 500;">unknown</div>
-            `;
+            versionElement.innerHTML = `<div style="color: var(--text-secondary);">MonsterMQ</div><div style="font-family: 'Courier New', monospace; color: var(--text-tertiary); font-weight: 500;">unknown</div>`;
         }
     }
 
     formatNumber(num) {
-        if (num >= 1000000) {
-            return (num / 1000000).toFixed(1) + 'M';
-        } else if (num >= 1000) {
-            return (num / 1000).toFixed(1) + 'K';
-        }
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+        if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
         return num.toString();
     }
 
     async loadArchiveGroups() {
         try {
             const result = await window.graphqlClient.query(`
-                query GetArchiveGroups {
-                    archiveGroups {
-                        name
-                        enabled
-                        metrics {
-                            messagesOut
-                            bufferSize
-                            timestamp
-                        }
-                    }
-                }
-            `);
+                query GetArchiveGroups { archiveGroups { name enabled metrics { messagesOut bufferSize timestamp } } }`);
             return result.archiveGroups || [];
         } catch (error) {
             console.error('Failed to load archive groups:', error);
@@ -707,18 +510,7 @@ class DashboardManager {
     async loadArchiveGroupsWithHistory(minutes) {
         try {
             const result = await window.graphqlClient.query(`
-                query GetArchiveGroupsWithHistory($lastMinutes: Int) {
-                    archiveGroups {
-                        name
-                        enabled
-                        metricsHistory(lastMinutes: $lastMinutes) {
-                            messagesOut
-                            bufferSize
-                            timestamp
-                        }
-                    }
-                }
-            `, { lastMinutes: minutes });
+                query GetArchiveGroupsWithHistory($lastMinutes: Int) { archiveGroups { name enabled metricsHistory(lastMinutes: $lastMinutes) { messagesOut bufferSize timestamp } } }`, { lastMinutes: minutes });
             return result.archiveGroups || [];
         } catch (error) {
             console.error('Failed to load archive groups with history:', error);
@@ -727,101 +519,46 @@ class DashboardManager {
     }
 
     initializeArchiveGroupsChart(archiveGroups) {
-        // Clear existing chart data
         this.archiveGroupsChart.data.labels = [];
         this.archiveGroupsChart.data.datasets = [];
-
-        // Generate colors for each archive group
-        const colors = [
-            '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6',
-            '#14B8A6', '#06B6D4', '#F97316', '#EC4899', '#6366F1'
-        ];
-
-        // Create a dataset for each archive group
+        const colors = ['#10B981','#3B82F6','#F59E0B','#EF4444','#8B5CF6','#14B8A6','#06B6D4','#F97316','#EC4899','#6366F1'];
         archiveGroups.forEach((group, index) => {
-            if (!group.enabled || !group.metricsHistory || group.metricsHistory.length === 0) {
-                return;
-            }
-
+            if (!group.enabled || !group.metricsHistory || group.metricsHistory.length === 0) return;
             const color = colors[index % colors.length];
-            this.archiveGroupsChart.data.datasets.push({
-                label: group.name,
-                data: [],
-                borderColor: color,
-                backgroundColor: color + '20',
-                fill: false,
-                tension: 0.4
-            });
+            this.archiveGroupsChart.data.datasets.push({ label: group.name, data: [], borderColor: color, backgroundColor: color + '20', fill: false, tension: 0.4 });
         });
-
-        // Populate timestamps and data points
         if (archiveGroups.length > 0 && archiveGroups[0].metricsHistory) {
             const timestamps = archiveGroups[0].metricsHistory.map(m => this.formatTimestamp(m.timestamp));
             this.archiveGroupsChart.data.labels = timestamps;
-
-            archiveGroups.forEach((group, groupIndex) => {
+            archiveGroups.forEach(group => {
                 if (!group.enabled || !group.metricsHistory) return;
-
-                const datasetIndex = this.archiveGroupsChart.data.datasets.findIndex(ds => ds.label === group.name);
-                if (datasetIndex >= 0) {
-                    this.archiveGroupsChart.data.datasets[datasetIndex].data =
-                        group.metricsHistory.map(m => m.messagesOut || 0);
-                }
+                const idx = this.archiveGroupsChart.data.datasets.findIndex(ds => ds.label === group.name);
+                if (idx >= 0) this.archiveGroupsChart.data.datasets[idx].data = group.metricsHistory.map(m => m.messagesOut || 0);
             });
         }
-
         this.archiveGroupsChart.update();
     }
 
     addArchiveGroupsRealtimeDataPoint(archiveGroups) {
         const now = new Date();
         const timeLabel = now.toLocaleTimeString();
-
-        // Add new label
         this.archiveGroupsChart.data.labels.push(timeLabel);
-
-        // Limit data points
-        if (this.archiveGroupsChart.data.labels.length > this.maxDataPoints) {
-            this.archiveGroupsChart.data.labels.shift();
-        }
-
-        // Update each dataset with new data
+        if (this.archiveGroupsChart.data.labels.length > this.maxDataPoints) this.archiveGroupsChart.data.labels.shift();
         archiveGroups.forEach(group => {
             if (!group.enabled) return;
-
-            const datasetIndex = this.archiveGroupsChart.data.datasets.findIndex(ds => ds.label === group.name);
-            if (datasetIndex >= 0) {
-                const currentMetric = group.metrics && group.metrics.length > 0 ? group.metrics[0] : { messagesOut: 0 };
-                this.archiveGroupsChart.data.datasets[datasetIndex].data.push(currentMetric.messagesOut || 0);
-
-                // Limit data points
-                if (this.archiveGroupsChart.data.datasets[datasetIndex].data.length > this.maxDataPoints) {
-                    this.archiveGroupsChart.data.datasets[datasetIndex].data.shift();
-                }
+            const idx = this.archiveGroupsChart.data.datasets.findIndex(ds => ds.label === group.name);
+            const currentMetric = group.metrics && group.metrics.length > 0 ? group.metrics[0] : { messagesOut: 0 };
+            if (idx >= 0) {
+                this.archiveGroupsChart.data.datasets[idx].data.push(currentMetric.messagesOut || 0);
+                if (this.archiveGroupsChart.data.datasets[idx].data.length > this.maxDataPoints) this.archiveGroupsChart.data.datasets[idx].data.shift();
             } else {
-                // New archive group appeared, add a new dataset
-                const colors = [
-                    '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6',
-                    '#14B8A6', '#06B6D4', '#F97316', '#EC4899', '#6366F1'
-                ];
+                const colors = ['#10B981','#3B82F6','#F59E0B','#EF4444','#8B5CF6','#14B8A6','#06B6D4','#F97316','#EC4899','#6366F1'];
                 const color = colors[this.archiveGroupsChart.data.datasets.length % colors.length];
-                const currentMetric = group.metrics && group.metrics.length > 0 ? group.metrics[0] : { messagesOut: 0 };
-
-                this.archiveGroupsChart.data.datasets.push({
-                    label: group.name,
-                    data: [currentMetric.messagesOut || 0],
-                    borderColor: color,
-                    backgroundColor: color + '20',
-                    fill: false,
-                    tension: 0.4
-                });
+                this.archiveGroupsChart.data.datasets.push({ label: group.name, data: [currentMetric.messagesOut || 0], borderColor: color, backgroundColor: color + '20', fill: false, tension: 0.4 });
             }
         });
-
         this.archiveGroupsChart.update('none');
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    new DashboardManager();
-});
+document.addEventListener('DOMContentLoaded', () => { new DashboardManager(); });

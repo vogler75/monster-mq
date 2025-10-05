@@ -326,6 +326,8 @@ class MetricsStorePostgres(
         .put("mqttBridgeOut", m.mqttBridgeOut)
         .put("opcUaIn", m.opcUaIn)
         .put("opcUaOut", m.opcUaOut)
+        .put("kafkaBridgeIn", m.kafkaBridgeIn)
+        .put("kafkaBridgeOut", m.kafkaBridgeOut)
         .put("timestamp", m.timestamp)
 
     private fun sessionMetricsToJson(m: SessionMetrics) = JsonObject()
@@ -348,6 +350,8 @@ class MetricsStorePostgres(
         mqttBridgeOut = 0.0,
         opcUaIn = 0.0,
         opcUaOut = 0.0,
+        kafkaBridgeIn = 0.0,
+        kafkaBridgeOut = 0.0,
         timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     ) else BrokerMetrics(
         messagesIn = j.getDouble("messagesIn",0.0),
@@ -364,6 +368,8 @@ class MetricsStorePostgres(
         mqttBridgeOut = j.getDouble("mqttBridgeOut",0.0),
         opcUaIn = j.getDouble("opcUaIn",0.0),
         opcUaOut = j.getDouble("opcUaOut",0.0),
+        kafkaBridgeIn = j.getDouble("kafkaBridgeIn",0.0),
+        kafkaBridgeOut = j.getDouble("kafkaBridgeOut",0.0),
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 

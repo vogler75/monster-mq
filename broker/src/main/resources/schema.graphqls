@@ -64,6 +64,10 @@ type BrokerMetrics {
     mqttBridgeIn: Float!
     # Messages per second sent via MQTT bridge clients (local -> remote)
     mqttBridgeOut: Float!
+    # Messages per second received via Kafka bridge clients (Kafka -> MQTT)
+    kafkaBridgeIn: Float!
+    # Messages per second published via Kafka bridge clients (MQTT -> Kafka)
+    kafkaBridgeOut: Float!
     # Messages per second received from OPC UA devices (value changes)
     opcUaIn: Float!
     # Messages per second sent to OPC UA devices (writes)

@@ -55,13 +55,16 @@ class MetricsHandler(
             var bridgeOutTotal = 0.0
             var opcUaInTotal = 0.0
             var opcUaOutTotal = 0.0
+            var kafkaInTotal = 0.0
+            var kafkaOutTotal = 0.0
             var brokerDone = false
             var bridgeDone = false
             var opcUaDone = false
+            var kafkaDone = false
             var archiveDone = false
 
             fun tryAssembleAndStore() {
-                if (brokerDone && bridgeDone && opcUaDone && archiveDone && nodeMetrics != null) {
+                if (brokerDone && bridgeDone && opcUaDone && kafkaDone && archiveDone && nodeMetrics != null) {
                     try {
                         val nm = nodeMetrics!!
                         val brokerMetrics = BrokerMetrics(
@@ -79,12 +82,14 @@ class MetricsHandler(
                              mqttBridgeOut = bridgeOutTotal,
                              opcUaIn = opcUaInTotal,
                              opcUaOut = opcUaOutTotal,
+                             kafkaBridgeIn = kafkaInTotal,
+                             kafkaBridgeOut = kafkaOutTotal,
                             timestamp = TimestampConverter.instantToIsoString(timestamp)
                         )
 
                         metricsStore.storeBrokerMetrics(timestamp, nodeId, brokerMetrics).onComplete { result ->
                             if (result.succeeded()) {
-                                logger.fine("Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal) for nodeId: $nodeId")
+                                    logger.fine("Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal kafkaIn=$kafkaInTotal kafkaOut=$kafkaOutTotal) for nodeId: $nodeId")
                             } else {
                                 logger.warning("Error storing broker metrics: ${result.cause()?.message}")
                             }
@@ -223,6 +228,56 @@ class MetricsHandler(
                  }
              }
 
+            // Kafka bridge metrics aggregation
+            val kafkaListAddress = EventBusAddresses.KafkaBridge.CONNECTORS_LIST
+            vertx.eventBus().request<JsonObject>(kafkaListAddress, JsonObject()).onComplete { listReply ->
+                if (listReply.succeeded()) {
+                    val body = listReply.result().body()
+                    val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
+                    if (devices.isEmpty) {
+                        kafkaDone = true
+                        tryAssembleAndStore()
+                    } else {
+                        var remaining = devices.size()
+                        devices.forEach { d ->
+                            val deviceName = d as String
+                            val mAddr = EventBusAddresses.KafkaBridge.connectorMetrics(deviceName)
+                            vertx.eventBus().request<JsonObject>(mAddr, JsonObject()).onComplete { mReply ->
+                                if (mReply.succeeded()) {
+                                    try {
+                                        val m = mReply.result().body()
+                                         val inRate = m.getDouble("messagesInRate", m.getDouble("ratePerSec", 0.0))
+                                         val outRate = m.getDouble("messagesOutRate", 0.0)
+                                         kafkaInTotal += inRate
+                                         kafkaOutTotal += outRate
+                                         // Store individual Kafka client metrics
+                                         val kafkaMetrics = at.rocworks.extensions.graphql.KafkaClientMetrics(
+                                             messagesIn = inRate,
+                                             messagesOut = outRate,
+                                             timestamp = TimestampConverter.instantToIsoString(timestamp)
+                                         )
+                                         metricsStore.storeKafkaClientMetrics(timestamp, deviceName, kafkaMetrics)
+                                    } catch (e: Exception) {
+                                        logger.warning("Error processing Kafka client metrics for $deviceName: ${e.message}")
+                                    }
+                                } else {
+                                    logger.fine("No metrics for Kafka client $deviceName: ${mReply.cause()?.message}")
+                                }
+                                remaining -= 1
+                                if (remaining == 0) {
+                                    kafkaDone = true
+                                    tryAssembleAndStore()
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    logger.fine("Could not retrieve Kafka client connector list: ${listReply.cause()?.message}")
+                    kafkaDone = true
+                    tryAssembleAndStore()
+                }
+            }
+
             // Archive group metrics aggregation
             val archiveListAddress = EventBusAddresses.Archive.GROUPS_LIST
             vertx.eventBus().request<JsonObject>(archiveListAddress, JsonObject()).onComplete { listReply ->
@@ -296,6 +351,12 @@ class MetricsHandler(
                             topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
                             messageBusIn = nodeMetrics.getDouble("messageBusInRate", 0.0),
                             messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
+                            mqttBridgeIn = 0.0,
+                            mqttBridgeOut = 0.0,
+                            opcUaIn = 0.0,
+                            opcUaOut = 0.0,
+                            kafkaBridgeIn = 0.0,
+                            kafkaBridgeOut = 0.0,
                             timestamp = TimestampConverter.instantToIsoString(timestamp)
                         )
 
