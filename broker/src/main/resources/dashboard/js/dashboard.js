@@ -97,65 +97,57 @@ class DashboardManager {
                     {   // 0
                         label: 'Messages In',
                         data: [],
-                        borderColor: '#10B981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        tension: 0.4,
+                        borderColor: '#22C55E',
+                        backgroundColor: 'rgba(34, 197, 94, 0.12)',
+                        tension: 0.35,
                         fill: true
                     },
                     {   // 1
                         label: 'Messages Out',
                         data: [],
-                        borderColor: '#7C3AED',
-                        backgroundColor: 'rgba(124, 58, 237, 0.1)',
-                        tension: 0.4,
+                        borderColor: '#6366F1',
+                        backgroundColor: 'rgba(99, 102, 241, 0.12)',
+                        tension: 0.35,
                         fill: true
                     },
                     {   // 2
                         label: 'MQTT Bridge In',
                         data: [],
                         borderColor: '#0EA5E9',
-                        backgroundColor: 'rgba(14, 165, 233, 0.1)',
-                        tension: 0.4,
+                        backgroundColor: 'rgba(14, 165, 233, 0.12)',
+                        tension: 0.35,
                         fill: true
                     },
                     {   // 3
                         label: 'MQTT Bridge Out',
                         data: [],
                         borderColor: '#F59E0B',
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                        tension: 0.4,
+                        backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                        tension: 0.35,
                         fill: true
                     },
                     {   // 4
                         label: 'Kafka Bridge In',
                         data: [],
-                        borderColor: '#DC2626',
-                        backgroundColor: 'rgba(220, 38, 38, 0.1)',
-                        tension: 0.4,
+                        borderColor: '#EF4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                        tension: 0.35,
                         fill: true
                     },
                     {   // 5
-                        label: 'Kafka Bridge Out',
+                        label: 'OPC UA In',
                         data: [],
-                        borderColor: '#F43F5E',
-                        backgroundColor: 'rgba(244, 63, 94, 0.1)',
-                        tension: 0.4,
+                        borderColor: '#14B8A6',
+                        backgroundColor: 'rgba(20, 184, 166, 0.12)',
+                        tension: 0.35,
                         fill: true
                     },
                     {   // 6
-                        label: 'OPC UA In',
-                        data: [],
-                        borderColor: '#06B6D4',
-                        backgroundColor: 'rgba(6, 182, 212, 0.1)',
-                        tension: 0.4,
-                        fill: true
-                    },
-                    {   // 7
                         label: 'OPC UA Out',
                         data: [],
                         borderColor: '#9333EA',
-                        backgroundColor: 'rgba(147, 51, 234, 0.1)',
-                        tension: 0.4,
+                        backgroundColor: 'rgba(147, 51, 234, 0.12)',
+                        tension: 0.35,
                         fill: true
                     }
                 ]
@@ -322,7 +314,7 @@ class DashboardManager {
                     messagesIn: 0, messagesOut: 0,
                     messageBusIn: 0, messageBusOut: 0,
                     mqttBridgeIn: 0, mqttBridgeOut: 0,
-                    kafkaBridgeIn: 0, kafkaBridgeOut: 0,
+                    kafkaBridgeIn: 0,
                     opcUaIn: 0, opcUaOut: 0
                 };
             }
@@ -333,7 +325,7 @@ class DashboardManager {
             aggregatedData[timeKey].mqttBridgeIn += point.mqttBridgeIn || 0;
             aggregatedData[timeKey].mqttBridgeOut += point.mqttBridgeOut || 0;
             aggregatedData[timeKey].kafkaBridgeIn += point.kafkaBridgeIn || 0;
-            aggregatedData[timeKey].kafkaBridgeOut += point.kafkaBridgeOut || 0;
+            // Removed kafkaBridgeOut (always zero / unused)
             aggregatedData[timeKey].opcUaIn += point.opcUaIn || 0;
             aggregatedData[timeKey].opcUaOut += point.opcUaOut || 0;
         });
@@ -347,9 +339,9 @@ class DashboardManager {
             this.trafficChart.data.datasets[2].data.push(data.mqttBridgeIn);
             this.trafficChart.data.datasets[3].data.push(data.mqttBridgeOut);
             this.trafficChart.data.datasets[4].data.push(data.kafkaBridgeIn);
-            this.trafficChart.data.datasets[5].data.push(data.kafkaBridgeOut);
-            this.trafficChart.data.datasets[6].data.push(data.opcUaIn);
-            this.trafficChart.data.datasets[7].data.push(data.opcUaOut);
+            // Removed dataset push for kafkaBridgeOut
+            this.trafficChart.data.datasets[5].data.push(data.opcUaIn);
+            this.trafficChart.data.datasets[6].data.push(data.opcUaOut);
         });
 
         this.messageBusChart.data.labels = brokers.map(b => b.nodeId);
@@ -374,11 +366,11 @@ class DashboardManager {
                 mqttBridgeIn: acc.mqttBridgeIn + (metrics.mqttBridgeIn || 0),
                 mqttBridgeOut: acc.mqttBridgeOut + (metrics.mqttBridgeOut || 0),
                 kafkaBridgeIn: acc.kafkaBridgeIn + (metrics.kafkaBridgeIn || 0),
-                kafkaBridgeOut: acc.kafkaBridgeOut + (metrics.kafkaBridgeOut || 0),
+                // kafkaBridgeOut removed
                 opcUaIn: acc.opcUaIn + (metrics.opcUaIn || 0),
                 opcUaOut: acc.opcUaOut + (metrics.opcUaOut || 0)
             };
-        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttBridgeIn: 0, mqttBridgeOut: 0, kafkaBridgeIn: 0, kafkaBridgeOut: 0, opcUaIn: 0, opcUaOut: 0 });
+        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttBridgeIn: 0, mqttBridgeOut: 0, kafkaBridgeIn: 0, opcUaIn: 0, opcUaOut: 0 });
 
         if (this.trafficChart.data.labels.length >= this.maxDataPoints) {
             this.trafficChart.data.labels.shift();
@@ -393,9 +385,9 @@ class DashboardManager {
         this.trafficChart.data.datasets[2].data.push(clusterTotals.mqttBridgeIn);
         this.trafficChart.data.datasets[3].data.push(clusterTotals.mqttBridgeOut);
         this.trafficChart.data.datasets[4].data.push(clusterTotals.kafkaBridgeIn);
-        this.trafficChart.data.datasets[5].data.push(clusterTotals.kafkaBridgeOut);
-        this.trafficChart.data.datasets[6].data.push(clusterTotals.opcUaIn);
-        this.trafficChart.data.datasets[7].data.push(clusterTotals.opcUaOut);
+        // Removed kafkaBridgeOut dataset push
+        this.trafficChart.data.datasets[5].data.push(clusterTotals.opcUaIn);
+        this.trafficChart.data.datasets[6].data.push(clusterTotals.opcUaOut);
         this.trafficChart.update('none');
 
         this.messageBusChart.data.labels = brokers.map(b => b.nodeId);
@@ -428,7 +420,7 @@ class DashboardManager {
                 mqttBridgeIn: acc.mqttBridgeIn + (metrics.mqttBridgeIn || 0),
                 mqttBridgeOut: acc.mqttBridgeOut + (metrics.mqttBridgeOut || 0),
                 kafkaBridgeIn: acc.kafkaBridgeIn + (metrics.kafkaBridgeIn || 0),
-                kafkaBridgeOut: acc.kafkaBridgeOut + (metrics.kafkaBridgeOut || 0),
+                // kafkaBridgeOut removed
                 opcUaIn: acc.opcUaIn + (metrics.opcUaIn || 0),
                 opcUaOut: acc.opcUaOut + (metrics.opcUaOut || 0)
             };
@@ -436,7 +428,7 @@ class DashboardManager {
             messagesIn: 0, messagesOut: 0, totalSessions: 0, queuedMessages: 0,
             messageBusIn: 0, messageBusOut: 0,
             mqttBridgeIn: 0, mqttBridgeOut: 0,
-            kafkaBridgeIn: 0, kafkaBridgeOut: 0,
+            kafkaBridgeIn: 0, // kafkaBridgeOut removed
             opcUaIn: 0, opcUaOut: 0
         });
 
@@ -449,7 +441,7 @@ class DashboardManager {
             <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Bridge In</span><div class="metric-icon">🛬</div></div><div class="metric-value">${this.formatNumber(clusterTotals.mqttBridgeIn)}</div><div class="metric-label">External Bridges</div></div>
             <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Bridge Out</span><div class="metric-icon">🛫</div></div><div class="metric-value">${this.formatNumber(clusterTotals.mqttBridgeOut)}</div><div class="metric-label">External Bridges</div></div>
             <div class="metric-card"><div class="metric-header"><span class="metric-title">Kafka Bridge In</span><div class="metric-icon">📦</div></div><div class="metric-value">${this.formatNumber(clusterTotals.kafkaBridgeIn)}</div><div class="metric-label">Kafka</div></div>
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">Kafka Bridge Out</span><div class="metric-icon">📦</div></div><div class="metric-value">${this.formatNumber(clusterTotals.kafkaBridgeOut)}</div><div class="metric-label">Kafka</div></div>
+            <!-- Kafka Bridge Out removed (always zero) -->
             <div class="metric-card"><div class="metric-header"><span class="metric-title">OPC UA In</span><div class="metric-icon">⚙️</div></div><div class="metric-value">${this.formatNumber(clusterTotals.opcUaIn)}</div><div class="metric-label">Industrial Protocol</div></div>
             <div class="metric-card"><div class="metric-header"><span class="metric-title">OPC UA Out</span><div class="metric-icon">⚙️</div></div><div class="metric-value">${this.formatNumber(clusterTotals.opcUaOut)}</div><div class="metric-label">Industrial Protocol</div></div>`;
     }
@@ -470,7 +462,7 @@ class DashboardManager {
                     <td>${this.formatNumber(metrics.queuedMessagesCount || 0)}</td>
                     <td><span style="color: #14B8A6;">${this.formatNumber(metrics.messageBusIn || 0)}</span> / <span style="color: #F97316;">${this.formatNumber(metrics.messageBusOut || 0)}</span></td>
                     <td><span style="color: #0EA5E9;">${this.formatNumber(metrics.mqttBridgeIn || 0)}</span> / <span style="color: #F59E0B;">${this.formatNumber(metrics.mqttBridgeOut || 0)}</span></td>
-                    <td><span style="color: #DC2626;">${this.formatNumber(metrics.kafkaBridgeIn || 0)}</span> / <span style="color: #F43F5E;">${this.formatNumber(metrics.kafkaBridgeOut || 0)}</span></td>
+                    <td><span style="color: #EF4444;">${this.formatNumber(metrics.kafkaBridgeIn || 0)}</span></td>
                 </tr>`;
         }).join('');
     }
