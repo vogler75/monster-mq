@@ -40,7 +40,7 @@ class MetricsStorePostgres(
                     val createTableSQL = """
                         CREATE TABLE IF NOT EXISTS public.metrics (
                             "timestamp" timestamptz NOT NULL,
-                            metric_type varchar(12) NOT NULL,
+                            metric_type varchar(30) NOT NULL,
                             identifier varchar(255) NOT NULL,
                             metrics jsonb NOT NULL,
                             CONSTRAINT metrics_pkey PRIMARY KEY ("timestamp", metric_type, identifier)

@@ -33,6 +33,37 @@ mutation {
 
 ## Queries
 
+### Kafka Client Bridge Metrics (Embedded Fields)
+
+Kafka client bridge configurations expose their current throughput sample and optional persisted history directly on `KafkaClient`.
+
+Example:
+```graphql
+{
+  kafkaClients {
+    name
+    namespace
+    metrics { messagesIn messagesOut timestamp }
+  }
+}
+```
+Historical window:
+```graphql
+{
+  kafkaClient(name: "MyKafkaClient") {
+    metricsHistory(lastMinutes: 30) { messagesIn messagesOut timestamp }
+  }
+}
+```
+Semantics:
+- messagesIn: Kafka records/sec consumed (latest sample).
+- messagesOut: MQTT messages/sec published (after transformation & filtering).
+- Live fallback: If no persisted sample exists, resolver fetches a live point via the Vert.x event bus for immediate visibility.
+- History requires a configured metrics store; otherwise only a single current sample is returned.
+
+(Planned) Aggregate broker-level sums will surface as `kafkaBridgeIn` / `kafkaBridgeOut` fields in Broker metrics once implemented; for now derive aggregates client-side.
+
+
 The top-level `Query` type exposes the following fields (`broker/src/main/resources/schema.graphqls:141-356`):
 
 ### OPC UA Device Metrics (Embedded Fields)

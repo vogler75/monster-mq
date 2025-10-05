@@ -846,17 +846,37 @@ callback(BrokerMetrics(
                 return@DataFetcher future
             }
 
-            if (metricsStore != null) {
-                metricsStore.getKafkaClientMetricsList(clientName, null, null, 1).onComplete { result ->
-                    if (result.succeeded() && result.result().isNotEmpty()) {
-                        val m = result.result().first()
-                        future.complete(listOf(KafkaClientMetrics(round2(m.messagesIn), round2(m.messagesOut), m.timestamp)))
+            fun fetchLive() {
+                // Fallback to live event bus metrics (no history) if store missing or empty
+                val addr = at.rocworks.bus.EventBusAddresses.KafkaBridge.connectorMetrics(clientName)
+                vertx.eventBus().request<io.vertx.core.json.JsonObject>(addr, io.vertx.core.json.JsonObject()).onComplete { reply ->
+                    if (reply.succeeded()) {
+                        val body = reply.result().body()
+                        val inRate = body.getDouble("messagesInRate", body.getDouble("ratePerSec", 0.0))
+                        val outRate = body.getDouble("messagesOutRate", 0.0)
+                        future.complete(listOf(KafkaClientMetrics(round2(inRate), round2(outRate), TimestampConverter.currentTimeIsoString())))
                     } else {
                         future.complete(listOf(KafkaClientMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
                     }
                 }
+            }
+
+            if (metricsStore != null) {
+                metricsStore.getKafkaClientMetricsList(clientName, null, null, 1).onComplete { result ->
+                    if (result.succeeded()) {
+                        val list = result.result()
+                        if (list.isNotEmpty()) {
+                            val m = list.first()
+                            future.complete(listOf(KafkaClientMetrics(round2(m.messagesIn), round2(m.messagesOut), m.timestamp)))
+                        } else {
+                            fetchLive()
+                        }
+                    } else {
+                        fetchLive()
+                    }
+                }
             } else {
-                future.complete(listOf(KafkaClientMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
+                fetchLive()
             }
 
             future

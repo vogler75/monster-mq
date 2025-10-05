@@ -1,0 +1,24 @@
+Version 1.6.19 (UNRELEASED)
+============================
+
+Enhancements
+- Kafka Client Bridge Metrics: Added GraphQL `KafkaClient.metrics` and `KafkaClient.metricsHistory` embedded fields exposing per-client throughput rates (messagesIn/messagesOut) with two-decimal precision.
+- Live Metrics Fallback: When no persisted metrics are available (store disabled or first sample not yet stored) the resolver returns a live on-demand sample via the Vert.x event bus, enabling immediate UI visibility after client creation.
+- Documentation: Added detailed sections in `doc/kafka.md` and `doc/graphql.md` describing schema, semantics, and usage examples for Kafka client metrics.
+
+Behavior Notes
+- Only instantaneous rates are stored; no cumulative counters. Derive approximate counts by integrating rate over time client-side.
+- Aggregate broker-wide Kafka bridge rates are planned (placeholders `kafkaBridgeIn` / `kafkaBridgeOut` in Broker metrics) and not yet populated; sum per-client metrics as a temporary workaround.
+
+Internal
+- MetricsResolver updated to attempt store read first, then fall back to live metrics if empty/failed.
+- MetricsHandler persists per-client samples during its periodic aggregation loop across available Kafka clients.
+
+Upgrade Guidance
+- No schema-breaking changes. Existing queries continue to work.
+- Update dashboards/clients to prefer `kafkaClients { metrics { ... } }` for real-time Kafka bridge insight.
+
+Planned (Future)
+- Broker-level aggregated Kafka bridge rate fields.
+- Optional cumulative counters and smoothing parameters.
+- UI dashboard section for Kafka client performance with aggregate roll-up.

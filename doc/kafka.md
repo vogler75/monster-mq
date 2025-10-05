@@ -75,6 +75,8 @@ Downstream consumers must decode this binary format using the same codec or a co
 
 ## Kafka Client Bridge
 
+MonsterMQ now exposes per-client runtime metrics via GraphQL. See the new section "Kafka Client Metrics" below for details.
+
 MonsterMQ provides a unidirectional Kafka Client bridge device that subscribes to a single Kafka topic and republishes records as MQTT messages.
 
 Key characteristics:
@@ -108,6 +110,70 @@ Recommended usage:
 - Use DEFAULT when producing from another MonsterMQ instance (lossless round-trip).
 - Use JSON for language-agnostic integrations without implementing the binary codec.
 - Use BINARY/TEXT for simple key->topic mirroring.
+
+## Kafka Client Metrics
+
+The Kafka Client bridge exposes lightweight runtime throughput metrics via GraphQL.
+
+Schema types:
+
+```graphql
+type KafkaClientMetrics {
+  messagesIn: Float!      # Kafka records consumed per second (smoothed)
+  messagesOut: Float!     # MQTT messages published per second (post-transform)
+  timestamp: String!      # ISO-8601 capture time
+}
+
+type KafkaClient {
+  name: String!
+  namespace: String!
+  metrics: [KafkaClientMetrics!]!
+  metricsHistory(from: String, to: String, lastMinutes: Int): [KafkaClientMetrics!]!
+}
+```
+
+Query examples:
+
+```graphql
+# List all Kafka clients with their latest instantaneous rate sample
+{
+  kafkaClients {
+    name
+    namespace
+    metrics { messagesIn messagesOut timestamp }
+  }
+}
+
+# Retrieve the most recent 15 minutes of metrics for a single client
+{
+  kafkaClient(name: "MyKafkaClient") {
+    name
+    metricsHistory(lastMinutes: 15) { messagesIn messagesOut timestamp }
+  }
+}
+```
+
+Behavior & Semantics:
+- messagesIn: Rate (records/sec) the consumer loop ingested from Kafka during the last sampling window.
+- messagesOut: Rate (messages/sec) successfully republished to MQTT after payload transformation and topic mapping.
+- Rates are floating point values rounded to two decimals in GraphQL responses (`round2` in resolver).
+- Sampling cadence equals the internal metrics collection interval plus client poll granularity (pollIntervalMs). Shorter polls give more responsive rates.
+- Persistence: If a metrics store (PostgreSQL / CrateDB / MongoDB / SQLite) is configured, periodic samples are persisted and exposed via `metricsHistory`.
+- Live Fallback: When the metrics store is disabled or contains no sample yet for the client, the resolver queries the live Vert.x event bus address (`KafkaBridge.connectorMetrics(<clientName>)`) and returns a synthetic single-sample list. This enables immediate UI feedback after client creation.
+- Zeroes: A result of 0.0 for both fields can mean idle client, startup (no data yet), or an error retrieving live metrics (check broker log at `FINE` level for hints).
+- History Limits: `metricsHistory` applies optional time slicing (`from`, `to`, `lastMinutes`). When absent, all stored samples for the client are returned (may be large; paginate client-side).
+
+Operational Notes:
+- No backfill: History starts only after the client first produces metrics.
+- Clock Source: Timestamps use the broker node system clock in ISO-8601 UTC.
+- Aggregation: An aggregate across all Kafka clients (sum of messagesIn/messagesOut) is planned for BrokerMetrics but currently not exposed; consumers can sum client samples client-side.
+- Rates vs Counts: Cumulative counts are not stored; only per-second rates. To approximate counts over a period, integrate (sum rate * interval duration) across successive samples client-side.
+
+Troubleshooting Metrics:
+1. Both rates always zero: Verify the client is enabled and consuming (Kafka topic has traffic). Increase log level to FINE and watch for consumer errors.
+2. messagesIn > 0 but messagesOut = 0: Likely all consumed records are dropped (e.g., null record key for formats requiring a key, or transform errors). Inspect logs for "dropped" entries.
+3. Spiky rates: Consider increasing `pollIntervalMs` to smooth or aggregate samples client-side.
+4. Missing history: Ensure a supported metrics store is configured; otherwise only the live single-sample endpoint is available.
 
 ## Limitations
 
