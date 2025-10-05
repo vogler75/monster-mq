@@ -1,0 +1,13 @@
+Release v1.6.17
+Built from commit: 7c11678
+Date: 2025-10-05 10:55:33
+
+Changes since v1.6.16:
+---
+7c11678 Move OPC UA Server documentation to dedicated file
+7b210dd Add disconnected buffer config to MQTT client UI
+edaf317 Add disconnected buffer config to MQTT client
+a8b841a Swap chart titles and canvas IDs in dashboard
+d6013f5 Add archive groups throughput chart to dashboard
+70370a7 Add archive group metrics to GraphQL API
+6d6dc93 Add archive group metrics collection and storage
