@@ -1,0 +1,422 @@
+package at.rocworks.stores.devices
+
+import io.vertx.core.json.JsonArray
+import io.vertx.core.json.JsonObject
+
+/**
+ * OPC UA address configuration for subscriptions
+ */
+data class OpcUaAddress(
+    val address: String,        // BrowsePath://Objects/Factory/# or NodeId://ns=2;i=16
+    val topic: String,          // MQTT topic where to publish the values (for single mode)
+    val publishMode: String = "SEPARATE",  // "SINGLE" = all values on one topic, "SEPARATE" = each node gets own topic
+    val removePath: Boolean = true       // Remove base path before first wildcard from topic (default: true)
+) {
+    companion object {
+        const val PUBLISH_MODE_SINGLE = "SINGLE"
+        const val PUBLISH_MODE_SEPARATE = "SEPARATE"
+
+        fun fromJsonObject(json: JsonObject): OpcUaAddress {
+            return OpcUaAddress(
+                address = json.getString("address"),
+                topic = json.getString("topic"),
+                publishMode = json.getString("publishMode", PUBLISH_MODE_SEPARATE),
+                removePath = json.getBoolean("removePath", true)
+            )
+        }
+    }
+
+    fun toJsonObject(): JsonObject {
+        return JsonObject()
+            .put("address", address)
+            .put("topic", topic)
+            .put("publishMode", publishMode)
+            .put("removePath", removePath)
+    }
+
+    fun validate(): List<String> {
+        val errors = mutableListOf<String>()
+
+        if (address.isBlank()) {
+            errors.add("address cannot be blank")
+        }
+
+        if (topic.isBlank()) {
+            errors.add("topic cannot be blank")
+        }
+
+        // Validate address format
+        if (!address.startsWith("BrowsePath://") && !address.startsWith("NodeId://")) {
+            errors.add("address must start with 'BrowsePath://' or 'NodeId://'")
+        }
+
+        // Validate publish mode
+        if (publishMode != PUBLISH_MODE_SINGLE && publishMode != PUBLISH_MODE_SEPARATE) {
+            errors.add("publishMode must be '$PUBLISH_MODE_SINGLE' or '$PUBLISH_MODE_SEPARATE'")
+        }
+
+        return errors
+    }
+
+    /**
+     * Check if this is a node ID address (NodeId://...)
+     */
+    fun isNodeIdAddress(): Boolean = address.startsWith("NodeId://")
+
+    /**
+     * Check if this is a browse path address (BrowsePath://...)
+     */
+    fun isBrowsePathAddress(): Boolean = address.startsWith("BrowsePath://")
+
+    /**
+     * Get the node ID from a node address
+     */
+    fun getNodeId(): String? {
+        return if (isNodeIdAddress()) {
+            address.substringAfter("NodeId://")
+        } else null
+    }
+
+    /**
+     * Get the browse path from a path address
+     */
+    fun getBrowsePath(): String? {
+        return if (isBrowsePathAddress()) {
+            address.substringAfter("BrowsePath://")
+        } else null
+    }
+
+    /**
+     * Check if this address uses single topic mode (all values on one topic)
+     */
+    fun isSingleTopicMode(): Boolean = publishMode == PUBLISH_MODE_SINGLE
+
+    /**
+     * Check if this address uses separate topic mode (each node gets own topic)
+     */
+    fun isSeparateTopicMode(): Boolean = publishMode == PUBLISH_MODE_SEPARATE
+
+    /**
+     * Generate the MQTT topic for a specific node value
+     * @param namespace The device namespace (e.g., "opcua/factory")
+     * @param nodeId The OPC UA node ID (e.g., "ns=2;i=16")
+     * @param browsePath Optional browse path for separate mode
+     */
+    fun generateMqttTopic(namespace: String, nodeId: String, browsePath: String? = null): String {
+        return when (publishMode) {
+            PUBLISH_MODE_SINGLE -> {
+                // All values go to the configured topic with namespace prefix
+                if (topic.startsWith(namespace)) topic else "$namespace/$topic"
+            }
+            PUBLISH_MODE_SEPARATE -> {
+                // For nodeId subscriptions, only use the topic without appending nodeId
+                if (isNodeIdAddress()) {
+                    // NodeId subscriptions: only use namespace + topic
+                    if (topic.isNotEmpty()) {
+                        "$namespace/$topic"
+                    } else {
+                        namespace
+                    }
+                } else {
+                    // BrowsePath subscriptions: namespace + topic + browsePath
+                    var topicPath = if (browsePath != null && browsePath.isNotEmpty()) {
+                        browsePath
+                    } else {
+                        nodeId
+                    }
+
+                    // Apply removePath logic for browse paths if enabled
+                    if (removePath && isBrowsePathAddress() && browsePath != null) {
+                        topicPath = removeBasePath(browsePath)
+                    }
+
+                    // Incorporate the address topic field into the namespace path
+                    if (topic.isNotEmpty()) {
+                        "$namespace/$topic/$topicPath"
+                    } else {
+                        "$namespace/$topicPath"
+                    }
+                }
+            }
+            else -> topic // fallback
+        }
+    }
+
+    /**
+     * Unescape forward slashes in a browse path
+     * Converts escaped slashes (\/) to actual slashes (/)
+     */
+    private fun unescapeSlashes(path: String): String {
+        return path.replace("\\/", "/")
+    }
+
+    /**
+     * Remove the base path before first wildcard from a browse path
+     * Example: "Objects/Factory/Line1/Station1" with base "Objects/Factory/#" -> "Line1/Station1"
+     * Handles escaped slashes in configured path: "ns=2;s=85\/Mqtt\/home/Original/#" -> "ns=2;s=85/Mqtt/home/Original/#"
+     */
+    private fun removeBasePath(fullBrowsePath: String): String {
+        if (!isBrowsePathAddress()) return fullBrowsePath
+
+        val configuredPath = getBrowsePath() ?: return fullBrowsePath
+
+        // Unescape slashes in the configured path for comparison
+        val unescapedConfiguredPath = unescapeSlashes(configuredPath)
+
+        // Find the base path (everything before first # or +)
+        val wildcardIndex = unescapedConfiguredPath.indexOfFirst { it == '#' || it == '+' }
+        if (wildcardIndex <= 0) return fullBrowsePath
+
+        val basePath = unescapedConfiguredPath.substring(0, wildcardIndex).trimEnd('/')
+
+        // Remove the base path from the full browse path
+        return if (fullBrowsePath.startsWith(basePath)) {
+            fullBrowsePath.substring(basePath.length).trimStart('/')
+        } else {
+            fullBrowsePath
+        }
+    }
+}
+
+/**
+ * OPC UA connection configuration parameters
+ */
+data class OpcUaConnectionConfig(
+    val endpointUrl: String,
+    val updateEndpointUrl: Boolean = true,
+    val securityPolicy: String = "None",
+    val username: String? = null,
+    val password: String? = null,
+    val subscriptionSamplingInterval: Double = 0.0,
+    val keepAliveFailuresAllowed: Int = 3,
+    val reconnectDelay: Long = 5000,
+    val connectionTimeout: Long = 10000,
+    val requestTimeout: Long = 5000,
+    val monitoringParameters: MonitoringParameters = MonitoringParameters(),
+    val addresses: List<OpcUaAddress> = emptyList(),
+    val certificateConfig: CertificateConfig = CertificateConfig()
+) {
+    companion object {
+        fun fromJsonObject(json: JsonObject): OpcUaConnectionConfig {
+            try {
+                val monitoringParams = try {
+                    json.getJsonObject("monitoringParameters")?.let {
+                        MonitoringParameters.fromJsonObject(it)
+                    } ?: MonitoringParameters()
+                } catch (e: Exception) {
+                    println("Error parsing monitoringParameters: ${e.message}")
+                    MonitoringParameters()
+                }
+
+                val addresses = try {
+                    json.getJsonArray("addresses")?.map { addressObj ->
+                        OpcUaAddress.fromJsonObject(addressObj as JsonObject)
+                    } ?: emptyList()
+                } catch (e: Exception) {
+                    println("Error parsing addresses: ${e.message}")
+                    emptyList()
+                }
+
+                val certificateConfig = try {
+                    json.getJsonObject("certificateConfig")?.let {
+                        CertificateConfig.fromJsonObject(it)
+                    } ?: CertificateConfig()
+                } catch (e: Exception) {
+                    println("Error parsing certificateConfig: ${e.message}")
+                    CertificateConfig()
+                }
+
+                val config = OpcUaConnectionConfig(
+                    endpointUrl = try { json.getString("endpointUrl", "opc.tcp://localhost:4840/server") } catch (e: Exception) {
+                        println("Error parsing endpointUrl: ${e.message}")
+                        "opc.tcp://localhost:4840/server"
+                    },
+                    updateEndpointUrl = try { json.getBoolean("updateEndpointUrl", true) } catch (e: Exception) {
+                        println("Error parsing updateEndpointUrl: ${e.message}")
+                        true
+                    },
+                    securityPolicy = try { json.getString("securityPolicy", "None") } catch (e: Exception) {
+                        println("Error parsing securityPolicy: ${e.message}")
+                        "None"
+                    },
+                    username = try { json.getString("username") } catch (e: Exception) {
+                        println("Error parsing username: ${e.message}")
+                        null
+                    },
+                    password = try { json.getString("password") } catch (e: Exception) {
+                        println("Error parsing password: ${e.message}")
+                        null
+                    },
+                    subscriptionSamplingInterval = try { json.getDouble("subscriptionSamplingInterval", 0.0) } catch (e: Exception) {
+                        println("Error parsing subscriptionSamplingInterval: ${e.message}")
+                        0.0
+                    },
+                    keepAliveFailuresAllowed = try { json.getInteger("keepAliveFailuresAllowed", 3) } catch (e: Exception) {
+                        println("Error parsing keepAliveFailuresAllowed: ${e.message}")
+                        3
+                    },
+                    reconnectDelay = try { json.getLong("reconnectDelay", 5000) } catch (e: Exception) {
+                        println("Error parsing reconnectDelay: ${e.message}")
+                        5000
+                    },
+                    connectionTimeout = try { json.getLong("connectionTimeout", 10000) } catch (e: Exception) {
+                        println("Error parsing connectionTimeout: ${e.message}")
+                        10000
+                    },
+                    requestTimeout = try { json.getLong("requestTimeout", 5000) } catch (e: Exception) {
+                        println("Error parsing requestTimeout: ${e.message}")
+                        5000
+                    },
+                    monitoringParameters = monitoringParams,
+                    addresses = addresses,
+                    certificateConfig = certificateConfig
+                )
+
+                // DeviceConfig is only for OPC UA Client devices
+                // OPC UA Server devices should use a separate configuration system
+
+                return config
+            } catch (e: Exception) {
+                println("Overall error in fromJsonObject: ${e.message}")
+                throw e
+            }
+        }
+    }
+
+    fun toJsonObject(): JsonObject {
+        val result = JsonObject()
+            .put("endpointUrl", endpointUrl)
+            .put("updateEndpointUrl", updateEndpointUrl)
+            .put("securityPolicy", securityPolicy)
+            .put("username", username)
+            .put("password", password)
+            .put("subscriptionSamplingInterval", subscriptionSamplingInterval)
+            .put("keepAliveFailuresAllowed", keepAliveFailuresAllowed)
+            .put("reconnectDelay", reconnectDelay)
+            .put("connectionTimeout", connectionTimeout)
+            .put("requestTimeout", requestTimeout)
+            .put("monitoringParameters", monitoringParameters.toJsonObject())
+            .put("certificateConfig", certificateConfig.toJsonObject())
+
+        // Add addresses array if we have addresses
+        if (addresses.isNotEmpty()) {
+            val addressArray = JsonArray()
+            addresses.forEach { address ->
+                addressArray.add(address.toJsonObject())
+            }
+            result.put("addresses", addressArray)
+        }
+
+        return result
+    }
+
+    fun validate(): List<String> {
+        val errors = mutableListOf<String>()
+
+        if (endpointUrl.isBlank()) {
+            errors.add("endpointUrl cannot be blank")
+        }
+
+        if (!endpointUrl.startsWith("opc.tcp://")) {
+            errors.add("endpointUrl must start with opc.tcp://")
+        }
+
+        if (subscriptionSamplingInterval < 0) {
+            errors.add("subscriptionSamplingInterval cannot be negative")
+        }
+
+        if (keepAliveFailuresAllowed < 0) {
+            errors.add("keepAliveFailuresAllowed cannot be negative")
+        }
+
+        if (reconnectDelay < 1000) {
+            errors.add("reconnectDelay should be at least 1000ms")
+        }
+
+        // Validate addresses
+        addresses.forEachIndexed { index, address ->
+            val addressErrors = address.validate()
+            addressErrors.forEach { error ->
+                errors.add("Address $index: $error")
+            }
+        }
+
+        return errors
+    }
+}
+
+/**
+ * Certificate configuration for OPC UA connections
+ */
+data class CertificateConfig(
+    val securityDir: String = "security",
+    val applicationName: String = "MonsterMQ@localhost",
+    val applicationUri: String = "urn:MonsterMQ:Client",
+    val organization: String = "MonsterMQ",
+    val organizationalUnit: String = "Client",
+    val localityName: String = "Unknown",
+    val countryCode: String = "XX",
+    val createSelfSigned: Boolean = true,
+    val keystorePassword: String = "password",
+    val validateServerCertificate: Boolean = true,
+    val autoAcceptServerCertificates: Boolean = false
+) {
+    companion object {
+        fun fromJsonObject(json: JsonObject): CertificateConfig {
+            return CertificateConfig(
+                securityDir = json.getString("securityDir", "security"),
+                applicationName = json.getString("applicationName", "MonsterMQ@localhost"),
+                applicationUri = json.getString("applicationUri", "urn:MonsterMQ:Client"),
+                organization = json.getString("organization", "MonsterMQ"),
+                organizationalUnit = json.getString("organizationalUnit", "Client"),
+                localityName = json.getString("localityName", "Unknown"),
+                countryCode = json.getString("countryCode", "XX"),
+                createSelfSigned = json.getBoolean("createSelfSigned", true),
+                keystorePassword = json.getString("keystorePassword", "password"),
+                validateServerCertificate = json.getBoolean("validateServerCertificate", true),
+                autoAcceptServerCertificates = json.getBoolean("autoAcceptServerCertificates", false)
+            )
+        }
+    }
+
+    fun toJsonObject(): JsonObject {
+        return JsonObject()
+            .put("securityDir", securityDir)
+            .put("applicationName", applicationName)
+            .put("applicationUri", applicationUri)
+            .put("organization", organization)
+            .put("organizationalUnit", organizationalUnit)
+            .put("localityName", localityName)
+            .put("countryCode", countryCode)
+            .put("createSelfSigned", createSelfSigned)
+            .put("keystorePassword", keystorePassword)
+            .put("validateServerCertificate", validateServerCertificate)
+            .put("autoAcceptServerCertificates", autoAcceptServerCertificates)
+    }
+}
+
+/**
+ * OPC UA monitoring parameters for subscriptions
+ */
+data class MonitoringParameters(
+    val bufferSize: Int = 100,
+    val samplingInterval: Double = 0.0,
+    val discardOldest: Boolean = false
+) {
+    companion object {
+        fun fromJsonObject(json: JsonObject): MonitoringParameters {
+            return MonitoringParameters(
+                bufferSize = json.getInteger("bufferSize", 100),
+                samplingInterval = json.getDouble("samplingInterval", 0.0),
+                discardOldest = json.getBoolean("discardOldest", false)
+            )
+        }
+    }
+
+    fun toJsonObject(): JsonObject {
+        return JsonObject()
+            .put("bufferSize", bufferSize)
+            .put("samplingInterval", samplingInterval)
+            .put("discardOldest", discardOldest)
+    }
+}

@@ -1,7 +1,7 @@
 package at.rocworks.devices.opcua
 
 import at.rocworks.Utils
-import at.rocworks.stores.CertificateConfig
+import at.rocworks.stores.devices.CertificateConfig
 import org.eclipse.milo.opcua.stack.core.util.SelfSignedCertificateBuilder
 import org.eclipse.milo.opcua.stack.core.util.SelfSignedCertificateGenerator
 import java.io.InputStream

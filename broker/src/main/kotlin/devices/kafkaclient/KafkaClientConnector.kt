@@ -5,6 +5,8 @@ import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DeviceConfig
+import at.rocworks.stores.devices.KafkaClientConfig
+import at.rocworks.stores.devices.PayloadFormat
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject

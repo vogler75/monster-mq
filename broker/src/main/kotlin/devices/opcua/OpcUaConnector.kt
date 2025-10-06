@@ -34,8 +34,8 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.ULong
 import org.eclipse.milo.opcua.stack.core.types.enumerated.*
 import org.eclipse.milo.opcua.stack.core.types.structured.*
 import at.rocworks.stores.DeviceConfig
-import at.rocworks.stores.OpcUaAddress
-import at.rocworks.stores.OpcUaConnectionConfig
+import at.rocworks.stores.devices.OpcUaAddress
+import at.rocworks.stores.devices.OpcUaConnectionConfig
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger

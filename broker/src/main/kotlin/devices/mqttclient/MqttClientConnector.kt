@@ -5,8 +5,8 @@ import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DeviceConfig
-import at.rocworks.stores.MqttClientAddress
-import at.rocworks.stores.MqttClientConnectionConfig
+import at.rocworks.stores.devices.MqttClientAddress
+import at.rocworks.stores.devices.MqttClientConnectionConfig
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import org.eclipse.paho.client.mqttv3.*

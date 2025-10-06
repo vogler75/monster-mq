@@ -4,9 +4,9 @@ import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.stores.DeviceConfig
-import at.rocworks.stores.WinCCOaAddress
-import at.rocworks.stores.WinCCOaConnectionConfig
-import at.rocworks.stores.WinCCOaTransformConfig
+import at.rocworks.stores.devices.WinCCOaAddress
+import at.rocworks.stores.devices.WinCCOaConnectionConfig
+import at.rocworks.stores.devices.WinCCOaTransformConfig
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise

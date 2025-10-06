@@ -4,6 +4,7 @@ import at.rocworks.Utils
 import at.rocworks.Monster
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
+import at.rocworks.stores.devices.OpcUaConnectionConfig
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
 import java.util.concurrent.CompletableFuture
@@ -139,7 +140,7 @@ class OpcUaClientConfigQueries(
         val currentNodeId = Monster.Companion.getClusterNodeId(vertx) ?: "local"
 
         // Parse config from JsonObject for OPC UA Client devices
-        val config = at.rocworks.stores.OpcUaConnectionConfig.fromJsonObject(device.config)
+        val config = OpcUaConnectionConfig.fromJsonObject(device.config)
 
         return mapOf(
             "name" to device.name,

@@ -4,8 +4,8 @@ import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigException
 import at.rocworks.stores.IDeviceConfigStore
-import at.rocworks.stores.OpcUaAddress
-import at.rocworks.stores.OpcUaConnectionConfig
+import at.rocworks.stores.devices.OpcUaAddress
+import at.rocworks.stores.devices.OpcUaConnectionConfig
 import at.rocworks.stores.sqlite.SQLiteClient
 import io.vertx.core.Future
 import io.vertx.core.Promise

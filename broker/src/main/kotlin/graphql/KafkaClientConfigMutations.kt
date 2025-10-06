@@ -2,13 +2,12 @@ package at.rocworks.graphql
 
 import at.rocworks.Monster
 import at.rocworks.Utils
-import at.rocworks.devices.kafkaclient.KafkaClientConfig
-
 import at.rocworks.devices.kafkaclient.KafkaClientExtension
-import at.rocworks.devices.kafkaclient.PayloadFormat
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigRequest
 import at.rocworks.stores.IDeviceConfigStore
+import at.rocworks.stores.devices.KafkaClientConfig
+import at.rocworks.stores.devices.PayloadFormat
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject

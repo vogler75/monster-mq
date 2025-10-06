@@ -5,10 +5,10 @@ import at.rocworks.Monster
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigRequest
 import at.rocworks.stores.IDeviceConfigStore
-import at.rocworks.stores.MonitoringParameters
-import at.rocworks.stores.OpcUaAddress
-import at.rocworks.stores.OpcUaConnectionConfig
-import at.rocworks.stores.CertificateConfig
+import at.rocworks.stores.devices.MonitoringParameters
+import at.rocworks.stores.devices.OpcUaAddress
+import at.rocworks.stores.devices.OpcUaConnectionConfig
+import at.rocworks.stores.devices.CertificateConfig
 import at.rocworks.devices.opcua.OpcUaExtension
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx

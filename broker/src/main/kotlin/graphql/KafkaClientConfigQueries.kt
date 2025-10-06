@@ -2,10 +2,9 @@ package at.rocworks.graphql
 
 import at.rocworks.Monster
 import at.rocworks.Utils
-import at.rocworks.devices.kafkaclient.KafkaClientConfig
-
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
+import at.rocworks.stores.devices.KafkaClientConfig
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
 import java.util.concurrent.CompletableFuture

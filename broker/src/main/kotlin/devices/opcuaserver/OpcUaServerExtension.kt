@@ -5,6 +5,7 @@ import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 // Removed - we'll define our own EventBusAddresses
 import at.rocworks.handlers.SessionHandler
+import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
 import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy
 import io.vertx.core.AbstractVerticle
@@ -26,7 +27,6 @@ class OpcUaServerExtension(
 
     companion object {
         private val logger: Logger = Utils.getLogger(OpcUaServerExtension::class.java)
-        const val DEVICE_TYPE = "OPCUA-Server"
     }
 
     private val runningServers = ConcurrentHashMap<String, OpcUaServerInstance>()
@@ -172,7 +172,7 @@ class OpcUaServerExtension(
                     // Get all OPC UA Server configurations for this node
                     val configs = result.result()
                         .filter { device ->
-                            device.type == DEVICE_TYPE && (device.nodeId == "*" || device.nodeId == currentNodeId)
+                            device.type == DeviceConfig.DEVICE_TYPE_OPCUA_SERVER && (device.nodeId == "*" || device.nodeId == currentNodeId)
                         }
 
                     configs.forEach { device ->
@@ -384,7 +384,7 @@ class OpcUaServerExtension(
                     nodeId = config.nodeId,
                     config = configJson,
                     enabled = config.enabled,
-                    type = DEVICE_TYPE
+                    type = DeviceConfig.DEVICE_TYPE_OPCUA_SERVER
                 )
 
                 // Save to store

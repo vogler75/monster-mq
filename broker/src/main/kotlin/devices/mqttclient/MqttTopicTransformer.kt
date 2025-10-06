@@ -1,6 +1,6 @@
 package at.rocworks.devices.mqttclient
 
-import at.rocworks.stores.MqttClientAddress
+import at.rocworks.stores.devices.MqttClientAddress
 
 /**
  * Utility class for transforming MQTT topics between local and remote brokers

@@ -4,7 +4,7 @@ import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
-import at.rocworks.stores.WinCCOaConnectionConfig
+import at.rocworks.stores.devices.WinCCOaConnectionConfig
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
 import java.util.concurrent.CompletableFuture

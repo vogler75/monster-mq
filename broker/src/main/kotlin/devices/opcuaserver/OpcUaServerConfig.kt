@@ -1,5 +1,6 @@
 package at.rocworks.devices.opcuaserver
 
+import at.rocworks.stores.DeviceConfig
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.time.Instant
@@ -20,7 +21,7 @@ data class OpcUaServerConfig(
     val security: OpcUaServerSecurity,          // Security configuration
     val bufferSize: Int = 1000,                 // Buffer size for value updates
     val updateInterval: Long = 100,             // Minimum update interval in milliseconds
-    val type: String = "OPCUA-Server",
+    val type: String = DeviceConfig.DEVICE_TYPE_OPCUA_SERVER,
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now()
 ) {
@@ -45,7 +46,7 @@ data class OpcUaServerConfig(
                 ),
                 bufferSize = json.getInteger("bufferSize", 1000),
                 updateInterval = json.getLong("updateInterval", 100L),
-                type = json.getString("type", "OPCUA-Server"),
+                type = json.getString("type", DeviceConfig.DEVICE_TYPE_OPCUA_SERVER),
                 createdAt = json.getString("createdAt")?.let { Instant.parse(it) } ?: Instant.now(),
                 updatedAt = json.getString("updatedAt")?.let { Instant.parse(it) } ?: Instant.now()
             )
