@@ -1661,21 +1661,297 @@ input KafkaClientInput {
 
 # Extend Queries for Kafka clients
 extend type Query {
-    # List all Kafka client bridge configurations
+    # Get all Kafka client bridge configurations across the entire cluster
+    # Returns clients from all cluster nodes, showing their assignment and connection status
+    # Kafka clients consume from external Kafka topics and republish as MQTT messages
     kafkaClients: [KafkaClient!]!
-    # Get single Kafka client bridge by name
+
+    # Get a specific Kafka client bridge configuration by its unique name
+    # Client names must be unique across the entire MonsterMQ cluster
     kafkaClient(name: String!): KafkaClient
-    # List Kafka clients assigned to a specific node
+
+    # Get Kafka clients assigned to a specific cluster node
+    # Useful for monitoring client distribution and cluster load balancing
     kafkaClientsByNode(nodeId: String!): [KafkaClient!]!
 }
 
 # Extend Mutations for Kafka clients
 extend type Mutation {
+    # Create a new Kafka client bridge to consume from an external Kafka cluster
+    # Creates a client connector that will be deployed on the specified cluster node
+    # The client will automatically connect to Kafka, consume records, and republish as MQTT messages
+    # Note: The Kafka topic to consume is derived from the device namespace
     createKafkaClient(input: KafkaClientInput!): KafkaClientResult!
+
+    # Update an existing Kafka client configuration
+    # Changes take effect immediately - the client connector will be redeployed with new settings
+    # Useful for modifying bootstrap servers, consumer properties, or payload format
     updateKafkaClient(name: String!, input: KafkaClientInput!): KafkaClientResult!
+
+    # Delete a Kafka client configuration permanently
+    # Stops the client connector and removes all configuration data
+    # Returns true if deletion was successful, false if client was not found
     deleteKafkaClient(name: String!): Boolean!
+
+    # Start a Kafka client connection
+    # Enables a previously stopped client and begins consuming from Kafka topic
+    # Messages will be polled and republished as MQTT messages
     startKafkaClient(name: String!): KafkaClientResult!
+
+    # Stop a Kafka client connection
+    # Disables the client and stops consuming from Kafka while preserving configuration
+    # Useful for temporarily pausing data ingestion or troubleshooting
     stopKafkaClient(name: String!): KafkaClientResult!
+
+    # Toggle Kafka client enabled state
+    # Enable or disable a Kafka client without deleting its configuration
+    # Disabled clients stop consuming but retain their configuration and consumer group position
     toggleKafkaClient(name: String!, enabled: Boolean!): KafkaClientResult!
+
+    # Reassign a Kafka client to a different cluster node
+    # Moves the client connector from one node to another for load balancing
+    # The client configuration remains unchanged, only the deployment location changes
+    # Consumer group position is preserved across reassignments
     reassignKafkaClient(name: String!, nodeId: String!): KafkaClientResult!
+}
+
+#############################################
+# WinCC OA Bridge Configuration            #
+#############################################
+
+"""
+WinCC OA Bridge connects to a WinCC OA GraphQL server and subscribes to datapoint changes
+via WebSocket subscriptions. Each subscription uses the dpQueryConnectSingle GraphQL function
+to monitor datapoint values and publishes them as MQTT messages.
+
+Features:
+- GraphQL authentication (username/password login or direct token)
+- WebSocket subscriptions for real-time datapoint updates
+- Configurable topic name transformation (remove system name, convert dots/underscores to slashes, regex)
+- Multiple message formats: JSON_ISO (ISO timestamps), JSON_MS (epoch milliseconds), RAW_VALUE (plain values)
+- Support for BLOB data types
+- Topic name caching for performance
+"""
+
+enum WinCCOaMessageFormat {
+    # JSON format with ISO 8601 timestamp: {"value": <value>, "time": "2025-10-06T18:03:05.984Z"}
+    JSON_ISO
+    # JSON format with epoch milliseconds: {"value": <value>, "time": 1728234185984}
+    JSON_MS
+    # Raw value only (as text or binary for BLOBs)
+    RAW_VALUE
+}
+
+type WinCCOaTransformConfig {
+    # Remove "System1:" prefix from datapoint names
+    removeSystemName: Boolean!
+    # Convert "." to "/" in datapoint names for MQTT topic hierarchy
+    convertDotToSlash: Boolean!
+    # Convert "_" to "/" in datapoint names for MQTT topic hierarchy
+    convertUnderscoreToSlash: Boolean!
+    # Optional regex pattern for additional name transformation
+    regexPattern: String
+    # Replacement string for regex pattern
+    regexReplacement: String
+}
+
+type WinCCOaAddress {
+    # GraphQL query for dpQueryConnectSingle
+    # Example: "SELECT '_original.._value', '_original.._stime' FROM 'System1:Test_*'"
+    query: String!
+    # MQTT topic prefix for this subscription
+    # Example: "test" will publish to "winccoa/plant1/test/..."
+    topic: String!
+    # Optional description for this address
+    description: String!
+    # Whether to request the answer row in dpQueryConnectSingle (initial values)
+    answer: Boolean!
+    # Whether to publish MQTT messages with retained flag
+    retained: Boolean!
+}
+
+type WinCCOaConnectionConfig {
+    # GraphQL endpoint URL (e.g., "http://winccoa:4000/graphql")
+    graphqlEndpoint: String!
+    # WebSocket endpoint URL (auto-derived from graphqlEndpoint if not specified)
+    websocketEndpoint: String
+    # Username for authentication (used with password for login mutation)
+    username: String
+    # Token for direct authentication (skips login if provided)
+    token: String
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long!
+    # Connection timeout in milliseconds
+    connectionTimeout: Long!
+    # Message format for publishing datapoint values
+    messageFormat: WinCCOaMessageFormat!
+    # Topic name transformation configuration
+    transformConfig: WinCCOaTransformConfig!
+    # Configured datapoint subscriptions
+    addresses: [WinCCOaAddress!]!
+}
+
+type WinCCOaClientMetrics {
+    # Messages per second received from WinCC OA server (datapoint value changes)
+    messagesIn: Float!
+    # ISO 8601 timestamp when these metrics were captured
+    timestamp: String!
+}
+
+type WinCCOaClient {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Cluster node ID where this client runs
+    nodeId: String!
+    # Connection and subscription configuration
+    config: WinCCOaConnectionConfig!
+    # Whether this client is enabled and should connect
+    enabled: Boolean!
+    # Client creation timestamp
+    createdAt: String!
+    # Client last update timestamp
+    updatedAt: String!
+    # Whether this client is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current metrics for this WinCC OA bridge client (single most recent entry)
+    metrics: [WinCCOaClientMetrics!]!
+    # Historical metrics data for this WinCC OA bridge client
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [WinCCOaClientMetrics!]!
+}
+
+type WinCCOaClientResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected WinCC OA client (null if operation failed)
+    client: WinCCOaClient
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+input WinCCOaTransformConfigInput {
+    # Remove "System1:" prefix from datapoint names (default: true)
+    removeSystemName: Boolean = true
+    # Convert "." to "/" in datapoint names (default: true)
+    convertDotToSlash: Boolean = true
+    # Convert "_" to "/" in datapoint names (default: false)
+    convertUnderscoreToSlash: Boolean = false
+    # Optional regex pattern for additional transformation
+    regexPattern: String
+    # Replacement string for regex pattern
+    regexReplacement: String
+}
+
+input WinCCOaConnectionConfigInput {
+    # GraphQL endpoint URL
+    graphqlEndpoint: String = "http://winccoa:4000/graphql"
+    # WebSocket endpoint URL (optional, auto-derived if not specified)
+    websocketEndpoint: String
+    # Username for authentication (optional, omit for anonymous access)
+    # If provided, password must also be provided
+    username: String
+    # Password for authentication (optional, omit for anonymous access)
+    # If provided, username must also be provided
+    password: String
+    # Direct token for authentication (optional, skips login if provided)
+    # If provided, username/password are ignored
+    token: String
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long = 5000
+    # Connection timeout in milliseconds
+    connectionTimeout: Long = 10000
+    # Message format for publishing datapoint values
+    messageFormat: WinCCOaMessageFormat = JSON_ISO
+    # Topic name transformation configuration
+    transformConfig: WinCCOaTransformConfigInput
+}
+
+input WinCCOaAddressInput {
+    # GraphQL query for dpQueryConnectSingle subscription
+    query: String!
+    # MQTT topic prefix for this subscription
+    topic: String!
+    # Optional description
+    description: String
+    # Whether to request the answer row in dpQueryConnectSingle (initial values)
+    answer: Boolean = false
+    # Whether to publish MQTT messages with retained flag
+    retained: Boolean = false
+}
+
+input WinCCOaClientInput {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (e.g., "winccoa/plant1")
+    namespace: String!
+    # Target cluster node (use "*" for automatic assignment)
+    nodeId: String!
+    # Whether the client should be enabled
+    enabled: Boolean = true
+    # Connection configuration
+    config: WinCCOaConnectionConfigInput!
+}
+
+# Extend Queries for WinCC OA clients
+extend type Query {
+    # Get all WinCC OA client configurations across the entire cluster
+    # Returns clients from all cluster nodes, showing their assignment and connection status
+    winCCOaClients: [WinCCOaClient!]!
+
+    # Get a specific WinCC OA client configuration by its unique name
+    # Client names must be unique across the entire MonsterMQ cluster
+    winCCOaClient(name: String!): WinCCOaClient
+
+    # Get WinCC OA clients assigned to a specific cluster node
+    # Useful for monitoring client distribution and cluster load balancing
+    winCCOaClientsByNode(nodeId: String!): [WinCCOaClient!]!
+}
+
+# Extend Mutations for WinCC OA clients
+extend type Mutation {
+    # Create a new WinCC OA client configuration to connect to a WinCC OA GraphQL server
+    # Creates a client connector that will be deployed on the specified cluster node
+    # The client will automatically connect and subscribe to configured datapoint queries
+    createWinCCOaClient(input: WinCCOaClientInput!): WinCCOaClientResult!
+
+    # Update an existing WinCC OA client configuration
+    # Changes take effect immediately - the client connector will be redeployed with new settings
+    # Useful for modifying connection parameters, credentials, or subscriptions
+    updateWinCCOaClient(name: String!, input: WinCCOaClientInput!): WinCCOaClientResult!
+
+    # Delete a WinCC OA client configuration permanently
+    # Stops the client connector and removes all configuration data
+    # Returns true if deletion was successful, false if client was not found
+    deleteWinCCOaClient(name: String!): Boolean!
+
+    # Start a WinCC OA client connection
+    # Enables a previously stopped client and establishes connection to WinCC OA server
+    startWinCCOaClient(name: String!): WinCCOaClientResult!
+
+    # Stop a WinCC OA client connection
+    # Disables the client and disconnects from WinCC OA server while preserving configuration
+    stopWinCCOaClient(name: String!): WinCCOaClientResult!
+
+    # Toggle WinCC OA client enabled state
+    # Enable or disable a WinCC OA client without deleting its configuration
+    toggleWinCCOaClient(name: String!, enabled: Boolean!): WinCCOaClientResult!
+
+    # Reassign a WinCC OA client to a different cluster node
+    # Moves the client connector from one node to another for load balancing
+    # The client configuration remains unchanged, only the deployment location changes
+    reassignWinCCOaClient(name: String!, nodeId: String!): WinCCOaClientResult!
+
+    # Add a new subscription address to an existing WinCC OA client
+    # Defines a GraphQL query subscription for monitoring datapoint changes
+    # New subscriptions will immediately start receiving updates
+    addWinCCOaClientAddress(deviceName: String!, input: WinCCOaAddressInput!): WinCCOaClientResult!
+
+    # Remove a subscription address from a WinCC OA client
+    # Stops monitoring the specified GraphQL query while keeping other subscriptions active
+    deleteWinCCOaClientAddress(deviceName: String!, query: String!): WinCCOaClientResult!
 }

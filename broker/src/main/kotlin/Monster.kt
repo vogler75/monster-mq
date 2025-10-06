@@ -35,6 +35,7 @@ import at.rocworks.devices.opcua.OpcUaExtension
 import at.rocworks.devices.opcuaserver.OpcUaServerExtension
 import at.rocworks.devices.mqttclient.MqttClientExtension
 import at.rocworks.devices.kafkaclient.KafkaClientExtension
+import at.rocworks.devices.winccoa.WinCCOaExtension
 import at.rocworks.stores.DeviceConfigStoreFactory
 import handlers.MetricsHandler
 import java.io.File
@@ -680,6 +681,12 @@ MORE INFO:
                         val kafkaClientExtension = KafkaClientExtension()
                         val kafkaDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(kafkaClientExtension, kafkaDeploymentOptions)
+                    }
+                    .compose {
+                        // WinCC OA Bridge Extension
+                        val winCCOaExtension = WinCCOaExtension()
+                        val winCCOaDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(winCCOaExtension, winCCOaDeploymentOptions)
                     }
                     .compose {
                         if (metricsCollector != null) {

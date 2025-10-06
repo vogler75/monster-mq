@@ -21,6 +21,8 @@ import at.rocworks.graphql.MqttClientConfigQueries
 import at.rocworks.graphql.MqttClientConfigMutations
 import at.rocworks.graphql.KafkaClientConfigQueries
 import at.rocworks.graphql.KafkaClientConfigMutations
+import at.rocworks.graphql.WinCCOaClientConfigQueries
+import at.rocworks.graphql.WinCCOaClientConfigMutations
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
@@ -253,6 +255,10 @@ class GraphQLServer(
         val kafkaClientQueries = deviceStore?.let { KafkaClientConfigQueries(vertx, it) }
         val kafkaClientMutations = deviceStore?.let { KafkaClientConfigMutations(vertx, it) }
 
+        // Initialize WinCC OA Client resolvers
+        val winCCOaClientQueries = deviceStore?.let { WinCCOaClientConfigQueries(vertx, it) }
+        val winCCOaClientMutations = deviceStore?.let { WinCCOaClientConfigMutations(vertx, it) }
+
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
             .scalar(ExtendedScalars.GraphQLLong)
@@ -326,6 +332,14 @@ class GraphQLServer(
                             dataFetcher("kafkaClients", resolver.kafkaClients())
                             dataFetcher("kafkaClient", resolver.kafkaClient())
                             dataFetcher("kafkaClientsByNode", resolver.kafkaClientsByNode())
+                        }
+                    }
+                    // WinCC OA Client queries
+                    .apply {
+                        winCCOaClientQueries?.let { resolver ->
+                            dataFetcher("winCCOaClients", resolver.winCCOaClients())
+                            dataFetcher("winCCOaClient", resolver.winCCOaClient())
+                            dataFetcher("winCCOaClientsByNode", resolver.winCCOaClientsByNode())
                         }
                     }
             }
@@ -407,6 +421,20 @@ class GraphQLServer(
                             dataFetcher("stopKafkaClient", resolver.stopKafkaClient())
                             dataFetcher("toggleKafkaClient", resolver.toggleKafkaClient())
                             dataFetcher("reassignKafkaClient", resolver.reassignKafkaClient())
+                        }
+                    }
+                    // WinCC OA Client mutations
+                    .apply {
+                        winCCOaClientMutations?.let { resolver ->
+                            dataFetcher("createWinCCOaClient", resolver.createWinCCOaClient())
+                            dataFetcher("updateWinCCOaClient", resolver.updateWinCCOaClient())
+                            dataFetcher("deleteWinCCOaClient", resolver.deleteWinCCOaClient())
+                            dataFetcher("startWinCCOaClient", resolver.startWinCCOaClient())
+                            dataFetcher("stopWinCCOaClient", resolver.stopWinCCOaClient())
+                            dataFetcher("toggleWinCCOaClient", resolver.toggleWinCCOaClient())
+                            dataFetcher("reassignWinCCOaClient", resolver.reassignWinCCOaClient())
+                            dataFetcher("addWinCCOaClientAddress", resolver.addWinCCOaClientAddress())
+                            dataFetcher("deleteWinCCOaClientAddress", resolver.deleteWinCCOaClientAddress())
                         }
                     }
             }
