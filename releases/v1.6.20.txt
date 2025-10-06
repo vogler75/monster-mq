@@ -1,0 +1,7 @@
+Release v1.6.20
+Built from commit: 2d892ef
+Date: 2025-10-06 11:37:27
+
+Changes since v1.6.19:
+---
+2d892ef Add configurable rate limiting for MQTT clients
