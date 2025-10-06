@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MonsterMQ - MQTT Bridges</title>
+    <title>MonsterMQ - WinCC OA Bridges</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -311,7 +311,7 @@
                     </svg>
                     <span class="nav-text">OPC UA Servers</span>
                 </a>
-                <a href="/pages/mqtt-clients.html" class="nav-item active">
+                <a href="/pages/mqtt-clients.html" class="nav-item">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M16 18l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
                         <path d="M12 5v14M5 12h14"/>
@@ -330,7 +330,7 @@
                     </svg>
                     <span class="nav-text">Kafka Clients</span>
                 </a>
-                <a href="/pages/winccoa-clients.html" class="nav-item">
+                <a href="/pages/winccoa-clients.html" class="nav-item active">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
                         <path d="M12 6v6l4 2"></path>
@@ -369,8 +369,8 @@
     <div class="main-content" id="main-content">
         <div class="container">
             <div class="page-header">
-                <h1 class="page-title">MQTT Bridge Management</h1>
-                <p class="page-subtitle">Configure and manage MQTT broker connections for bridging</p>
+                <h1 class="page-title">WinCC OA Bridge Management</h1>
+                <p class="page-subtitle">Configure and manage WinCC OA GraphQL connections for bridging</p>
             </div>
 
             <div class="metrics-grid" style="margin-bottom: 2rem;">
@@ -403,11 +403,11 @@
 
                 <div class="metric-card">
                     <div class="metric-header">
-                        <span class="metric-title">Total Mappings</span>
+                        <span class="metric-title">Total Queries</span>
                         <div class="metric-icon">📊</div>
                     </div>
                     <div class="metric-value" id="total-addresses">0</div>
-                    <div class="metric-label">Topic Mappings</div>
+                    <div class="metric-label">Datapoint Queries</div>
                 </div>
             </div>
 
@@ -426,7 +426,7 @@
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                             </svg>
-Add Bridge
+                            Add Bridge
                         </button>
                     </div>
                 </div>
@@ -434,13 +434,11 @@ Add Bridge
                     <thead>
                         <tr>
                             <th>Bridge Name</th>
-                            <th>Broker URL</th>
+                            <th>GraphQL Endpoint</th>
                             <th>Namespace</th>
                             <th>Node Assignment</th>
                             <th>Status</th>
-                            <th>Mappings</th>
-                            <th>In (msg/s)</th>
-                            <th>Out (msg/s)</th>
+                            <th>Queries</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -467,39 +465,26 @@ Add Bridge
     <div id="add-client-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Add MQTT Bridge</h3>
+                <h3>Add WinCC OA Bridge</h3>
                 <button class="modal-close" onclick="hideAddClientModal()">×</button>
             </div>
             <div class="modal-body">
                 <form id="add-client-form">
                     <div class="form-group">
                         <label for="client-name">Bridge Name *</label>
-                        <input type="text" id="client-name" required placeholder="e.g., remote-broker-1">
+                        <input type="text" id="client-name" required placeholder="e.g., winccoa-plant1">
                     </div>
                     <div class="form-group">
                         <label for="client-namespace">Namespace *</label>
-                        <input type="text" id="client-namespace" required placeholder="e.g., mqtt/remote1">
+                        <input type="text" id="client-namespace" required placeholder="e.g., winccoa/plant1">
                     </div>
                     <div class="form-group">
-                        <label for="client-protocol">Protocol *</label>
-                        <select id="client-protocol" required>
-                            <option value="tcp">TCP</option>
-                            <option value="tcps">TCP+TLS</option>
-                            <option value="ws">WebSocket</option>
-                            <option value="wss">WebSocket+TLS</option>
-                        </select>
+                        <label for="client-graphql-endpoint">GraphQL Endpoint *</label>
+                        <input type="text" id="client-graphql-endpoint" required placeholder="http://winccoa:4000/graphql">
                     </div>
                     <div class="form-group">
-                        <label for="client-hostname">Hostname *</label>
-                        <input type="text" id="client-hostname" required placeholder="broker.example.com">
-                    </div>
-                    <div class="form-group">
-                        <label for="client-port">Port *</label>
-                        <input type="number" id="client-port" required value="1883">
-                    </div>
-                    <div class="form-group">
-                        <label for="client-id">Client ID *</label>
-                        <input type="text" id="client-id" required placeholder="monstermq-client" value="monstermq-client">
+                        <label for="client-websocket-endpoint">WebSocket Endpoint</label>
+                        <input type="text" id="client-websocket-endpoint" placeholder="Optional (auto-derived from GraphQL endpoint)">
                     </div>
                     <div class="form-group">
                         <label for="client-username">Username</label>
@@ -510,14 +495,14 @@ Add Bridge
                         <input type="password" id="client-password" placeholder="Optional">
                     </div>
                     <div class="form-group">
+                        <label for="client-token">Token</label>
+                        <input type="text" id="client-token" placeholder="Optional (if provided, skips login)">
+                    </div>
+                    <div class="form-group">
                         <label for="client-node">Cluster Node *</label>
                         <select id="client-node" required>
                             <option value="">Select Node...</option>
                         </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="client-keep-alive">Keep Alive (seconds)</label>
-                        <input type="number" id="client-keep-alive" value="60">
                     </div>
                     <div class="form-group">
                         <label for="client-reconnect-delay">Reconnect Delay (ms)</label>
@@ -525,7 +510,15 @@ Add Bridge
                     </div>
                     <div class="form-group">
                         <label for="client-connection-timeout">Connection Timeout (ms)</label>
-                        <input type="number" id="client-connection-timeout" value="30000">
+                        <input type="number" id="client-connection-timeout" value="10000">
+                    </div>
+                    <div class="form-group">
+                        <label for="client-message-format">Message Format *</label>
+                        <select id="client-message-format" required>
+                            <option value="JSON_ISO" selected>JSON with ISO timestamps</option>
+                            <option value="JSON_MS">JSON with milliseconds</option>
+                            <option value="RAW_VALUE">Raw value only</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <div class="checkbox-group">
@@ -533,47 +526,59 @@ Add Bridge
                             <label for="client-enabled">Enabled</label>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="client-clean-session" checked>
-                            <label for="client-clean-session">Clean Session</label>
-                        </div>
-                    </div>
 
-                    <!-- Disconnected Buffer Configuration -->
-                    <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Disconnected Buffer</h4>
+                    <!-- Transform Configuration -->
+                    <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Topic Transformation</h4>
 
                     <div class="form-group">
                         <div class="checkbox-group">
-                            <input type="checkbox" id="client-buffer-enabled">
-                            <label for="client-buffer-enabled">Enable Message Buffering</label>
+                            <input type="checkbox" id="client-remove-system-name" checked>
+                            <label for="client-remove-system-name">Remove System Name Prefix</label>
                         </div>
-                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Buffer messages when connection to remote broker is lost</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="client-buffer-size">Buffer Size (messages)</label>
-                        <input type="number" id="client-buffer-size" value="5000" min="1" max="100000">
-                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Maximum number of messages to buffer (1-100,000)</small>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Remove "System1:" prefix from datapoint names</small>
                     </div>
                     <div class="form-group">
                         <div class="checkbox-group">
-                            <input type="checkbox" id="client-persist-buffer">
-                            <label for="client-persist-buffer">Persist Buffer to Disk</label>
+                            <input type="checkbox" id="client-convert-dot-to-slash" checked>
+                            <label for="client-convert-dot-to-slash">Convert Dots to Slashes</label>
                         </div>
-                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Save buffer to disk (unchecked = memory only)</small>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Convert "." to "/" in datapoint names</small>
                     </div>
                     <div class="form-group">
                         <div class="checkbox-group">
-                            <input type="checkbox" id="client-delete-oldest" checked>
-                            <label for="client-delete-oldest">Delete Oldest Messages When Full</label>
+                            <input type="checkbox" id="client-convert-underscore-to-slash">
+                            <label for="client-convert-underscore-to-slash">Convert Underscores to Slashes</label>
                         </div>
-                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">FIFO mode (unchecked = reject new messages when buffer is full)</small>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Convert "_" to "/" in datapoint names</small>
                     </div>
+                    <div class="form-group">
+                        <label for="client-regex-pattern">Regex Pattern</label>
+                        <input type="text" id="client-regex-pattern" placeholder="Optional (e.g., ([0-9]+))">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Additional regex transformation</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="client-regex-replacement">Regex Replacement</label>
+                        <input type="text" id="client-regex-replacement" placeholder="Optional (e.g., $1)">
+                    </div>
+
+                    <!-- Addresses/Queries Configuration -->
+                    <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">WinCC OA Queries</h4>
+
+                    <div id="addresses-container" style="margin-bottom: 1rem;">
+                        <!-- Addresses will be added here dynamically -->
+                    </div>
+
+                    <button type="button" class="btn btn-secondary" onclick="addAddressRow()" style="width: 100%; margin-bottom: 1rem;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 0.5rem;">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                        Add Query
+                    </button>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="hideAddClientModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary" onclick="addClient()">Add Bridge</button>
+                <button type="submit" class="btn btn-primary" id="modal-submit-btn" onclick="addClient()">Add Bridge</button>
             </div>
         </div>
     </div>
@@ -596,6 +601,6 @@ Add Bridge
         </div>
     </div>
 
-    <script src="/js/mqtt-clients.js"></script>
+    <script src="/js/winccoa-clients.js"></script>
 </body>
 </html>
