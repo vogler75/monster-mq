@@ -34,6 +34,10 @@ class MqttClient(
     private var gracefulDisconnected: Boolean = false
     private var lastStatisticsMessage: String = ""
 
+    // Rate limiting - snapshot values for periodic check
+    private var lastMessagesIn: Long = 0
+    private var lastMessagesOut: Long = 0
+
     private var nextMessageId: Int = 0
     private fun getNextMessageId(): Int = if (nextMessageId==65535) {
         nextMessageId=1
@@ -96,6 +100,7 @@ class MqttClient(
         vertx.setPeriodic(1000) { receivingInFlightMessagesPeriodicCheck() }
         vertx.setPeriodic(1000) { sendingInFlightMessagesPeriodicCheck() }
         vertx.setPeriodic(1000) { publishStatistics() }
+        vertx.setPeriodic(1000) { checkRateLimits() }
     }
 
     override fun stop() {
@@ -394,6 +399,42 @@ class MqttClient(
             val message = BrokerMessage(clientId, "\$SYS/clients/${clientId}/statistics", payload)
             sessionHandler.publishMessage(message)
         }
+    }
+
+    private fun checkRateLimits() {
+        val maxPublishRate = Monster.getMaxPublishRate()
+        val maxSubscribeRate = Monster.getMaxSubscribeRate()
+
+        // Skip if both unlimited
+        if (maxPublishRate == 0 && maxSubscribeRate == 0) return
+
+        // Get current metrics from SessionHandler
+        val metrics = sessionHandler.getClientMetrics(clientId) ?: return
+
+        val currentMessagesIn = metrics.messagesIn.get()
+        val currentMessagesOut = metrics.messagesOut.get()
+
+        // Calculate deltas since last check (approximately 1 second ago)
+        val deltaIn = currentMessagesIn - lastMessagesIn
+        val deltaOut = currentMessagesOut - lastMessagesOut
+
+        // Check publish rate limit
+        if (maxPublishRate > 0 && deltaIn > maxPublishRate) {
+            logger.warning("Client [$clientId] Publish rate limit exceeded: $deltaIn > $maxPublishRate msg/s - disconnecting")
+            sessionHandler.disconnectClient(clientId, "Publish rate limit exceeded")
+            return
+        }
+
+        // Check subscribe rate limit
+        if (maxSubscribeRate > 0 && deltaOut > maxSubscribeRate) {
+            logger.warning("Client [$clientId] Subscribe rate limit exceeded: $deltaOut > $maxSubscribeRate msg/s - disconnecting")
+            sessionHandler.disconnectClient(clientId, "Subscribe rate limit exceeded")
+            return
+        }
+
+        // Update snapshot values for next check
+        lastMessagesIn = currentMessagesIn
+        lastMessagesOut = currentMessagesOut
     }
 
     // -----------------------------------------------------------------------------------------------------------------

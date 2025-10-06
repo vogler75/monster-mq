@@ -25,6 +25,23 @@ All ports default to `0` (disabled) except `TCP`, which defaults to 1883 if omit
 
 If `AllowRootWildcardSubscription` is set to `false`, any client requesting a subscription to the root wildcard topic filter `#` receives a SUBACK failure (0x80) for that specific topic while the connection stays open. Internal components (e.g. OPC UA extensions) are unaffected.
 
+## Rate Limiting
+
+```yaml
+MaxPublishRate: 1000     # Max messages/second a client can publish (0 = unlimited)
+MaxSubscribeRate: 1000   # Max messages/second a client can receive (0 = unlimited)
+```
+
+Rate limits protect the broker from client overload by monitoring message throughput per client. Both settings default to `0` (unlimited).
+
+When enabled, the broker checks each MQTT client's message rate every second using atomic counters:
+- **MaxPublishRate** tracks incoming messages from the client (PUBLISH packets)
+- **MaxSubscribeRate** tracks outgoing messages to the client (delivered subscriptions)
+
+If a client exceeds the configured threshold, the broker immediately disconnects them with a reason message. Rate limiting only applies to **real MQTT clients**—internal bridges, archives, and connectors bypass these checks (`broker/src/main/kotlin/MqttClient.kt:404-438`).
+
+This feature uses a periodic check with zero per-message overhead, leveraging existing metrics infrastructure for efficient enforcement.
+
 ## Store Selection
 
 MonsterMQ supports multiple backends for sessions, retained messages, archive groups, metrics, and user storage. Select store types with the following keys:

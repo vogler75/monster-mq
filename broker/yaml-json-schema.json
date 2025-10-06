@@ -29,6 +29,16 @@
       "type": "integer",
       "default": 8
     },
+    "MaxPublishRate": {
+      "type": "integer",
+      "default": 0,
+      "description": "Maximum messages per second a client can publish (0 = unlimited)"
+    },
+    "MaxSubscribeRate": {
+      "type": "integer",
+      "default": 0,
+      "description": "Maximum messages per second a client can receive (0 = unlimited)"
+    },
     "Kafka": {
       "type": "object",
       "properties": {

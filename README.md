@@ -8,6 +8,7 @@ A MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data sto
 - **Multi-Database Support** - PostgreSQL, CrateDB, MongoDB, SQLite backends
 - **Hazelcast Clustering** - Multi-node scalability with automatic failover
 - **Message Archiving** - Persistent storage with configurable retention policies
+- **Rate Limiting** - Configurable publish/subscribe rate protection against client overload
 - **OPC UA Server** - Industrial protocol server with MQTT bridge and real-time subscriptions
 - **GraphQL API** - Real-time data access and management interface
 - **MCP Server** - AI model integration through Model Context Protocol

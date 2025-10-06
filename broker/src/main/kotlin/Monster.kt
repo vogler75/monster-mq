@@ -165,6 +165,16 @@ class Monster(args: Array<String>) {
         private var allowRootWildcardSubscriptionFlag: Boolean = true
         @JvmStatic
         fun allowRootWildcardSubscription(): Boolean = allowRootWildcardSubscriptionFlag
+
+        @Volatile
+        private var maxPublishRate: Int = 0
+        @JvmStatic
+        fun getMaxPublishRate(): Int = maxPublishRate
+
+        @Volatile
+        private var maxSubscribeRate: Int = 0
+        @JvmStatic
+        fun getMaxSubscribeRate(): Int = maxSubscribeRate
         
         private fun ensureSQLiteVerticleDeployed(vertx: Vertx): Future<String> {
             return if (sqliteVerticleDeploymentId == null) {
@@ -369,6 +379,23 @@ MORE INFO:
                     true
                 }
                 logger.info("Config: AllowRootWildcardSubscription=$allowRootWildcardSubscriptionFlag")
+
+                // Read rate limiting configuration (default 0 = unlimited)
+                maxPublishRate = try {
+                    configJson.getInteger("MaxPublishRate", 0)
+                } catch (e: Exception) {
+                    logger.warning("Config: MaxPublishRate read failed: ${e.message}")
+                    0
+                }
+                logger.info("Config: MaxPublishRate=$maxPublishRate msg/s" + if (maxPublishRate == 0) " (unlimited)" else "")
+
+                maxSubscribeRate = try {
+                    configJson.getInteger("MaxSubscribeRate", 0)
+                } catch (e: Exception) {
+                    logger.warning("Config: MaxSubscribeRate read failed: ${e.message}")
+                    0
+                }
+                logger.info("Config: MaxSubscribeRate=$maxSubscribeRate msg/s" + if (maxSubscribeRate == 0) " (unlimited)" else "")
 
                 startMonster(vertx)
             } else {
