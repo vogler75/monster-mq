@@ -61,9 +61,9 @@ type BrokerMetrics {
     # Messages per second sent to other nodes via message bus
     messageBusOut: Float!
     # Messages per second received via MQTT bridge clients (remote -> local)
-    mqttBridgeIn: Float!
+    mqttClientIn: Float!
     # Messages per second sent via MQTT bridge clients (local -> remote)
-    mqttBridgeOut: Float!
+    mqttClientOut: Float!
     # Messages per second received via Kafka bridge clients (Kafka -> MQTT)
     kafkaBridgeIn: Float!
     # Messages per second published via Kafka bridge clients (MQTT -> Kafka)

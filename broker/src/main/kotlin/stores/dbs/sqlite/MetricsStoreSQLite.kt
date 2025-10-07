@@ -355,8 +355,8 @@ class MetricsStoreSQLite(
         .put("topicNodeMappingSize", m.topicNodeMappingSize)
         .put("messageBusIn", m.messageBusIn)
         .put("messageBusOut", m.messageBusOut)
-        .put("mqttBridgeIn", m.mqttBridgeIn)
-        .put("mqttBridgeOut", m.mqttBridgeOut)
+        .put("mqttClientIn", m.mqttClientIn)
+        .put("mqttClientOut", m.mqttClientOut)
         .put("opcUaIn", m.opcUaIn)
         .put("opcUaOut", m.opcUaOut)
         .put("kafkaBridgeIn", m.kafkaBridgeIn)
@@ -394,8 +394,8 @@ class MetricsStoreSQLite(
         topicNodeMappingSize = 0,
         messageBusIn = 0.0,
         messageBusOut = 0.0,
-        mqttBridgeIn = 0.0,
-        mqttBridgeOut = 0.0,
+        mqttClientIn = 0.0,
+        mqttClientOut = 0.0,
         opcUaIn = 0.0,
         opcUaOut = 0.0,
         kafkaBridgeIn = 0.0,
@@ -412,8 +412,8 @@ class MetricsStoreSQLite(
         topicNodeMappingSize = j.getInteger("topicNodeMappingSize", 0),
         messageBusIn = j.getDouble("messageBusIn", 0.0),
         messageBusOut = j.getDouble("messageBusOut", 0.0),
-        mqttBridgeIn = j.getDouble("mqttBridgeIn", 0.0),
-        mqttBridgeOut = j.getDouble("mqttBridgeOut", 0.0),
+        mqttClientIn = j.getDouble("mqttClientIn", 0.0),
+        mqttClientOut = j.getDouble("mqttClientOut", 0.0),
         opcUaIn = j.getDouble("opcUaIn", 0.0),
         opcUaOut = j.getDouble("opcUaOut", 0.0),
         kafkaBridgeIn = j.getDouble("kafkaBridgeIn", 0.0),

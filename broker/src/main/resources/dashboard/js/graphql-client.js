@@ -110,8 +110,8 @@ class GraphQLDashboardClient {
                         topicNodeMappingSize
                         messageBusIn
                         messageBusOut
-                        mqttBridgeIn
-                        mqttBridgeOut
+                        mqttClientIn
+                        mqttClientOut
                         kafkaBridgeIn
                         kafkaBridgeOut
                         opcUaIn
@@ -143,8 +143,8 @@ class GraphQLDashboardClient {
                         topicNodeMappingSize
                         messageBusIn
                         messageBusOut
-                        mqttBridgeIn
-                        mqttBridgeOut
+                        mqttClientIn
+                        mqttClientOut
                         kafkaBridgeIn
                         kafkaBridgeOut
                         opcUaIn
@@ -162,8 +162,8 @@ class GraphQLDashboardClient {
                         topicNodeMappingSize
                         messageBusIn
                         messageBusOut
-                        mqttBridgeIn
-                        mqttBridgeOut
+                        mqttClientIn
+                        mqttClientOut
                         kafkaBridgeIn
                         kafkaBridgeOut
                         opcUaIn

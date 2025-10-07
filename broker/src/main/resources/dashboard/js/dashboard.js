@@ -351,7 +351,7 @@ class DashboardManager {
                 aggregatedData[timeKey] = {
                     messagesIn: 0, messagesOut: 0,
                     messageBusIn: 0, messageBusOut: 0,
-                    mqttBridgeIn: 0, mqttBridgeOut: 0,
+                    mqttClientIn: 0, mqttClientOut: 0,
                     kafkaBridgeIn: 0,
                     opcUaIn: 0, opcUaOut: 0
                 };
@@ -360,8 +360,8 @@ class DashboardManager {
             aggregatedData[timeKey].messagesOut += point.messagesOut || 0;
             aggregatedData[timeKey].messageBusIn += point.messageBusIn || 0;
             aggregatedData[timeKey].messageBusOut += point.messageBusOut || 0;
-            aggregatedData[timeKey].mqttBridgeIn += point.mqttBridgeIn || 0;
-            aggregatedData[timeKey].mqttBridgeOut += point.mqttBridgeOut || 0;
+            aggregatedData[timeKey].mqttClientIn += point.mqttClientIn || 0;
+            aggregatedData[timeKey].mqttClientOut += point.mqttClientOut || 0;
             aggregatedData[timeKey].kafkaBridgeIn += point.kafkaBridgeIn || 0;
             // Removed kafkaBridgeOut (always zero / unused)
             aggregatedData[timeKey].opcUaIn += point.opcUaIn || 0;
@@ -377,8 +377,8 @@ class DashboardManager {
             this.trafficChart.data.labels.push(timeLabel);
             this.trafficChart.data.datasets[0].data.push(data.messagesIn);
             this.trafficChart.data.datasets[1].data.push(data.messagesOut);
-            this.trafficChart.data.datasets[2].data.push(data.mqttBridgeIn);
-            this.trafficChart.data.datasets[3].data.push(data.mqttBridgeOut);
+            this.trafficChart.data.datasets[2].data.push(data.mqttClientIn);
+            this.trafficChart.data.datasets[3].data.push(data.mqttClientOut);
             this.trafficChart.data.datasets[4].data.push(data.kafkaBridgeIn);
             this.trafficChart.data.datasets[5].data.push(data.opcUaIn);
             this.trafficChart.data.datasets[6].data.push(data.opcUaOut);
@@ -415,14 +415,14 @@ class DashboardManager {
                 messagesOut: acc.messagesOut + (metrics.messagesOut || 0),
                 messageBusIn: acc.messageBusIn + (metrics.messageBusIn || 0),
                 messageBusOut: acc.messageBusOut + (metrics.messageBusOut || 0),
-                mqttBridgeIn: acc.mqttBridgeIn + (metrics.mqttBridgeIn || 0),
-                mqttBridgeOut: acc.mqttBridgeOut + (metrics.mqttBridgeOut || 0),
+                mqttClientIn: acc.mqttClientIn + (metrics.mqttClientIn || 0),
+                mqttClientOut: acc.mqttClientOut + (metrics.mqttClientOut || 0),
                 kafkaBridgeIn: acc.kafkaBridgeIn + (metrics.kafkaBridgeIn || 0),
                 // kafkaBridgeOut removed
                 opcUaIn: acc.opcUaIn + (metrics.opcUaIn || 0),
                 opcUaOut: acc.opcUaOut + (metrics.opcUaOut || 0)
             };
-        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttBridgeIn: 0, mqttBridgeOut: 0, kafkaBridgeIn: 0, opcUaIn: 0, opcUaOut: 0 });
+        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttClientIn: 0, mqttClientOut: 0, kafkaBridgeIn: 0, opcUaIn: 0, opcUaOut: 0 });
 
         if (this.trafficChart.data.labels.length >= this.maxDataPoints) {
             this.trafficChart.data.labels.shift();
@@ -434,8 +434,8 @@ class DashboardManager {
         this.trafficChart.data.labels.push(timeLabel);
         this.trafficChart.data.datasets[0].data.push(clusterTotals.messagesIn);
         this.trafficChart.data.datasets[1].data.push(clusterTotals.messagesOut);
-        this.trafficChart.data.datasets[2].data.push(clusterTotals.mqttBridgeIn);
-        this.trafficChart.data.datasets[3].data.push(clusterTotals.mqttBridgeOut);
+        this.trafficChart.data.datasets[2].data.push(clusterTotals.mqttClientIn);
+        this.trafficChart.data.datasets[3].data.push(clusterTotals.mqttClientOut);
         this.trafficChart.data.datasets[4].data.push(clusterTotals.kafkaBridgeIn);
         // Removed kafkaBridgeOut dataset push
         this.trafficChart.data.datasets[5].data.push(clusterTotals.opcUaIn);
@@ -472,8 +472,8 @@ class DashboardManager {
                 queuedMessages: acc.queuedMessages + (metrics.queuedMessagesCount || 0),
                 messageBusIn: acc.messageBusIn + (metrics.messageBusIn || 0),
                 messageBusOut: acc.messageBusOut + (metrics.messageBusOut || 0),
-                mqttBridgeIn: acc.mqttBridgeIn + (metrics.mqttBridgeIn || 0),
-                mqttBridgeOut: acc.mqttBridgeOut + (metrics.mqttBridgeOut || 0),
+                mqttClientIn: acc.mqttClientIn + (metrics.mqttClientIn || 0),
+                mqttClientOut: acc.mqttClientOut + (metrics.mqttClientOut || 0),
                 kafkaBridgeIn: acc.kafkaBridgeIn + (metrics.kafkaBridgeIn || 0),
                 // kafkaBridgeOut removed
                 opcUaIn: acc.opcUaIn + (metrics.opcUaIn || 0),
@@ -482,7 +482,7 @@ class DashboardManager {
         }, {
             messagesIn: 0, messagesOut: 0, totalSessions: 0, queuedMessages: 0,
             messageBusIn: 0, messageBusOut: 0,
-            mqttBridgeIn: 0, mqttBridgeOut: 0,
+            mqttClientIn: 0, mqttClientOut: 0,
             kafkaBridgeIn: 0, // kafkaBridgeOut removed
             opcUaIn: 0, opcUaOut: 0
         });
@@ -493,8 +493,8 @@ class DashboardManager {
             <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Messages Out</span><div class="metric-icon">📤</div></div><div class="metric-value">${this.formatNumber(clusterTotals.messagesOut)}</div><div class="metric-label">Cluster Total</div></div>
             <div class="metric-card"><div class="metric-header"><span class="metric-title">Active Sessions</span><div class="metric-icon">👥</div></div><div class="metric-value">${clusterTotals.totalSessions}</div><div class="metric-label">${brokers.length} Node${brokers.length !== 1 ? 's' : ''}</div></div>
             <div class="metric-card"><div class="metric-header"><span class="metric-title">Queued Messages</span><div class="metric-icon">⏳</div></div><div class="metric-value">${this.formatNumber(clusterTotals.queuedMessages)}</div><div class="metric-label">Pending Delivery</div></div>
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Bridge In</span><div class="metric-icon">🛬</div></div><div class="metric-value">${this.formatNumber(clusterTotals.mqttBridgeIn)}</div><div class="metric-label">External Bridges</div></div>
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Bridge Out</span><div class="metric-icon">🛫</div></div><div class="metric-value">${this.formatNumber(clusterTotals.mqttBridgeOut)}</div><div class="metric-label">External Bridges</div></div>
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Bridge In</span><div class="metric-icon">🛬</div></div><div class="metric-value">${this.formatNumber(clusterTotals.mqttClientIn)}</div><div class="metric-label">External Bridges</div></div>
+            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Bridge Out</span><div class="metric-icon">🛫</div></div><div class="metric-value">${this.formatNumber(clusterTotals.mqttClientOut)}</div><div class="metric-label">External Bridges</div></div>
             <!-- Kafka Bridge Out removed (always zero) -->
             <div class="metric-card"><div class="metric-header"><span class="metric-title">OPC UA In</span><div class="metric-icon">⚙️</div></div><div class="metric-value">${this.formatNumber(clusterTotals.opcUaIn)}</div><div class="metric-label">Industrial Protocol</div></div>
             <div class="metric-card"><div class="metric-header"><span class="metric-title">OPC UA Out</span><div class="metric-icon">⚙️</div></div><div class="metric-value">${this.formatNumber(clusterTotals.opcUaOut)}</div><div class="metric-label">Industrial Protocol</div></div>
@@ -516,7 +516,7 @@ class DashboardManager {
                     <td>${metrics.nodeSessionCount || 0}</td>
                     <td>${this.formatNumber(metrics.queuedMessagesCount || 0)}</td>
                     <td><span style="color: #14B8A6;">${this.formatNumber(metrics.messageBusIn || 0)}</span> / <span style="color: #F97316;">${this.formatNumber(metrics.messageBusOut || 0)}</span></td>
-                    <td><span style="color: #0EA5E9;">${this.formatNumber(metrics.mqttBridgeIn || 0)}</span> / <span style="color: #F59E0B;">${this.formatNumber(metrics.mqttBridgeOut || 0)}</span></td>
+                    <td><span style="color: #0EA5E9;">${this.formatNumber(metrics.mqttClientIn || 0)}</span> / <span style="color: #F59E0B;">${this.formatNumber(metrics.mqttClientOut || 0)}</span></td>
                     <td><span style="color: #EF4444;">${this.formatNumber(metrics.kafkaBridgeIn || 0)}</span></td>
                 </tr>`;
         }).join('');
