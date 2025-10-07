@@ -57,14 +57,16 @@ class MetricsHandler(
             var opcUaClientOutTotal = 0.0
             var kafkaInTotal = 0.0
             var kafkaOutTotal = 0.0
+            var winCCOaClientInTotal = 0.0
             var brokerDone = false
             var bridgeDone = false
             var opcUaDone = false
             var kafkaDone = false
+            var winCCOaDone = false
             var archiveDone = false
 
             fun tryAssembleAndStore() {
-                if (brokerDone && bridgeDone && opcUaDone && kafkaDone && archiveDone && nodeMetrics != null) {
+                if (brokerDone && bridgeDone && opcUaDone && kafkaDone && winCCOaDone && archiveDone && nodeMetrics != null) {
                     try {
                         val nm = nodeMetrics!!
                         val brokerMetrics = BrokerMetrics(
@@ -274,6 +276,53 @@ class MetricsHandler(
                 } else {
                     logger.fine("Could not retrieve Kafka client connector list: ${listReply.cause()?.message}")
                     kafkaDone = true
+                    tryAssembleAndStore()
+                }
+            }
+
+            // WinCC OA Client metrics aggregation
+            val winCCOaListAddress = EventBusAddresses.WinCCOaBridge.CONNECTORS_LIST
+            vertx.eventBus().request<JsonObject>(winCCOaListAddress, JsonObject()).onComplete { listReply ->
+                if (listReply.succeeded()) {
+                    val body = listReply.result().body()
+                    val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
+                    if (devices.isEmpty) {
+                        winCCOaDone = true
+                        tryAssembleAndStore()
+                    } else {
+                        var remaining = devices.size()
+                        devices.forEach { d ->
+                            val deviceName = d as String
+                            val mAddr = EventBusAddresses.WinCCOaBridge.connectorMetrics(deviceName)
+                            vertx.eventBus().request<JsonObject>(mAddr, JsonObject()).onComplete { mReply ->
+                                if (mReply.succeeded()) {
+                                    try {
+                                        val m = mReply.result().body()
+                                        val inRate = m.getDouble("messagesInRate", 0.0)
+                                        winCCOaClientInTotal += inRate
+                                        // Store individual client metrics
+                                        val winCCOaMetrics = at.rocworks.extensions.graphql.WinCCOaClientMetrics(
+                                            messagesIn = inRate,
+                                            timestamp = TimestampConverter.instantToIsoString(timestamp)
+                                        )
+                                        metricsStore.storeWinCCOaClientMetrics(timestamp, deviceName, winCCOaMetrics)
+                                    } catch (e: Exception) {
+                                        logger.warning("Error processing WinCC OA client metrics for $deviceName: ${e.message}")
+                                    }
+                                } else {
+                                    logger.fine("No metrics for WinCC OA client $deviceName: ${mReply.cause()?.message}")
+                                }
+                                remaining -= 1
+                                if (remaining == 0) {
+                                    winCCOaDone = true
+                                    tryAssembleAndStore()
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    logger.fine("Could not retrieve WinCC OA client connector list: ${listReply.cause()?.message}")
+                    winCCOaDone = true
                     tryAssembleAndStore()
                 }
             }

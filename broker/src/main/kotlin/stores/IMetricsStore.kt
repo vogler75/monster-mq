@@ -34,6 +34,7 @@ interface IMetricsStore {
     fun storeBrokerMetrics(timestamp: Instant, nodeId: String, metrics: BrokerMetrics): Future<Void>
     fun storeSessionMetrics(timestamp: Instant, clientId: String, metrics: SessionMetrics): Future<Void>
     fun storeMqttClientMetrics(timestamp: Instant, clientName: String, metrics: MqttClientMetrics): Future<Void>
+    fun storeWinCCOaClientMetrics(timestamp: Instant, clientName: String, metrics: at.rocworks.extensions.graphql.WinCCOaClientMetrics): Future<Void>
 
     // Generic JSON based API (metric_type + identifier + metrics JSON)
     fun storeMetrics(kind: MetricKind, timestamp: Instant, identifier: String, metricsJson: io.vertx.core.json.JsonObject): Future<Void>

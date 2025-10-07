@@ -118,6 +118,9 @@ class MetricsStoreSQLite(
     override fun storeMqttClientMetrics(timestamp: Instant, clientName: String, metrics: MqttClientMetrics): Future<Void> =
         storeMetrics(MetricKind.MQTTCLIENT, timestamp, clientName, mqttClientMetricsToJson(metrics))
 
+    override fun storeWinCCOaClientMetrics(timestamp: Instant, clientName: String, metrics: at.rocworks.extensions.graphql.WinCCOaClientMetrics): Future<Void> =
+        storeMetrics(MetricKind.WINCCOACLIENT, timestamp, clientName, winCCOaClientMetricsToJson(metrics))
+
     override fun storeKafkaClientMetrics(timestamp: Instant, clientName: String, metrics: KafkaClientMetrics): Future<Void> =
         storeMetrics(MetricKind.KAFKACLIENT, timestamp, clientName, kafkaClientMetricsToJson(metrics))
 
@@ -303,7 +306,8 @@ class MetricsStoreSQLite(
         from: Instant?,
         to: Instant?,
         lastMinutes: Int?
-    ): Future<List<at.rocworks.extensions.graphql.WinCCOaClientMetrics>> = Future.succeededFuture(emptyList())
+    ): Future<List<at.rocworks.extensions.graphql.WinCCOaClientMetrics>> =
+        getMetricsHistory(MetricKind.WINCCOACLIENT, clientName, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { jsonToWinCCOaClientMetrics(it.second) } }
 
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {
         return vertx.executeBlocking<Long>(Callable {
@@ -356,6 +360,10 @@ class MetricsStoreSQLite(
     private fun kafkaClientMetricsToJson(m: KafkaClientMetrics) = JsonObject()
         .put("messagesIn", m.messagesIn)
         .put("messagesOut", m.messagesOut)
+        .put("timestamp", m.timestamp)
+
+    private fun winCCOaClientMetricsToJson(m: at.rocworks.extensions.graphql.WinCCOaClientMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
         .put("timestamp", m.timestamp)
 
     private fun opcUaDeviceMetricsToJson(m: OpcUaDeviceMetrics) = JsonObject()
@@ -428,6 +436,14 @@ class MetricsStoreSQLite(
     ) else KafkaClientMetrics(
         messagesIn = j.getDouble("messagesIn", 0.0),
         messagesOut = j.getDouble("messagesOut", 0.0),
+        timestamp = j.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    )
+
+    private fun jsonToWinCCOaClientMetrics(j: JsonObject) = if (j.isEmpty) at.rocworks.extensions.graphql.WinCCOaClientMetrics(
+        0.0,
+        at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    ) else at.rocworks.extensions.graphql.WinCCOaClientMetrics(
+        messagesIn = j.getDouble("messagesIn", 0.0),
         timestamp = j.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 
