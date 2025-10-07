@@ -1,4 +1,4 @@
-// WinCC OA Bridge Management JavaScript
+// WinCC OA Client Management JavaScript
 
 class WinCCOaClientManager {
     constructor() {
@@ -11,7 +11,7 @@ class WinCCOaClientManager {
     }
 
     async init() {
-        console.log('Initializing WinCC OA Bridge Manager...');
+        console.log('Initializing WinCC OA Client Manager...');
         // Load initial data
         await this.loadClusterNodes();
         await this.loadClients();
@@ -104,7 +104,7 @@ class WinCCOaClientManager {
 
         } catch (error) {
             console.error('Error loading clients:', error);
-            this.showError('Failed to load WinCC OA bridges: ' + error.message);
+            this.showError('Failed to load WinCC OA Clients: ' + error.message);
         } finally {
             this.showLoading(false);
         }
@@ -132,7 +132,7 @@ class WinCCOaClientManager {
             tbody.innerHTML = `
                 <tr>
                     <td colspan="7" class="no-data">
-                        No WinCC OA bridges configured. Click "Add Bridge" to get started.
+                        No WinCC OA Clients configured. Click "Add Bridge" to get started.
                     </td>
                 </tr>
             `;
@@ -400,7 +400,7 @@ class WinCCOaClientManager {
         }
 
         // Update modal title and button
-        document.querySelector('#add-client-modal .modal-header h3').textContent = 'Edit WinCC OA Bridge';
+        document.querySelector('#add-client-modal .modal-header h3').textContent = 'Edit WinCC OA Client';
         document.getElementById('modal-submit-btn').textContent = 'Update Bridge';
         document.getElementById('modal-submit-btn').onclick = () => updateClient();
     }
@@ -556,7 +556,7 @@ class WinCCOaClientManager {
         this.clearAddresses();
 
         // Reset modal title and button
-        document.querySelector('#add-client-modal .modal-header h3').textContent = 'Add WinCC OA Bridge';
+        document.querySelector('#add-client-modal .modal-header h3').textContent = 'Add WinCC OA Client';
         document.getElementById('modal-submit-btn').textContent = 'Add Bridge';
         document.getElementById('modal-submit-btn').onclick = () => addClient();
     }

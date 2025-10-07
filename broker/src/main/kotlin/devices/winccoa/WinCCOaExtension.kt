@@ -151,11 +151,11 @@ class WinCCOaExtension : AbstractVerticle() {
         deviceStore.getEnabledDevicesByNode(currentNodeId)
             .onComplete { result ->
                 if (result.succeeded()) {
-                    // Filter to only include WinCC OA Bridge devices
+                    // Filter to only include WinCC OA Client devices
                     val devices = result.result().filter { device ->
                         device.type == DeviceConfig.DEVICE_TYPE_WINCCOA_CLIENT
                     }
-                    logger.info("Found ${devices.size} enabled WinCC OA Bridge devices assigned to node $currentNodeId")
+                    logger.info("Found ${devices.size} enabled WinCC OA Client devices assigned to node $currentNodeId")
 
                     if (devices.isEmpty()) {
                         promise.complete()

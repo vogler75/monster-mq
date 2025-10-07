@@ -91,7 +91,7 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
-    // WinCC OA Bridge (WinCC OA -> MQTT)
+    // WinCC OA Client (WinCC OA -> MQTT)
     object WinCCOaBridge {
         private const val BRIDGE_NS = "$BASE.bridge.winccoa"
         const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"

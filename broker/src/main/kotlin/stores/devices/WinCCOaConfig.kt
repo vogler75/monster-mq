@@ -4,7 +4,7 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 
 /**
- * WinCC OA Bridge address configuration for subscriptions
+ * WinCC OA Client address configuration for subscriptions
  */
 data class WinCCOaAddress(
     val query: String,              // GraphQL query for dpQueryConnectSingle (e.g., "SELECT '_original.._value', '_original.._stime' FROM 'System1:*'")

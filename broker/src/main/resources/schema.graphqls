@@ -1716,11 +1716,11 @@ extend type Mutation {
 }
 
 #############################################
-# WinCC OA Bridge Configuration            #
+# WinCC OA Client Configuration            #
 #############################################
 
 """
-WinCC OA Bridge connects to a WinCC OA GraphQL server and subscribes to datapoint changes
+WinCC OA Client connects to a WinCC OA GraphQL server and subscribes to datapoint changes
 via WebSocket subscriptions. Each subscription uses the dpQueryConnectSingle GraphQL function
 to monitor datapoint values and publishes them as MQTT messages.
 
@@ -1815,9 +1815,9 @@ type WinCCOaClient {
     updatedAt: String!
     # Whether this client is running on the current node
     isOnCurrentNode: Boolean!
-    # Current metrics for this WinCC OA bridge client (single most recent entry)
+    # Current metrics for this WinCC OA Client client (single most recent entry)
     metrics: [WinCCOaClientMetrics!]!
-    # Historical metrics data for this WinCC OA bridge client
+    # Historical metrics data for this WinCC OA Client client
     metricsHistory(
         from: String
         to: String

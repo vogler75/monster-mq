@@ -683,7 +683,7 @@ MORE INFO:
                         vertx.deployVerticle(kafkaClientExtension, kafkaDeploymentOptions)
                     }
                     .compose {
-                        // WinCC OA Bridge Extension
+                        // WinCC OA Client Extension
                         val winCCOaExtension = WinCCOaExtension()
                         val winCCOaDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(winCCOaExtension, winCCOaDeploymentOptions)
