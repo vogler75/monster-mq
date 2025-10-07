@@ -14,13 +14,14 @@ enum class MetricsStoreType {
 }
 
 enum class MetricKind {
-    BROKER, SESSION, MQTTCLIENT, KAFKACLIENT, OPCUADEVICE, ARCHIVEGROUP;
+    BROKER, SESSION, MQTTCLIENT, KAFKACLIENT, WINCCOACLIENT, OPCUADEVICE, ARCHIVEGROUP;
 
     fun toDbString(): String = when (this) {
         BROKER -> "broker"
         SESSION -> "session"
         MQTTCLIENT -> "mqtt"
         KAFKACLIENT -> "kafka"
+        WINCCOACLIENT -> "winccoa"
         OPCUADEVICE -> "opcua"
         ARCHIVEGROUP -> "archive"
     }
@@ -126,6 +127,14 @@ interface IMetricsStore {
         lastMinutes: Int?,
         limit: Int = 100
     ): Future<List<Pair<Instant, at.rocworks.extensions.graphql.KafkaClientMetrics>>>
+
+    // WinCC OA Client Metrics
+    fun getWinCCOaClientMetricsList(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<at.rocworks.extensions.graphql.WinCCOaClientMetrics>>
 
     // OPC UA Device Metrics
     fun getOpcUaDeviceMetrics(

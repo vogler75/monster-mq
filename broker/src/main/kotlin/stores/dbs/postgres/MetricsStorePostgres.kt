@@ -157,6 +157,12 @@ class MetricsStorePostgres(
     override fun getKafkaClientMetricsList(clientName: String, from: Instant?, to: Instant?, lastMinutes: Int?) =
         getKafkaClientMetricsHistory(clientName, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { it.second } }
 
+    override fun getWinCCOaClientMetricsList(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<at.rocworks.extensions.graphql.WinCCOaClientMetrics>> = Future.succeededFuture(emptyList())
 
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {
         return vertx.executeBlocking<Long>(Callable {

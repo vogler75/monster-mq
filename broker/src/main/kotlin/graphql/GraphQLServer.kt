@@ -467,6 +467,11 @@ class GraphQLServer(
                     .dataFetcher("metrics", metricsResolver.kafkaClientMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.kafkaClientMetricsHistory())
             }
+            .type("WinCCOaClient") { builder ->
+                builder
+                    .dataFetcher("metrics", metricsResolver.winCCOaClientMetrics())
+                    .dataFetcher("metricsHistory", metricsResolver.winCCOaClientMetricsHistory())
+            }
             .type("ArchiveGroupInfo") { builder ->
                 builder.apply {
                     archiveGroupResolver?.let { resolver ->

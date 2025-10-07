@@ -152,6 +152,13 @@ class MetricsStoreCrateDB(
     override fun getOpcUaDeviceMetricsList(deviceName: String, from: Instant?, to: Instant?, lastMinutes: Int?) =
         getOpcUaDeviceMetricsHistory(deviceName, from, to, lastMinutes, Int.MAX_VALUE).map { it.map { pair -> pair.second } }
 
+    override fun getWinCCOaClientMetricsList(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<at.rocworks.extensions.graphql.WinCCOaClientMetrics>> = Future.succeededFuture(emptyList())
+
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {
         return vertx.executeBlocking<Long>(Callable {
             try {

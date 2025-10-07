@@ -984,6 +984,69 @@ callback(BrokerMetrics(
         }
     }
 
+    fun winCCOaClientMetrics(): DataFetcher<CompletableFuture<List<WinCCOaClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<WinCCOaClientMetrics>>()
+            val winCCOaClient = env.getSource<Map<String, Any>>()
+            val clientName = winCCOaClient?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(listOf(WinCCOaClientMetrics(0.0, TimestampConverter.currentTimeIsoString())))
+                return@DataFetcher future
+            }
+
+            if (metricsStore != null) {
+                metricsStore.getWinCCOaClientMetricsList(clientName, null, null, 1).onComplete { result ->
+                    if (result.succeeded() && result.result().isNotEmpty()) {
+                        val m = result.result().first()
+                        future.complete(listOf(WinCCOaClientMetrics(round2(m.messagesIn), m.timestamp)))
+                    } else {
+                        future.complete(listOf(WinCCOaClientMetrics(0.0, TimestampConverter.currentTimeIsoString())))
+                    }
+                }
+            } else {
+                future.complete(listOf(WinCCOaClientMetrics(0.0, TimestampConverter.currentTimeIsoString())))
+            }
+
+            future
+        }
+    }
+
+    fun winCCOaClientMetricsHistory(): DataFetcher<CompletableFuture<List<WinCCOaClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<WinCCOaClientMetrics>>()
+            val winCCOaClient = env.getSource<Map<String, Any>>()
+            val clientName = winCCOaClient?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            val from = env.getArgument<String?>("from")
+            val to = env.getArgument<String?>("to")
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+
+            if (metricsStore != null) {
+                val fromInstant = from?.let { java.time.Instant.parse(it) }
+                val toInstant = to?.let { java.time.Instant.parse(it) }
+
+                metricsStore.getWinCCOaClientMetricsList(clientName, fromInstant, toInstant, lastMinutes).onComplete { result ->
+                    if (result.succeeded()) {
+                        future.complete(result.result().map { WinCCOaClientMetrics(round2(it.messagesIn), it.timestamp) })
+                    } else {
+                        logger.warning("Failed to get historical WinCC OA client metrics: ${result.cause()?.message}")
+                        future.complete(emptyList())
+                    }
+                }
+            } else {
+                future.complete(emptyList())
+            }
+
+            future
+        }
+    }
+
     // OPC UA Device Metrics (embedded field resolvers)
     fun opcUaDeviceMetricsField(): DataFetcher<CompletableFuture<List<OpcUaDeviceMetrics>>> {
         return DataFetcher { env ->

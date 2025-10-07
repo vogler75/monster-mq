@@ -195,6 +195,12 @@ data class KafkaClientMetrics(
     val timestamp: String
 )
 
+// WinCC OA Client Metrics
+data class WinCCOaClientMetrics(
+    val messagesIn: Double,
+    val timestamp: String
+)
+
 data class ArchiveGroupMetrics(
     val messagesOut: Double,  // Messages written to database per second
     val bufferSize: Int,      // Average size of the write buffer
