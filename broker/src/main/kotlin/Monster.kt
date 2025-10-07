@@ -36,6 +36,7 @@ import at.rocworks.devices.opcuaserver.OpcUaServerExtension
 import at.rocworks.devices.mqttclient.MqttClientExtension
 import at.rocworks.devices.kafkaclient.KafkaClientExtension
 import at.rocworks.devices.winccoa.WinCCOaExtension
+import at.rocworks.devices.winccua.WinCCUaExtension
 import at.rocworks.stores.DeviceConfigStoreFactory
 import handlers.MetricsHandler
 import java.io.File
@@ -687,6 +688,12 @@ MORE INFO:
                         val winCCOaExtension = WinCCOaExtension()
                         val winCCOaDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(winCCOaExtension, winCCOaDeploymentOptions)
+                    }
+                    .compose {
+                        // WinCC Unified Client Extension
+                        val winCCUaExtension = WinCCUaExtension()
+                        val winCCUaDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(winCCUaExtension, winCCUaDeploymentOptions)
                     }
                     .compose {
                         if (metricsCollector != null) {

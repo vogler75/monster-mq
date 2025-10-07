@@ -1959,3 +1959,246 @@ extend type Mutation {
     # Stops monitoring the specified GraphQL query while keeping other subscriptions active
     deleteWinCCOaClientAddress(deviceName: String!, query: String!): WinCCOaClientResult!
 }
+
+# ===================================
+# WinCC Unified Client Configuration
+# ===================================
+
+# WinCC Unified address type enum
+enum WinCCUaAddressType {
+    # Subscribe to tag value changes
+    TAG_VALUES
+    # Subscribe to active alarms
+    ACTIVE_ALARMS
+}
+
+# WinCC Unified message format options
+enum WinCCUaMessageFormat {
+    # JSON format with ISO 8601 timestamp: {"value": <value>, "time": "2024-01-01T12:00:00Z"}
+    JSON_ISO
+    # JSON format with milliseconds since epoch: {"value": <value>, "time": 1704110400000}
+    JSON_MS
+    # Raw value only (no timestamp)
+    RAW_VALUE
+}
+
+# WinCC Unified address configuration for subscriptions
+type WinCCUaAddress {
+    # Address type (TAG_VALUES or ACTIVE_ALARMS)
+    type: WinCCUaAddressType!
+    # MQTT topic prefix for this subscription
+    topic: String!
+    # Optional description
+    description: String
+    # Whether to publish MQTT messages with retained flag
+    retained: Boolean!
+    # Browse arguments for TAG_VALUES type (JSON object)
+    browseArguments: JSON
+    # System names filter for ACTIVE_ALARMS type
+    systemNames: [String!]
+    # Filter string for ACTIVE_ALARMS type
+    filterString: String
+}
+
+# Topic name transformation configuration
+type WinCCUaTransformConfig {
+    # Convert "." to "/" in tag names (default: true)
+    convertDotToSlash: Boolean!
+    # Convert "_" to "/" in tag names (default: false)
+    convertUnderscoreToSlash: Boolean!
+    # Optional regex pattern for additional transformation
+    regexPattern: String
+    # Replacement string for regex pattern
+    regexReplacement: String
+}
+
+# WinCC Unified connection configuration
+type WinCCUaConnectionConfig {
+    # GraphQL endpoint URL (e.g., "http://winccua:4000/graphql")
+    graphqlEndpoint: String!
+    # WebSocket endpoint URL (defaults to graphqlEndpoint with ws:// protocol)
+    websocketEndpoint: String
+    # Username for authentication (required)
+    username: String!
+    # Password for authentication (required)
+    password: String!
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long!
+    # Connection timeout in milliseconds
+    connectionTimeout: Long!
+    # Message format for publishing tag values
+    messageFormat: WinCCUaMessageFormat!
+    # Topic name transformation configuration
+    transformConfig: WinCCUaTransformConfig!
+    # Configured subscriptions (tags and alarms)
+    addresses: [WinCCUaAddress!]!
+}
+
+type WinCCUaClientMetrics {
+    # Messages per second received from WinCC Unified server (tag values and alarms)
+    messagesIn: Float!
+    # ISO 8601 timestamp when these metrics were captured
+    timestamp: String!
+}
+
+type WinCCUaClient {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Cluster node ID where this client runs
+    nodeId: String!
+    # Connection and subscription configuration
+    config: WinCCUaConnectionConfig!
+    # Whether this client is enabled and should connect
+    enabled: Boolean!
+    # Client creation timestamp
+    createdAt: String!
+    # Client last update timestamp
+    updatedAt: String!
+    # Whether this client is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current metrics for this WinCC Unified client (single most recent entry)
+    metrics: [WinCCUaClientMetrics!]!
+    # Historical metrics data for this WinCC Unified client
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [WinCCUaClientMetrics!]!
+}
+
+type WinCCUaClientResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected WinCC Unified client (null if operation failed)
+    client: WinCCUaClient
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+input WinCCUaTransformConfigInput {
+    # Convert "." to "/" in tag names (default: true)
+    convertDotToSlash: Boolean = true
+    # Convert "_" to "/" in tag names (default: false)
+    convertUnderscoreToSlash: Boolean = false
+    # Optional regex pattern for additional transformation
+    regexPattern: String
+    # Replacement string for regex pattern
+    regexReplacement: String
+}
+
+input WinCCUaConnectionConfigInput {
+    # GraphQL endpoint URL (e.g., "http://winccua:4000/graphql")
+    graphqlEndpoint: String!
+    # WebSocket endpoint URL (optional, defaults to graphqlEndpoint with ws:// protocol)
+    websocketEndpoint: String
+    # Username for authentication (required)
+    username: String!
+    # Password for authentication (required)
+    password: String!
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long = 5000
+    # Connection timeout in milliseconds
+    connectionTimeout: Long = 10000
+    # Message format for publishing tag values
+    messageFormat: String = "JSON_ISO"
+    # Topic name transformation configuration
+    transformConfig: WinCCUaTransformConfigInput
+}
+
+input WinCCUaAddressInput {
+    # Address type (TAG_VALUES or ACTIVE_ALARMS)
+    type: String!
+    # MQTT topic prefix for this subscription
+    topic: String!
+    # Optional description
+    description: String
+    # Whether to publish MQTT messages with retained flag
+    retained: Boolean = false
+    # Browse arguments for TAG_VALUES type (JSON object with query parameters)
+    browseArguments: JSON
+    # System names filter for ACTIVE_ALARMS type
+    systemNames: [String!]
+    # Filter string for ACTIVE_ALARMS type
+    filterString: String
+}
+
+input WinCCUaClientInput {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (e.g., "winccua/plant1")
+    namespace: String!
+    # Target cluster node (use "*" for automatic assignment)
+    nodeId: String!
+    # Whether the client should be enabled
+    enabled: Boolean = true
+    # Connection configuration
+    config: WinCCUaConnectionConfigInput!
+}
+
+# Extend Queries for WinCC Unified clients
+extend type Query {
+    # Get all WinCC Unified client configurations across the entire cluster
+    # Returns clients from all cluster nodes, showing their assignment and connection status
+    winCCUaClients: [WinCCUaClient!]!
+
+    # Get a specific WinCC Unified client configuration by its unique name
+    # Client names must be unique across the entire MonsterMQ cluster
+    winCCUaClient(name: String!): WinCCUaClient
+
+    # Get WinCC Unified clients assigned to a specific cluster node
+    # Useful for monitoring client distribution and cluster load balancing
+    winCCUaClientsByNode(nodeId: String!): [WinCCUaClient!]!
+}
+
+# WinCC Unified Device Mutations - Grouped operations for WinCC Unified device management
+type WinCCUaDeviceMutations {
+    # Create a new WinCC Unified client configuration to connect to a WinCC Unified GraphQL server
+    # Creates a client connector that will be deployed on the specified cluster node
+    # The client will automatically connect, authenticate, and subscribe to configured tags/alarms
+    create(input: WinCCUaClientInput!): WinCCUaClientResult!
+
+    # Update an existing WinCC Unified client configuration
+    # Changes take effect immediately - the client connector will be redeployed with new settings
+    # Useful for modifying connection parameters, credentials, or subscriptions
+    update(name: String!, input: WinCCUaClientInput!): WinCCUaClientResult!
+
+    # Delete a WinCC Unified client configuration permanently
+    # Stops the client connector and removes all configuration data
+    # Returns true if deletion was successful, false if client was not found
+    delete(name: String!): Boolean!
+
+    # Start a WinCC Unified client connection
+    # Enables a previously stopped client and establishes connection to WinCC Unified server
+    start(name: String!): WinCCUaClientResult!
+
+    # Stop a WinCC Unified client connection
+    # Disables the client and disconnects from WinCC Unified server while preserving configuration
+    stop(name: String!): WinCCUaClientResult!
+
+    # Toggle WinCC Unified client enabled state
+    # Enable or disable a WinCC Unified client without deleting its configuration
+    toggle(name: String!, enabled: Boolean!): WinCCUaClientResult!
+
+    # Reassign a WinCC Unified client to a different cluster node
+    # Moves the client connector from one node to another for load balancing
+    # The client configuration remains unchanged, only the deployment location changes
+    reassign(name: String!, nodeId: String!): WinCCUaClientResult!
+
+    # Add a new subscription address to an existing WinCC Unified client
+    # Can be either TAG_VALUES (requires browseArguments) or ACTIVE_ALARMS (optional filters)
+    # New subscriptions will immediately start receiving updates
+    addAddress(deviceName: String!, input: WinCCUaAddressInput!): WinCCUaClientResult!
+
+    # Remove a subscription address from a WinCC Unified client
+    # Stops monitoring the specified topic while keeping other subscriptions active
+    deleteAddress(deviceName: String!, topic: String!): WinCCUaClientResult!
+}
+
+# Extend Mutations for WinCC Unified clients
+extend type Mutation {
+    # Access WinCC Unified device management operations
+    # Returns a WinCCUaDeviceMutations type that provides grouped mutation operations
+    winCCUaDevice: WinCCUaDeviceMutations!
+}

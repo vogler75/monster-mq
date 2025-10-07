@@ -23,6 +23,8 @@ import at.rocworks.graphql.KafkaClientConfigQueries
 import at.rocworks.graphql.KafkaClientConfigMutations
 import at.rocworks.graphql.WinCCOaClientConfigQueries
 import at.rocworks.graphql.WinCCOaClientConfigMutations
+import at.rocworks.graphql.WinCCUaClientConfigQueries
+import at.rocworks.graphql.WinCCUaClientConfigMutations
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
@@ -259,6 +261,10 @@ class GraphQLServer(
         val winCCOaClientQueries = deviceStore?.let { WinCCOaClientConfigQueries(vertx, it) }
         val winCCOaClientMutations = deviceStore?.let { WinCCOaClientConfigMutations(vertx, it) }
 
+        // Initialize WinCC Unified Client resolvers
+        val winCCUaClientQueries = deviceStore?.let { WinCCUaClientConfigQueries(vertx, it) }
+        val winCCUaClientMutations = deviceStore?.let { WinCCUaClientConfigMutations(vertx, it) }
+
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
             .scalar(ExtendedScalars.GraphQLLong)
@@ -340,6 +346,14 @@ class GraphQLServer(
                             dataFetcher("winCCOaClients", resolver.winCCOaClients())
                             dataFetcher("winCCOaClient", resolver.winCCOaClient())
                             dataFetcher("winCCOaClientsByNode", resolver.winCCOaClientsByNode())
+                        }
+                    }
+                    // WinCC Unified Client queries
+                    .apply {
+                        winCCUaClientQueries?.let { resolver ->
+                            dataFetcher("winCCUaClients", resolver.winCCUaClients())
+                            dataFetcher("winCCUaClient", resolver.winCCUaClient())
+                            dataFetcher("winCCUaClientsByNode", resolver.winCCUaClientsByNode())
                         }
                     }
             }
@@ -437,6 +451,29 @@ class GraphQLServer(
                             dataFetcher("deleteWinCCOaClientAddress", resolver.deleteWinCCOaClientAddress())
                         }
                     }
+                    // WinCC Unified Client mutations - grouped under winCCUaDevice
+                    .apply {
+                        winCCUaClientMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on WinCCUaDeviceMutations type
+                            dataFetcher("winCCUaDevice") { _ -> emptyMap<String, Any>() }
+                        }
+                    }
+            }
+            // Register WinCC Unified Device Mutations type
+            .type("WinCCUaDeviceMutations") { builder ->
+                builder.apply {
+                    winCCUaClientMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createWinCCUaClient())
+                        dataFetcher("update", resolver.updateWinCCUaClient())
+                        dataFetcher("delete", resolver.deleteWinCCUaClient())
+                        dataFetcher("start", resolver.startWinCCUaClient())
+                        dataFetcher("stop", resolver.stopWinCCUaClient())
+                        dataFetcher("toggle", resolver.toggleWinCCUaClient())
+                        dataFetcher("reassign", resolver.reassignWinCCUaClient())
+                        dataFetcher("addAddress", resolver.addWinCCUaClientAddress())
+                        dataFetcher("deleteAddress", resolver.deleteWinCCUaClientAddress())
+                    }
+                }
             }
             // Register subscription resolvers
             .type("Subscription") { builder ->

@@ -98,6 +98,13 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // WinCC Unified Client (WinCC Unified -> MQTT)
+    object WinCCUaBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.winccua"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // Archive Groups
     object Archive {
         private const val ARCHIVE_NS = "$BASE.archive"
