@@ -58,6 +58,7 @@ class WinCCOaConnector : AbstractVerticle() {
     private var isConnected = false
     private var isReconnecting = false
     private var reconnectTimerId: Long? = null
+    private var isStopping = false
 
     // Subscription tracking
     private val activeSubscriptions = ConcurrentHashMap<String, WinCCOaAddress>() // subscriptionId -> address
@@ -120,6 +121,9 @@ class WinCCOaConnector : AbstractVerticle() {
     override fun stop(stopPromise: Promise<Void>) {
         logger.info("Stopping WinCCOaConnector for device: ${deviceConfig.name}")
 
+        // Set stopping flag to prevent reconnection attempts
+        isStopping = true
+
         // Cancel any pending reconnection timer
         reconnectTimerId?.let { timerId ->
             vertx.cancelTimer(timerId)
@@ -161,6 +165,12 @@ class WinCCOaConnector : AbstractVerticle() {
      */
     private fun authenticate(): Future<Void> {
         val promise = Promise.promise<Void>()
+
+        // Don't authenticate if stopping
+        if (isStopping) {
+            promise.fail("Connector is stopping")
+            return promise.future()
+        }
 
         // If token is provided, use it directly
         if (winCCOaConfig.token != null) {
@@ -232,6 +242,12 @@ class WinCCOaConnector : AbstractVerticle() {
      */
     private fun connectWebSocket(): Future<Void> {
         val promise = Promise.promise<Void>()
+
+        // Don't connect if stopping
+        if (isStopping) {
+            promise.fail("Connector is stopping")
+            return promise.future()
+        }
 
         if (isConnected || isReconnecting) {
             promise.complete()
@@ -627,28 +643,32 @@ class WinCCOaConnector : AbstractVerticle() {
      * Schedule reconnection attempt
      */
     private fun scheduleReconnection() {
-        if (!isReconnecting) {
-            // Cancel any existing reconnection timer
-            reconnectTimerId?.let { timerId ->
-                vertx.cancelTimer(timerId)
-            }
-
-            // Schedule new reconnection attempt
-            reconnectTimerId = vertx.setTimer(winCCOaConfig.reconnectDelay) {
-                reconnectTimerId = null
-                if (!isConnected) {
-                    logger.info("Attempting to reconnect to WinCC OA server for device ${deviceConfig.name}...")
-                    authenticate()
-                        .compose { connectWebSocket() }
-                        .compose { setupSubscriptions() }
-                        .onComplete { result ->
-                            if (result.failed()) {
-                                logger.warning("Reconnection failed for device ${deviceConfig.name}: ${result.cause()?.message}")
-                            }
-                        }
-                }
-            }
-            logger.info("Scheduled reconnection for device ${deviceConfig.name} in ${winCCOaConfig.reconnectDelay}ms")
+        // Don't schedule reconnection if stopping or already reconnecting
+        if (isStopping || isReconnecting) {
+            return
         }
+
+        // Cancel any existing reconnection timer
+        reconnectTimerId?.let { timerId ->
+            vertx.cancelTimer(timerId)
+        }
+
+        // Schedule new reconnection attempt
+        reconnectTimerId = vertx.setTimer(winCCOaConfig.reconnectDelay) {
+            reconnectTimerId = null
+            // Check again if we're stopping before attempting reconnection
+            if (!isConnected && !isStopping) {
+                logger.info("Attempting to reconnect to WinCC OA server for device ${deviceConfig.name}...")
+                authenticate()
+                    .compose { connectWebSocket() }
+                    .compose { setupSubscriptions() }
+                    .onComplete { result ->
+                        if (result.failed()) {
+                            logger.warning("Reconnection failed for device ${deviceConfig.name}: ${result.cause()?.message}")
+                        }
+                    }
+            }
+        }
+        logger.info("Scheduled reconnection for device ${deviceConfig.name} in ${winCCOaConfig.reconnectDelay}ms")
     }
 }

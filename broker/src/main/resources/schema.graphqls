@@ -1869,6 +1869,8 @@ input WinCCOaConnectionConfigInput {
     messageFormat: WinCCOaMessageFormat = JSON_ISO
     # Topic name transformation configuration
     transformConfig: WinCCOaTransformConfigInput
+    # Configured datapoint subscriptions
+    addresses: [WinCCOaAddressInput!]
 }
 
 input WinCCOaAddressInput {

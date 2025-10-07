@@ -219,15 +219,15 @@ class WinCCOaClientManager {
             </div>
             <div class="form-group">
                 <label>GraphQL Query *</label>
-                <input type="text" class="address-query" data-index="${index}" required placeholder="e.g., ExampleDP_Trend1.:_original.._value" value="${address?.query || ''}">
+                <input type="text" class="address-query" data-index="${index}" required placeholder="e.g., ExampleDP_Trend1.:_original.._value" value="${this.escapeAttr(address?.query || '')}">
             </div>
             <div class="form-group">
                 <label>MQTT Topic *</label>
-                <input type="text" class="address-topic" data-index="${index}" required placeholder="e.g., plant/sensor/value" value="${address?.topic || ''}">
+                <input type="text" class="address-topic" data-index="${index}" required placeholder="e.g., plant/sensor/value" value="${this.escapeAttr(address?.topic || '')}">
             </div>
             <div class="form-group">
                 <label>Description</label>
-                <input type="text" class="address-description" data-index="${index}" placeholder="Optional description" value="${address?.description || ''}">
+                <input type="text" class="address-description" data-index="${index}" placeholder="Optional description" value="${this.escapeAttr(address?.description || '')}">
             </div>
             <div class="form-group">
                 <div class="checkbox-group">
@@ -445,8 +445,8 @@ class WinCCOaClientManager {
 
         try {
             const mutation = `
-                mutation UpdateWinCCOaClient($input: WinCCOaClientInput!) {
-                    updateWinCCOaClient(input: $input) {
+                mutation UpdateWinCCOaClient($name: String!, $input: WinCCOaClientInput!) {
+                    updateWinCCOaClient(name: $name, input: $input) {
                         success
                         errors
                         client {
@@ -457,7 +457,7 @@ class WinCCOaClientManager {
                 }
             `;
 
-            const result = await this.client.query(mutation, { input: clientData });
+            const result = await this.client.query(mutation, { name: this.editingClientName, input: clientData });
 
             if (result.updateWinCCOaClient.success) {
                 this.hideAddClientModal();
@@ -619,6 +619,16 @@ class WinCCOaClientManager {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    escapeAttr(text) {
+        if (!text) return '';
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     }
 
     async refreshClients() {
