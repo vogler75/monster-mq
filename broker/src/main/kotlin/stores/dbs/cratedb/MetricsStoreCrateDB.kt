@@ -175,14 +175,7 @@ class MetricsStoreCrateDB(
             val connection = db.connection ?: throw IllegalStateException("Database connection not available")
             // Upsert (two phase: update first, if none updated then insert)
             val updateSql = "UPDATE $tableName SET metrics = ? WHERE \"timestamp\" = ? AND metric_type = ? AND identifier = ?"
-            val kindStr = when (kind) {
-                MetricKind.BROKER -> "broker"
-                MetricKind.SESSION -> "session"
-                MetricKind.MQTTCLIENT -> "mqttbridge"
-                MetricKind.KAFKACLIENT -> "kafkaclient"
-                MetricKind.OPCUADEVICE -> "opcua"
-                MetricKind.ARCHIVEGROUP -> "archive"
-            }
+            val kindStr = kind.toDbString()
             var updatedRows = 0
             connection.prepareStatement(updateSql).use { st ->
                 st.setObject(1, metricsJson.map) // OBJECT(DYNAMIC) accepts map
@@ -210,14 +203,7 @@ class MetricsStoreCrateDB(
             val (fromTs, toTs) = calculateTimeRange(from, to, lastMinutes)
             if (fromTs == null) throw IllegalArgumentException("Historical query requires time range")
             val connection = db.connection ?: throw IllegalStateException("Database connection not available")
-            val kindStr = when (kind) {
-                MetricKind.BROKER -> "broker"
-                MetricKind.SESSION -> "session"
-                MetricKind.MQTTCLIENT -> "mqttbridge"
-                MetricKind.KAFKACLIENT -> "kafkaclient"
-                MetricKind.OPCUADEVICE -> "opcua"
-                MetricKind.ARCHIVEGROUP -> "archive"
-            }
+            val kindStr = kind.toDbString()
             val sql = if (toTs != null) {
                 """
                     SELECT metrics
@@ -251,14 +237,7 @@ class MetricsStoreCrateDB(
             val (fromTs, toTs) = calculateTimeRange(from, to, lastMinutes)
             if (fromTs == null) throw IllegalArgumentException("Historical query requires time range")
             val connection = db.connection ?: throw IllegalStateException("Database connection not available")
-            val kindStr = when (kind) {
-                MetricKind.BROKER -> "broker"
-                MetricKind.SESSION -> "session"
-                MetricKind.MQTTCLIENT -> "mqttbridge"
-                MetricKind.KAFKACLIENT -> "kafkaclient"
-                MetricKind.OPCUADEVICE -> "opcua"
-                MetricKind.ARCHIVEGROUP -> "archive"
-            }
+            val kindStr = kind.toDbString()
             val sql = if (toTs != null) {
                 """
                     SELECT "timestamp", metrics

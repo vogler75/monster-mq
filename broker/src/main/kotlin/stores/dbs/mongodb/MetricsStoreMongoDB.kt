@@ -108,14 +108,7 @@ class MetricsStoreMongoDB(
 
     override fun getType(): MetricsStoreType = MetricsStoreType.MONGODB
 
-    private fun kindToString(kind: MetricKind) = when(kind){
-        MetricKind.BROKER->"broker"
-        MetricKind.SESSION->"session"
-        MetricKind.MQTTCLIENT->"mqttbridge"
-        MetricKind.KAFKACLIENT->"kafkaclient"
-        MetricKind.OPCUADEVICE->"opcua"
-        MetricKind.ARCHIVEGROUP->"archive" // unify naming (was "archivegroup" in retrieval; store always used "archive")
-    }
+    private fun kindToString(kind: MetricKind) = kind.toDbString()
 
     // Generic store method
     override fun storeMetrics(kind: MetricKind, timestamp: Instant, identifier: String, metricsJson: JsonObject): Future<Void> {

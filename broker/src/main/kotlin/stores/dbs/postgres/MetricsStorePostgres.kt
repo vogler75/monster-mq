@@ -198,14 +198,7 @@ class MetricsStorePostgres(
                 """.trimIndent()
                 connection.prepareStatement(insertSQL).use { statement ->
                     statement.setTimestamp(1, Timestamp.from(timestamp))
-                    statement.setString(2, when(kind){
-                        MetricKind.BROKER->"broker"
-                        MetricKind.SESSION->"session"
-                        MetricKind.MQTTCLIENT->"mqttbridge"
-                        MetricKind.KAFKACLIENT->"kafkaclient"
-                        MetricKind.OPCUADEVICE->"opcua"
-                        MetricKind.ARCHIVEGROUP->"archive"
-                    })
+                    statement.setString(2, kind.toDbString())
                     statement.setString(3, identifier)
                     statement.setString(4, metricsJson.encode())
                     statement.executeUpdate()
@@ -243,14 +236,7 @@ class MetricsStorePostgres(
                 """.trimIndent()
             }
             connection.prepareStatement(sql).use { st ->
-                st.setString(1, when(kind){
-                    MetricKind.BROKER->"broker"
-                    MetricKind.SESSION->"session"
-                    MetricKind.MQTTCLIENT->"mqttbridge"
-                    MetricKind.KAFKACLIENT->"kafkaclient"
-                    MetricKind.OPCUADEVICE->"opcua"
-                    MetricKind.ARCHIVEGROUP->"archive"
-                })
+                st.setString(1, kind.toDbString())
                 st.setString(2, identifier)
                 st.setTimestamp(3, Timestamp.from(fromTs))
                 if (toTs != null) st.setTimestamp(4, Timestamp.from(toTs))
@@ -283,14 +269,7 @@ class MetricsStorePostgres(
                 """.trimIndent()
             }
             connection.prepareStatement(sql).use { st ->
-                st.setString(1, when(kind){
-                    MetricKind.BROKER->"broker"
-                    MetricKind.SESSION->"session"
-                    MetricKind.MQTTCLIENT->"mqttbridge"
-                    MetricKind.KAFKACLIENT->"kafkaclient"
-                    MetricKind.OPCUADEVICE->"opcua"
-                    MetricKind.ARCHIVEGROUP->"archive"
-                })
+                st.setString(1, kind.toDbString())
                 st.setString(2, identifier)
                 st.setTimestamp(3, Timestamp.from(fromTs))
                 if (toTs != null) {

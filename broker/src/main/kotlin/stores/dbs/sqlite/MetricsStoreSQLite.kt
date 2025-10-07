@@ -96,16 +96,7 @@ class MetricsStoreSQLite(
                 """.trimIndent()
                 val params = JsonArray()
                     .add(timestamp.toString())
-                    .add(
-                        when (kind) {
-                            MetricKind.BROKER -> "broker"
-                            MetricKind.SESSION -> "session"
-                            MetricKind.MQTTCLIENT -> "mqttbridge"
-                            MetricKind.KAFKACLIENT -> "kafkaclient"
-                            MetricKind.OPCUADEVICE -> "opcua"
-                            MetricKind.ARCHIVEGROUP -> "archive"
-                        }
-                    )
+                    .add(kind.toDbString())
                     .add(identifier)
                     .add(metricsJson.encode())
                 sqlClient.executeUpdate(insertSQL, params)
@@ -156,16 +147,7 @@ class MetricsStoreSQLite(
                 """.trimIndent()
             }
             val params = JsonArray()
-                .add(
-                    when (kind) {
-                        MetricKind.BROKER -> "broker"
-                        MetricKind.SESSION -> "session"
-                        MetricKind.MQTTCLIENT -> "mqttbridge"
-                        MetricKind.KAFKACLIENT -> "kafkaclient"
-                        MetricKind.OPCUADEVICE -> "opcua"
-                        MetricKind.ARCHIVEGROUP -> "archive"
-                    }
-                )
+                .add(kind.toDbString())
                 .add(identifier)
                 .add(fromTimestamp.toString())
             if (toTimestamp != null) params.add(toTimestamp.toString())
@@ -218,16 +200,7 @@ class MetricsStoreSQLite(
                 """.trimIndent()
             }
             val params = JsonArray()
-                .add(
-                    when (kind) {
-                        MetricKind.BROKER -> "broker"
-                        MetricKind.SESSION -> "session"
-                        MetricKind.MQTTCLIENT -> "mqttbridge"
-                        MetricKind.KAFKACLIENT -> "kafkaclient"
-                        MetricKind.OPCUADEVICE -> "opcua"
-                        MetricKind.ARCHIVEGROUP -> "archive"
-                    }
-                )
+                .add(kind.toDbString())
                 .add(identifier)
                 .add(fromTimestamp.toString())
             if (toTimestamp != null) params.add(toTimestamp.toString())
