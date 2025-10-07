@@ -159,6 +159,7 @@ data class BrokerMetrics(
     val opcUaClientOut: Double = 0.0,
     val kafkaClientIn: Double = 0.0,
     val kafkaClientOut: Double = 0.0,
+    val winCCOaClientIn: Double = 0.0,
     val timestamp: String
 )
 

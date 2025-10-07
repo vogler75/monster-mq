@@ -65,6 +65,10 @@ class WinCCOaClientManager {
                         isOnCurrentNode
                         createdAt
                         updatedAt
+                        metrics {
+                            messagesIn
+                            timestamp
+                        }
                         config {
                             graphqlEndpoint
                             websocketEndpoint
@@ -131,7 +135,7 @@ class WinCCOaClientManager {
         if (this.clients.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="no-data">
+                    <td colspan="8" class="no-data">
                         No WinCC OA Clients configured. Click "Add Bridge" to get started.
                     </td>
                 </tr>
@@ -145,6 +149,10 @@ class WinCCOaClientManager {
             const statusClass = client.enabled ? 'status-enabled' : 'status-disabled';
             const statusText = client.enabled ? 'Enabled' : 'Disabled';
             const nodeIndicator = client.isOnCurrentNode ? '📍 ' : '';
+
+            // Format metrics
+            const metrics = client.metrics && client.metrics.length > 0 ? client.metrics[0] : null;
+            const messagesIn = metrics ? Math.round(metrics.messagesIn) : '0';
 
             row.innerHTML = `
                 <td>
@@ -169,6 +177,11 @@ class WinCCOaClientManager {
                 <td>
                     <div class="address-count">
                         ${client.config.addresses.length} queries
+                    </div>
+                </td>
+                <td>
+                    <div class="metric-value" style="color: var(--monster-green); font-weight: 500;">
+                        ${messagesIn}
                     </div>
                 </td>
                 <td>

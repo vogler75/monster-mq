@@ -72,6 +72,8 @@ type BrokerMetrics {
     opcUaClientIn: Float!
     # Messages per second sent to OPC UA devices (writes)
     opcUaClientOut: Float!
+    # Messages per second received from WinCC OA clients (datapoint value changes)
+    winCCOaClientIn: Float!
     # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
     timestamp: String!
 }

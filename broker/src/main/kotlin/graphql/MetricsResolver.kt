@@ -668,6 +668,7 @@ class MetricsResolver(
                 opcUaClientOut = round2(bm.opcUaClientOut),
                 kafkaClientIn = round2(bm.kafkaClientIn),
                 kafkaClientOut = round2(bm.kafkaClientOut),
+                winCCOaClientIn = round2(bm.winCCOaClientIn),
                 timestamp = bm.timestamp
             )
         }
@@ -719,6 +720,7 @@ class MetricsResolver(
                             opcUaClientOut = 0.0,
                             kafkaClientIn = 0.0,
                             kafkaClientOut = 0.0,
+                            winCCOaClientIn = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         )
                     } catch (e: Exception) {

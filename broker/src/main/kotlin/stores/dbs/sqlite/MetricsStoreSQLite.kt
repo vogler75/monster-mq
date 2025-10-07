@@ -345,6 +345,7 @@ class MetricsStoreSQLite(
         .put("opcUaClientOut", m.opcUaClientOut)
         .put("kafkaClientIn", m.kafkaClientIn)
         .put("kafkaClientOut", m.kafkaClientOut)
+        .put("winCCOaClientIn", m.winCCOaClientIn)
         .put("timestamp", m.timestamp)
 
     private fun sessionMetricsToJson(m: SessionMetrics) = JsonObject()
@@ -388,6 +389,7 @@ class MetricsStoreSQLite(
         opcUaClientOut = 0.0,
         kafkaClientIn = 0.0,
         kafkaClientOut = 0.0,
+        winCCOaClientIn = 0.0,
         timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     ) else BrokerMetrics(
         messagesIn = j.getDouble("messagesIn", 0.0),
@@ -406,6 +408,7 @@ class MetricsStoreSQLite(
         opcUaClientOut = j.getDouble("opcUaClientOut", 0.0),
         kafkaClientIn = j.getDouble("kafkaClientIn", 0.0),
         kafkaClientOut = j.getDouble("kafkaClientOut", 0.0),
+        winCCOaClientIn = j.getDouble("winCCOaClientIn", 0.0),
         timestamp = j.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 

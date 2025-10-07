@@ -86,12 +86,13 @@ class MetricsHandler(
                              opcUaClientOut = opcUaClientOutTotal,
                              kafkaClientIn = kafkaInTotal,
                              kafkaClientOut = kafkaOutTotal,
+                             winCCOaClientIn = winCCOaClientInTotal,
                             timestamp = TimestampConverter.instantToIsoString(timestamp)
                         )
 
                         metricsStore.storeBrokerMetrics(timestamp, nodeId, brokerMetrics).onComplete { result ->
                             if (result.succeeded()) {
-                                    logger.fine("Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal kafkaIn=$kafkaInTotal kafkaOut=$kafkaOutTotal) for nodeId: $nodeId")
+                                    logger.fine("Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal kafkaIn=$kafkaInTotal winCCOaIn=$winCCOaClientInTotal) for nodeId: $nodeId")
                             } else {
                                 logger.warning("Error storing broker metrics: ${result.cause()?.message}")
                             }
@@ -286,6 +287,7 @@ class MetricsHandler(
                 if (listReply.succeeded()) {
                     val body = listReply.result().body()
                     val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
+                    logger.fine("WinCC OA metrics aggregation: found ${devices.size()} devices")
                     if (devices.isEmpty) {
                         winCCOaDone = true
                         tryAssembleAndStore()
@@ -299,6 +301,7 @@ class MetricsHandler(
                                     try {
                                         val m = mReply.result().body()
                                         val inRate = m.getDouble("messagesInRate", 0.0)
+                                        logger.fine("WinCC OA client '$deviceName' metrics: messagesInRate=$inRate")
                                         winCCOaClientInTotal += inRate
                                         // Store individual client metrics
                                         val winCCOaMetrics = at.rocworks.extensions.graphql.WinCCOaClientMetrics(
@@ -314,6 +317,7 @@ class MetricsHandler(
                                 }
                                 remaining -= 1
                                 if (remaining == 0) {
+                                    logger.fine("WinCC OA metrics collection complete. Final total: $winCCOaClientInTotal")
                                     winCCOaDone = true
                                     tryAssembleAndStore()
                                 }

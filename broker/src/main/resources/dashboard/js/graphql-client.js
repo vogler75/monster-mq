@@ -116,6 +116,7 @@ class GraphQLDashboardClient {
                         kafkaClientOut
                         opcUaClientIn
                         opcUaClientOut
+                        winCCOaClientIn
                         timestamp
                     }
                 }
@@ -149,6 +150,7 @@ class GraphQLDashboardClient {
                         kafkaClientOut
                         opcUaClientIn
                         opcUaClientOut
+                        winCCOaClientIn
                         timestamp
                     }
                     metricsHistory(lastMinutes: $lastMinutes, from: $from, to: $to) {
@@ -168,6 +170,7 @@ class GraphQLDashboardClient {
                         kafkaClientOut
                         opcUaClientIn
                         opcUaClientOut
+                        winCCOaClientIn
                         timestamp
                     }
                 }
