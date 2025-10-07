@@ -489,16 +489,28 @@ class DashboardManager {
 
         const overviewContainer = document.getElementById('cluster-overview');
         overviewContainer.innerHTML = `
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Messages In</span><div class="metric-icon">📥</div></div><div class="metric-value">${this.formatNumber(clusterTotals.messagesIn)}</div><div class="metric-label">Cluster Total</div></div>
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Messages Out</span><div class="metric-icon">📤</div></div><div class="metric-value">${this.formatNumber(clusterTotals.messagesOut)}</div><div class="metric-label">Cluster Total</div></div>
             <div class="metric-card"><div class="metric-header"><span class="metric-title">Active Sessions</span><div class="metric-icon">👥</div></div><div class="metric-value">${clusterTotals.totalSessions}</div><div class="metric-label">${brokers.length} Node${brokers.length !== 1 ? 's' : ''}</div></div>
             <div class="metric-card"><div class="metric-header"><span class="metric-title">Queued Messages</span><div class="metric-icon">⏳</div></div><div class="metric-value">${this.formatNumber(clusterTotals.queuedMessages)}</div><div class="metric-label">Pending Delivery</div></div>
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Bridge In</span><div class="metric-icon">🛬</div></div><div class="metric-value">${this.formatNumber(clusterTotals.mqttClientIn)}</div><div class="metric-label">External Bridges</div></div>
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">MQTT Bridge Out</span><div class="metric-icon">🛫</div></div><div class="metric-value">${this.formatNumber(clusterTotals.mqttClientOut)}</div><div class="metric-label">External Bridges</div></div>
-            <!-- Kafka Bridge Out removed (always zero) -->
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">OPC UA In</span><div class="metric-icon">⚙️</div></div><div class="metric-value">${this.formatNumber(clusterTotals.opcUaIn)}</div><div class="metric-label">Industrial Protocol</div></div>
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">OPC UA Out</span><div class="metric-icon">⚙️</div></div><div class="metric-value">${this.formatNumber(clusterTotals.opcUaOut)}</div><div class="metric-label">Industrial Protocol</div></div>
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">Kafka Bridge In</span><div class="metric-icon">📦</div></div><div class="metric-value">${this.formatNumber(clusterTotals.kafkaClientIn)}</div><div class="metric-label">Kafka</div></div>`;
+            <div class="metric-card">
+                <div class="metric-header"><span class="metric-title">MQTT Messages</span><div class="metric-icon">📨</div></div>
+                <div class="metric-value"><span style="color: #22C55E;">${this.formatNumber(clusterTotals.messagesIn)}</span> / <span style="color: #6366F1;">${this.formatNumber(clusterTotals.messagesOut)}</span></div>
+                <div class="metric-label">In / Out</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-header"><span class="metric-title">MQTT Bridge</span><div class="metric-icon">🌉</div></div>
+                <div class="metric-value"><span style="color: #0EA5E9;">${this.formatNumber(clusterTotals.mqttClientIn)}</span> / <span style="color: #F59E0B;">${this.formatNumber(clusterTotals.mqttClientOut)}</span></div>
+                <div class="metric-label">In / Out</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-header"><span class="metric-title">Kafka Bridge</span><div class="metric-icon">📦</div></div>
+                <div class="metric-value">${this.formatNumber(clusterTotals.kafkaClientIn)}</div>
+                <div class="metric-label">In</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-header"><span class="metric-title">OPC UA</span><div class="metric-icon">⚙️</div></div>
+                <div class="metric-value"><span style="color: #14B8A6;">${this.formatNumber(clusterTotals.opcUaIn)}</span> / <span style="color: #9333EA;">${this.formatNumber(clusterTotals.opcUaOut)}</span></div>
+                <div class="metric-label">In / Out</div>
+            </div>`;
     }
 
     updateBrokerTable(brokers) {
