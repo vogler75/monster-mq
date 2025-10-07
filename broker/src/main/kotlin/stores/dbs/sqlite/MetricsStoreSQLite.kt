@@ -100,7 +100,7 @@ class MetricsStoreSQLite(
                         when (kind) {
                             MetricKind.BROKER -> "broker"
                             MetricKind.SESSION -> "session"
-                            MetricKind.MQTTBRIDGE -> "mqttbridge"
+                            MetricKind.MQTTCLIENT -> "mqttbridge"
                             MetricKind.KAFKACLIENT -> "kafkaclient"
                             MetricKind.OPCUADEVICE -> "opcua"
                             MetricKind.ARCHIVEGROUP -> "archive"
@@ -125,7 +125,7 @@ class MetricsStoreSQLite(
         storeMetrics(MetricKind.SESSION, timestamp, clientId, sessionMetricsToJson(metrics))
 
     override fun storeMqttClientMetrics(timestamp: Instant, clientName: String, metrics: MqttClientMetrics): Future<Void> =
-        storeMetrics(MetricKind.MQTTBRIDGE, timestamp, clientName, mqttClientMetricsToJson(metrics))
+        storeMetrics(MetricKind.MQTTCLIENT, timestamp, clientName, mqttClientMetricsToJson(metrics))
 
     override fun storeKafkaClientMetrics(timestamp: Instant, clientName: String, metrics: KafkaClientMetrics): Future<Void> =
         storeMetrics(MetricKind.KAFKACLIENT, timestamp, clientName, kafkaClientMetricsToJson(metrics))
@@ -160,7 +160,7 @@ class MetricsStoreSQLite(
                     when (kind) {
                         MetricKind.BROKER -> "broker"
                         MetricKind.SESSION -> "session"
-                        MetricKind.MQTTBRIDGE -> "mqttbridge"
+                        MetricKind.MQTTCLIENT -> "mqttbridge"
                         MetricKind.KAFKACLIENT -> "kafkaclient"
                         MetricKind.OPCUADEVICE -> "opcua"
                         MetricKind.ARCHIVEGROUP -> "archive"
@@ -187,7 +187,7 @@ class MetricsStoreSQLite(
         getLatestMetrics(MetricKind.SESSION, clientId, from, to, lastMinutes).map { jsonToSessionMetrics(it) }
 
     override fun getMqttClientMetrics(clientName: String, from: Instant?, to: Instant?, lastMinutes: Int?): Future<MqttClientMetrics> =
-        getLatestMetrics(MetricKind.MQTTBRIDGE, clientName, from, to, lastMinutes).map { jsonToMqttClientMetrics(it) }
+        getLatestMetrics(MetricKind.MQTTCLIENT, clientName, from, to, lastMinutes).map { jsonToMqttClientMetrics(it) }
 
     override fun getKafkaClientMetrics(clientName: String, from: Instant?, to: Instant?, lastMinutes: Int?) =
         getLatestMetrics(MetricKind.KAFKACLIENT, clientName, from, to, lastMinutes).map { jsonToKafkaClientMetrics(it) }
@@ -222,7 +222,7 @@ class MetricsStoreSQLite(
                     when (kind) {
                         MetricKind.BROKER -> "broker"
                         MetricKind.SESSION -> "session"
-                        MetricKind.MQTTBRIDGE -> "mqttbridge"
+                        MetricKind.MQTTCLIENT -> "mqttbridge"
                         MetricKind.KAFKACLIENT -> "kafkaclient"
                         MetricKind.OPCUADEVICE -> "opcua"
                         MetricKind.ARCHIVEGROUP -> "archive"
@@ -277,7 +277,7 @@ class MetricsStoreSQLite(
         lastMinutes: Int?,
         limit: Int
     ): Future<List<Pair<Instant, MqttClientMetrics>>> =
-        getMetricsHistory(MetricKind.MQTTBRIDGE, clientName, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToMqttClientMetrics(it.second) } }
+        getMetricsHistory(MetricKind.MQTTCLIENT, clientName, from, to, lastMinutes, limit).map { list -> list.map { it.first to jsonToMqttClientMetrics(it.second) } }
 
     override fun getKafkaClientMetricsHistory(
         clientName: String,
@@ -359,8 +359,8 @@ class MetricsStoreSQLite(
         .put("mqttClientOut", m.mqttClientOut)
         .put("opcUaIn", m.opcUaIn)
         .put("opcUaOut", m.opcUaOut)
-        .put("kafkaBridgeIn", m.kafkaBridgeIn)
-        .put("kafkaBridgeOut", m.kafkaBridgeOut)
+        .put("kafkaClientIn", m.kafkaClientIn)
+        .put("kafkaClientOut", m.kafkaClientOut)
         .put("timestamp", m.timestamp)
 
     private fun sessionMetricsToJson(m: SessionMetrics) = JsonObject()
@@ -398,8 +398,8 @@ class MetricsStoreSQLite(
         mqttClientOut = 0.0,
         opcUaIn = 0.0,
         opcUaOut = 0.0,
-        kafkaBridgeIn = 0.0,
-        kafkaBridgeOut = 0.0,
+        kafkaClientIn = 0.0,
+        kafkaClientOut = 0.0,
         timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     ) else BrokerMetrics(
         messagesIn = j.getDouble("messagesIn", 0.0),
@@ -416,8 +416,8 @@ class MetricsStoreSQLite(
         mqttClientOut = j.getDouble("mqttClientOut", 0.0),
         opcUaIn = j.getDouble("opcUaIn", 0.0),
         opcUaOut = j.getDouble("opcUaOut", 0.0),
-        kafkaBridgeIn = j.getDouble("kafkaBridgeIn", 0.0),
-        kafkaBridgeOut = j.getDouble("kafkaBridgeOut", 0.0),
+        kafkaClientIn = j.getDouble("kafkaClientIn", 0.0),
+        kafkaClientOut = j.getDouble("kafkaClientOut", 0.0),
         timestamp = j.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 

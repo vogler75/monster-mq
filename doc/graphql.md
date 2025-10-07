@@ -61,7 +61,7 @@ Semantics:
 - Live fallback: If no persisted sample exists, resolver fetches a live point via the Vert.x event bus for immediate visibility.
 - History requires a configured metrics store; otherwise only a single current sample is returned.
 
-(Planned) Aggregate broker-level sums will surface as `kafkaBridgeIn` / `kafkaBridgeOut` fields in Broker metrics once implemented; for now derive aggregates client-side.
+(Planned) Aggregate broker-level sums will surface as `kafkaClientIn` / `kafkaClientOut` fields in Broker metrics once implemented; for now derive aggregates client-side.
 
 
 The top-level `Query` type exposes the following fields (`broker/src/main/resources/schema.graphqls:141-356`):

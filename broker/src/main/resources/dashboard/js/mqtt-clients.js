@@ -103,7 +103,7 @@ class MqttClientManager {
 
         } catch (error) {
             console.error('Error loading clients:', error);
-            this.showError('Failed to load MQTT bridges: ' + error.message);
+            this.showError('Failed to load MQTT Clients: ' + error.message);
         } finally {
             this.showLoading(false);
         }
@@ -131,7 +131,7 @@ class MqttClientManager {
             tbody.innerHTML = `
                 <tr>
                     <td colspan="9" class="no-data">
-                        No MQTT bridges configured. Click \"Add Bridge\" to get started.
+                        No MQTT Clients configured. Click \"Add Bridge\" to get started.
                     </td>
                 </tr>
             `;

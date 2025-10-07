@@ -65,8 +65,8 @@ class MetricsResolver(
                             mqttClientOut = 0.0,
                             opcUaIn = 0.0,
                             opcUaOut = 0.0,
-                            kafkaBridgeIn = 0.0,
-                            kafkaBridgeOut = 0.0,
+                            kafkaClientIn = 0.0,
+                            kafkaClientOut = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                             )
                         } catch (e: Exception) {
@@ -124,8 +124,8 @@ class MetricsResolver(
                                     mqttClientOut = 0.0,
                                     opcUaIn = 0.0,
                                     opcUaOut = 0.0,
-                                    kafkaBridgeIn = 0.0,
-                                    kafkaBridgeOut = 0.0,
+                                    kafkaClientIn = 0.0,
+                                    kafkaClientOut = 0.0,
                                     timestamp = TimestampConverter.currentTimeIsoString()
                                 )
                             } catch (e: Exception) {
@@ -539,8 +539,8 @@ class MetricsResolver(
                                 mqttClientOut = round2(bm.mqttClientOut),
                                 opcUaIn = round2(bm.opcUaIn),
                                 opcUaOut = round2(bm.opcUaOut),
-                                kafkaBridgeIn = round2(bm.kafkaBridgeIn),
-                                kafkaBridgeOut = round2(bm.kafkaBridgeOut),
+                                kafkaClientIn = round2(bm.kafkaClientIn),
+                                kafkaClientOut = round2(bm.kafkaClientOut),
                                 timestamp = bm.timestamp
                             )
                         })
@@ -666,8 +666,8 @@ class MetricsResolver(
                 mqttClientOut = round2(bm.mqttClientOut),
                 opcUaIn = round2(bm.opcUaIn),
                 opcUaOut = round2(bm.opcUaOut),
-                kafkaBridgeIn = round2(bm.kafkaBridgeIn),
-                kafkaBridgeOut = round2(bm.kafkaBridgeOut),
+                kafkaClientIn = round2(bm.kafkaClientIn),
+                kafkaClientOut = round2(bm.kafkaClientOut),
                 timestamp = bm.timestamp
             )
         }
@@ -717,8 +717,8 @@ class MetricsResolver(
                             mqttClientOut = 0.0,
                             opcUaIn = 0.0,
                             opcUaOut = 0.0,
-                            kafkaBridgeIn = 0.0,
-                            kafkaBridgeOut = 0.0,
+                            kafkaClientIn = 0.0,
+                            kafkaClientOut = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         )
                     } catch (e: Exception) {
@@ -745,8 +745,8 @@ callback(BrokerMetrics(
                             mqttClientOut = 0.0,
                             opcUaIn = 0.0,
                             opcUaOut = 0.0,
-                            kafkaBridgeIn = 0.0,
-                            kafkaBridgeOut = 0.0,
+                            kafkaClientIn = 0.0,
+                            kafkaClientOut = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         ))
                     }
