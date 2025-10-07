@@ -10,6 +10,7 @@ A MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data sto
 - **Message Archiving** - Persistent storage with configurable retention policies
 - **Rate Limiting** - Configurable publish/subscribe rate protection against client overload
 - **OPC UA Server** - Industrial protocol server with MQTT bridge and real-time subscriptions
+- **WinCC OA Client** - High-performance bulk message transfer from Siemens WinCC OA SCADA systems
 - **GraphQL API** - Real-time data access and management interface
 - **MCP Server** - AI model integration through Model Context Protocol
 - **User Authentication** - BCrypt-secured user management with ACL rules
@@ -102,11 +103,16 @@ MCP:
 └─────────────────┘    │ │ Manager  │ │    └─────────────────┘
                        │ └──────────┘ │
 ┌─────────────────┐    │              │    ┌─────────────────┐
-│   AI Models     │◀───┤ ┌──────────┐ │    │   GraphQL API   │
-│ • MCP Server    │    │ │ GraphQL  │ │───▶│ • Real-time     │
-│ • Analytics     │    │ │   API    │ │    │ • Management    │
+│ WinCC OA SCADA  │───▶│ ┌──────────┐ │    │   GraphQL API   │
+│ • SQL Queries   │    │ │ GraphQL  │ │───▶│ • Real-time     │
+│ • Bulk Transfer │    │ │   API    │ │    │ • Management    │
 └─────────────────┘    │ └──────────┘ │    └─────────────────┘
-                       └──────────────┘
+                       │              │
+┌─────────────────┐    │              │
+│   AI Models     │◀───┤              │
+│ • MCP Server    │    │              │
+│ • Analytics     │    │              │
+└─────────────────┘    └──────────────┘
 ```
 
 ## 📚 Documentation
@@ -121,6 +127,7 @@ For detailed documentation, see the [`doc/`](doc/) directory:
 - **[User Management & ACL](doc/users.md)** - Authentication and authorization system
 - **[Access Control Lists (ACL)](doc/acl.md)** - Comprehensive ACL documentation and examples
 - **[OPC UA Integration](doc/opcua.md)** - Industrial protocol support and certificates
+- **[WinCC OA Integration](doc/winccoa.md)** - Siemens WinCC OA SCADA system integration
 - **[GraphQL API](doc/graphql.md)** - Real-time data access and management
 - **[MCP Server](doc/mcp.md)** - AI model integration and analytics
 - **[Kafka Integration](doc/kafka.md)** - Stream processing and event sourcing
@@ -238,6 +245,26 @@ curl -X POST http://localhost:4000/graphql \
   -H "Content-Type: application/json" \
   -d '{"query": "mutation { publish(input: {topic: \"sensors/temp1\", payload: \"25.0\", qos: 0}) { success } }"}'
 ```
+
+## 🏭 WinCC OA Integration
+
+**High-Performance SCADA Data Transfer**
+
+MonsterMQ includes a native WinCC OA client that efficiently transfers data from Siemens WinCC OA SCADA systems to MQTT.
+
+### 🤨 Why not use WinCC OA's built-in MQTT capabilities?
+
+Because the MQTT protocol doesn't support bulk messages, it's not efficient for transferring a large number of topic value changes. MonsterMQ's WinCC OA client leverages WinCC OA's powerful **continuous SQL queries** (`dpQueryConnectSingle`), making it possible to subscribe to **5 million tags with just a single SQL query**.
+
+### Key Benefits
+
+- **Massive Scale** - Subscribe to millions of datapoints with minimal configuration
+- **Efficient Bulk Transfer** - Process high-volume tag changes without MQTT per-message overhead
+- **Real-time Streaming** - GraphQL subscription-based updates via WebSocket
+- **Flexible Topic Mapping** - Transform WinCC OA datapoint names to MQTT topic hierarchies
+- **Multiple Formats** - Publish as JSON (ISO/epoch) or raw values
+
+See the [WinCC OA Integration documentation](doc/winccoa.md) for detailed configuration and setup instructions.
 
 ## 📋 Requirements
 
