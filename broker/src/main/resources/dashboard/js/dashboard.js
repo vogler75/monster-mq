@@ -131,7 +131,7 @@ class DashboardManager {
                         fill: true
                     },
                     {   // 4
-                        label: 'Kafka Bridge In',
+                        label: 'Kafka Clients In',
                         data: [],
                         borderColor: '#EF4444',
                         backgroundColor: 'rgba(239, 68, 68, 0.12)',
@@ -139,7 +139,7 @@ class DashboardManager {
                         fill: true
                     },
                     {   // 5
-                        label: 'OPC UA In',
+                        label: 'OPC UA Clients In',
                         data: [],
                         borderColor: '#14B8A6',
                         backgroundColor: 'rgba(20, 184, 166, 0.12)',
@@ -147,7 +147,7 @@ class DashboardManager {
                         fill: true
                     },
                     {   // 6
-                        label: 'OPC UA Out',
+                        label: 'OPC UA Clients Out',
                         data: [],
                         borderColor: '#9333EA',
                         backgroundColor: 'rgba(147, 51, 234, 0.12)',
@@ -353,7 +353,7 @@ class DashboardManager {
                     messageBusIn: 0, messageBusOut: 0,
                     mqttClientIn: 0, mqttClientOut: 0,
                     kafkaClientIn: 0,
-                    opcUaIn: 0, opcUaOut: 0
+                    opcUaClientIn: 0, opcUaClientOut: 0
                 };
             }
             aggregatedData[timeKey].messagesIn += point.messagesIn || 0;
@@ -364,8 +364,8 @@ class DashboardManager {
             aggregatedData[timeKey].mqttClientOut += point.mqttClientOut || 0;
             aggregatedData[timeKey].kafkaClientIn += point.kafkaClientIn || 0;
             // Removed kafkaClientOut (always zero / unused)
-            aggregatedData[timeKey].opcUaIn += point.opcUaIn || 0;
-            aggregatedData[timeKey].opcUaOut += point.opcUaOut || 0;
+            aggregatedData[timeKey].opcUaClientIn += point.opcUaClientIn || 0;
+            aggregatedData[timeKey].opcUaClientOut += point.opcUaClientOut || 0;
         });
 
         // Preserve chronological order by iterating sorted allHistoricalData sequence
@@ -380,8 +380,8 @@ class DashboardManager {
             this.trafficChart.data.datasets[2].data.push(data.mqttClientIn);
             this.trafficChart.data.datasets[3].data.push(data.mqttClientOut);
             this.trafficChart.data.datasets[4].data.push(data.kafkaClientIn);
-            this.trafficChart.data.datasets[5].data.push(data.opcUaIn);
-            this.trafficChart.data.datasets[6].data.push(data.opcUaOut);
+            this.trafficChart.data.datasets[5].data.push(data.opcUaClientIn);
+            this.trafficChart.data.datasets[6].data.push(data.opcUaClientOut);
         });
 
         console.debug('Traffic history loaded', {
@@ -419,10 +419,10 @@ class DashboardManager {
                 mqttClientOut: acc.mqttClientOut + (metrics.mqttClientOut || 0),
                 kafkaClientIn: acc.kafkaClientIn + (metrics.kafkaClientIn || 0),
                 // kafkaClientOut removed
-                opcUaIn: acc.opcUaIn + (metrics.opcUaIn || 0),
-                opcUaOut: acc.opcUaOut + (metrics.opcUaOut || 0)
+                opcUaClientIn: acc.opcUaClientIn + (metrics.opcUaClientIn || 0),
+                opcUaClientOut: acc.opcUaClientOut + (metrics.opcUaClientOut || 0)
             };
-        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttClientIn: 0, mqttClientOut: 0, kafkaClientIn: 0, opcUaIn: 0, opcUaOut: 0 });
+        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttClientIn: 0, mqttClientOut: 0, kafkaClientIn: 0, opcUaClientIn: 0, opcUaClientOut: 0 });
 
         if (this.trafficChart.data.labels.length >= this.maxDataPoints) {
             this.trafficChart.data.labels.shift();
@@ -438,8 +438,8 @@ class DashboardManager {
         this.trafficChart.data.datasets[3].data.push(clusterTotals.mqttClientOut);
         this.trafficChart.data.datasets[4].data.push(clusterTotals.kafkaClientIn);
         // Removed kafkaClientOut dataset push
-        this.trafficChart.data.datasets[5].data.push(clusterTotals.opcUaIn);
-        this.trafficChart.data.datasets[6].data.push(clusterTotals.opcUaOut);
+        this.trafficChart.data.datasets[5].data.push(clusterTotals.opcUaClientIn);
+        this.trafficChart.data.datasets[6].data.push(clusterTotals.opcUaClientOut);
         this.trafficChart.update('none');
 
         this.messageBusChart.data.labels = brokers.map(b => b.nodeId);
@@ -476,15 +476,15 @@ class DashboardManager {
                 mqttClientOut: acc.mqttClientOut + (metrics.mqttClientOut || 0),
                 kafkaClientIn: acc.kafkaClientIn + (metrics.kafkaClientIn || 0),
                 // kafkaClientOut removed
-                opcUaIn: acc.opcUaIn + (metrics.opcUaIn || 0),
-                opcUaOut: acc.opcUaOut + (metrics.opcUaOut || 0)
+                opcUaClientIn: acc.opcUaClientIn + (metrics.opcUaClientIn || 0),
+                opcUaClientOut: acc.opcUaClientOut + (metrics.opcUaClientOut || 0)
             };
         }, {
             messagesIn: 0, messagesOut: 0, totalSessions: 0, queuedMessages: 0,
             messageBusIn: 0, messageBusOut: 0,
             mqttClientIn: 0, mqttClientOut: 0,
             kafkaClientIn: 0, // kafkaClientOut removed
-            opcUaIn: 0, opcUaOut: 0
+            opcUaClientIn: 0, opcUaClientOut: 0
         });
 
         const overviewContainer = document.getElementById('cluster-overview');
@@ -497,18 +497,18 @@ class DashboardManager {
                 <div class="metric-label">In / Out</div>
             </div>
             <div class="metric-card">
-                <div class="metric-header"><span class="metric-title">MQTT Bridge</span><div class="metric-icon">🌉</div></div>
+                <div class="metric-header"><span class="metric-title">MQTT Bridges</span><div class="metric-icon">🌉</div></div>
                 <div class="metric-value"><span style="color: #0EA5E9;">${this.formatNumber(clusterTotals.mqttClientIn)}</span> / <span style="color: #F59E0B;">${this.formatNumber(clusterTotals.mqttClientOut)}</span></div>
                 <div class="metric-label">In / Out</div>
             </div>
             <div class="metric-card">
-                <div class="metric-header"><span class="metric-title">Kafka Bridge</span><div class="metric-icon">📦</div></div>
+                <div class="metric-header"><span class="metric-title">Kafka Bridges</span><div class="metric-icon">📦</div></div>
                 <div class="metric-value">${this.formatNumber(clusterTotals.kafkaClientIn)}</div>
                 <div class="metric-label">In</div>
             </div>
             <div class="metric-card">
-                <div class="metric-header"><span class="metric-title">OPC UA</span><div class="metric-icon">⚙️</div></div>
-                <div class="metric-value"><span style="color: #14B8A6;">${this.formatNumber(clusterTotals.opcUaIn)}</span> / <span style="color: #9333EA;">${this.formatNumber(clusterTotals.opcUaOut)}</span></div>
+                <div class="metric-header"><span class="metric-title">OPC UA Clients</span><div class="metric-icon">⚙️</div></div>
+                <div class="metric-value"><span style="color: #14B8A6;">${this.formatNumber(clusterTotals.opcUaClientIn)}</span> / <span style="color: #9333EA;">${this.formatNumber(clusterTotals.opcUaClientOut)}</span></div>
                 <div class="metric-label">In / Out</div>
             </div>`;
     }

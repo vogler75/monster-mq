@@ -53,8 +53,8 @@ class MetricsHandler(
             var nodeMetrics: JsonObject? = null
             var bridgeInTotal = 0.0
             var bridgeOutTotal = 0.0
-            var opcUaInTotal = 0.0
-            var opcUaOutTotal = 0.0
+            var opcUaClientInTotal = 0.0
+            var opcUaClientOutTotal = 0.0
             var kafkaInTotal = 0.0
             var kafkaOutTotal = 0.0
             var brokerDone = false
@@ -80,8 +80,8 @@ class MetricsHandler(
                             messageBusOut = nm.getDouble("messageBusOutRate", 0.0),
                             mqttClientIn = bridgeInTotal,
                              mqttClientOut = bridgeOutTotal,
-                             opcUaIn = opcUaInTotal,
-                             opcUaOut = opcUaOutTotal,
+                             opcUaClientIn = opcUaClientInTotal,
+                             opcUaClientOut = opcUaClientOutTotal,
                              kafkaClientIn = kafkaInTotal,
                              kafkaClientOut = kafkaOutTotal,
                             timestamp = TimestampConverter.instantToIsoString(timestamp)
@@ -200,8 +200,8 @@ class MetricsHandler(
                                          val m = mReply.result().body()
                                          val inRate = m.getDouble("messagesInRate", 0.0)
                                          val outRate = m.getDouble("messagesOutRate", 0.0)
-                                         opcUaInTotal += inRate
-                                         opcUaOutTotal += outRate
+                                         opcUaClientInTotal += inRate
+                                         opcUaClientOutTotal += outRate
                                          // Store individual OPC UA device metrics
                                          val opcUaMetricsJson = JsonObject()
                                              .put("messagesIn", inRate)
@@ -353,8 +353,8 @@ class MetricsHandler(
                             messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
                             mqttClientIn = 0.0,
                             mqttClientOut = 0.0,
-                            opcUaIn = 0.0,
-                            opcUaOut = 0.0,
+                            opcUaClientIn = 0.0,
+                            opcUaClientOut = 0.0,
                             kafkaClientIn = 0.0,
                             kafkaClientOut = 0.0,
                             timestamp = TimestampConverter.instantToIsoString(timestamp)

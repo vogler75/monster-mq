@@ -303,8 +303,8 @@ class MetricsStorePostgres(
         .put("messageBusOut", m.messageBusOut)
         .put("mqttClientIn", m.mqttClientIn)
         .put("mqttClientOut", m.mqttClientOut)
-        .put("opcUaIn", m.opcUaIn)
-        .put("opcUaOut", m.opcUaOut)
+        .put("opcUaClientIn", m.opcUaClientIn)
+        .put("opcUaClientOut", m.opcUaClientOut)
         .put("kafkaClientIn", m.kafkaClientIn)
         .put("kafkaClientOut", m.kafkaClientOut)
         .put("timestamp", m.timestamp)
@@ -327,8 +327,8 @@ class MetricsStorePostgres(
         messageBusOut = 0.0,
         mqttClientIn = 0.0,
         mqttClientOut = 0.0,
-        opcUaIn = 0.0,
-        opcUaOut = 0.0,
+        opcUaClientIn = 0.0,
+        opcUaClientOut = 0.0,
         kafkaClientIn = 0.0,
         kafkaClientOut = 0.0,
         timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
@@ -345,8 +345,8 @@ class MetricsStorePostgres(
         messageBusOut = j.getDouble("messageBusOut",0.0),
         mqttClientIn = j.getDouble("mqttClientIn",0.0),
         mqttClientOut = j.getDouble("mqttClientOut",0.0),
-        opcUaIn = j.getDouble("opcUaIn",0.0),
-        opcUaOut = j.getDouble("opcUaOut",0.0),
+        opcUaClientIn = j.getDouble("opcUaClientIn",0.0),
+        opcUaClientOut = j.getDouble("opcUaClientOut",0.0),
         kafkaClientIn = j.getDouble("kafkaClientIn",0.0),
         kafkaClientOut = j.getDouble("kafkaClientOut",0.0),
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()

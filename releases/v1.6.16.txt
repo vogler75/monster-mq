@@ -9,7 +9,7 @@ Changes since v1.6.15:
 4019cd5 Update metric titles in dashboard overview
 4fd10d1 Add OPC UA metrics to dashboard and GraphQL client
 b361491 Embed OPC UA device metrics as fields on OpcUaDevice
-cf3c585 feat(opcua-metrics): add OPC UA device metrics collection, storage, and GraphQL queries; enhance broker metrics with opcUaIn/opcUaOut
+cf3c585 feat(opcua-metrics): add OPC UA device metrics collection, storage, and GraphQL queries; enhance broker metrics with opcUaClientIn/opcUaClientOut
 b46a476 Add MQTT bridge metrics and update dashboard terminology
 b8c7ad0 Add MQTT bridge client metrics collection and GraphQL API
 9c1d1c7 Add generic JSON metrics API to IMetricsStore

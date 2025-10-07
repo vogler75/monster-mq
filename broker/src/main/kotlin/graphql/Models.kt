@@ -155,8 +155,8 @@ data class BrokerMetrics(
     val messageBusOut: Double,
     val mqttClientIn: Double = 0.0,
     val mqttClientOut: Double = 0.0,
-    val opcUaIn: Double = 0.0,
-    val opcUaOut: Double = 0.0,
+    val opcUaClientIn: Double = 0.0,
+    val opcUaClientOut: Double = 0.0,
     val kafkaClientIn: Double = 0.0,
     val kafkaClientOut: Double = 0.0,
     val timestamp: String

@@ -114,8 +114,8 @@ class GraphQLDashboardClient {
                         mqttClientOut
                         kafkaClientIn
                         kafkaClientOut
-                        opcUaIn
-                        opcUaOut
+                        opcUaClientIn
+                        opcUaClientOut
                         timestamp
                     }
                 }
@@ -147,8 +147,8 @@ class GraphQLDashboardClient {
                         mqttClientOut
                         kafkaClientIn
                         kafkaClientOut
-                        opcUaIn
-                        opcUaOut
+                        opcUaClientIn
+                        opcUaClientOut
                         timestamp
                     }
                     metricsHistory(lastMinutes: $lastMinutes, from: $from, to: $to) {
@@ -166,8 +166,8 @@ class GraphQLDashboardClient {
                         mqttClientOut
                         kafkaClientIn
                         kafkaClientOut
-                        opcUaIn
-                        opcUaOut
+                        opcUaClientIn
+                        opcUaClientOut
                         timestamp
                     }
                 }
