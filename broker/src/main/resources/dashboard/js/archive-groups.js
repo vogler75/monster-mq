@@ -225,21 +225,23 @@ class ArchiveGroupsManager {
         try {
             console.log(`${enable ? 'Enabling' : 'Disabling'} archive group:`, name);
 
-            const mutation = enable ? 'enableArchiveGroup' : 'disableArchiveGroup';
+            const methodName = enable ? 'enable' : 'disable';
             const result = await window.graphqlClient.query(`
                 mutation ${enable ? 'EnableArchiveGroup' : 'DisableArchiveGroup'}($name: String!) {
-                    ${mutation}(name: $name) {
-                        success
-                        message
+                    archiveGroup {
+                        ${methodName}(name: $name) {
+                            success
+                            message
+                        }
                     }
                 }
             `, { name });
 
-            if (result[mutation].success) {
+            if (result.archiveGroup[methodName].success) {
                 console.log(`Archive group ${enable ? 'enabled' : 'disabled'} successfully`);
                 await this.loadArchiveGroups(); // Reload to update UI
             } else {
-                this.showError(result[mutation].message || `Failed to ${enable ? 'enable' : 'disable'} archive group`);
+                this.showError(result.archiveGroup[methodName].message || `Failed to ${enable ? 'enable' : 'disable'} archive group`);
             }
         } catch (error) {
             console.error(`Error ${enable ? 'enabling' : 'disabling'} archive group:`, error);
@@ -257,18 +259,20 @@ class ArchiveGroupsManager {
 
             const result = await window.graphqlClient.query(`
                 mutation DeleteArchiveGroup($name: String!) {
-                    deleteArchiveGroup(name: $name) {
-                        success
-                        message
+                    archiveGroup {
+                        delete(name: $name) {
+                            success
+                            message
+                        }
                     }
                 }
             `, { name });
 
-            if (result.deleteArchiveGroup.success) {
+            if (result.archiveGroup.delete.success) {
                 console.log('Archive group deleted successfully');
                 await this.loadArchiveGroups(); // Reload to update UI
             } else {
-                this.showError(result.deleteArchiveGroup.message || 'Failed to delete archive group');
+                this.showError(result.archiveGroup.delete.message || 'Failed to delete archive group');
             }
         } catch (error) {
             console.error('Error deleting archive group:', error);
@@ -391,36 +395,40 @@ class ArchiveGroupsManager {
 
                 result = await window.graphqlClient.query(`
                     mutation UpdateArchiveGroup($input: UpdateArchiveGroupInput!) {
-                        updateArchiveGroup(input: $input) {
-                            success
-                            message
+                        archiveGroup {
+                            update(input: $input) {
+                                success
+                                message
+                            }
                         }
                     }
                 `, { input: updateInput });
 
-                if (result.updateArchiveGroup.success) {
+                if (result.archiveGroup.update.success) {
                     console.log('Archive group updated successfully');
                     this.closeModal();
                     await this.loadArchiveGroups();
                 } else {
-                    this.showError(result.updateArchiveGroup.message || 'Failed to update archive group');
+                    this.showError(result.archiveGroup.update.message || 'Failed to update archive group');
                 }
             } else {
                 result = await window.graphqlClient.query(`
                     mutation CreateArchiveGroup($input: CreateArchiveGroupInput!) {
-                        createArchiveGroup(input: $input) {
-                            success
-                            message
+                        archiveGroup {
+                            create(input: $input) {
+                                success
+                                message
+                            }
                         }
                     }
                 `, { input });
 
-                if (result.createArchiveGroup.success) {
+                if (result.archiveGroup.create.success) {
                     console.log('Archive group created successfully');
                     this.closeModal();
                     await this.loadArchiveGroups();
                 } else {
-                    this.showError(result.createArchiveGroup.message || 'Failed to create archive group');
+                    this.showError(result.archiveGroup.create.message || 'Failed to create archive group');
                 }
             }
         } catch (error) {
@@ -487,90 +495,100 @@ if (window.graphqlClient) {
     window.graphqlClient.createArchiveGroup = async function(input) {
         const mutation = `
             mutation CreateArchiveGroup($input: CreateArchiveGroupInput!) {
-                createArchiveGroup(input: $input) {
-                    success
-                    message
-                    archiveGroup {
-                        name
-                        enabled
-                        deployed
+                archiveGroup {
+                    create(input: $input) {
+                        success
+                        message
+                        archiveGroup {
+                            name
+                            enabled
+                            deployed
+                        }
                     }
                 }
             }
         `;
 
         const result = await this.query(mutation, { input });
-        return result.createArchiveGroup;
+        return result.archiveGroup.create;
     };
 
     window.graphqlClient.updateArchiveGroup = async function(input) {
         const mutation = `
             mutation UpdateArchiveGroup($input: UpdateArchiveGroupInput!) {
-                updateArchiveGroup(input: $input) {
-                    success
-                    message
-                    archiveGroup {
-                        name
-                        enabled
-                        deployed
+                archiveGroup {
+                    update(input: $input) {
+                        success
+                        message
+                        archiveGroup {
+                            name
+                            enabled
+                            deployed
+                        }
                     }
                 }
             }
         `;
 
         const result = await this.query(mutation, { input });
-        return result.updateArchiveGroup;
+        return result.archiveGroup.update;
     };
 
     window.graphqlClient.deleteArchiveGroup = async function(name) {
         const mutation = `
             mutation DeleteArchiveGroup($name: String!) {
-                deleteArchiveGroup(name: $name) {
-                    success
-                    message
+                archiveGroup {
+                    delete(name: $name) {
+                        success
+                        message
+                    }
                 }
             }
         `;
 
         const result = await this.query(mutation, { name });
-        return result.deleteArchiveGroup;
+        return result.archiveGroup.delete;
     };
 
     window.graphqlClient.enableArchiveGroup = async function(name) {
         const mutation = `
             mutation EnableArchiveGroup($name: String!) {
-                enableArchiveGroup(name: $name) {
-                    success
-                    message
-                    archiveGroup {
-                        name
-                        enabled
-                        deployed
+                archiveGroup {
+                    enable(name: $name) {
+                        success
+                        message
+                        archiveGroup {
+                            name
+                            enabled
+                            deployed
+                        }
                     }
                 }
             }
         `;
 
         const result = await this.query(mutation, { name });
-        return result.enableArchiveGroup;
+        return result.archiveGroup.enable;
     };
 
     window.graphqlClient.disableArchiveGroup = async function(name) {
         const mutation = `
             mutation DisableArchiveGroup($name: String!) {
-                disableArchiveGroup(name: $name) {
-                    success
-                    message
-                    archiveGroup {
-                        name
-                        enabled
-                        deployed
+                archiveGroup {
+                    disable(name: $name) {
+                        success
+                        message
+                        archiveGroup {
+                            name
+                            enabled
+                            deployed
+                        }
                     }
                 }
             }
         `;
 
         const result = await this.query(mutation, { name });
-        return result.disableArchiveGroup;
+        return result.archiveGroup.disable;
     };
 }

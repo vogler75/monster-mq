@@ -375,14 +375,11 @@ class GraphQLServer(
                     .dataFetcher("deleteAclRule", userManagementResolver.deleteAclRule())
                     // Queued messages management (requires admin token)
                     .dataFetcher("purgeQueuedMessages", mutationResolver.purgeQueuedMessages())
-                    // ArchiveGroup mutations
+                    // Archive Group mutations - grouped under archiveGroup
                     .apply {
-                        archiveGroupResolver?.let { resolver ->
-                            dataFetcher("createArchiveGroup", resolver.createArchiveGroup())
-                            dataFetcher("updateArchiveGroup", resolver.updateArchiveGroup())
-                            dataFetcher("deleteArchiveGroup", resolver.deleteArchiveGroup())
-                            dataFetcher("enableArchiveGroup", resolver.enableArchiveGroup())
-                            dataFetcher("disableArchiveGroup", resolver.disableArchiveGroup())
+                        archiveGroupResolver?.let { _ ->
+                            // Return an empty object - actual resolvers are on ArchiveGroupMutations type
+                            dataFetcher("archiveGroup") { _ -> emptyMap<String, Any>() }
                         }
                     }
                     // OPC UA Device mutations - grouped under opcUaDevice
@@ -516,6 +513,18 @@ class GraphQLServer(
                         dataFetcher("removeAddress", resolver.removeOpcUaServerAddress())
                         dataFetcher("trustCertificates", resolver.trustOpcUaServerCertificates())
                         dataFetcher("deleteCertificates", resolver.deleteOpcUaServerCertificates())
+                    }
+                }
+            }
+            // Register Archive Group Mutations type
+            .type("ArchiveGroupMutations") { builder ->
+                builder.apply {
+                    archiveGroupResolver?.let { resolver ->
+                        dataFetcher("create", resolver.createArchiveGroup())
+                        dataFetcher("update", resolver.updateArchiveGroup())
+                        dataFetcher("delete", resolver.deleteArchiveGroup())
+                        dataFetcher("enable", resolver.enableArchiveGroup())
+                        dataFetcher("disable", resolver.disableArchiveGroup())
                     }
                 }
             }

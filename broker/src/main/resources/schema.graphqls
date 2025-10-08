@@ -428,19 +428,20 @@ type Mutation {
         # Client ID to purge messages for (optional - if omitted, purges all clients)
         clientId: String
     ): PurgeResult!
+}
 
-    # Create a new ArchiveGroup for organizing topic data storage
-    # Defines which topics are stored, which databases to use, and retention policies
-    # The group becomes active immediately and starts archiving matching topics
-    createArchiveGroup(
-        # ArchiveGroup configuration including topic filters and storage settings
+# Archive Group Mutations - Grouped operations for archive group management
+type ArchiveGroupMutations {
+    # Create a new ArchiveGroup to archive MQTT topics
+    # ArchiveGroup configuration including topic filters and storage settings
+    create(
         input: CreateArchiveGroupInput!
     ): ArchiveGroupResult!
 
     # Update an existing ArchiveGroup's configuration
     # Changes to topic filters take effect immediately
     # Database changes may require redeployment of the archive handlers
-    updateArchiveGroup(
+    update(
         # Updated ArchiveGroup settings (name required, other fields optional)
         input: UpdateArchiveGroupInput!
     ): ArchiveGroupResult!
@@ -448,7 +449,7 @@ type Mutation {
     # Permanently delete an ArchiveGroup and stop archiving its topics
     # Existing archived data is preserved but no new data will be stored
     # Cannot delete the "Default" ArchiveGroup as it's required by the system
-    deleteArchiveGroup(
+    delete(
         # Name of the ArchiveGroup to delete
         name: String!
     ): ArchiveGroupResult!
@@ -456,7 +457,7 @@ type Mutation {
     # Enable a disabled ArchiveGroup to resume topic archiving
     # Restarts data collection for the group's topic filters
     # Useful for temporarily pausing and resuming data archiving
-    enableArchiveGroup(
+    enable(
         # Name of the ArchiveGroup to enable
         name: String!
     ): ArchiveGroupResult!
@@ -464,10 +465,17 @@ type Mutation {
     # Disable an ArchiveGroup to pause topic archiving without deleting it
     # Stops new data collection but preserves existing archived data
     # Configuration remains intact for future re-enabling
-    disableArchiveGroup(
+    disable(
         # Name of the ArchiveGroup to disable
         name: String!
     ): ArchiveGroupResult!
+}
+
+# Extend Mutations for archive groups
+extend type Mutation {
+    # Access archive group management operations
+    # Returns an ArchiveGroupMutations type that provides grouped mutation operations
+    archiveGroup: ArchiveGroupMutations!
 }
 
 type Subscription {
