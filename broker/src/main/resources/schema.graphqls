@@ -427,10 +427,6 @@ type UserManagementMutations {
 
 # Extend Mutations for user management
 extend type Mutation {
-    # Access user and ACL management operations
-    # Returns a UserManagementMutations type that provides grouped mutation operations
-    user: UserManagementMutations!
-
     # Remove queued messages from persistent sessions to free up memory
     # Useful for clearing message backlogs from disconnected clients
     # Can target a specific client or purge all queued messages cluster-wide
@@ -438,6 +434,10 @@ extend type Mutation {
         # Client ID to purge messages for (optional - if omitted, purges all clients)
         clientId: String
     ): PurgeResult!
+
+    # Access user and ACL management operations
+    # Returns a UserManagementMutations type that provides grouped mutation operations
+    user: UserManagementMutations!
 }
 
 # Archive Group Mutations - Grouped operations for archive group management
