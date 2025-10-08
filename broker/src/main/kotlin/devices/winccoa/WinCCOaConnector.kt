@@ -408,6 +408,8 @@ class WinCCOaConnector : AbstractVerticle() {
     private fun handleSubscriptionData(message: JsonObject) {
         try {
             val id = message.getString("id")
+            logger.info("Received subscription data for ID: $id")
+
             val payload = message.getJsonObject("payload")
 
             if (payload == null) {
@@ -431,19 +433,23 @@ class WinCCOaConnector : AbstractVerticle() {
             val error = dpQueryData.getValue("error")
 
             if (error != null) {
-                logger.warning("Subscription error: $error")
+                logger.warning("Subscription error for ID $id: $error")
                 return
             }
 
             if (values == null || values.size() < 2) {
+                logger.fine("No data rows for subscription ID $id (only header or empty)")
                 return // No data or only header row
             }
 
             val address = activeSubscriptions[id]
             if (address == null) {
-                logger.warning("Received data for unknown subscription: $id")
+                logger.warning("Received data for unknown subscription ID: $id. Active subscriptions: ${activeSubscriptions.keys.joinToString(", ")}")
                 return
             }
+
+            logger.info("Found address for subscription ID $id: query='${address.query}', topic='${address.topic}', description='${address.description}'")
+            logger.info("Processing ${values.size() - 1} data rows for subscription ID $id")
 
             // Parse values array
             // First row is header: ["", ":_original.._value", ":_original.._stime"]
@@ -487,11 +493,17 @@ class WinCCOaConnector : AbstractVerticle() {
      */
     private fun publishValue(address: WinCCOaAddress, dpName: String, data: JsonObject) {
         try {
+            logger.fine("Publishing value for dpName: $dpName from query: ${address.query}")
+
             // Get or compute MQTT topic from cache
             val mqttTopic = topicCache.computeIfAbsent(dpName) { name ->
                 val transformed = winCCOaConfig.transformConfig.transformDpNameToTopic(name)
-                "${deviceConfig.namespace}/${address.topic}/$transformed"
+                val fullTopic = "${deviceConfig.namespace}/${address.topic}/$transformed"
+                logger.info("Computed MQTT topic for dpName '$name': $fullTopic (base topic: ${address.topic})")
+                fullTopic
             }
+
+            logger.info("Publishing to MQTT topic: $mqttTopic (from query: ${address.query}, dpName: $dpName)")
 
             // Format message based on configuration
             val payload = formatMessage(data)
@@ -511,10 +523,11 @@ class WinCCOaConnector : AbstractVerticle() {
             vertx.eventBus().publish(WinCCOaExtension.ADDRESS_WINCCOA_VALUE_PUBLISH, mqttMessage)
 
             messagesInCounter.incrementAndGet()
-            logger.fine("Published WinCC OA value: $mqttTopic = ${data.encode()}")
+            logger.fine("Successfully published WinCC OA value: $mqttTopic = ${data.encode()}")
 
         } catch (e: Exception) {
-            logger.severe("Error publishing value for $dpName: ${e.message}")
+            logger.severe("Error publishing value for dpName '$dpName' from query '${address.query}': ${e.message}")
+            e.printStackTrace()
         }
     }
 
@@ -643,7 +656,8 @@ class WinCCOaConnector : AbstractVerticle() {
         webSocket?.writeTextMessage(messageStr)
         activeSubscriptions[subscriptionId] = address
 
-        logger.info("Subscribed to WinCC OA query: ${address.query} (ID: $subscriptionId)")
+        logger.info("Subscribed to WinCC OA query with ID '$subscriptionId': query='${address.query}', topic='${address.topic}', description='${address.description}'")
+        logger.info("Active subscriptions now: ${activeSubscriptions.size} - IDs: ${activeSubscriptions.keys.joinToString(", ")}")
     }
 
     /**
