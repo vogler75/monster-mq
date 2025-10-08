@@ -2053,6 +2053,8 @@ type WinCCUaAddress {
     retained: Boolean!
     # Name filters for TAG_VALUES type (e.g., ["HMI_*", "TANK_*"])
     nameFilters: [String!]
+    # Whether to include quality information in TAG_VALUES data (default: false)
+    includeQuality: Boolean
     # System names filter for ACTIVE_ALARMS type
     systemNames: [String!]
     # Filter string for ACTIVE_ALARMS type
@@ -2179,6 +2181,8 @@ input WinCCUaAddressInput {
     retained: Boolean = false
     # Name filters for TAG_VALUES type (e.g., ["HMI_*", "TANK_*"])
     nameFilters: [String!]
+    # Whether to include quality information in TAG_VALUES data (default: false)
+    includeQuality: Boolean = false
     # System names filter for ACTIVE_ALARMS type
     systemNames: [String!]
     # Filter string for ACTIVE_ALARMS type

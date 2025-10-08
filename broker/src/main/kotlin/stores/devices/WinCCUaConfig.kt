@@ -22,6 +22,7 @@ data class WinCCUaAddress(
 
     // For TAG_VALUES type
     val nameFilters: List<String>? = null,   // Name filters for tag browsing (e.g., ["HMI_*", "TANK_*"])
+    val includeQuality: Boolean = false,      // Whether to include quality information in TAG_VALUES data
 
     // For ACTIVE_ALARMS type
     val systemNames: List<String>? = null,   // Optional system names filter for alarms
@@ -48,6 +49,7 @@ data class WinCCUaAddress(
                 description = json.getString("description", ""),
                 retained = json.getBoolean("retained", false),
                 nameFilters = nameFiltersList,
+                includeQuality = json.getBoolean("includeQuality", false),
                 systemNames = systemNamesList,
                 filterString = json.getString("filterString")
             )
@@ -63,6 +65,10 @@ data class WinCCUaAddress(
 
         if (nameFilters != null) {
             obj.put("nameFilters", JsonArray(nameFilters))
+        }
+
+        if (type == WinCCUaAddressType.TAG_VALUES) {
+            obj.put("includeQuality", includeQuality)
         }
 
         if (systemNames != null) {

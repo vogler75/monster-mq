@@ -75,6 +75,7 @@ class WinCCUaClientManager {
                                 topic
                                 description
                                 nameFilters
+                                includeQuality
                                 systemNames
                                 filterString
                                 retained

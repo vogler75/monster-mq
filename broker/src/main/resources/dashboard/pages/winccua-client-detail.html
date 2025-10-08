@@ -980,6 +980,13 @@
                                   placeholder='e.g., HMI_*, TANK_*, System.Tag1'></textarea>
                         <small class="form-hint">Tag name filters for TAG_VALUES (supports wildcards like HMI_*)</small>
                     </div>
+                    <div id="include-quality-group" class="form-group conditional-field">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="address-include-quality">
+                            <label for="address-include-quality">Include Quality Information</label>
+                        </div>
+                        <small class="form-hint">Include quality data in TAG_VALUES messages</small>
+                    </div>
                     <div id="system-names-group" class="form-group conditional-field">
                         <label for="address-system-names">System Names (comma-separated)</label>
                         <input type="text" id="address-system-names" placeholder="e.g., System1, System2">

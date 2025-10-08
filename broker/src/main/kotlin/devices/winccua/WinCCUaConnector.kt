@@ -460,12 +460,13 @@ class WinCCUaConnector : AbstractVerticle() {
             }
         }
 
-        // Extract value and timestamp from value object
+        // Extract value, timestamp, and quality from value object
         val value = valueObj?.getValue("value")
         val timestamp = valueObj?.getString("timestamp")
+        val quality = valueObj?.getJsonObject("quality")
 
         if (tagName != null && value != null) {
-            publishTagValue(address, tagName, value, timestamp)
+            publishTagValue(address, tagName, value, timestamp, quality)
         }
     }
 
@@ -493,7 +494,7 @@ class WinCCUaConnector : AbstractVerticle() {
     /**
      * Publish tag value to MQTT broker with topic transformation
      */
-    private fun publishTagValue(address: WinCCUaAddress, tagName: String, value: Any?, timestamp: String?) {
+    private fun publishTagValue(address: WinCCUaAddress, tagName: String, value: Any?, timestamp: String?, quality: JsonObject?) {
         try {
             // Get or compute MQTT topic from cache
             val mqttTopic = topicCache.computeIfAbsent(tagName) { name ->
@@ -502,7 +503,7 @@ class WinCCUaConnector : AbstractVerticle() {
             }
 
             // Format message based on configuration
-            val payload = formatTagMessage(value, timestamp)
+            val payload = formatTagMessage(value, timestamp, quality)
 
             // Publish to MQTT broker
             val mqttMessage = BrokerMessage(
@@ -566,12 +567,13 @@ class WinCCUaConnector : AbstractVerticle() {
     /**
      * Format tag message according to configured format
      */
-    private fun formatTagMessage(value: Any?, timestamp: String?): ByteArray {
+    private fun formatTagMessage(value: Any?, timestamp: String?, quality: JsonObject?): ByteArray {
         return when (winCCUaConfig.messageFormat) {
             WinCCUaConnectionConfig.FORMAT_JSON_ISO -> {
                 val json = JsonObject()
                     .put("value", value)
                 if (timestamp != null) json.put("time", timestamp)
+                if (quality != null) json.put("quality", quality)
                 json.encode().toByteArray()
             }
             WinCCUaConnectionConfig.FORMAT_JSON_MS -> {
@@ -583,6 +585,7 @@ class WinCCUaConnector : AbstractVerticle() {
                 val json = JsonObject()
                     .put("value", value)
                     .put("time", timestampMs)
+                if (quality != null) json.put("quality", quality)
                 json.encode().toByteArray()
             }
             WinCCUaConnectionConfig.FORMAT_RAW_VALUE -> {
@@ -594,6 +597,7 @@ class WinCCUaConnector : AbstractVerticle() {
                 val json = JsonObject()
                     .put("value", value)
                 if (timestamp != null) json.put("time", timestamp)
+                if (quality != null) json.put("quality", quality)
                 json.encode().toByteArray()
             }
         }
@@ -751,13 +755,30 @@ class WinCCUaConnector : AbstractVerticle() {
         // Build tags array for GraphQL
         val tagsJsonArray = JsonArray(tags)
 
+        // Build quality fields if requested
+        val qualityFields = if (address.includeQuality) {
+            """
+
+                        quality {
+                            quality
+                            subStatus
+                            limit
+                            extendedSubStatus
+                            sourceQuality
+                            sourceTime
+                            timeCorrected
+                        }"""
+        } else {
+            ""
+        }
+
         val subscription = """
             subscription {
                 tagValues(names: ${tagsJsonArray.encode()}) {
                     name
                     value {
                         value
-                        timestamp
+                        timestamp$qualityFields
                     }
                     error {
                         code

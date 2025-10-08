@@ -529,6 +529,7 @@ class WinCCUaClientConfigMutations(
 
                 // Parse type-specific fields
                 val nameFilters = (inputMap["nameFilters"] as? List<*>)?.mapNotNull { it as? String }
+                val includeQuality = inputMap["includeQuality"] as? Boolean ?: false
                 val systemNames = (inputMap["systemNames"] as? List<*>)?.mapNotNull { it as? String }
                 val filterString = inputMap["filterString"] as? String
 
@@ -539,6 +540,7 @@ class WinCCUaClientConfigMutations(
                     description = description,
                     retained = retained,
                     nameFilters = nameFilters,
+                    includeQuality = includeQuality,
                     systemNames = systemNames,
                     filterString = filterString
                 )
@@ -830,6 +832,9 @@ class WinCCUaClientConfigMutations(
                     )
                     if (address.nameFilters != null) {
                         addressMap["nameFilters"] = address.nameFilters
+                    }
+                    if (address.type == WinCCUaAddressType.TAG_VALUES) {
+                        addressMap["includeQuality"] = address.includeQuality
                     }
                     if (address.systemNames != null) {
                         addressMap["systemNames"] = address.systemNames

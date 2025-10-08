@@ -4,6 +4,7 @@ import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
+import at.rocworks.stores.devices.WinCCUaAddressType
 import at.rocworks.stores.devices.WinCCUaConnectionConfig
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
@@ -144,6 +145,9 @@ class WinCCUaClientConfigQueries(
                     )
                     if (address.nameFilters != null) {
                         addressMap["nameFilters"] = address.nameFilters
+                    }
+                    if (address.type == WinCCUaAddressType.TAG_VALUES) {
+                        addressMap["includeQuality"] = address.includeQuality
                     }
                     if (address.systemNames != null) {
                         addressMap["systemNames"] = address.systemNames

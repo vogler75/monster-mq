@@ -153,6 +153,7 @@ class WinCCUaClientDetailManager {
                                 topic
                                 description
                                 nameFilters
+                                includeQuality
                                 systemNames
                                 filterString
                                 retained
@@ -270,6 +271,9 @@ class WinCCUaClientDetailManager {
             if (address.type === 'TAG_VALUES' && address.nameFilters) {
                 optionsBadges.push(`Filters: ${this.escapeHtml(address.nameFilters.join(', '))}`);
             }
+            if (address.type === 'TAG_VALUES' && address.includeQuality) {
+                optionsBadges.push('Quality');
+            }
             if (address.type === 'ACTIVE_ALARMS') {
                 if (address.systemNames) optionsBadges.push(`Systems: ${this.escapeHtml(address.systemNames.join(', '))}`);
                 if (address.filterString) optionsBadges.push(`Filter: ${this.escapeHtml(address.filterString)}`);
@@ -310,17 +314,20 @@ class WinCCUaClientDetailManager {
     updateAddressFormFields() {
         const type = document.getElementById('address-type').value;
         const browseArgsGroup = document.getElementById('browse-args-group');
+        const includeQualityGroup = document.getElementById('include-quality-group');
         const systemNamesGroup = document.getElementById('system-names-group');
         const filterStringGroup = document.getElementById('filter-string-group');
 
         // Hide all conditional fields
         browseArgsGroup.classList.remove('visible');
+        includeQualityGroup.classList.remove('visible');
         systemNamesGroup.classList.remove('visible');
         filterStringGroup.classList.remove('visible');
 
         // Show relevant fields based on type
         if (type === 'TAG_VALUES') {
             browseArgsGroup.classList.add('visible');
+            includeQualityGroup.classList.add('visible');
         } else if (type === 'ACTIVE_ALARMS') {
             systemNamesGroup.classList.add('visible');
             filterStringGroup.classList.add('visible');
@@ -358,6 +365,7 @@ class WinCCUaClientDetailManager {
         document.getElementById('address-topic').value = address.topic || '';
         document.getElementById('address-description').value = address.description || '';
         document.getElementById('address-browse-arguments').value = (address.nameFilters && address.nameFilters.length > 0) ? address.nameFilters.join(', ') : '';
+        document.getElementById('address-include-quality').checked = address.includeQuality || false;
         document.getElementById('address-system-names').value = (address.systemNames && address.systemNames.length > 0) ? address.systemNames.join(', ') : '';
         document.getElementById('address-filter-string').value = address.filterString || '';
         document.getElementById('address-retained').checked = address.retained || false;
@@ -392,6 +400,7 @@ class WinCCUaClientDetailManager {
         if (type === 'TAG_VALUES') {
             const nameFiltersValue = document.getElementById('address-browse-arguments').value.trim();
             addressData.nameFilters = nameFiltersValue ? nameFiltersValue.split(',').map(f => f.trim()).filter(f => f.length > 0) : null;
+            addressData.includeQuality = document.getElementById('address-include-quality').checked;
         } else if (type === 'ACTIVE_ALARMS') {
             const systemNamesValue = document.getElementById('address-system-names').value.trim();
             addressData.systemNames = systemNamesValue ? systemNamesValue.split(',').map(s => s.trim()).filter(s => s.length > 0) : null;
