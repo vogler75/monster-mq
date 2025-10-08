@@ -1,0 +1,39 @@
+Release v1.6.21
+Built from commit: 8afa8d9
+Date: 2025-10-08 21:26:02
+
+Changes since v1.6.20:
+---
+8afa8d9 Simplify type casting for metrics and config maps
+62dcba7 Improve metrics parsing and update sidebar navigation
+ebf5b4a Improve logging for WinCCOaConnector subscriptions
+631f3eb Add WinCC Unified integration and update features
+67d9e36 Refactor WinCC OA value publishing for dynamic columns
+ffa6953 Add quality info option to WinCC UA TAG_VALUES
+d35acf3 Refactor WinCC UA address filters and UI integration
+da3f58c Add device integration guide and extend device support
+22ccbec Update WinCCUaConnector for new GraphQL API structure
+51321b9 Reorder user mutation in GraphQL schema
+dd7873c Group user management mutations under 'user' field
+79fe240 Refactor archive group mutations to grouped type
+93cf180 Refactor OPC UA mutations to grouped types
+62d89d7 Refactor MQTT client mutations to grouped type
+f716190 Refactor GraphQL mutations for Kafka and WinCC OA clients
+1cfcdb2 Add WinCC Unified client integration
+75530c2 Add WinCC OA client metrics to broker monitoring
+6e4f5c7 Add WinCC OA client metrics aggregation and storage
+cb56c8a Add WinCC OA client metrics support
+9bebc60 Add WinCC OA integration and dashboard metrics
+e4938ec Refactor sidebar navigation to use dynamic rendering
+68bde85 Add WinCC OA client detail page and JS manager
+c0b93c4 Improve WinCCOaConnector shutdown and client input handling
+1fb6c6c Rename OPC UA metrics fields to opcUaClientIn/Out
+6b6f0ba Revamp cluster overview metrics layout
+2cfe874 Refactor MetricKind string conversion logic
+7244e38 Rename MQTT Bridge and Kafka Bridge metrics to client
+019fc58 Rename mqttBridgeIn/Out to mqttClientIn/Out in metrics
+9b5f232 Rename WinCC OA Bridge to WinCC OA Client
+2c5d7cd Add Kafka and WinCC OA navigation links
+94fc01d Add WinCC OA Bridge management to dashboard
+0a9329d Refactor device config models to stores/devices package
+25116f4 Add WinCC OA bridge integration and GraphQL support
