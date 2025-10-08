@@ -20,7 +20,6 @@
                 <a href="#features">Features</a>
                 <a href="#databases">Databases</a>
                 <a href="#clustering">Clustering</a>
-                <a href="#integrations">Integrations</a>
                 <a href="https://github.com/vogler75/monster-mq" target="_blank">GitHub</a>
             </div>
         </div>
@@ -71,7 +70,22 @@
                 <div class="feature-card">
                     <div class="feature-icon">🏭</div>
                     <h3>OPC UA Integration</h3>
-                    <p>Native OPC UA support with unified message archiving. Industrial automation data flows through the same central system as MQTT messages, ensuring complete data integrity.</p>
+                    <p>Native OPC UA client with cluster-aware device management and certificate-based security. Unified archiving ensures industrial data flows through the same central system as MQTT messages. Supports browse paths, node IDs, and wildcard subscriptions for flexible device connectivity.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🏭</div>
+                    <h3>WinCC Open Architecture Integration</h3>
+                    <p>High-performance bulk transfer from Siemens WinCC Open Architecture SCADA systems. Subscribe to millions of datapoints with a single continuous SQL query leveraging WinCC Open Architecture's powerful dpQueryConnectSingle function. Stream tag values and alerts directly to MQTT topics. Efficient handling of high-volume data changes without per-message overhead.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🏭</div>
+                    <h3>WinCC Unified Integration</h3>
+                    <p>Modern SCADA integration via GraphQL/WebSocket for Siemens WinCC Unified. Real-time tag value subscriptions with flexible name filters and wildcards. Stream active alarms and alerts with complete alarm details including state, priority, and timestamps. Optional OPC UA quality information for tag values including quality codes and status flags.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔗</div>
+                    <h3>MQTT to MQTT Bridge</h3>
+                    <p>Built-in MQTT bridge functionality enables bidirectional message flow between brokers. Forward messages to remote brokers with topic filters and transformations, or consume messages from external MQTT brokers. Perfect for building hierarchical broker architectures and connecting distributed systems without external tools.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">📊</div>
@@ -321,118 +335,6 @@
                 <div class="cluster-feature">
                     <h4>Central Database</h4>
                     <p>All cluster nodes share a central database, ensuring consistent state and enabling SQL analytics.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section id="integrations" class="integrations">
-        <div class="container">
-            <h2 class="section-title">Modern Integration Capabilities</h2>
-
-            <div class="integration-grid">
-                <div class="integration-card mcp">
-                    <div class="integration-header">
-                        <div class="integration-icon">🤖</div>
-                        <h3>MCP Server (AI Ready)</h3>
-                    </div>
-                    <p>Built-in Model Context Protocol server on port 3000 enables AI models to directly query MQTT data.</p>
-                    <div class="code-snippet">
-<pre><code>import mcp_client
-
-client = mcp_client.connect("http://localhost:3000")
-data = client.query_topics("sensors/#")
-history = client.get_history("sensors/temp")</code></pre>
-                    </div>
-                </div>
-
-                <div class="integration-card graphql">
-                    <div class="integration-header">
-                        <div class="integration-icon">📊</div>
-                        <h3>GraphQL API</h3>
-                    </div>
-                    <p>Query current states and historical data with GraphQL. Real-time subscriptions for live data streams.</p>
-                    <div class="code-snippet">
-<pre><code>query {
-  currentValue(topic: "sensors/temperature") {
-    payload
-    timestamp
-  }
-}</code></pre>
-                    </div>
-                </div>
-
-                <div class="integration-card sql">
-                    <div class="integration-header">
-                        <div class="integration-icon">🔍</div>
-                        <h3>SQL Analytics</h3>
-                    </div>
-                    <p>Direct SQL access to all stored messages enables powerful analytics and reporting capabilities.</p>
-                    <div class="code-snippet">
-<pre><code>SELECT topic, AVG(payload::float) as avg_temp
-FROM messages
-WHERE topic LIKE 'sensors/temp%'
-GROUP BY topic</code></pre>
-                    </div>
-                </div>
-
-                <div class="integration-card kafka">
-                    <div class="integration-header">
-                        <div class="integration-icon">📡</div>
-                        <h3>Kafka Streaming</h3>
-                    </div>
-                    <p>Stream MQTT messages to Kafka for event sourcing, or use Kafka as the internal message bus.</p>
-                    <div class="code-snippet">
-<pre><code>ArchiveGroups:
-  - Name: events
-    TopicFilter: ["events/#"]
-    ArchiveType: KAFKA</code></pre>
-                    </div>
-                </div>
-
-                <div class="integration-card opcua">
-                    <div class="integration-header">
-                        <div class="integration-icon">🏭</div>
-                        <h3>OPC UA Integration</h3>
-                    </div>
-                    <p>Native OPC UA client with cluster-aware device management. Unified archiving ensures industrial data flows through the same system as MQTT.</p>
-                    <div class="code-snippet">
-<pre><code>// OPC UA device configuration
-{
-  "name": "factory_plc01",
-  "namespace": "opcua/factory",
-  "config": {
-    "endpointUrl": "opc.tcp://192.168.1.100:4840",
-    "addresses": [{
-      "address": "BrowsePath://Objects/Factory/#",
-      "topic": "sensors"
-    }]
-  }
-}</code></pre>
-                    </div>
-                </div>
-
-                <div class="integration-card dashboard">
-                    <div class="integration-header">
-                        <div class="integration-icon">🖥️</div>
-                        <h3>Web Dashboard</h3>
-                    </div>
-                    <p>Complete browser-based management interface for configuration, monitoring, and administration. Real-time updates without broker restarts.</p>
-                    <div class="code-snippet">
-<pre><code>// Access management dashboard
-http://localhost:4000/archives   // Archive Groups
-http://localhost:4000/users      // User Management
-http://localhost:4000/graphql    // GraphQL Playground
-
-// Dynamic configuration changes
-mutation {
-  createArchiveGroup(input: {
-    name: "Production"
-    enabled: true
-    topicFilter: ["sensors/#"]
-  }) { success }
-}</code></pre>
-                    </div>
                 </div>
             </div>
         </div>

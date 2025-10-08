@@ -10,7 +10,8 @@ A MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data sto
 - **Message Archiving** - Persistent storage with configurable retention policies
 - **Rate Limiting** - Configurable publish/subscribe rate protection against client overload
 - **OPC UA Server** - Industrial protocol server with MQTT bridge and real-time subscriptions
-- **WinCC OA Client** - High-performance bulk message transfer from Siemens WinCC OA SCADA systems
+- **WinCC OA Client** - High-performance bulk message transfer from Siemens WinCC Open Architecture SCADA systems
+- **WinCC Unified Client** - GraphQL/WebSocket integration for Siemens WinCC Unified tag values and alarms
 - **GraphQL API** - Real-time data access and management interface
 - **MCP Server** - AI model integration through Model Context Protocol
 - **User Authentication** - BCrypt-secured user management with ACL rules
@@ -265,6 +266,44 @@ Because the MQTT protocol doesn't support bulk messages, it's not efficient for 
 - **Multiple Formats** - Publish as JSON (ISO/epoch) or raw values
 
 See the [WinCC OA Integration documentation](doc/winccoa.md) for detailed configuration and setup instructions.
+
+## 🏭 WinCC Unified Integration
+
+**Modern SCADA Integration via GraphQL**
+
+MonsterMQ includes a WinCC Unified client that connects to Siemens WinCC Unified systems using their GraphQL API over WebSocket for real-time tag values and alarm notifications.
+
+### Key Features
+
+- **GraphQL Subscriptions** - Real-time tag value updates via WebSocket
+- **Active Alarms** - Subscribe to alarm notifications with full alarm details
+- **Quality Information** - Optional OPC UA quality data in tag values
+- **Flexible Filtering** - Name filters with wildcards (e.g., `HMI_*`, `TANK_*`) for tag subscriptions
+- **Topic Transformation** - Convert tag names to MQTT topic hierarchies with regex support
+- **Multiple Formats** - JSON with ISO timestamps, milliseconds, or raw values
+
+### Example Configuration
+
+```yaml
+WinCCUa:
+  Clients:
+    - Name: "winccua-plant1"
+      Namespace: "winccua/plant1"
+      GraphqlEndpoint: "http://winccua-server:4000/graphql"
+      Username: "admin"
+      Password: "password"
+      MessageFormat: "JSON_ISO"
+      Addresses:
+        - Type: TAG_VALUES
+          Topic: "tags"
+          NameFilters: ["HMI_*", "TANK_*"]
+          IncludeQuality: true
+        - Type: ACTIVE_ALARMS
+          Topic: "alarms"
+          SystemNames: ["System1"]
+```
+
+See the device integration documentation for detailed configuration and setup instructions.
 
 ## 📋 Requirements
 

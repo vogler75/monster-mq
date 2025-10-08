@@ -950,7 +950,12 @@
             <div class="modal-body">
                 <form id="add-query-form">
                     <div class="form-group">
-                        <label for="query-query">WinCC OA Query *</label>
+                        <label for="query-query">
+                            WinCC OA Query *
+                            <button type="button" class="btn btn-secondary" onclick="showQueryExamplesModal()" style="margin-left: 0.5rem; padding: 0.25rem 0.75rem; font-size: 0.75rem;">
+                                View Examples
+                            </button>
+                        </label>
                         <input type="text" id="query-query" required
                                placeholder="e.g., SELECT '_original.._value', '_original.._stime', '_original.._status' FROM '*.**' WHERE _DPT = ""Test""">
                         <small class="form-hint">WinCC OA datapoint query string</small>
@@ -1006,8 +1011,89 @@
         </div>
     </div>
 
+    <!-- Query Examples Modal -->
+    <div id="query-examples-modal" class="modal" style="display: none;">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3>WinCC OA Query Examples</h3>
+                <button class="modal-close" onclick="hideQueryExamplesModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 1.5rem;">
+                    <h4 style="color: var(--text-primary); margin-bottom: 0.5rem; font-size: 1rem;">Tag Values Query</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 0.75rem;">Subscribe to datapoint values with timestamp and status information.</p>
+                    <div style="position: relative;">
+                        <pre style="background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--text-primary);"><code>SELECT '_original.._value', '_original.._stime', '_original.._status' FROM '*.**' WHERE _DPT = "ExampleDP_Float"</code></pre>
+                        <button type="button" class="btn btn-secondary" onclick="copyQueryExample(0)" style="position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.75rem; font-size: 0.75rem;">
+                            Copy
+                        </button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 1.5rem;">
+                    <h4 style="color: var(--text-primary); margin-bottom: 0.5rem; font-size: 1rem;">Alerts Query</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 0.75rem;">Subscribe to alert/alarm notifications with comprehensive alert information.</p>
+                    <div style="position: relative;">
+                        <pre style="background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--text-primary);"><code>SELECT ALERT '_alert_hdl.._last','_alert_hdl.._abbr','_alert_hdl.._prior','_alert_hdl.._text','_alert_hdl.._direction','_alert_hdl.._value','_alert_hdl.._ack_state','_alert_hdl.._ackable','_alert_hdl.._oldest_ack','_alert_hdl.._ack_oblig','_alert_hdl.._ack_time','_alert_hdl.._comment','_alert_hdl.._panel','_alert_hdl.._partner','_alert_hdl.._alert_color','_alert_hdl.._visible','_alert_hdl.._dest','_alert_hdl.._ack_user','_alert_hdl.._class','_alert_hdl.._alert_fore_color' FROM '{*}'</code></pre>
+                        <button type="button" class="btn btn-secondary" onclick="copyQueryExample(1)" style="position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.75rem; font-size: 0.75rem;">
+                            Copy
+                        </button>
+                    </div>
+                </div>
+
+                <div style="background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: 8px; padding: 1rem;">
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin: 0;">
+                        <strong style="color: var(--text-primary);">Note:</strong> These are example queries for WinCC OA's dpQueryConnectSingle function.
+                        Modify the WHERE clause and field selections based on your datapoint types and requirements.
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="hideQueryExamplesModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/js/winccoa-client-detail.js"></script>
     <script>
+        // Query examples data
+        const QUERY_EXAMPLES = [
+            "SELECT '_original.._value', '_original.._stime', '_original.._status' FROM '*.**' WHERE _DPT = \"ExampleDP_Float\"",
+            "SELECT ALERT '_alert_hdl.._last','_alert_hdl.._abbr','_alert_hdl.._prior','_alert_hdl.._text','_alert_hdl.._direction','_alert_hdl.._value','_alert_hdl.._ack_state','_alert_hdl.._ackable','_alert_hdl.._oldest_ack','_alert_hdl.._ack_oblig','_alert_hdl.._ack_time','_alert_hdl.._comment','_alert_hdl.._panel','_alert_hdl.._partner','_alert_hdl.._alert_color','_alert_hdl.._visible','_alert_hdl.._dest','_alert_hdl.._ack_user','_alert_hdl.._class','_alert_hdl.._alert_fore_color' FROM '{*}'"
+        ];
+
+        // Show query examples modal
+        function showQueryExamplesModal() {
+            document.getElementById('query-examples-modal').style.display = 'flex';
+        }
+
+        // Hide query examples modal
+        function hideQueryExamplesModal() {
+            document.getElementById('query-examples-modal').style.display = 'none';
+        }
+
+        // Copy query example to clipboard
+        function copyQueryExample(index) {
+            const query = QUERY_EXAMPLES[index];
+            navigator.clipboard.writeText(query).then(() => {
+                // Update button text temporarily
+                const buttons = document.querySelectorAll('#query-examples-modal .btn-secondary');
+                const button = buttons[index];
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.style.background = 'var(--monster-green)';
+                button.style.color = 'white';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.background = '';
+                    button.style.color = '';
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy query:', err);
+                alert('Failed to copy query to clipboard');
+            });
+        }
+
         // Handle modal clicks (close when clicking outside)
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal')) {
@@ -1015,6 +1101,8 @@
                     clientDetailManager.hideAddQueryModal();
                 } else if (e.target.id === 'confirm-delete-query-modal') {
                     clientDetailManager.hideConfirmDeleteQueryModal();
+                } else if (e.target.id === 'query-examples-modal') {
+                    hideQueryExamplesModal();
                 }
             }
         });
