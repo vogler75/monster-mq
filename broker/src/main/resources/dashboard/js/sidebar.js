@@ -82,12 +82,12 @@ class SidebarManager {
                     },
                     {
                         href: '/pages/winccoa-clients.html',
-                        icon: '<circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path>',
+                        icon: '<rect x="4" y="4" width="16" height="16" rx="2" fill="none"></rect><text x="12" y="17" text-anchor="middle" font-size="14" font-weight="bold" fill="currentColor" font-family="Arial, sans-serif">S</text>',
                         text: 'WinCC OA Clients'
                     },
                     {
                         href: '/pages/winccua-clients.html',
-                        icon: '<rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 9h6v6H9z"></path><path d="M9 3v6M3 9h6M9 15v6M15 9h6"></path>',
+                        icon: '<rect x="4" y="4" width="16" height="16" rx="2" fill="none"></rect><text x="12" y="17" text-anchor="middle" font-size="14" font-weight="bold" fill="currentColor" font-family="Arial, sans-serif">S</text>',
                         text: 'WinCC Unified Clients'
                     }
                 ]

@@ -249,7 +249,15 @@ class MetricsStoreCrateDB(
                 st.setTimestamp(3, Timestamp.from(fromTs))
                 if (toTs != null) st.setTimestamp(4, Timestamp.from(toTs))
                 val rs = st.executeQuery()
-                return@use if (rs.next()) JsonObject(rs.getObject("metrics") as Map<String, Any?>) else JsonObject()
+                return@use if (rs.next()) {
+                    val metricsObj = rs.getObject("metrics")
+                    when (metricsObj) {
+                        is Map<*, *> -> JsonObject(metricsObj.mapNotNull { (k, v) ->
+                            if (k is String) k to v else null
+                        }.toMap())
+                        else -> JsonObject()
+                    }
+                } else JsonObject()
             }
         })
     }
@@ -291,9 +299,14 @@ class MetricsStoreCrateDB(
                 val list = mutableListOf<Pair<Instant, JsonObject>>()
                 while (rs.next()) {
                     val ts = rs.getTimestamp("timestamp").toInstant()
-                    @Suppress("UNCHECKED_CAST")
-                    val jsonMap = rs.getObject("metrics") as Map<String, Any?>
-                    list.add(ts to JsonObject(jsonMap))
+                    val metricsObj = rs.getObject("metrics")
+                    val json = when (metricsObj) {
+                        is Map<*, *> -> JsonObject(metricsObj.mapNotNull { (k, v) ->
+                            if (k is String) k to v else null
+                        }.toMap())
+                        else -> JsonObject()
+                    }
+                    list.add(ts to json)
                 }
                 list
             }

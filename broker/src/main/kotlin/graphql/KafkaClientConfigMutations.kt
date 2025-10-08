@@ -271,8 +271,9 @@ class KafkaClientConfigMutations(
     }
 
     private fun parseDeviceConfigRequest(input: Map<String, Any>): DeviceConfigRequest {
-        val configMap = (input["config"] as? Map<*, *>)?.let { @Suppress("UNCHECKED_CAST") it as Map<String, Any> }
-            ?: throw IllegalArgumentException("Invalid or missing 'config' field")
+        val configMap = (input["config"] as? Map<*, *>)?.mapNotNull { (k, v) ->
+            if (k is String && v != null) k to v else null
+        }?.toMap() ?: throw IllegalArgumentException("Invalid or missing 'config' field")
 
         val kafkaConfig = KafkaClientConfig(
             bootstrapServers = configMap["bootstrapServers"] as? String ?: "localhost:9092",
