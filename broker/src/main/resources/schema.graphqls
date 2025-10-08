@@ -2166,7 +2166,7 @@ input WinCCUaConnectionConfigInput {
 
 input WinCCUaAddressInput {
     # Address type (TAG_VALUES or ACTIVE_ALARMS)
-    type: String!
+    type: WinCCUaAddressType!
     # MQTT topic prefix for this subscription
     topic: String!
     # Optional description

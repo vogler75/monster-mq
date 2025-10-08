@@ -176,18 +176,23 @@ class WinCCUaConnector : AbstractVerticle() {
         }
 
         logger.info("Authenticating with WinCC Unified server for device ${deviceConfig.name}")
+        logger.info("GraphQL endpoint: ${winCCUaConfig.graphqlEndpoint}")
 
         val loginMutation = """
             mutation {
                 login(username: "${winCCUaConfig.username}", password: "${winCCUaConfig.password}") {
                     token
-                    expiresAt
+                    expires
                 }
             }
         """.trimIndent()
 
+        logger.fine("Login mutation: $loginMutation")
+
         val requestBody = JsonObject()
             .put("query", loginMutation)
+
+        logger.fine("Request body: ${requestBody.encode()}")
 
         webClient.postAbs(winCCUaConfig.graphqlEndpoint)
             .putHeader("Content-Type", "application/json")
@@ -205,14 +210,17 @@ class WinCCUaConnector : AbstractVerticle() {
                     } else if (data != null) {
                         val loginData = data.getJsonObject("login")
                         authToken = loginData.getString("token")
-                        val expiresAt = loginData.getString("expiresAt")
-                        logger.info("Successfully authenticated with WinCC Unified server. Token expires at: $expiresAt")
+                        val expires = loginData.getString("expires")
+                        logger.info("Successfully authenticated with WinCC Unified server. Token expires at: $expires")
                         promise.complete()
                     } else {
                         promise.fail("Invalid login response")
                     }
                 } else {
-                    promise.fail("Login request failed with status ${response.statusCode()}")
+                    val responseBody = response.bodyAsString() ?: "(empty body)"
+                    val errorMsg = "Login request failed with status ${response.statusCode()}. Response: $responseBody"
+                    logger.warning(errorMsg)
+                    promise.fail(errorMsg)
                 }
             }
             .onFailure { error ->
@@ -435,20 +443,28 @@ class WinCCUaConnector : AbstractVerticle() {
             return
         }
 
-        val notification = tagValuesData.getJsonObject("notification")
-        if (notification == null) {
-            logger.warning("No notification in tagValues data")
-            return
+        // Parse TagValueNotification - new structure
+        val tagName = tagValuesData.getString("name")
+        val valueObj = tagValuesData.getJsonObject("value")
+        val errorObj = tagValuesData.getJsonObject("error")
+
+        // Check for actual errors (error code != 0 means error)
+        if (errorObj != null) {
+            val errorCode = errorObj.getString("code")
+            val errorDesc = errorObj.getString("description")
+            // Error code "0" means success, not an error
+            if (errorCode != "0") {
+                logger.warning("Error in tagValues for tag $tagName: $errorCode - $errorDesc")
+                return
+            }
         }
 
-        // Parse TagValueNotification
-        val tagName = notification.getString("tag")
-        val value = notification.getValue("value")
-        val timestamp = notification.getString("timestamp")
-        val quality = notification.getString("quality")
+        // Extract value and timestamp from value object
+        val value = valueObj?.getValue("value")
+        val timestamp = valueObj?.getString("timestamp")
 
         if (tagName != null && value != null) {
-            publishTagValue(address, tagName, value, timestamp, quality)
+            publishTagValue(address, tagName, value, timestamp)
         }
     }
 
@@ -484,7 +500,7 @@ class WinCCUaConnector : AbstractVerticle() {
     /**
      * Publish tag value to MQTT broker with topic transformation
      */
-    private fun publishTagValue(address: WinCCUaAddress, tagName: String, value: Any?, timestamp: String?, quality: String?) {
+    private fun publishTagValue(address: WinCCUaAddress, tagName: String, value: Any?, timestamp: String?) {
         try {
             // Get or compute MQTT topic from cache
             val mqttTopic = topicCache.computeIfAbsent(tagName) { name ->
@@ -493,7 +509,7 @@ class WinCCUaConnector : AbstractVerticle() {
             }
 
             // Format message based on configuration
-            val payload = formatTagMessage(value, timestamp, quality)
+            val payload = formatTagMessage(value, timestamp)
 
             // Publish to MQTT broker
             val mqttMessage = BrokerMessage(
@@ -552,13 +568,12 @@ class WinCCUaConnector : AbstractVerticle() {
     /**
      * Format tag message according to configured format
      */
-    private fun formatTagMessage(value: Any?, timestamp: String?, quality: String?): ByteArray {
+    private fun formatTagMessage(value: Any?, timestamp: String?): ByteArray {
         return when (winCCUaConfig.messageFormat) {
             WinCCUaConnectionConfig.FORMAT_JSON_ISO -> {
                 val json = JsonObject()
                     .put("value", value)
                 if (timestamp != null) json.put("time", timestamp)
-                if (quality != null) json.put("quality", quality)
                 json.encode().toByteArray()
             }
             WinCCUaConnectionConfig.FORMAT_JSON_MS -> {
@@ -570,7 +585,6 @@ class WinCCUaConnector : AbstractVerticle() {
                 val json = JsonObject()
                     .put("value", value)
                     .put("time", timestampMs)
-                if (quality != null) json.put("quality", quality)
                 json.encode().toByteArray()
             }
             WinCCUaConnectionConfig.FORMAT_RAW_VALUE -> {
@@ -582,7 +596,6 @@ class WinCCUaConnector : AbstractVerticle() {
                 val json = JsonObject()
                     .put("value", value)
                 if (timestamp != null) json.put("time", timestamp)
-                if (quality != null) json.put("quality", quality)
                 json.encode().toByteArray()
             }
         }
@@ -668,23 +681,14 @@ class WinCCUaConnector : AbstractVerticle() {
             return promise.future()
         }
 
-        // Build browse query with arguments
-        val argsStr = browseArgs.fieldNames().joinToString(", ") { key ->
-            val value = browseArgs.getValue(key)
-            when (value) {
-                is String -> "$key: \"$value\""
-                is Number -> "$key: $value"
-                is Boolean -> "$key: $value"
-                else -> "$key: \"$value\""
-            }
-        }
+        // Build nameFilters array from filter argument
+        val filterValue = browseArgs.getString("filter") ?: browseArgs.getString("nameFilters") ?: "*"
+        val nameFiltersArray = "[${"\"$filterValue\""}]"  // Convert single filter to array format
 
         val browseQuery = """
             query {
-                browse($argsStr) {
-                    tags {
-                        name
-                    }
+                browse(nameFilters: $nameFiltersArray) {
+                    name
                 }
             }
         """.trimIndent()
@@ -692,7 +696,9 @@ class WinCCUaConnector : AbstractVerticle() {
         val requestBody = JsonObject()
             .put("query", browseQuery)
 
-        logger.fine("Executing browse query: $browseQuery")
+        logger.info("Executing browse query for address ${address.topic}")
+        logger.fine("Browse query: $browseQuery")
+        logger.fine("Request body: ${requestBody.encode()}")
 
         webClient.postAbs(winCCUaConfig.graphqlEndpoint)
             .putHeader("Content-Type", "application/json")
@@ -707,17 +713,22 @@ class WinCCUaConnector : AbstractVerticle() {
                     if (errors != null && errors.size() > 0) {
                         val errorMsg = "Browse query failed: ${errors.encode()}"
                         logger.severe(errorMsg)
+                        logger.severe("Query was: $browseQuery")
                         promise.fail(errorMsg)
                     } else if (data != null) {
-                        val browseData = data.getJsonObject("browse")
-                        val tagsArray = browseData?.getJsonArray("tags")
-                        val tagList = tagsArray?.map { it as JsonObject }?.map { it.getString("name") } ?: emptyList()
+                        val browseArray = data.getJsonArray("browse")
+                        val tagList = browseArray?.map { it as JsonObject }?.map { it.getString("name") } ?: emptyList()
+                        logger.fine("Browse query result: ${tagList.size} tags")
                         promise.complete(tagList)
                     } else {
                         promise.fail("Invalid browse query response")
                     }
                 } else {
-                    promise.fail("Browse query failed with status ${response.statusCode()}")
+                    val responseBody = response.bodyAsString() ?: "(empty body)"
+                    val errorMsg = "Browse query failed with status ${response.statusCode()}. Response: $responseBody"
+                    logger.severe(errorMsg)
+                    logger.severe("Query was: $browseQuery")
+                    promise.fail(errorMsg)
                 }
             }
             .onFailure { error ->
@@ -744,12 +755,15 @@ class WinCCUaConnector : AbstractVerticle() {
 
         val subscription = """
             subscription {
-                tagValues(tags: ${tagsJsonArray.encode()}) {
-                    notification {
-                        tag
+                tagValues(names: ${tagsJsonArray.encode()}) {
+                    name
+                    value {
                         value
                         timestamp
-                        quality
+                    }
+                    error {
+                        code
+                        description
                     }
                 }
             }
