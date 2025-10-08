@@ -234,12 +234,14 @@ class MqttClientManager {
         try {
             const mutation = `
                 mutation CreateMqttClient($input: MqttClientInput!) {
-                    createMqttClient(input: $input) {
-                        success
-                        errors
-                        client {
-                            name
-                            enabled
+                    mqttClient {
+                        create(input: $input) {
+                            success
+                            errors
+                            client {
+                                name
+                                enabled
+                            }
                         }
                     }
                 }
@@ -247,12 +249,12 @@ class MqttClientManager {
 
             const result = await this.client.query(mutation, { input: clientData });
 
-            if (result.createMqttClient.success) {
+            if (result.mqttClient.create.success) {
                 this.hideAddClientModal();
                 await this.loadClients();
                 this.showSuccess(`Bridge \"${clientData.name}\" added successfully`);
             } else {
-                const errors = result.createMqttClient.errors || ['Unknown error'];
+                const errors = result.mqttClient.create.errors || ['Unknown error'];
                 this.showError('Failed to add bridge: ' + errors.join(', '));
             }
 
@@ -266,12 +268,14 @@ class MqttClientManager {
         try {
             const mutation = `
                 mutation ToggleMqttClient($name: String!, $enabled: Boolean!) {
-                    toggleMqttClient(name: $name, enabled: $enabled) {
-                        success
-                        errors
-                        client {
-                            name
-                            enabled
+                    mqttClient {
+                        toggle(name: $name, enabled: $enabled) {
+                            success
+                            errors
+                            client {
+                                name
+                                enabled
+                            }
                         }
                     }
                 }
@@ -279,11 +283,11 @@ class MqttClientManager {
 
             const result = await this.client.query(mutation, { name: clientName, enabled });
 
-            if (result.toggleMqttClient.success) {
+            if (result.mqttClient.toggle.success) {
                 await this.loadClients();
                 this.showSuccess(`Bridge \"${clientName}\" ${enabled ? 'started' : 'stopped'} successfully`);
             } else {
-                const errors = result.toggleMqttClient.errors || ['Unknown error'];
+                const errors = result.mqttClient.toggle.errors || ['Unknown error'];
                 this.showError('Failed to toggle bridge: ' + errors.join(', '));
             }
 
@@ -305,13 +309,15 @@ class MqttClientManager {
         try {
             const mutation = `
                 mutation DeleteMqttClient($name: String!) {
-                    deleteMqttClient(name: $name)
+                    mqttClient {
+                        delete(name: $name)
+                    }
                 }
             `;
 
             const result = await this.client.query(mutation, { name: this.deleteClientName });
 
-            if (result.deleteMqttClient) {
+            if (result.mqttClient.delete) {
                 this.hideConfirmDeleteModal();
                 await this.loadClients();
                 this.showSuccess(`Bridge \"${this.deleteClientName}\" deleted successfully`);

@@ -1347,47 +1347,57 @@ extend type Mutation {
         serverName: String!,
         fingerprints: [String!]!
     ): CertificateManagementResult!
+}
 
-    # Create a new MQTT client configuration to connect to a remote MQTT broker
+# MQTT Client Mutations - Grouped operations for MQTT client management
+type MqttClientMutations {
+    # Create a new MQTT client bridge to connect to a remote MQTT broker
     # Creates a client connector that will be deployed on the specified cluster node
-    # The client will automatically connect and synchronize topics with the remote broker
-    createMqttClient(input: MqttClientInput!): MqttClientResult!
+    # The client can subscribe to remote topics or publish local topics to the remote broker
+    create(input: MqttClientInput!): MqttClientResult!
 
     # Update an existing MQTT client configuration
     # Changes take effect immediately - the client connector will be redeployed with new settings
     # Useful for modifying connection parameters, credentials, or topic mappings
-    updateMqttClient(name: String!, input: MqttClientInput!): MqttClientResult!
+    update(name: String!, input: MqttClientInput!): MqttClientResult!
 
     # Delete an MQTT client configuration permanently
     # Stops the client connector and removes all configuration data
     # Returns true if deletion was successful, false if client was not found
-    deleteMqttClient(name: String!): Boolean!
+    delete(name: String!): Boolean!
 
     # Start an MQTT client connection
     # Enables a previously stopped client and establishes connection to remote broker
-    startMqttClient(name: String!): MqttClientResult!
+    start(name: String!): MqttClientResult!
 
     # Stop an MQTT client connection
     # Disables the client and disconnects from remote broker while preserving configuration
-    stopMqttClient(name: String!): MqttClientResult!
+    stop(name: String!): MqttClientResult!
 
     # Toggle MQTT client enabled state
     # Enable or disable an MQTT client without deleting its configuration
-    toggleMqttClient(name: String!, enabled: Boolean!): MqttClientResult!
+    toggle(name: String!, enabled: Boolean!): MqttClientResult!
 
     # Reassign an MQTT client to a different cluster node
     # Moves the client connector from one node to another for load balancing
     # The client configuration remains unchanged, only the deployment location changes
-    reassignMqttClient(name: String!, nodeId: String!): MqttClientResult!
+    reassign(name: String!, nodeId: String!): MqttClientResult!
 
     # Add a new address mapping to an existing MQTT client
     # Defines how topics are mapped between local and remote brokers (subscribe/publish)
     # New mappings will immediately start synchronizing data
-    addMqttClientAddress(deviceName: String!, input: MqttClientAddressInput!): MqttClientResult!
+    addAddress(deviceName: String!, input: MqttClientAddressInput!): MqttClientResult!
 
     # Remove an address mapping from an MQTT client
     # Stops data synchronization for the specified remote topic while keeping other mappings active
-    deleteMqttClientAddress(deviceName: String!, remoteTopic: String!): MqttClientResult!
+    deleteAddress(deviceName: String!, remoteTopic: String!): MqttClientResult!
+}
+
+# Extend Mutations for MQTT clients
+extend type Mutation {
+    # Access MQTT client management operations
+    # Returns a MqttClientMutations type that provides grouped mutation operations
+    mqttClient: MqttClientMutations!
 }
 
 # MQTT Client Configuration Types

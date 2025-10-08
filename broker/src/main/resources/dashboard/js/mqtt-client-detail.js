@@ -251,11 +251,13 @@ class MqttClientDetailManager {
         try {
             const mutation = `
                 mutation UpdateMqttClient($name: String!, $input: MqttClientInput!) {
-                    updateMqttClient(name: $name, input: $input) {
-                        success
-                        errors
-                        client {
-                            name
+                    mqttClient {
+                        update(name: $name, input: $input) {
+                            success
+                            errors
+                            client {
+                                name
+                            }
                         }
                     }
                 }
@@ -266,12 +268,12 @@ class MqttClientDetailManager {
                 input: updateData
             });
 
-            if (result.updateMqttClient.success) {
+            if (result.mqttClient.update.success) {
                 this.hideEditModal();
                 await this.loadClientData();
                 this.showSuccess('Bridge updated successfully');
             } else {
-                const errors = result.updateMqttClient.errors || ['Unknown error'];
+                const errors = result.mqttClient.update.errors || ['Unknown error'];
                 this.showError('Failed to update bridge: ' + errors.join(', '));
             }
 
@@ -289,9 +291,11 @@ class MqttClientDetailManager {
         try {
             const mutation = `
                 mutation ToggleMqttClient($name: String!, $enabled: Boolean!) {
-                    toggleMqttClient(name: $name, enabled: $enabled) {
-                        success
-                        errors
+                    mqttClient {
+                        toggle(name: $name, enabled: $enabled) {
+                            success
+                            errors
+                        }
                     }
                 }
             `;
@@ -301,11 +305,11 @@ class MqttClientDetailManager {
                 enabled: newState
             });
 
-            if (result.toggleMqttClient.success) {
+            if (result.mqttClient.toggle.success) {
                 await this.loadClientData();
                 this.showSuccess(`Bridge ${newState ? 'started' : 'stopped'} successfully`);
             } else {
-                const errors = result.toggleMqttClient.errors || ['Unknown error'];
+                const errors = result.mqttClient.toggle.errors || ['Unknown error'];
                 this.showError('Failed to toggle bridge: ' + errors.join(', '));
             }
 
@@ -333,9 +337,11 @@ class MqttClientDetailManager {
         try {
             const mutation = `
                 mutation AddMqttClientAddress($deviceName: String!, $input: MqttClientAddressInput!) {
-                    addMqttClientAddress(deviceName: $deviceName, input: $input) {
-                        success
-                        errors
+                    mqttClient {
+                        addAddress(deviceName: $deviceName, input: $input) {
+                            success
+                            errors
+                        }
                     }
                 }
             `;
@@ -345,12 +351,12 @@ class MqttClientDetailManager {
                 input: addressData
             });
 
-            if (result.addMqttClientAddress.success) {
+            if (result.mqttClient.addAddress.success) {
                 this.hideAddAddressModal();
                 await this.loadClientData();
                 this.showSuccess('Address mapping added successfully');
             } else {
-                const errors = result.addMqttClientAddress.errors || ['Unknown error'];
+                const errors = result.mqttClient.addAddress.errors || ['Unknown error'];
                 this.showError('Failed to add address: ' + errors.join(', '));
             }
 
@@ -372,9 +378,11 @@ class MqttClientDetailManager {
         try {
             const mutation = `
                 mutation DeleteMqttClientAddress($deviceName: String!, $remoteTopic: String!) {
-                    deleteMqttClientAddress(deviceName: $deviceName, remoteTopic: $remoteTopic) {
-                        success
-                        errors
+                    mqttClient {
+                        deleteAddress(deviceName: $deviceName, remoteTopic: $remoteTopic) {
+                            success
+                            errors
+                        }
                     }
                 }
             `;
@@ -384,12 +392,12 @@ class MqttClientDetailManager {
                 remoteTopic: this.deleteAddressRemoteTopic
             });
 
-            if (result.deleteMqttClientAddress.success) {
+            if (result.mqttClient.deleteAddress.success) {
                 this.hideConfirmDeleteAddressModal();
                 await this.loadClientData();
                 this.showSuccess('Address mapping deleted successfully');
             } else {
-                const errors = result.deleteMqttClientAddress.errors || ['Unknown error'];
+                const errors = result.mqttClient.deleteAddress.errors || ['Unknown error'];
                 this.showError('Failed to delete address: ' + errors.join(', '));
             }
 

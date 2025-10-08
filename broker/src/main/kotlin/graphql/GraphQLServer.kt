@@ -411,18 +411,11 @@ class GraphQLServer(
                             dataFetcher("deleteOpcUaServerCertificates", resolver.deleteOpcUaServerCertificates())
                         }
                     }
-                    // MQTT Client mutations
+                    // MQTT Client mutations - grouped under mqttClient
                     .apply {
-                        mqttClientMutations?.let { resolver ->
-                            dataFetcher("createMqttClient", resolver.createMqttClient())
-                            dataFetcher("updateMqttClient", resolver.updateMqttClient())
-                            dataFetcher("deleteMqttClient", resolver.deleteMqttClient())
-                            dataFetcher("startMqttClient", resolver.startMqttClient())
-                            dataFetcher("stopMqttClient", resolver.stopMqttClient())
-                            dataFetcher("toggleMqttClient", resolver.toggleMqttClient())
-                            dataFetcher("reassignMqttClient", resolver.reassignMqttClient())
-                            dataFetcher("addMqttClientAddress", resolver.addMqttClientAddress())
-                            dataFetcher("deleteMqttClientAddress", resolver.deleteMqttClientAddress())
+                        mqttClientMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on MqttClientMutations type
+                            dataFetcher("mqttClient") { _ -> emptyMap<String, Any>() }
                         }
                     }
                     // Kafka Client mutations - grouped under kafkaClient
@@ -446,6 +439,22 @@ class GraphQLServer(
                             dataFetcher("winCCUaDevice") { _ -> emptyMap<String, Any>() }
                         }
                     }
+            }
+            // Register MQTT Client Mutations type
+            .type("MqttClientMutations") { builder ->
+                builder.apply {
+                    mqttClientMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createMqttClient())
+                        dataFetcher("update", resolver.updateMqttClient())
+                        dataFetcher("delete", resolver.deleteMqttClient())
+                        dataFetcher("start", resolver.startMqttClient())
+                        dataFetcher("stop", resolver.stopMqttClient())
+                        dataFetcher("toggle", resolver.toggleMqttClient())
+                        dataFetcher("reassign", resolver.reassignMqttClient())
+                        dataFetcher("addAddress", resolver.addMqttClientAddress())
+                        dataFetcher("deleteAddress", resolver.deleteMqttClientAddress())
+                    }
+                }
             }
             // Register Kafka Client Mutations type
             .type("KafkaClientMutations") { builder ->
