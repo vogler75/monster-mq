@@ -568,6 +568,11 @@ class GraphQLServer(
                     .dataFetcher("metrics", metricsResolver.winCCOaClientMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.winCCOaClientMetricsHistory())
             }
+            .type("WinCCUaClient") { builder ->
+                builder
+                    .dataFetcher("metrics", metricsResolver.winCCUaClientMetrics())
+                    .dataFetcher("metricsHistory", metricsResolver.winCCUaClientMetricsHistory())
+            }
             .type("ArchiveGroupInfo") { builder ->
                 builder.apply {
                     archiveGroupResolver?.let { resolver ->

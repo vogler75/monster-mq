@@ -160,6 +160,7 @@ data class BrokerMetrics(
     val kafkaClientIn: Double = 0.0,
     val kafkaClientOut: Double = 0.0,
     val winCCOaClientIn: Double = 0.0,
+    val winCCUaClientIn: Double = 0.0,
     val timestamp: String
 )
 
@@ -199,6 +200,13 @@ data class KafkaClientMetrics(
 // WinCC OA Client Metrics
 data class WinCCOaClientMetrics(
     val messagesIn: Double,
+    val timestamp: String
+)
+
+// WinCC Unified (UA) Client Metrics
+data class WinCCUaClientMetrics(
+    val messagesIn: Double,
+    val connected: Boolean = false,
     val timestamp: String
 )
 

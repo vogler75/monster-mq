@@ -153,6 +153,7 @@ class WinCCUaConnector : AbstractVerticle() {
                 val json = JsonObject()
                     .put("device", deviceConfig.name)
                     .put("messagesInRate", inCount / elapsedSec)
+                    .put("connected", isConnected)
                     .put("elapsedMs", elapsedMs)
                 msg.reply(json)
             } catch (e: Exception) {

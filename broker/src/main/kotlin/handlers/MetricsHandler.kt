@@ -58,15 +58,17 @@ class MetricsHandler(
             var kafkaInTotal = 0.0
             var kafkaOutTotal = 0.0
             var winCCOaClientInTotal = 0.0
+            var winCCUaClientInTotal = 0.0
             var brokerDone = false
             var bridgeDone = false
             var opcUaDone = false
             var kafkaDone = false
             var winCCOaDone = false
+            var winCCUaDone = false
             var archiveDone = false
 
             fun tryAssembleAndStore() {
-                if (brokerDone && bridgeDone && opcUaDone && kafkaDone && winCCOaDone && archiveDone && nodeMetrics != null) {
+                if (brokerDone && bridgeDone && opcUaDone && kafkaDone && winCCOaDone && winCCUaDone && archiveDone && nodeMetrics != null) {
                     try {
                         val nm = nodeMetrics!!
                         val brokerMetrics = BrokerMetrics(
@@ -87,12 +89,13 @@ class MetricsHandler(
                              kafkaClientIn = kafkaInTotal,
                              kafkaClientOut = kafkaOutTotal,
                              winCCOaClientIn = winCCOaClientInTotal,
+                             winCCUaClientIn = winCCUaClientInTotal,
                             timestamp = TimestampConverter.instantToIsoString(timestamp)
                         )
 
                         metricsStore.storeBrokerMetrics(timestamp, nodeId, brokerMetrics).onComplete { result ->
                             if (result.succeeded()) {
-                                    logger.fine("Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal kafkaIn=$kafkaInTotal winCCOaIn=$winCCOaClientInTotal) for nodeId: $nodeId")
+                                    logger.fine("Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal kafkaIn=$kafkaInTotal winCCOaIn=$winCCOaClientInTotal winCCUaIn=$winCCUaClientInTotal) for nodeId: $nodeId")
                             } else {
                                 logger.warning("Error storing broker metrics: ${result.cause()?.message}")
                             }
@@ -327,6 +330,58 @@ class MetricsHandler(
                 } else {
                     logger.fine("Could not retrieve WinCC OA client connector list: ${listReply.cause()?.message}")
                     winCCOaDone = true
+                    tryAssembleAndStore()
+                }
+            }
+
+            // WinCC Unified (UA) Client metrics aggregation
+            val winCCUaListAddress = EventBusAddresses.WinCCUaBridge.CONNECTORS_LIST
+            vertx.eventBus().request<JsonObject>(winCCUaListAddress, JsonObject()).onComplete { listReply ->
+                if (listReply.succeeded()) {
+                    val body = listReply.result().body()
+                    val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
+                    logger.fine("WinCC Unified metrics aggregation: found ${devices.size()} devices")
+                    if (devices.isEmpty) {
+                        winCCUaDone = true
+                        tryAssembleAndStore()
+                    } else {
+                        var remaining = devices.size()
+                        devices.forEach { d ->
+                            val deviceName = d as String
+                            val mAddr = EventBusAddresses.WinCCUaBridge.connectorMetrics(deviceName)
+                            vertx.eventBus().request<JsonObject>(mAddr, JsonObject()).onComplete { mReply ->
+                                if (mReply.succeeded()) {
+                                    try {
+                                        val m = mReply.result().body()
+                                        val inRate = m.getDouble("messagesInRate", 0.0)
+                                        val connected = m.getBoolean("connected", false)
+                                        logger.fine("WinCC Unified client '$deviceName' metrics: messagesInRate=$inRate connected=$connected")
+                                        winCCUaClientInTotal += inRate
+                                        // Store individual client metrics
+                                        val winCCUaMetrics = at.rocworks.extensions.graphql.WinCCUaClientMetrics(
+                                            messagesIn = inRate,
+                                            connected = connected,
+                                            timestamp = TimestampConverter.instantToIsoString(timestamp)
+                                        )
+                                        metricsStore.storeWinCCUaClientMetrics(timestamp, deviceName, winCCUaMetrics)
+                                    } catch (e: Exception) {
+                                        logger.warning("Error processing WinCC Unified client metrics for $deviceName: ${e.message}")
+                                    }
+                                } else {
+                                    logger.fine("No metrics for WinCC Unified client $deviceName: ${mReply.cause()?.message}")
+                                }
+                                remaining -= 1
+                                if (remaining == 0) {
+                                    logger.fine("WinCC Unified metrics collection complete. Final total: $winCCUaClientInTotal")
+                                    winCCUaDone = true
+                                    tryAssembleAndStore()
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    logger.fine("Could not retrieve WinCC Unified client connector list: ${listReply.cause()?.message}")
+                    winCCUaDone = true
                     tryAssembleAndStore()
                 }
             }

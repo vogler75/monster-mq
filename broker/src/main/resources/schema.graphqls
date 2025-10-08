@@ -74,6 +74,8 @@ type BrokerMetrics {
     opcUaClientOut: Float!
     # Messages per second received from WinCC OA clients (datapoint value changes)
     winCCOaClientIn: Float!
+    # Messages per second received from WinCC Unified clients (tag values and alarms)
+    winCCUaClientIn: Float!
     # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
     timestamp: String!
 }
@@ -2094,6 +2096,8 @@ type WinCCUaConnectionConfig {
 type WinCCUaClientMetrics {
     # Messages per second received from WinCC Unified server (tag values and alarms)
     messagesIn: Float!
+    # Connection status to WinCC Unified server
+    connected: Boolean!
     # ISO 8601 timestamp when these metrics were captured
     timestamp: String!
 }

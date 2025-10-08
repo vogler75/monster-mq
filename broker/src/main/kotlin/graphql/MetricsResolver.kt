@@ -67,6 +67,7 @@ class MetricsResolver(
                             opcUaClientOut = 0.0,
                             kafkaClientIn = 0.0,
                             kafkaClientOut = 0.0,
+                            winCCUaClientIn = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                             )
                         } catch (e: Exception) {
@@ -541,6 +542,7 @@ class MetricsResolver(
                                 opcUaClientOut = round2(bm.opcUaClientOut),
                                 kafkaClientIn = round2(bm.kafkaClientIn),
                                 kafkaClientOut = round2(bm.kafkaClientOut),
+                                winCCUaClientIn = round2(bm.winCCUaClientIn),
                                 timestamp = bm.timestamp
                             )
                         })
@@ -669,6 +671,7 @@ class MetricsResolver(
                 kafkaClientIn = round2(bm.kafkaClientIn),
                 kafkaClientOut = round2(bm.kafkaClientOut),
                 winCCOaClientIn = round2(bm.winCCOaClientIn),
+                winCCUaClientIn = round2(bm.winCCUaClientIn),
                 timestamp = bm.timestamp
             )
         }
@@ -721,6 +724,7 @@ class MetricsResolver(
                             kafkaClientIn = 0.0,
                             kafkaClientOut = 0.0,
                             winCCOaClientIn = 0.0,
+                            winCCUaClientIn = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         )
                     } catch (e: Exception) {
@@ -749,6 +753,7 @@ callback(BrokerMetrics(
                             opcUaClientOut = 0.0,
                             kafkaClientIn = 0.0,
                             kafkaClientOut = 0.0,
+                            winCCUaClientIn = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         ))
                     }
@@ -768,6 +773,12 @@ callback(BrokerMetrics(
                             messageBusOut = 0.0,
                             mqttClientIn = 0.0,
                             mqttClientOut = 0.0,
+                            opcUaClientIn = 0.0,
+                            opcUaClientOut = 0.0,
+                            kafkaClientIn = 0.0,
+                            kafkaClientOut = 0.0,
+                            winCCOaClientIn = 0.0,
+                            winCCUaClientIn = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         ))
             }
@@ -1038,6 +1049,89 @@ callback(BrokerMetrics(
                         future.complete(result.result().map { WinCCOaClientMetrics(round2(it.messagesIn), it.timestamp) })
                     } else {
                         logger.warning("Failed to get historical WinCC OA client metrics: ${result.cause()?.message}")
+                        future.complete(emptyList())
+                    }
+                }
+            } else {
+                future.complete(emptyList())
+            }
+
+            future
+        }
+    }
+
+    fun winCCUaClientMetrics(): DataFetcher<CompletableFuture<List<WinCCUaClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<WinCCUaClientMetrics>>()
+            val winCCUaClient = env.getSource<Map<String, Any>>()
+            val clientName = winCCUaClient?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(listOf(WinCCUaClientMetrics(0.0, false, TimestampConverter.currentTimeIsoString())))
+                return@DataFetcher future
+            }
+
+            fun fetchLive() {
+                // Fallback to live event bus metrics (no history) if store missing or empty
+                val addr = at.rocworks.bus.EventBusAddresses.WinCCUaBridge.connectorMetrics(clientName)
+                vertx.eventBus().request<io.vertx.core.json.JsonObject>(addr, io.vertx.core.json.JsonObject()).onComplete { reply ->
+                    if (reply.succeeded()) {
+                        val body = reply.result().body()
+                        val inRate = body.getDouble("messagesInRate", 0.0)
+                        val connected = body.getBoolean("connected", false)
+                        future.complete(listOf(WinCCUaClientMetrics(round2(inRate), connected, TimestampConverter.currentTimeIsoString())))
+                    } else {
+                        future.complete(listOf(WinCCUaClientMetrics(0.0, false, TimestampConverter.currentTimeIsoString())))
+                    }
+                }
+            }
+
+            if (metricsStore != null) {
+                metricsStore.getWinCCUaClientMetricsList(clientName, null, null, 1).onComplete { result ->
+                    if (result.succeeded()) {
+                        val list = result.result()
+                        if (list.isNotEmpty()) {
+                            val m = list.first()
+                            future.complete(listOf(WinCCUaClientMetrics(round2(m.messagesIn), m.connected, m.timestamp)))
+                        } else {
+                            fetchLive()
+                        }
+                    } else {
+                        fetchLive()
+                    }
+                }
+            } else {
+                fetchLive()
+            }
+
+            future
+        }
+    }
+
+    fun winCCUaClientMetricsHistory(): DataFetcher<CompletableFuture<List<WinCCUaClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<WinCCUaClientMetrics>>()
+            val winCCUaClient = env.getSource<Map<String, Any>>()
+            val clientName = winCCUaClient?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            val from = env.getArgument<String?>("from")
+            val to = env.getArgument<String?>("to")
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+
+            if (metricsStore != null) {
+                val fromInstant = from?.let { java.time.Instant.parse(it) }
+                val toInstant = to?.let { java.time.Instant.parse(it) }
+
+                metricsStore.getWinCCUaClientMetricsList(clientName, fromInstant, toInstant, lastMinutes).onComplete { result ->
+                    if (result.succeeded()) {
+                        future.complete(result.result().map { WinCCUaClientMetrics(round2(it.messagesIn), it.connected, it.timestamp) })
+                    } else {
+                        logger.warning("Failed to get historical WinCC Unified client metrics: ${result.cause()?.message}")
                         future.complete(emptyList())
                     }
                 }

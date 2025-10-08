@@ -121,6 +121,9 @@ class MetricsStoreSQLite(
     override fun storeWinCCOaClientMetrics(timestamp: Instant, clientName: String, metrics: at.rocworks.extensions.graphql.WinCCOaClientMetrics): Future<Void> =
         storeMetrics(MetricKind.WINCCOACLIENT, timestamp, clientName, winCCOaClientMetricsToJson(metrics))
 
+    override fun storeWinCCUaClientMetrics(timestamp: Instant, clientName: String, metrics: at.rocworks.extensions.graphql.WinCCUaClientMetrics): Future<Void> =
+        storeMetrics(MetricKind.WINCCUACLIENT, timestamp, clientName, winCCUaClientMetricsToJson(metrics))
+
     override fun storeKafkaClientMetrics(timestamp: Instant, clientName: String, metrics: KafkaClientMetrics): Future<Void> =
         storeMetrics(MetricKind.KAFKACLIENT, timestamp, clientName, kafkaClientMetricsToJson(metrics))
 
@@ -309,6 +312,14 @@ class MetricsStoreSQLite(
     ): Future<List<at.rocworks.extensions.graphql.WinCCOaClientMetrics>> =
         getMetricsHistory(MetricKind.WINCCOACLIENT, clientName, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { jsonToWinCCOaClientMetrics(it.second) } }
 
+    override fun getWinCCUaClientMetricsList(
+        clientName: String,
+        from: Instant?,
+        to: Instant?,
+        lastMinutes: Int?
+    ): Future<List<at.rocworks.extensions.graphql.WinCCUaClientMetrics>> =
+        getMetricsHistory(MetricKind.WINCCUACLIENT, clientName, from, to, lastMinutes, Int.MAX_VALUE).map { list -> list.map { jsonToWinCCUaClientMetrics(it.second) } }
+
     override fun purgeOldMetrics(olderThan: Instant): Future<Long> {
         return vertx.executeBlocking<Long>(Callable {
             try {
@@ -346,6 +357,7 @@ class MetricsStoreSQLite(
         .put("kafkaClientIn", m.kafkaClientIn)
         .put("kafkaClientOut", m.kafkaClientOut)
         .put("winCCOaClientIn", m.winCCOaClientIn)
+        .put("winCCUaClientIn", m.winCCUaClientIn)
         .put("timestamp", m.timestamp)
 
     private fun sessionMetricsToJson(m: SessionMetrics) = JsonObject()
@@ -365,6 +377,11 @@ class MetricsStoreSQLite(
 
     private fun winCCOaClientMetricsToJson(m: at.rocworks.extensions.graphql.WinCCOaClientMetrics) = JsonObject()
         .put("messagesIn", m.messagesIn)
+        .put("timestamp", m.timestamp)
+
+    private fun winCCUaClientMetricsToJson(m: at.rocworks.extensions.graphql.WinCCUaClientMetrics) = JsonObject()
+        .put("messagesIn", m.messagesIn)
+        .put("connected", m.connected)
         .put("timestamp", m.timestamp)
 
     private fun opcUaDeviceMetricsToJson(m: OpcUaDeviceMetrics) = JsonObject()
@@ -390,6 +407,7 @@ class MetricsStoreSQLite(
         kafkaClientIn = 0.0,
         kafkaClientOut = 0.0,
         winCCOaClientIn = 0.0,
+        winCCUaClientIn = 0.0,
         timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     ) else BrokerMetrics(
         messagesIn = j.getDouble("messagesIn", 0.0),
@@ -409,6 +427,7 @@ class MetricsStoreSQLite(
         kafkaClientIn = j.getDouble("kafkaClientIn", 0.0),
         kafkaClientOut = j.getDouble("kafkaClientOut", 0.0),
         winCCOaClientIn = j.getDouble("winCCOaClientIn", 0.0),
+        winCCUaClientIn = j.getDouble("winCCUaClientIn", 0.0),
         timestamp = j.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 
@@ -447,6 +466,16 @@ class MetricsStoreSQLite(
         at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     ) else at.rocworks.extensions.graphql.WinCCOaClientMetrics(
         messagesIn = j.getDouble("messagesIn", 0.0),
+        timestamp = j.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    )
+
+    private fun jsonToWinCCUaClientMetrics(j: JsonObject) = if (j.isEmpty) at.rocworks.extensions.graphql.WinCCUaClientMetrics(
+        0.0,
+        false,
+        at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
+    ) else at.rocworks.extensions.graphql.WinCCUaClientMetrics(
+        messagesIn = j.getDouble("messagesIn", 0.0),
+        connected = j.getBoolean("connected", false),
         timestamp = j.getString("timestamp") ?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 
