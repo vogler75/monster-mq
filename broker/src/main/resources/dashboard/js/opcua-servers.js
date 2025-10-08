@@ -297,9 +297,11 @@ async function saveServer() {
 
         const mutation = `
             mutation CreateOpcUaServer($config: OpcUaServerConfigInput!) {
-                createOpcUaServer(config: $config) {
-                    success
-                    message
+                opcUaServer {
+                    create(config: $config) {
+                        success
+                        message
+                    }
                 }
             }
         `;
@@ -310,12 +312,12 @@ async function saveServer() {
 
         const response = await window.graphqlClient.query(mutation, variables);
 
-        if (response && response.createOpcUaServer.success) {
+        if (response && response.opcUaServer.create.success) {
             hideAddServerModal();
             await loadServers();
             showSuccessMessage('OPC UA Server created successfully');
         } else {
-            throw new Error(response?.createOpcUaServer?.message || 'Failed to create server');
+            throw new Error(response?.opcUaServer?.create?.message || 'Failed to create server');
         }
 
     } catch (error) {
@@ -368,9 +370,11 @@ async function startServer(serverName) {
     try {
         const mutation = `
             mutation StartOpcUaServer($serverName: String!, $nodeId: String) {
-                startOpcUaServer(serverName: $serverName, nodeId: $nodeId) {
-                    success
-                    message
+                opcUaServer {
+                    start(serverName: $serverName, nodeId: $nodeId) {
+                        success
+                        message
+                    }
                 }
             }
         `;
@@ -382,11 +386,11 @@ async function startServer(serverName) {
 
         const response = await window.graphqlClient.query(mutation, variables);
 
-        if (response && response.startOpcUaServer.success) {
+        if (response && response.opcUaServer.start.success) {
             await loadServers();
             showSuccessMessage(`Server '${serverName}' started successfully`);
         } else {
-            throw new Error(response?.startOpcUaServer?.message || 'Failed to start server');
+            throw new Error(response?.opcUaServer?.start?.message || 'Failed to start server');
         }
 
     } catch (error) {
@@ -399,9 +403,11 @@ async function stopServer(serverName) {
     try {
         const mutation = `
             mutation StopOpcUaServer($serverName: String!, $nodeId: String) {
-                stopOpcUaServer(serverName: $serverName, nodeId: $nodeId) {
-                    success
-                    message
+                opcUaServer {
+                    stop(serverName: $serverName, nodeId: $nodeId) {
+                        success
+                        message
+                    }
                 }
             }
         `;
@@ -413,11 +419,11 @@ async function stopServer(serverName) {
 
         const response = await window.graphqlClient.query(mutation, variables);
 
-        if (response && response.stopOpcUaServer.success) {
+        if (response && response.opcUaServer.stop.success) {
             await loadServers();
             showSuccessMessage(`Server '${serverName}' stopped successfully`);
         } else {
-            throw new Error(response?.stopOpcUaServer?.message || 'Failed to stop server');
+            throw new Error(response?.opcUaServer?.stop?.message || 'Failed to stop server');
         }
 
     } catch (error) {
@@ -434,9 +440,11 @@ async function deleteServer(serverName) {
     try {
         const mutation = `
             mutation DeleteOpcUaServer($serverName: String!) {
-                deleteOpcUaServer(serverName: $serverName) {
-                    success
-                    message
+                opcUaServer {
+                    delete(serverName: $serverName) {
+                        success
+                        message
+                    }
                 }
             }
         `;
@@ -447,11 +455,11 @@ async function deleteServer(serverName) {
 
         const response = await window.graphqlClient.query(mutation, variables);
 
-        if (response && response.deleteOpcUaServer.success) {
+        if (response && response.opcUaServer.delete.success) {
             await loadServers();
             showSuccessMessage(`Server '${serverName}' deleted successfully`);
         } else {
-            throw new Error(response?.deleteOpcUaServer?.message || 'Failed to delete server');
+            throw new Error(response?.opcUaServer?.delete?.message || 'Failed to delete server');
         }
 
     } catch (error) {
@@ -617,9 +625,11 @@ async function addInlineAddress() {
     try {
         const mutation = `
             mutation AddOpcUaServerAddress($serverName: String!, $address: OpcUaServerAddressInput!) {
-                addOpcUaServerAddress(serverName: $serverName, address: $address) {
-                    success
-                    message
+                opcUaServer {
+                    addAddress(serverName: $serverName, address: $address) {
+                        success
+                        message
+                    }
                 }
             }
         `;
@@ -631,7 +641,7 @@ async function addInlineAddress() {
 
         const response = await window.graphqlClient.query(mutation, variables);
 
-        if (response && response.addOpcUaServerAddress && response.addOpcUaServerAddress.success) {
+        if (response && response.opcUaServer.addAddress && response.opcUaServer.addAddress.success) {
             // Add to local server object
             if (!currentEditingServer.addresses) {
                 currentEditingServer.addresses = [];
@@ -667,9 +677,11 @@ async function deleteAddress(mqttTopic) {
     try {
         const mutation = `
             mutation RemoveOpcUaServerAddress($serverName: String!, $mqttTopic: String!) {
-                removeOpcUaServerAddress(serverName: $serverName, mqttTopic: $mqttTopic) {
-                    success
-                    message
+                opcUaServer {
+                    removeAddress(serverName: $serverName, mqttTopic: $mqttTopic) {
+                        success
+                        message
+                    }
                 }
             }
         `;
@@ -681,7 +693,7 @@ async function deleteAddress(mqttTopic) {
 
         const response = await window.graphqlClient.query(mutation, variables);
 
-        if (response && response.removeOpcUaServerAddress && response.removeOpcUaServerAddress.success) {
+        if (response && response.opcUaServer.removeAddress && response.opcUaServer.removeAddress.success) {
             // Remove from local server object
             if (currentEditingServer.addresses) {
                 currentEditingServer.addresses = currentEditingServer.addresses.filter(addr => addr.mqttTopic !== mqttTopic);

@@ -385,30 +385,18 @@ class GraphQLServer(
                             dataFetcher("disableArchiveGroup", resolver.disableArchiveGroup())
                         }
                     }
-                    // OPC UA Client mutations
+                    // OPC UA Device mutations - grouped under opcUaDevice
                     .apply {
-                        opcUaMutations?.let { resolver ->
-                            dataFetcher("addOpcUaDevice", resolver.addOpcUaDevice())
-                            dataFetcher("updateOpcUaDevice", resolver.updateOpcUaDevice())
-                            dataFetcher("deleteOpcUaDevice", resolver.deleteOpcUaDevice())
-                            dataFetcher("toggleOpcUaDevice", resolver.toggleOpcUaDevice())
-                            dataFetcher("reassignOpcUaDevice", resolver.reassignOpcUaDevice())
-                            dataFetcher("addOpcUaAddress", resolver.addOpcUaAddress())
-                            dataFetcher("deleteOpcUaAddress", resolver.deleteOpcUaAddress())
+                        opcUaMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on OpcUaDeviceMutations type
+                            dataFetcher("opcUaDevice") { _ -> emptyMap<String, Any>() }
                         }
                     }
-                    // OPC UA Server mutations
+                    // OPC UA Server mutations - grouped under opcUaServer
                     .apply {
-                        opcUaServerMutations?.let { resolver ->
-                            dataFetcher("createOpcUaServer", resolver.createOpcUaServer())
-                            dataFetcher("startOpcUaServer", resolver.startOpcUaServer())
-                            dataFetcher("stopOpcUaServer", resolver.stopOpcUaServer())
-                            dataFetcher("deleteOpcUaServer", resolver.deleteOpcUaServer())
-                            dataFetcher("addOpcUaServerAddress", resolver.addOpcUaServerAddress())
-                            dataFetcher("removeOpcUaServerAddress", resolver.removeOpcUaServerAddress())
-                            // Certificate management mutations
-                            dataFetcher("trustOpcUaServerCertificates", resolver.trustOpcUaServerCertificates())
-                            dataFetcher("deleteOpcUaServerCertificates", resolver.deleteOpcUaServerCertificates())
+                        opcUaServerMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on OpcUaServerMutations type
+                            dataFetcher("opcUaServer") { _ -> emptyMap<String, Any>() }
                         }
                     }
                     // MQTT Client mutations - grouped under mqttClient
@@ -499,6 +487,35 @@ class GraphQLServer(
                         dataFetcher("reassign", resolver.reassignWinCCUaClient())
                         dataFetcher("addAddress", resolver.addWinCCUaClientAddress())
                         dataFetcher("deleteAddress", resolver.deleteWinCCUaClientAddress())
+                    }
+                }
+            }
+            // Register OPC UA Device Mutations type
+            .type("OpcUaDeviceMutations") { builder ->
+                builder.apply {
+                    opcUaMutations?.let { resolver ->
+                        dataFetcher("add", resolver.addOpcUaDevice())
+                        dataFetcher("update", resolver.updateOpcUaDevice())
+                        dataFetcher("delete", resolver.deleteOpcUaDevice())
+                        dataFetcher("toggle", resolver.toggleOpcUaDevice())
+                        dataFetcher("reassign", resolver.reassignOpcUaDevice())
+                        dataFetcher("addAddress", resolver.addOpcUaAddress())
+                        dataFetcher("deleteAddress", resolver.deleteOpcUaAddress())
+                    }
+                }
+            }
+            // Register OPC UA Server Mutations type
+            .type("OpcUaServerMutations") { builder ->
+                builder.apply {
+                    opcUaServerMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createOpcUaServer())
+                        dataFetcher("start", resolver.startOpcUaServer())
+                        dataFetcher("stop", resolver.stopOpcUaServer())
+                        dataFetcher("delete", resolver.deleteOpcUaServer())
+                        dataFetcher("addAddress", resolver.addOpcUaServerAddress())
+                        dataFetcher("removeAddress", resolver.removeOpcUaServerAddress())
+                        dataFetcher("trustCertificates", resolver.trustOpcUaServerCertificates())
+                        dataFetcher("deleteCertificates", resolver.deleteOpcUaServerCertificates())
                     }
                 }
             }

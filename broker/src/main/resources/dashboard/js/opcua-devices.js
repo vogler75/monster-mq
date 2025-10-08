@@ -261,12 +261,14 @@ class OpcUaDeviceManager {
         try {
             const mutation = `
                 mutation AddOpcUaDevice($input: OpcUaDeviceInput!) {
-                    addOpcUaDevice(input: $input) {
-                        success
-                        errors
-                        device {
-                            name
-                            enabled
+                    opcUaDevice {
+                        add(input: $input) {
+                            success
+                            errors
+                            device {
+                                name
+                                enabled
+                            }
                         }
                     }
                 }
@@ -274,12 +276,12 @@ class OpcUaDeviceManager {
 
             const result = await this.client.query(mutation, { input: deviceData });
 
-            if (result.addOpcUaDevice.success) {
+            if (result.opcUaDevice.add.success) {
                 this.hideAddDeviceModal();
                 await this.loadDevices();
                 this.showSuccess(`Device "${deviceData.name}" added successfully`);
             } else {
-                const errors = result.addOpcUaDevice.errors || ['Unknown error'];
+                const errors = result.opcUaDevice.add.errors || ['Unknown error'];
                 this.showError('Failed to add device: ' + errors.join(', '));
             }
 
@@ -293,12 +295,14 @@ class OpcUaDeviceManager {
         try {
             const mutation = `
                 mutation ToggleOpcUaDevice($name: String!, $enabled: Boolean!) {
-                    toggleOpcUaDevice(name: $name, enabled: $enabled) {
-                        success
-                        errors
-                        device {
-                            name
-                            enabled
+                    opcUaDevice {
+                        toggle(name: $name, enabled: $enabled) {
+                            success
+                            errors
+                            device {
+                                name
+                                enabled
+                            }
                         }
                     }
                 }
@@ -306,11 +310,11 @@ class OpcUaDeviceManager {
 
             const result = await this.client.query(mutation, { name: deviceName, enabled });
 
-            if (result.toggleOpcUaDevice.success) {
+            if (result.opcUaDevice.toggle.success) {
                 await this.loadDevices();
                 this.showSuccess(`Device "${deviceName}" ${enabled ? 'enabled' : 'disabled'} successfully`);
             } else {
-                const errors = result.toggleOpcUaDevice.errors || ['Unknown error'];
+                const errors = result.opcUaDevice.toggle.errors || ['Unknown error'];
                 this.showError('Failed to toggle device: ' + errors.join(', '));
             }
 
@@ -332,13 +336,15 @@ class OpcUaDeviceManager {
         try {
             const mutation = `
                 mutation DeleteOpcUaDevice($name: String!) {
-                    deleteOpcUaDevice(name: $name)
+                    opcUaDevice {
+                        delete(name: $name)
+                    }
                 }
             `;
 
             const result = await this.client.query(mutation, { name: this.deleteDeviceName });
 
-            if (result.deleteOpcUaDevice) {
+            if (result.opcUaDevice.delete) {
                 this.hideConfirmDeleteModal();
                 await this.loadDevices();
                 this.showSuccess(`Device "${this.deleteDeviceName}" deleted successfully`);

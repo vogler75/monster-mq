@@ -290,11 +290,13 @@ class OpcUaDeviceDetailManager {
         try {
             const mutation = `
                 mutation AddOpcUaAddress($deviceName: String!, $input: OpcUaAddressInput!) {
-                    addOpcUaAddress(deviceName: $deviceName, input: $input) {
-                        success
-                        errors
-                        device {
-                            name
+                    opcUaDevice {
+                        addAddress(deviceName: $deviceName, input: $input) {
+                            success
+                            errors
+                            device {
+                                name
+                            }
                         }
                     }
                 }
@@ -305,12 +307,12 @@ class OpcUaDeviceDetailManager {
                 input: addressData
             });
 
-            if (result.addOpcUaAddress.success) {
+            if (result.opcUaDevice.addAddress.success) {
                 this.hideAddAddressModal();
                 await this.loadDevice();
                 this.showSuccess(`Address "${addressData.address}" added successfully`);
             } else {
-                const errors = result.addOpcUaAddress.errors || ['Unknown error'];
+                const errors = result.opcUaDevice.addAddress.errors || ['Unknown error'];
                 this.showError('Failed to add address: ' + errors.join(', '));
             }
 
@@ -332,11 +334,13 @@ class OpcUaDeviceDetailManager {
         try {
             const mutation = `
                 mutation DeleteOpcUaAddress($deviceName: String!, $address: String!) {
-                    deleteOpcUaAddress(deviceName: $deviceName, address: $address) {
-                        success
-                        errors
-                        device {
-                            name
+                    opcUaDevice {
+                        deleteAddress(deviceName: $deviceName, address: $address) {
+                            success
+                            errors
+                            device {
+                                name
+                            }
                         }
                     }
                 }
@@ -347,12 +351,12 @@ class OpcUaDeviceDetailManager {
                 address: this.deleteAddressName
             });
 
-            if (result.deleteOpcUaAddress.success) {
+            if (result.opcUaDevice.deleteAddress.success) {
                 this.hideConfirmDeleteAddressModal();
                 await this.loadDevice();
                 this.showSuccess(`Address "${this.deleteAddressName}" deleted successfully`);
             } else {
-                const errors = result.deleteOpcUaAddress.errors || ['Unknown error'];
+                const errors = result.opcUaDevice.deleteAddress.errors || ['Unknown error'];
                 this.showError('Failed to delete address: ' + errors.join(', '));
             }
 
@@ -460,11 +464,13 @@ class OpcUaDeviceDetailManager {
         try {
             const mutation = `
                 mutation UpdateOpcUaDevice($name: String!, $input: OpcUaDeviceInput!) {
-                    updateOpcUaDevice(name: $name, input: $input) {
-                        success
-                        errors
-                        device {
-                            name
+                    opcUaDevice {
+                        update(name: $name, input: $input) {
+                            success
+                            errors
+                            device {
+                                name
+                            }
                         }
                     }
                 }
@@ -475,12 +481,12 @@ class OpcUaDeviceDetailManager {
                 input: deviceData
             });
 
-            if (result.updateOpcUaDevice.success) {
+            if (result.opcUaDevice.update.success) {
                 this.hideEditDeviceModal();
                 await this.loadDevice();
                 this.showSuccess(`Device "${this.deviceName}" updated successfully`);
             } else {
-                const errors = result.updateOpcUaDevice.errors || ['Unknown error'];
+                const errors = result.opcUaDevice.update.errors || ['Unknown error'];
                 this.showError('Failed to update device: ' + errors.join(', '));
             }
 

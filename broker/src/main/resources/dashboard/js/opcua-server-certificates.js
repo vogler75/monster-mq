@@ -272,13 +272,15 @@ function trustSelectedCertificates() {
 
     const mutation = `
         mutation TrustCertificates($serverName: String!, $fingerprints: [String!]!) {
-            trustOpcUaServerCertificates(serverName: $serverName, fingerprints: $fingerprints) {
-                success
-                message
-                affectedCertificates {
-                    fingerprint
-                    subject
-                    trusted
+            opcUaServer {
+                trustCertificates(serverName: $serverName, fingerprints: $fingerprints) {
+                    success
+                    message
+                    affectedCertificates {
+                        fingerprint
+                        subject
+                        trusted
+                    }
                 }
             }
         }
@@ -293,7 +295,7 @@ function trustSelectedCertificates() {
     })
         .then(data => {
             hideLoading();
-            const result = data.trustOpcUaServerCertificates;
+            const result = data.opcUaServer.trustCertificates;
 
             if (result.success) {
                 showSuccess(`Successfully trusted ${result.affectedCertificates.length} certificate(s)`);
@@ -332,13 +334,15 @@ function deleteSelectedTrustedCertificates() {
 function deleteCertificates(fingerprints, type) {
     const mutation = `
         mutation DeleteCertificates($serverName: String!, $fingerprints: [String!]!) {
-            deleteOpcUaServerCertificates(serverName: $serverName, fingerprints: $fingerprints) {
-                success
-                message
-                affectedCertificates {
-                    fingerprint
-                    subject
-                    trusted
+            opcUaServer {
+                deleteCertificates(serverName: $serverName, fingerprints: $fingerprints) {
+                    success
+                    message
+                    affectedCertificates {
+                        fingerprint
+                        subject
+                        trusted
+                    }
                 }
             }
         }
@@ -353,7 +357,7 @@ function deleteCertificates(fingerprints, type) {
     })
         .then(data => {
             hideLoading();
-            const result = data.deleteOpcUaServerCertificates;
+            const result = data.opcUaServer.deleteCertificates;
 
             if (result.success) {
                 showSuccess(`Successfully deleted ${result.affectedCertificates.length} certificate(s)`);

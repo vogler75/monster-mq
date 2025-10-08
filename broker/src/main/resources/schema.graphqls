@@ -1254,99 +1254,114 @@ extend type Query {
 
     }
 
-# Extend existing Mutation type
-extend type Mutation {
-    # Add a new OPC UA device configuration to the cluster
-    # Creates a device connector that will be deployed on the specified cluster node
-    # The device will automatically start collecting data from the configured OPC UA addresses
-    addOpcUaDevice(input: OpcUaDeviceInput!): OpcUaDeviceResult!
+# OPC UA Device Mutations - Grouped operations for OPC UA device management
+type OpcUaDeviceMutations {
+    # Add a new OPC UA device configuration
+    # Creates a new OPC UA device that connects to a remote OPC UA server and subscribes to node changes
+    add(input: OpcUaDeviceInput!): OpcUaDeviceResult!
 
     # Update an existing OPC UA device configuration
     # Changes take effect immediately - the device connector will be redeployed with new settings
     # Useful for modifying connection parameters, security settings, or sampling intervals
-    updateOpcUaDevice(name: String!, input: OpcUaDeviceInput!): OpcUaDeviceResult!
+    update(name: String!, input: OpcUaDeviceInput!): OpcUaDeviceResult!
 
     # Delete an OPC UA device configuration permanently
     # Stops the device connector and removes all configuration data
     # Returns true if deletion was successful, false if device was not found
-    deleteOpcUaDevice(name: String!): Boolean!
+    delete(name: String!): Boolean!
 
     # Enable or disable an OPC UA device without deleting its configuration
     # Disabled devices stop collecting data but retain their configuration
     # Useful for temporarily pausing data collection or troubleshooting
-    toggleOpcUaDevice(name: String!, enabled: Boolean!): OpcUaDeviceResult!
+    toggle(name: String!, enabled: Boolean!): OpcUaDeviceResult!
 
     # Reassign an OPC UA device to a different cluster node
     # Moves the device connector from one node to another for load balancing
     # The device configuration remains unchanged, only the deployment location changes
-    reassignOpcUaDevice(name: String!, nodeId: String!): OpcUaDeviceResult!
+    reassign(name: String!, nodeId: String!): OpcUaDeviceResult!
 
     # Add a new OPC UA address (node subscription) to an existing device
     # The address can be either a NodeId or BrowsePath - see OpcUaAddressInput for format details
     # New addresses will immediately start collecting data from the OPC UA server
-    addOpcUaAddress(deviceName: String!, input: OpcUaAddressInput!): OpcUaDeviceResult!
+    addAddress(deviceName: String!, input: OpcUaAddressInput!): OpcUaDeviceResult!
 
     # Remove an OPC UA address subscription from a device
     # Stops data collection for the specified address while keeping other addresses active
     # Use the exact address string that was used when adding the address
-    deleteOpcUaAddress(deviceName: String!, address: String!): OpcUaDeviceResult!
+    deleteAddress(deviceName: String!, address: String!): OpcUaDeviceResult!
+}
 
+# Extend Mutations for OPC UA devices
+extend type Mutation {
+    # Access OPC UA device management operations
+    # Returns an OpcUaDeviceMutations type that provides grouped mutation operations
+    opcUaDevice: OpcUaDeviceMutations!
+}
+
+# OPC UA Server Mutations - Grouped operations for OPC UA server management
+type OpcUaServerMutations {
     # Add a new OPC UA server configuration
     # Creates a new OPC UA server that exposes MQTT topics as OPC UA nodes with hierarchical structure
-    addOpcUaServer(input: OpcUaServerInput!): OpcUaServerResult!
+    add(input: OpcUaServerInput!): OpcUaServerResult!
 
     # Update an existing OPC UA server configuration
     # Changes will be applied immediately - server will be restarted if currently running
-    updateOpcUaServer(name: String!, input: OpcUaServerInput!): OpcUaServerResult!
-
+    update(name: String!, input: OpcUaServerInput!): OpcUaServerResult!
 
     # Enable or disable an OPC UA server
     # Controls whether the server should be running on the target cluster nodes
-    toggleOpcUaServer(name: String!, enabled: Boolean!): OpcUaServerResult!
+    toggle(name: String!, enabled: Boolean!): OpcUaServerResult!
 
     # Reassign an OPC UA server to different cluster node(s)
     # Moves the server from one node to another or changes multi-node deployment
-    reassignOpcUaServer(name: String!, nodeId: String!): OpcUaServerResult!
+    reassign(name: String!, nodeId: String!): OpcUaServerResult!
 
     # Create a new OPC UA server configuration (simplified form)
     # Creates a server using simplified configuration matching the web form
-    createOpcUaServer(config: OpcUaServerConfigInput!): OpcUaServerOperationResult!
+    create(config: OpcUaServerConfigInput!): OpcUaServerOperationResult!
 
     # Start an OPC UA server
-    startOpcUaServer(serverName: String!, nodeId: String): OpcUaServerOperationResult!
+    start(serverName: String!, nodeId: String): OpcUaServerOperationResult!
 
     # Stop an OPC UA server
-    stopOpcUaServer(serverName: String!, nodeId: String): OpcUaServerOperationResult!
+    stop(serverName: String!, nodeId: String): OpcUaServerOperationResult!
 
     # Delete an OPC UA server instance
-    deleteOpcUaServer(serverName: String!): OpcUaServerOperationResult!
+    delete(serverName: String!): OpcUaServerOperationResult!
 
     # Add an address mapping to an existing OPC UA Server
     # Adds a new MQTT topic to OPC UA node mapping to the server configuration
-    addOpcUaServerAddress(
+    addAddress(
         serverName: String!,
         address: OpcUaServerAddressInput!
     ): OpcUaServerOperationResult!
 
     # Remove an address mapping from an existing OPC UA Server
     # Removes a mapping by its MQTT topic pattern
-    removeOpcUaServerAddress(
+    removeAddress(
         serverName: String!,
         mqttTopic: String!
     ): OpcUaServerOperationResult!
 
     # Trust one or more certificates (move from untrusted to trusted directory)
-    trustOpcUaServerCertificates(
+    trustCertificates(
         serverName: String!,
         # Certificate fingerprints to trust
         fingerprints: [String!]!
     ): CertificateManagementResult!
 
     # Delete certificates completely (from both trusted and untrusted directories)
-    deleteOpcUaServerCertificates(
+    deleteCertificates(
         serverName: String!,
         fingerprints: [String!]!
     ): CertificateManagementResult!
+}
+
+# Extend Mutations for OPC UA servers
+extend type Mutation {
+    # Access OPC UA server management operations
+    # Returns an OpcUaServerMutations type that provides grouped mutation operations
+    opcUaServer: OpcUaServerMutations!
 }
 
 # MQTT Client Mutations - Grouped operations for MQTT client management
