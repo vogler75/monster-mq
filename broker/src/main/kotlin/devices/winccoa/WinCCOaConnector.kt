@@ -450,14 +450,29 @@ class WinCCOaConnector : AbstractVerticle() {
             // Subsequent rows are data: ["System1:Test_000001.1", 1, "2025-10-06T18:03:05.984Z"]
             val header = values.getJsonArray(0)
 
+            // Extract column names from header (skip first column which is the DP name)
+            val columnNames = mutableListOf<String>()
+            for (i in 1 until header.size()) {
+                val colName = header.getString(i)
+                // Remove leading ":" if present
+                columnNames.add(if (colName.startsWith(":")) colName.substring(1) else colName)
+            }
+
             for (i in 1 until values.size()) {
                 val row = values.getJsonArray(i)
-                if (row.size() >= 3) {
+                if (row.size() >= 2) { // At least DP name + one data column
                     val dpName = row.getString(0)
-                    val value = row.getValue(1)
-                    val stime = row.getString(2)
 
-                    publishValue(address, dpName, value, stime)
+                    // Build dynamic data object from remaining columns
+                    val data = JsonObject()
+                    for (j in 1 until row.size()) {
+                        val colIndex = j - 1
+                        if (colIndex < columnNames.size) {
+                            data.put(columnNames[colIndex], row.getValue(j))
+                        }
+                    }
+
+                    publishValue(address, dpName, data)
                 }
             }
 
@@ -470,7 +485,7 @@ class WinCCOaConnector : AbstractVerticle() {
     /**
      * Publish value to MQTT broker with topic transformation
      */
-    private fun publishValue(address: WinCCOaAddress, dpName: String, value: Any?, stime: String) {
+    private fun publishValue(address: WinCCOaAddress, dpName: String, data: JsonObject) {
         try {
             // Get or compute MQTT topic from cache
             val mqttTopic = topicCache.computeIfAbsent(dpName) { name ->
@@ -479,7 +494,7 @@ class WinCCOaConnector : AbstractVerticle() {
             }
 
             // Format message based on configuration
-            val payload = formatMessage(value, stime)
+            val payload = formatMessage(data)
 
             // Publish to MQTT broker
             val mqttMessage = BrokerMessage(
@@ -496,7 +511,7 @@ class WinCCOaConnector : AbstractVerticle() {
             vertx.eventBus().publish(WinCCOaExtension.ADDRESS_WINCCOA_VALUE_PUBLISH, mqttMessage)
 
             messagesInCounter.incrementAndGet()
-            logger.fine("Published WinCC OA value: $mqttTopic = $value")
+            logger.fine("Published WinCC OA value: $mqttTopic = ${data.encode()}")
 
         } catch (e: Exception) {
             logger.severe("Error publishing value for $dpName: ${e.message}")
@@ -505,30 +520,51 @@ class WinCCOaConnector : AbstractVerticle() {
 
     /**
      * Format message according to configured format
+     *
+     * @param data JsonObject with dynamic columns from the query result (e.g., {"_original.._value": 1, "_original.._stime": "..."})
      */
-    private fun formatMessage(value: Any?, stime: String): ByteArray {
+    private fun formatMessage(data: JsonObject): ByteArray {
         return when (winCCOaConfig.messageFormat) {
-            WinCCOaConnectionConfig.FORMAT_JSON_ISO -> {
-                val json = JsonObject()
-                    .put("value", value)
-                    .put("time", stime)
-                json.encode().toByteArray()
-            }
-            WinCCOaConnectionConfig.FORMAT_JSON_MS -> {
-                val timestamp = try {
-                    Instant.parse(stime).toEpochMilli()
-                } catch (e: Exception) {
-                    System.currentTimeMillis()
+            WinCCOaConnectionConfig.FORMAT_JSON_ISO, WinCCOaConnectionConfig.FORMAT_JSON_MS -> {
+                // For JSON formats, check if we need to convert timestamp to milliseconds
+                if (winCCOaConfig.messageFormat == WinCCOaConnectionConfig.FORMAT_JSON_MS) {
+                    // Try to find and convert timestamp fields to milliseconds
+                    val convertedData = JsonObject()
+                    data.forEach { entry ->
+                        val key = entry.key
+                        val value = entry.value
+
+                        // If the key contains "time" or "stime" and value is ISO string, convert to ms
+                        if ((key.contains("time", ignoreCase = true) || key.contains("stime", ignoreCase = true))
+                            && value is String) {
+                            try {
+                                val timestampMs = Instant.parse(value).toEpochMilli()
+                                convertedData.put(key, timestampMs)
+                            } catch (e: Exception) {
+                                // If conversion fails, keep original value
+                                convertedData.put(key, value)
+                            }
+                        } else {
+                            convertedData.put(key, value)
+                        }
+                    }
+                    convertedData.encode().toByteArray()
+                } else {
+                    // JSON_ISO: use data as-is
+                    data.encode().toByteArray()
                 }
-                val json = JsonObject()
-                    .put("value", value)
-                    .put("time", timestamp)
-                json.encode().toByteArray()
             }
             WinCCOaConnectionConfig.FORMAT_RAW_VALUE -> {
+                // For RAW format, only use the first column's value
+                val firstValue = if (data.size() > 0) {
+                    data.iterator().next().value
+                } else {
+                    null
+                }
+
                 // Handle BLOB type (Buffer data)
-                if (value is JsonObject && value.getString("type") == "Buffer") {
-                    val dataArray = value.getJsonArray("data")
+                if (firstValue is JsonObject && firstValue.getString("type") == "Buffer") {
+                    val dataArray = firstValue.getJsonArray("data")
                     val bytes = ByteArray(dataArray.size())
                     for (i in 0 until dataArray.size()) {
                         bytes[i] = dataArray.getInteger(i).toByte()
@@ -536,15 +572,12 @@ class WinCCOaConnector : AbstractVerticle() {
                     bytes
                 } else {
                     // Plain value as string
-                    value.toString().toByteArray()
+                    firstValue.toString().toByteArray()
                 }
             }
             else -> {
                 // Default to JSON_ISO
-                val json = JsonObject()
-                    .put("value", value)
-                    .put("time", stime)
-                json.encode().toByteArray()
+                data.encode().toByteArray()
             }
         }
     }

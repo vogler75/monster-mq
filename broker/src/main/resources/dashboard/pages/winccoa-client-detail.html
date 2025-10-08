@@ -950,9 +950,9 @@
             <div class="modal-body">
                 <form id="add-query-form">
                     <div class="form-group">
-                        <label for="query-query">GraphQL Query *</label>
+                        <label for="query-query">WinCC OA Query *</label>
                         <input type="text" id="query-query" required
-                               placeholder="e.g., ExampleDP_Trend1.:_original.._value">
+                               placeholder="e.g., SELECT '_original.._value', '_original.._stime', '_original.._status' FROM '*.**' WHERE _DPT = ""Test""">
                         <small class="form-hint">WinCC OA datapoint query string</small>
                     </div>
                     <div class="form-group">
