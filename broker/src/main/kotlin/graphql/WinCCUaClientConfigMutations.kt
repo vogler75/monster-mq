@@ -528,7 +528,7 @@ class WinCCUaClientConfigMutations(
                 }
 
                 // Parse type-specific fields
-                val browseArguments = (inputMap["browseArguments"] as? Map<*, *>)?.let { JsonObject(it as Map<String, Any>) }
+                val nameFilters = (inputMap["nameFilters"] as? List<*>)?.mapNotNull { it as? String }
                 val systemNames = (inputMap["systemNames"] as? List<*>)?.mapNotNull { it as? String }
                 val filterString = inputMap["filterString"] as? String
 
@@ -538,7 +538,7 @@ class WinCCUaClientConfigMutations(
                     topic = topic,
                     description = description,
                     retained = retained,
-                    browseArguments = browseArguments,
+                    nameFilters = nameFilters,
                     systemNames = systemNames,
                     filterString = filterString
                 )
@@ -828,8 +828,8 @@ class WinCCUaClientConfigMutations(
                         "description" to address.description,
                         "retained" to address.retained
                     )
-                    if (address.browseArguments != null) {
-                        addressMap["browseArguments"] = address.browseArguments.map
+                    if (address.nameFilters != null) {
+                        addressMap["nameFilters"] = address.nameFilters
                     }
                     if (address.systemNames != null) {
                         addressMap["systemNames"] = address.systemNames

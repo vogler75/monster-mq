@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - WinCC Unified Client Detail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        /* Enhanced WinCC Unified Client Detail Page Styles */
+
+        /* Two-column grid layout for client info */
+        .client-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Section Cards */
+        .section-card {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+            transition: all 0.3s ease;
+        }
+
+        .section-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+        }
+
+        .section-card.full-width {
+            grid-column: 1 / -1;
+        }
+
+        /* Section Headers */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .section-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--gradient-primary);
+            color: white;
+        }
+
+        .section-title h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .section-content {
+            padding: 1.5rem;
+        }
+
+        /* Info List Layout */
+        .info-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: var(--dark-bg);
+            border-radius: 8px;
+            border: 1px solid var(--dark-border);
+            transition: all 0.2s ease;
+        }
+
+        .info-item:hover {
+            border-color: var(--monster-purple);
+            background: rgba(124, 58, 237, 0.05);
+        }
+
+        .info-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+
+        .info-label svg {
+            color: var(--monster-purple);
+            opacity: 0.7;
+        }
+
+        .info-value {
+            color: var(--text-primary);
+            font-weight: 600;
+            text-align: right;
+            max-width: 60%;
+            word-break: break-all;
+        }
+
+        .info-value.endpoint-url {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            background: rgba(124, 58, 237, 0.1);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid rgba(124, 58, 237, 0.2);
+        }
+
+        /* Status Badge Improvements */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border: 1px solid;
+        }
+
+        .status-enabled {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--monster-green);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .status-disabled {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--monster-red);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        /* Form Input Styles */
+        input[type="text"],
+        input[type="password"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        input[type="number"]:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        input:disabled,
+        select:disabled,
+        textarea:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        input[type="checkbox"] {
+            width: auto;
+            accent-color: var(--monster-purple);
+            transform: scale(1.2);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .checkbox-group label {
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+
+        /* Data Table Enhancements */
+        .data-table {
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        .data-table table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--dark-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            table-layout: fixed;
+        }
+
+        .data-table thead th:nth-child(1) { width: 15%; } /* Type */
+        .data-table thead th:nth-child(2) { width: 25%; } /* MQTT Topic */
+        .data-table thead th:nth-child(3) { width: 25%; } /* Description */
+        .data-table thead th:nth-child(4) { width: 27%; } /* Options */
+        .data-table thead th:nth-child(5) { width: 8%; }  /* Actions */
+
+        .data-table thead th {
+            background: var(--dark-surface-2);
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--dark-border);
+        }
+
+        .data-table tbody td {
+            padding: 1.5rem 1rem;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+            vertical-align: middle;
+            height: 80px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+        }
+
+        .data-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .modal-content {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .large-modal {
+            max-width: 800px;
+        }
+
+        .modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.25rem;
+            line-height: 1;
+            transition: color 0.2s ease;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 2rem;
+        }
+
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+
+        /* Enhanced Form Styles for Modals */
+        .modal .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .modal .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .modal .form-control,
+        .modal input[type="text"],
+        .modal input[type="password"],
+        .modal input[type="number"],
+        .modal select,
+        .modal textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        .modal .form-control:focus,
+        .modal input[type="text"]:focus,
+        .modal input[type="password"]:focus,
+        .modal input[type="number"]:focus,
+        .modal select:focus,
+        .modal textarea:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+
+        .modal .form-control::placeholder,
+        .modal input::placeholder,
+        .modal textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        small.form-hint {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+            display: block;
+        }
+
+        /* Checkbox Styling */
+        .modal input[type="checkbox"] {
+            margin-right: 0.5rem;
+            accent-color: var(--monster-purple);
+            transform: scale(1.1);
+        }
+
+        .modal .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .modal .checkbox-group label {
+            margin-bottom: 0;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Two Column Layout for Forms */
+        .modal .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal .form-row.single {
+            grid-template-columns: 1fr;
+        }
+
+        /* Button Improvements */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .btn svg {
+            flex-shrink: 0;
+        }
+
+        .btn-primary {
+            background: var(--gradient-primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--dark-surface-2);
+            color: var(--text-primary);
+            border: 1px solid var(--dark-border);
+            min-width: 160px;
+            white-space: nowrap;
+        }
+
+        .btn-secondary:hover {
+            background: var(--dark-border);
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background: var(--monster-red);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        /* Page Header Enhancements */
+        .page-header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .page-header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        /* Loading and Error States */
+        .loading-indicator {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            text-align: center;
+        }
+
+        .loading-spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--dark-border);
+            border-top: 3px solid var(--monster-purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* No Data State */
+        .no-data {
+            padding: 0;
+            background: transparent;
+            border: none;
+        }
+
+        .no-data-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            text-align: center;
+            background: var(--dark-bg);
+            border-radius: 8px;
+            border: 2px dashed var(--dark-border);
+        }
+
+        .no-data-content svg {
+            margin-bottom: 1rem;
+            color: var(--text-muted);
+        }
+
+        .no-data-content h3 {
+            margin: 0 0 0.5rem 0;
+            color: var(--text-primary);
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .no-data-content p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        /* Action buttons for addresses table */
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--dark-surface-2);
+            border: 1px solid var(--dark-border);
+        }
+
+        .btn-action:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-delete {
+            color: var(--monster-red);
+        }
+
+        .btn-delete:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--monster-red);
+            color: #f87171;
+        }
+
+        /* Pulse animation for unsaved changes */
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+        }
+
+        /* Conditional field display */
+        .conditional-field {
+            display: none;
+        }
+
+        .conditional-field.visible {
+            display: block;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .client-info-grid {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+
+            .modal .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .section-header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 1rem;
+            }
+
+            .section-title {
+                justify-content: center;
+            }
+
+            .info-item {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.5rem;
+            }
+
+            .info-value {
+                text-align: left;
+                max-width: 100%;
+            }
+
+            .page-header-content {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .page-header-actions {
+                justify-content: center;
+            }
+
+            .data-table table {
+                font-size: 0.875rem;
+            }
+
+            .data-table thead th,
+            .data-table tbody td {
+                padding: 0.75rem 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Top Bar -->
+    <div class="top-bar">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <button class="sidebar-toggle" onclick="toggleSidebar()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15,18 9,12 15,6"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">
+                    U
+                </div>
+                <div class="user-details">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-role">Administrator</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div>
+                        <h1 class="page-title" id="client-title">WinCC Unified Client</h1>
+                        <p class="page-subtitle" id="client-subtitle">Client configuration and subscription management</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button class="btn btn-secondary" onclick="goBack()">
+                            Back to Clients
+                        </button>
+                        <button class="btn btn-primary" onclick="saveClient()" id="save-client-btn">
+                            Save Client
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading client details...</span>
+            </div>
+
+            <div id="client-content" style="display: none;">
+                <!-- Two Column Layout for Client Info -->
+                <div class="client-info-grid">
+                    <!-- Basic Information Section -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                    </svg>
+                                </div>
+                                <h2>Basic Information</h2>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="info-list">
+                                <div class="form-group">
+                                    <label for="client-name">Bridge Name *</label>
+                                    <input type="text" id="client-name" required placeholder="e.g., winccua-plant1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-namespace">Namespace *</label>
+                                    <input type="text" id="client-namespace" required placeholder="e.g., winccua/plant1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-graphql-endpoint">GraphQL Endpoint *</label>
+                                    <input type="text" id="client-graphql-endpoint" required placeholder="http://winccua:4000/graphql">
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-websocket-endpoint">WebSocket Endpoint</label>
+                                    <input type="text" id="client-websocket-endpoint" placeholder="Optional (auto-derived)">
+                                    <small class="form-hint">Auto-derived from GraphQL endpoint if not specified</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-node">Cluster Node *</label>
+                                    <select id="client-node" required>
+                                        <option value="">Select Node...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-message-format">Message Format *</label>
+                                    <select id="client-message-format" required>
+                                        <option value="JSON_ISO" selected>JSON with ISO timestamps</option>
+                                        <option value="JSON_MS">JSON with milliseconds</option>
+                                        <option value="RAW_VALUE">Raw value only</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="client-enabled" checked>
+                                        <label for="client-enabled">Enabled</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Authentication Section -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                                    </svg>
+                                </div>
+                                <h2>Authentication</h2>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="info-list">
+                                <div class="form-group">
+                                    <label for="client-username">Username</label>
+                                    <input type="text" id="client-username" placeholder="Enter username" required>
+                                    <small class="form-hint">Required for WinCC Unified authentication</small>
+                                </div>
+                                <div class="form-group">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                        <label for="client-password">Password</label>
+                                        <div class="checkbox-group" id="change-password-group" style="display: none; margin: 0;">
+                                            <input type="checkbox" id="change-password-checkbox">
+                                            <label for="change-password-checkbox" style="margin: 0;">Change Password</label>
+                                        </div>
+                                    </div>
+                                    <input type="password" id="client-password" placeholder="Enter password" required>
+                                    <small class="form-hint">Required for WinCC Unified authentication</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Connection Settings Section -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM13 17h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                                    </svg>
+                                </div>
+                                <h2>Connection Settings</h2>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="info-list">
+                                <div class="form-group">
+                                    <label for="client-reconnect-delay">Reconnect Delay (ms)</label>
+                                    <input type="number" id="client-reconnect-delay" value="5000">
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-connection-timeout">Connection Timeout (ms)</label>
+                                    <input type="number" id="client-connection-timeout" value="10000">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Topic Transformation Section -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                    </svg>
+                                </div>
+                                <h2>Topic Transformation</h2>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="info-list">
+                                <div class="form-group">
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="client-convert-dot-to-slash" checked>
+                                        <label for="client-convert-dot-to-slash">Convert Dots to Slashes</label>
+                                    </div>
+                                    <small class="form-hint">Convert "." to "/" in tag names</small>
+                                </div>
+                                <div class="form-group">
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="client-convert-underscore-to-slash">
+                                        <label for="client-convert-underscore-to-slash">Convert Underscores to Slashes</label>
+                                    </div>
+                                    <small class="form-hint">Convert "_" to "/" in tag names</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-regex-pattern">Regex Pattern</label>
+                                    <input type="text" id="client-regex-pattern" placeholder="Optional (e.g., ([0-9]+))">
+                                    <small class="form-hint">Additional regex transformation</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-regex-replacement">Regex Replacement</label>
+                                    <input type="text" id="client-regex-replacement" placeholder="Optional (e.g., $1)">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Addresses Section - Full Width -->
+                <div id="addresses-section" class="section-card full-width">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/>
+                                </svg>
+                            </div>
+                            <h2>WinCC Unified Subscriptions</h2>
+                        </div>
+                        <div class="section-actions">
+                            <button class="btn btn-primary" onclick="showAddAddressModal()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                </svg>
+                                Add Subscription
+                            </button>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div id="addresses-container">
+                            <div id="addresses-table" class="data-table">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>MQTT Topic</th>
+                                            <th>Description</th>
+                                            <th>Options</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="addresses-table-body">
+                                        <!-- Address rows will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="no-addresses" class="no-data" style="display: none;">
+                                <div class="no-data-content">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
+                                        <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/>
+                                    </svg>
+                                    <h3>No subscriptions configured</h3>
+                                    <p>Click "Add Subscription" to start monitoring WinCC Unified data</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">!</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Address Modal -->
+    <div id="add-address-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add WinCC Unified Subscription</h3>
+                <button class="modal-close" onclick="hideAddAddressModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-address-form">
+                    <div class="form-group">
+                        <label for="address-type">Subscription Type *</label>
+                        <select id="address-type" required onchange="clientDetailManager.updateAddressFormFields()">
+                            <option value="">Select Type...</option>
+                            <option value="TAG_VALUES">TAG_VALUES</option>
+                            <option value="ACTIVE_ALARMS">ACTIVE_ALARMS</option>
+                        </select>
+                        <small class="form-hint">Type of subscription to create</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="address-topic">MQTT Topic *</label>
+                        <input type="text" id="address-topic" required
+                               placeholder="e.g., plant/sensor/value">
+                        <small class="form-hint">MQTT topic where values will be published</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="address-description">Description</label>
+                        <input type="text" id="address-description" placeholder="Optional description">
+                    </div>
+                    <div id="browse-args-group" class="form-group conditional-field">
+                        <label for="address-browse-arguments">Name Filters (comma-separated)</label>
+                        <textarea id="address-browse-arguments" rows="4"
+                                  placeholder='e.g., HMI_*, TANK_*, System.Tag1'></textarea>
+                        <small class="form-hint">Tag name filters for TAG_VALUES (supports wildcards like HMI_*)</small>
+                    </div>
+                    <div id="system-names-group" class="form-group conditional-field">
+                        <label for="address-system-names">System Names (comma-separated)</label>
+                        <input type="text" id="address-system-names" placeholder="e.g., System1, System2">
+                        <small class="form-hint">Comma-separated list of system names for ACTIVE_ALARMS</small>
+                    </div>
+                    <div id="filter-string-group" class="form-group conditional-field">
+                        <label for="address-filter-string">Filter String</label>
+                        <input type="text" id="address-filter-string" placeholder="Optional filter">
+                        <small class="form-hint">Filter string for ACTIVE_ALARMS</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="address-retained">
+                            <label for="address-retained">Publish with Retained Flag</label>
+                        </div>
+                        <small class="form-hint">Publish MQTT message with retained flag</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="add-address-btn" onclick="addAddress()">Add Subscription</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Address Modal -->
+    <div id="confirm-delete-address-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideConfirmDeleteAddressModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the subscription "<span id="delete-address-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteAddressModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteAddress()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/winccua-client-detail.js"></script>
+    <script>
+        // Handle modal clicks (close when clicking outside)
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                if (e.target.id === 'add-address-modal') {
+                    clientDetailManager.hideAddAddressModal();
+                } else if (e.target.id === 'confirm-delete-address-modal') {
+                    clientDetailManager.hideConfirmDeleteAddressModal();
+                }
+            }
+        });
+    </script>
+</body>
+</html>

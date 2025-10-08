@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - WinCC Unified Clients</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        /* Table and other existing styles */
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            border-radius: 12px 12px 0 0;
+        }
+        .table-title h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .table-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--monster-purple), var(--monster-teal));
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+        }
+        .btn-secondary {
+            background: var(--dark-surface-2);
+            border: 1px solid var(--dark-border);
+            color: var(--text-primary);
+        }
+        .btn-secondary:hover {
+            background: var(--dark-bg);
+            border-color: var(--monster-purple);
+        }
+        .btn-danger {
+            background: var(--monster-red);
+            color: white;
+        }
+        .btn-danger:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .btn-icon {
+            padding: 0.6rem;
+            min-width: auto;
+            width: auto;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            align-items: center;
+        }
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--dark-surface-2);
+            border: 1px solid var(--dark-border);
+        }
+        .btn-action:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        .btn-view { color: var(--monster-purple); }
+        .btn-view:hover {
+            background: rgba(124, 58, 237, 0.1);
+            border-color: var(--monster-purple);
+        }
+        .btn-play { color: var(--monster-green); }
+        .btn-play:hover {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: var(--monster-green);
+        }
+        .btn-pause { color: var(--monster-orange); }
+        .btn-pause:hover {
+            background: rgba(249, 115, 22, 0.1);
+            border-color: var(--monster-orange);
+        }
+        .btn-delete { color: var(--monster-red); }
+        .btn-delete:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--monster-red);
+        }
+        .data-table {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+        }
+        .data-table table {
+            margin: 0;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+            width: 100%;
+        }
+        .data-table thead th {
+            background: var(--dark-surface-2);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--dark-border);
+        }
+        .data-table tbody td {
+            padding: 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+        .data-table tbody tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+        }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-enabled {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--monster-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .status-disabled {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--monster-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .status-connected {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--monster-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .status-disconnected {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--monster-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <button class="sidebar-toggle" onclick="toggleSidebar()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15,18 9,12 15,6"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">
+                    U
+                </div>
+                <div class="user-details">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-role">Administrator</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">WinCC Unified Client Management</h1>
+                <p class="page-subtitle">Configure and manage WinCC Unified (OPC UA) connections for tag and alarm bridging</p>
+            </div>
+
+            <div class="metrics-grid" style="margin-bottom: 2rem;">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Clients</span>
+                        <div class="metric-icon">🔧</div>
+                    </div>
+                    <div class="metric-value" id="total-clients">0</div>
+                    <div class="metric-label">Configured Clients</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Connected</span>
+                        <div class="metric-icon">🟢</div>
+                    </div>
+                    <div class="metric-value" id="connected-clients">0</div>
+                    <div class="metric-label">Active Connections</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Local Clients</span>
+                        <div class="metric-icon">📍</div>
+                    </div>
+                    <div class="metric-value" id="current-node-clients">0</div>
+                    <div class="metric-label">On This Node</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Subscriptions</span>
+                        <div class="metric-icon">📊</div>
+                    </div>
+                    <div class="metric-value" id="total-addresses">0</div>
+                    <div class="metric-label">Tags & Alarms</div>
+                </div>
+            </div>
+
+            <!-- Clients Table -->
+            <div id="clients-table" class="data-table">
+                <div class="table-header">
+                    <div class="table-title">
+                        <h2>Client Configuration</h2>
+                    </div>
+                    <div class="table-actions">
+                        <button class="btn btn-secondary btn-icon" onclick="refreshClients()" title="Refresh clients">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                            </svg>
+                        </button>
+                        <a href="/pages/winccua-client-detail.html?new=true" class="btn btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                            Add Client
+                        </a>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Client Name</th>
+                            <th>GraphQL Endpoint</th>
+                            <th>Namespace</th>
+                            <th>Node Assignment</th>
+                            <th>Status</th>
+                            <th>Connection</th>
+                            <th>Subscriptions</th>
+                            <th>Metrics (msg/s)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clients-table-body">
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading clients...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="confirm-delete-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 9999; align-items: center; justify-content: center;">
+        <div style="background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-width: 500px; width: 100%;">
+            <div style="padding: 1.5rem 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; color: var(--text-primary);">Confirm Delete</h3>
+                <button style="background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;" onclick="hideConfirmDeleteModal()">×</button>
+            </div>
+            <div style="padding: 2rem;">
+                <p style="color: var(--text-primary);">Are you sure you want to delete the client "<span id="delete-client-name"></span>"?</p>
+                <p style="color: var(--text-muted);">This action cannot be undone.</p>
+            </div>
+            <div style="padding: 1.5rem 2rem; border-top: 1px solid var(--dark-border); display: flex; justify-content: flex-end; gap: 1rem;">
+                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteClient()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/winccua-clients.js"></script>
+</body>
+</html>

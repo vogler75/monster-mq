@@ -2051,8 +2051,8 @@ type WinCCUaAddress {
     description: String
     # Whether to publish MQTT messages with retained flag
     retained: Boolean!
-    # Browse arguments for TAG_VALUES type (JSON object)
-    browseArguments: JSON
+    # Name filters for TAG_VALUES type (e.g., ["HMI_*", "TANK_*"])
+    nameFilters: [String!]
     # System names filter for ACTIVE_ALARMS type
     systemNames: [String!]
     # Filter string for ACTIVE_ALARMS type
@@ -2177,8 +2177,8 @@ input WinCCUaAddressInput {
     description: String
     # Whether to publish MQTT messages with retained flag
     retained: Boolean = false
-    # Browse arguments for TAG_VALUES type (JSON object with query parameters)
-    browseArguments: JSON
+    # Name filters for TAG_VALUES type (e.g., ["HMI_*", "TANK_*"])
+    nameFilters: [String!]
     # System names filter for ACTIVE_ALARMS type
     systemNames: [String!]
     # Filter string for ACTIVE_ALARMS type
@@ -2248,7 +2248,7 @@ type WinCCUaDeviceMutations {
     reassign(name: String!, nodeId: String!): WinCCUaClientResult!
 
     # Add a new subscription address to an existing WinCC Unified client
-    # Can be either TAG_VALUES (requires browseArguments) or ACTIVE_ALARMS (optional filters)
+    # Can be either TAG_VALUES (requires nameFilters) or ACTIVE_ALARMS (optional filters)
     # New subscriptions will immediately start receiving updates
     addAddress(deviceName: String!, input: WinCCUaAddressInput!): WinCCUaClientResult!
 

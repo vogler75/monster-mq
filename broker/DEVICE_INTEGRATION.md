@@ -198,18 +198,22 @@ data class WinCCUaAddress(
     val topic: String,                 // MQTT topic for publishing
     val description: String? = null,
     val retained: Boolean = false,
-    val browseArguments: JsonObject? = null,  // For browse queries
+    val nameFilters: List<String>? = null,    // For tag name filtering (e.g., ["HMI_*", "TANK_*"])
     val systemNames: List<String>? = null,    // For alarm filtering
     val filterString: String? = null          // For tag filtering
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): WinCCUaAddress {
+            // Handle nameFilters (new format) or convert from browseArguments (legacy)
+            val nameFiltersList = json.getJsonArray("nameFilters")?.map { it.toString() }
+                ?: json.getJsonObject("browseArguments")?.getString("filter")?.let { listOf(it) }
+
             return WinCCUaAddress(
                 type = WinCCUaAddressType.valueOf(json.getString("type")),
                 topic = json.getString("topic"),
                 description = json.getString("description"),
                 retained = json.getBoolean("retained", false),
-                browseArguments = json.getJsonObject("browseArguments"),
+                nameFilters = nameFiltersList,
                 systemNames = json.getJsonArray("systemNames")?.map { it.toString() },
                 filterString = json.getString("filterString")
             )
@@ -223,7 +227,7 @@ data class WinCCUaAddress(
             .put("retained", retained)
 
         description?.let { json.put("description", it) }
-        browseArguments?.let { json.put("browseArguments", it) }
+        nameFilters?.let { json.put("nameFilters", JsonArray(it)) }
         systemNames?.let { json.put("systemNames", JsonArray(it)) }
         filterString?.let { json.put("filterString", it) }
 
@@ -3366,6 +3370,305 @@ query {
 - [ ] Test cluster node reassignment
 - [ ] Test reconnection on connection loss
 - [ ] Test configuration updates trigger redeploy
+
+---
+
+## Common UI and GraphQL Integration Pitfalls
+
+When implementing the frontend dashboard and GraphQL API layer, several common issues can arise. This section documents real issues encountered during development and how to avoid them.
+
+### 1. Addresses Management in Client Updates
+
+**Problem**: Including `addresses` in the config object when updating a client causes GraphQL validation errors.
+
+**Root Cause**: The backend manages addresses separately through dedicated `addAddress` and `deleteAddress` mutations. During updates, addresses are automatically preserved from the existing configuration (see `WinCCUaClientConfigMutations.kt:222`).
+
+**Solution**: Never include `addresses` in the config when saving a client:
+
+```javascript
+// ❌ WRONG - causes GraphQL validation error
+const clientData = {
+    name: name,
+    namespace: namespace,
+    nodeId: nodeId,
+    enabled: enabled,
+    config: {
+        graphqlEndpoint: endpoint,
+        username: username,
+        password: password,
+        addresses: this.addresses  // ❌ Don't send this
+    }
+}
+
+// ✅ CORRECT - addresses managed separately
+const clientData = {
+    name: name,
+    namespace: namespace,
+    nodeId: nodeId,
+    enabled: enabled,
+    config: {
+        graphqlEndpoint: endpoint,
+        username: username,
+        password: password
+        // addresses are automatically preserved by backend
+    }
+}
+```
+
+**Backend Code Reference** (`WinCCUaClientConfigMutations.kt:216-225`):
+```kotlin
+// Parse existing config from JsonObject
+val existingConfig = WinCCUaConnectionConfig.fromJsonObject(existingDevice.config)
+val requestConfig = WinCCUaConnectionConfig.fromJsonObject(request.config)
+
+// Update device (preserve existing addresses and passwords)
+val newConfig = requestConfig.copy(
+    addresses = existingConfig.addresses,  // ✅ Preserved automatically
+    password = requestConfig.password.ifBlank { existingConfig.password }
+)
+```
+
+### 2. Password Preservation in Updates
+
+**Problem**: When editing a client, forcing users to re-enter the password is bad UX. But how do you preserve existing passwords?
+
+**Solution**: The backend uses `ifBlank` to preserve passwords. Send an **empty string** (not null) when you don't want to change the password:
+
+```javascript
+// In edit mode
+function getPasswordForSave() {
+    if (this.isNewMode) {
+        // New client - password required
+        const password = document.getElementById('client-password').value;
+        if (!password) throw new Error('Password is required');
+        return password;
+    }
+
+    // Edit mode - check "Change Password" checkbox
+    const changePasswordCheckbox = document.getElementById('change-password-checkbox');
+    if (changePasswordCheckbox && changePasswordCheckbox.checked) {
+        const password = document.getElementById('client-password').value;
+        if (!password) throw new Error('Please enter a new password');
+        return password;  // ✅ Send new password
+    }
+
+    return '';  // ✅ Empty string preserves existing password
+}
+```
+
+**UI Pattern**:
+```html
+<div style="display: flex; justify-content: space-between; align-items: center;">
+    <label for="client-password">Password</label>
+    <div class="checkbox-group" id="change-password-group" style="display: none;">
+        <input type="checkbox" id="change-password-checkbox">
+        <label for="change-password-checkbox">Change Password</label>
+    </div>
+</div>
+<input type="password" id="client-password" disabled placeholder="••••••••">
+```
+
+**JavaScript to toggle password field**:
+```javascript
+if (!this.isNewClient) {
+    changePasswordGroup.style.display = 'block';
+    passwordField.disabled = true;
+    passwordField.required = false;
+    passwordField.placeholder = '••••••••';
+
+    changePasswordCheckbox.addEventListener('change', (e) => {
+        passwordField.disabled = !e.target.checked;
+        passwordField.required = e.target.checked;
+        passwordField.placeholder = e.target.checked ? 'Enter new password' : '••••••••';
+        if (!e.target.checked) {
+            passwordField.value = '';
+        }
+    });
+}
+```
+
+### 3. GraphQL Query Field Mismatches
+
+**Problem**: Frontend JavaScript queries fields that don't exist in the GraphQL schema, causing validation errors.
+
+**Example Error**:
+```
+Field 'removeSystemName' in type 'WinCCUaTransformConfig' is undefined
+Field 'query' in type 'WinCCUaAddress' is undefined
+```
+
+**Root Cause**: Copying code from similar integrations without checking schema differences. WinCC UA schema is different from WinCC OA schema.
+
+**Solution**: Always verify field names against the actual GraphQL schema (`schema.graphqls`) before writing queries:
+
+```javascript
+// ❌ WRONG - copied from WinCC OA
+const query = `
+    query {
+        winCCUaClient(name: $name) {
+            config {
+                token  // ❌ Doesn't exist in WinCC UA schema
+                transformConfig {
+                    removeSystemName  // ❌ Doesn't exist
+                }
+                addresses {
+                    query  // ❌ Called 'nameFilters' in WinCC UA
+                }
+            }
+        }
+    }
+`
+
+// ✅ CORRECT - matches schema.graphqls
+const query = `
+    query {
+        winCCUaClient(name: $name) {
+            config {
+                username  // ✅ Exists in WinCC UA
+                transformConfig {
+                    convertDotToSlash  // ✅ Correct field name
+                }
+                addresses {
+                    nameFilters  // ✅ Correct field name
+                }
+            }
+        }
+    }
+`
+```
+
+### 4. Array Field Handling: nameFilters vs browseArguments
+
+**Problem**: Converting from complex JSON objects to simple string arrays requires careful UI and backend handling.
+
+**Example**: WinCC UA originally used `browseArguments: JsonObject` but was simplified to `nameFilters: [String!]`.
+
+**Frontend Conversion**:
+```javascript
+// Parse comma-separated input into array
+const nameFiltersValue = document.getElementById('address-browse-arguments').value.trim();
+addressData.nameFilters = nameFiltersValue
+    ? nameFiltersValue.split(',').map(f => f.trim()).filter(f => f.length > 0)
+    : null;
+
+// Example: "HMI_*, TANK_*, System.Tag1" → ["HMI_*", "TANK_*", "System.Tag1"]
+```
+
+**Display Array in UI**:
+```javascript
+// Show array as comma-separated string
+if (address.nameFilters && address.nameFilters.length > 0) {
+    optionsBadges.push(`Filters: ${address.nameFilters.join(', ')}`);
+}
+```
+
+**Backend Backward Compatibility** (`WinCCUaConfig.kt`):
+```kotlin
+// Support old format during migration
+val nameFiltersList = json.getJsonArray("nameFilters")?.map { it.toString() }
+    ?: json.getJsonObject("browseArguments")?.getString("filter")?.let { listOf(it) }
+```
+
+### 5. GraphQL Type vs Input Type Confusion
+
+**Problem**: There are two versions of most types: the **type** (for queries) and the **input** (for mutations). They may have different fields.
+
+**Example**:
+```graphql
+# Type - returned from queries (may include computed fields)
+type WinCCUaAddress {
+    type: WinCCUaAddressType!
+    topic: String!
+    nameFilters: [String!]
+    # May include additional read-only fields
+}
+
+# Input - sent to mutations (only writeable fields)
+input WinCCUaAddressInput {
+    type: WinCCUaAddressType!
+    topic: String!
+    nameFilters: [String!]
+    # No read-only fields like 'id' or computed values
+}
+```
+
+**Solution**: Always check both type and input definitions when adding new fields. Update both if the field should be writable.
+
+### 6. Null vs Empty String vs Undefined in GraphQL
+
+**Problem**: JavaScript has three "empty" values but GraphQL only understands null and defined values.
+
+**Best Practices**:
+```javascript
+// For optional strings - use null for "not set"
+websocketEndpoint: document.getElementById('websocket').value.trim() || null
+
+// For arrays - use null for "not provided", [] for "empty list"
+nameFilters: filters.length > 0 ? filters : null  // ✅ null = not set
+nameFilters: []  // ✅ empty array = explicitly no filters
+
+// For numbers - send actual values or use schema defaults
+reconnectDelay: parseInt(value) || undefined  // ❌ undefined becomes null
+reconnectDelay: parseInt(value)  // ✅ relies on schema default if invalid
+```
+
+### 7. Live Metrics Fallback Pattern
+
+**Problem**: Newly created clients have no stored metrics yet, so GraphQL queries return empty results.
+
+**Solution**: Implement a fallback to fetch live metrics from EventBus when database has no data:
+
+```kotlin
+fun winCCUaClientMetrics(): DataFetcher<CompletableFuture<List<WinCCUaClientMetrics>>> {
+    return DataFetcher { env ->
+        val future = CompletableFuture<List<WinCCUaClientMetrics>>()
+        val clientName = env.getSource<Map<String, Any>>()["name"] as String
+
+        // Try database first
+        metricsStore.getWinCCUaClientMetricsList(clientName, 1).onComplete { result ->
+            if (result.succeeded() && result.result().isNotEmpty()) {
+                future.complete(result.result())  // ✅ Return stored metrics
+            } else {
+                // ✅ Fallback: fetch live from EventBus
+                fetchLiveMetrics(clientName, future)
+            }
+        }
+
+        future
+    }
+}
+
+private fun fetchLiveMetrics(clientName: String, future: CompletableFuture<...>) {
+    val addr = EventBusAddresses.WinCCUaBridge.connectorMetrics(clientName)
+    vertx.eventBus().request<JsonObject>(addr, JsonObject()).onComplete { reply ->
+        if (reply.succeeded()) {
+            val body = reply.result().body()
+            val metrics = WinCCUaClientMetrics(
+                messagesIn = body.getDouble("messagesInRate", 0.0),
+                connected = body.getBoolean("connected", false),
+                timestamp = TimestampConverter.currentTimeIsoString()
+            )
+            future.complete(listOf(metrics))
+        } else {
+            future.complete(emptyList())  // ✅ Graceful fallback
+        }
+    }
+}
+```
+
+### Summary: Quick Checklist for UI Development
+
+When implementing a new device client UI:
+
+- [ ] **Don't send addresses in config** - use dedicated addAddress/deleteAddress mutations
+- [ ] **Use empty string for unchanged passwords** - backend uses `ifBlank` to preserve
+- [ ] **Verify all GraphQL field names** against schema.graphqls before querying
+- [ ] **Handle array fields properly** - parse comma-separated input, display joined strings
+- [ ] **Update both type and input** in GraphQL schema when adding fields
+- [ ] **Use null for optional fields** - don't send undefined
+- [ ] **Implement live metrics fallback** - query EventBus when database is empty
+- [ ] **Test in both create and edit modes** - different validation rules apply
+- [ ] **Check browser console for GraphQL errors** - they show exact field mismatches
 
 ---
 

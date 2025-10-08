@@ -479,22 +479,14 @@ class WinCCUaConnector : AbstractVerticle() {
             return
         }
 
-        val notification = activeAlarmsData.getJsonObject("notification")
-        if (notification == null) {
-            logger.warning("No notification in activeAlarms data")
-            return
-        }
+        // Publish the complete alarm notification with all fields
+        val alarmName = activeAlarmsData.getString("name")
+            ?: activeAlarmsData.getString("path")
 
-        // Parse alarm notification
-        val alarmId = notification.getString("id")
-        val alarmType = notification.getString("type")
-        val systemName = notification.getString("systemName")
-        val alarmText = notification.getString("text")
-        val timestamp = notification.getString("timestamp")
-        val state = notification.getString("state")
-
-        if (alarmId != null) {
-            publishAlarm(address, notification)
+        if (alarmName != null) {
+            publishAlarm(address, activeAlarmsData)
+        } else {
+            logger.warning("Alarm notification has no name or path, skipping")
         }
     }
 
@@ -539,8 +531,13 @@ class WinCCUaConnector : AbstractVerticle() {
      */
     private fun publishAlarm(address: WinCCUaAddress, alarmData: JsonObject) {
         try {
-            val alarmId = alarmData.getString("id", "unknown")
-            val mqttTopic = "${deviceConfig.namespace}/${address.topic}/$alarmId"
+            // Use alarm name for topic (canonical name of the configured alarm)
+            // If name not available, use path (full hierarchical name) or fall back to "unknown"
+            val alarmName = alarmData.getString("name")
+                ?: alarmData.getString("path")
+                ?: "unknown"
+
+            val mqttTopic = "${deviceConfig.namespace}/${address.topic}/$alarmName"
 
             // Publish alarm as JSON
             val payload = alarmData.encode().toByteArray()
@@ -676,19 +673,19 @@ class WinCCUaConnector : AbstractVerticle() {
     private fun executeBrowseQuery(address: WinCCUaAddress): Future<List<String>> {
         val promise = Promise.promise<List<String>>()
 
-        val browseArgs = address.browseArguments
-        if (browseArgs == null) {
-            promise.fail("No browse arguments provided")
+        val nameFilters = address.nameFilters
+        if (nameFilters == null || nameFilters.isEmpty()) {
+            promise.fail("No name filters provided")
             return promise.future()
         }
 
-        // Build nameFilters array from filter argument
-        val filterValue = browseArgs.getString("filter") ?: browseArgs.getString("nameFilters") ?: "*"
-        val nameFiltersArray = "[${"\"$filterValue\""}]"  // Convert single filter to array format
+        // Build nameFilters array for GraphQL query
+        val nameFiltersArray = nameFilters.joinToString(", ") { "\"$it\"" }
+        val nameFiltersGraphQL = "[$nameFiltersArray]"
 
         val browseQuery = """
             query {
-                browse(nameFilters: $nameFiltersArray) {
+                browse(nameFilters: $nameFiltersGraphQL) {
                     name
                 }
             }
@@ -813,16 +810,83 @@ class WinCCUaConnector : AbstractVerticle() {
         val subscription = """
             subscription {
                 activeAlarms$filtersStr {
-                    notification {
-                        id
-                        type
-                        systemName
-                        text
-                        timestamp
-                        state
-                        priority
-                        value
+                    name
+                    instanceID
+                    alarmGroupID
+                    raiseTime
+                    acknowledgmentTime
+                    clearTime
+                    resetTime
+                    modificationTime
+                    state
+                    textColor
+                    backColor
+                    flashing
+                    languages
+                    alarmClassName
+                    alarmClassSymbol
+                    alarmClassID
+                    stateMachine
+                    priority
+                    alarmParameterValues
+                    alarmType
+                    eventText
+                    infoText
+                    alarmText1
+                    alarmText2
+                    alarmText3
+                    alarmText4
+                    alarmText5
+                    alarmText6
+                    alarmText7
+                    alarmText8
+                    alarmText9
+                    stateText
+                    origin
+                    area
+                    changeReason
+                    connectionName
+                    valueLimit
+                    sourceType
+                    suppressionState
+                    hostName
+                    userName
+                    value
+                    valueQuality {
+                        quality
+                        subStatus
+                        limit
+                        extendedSubStatus
+                        sourceQuality
+                        sourceTime
+                        timeCorrected
                     }
+                    quality {
+                        quality
+                        subStatus
+                        limit
+                        extendedSubStatus
+                        sourceQuality
+                        sourceTime
+                        timeCorrected
+                    }
+                    invalidFlags {
+                        invalidConfiguration
+                        invalidTimestamp
+                        invalidAlarmParameter
+                        invalidEventText
+                    }
+                    deadBand
+                    producer
+                    duration
+                    durationIso
+                    sourceID
+                    systemSeverity
+                    loopInAlarm
+                    loopInAlarmParameterValues
+                    path
+                    userResponse
+                    notificationReason
                 }
             }
         """.trimIndent()

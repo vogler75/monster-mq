@@ -142,8 +142,8 @@ class WinCCUaClientConfigQueries(
                         "description" to address.description,
                         "retained" to address.retained
                     )
-                    if (address.browseArguments != null) {
-                        addressMap["browseArguments"] = address.browseArguments.map
+                    if (address.nameFilters != null) {
+                        addressMap["nameFilters"] = address.nameFilters
                     }
                     if (address.systemNames != null) {
                         addressMap["systemNames"] = address.systemNames

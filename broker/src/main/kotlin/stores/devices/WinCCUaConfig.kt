@@ -21,7 +21,7 @@ data class WinCCUaAddress(
     val retained: Boolean = false,          // Whether to publish MQTT messages with retained flag
 
     // For TAG_VALUES type
-    val browseArguments: JsonObject? = null, // Arguments for browse query to get tag list
+    val nameFilters: List<String>? = null,   // Name filters for tag browsing (e.g., ["HMI_*", "TANK_*"])
 
     // For ACTIVE_ALARMS type
     val systemNames: List<String>? = null,   // Optional system names filter for alarms
@@ -38,12 +38,16 @@ data class WinCCUaAddress(
 
             val systemNamesList = json.getJsonArray("systemNames")?.map { it.toString() }
 
+            // Handle nameFilters (new format) or convert from browseArguments (legacy format)
+            val nameFiltersList = json.getJsonArray("nameFilters")?.map { it.toString() }
+                ?: json.getJsonObject("browseArguments")?.getString("filter")?.let { listOf(it) }
+
             return WinCCUaAddress(
                 type = type,
                 topic = json.getString("topic"),
                 description = json.getString("description", ""),
                 retained = json.getBoolean("retained", false),
-                browseArguments = json.getJsonObject("browseArguments"),
+                nameFilters = nameFiltersList,
                 systemNames = systemNamesList,
                 filterString = json.getString("filterString")
             )
@@ -57,8 +61,8 @@ data class WinCCUaAddress(
             .put("description", description)
             .put("retained", retained)
 
-        if (browseArguments != null) {
-            obj.put("browseArguments", browseArguments)
+        if (nameFilters != null) {
+            obj.put("nameFilters", JsonArray(nameFilters))
         }
 
         if (systemNames != null) {
@@ -81,8 +85,8 @@ data class WinCCUaAddress(
 
         when (type) {
             WinCCUaAddressType.TAG_VALUES -> {
-                if (browseArguments == null) {
-                    errors.add("browseArguments is required for TAG_VALUES address type")
+                if (nameFilters == null || nameFilters.isEmpty()) {
+                    errors.add("nameFilters is required for TAG_VALUES address type")
                 }
             }
             WinCCUaAddressType.ACTIVE_ALARMS -> {
