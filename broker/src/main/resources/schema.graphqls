@@ -364,7 +364,10 @@ type Mutation {
         # Array of messages to publish simultaneously
         inputs: [PublishInput!]!
     ): [PublishResult!]!
+}
 
+# User Management Mutations - Grouped operations for user and ACL management
+type UserManagementMutations {
     # Create a new user account with specified permissions and access rights
     # Sets up authentication credentials and initial ACL permissions
     # Requires admin JWT token for execution
@@ -420,6 +423,13 @@ type Mutation {
         # Unique ID of the ACL rule to delete
         id: String!
     ): UserManagementResult!
+}
+
+# Extend Mutations for user management
+extend type Mutation {
+    # Access user and ACL management operations
+    # Returns a UserManagementMutations type that provides grouped mutation operations
+    user: UserManagementMutations!
 
     # Remove queued messages from persistent sessions to free up memory
     # Useful for clearing message backlogs from disconnected clients

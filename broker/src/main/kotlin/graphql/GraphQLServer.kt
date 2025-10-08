@@ -365,14 +365,8 @@ class GraphQLServer(
                     // Publishing (requires token + ACL check)
                     .dataFetcher("publish", mutationResolver.publish())
                     .dataFetcher("publishBatch", mutationResolver.publishBatch())
-                    // User management mutations (requires admin token)
-                    .dataFetcher("createUser", userManagementResolver.createUser())
-                    .dataFetcher("updateUser", userManagementResolver.updateUser())
-                    .dataFetcher("deleteUser", userManagementResolver.deleteUser())
-                    .dataFetcher("setPassword", userManagementResolver.setPassword())
-                    .dataFetcher("createAclRule", userManagementResolver.createAclRule())
-                    .dataFetcher("updateAclRule", userManagementResolver.updateAclRule())
-                    .dataFetcher("deleteAclRule", userManagementResolver.deleteAclRule())
+                    // User management mutations - grouped under user
+                    .dataFetcher("user") { _ -> emptyMap<String, Any>() }
                     // Queued messages management (requires admin token)
                     .dataFetcher("purgeQueuedMessages", mutationResolver.purgeQueuedMessages())
                     // Archive Group mutations - grouped under archiveGroup
@@ -526,6 +520,18 @@ class GraphQLServer(
                         dataFetcher("enable", resolver.enableArchiveGroup())
                         dataFetcher("disable", resolver.disableArchiveGroup())
                     }
+                }
+            }
+            // Register User Management Mutations type
+            .type("UserManagementMutations") { builder ->
+                builder.apply {
+                    dataFetcher("createUser", userManagementResolver.createUser())
+                    dataFetcher("updateUser", userManagementResolver.updateUser())
+                    dataFetcher("deleteUser", userManagementResolver.deleteUser())
+                    dataFetcher("setPassword", userManagementResolver.setPassword())
+                    dataFetcher("createAclRule", userManagementResolver.createAclRule())
+                    dataFetcher("updateAclRule", userManagementResolver.updateAclRule())
+                    dataFetcher("deleteAclRule", userManagementResolver.deleteAclRule())
                 }
             }
             // Register subscription resolvers

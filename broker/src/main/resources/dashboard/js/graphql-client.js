@@ -269,81 +269,113 @@ class GraphQLDashboardClient {
     async createUser(userData) {
         const mutation = `
             mutation CreateUser($input: CreateUserInput!) {
-                createUser(input: $input) {
-                    success
-                    message
-                    user {
-                        username
-                        enabled
-                        canSubscribe
-                        canPublish
-                        isAdmin
-                        createdAt
+                user {
+                    createUser(input: $input) {
+                        success
+                        message
+                        user {
+                            username
+                            enabled
+                            canSubscribe
+                            canPublish
+                            isAdmin
+                            createdAt
+                        }
                     }
                 }
             }
         `;
 
         const result = await this.query(mutation, { input: userData });
-        return result.createUser;
+        return result.user.createUser;
     }
 
     async updateUser(userData) {
         const mutation = `
             mutation UpdateUser($input: UpdateUserInput!) {
-                updateUser(input: $input) {
-                    success
-                    message
-                    user {
-                        username
-                        enabled
-                        canSubscribe
-                        canPublish
-                        isAdmin
-                        updatedAt
+                user {
+                    updateUser(input: $input) {
+                        success
+                        message
+                        user {
+                            username
+                            enabled
+                            canSubscribe
+                            canPublish
+                            isAdmin
+                            updatedAt
+                        }
                     }
                 }
             }
         `;
 
         const result = await this.query(mutation, { input: userData });
-        return result.updateUser;
+        return result.user.updateUser;
     }
 
     async deleteUser(username) {
         const mutation = `
             mutation DeleteUser($username: String!) {
-                deleteUser(username: $username) {
-                    success
-                    message
+                user {
+                    deleteUser(username: $username) {
+                        success
+                        message
+                    }
                 }
             }
         `;
 
         const result = await this.query(mutation, { username });
-        return result.deleteUser;
+        return result.user.deleteUser;
     }
 
     // ===================== ACL RULES =====================
     async createAclRule(input) {
         const mutation = `
             mutation CreateAclRule($input: CreateAclRuleInput!) {
-                createAclRule(input: $input) {
-                    success
-                    message
-                    aclRule {
-                        id
-                        username
-                        topicPattern
-                        canSubscribe
-                        canPublish
-                        priority
-                        createdAt
-                    }
-                    user {
-                        username
-                        aclRules {
+                user {
+                    createAclRule(input: $input) {
+                        success
+                        message
+                        aclRule {
                             id
+                            username
+                            topicPattern
+                            canSubscribe
+                            canPublish
+                            priority
+                            createdAt
+                        }
+                        user {
+                            username
+                            aclRules {
+                                id
+                                topicPattern
+                                canSubscribe
+                                canPublish
+                                priority
+                                createdAt
+                            }
+                        }
+                    }
+                }
+            }
+        `;
+        const result = await this.query(mutation, { input });
+        return result.user.createAclRule;
+    }
+
+    async updateAclRule(input) {
+        const mutation = `
+            mutation UpdateAclRule($input: UpdateAclRuleInput!) {
+                user {
+                    updateAclRule(input: $input) {
+                        success
+                        message
+                        aclRule {
+                            id
+                            username
                             topicPattern
                             canSubscribe
                             canPublish
@@ -355,43 +387,23 @@ class GraphQLDashboardClient {
             }
         `;
         const result = await this.query(mutation, { input });
-        return result.createAclRule;
-    }
-
-    async updateAclRule(input) {
-        const mutation = `
-            mutation UpdateAclRule($input: UpdateAclRuleInput!) {
-                updateAclRule(input: $input) {
-                    success
-                    message
-                    aclRule {
-                        id
-                        username
-                        topicPattern
-                        canSubscribe
-                        canPublish
-                        priority
-                        createdAt
-                    }
-                }
-            }
-        `;
-        const result = await this.query(mutation, { input });
-        return result.updateAclRule;
+        return result.user.updateAclRule;
     }
 
     async deleteAclRule(id) {
         const mutation = `
             mutation DeleteAclRule($id: String!) {
-                deleteAclRule(id: $id) {
-                    success
-                    message
-                    aclRule { id }
+                user {
+                    deleteAclRule(id: $id) {
+                        success
+                        message
+                        aclRule { id }
+                    }
                 }
             }
         `;
         const result = await this.query(mutation, { id });
-        return result.deleteAclRule;
+        return result.user.deleteAclRule;
     }
 }
 
