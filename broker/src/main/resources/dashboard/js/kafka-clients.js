@@ -131,16 +131,18 @@ class KafkaClientManager {
         try {
             const mutation = `
                 mutation CreateKafkaClient($input: KafkaClientInput!) {
-                    createKafkaClient(input: $input) { success errors client { name enabled } }
+                    kafkaClient {
+                        create(input: $input) { success errors client { name enabled } }
+                    }
                 }
             `;
             const result = await this.client.query(mutation, { input: clientData });
-            if (result.createKafkaClient.success) {
+            if (result.kafkaClient.create.success) {
                 this.hideAddClientModal();
                 await this.loadClients();
                 this.showSuccess(`Kafka client "${clientData.name}" added successfully`);
             } else {
-                const errors = result.createKafkaClient.errors || ['Unknown error'];
+                const errors = result.kafkaClient.create.errors || ['Unknown error'];
                 this.showError('Failed to add Kafka client: ' + errors.join(', '));
             }
         } catch (e) {
@@ -153,15 +155,17 @@ class KafkaClientManager {
         try {
             const mutation = `
                 mutation ToggleKafkaClient($name: String!, $enabled: Boolean!) {
-                    toggleKafkaClient(name: $name, enabled: $enabled) { success errors client { name enabled } }
+                    kafkaClient {
+                        toggle(name: $name, enabled: $enabled) { success errors client { name enabled } }
+                    }
                 }
             `;
             const result = await this.client.query(mutation, { name: clientName, enabled });
-            if (result.toggleKafkaClient.success) {
+            if (result.kafkaClient.toggle.success) {
                 await this.loadClients();
                 this.showSuccess(`Kafka client "${clientName}" ${enabled ? 'enabled' : 'disabled'} successfully`);
             } else {
-                const errors = result.toggleKafkaClient.errors || ['Unknown error'];
+                const errors = result.kafkaClient.toggle.errors || ['Unknown error'];
                 this.showError('Failed to toggle Kafka client: ' + errors.join(', '));
             }
         } catch (e) {
@@ -179,9 +183,9 @@ class KafkaClientManager {
     async confirmDeleteClient() {
         if (!this.deleteClientName) return;
         try {
-            const mutation = `mutation DeleteKafkaClient($name: String!) { deleteKafkaClient(name: $name) }`;
+            const mutation = `mutation DeleteKafkaClient($name: String!) { kafkaClient { delete(name: $name) } }`;
             const result = await this.client.query(mutation, { name: this.deleteClientName });
-            if (result.deleteKafkaClient) {
+            if (result.kafkaClient.delete) {
                 this.hideConfirmDeleteModal();
                 await this.loadClients();
                 this.showSuccess(`Kafka client "${this.deleteClientName}" deleted successfully`);

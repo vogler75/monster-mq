@@ -425,30 +425,18 @@ class GraphQLServer(
                             dataFetcher("deleteMqttClientAddress", resolver.deleteMqttClientAddress())
                         }
                     }
-                    // Kafka Client mutations
+                    // Kafka Client mutations - grouped under kafkaClient
                     .apply {
-                        kafkaClientMutations?.let { resolver ->
-                            dataFetcher("createKafkaClient", resolver.createKafkaClient())
-                            dataFetcher("updateKafkaClient", resolver.updateKafkaClient())
-                            dataFetcher("deleteKafkaClient", resolver.deleteKafkaClient())
-                            dataFetcher("startKafkaClient", resolver.startKafkaClient())
-                            dataFetcher("stopKafkaClient", resolver.stopKafkaClient())
-                            dataFetcher("toggleKafkaClient", resolver.toggleKafkaClient())
-                            dataFetcher("reassignKafkaClient", resolver.reassignKafkaClient())
+                        kafkaClientMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on KafkaClientMutations type
+                            dataFetcher("kafkaClient") { _ -> emptyMap<String, Any>() }
                         }
                     }
-                    // WinCC OA Client mutations
+                    // WinCC OA Client mutations - grouped under winCCOaDevice
                     .apply {
-                        winCCOaClientMutations?.let { resolver ->
-                            dataFetcher("createWinCCOaClient", resolver.createWinCCOaClient())
-                            dataFetcher("updateWinCCOaClient", resolver.updateWinCCOaClient())
-                            dataFetcher("deleteWinCCOaClient", resolver.deleteWinCCOaClient())
-                            dataFetcher("startWinCCOaClient", resolver.startWinCCOaClient())
-                            dataFetcher("stopWinCCOaClient", resolver.stopWinCCOaClient())
-                            dataFetcher("toggleWinCCOaClient", resolver.toggleWinCCOaClient())
-                            dataFetcher("reassignWinCCOaClient", resolver.reassignWinCCOaClient())
-                            dataFetcher("addWinCCOaClientAddress", resolver.addWinCCOaClientAddress())
-                            dataFetcher("deleteWinCCOaClientAddress", resolver.deleteWinCCOaClientAddress())
+                        winCCOaClientMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on WinCCOaDeviceMutations type
+                            dataFetcher("winCCOaDevice") { _ -> emptyMap<String, Any>() }
                         }
                     }
                     // WinCC Unified Client mutations - grouped under winCCUaDevice
@@ -458,6 +446,36 @@ class GraphQLServer(
                             dataFetcher("winCCUaDevice") { _ -> emptyMap<String, Any>() }
                         }
                     }
+            }
+            // Register Kafka Client Mutations type
+            .type("KafkaClientMutations") { builder ->
+                builder.apply {
+                    kafkaClientMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createKafkaClient())
+                        dataFetcher("update", resolver.updateKafkaClient())
+                        dataFetcher("delete", resolver.deleteKafkaClient())
+                        dataFetcher("start", resolver.startKafkaClient())
+                        dataFetcher("stop", resolver.stopKafkaClient())
+                        dataFetcher("toggle", resolver.toggleKafkaClient())
+                        dataFetcher("reassign", resolver.reassignKafkaClient())
+                    }
+                }
+            }
+            // Register WinCC OA Device Mutations type
+            .type("WinCCOaDeviceMutations") { builder ->
+                builder.apply {
+                    winCCOaClientMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createWinCCOaClient())
+                        dataFetcher("update", resolver.updateWinCCOaClient())
+                        dataFetcher("delete", resolver.deleteWinCCOaClient())
+                        dataFetcher("start", resolver.startWinCCOaClient())
+                        dataFetcher("stop", resolver.stopWinCCOaClient())
+                        dataFetcher("toggle", resolver.toggleWinCCOaClient())
+                        dataFetcher("reassign", resolver.reassignWinCCOaClient())
+                        dataFetcher("addAddress", resolver.addWinCCOaClientAddress())
+                        dataFetcher("deleteAddress", resolver.deleteWinCCOaClientAddress())
+                    }
+                }
             }
             // Register WinCC Unified Device Mutations type
             .type("WinCCUaDeviceMutations") { builder ->

@@ -345,12 +345,14 @@ class WinCCOaClientDetailManager {
         try {
             const mutation = `
                 mutation AddWinCCOaClientAddress($deviceName: String!, $input: WinCCOaAddressInput!) {
-                    addWinCCOaClientAddress(deviceName: $deviceName, input: $input) {
-                        success
-                        errors
-                        client {
-                            name
-                            enabled
+                    winCCOaDevice {
+                        addAddress(deviceName: $deviceName, input: $input) {
+                            success
+                            errors
+                            client {
+                                name
+                                enabled
+                            }
                         }
                     }
                 }
@@ -361,12 +363,12 @@ class WinCCOaClientDetailManager {
                 input: queryData
             });
 
-            if (result.addWinCCOaClientAddress.success) {
+            if (result.winCCOaDevice.addAddress.success) {
                 // Reload client data to get updated addresses
                 await this.loadClient();
                 this.showSuccess('Query added successfully');
             } else {
-                const errors = result.addWinCCOaClientAddress.errors || ['Unknown error'];
+                const errors = result.winCCOaDevice.addAddress.errors || ['Unknown error'];
                 this.showError('Failed to add query: ' + errors.join(', '));
             }
         } catch (error) {
@@ -402,12 +404,14 @@ class WinCCOaClientDetailManager {
             try {
                 const mutation = `
                     mutation DeleteWinCCOaClientAddress($deviceName: String!, $query: String!) {
-                        deleteWinCCOaClientAddress(deviceName: $deviceName, query: $query) {
-                            success
-                            errors
-                            client {
-                                name
-                                enabled
+                        winCCOaDevice {
+                            deleteAddress(deviceName: $deviceName, query: $query) {
+                                success
+                                errors
+                                client {
+                                    name
+                                    enabled
+                                }
                             }
                         }
                     }
@@ -418,12 +422,12 @@ class WinCCOaClientDetailManager {
                     query: query.query
                 });
 
-                if (result.deleteWinCCOaClientAddress.success) {
+                if (result.winCCOaDevice.deleteAddress.success) {
                     // Reload client data to get updated addresses
                     await this.loadClient();
                     this.showSuccess('Query deleted successfully');
                 } else {
-                    const errors = result.deleteWinCCOaClientAddress.errors || ['Unknown error'];
+                    const errors = result.winCCOaDevice.deleteAddress.errors || ['Unknown error'];
                     this.showError('Failed to delete query: ' + errors.join(', '));
                 }
             } catch (error) {
@@ -515,12 +519,14 @@ class WinCCOaClientDetailManager {
     async createClient(clientData) {
         const mutation = `
             mutation CreateWinCCOaClient($input: WinCCOaClientInput!) {
-                createWinCCOaClient(input: $input) {
-                    success
-                    errors
-                    client {
-                        name
-                        enabled
+                winCCOaDevice {
+                    create(input: $input) {
+                        success
+                        errors
+                        client {
+                            name
+                            enabled
+                        }
                     }
                 }
             }
@@ -528,7 +534,7 @@ class WinCCOaClientDetailManager {
 
         const result = await this.client.query(mutation, { input: clientData });
 
-        if (result.createWinCCOaClient.success) {
+        if (result.winCCOaDevice.create.success) {
             this.hasUnsavedChanges = false;
             this.updateSaveButtonState();
             this.showSuccess(`Client "${clientData.name}" created successfully. Redirecting to edit page...`);
@@ -537,7 +543,7 @@ class WinCCOaClientDetailManager {
                 window.location.href = '/pages/winccoa-client-detail.html?client=' + encodeURIComponent(clientData.name);
             }, 1500);
         } else {
-            const errors = result.createWinCCOaClient.errors || ['Unknown error'];
+            const errors = result.winCCOaDevice.create.errors || ['Unknown error'];
             this.showError('Failed to create client: ' + errors.join(', '));
         }
     }
@@ -545,12 +551,14 @@ class WinCCOaClientDetailManager {
     async updateClient(clientData) {
         const mutation = `
             mutation UpdateWinCCOaClient($name: String!, $input: WinCCOaClientInput!) {
-                updateWinCCOaClient(name: $name, input: $input) {
-                    success
-                    errors
-                    client {
-                        name
-                        enabled
+                winCCOaDevice {
+                    update(name: $name, input: $input) {
+                        success
+                        errors
+                        client {
+                            name
+                            enabled
+                        }
                     }
                 }
             }
@@ -561,14 +569,14 @@ class WinCCOaClientDetailManager {
             input: clientData
         });
 
-        if (result.updateWinCCOaClient.success) {
+        if (result.winCCOaDevice.update.success) {
             this.hasUnsavedChanges = false;
             this.updateSaveButtonState();
             this.showSuccess(`Client "${clientData.name}" updated successfully`);
             // Reload the client data
             await this.loadClient();
         } else {
-            const errors = result.updateWinCCOaClient.errors || ['Unknown error'];
+            const errors = result.winCCOaDevice.update.errors || ['Unknown error'];
             this.showError('Failed to update client: ' + errors.join(', '));
         }
     }

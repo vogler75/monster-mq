@@ -220,12 +220,14 @@ class WinCCOaClientManager {
         try {
             const mutation = `
                 mutation ToggleWinCCOaClient($name: String!, $enabled: Boolean!) {
-                    toggleWinCCOaClient(name: $name, enabled: $enabled) {
-                        success
-                        errors
-                        client {
-                            name
-                            enabled
+                    winCCOaDevice {
+                        toggle(name: $name, enabled: $enabled) {
+                            success
+                            errors
+                            client {
+                                name
+                                enabled
+                            }
                         }
                     }
                 }
@@ -233,11 +235,11 @@ class WinCCOaClientManager {
 
             const result = await this.client.query(mutation, { name: clientName, enabled });
 
-            if (result.toggleWinCCOaClient.success) {
+            if (result.winCCOaDevice.toggle.success) {
                 await this.loadClients();
                 this.showSuccess(`Bridge "${clientName}" ${enabled ? 'started' : 'stopped'} successfully`);
             } else {
-                const errors = result.toggleWinCCOaClient.errors || ['Unknown error'];
+                const errors = result.winCCOaDevice.toggle.errors || ['Unknown error'];
                 this.showError('Failed to toggle bridge: ' + errors.join(', '));
             }
 
@@ -259,13 +261,15 @@ class WinCCOaClientManager {
         try {
             const mutation = `
                 mutation DeleteWinCCOaClient($name: String!) {
-                    deleteWinCCOaClient(name: $name)
+                    winCCOaDevice {
+                        delete(name: $name)
+                    }
                 }
             `;
 
             const result = await this.client.query(mutation, { name: this.deleteClientName });
 
-            if (result.deleteWinCCOaClient) {
+            if (result.winCCOaDevice.delete) {
                 this.hideConfirmDeleteModal();
                 await this.loadClients();
                 this.showSuccess(`Bridge "${this.deleteClientName}" deleted successfully`);

@@ -1677,44 +1677,51 @@ extend type Query {
     kafkaClientsByNode(nodeId: String!): [KafkaClient!]!
 }
 
-# Extend Mutations for Kafka clients
-extend type Mutation {
+# Kafka Client Mutations - Grouped operations for Kafka client management
+type KafkaClientMutations {
     # Create a new Kafka client bridge to consume from an external Kafka cluster
     # Creates a client connector that will be deployed on the specified cluster node
     # The client will automatically connect to Kafka, consume records, and republish as MQTT messages
     # Note: The Kafka topic to consume is derived from the device namespace
-    createKafkaClient(input: KafkaClientInput!): KafkaClientResult!
+    create(input: KafkaClientInput!): KafkaClientResult!
 
     # Update an existing Kafka client configuration
     # Changes take effect immediately - the client connector will be redeployed with new settings
     # Useful for modifying bootstrap servers, consumer properties, or payload format
-    updateKafkaClient(name: String!, input: KafkaClientInput!): KafkaClientResult!
+    update(name: String!, input: KafkaClientInput!): KafkaClientResult!
 
     # Delete a Kafka client configuration permanently
     # Stops the client connector and removes all configuration data
     # Returns true if deletion was successful, false if client was not found
-    deleteKafkaClient(name: String!): Boolean!
+    delete(name: String!): Boolean!
 
     # Start a Kafka client connection
     # Enables a previously stopped client and begins consuming from Kafka topic
     # Messages will be polled and republished as MQTT messages
-    startKafkaClient(name: String!): KafkaClientResult!
+    start(name: String!): KafkaClientResult!
 
     # Stop a Kafka client connection
     # Disables the client and stops consuming from Kafka while preserving configuration
     # Useful for temporarily pausing data ingestion or troubleshooting
-    stopKafkaClient(name: String!): KafkaClientResult!
+    stop(name: String!): KafkaClientResult!
 
     # Toggle Kafka client enabled state
     # Enable or disable a Kafka client without deleting its configuration
     # Disabled clients stop consuming but retain their configuration and consumer group position
-    toggleKafkaClient(name: String!, enabled: Boolean!): KafkaClientResult!
+    toggle(name: String!, enabled: Boolean!): KafkaClientResult!
 
     # Reassign a Kafka client to a different cluster node
     # Moves the client connector from one node to another for load balancing
     # The client configuration remains unchanged, only the deployment location changes
     # Consumer group position is preserved across reassignments
-    reassignKafkaClient(name: String!, nodeId: String!): KafkaClientResult!
+    reassign(name: String!, nodeId: String!): KafkaClientResult!
+}
+
+# Extend Mutations for Kafka clients
+extend type Mutation {
+    # Access Kafka client management operations
+    # Returns a KafkaClientMutations type that provides grouped mutation operations
+    kafkaClient: KafkaClientMutations!
 }
 
 #############################################
@@ -1916,48 +1923,55 @@ extend type Query {
     winCCOaClientsByNode(nodeId: String!): [WinCCOaClient!]!
 }
 
-# Extend Mutations for WinCC OA clients
-extend type Mutation {
+# WinCC OA Device Mutations - Grouped operations for WinCC OA device management
+type WinCCOaDeviceMutations {
     # Create a new WinCC OA client configuration to connect to a WinCC OA GraphQL server
     # Creates a client connector that will be deployed on the specified cluster node
     # The client will automatically connect and subscribe to configured datapoint queries
-    createWinCCOaClient(input: WinCCOaClientInput!): WinCCOaClientResult!
+    create(input: WinCCOaClientInput!): WinCCOaClientResult!
 
     # Update an existing WinCC OA client configuration
     # Changes take effect immediately - the client connector will be redeployed with new settings
     # Useful for modifying connection parameters, credentials, or subscriptions
-    updateWinCCOaClient(name: String!, input: WinCCOaClientInput!): WinCCOaClientResult!
+    update(name: String!, input: WinCCOaClientInput!): WinCCOaClientResult!
 
     # Delete a WinCC OA client configuration permanently
     # Stops the client connector and removes all configuration data
     # Returns true if deletion was successful, false if client was not found
-    deleteWinCCOaClient(name: String!): Boolean!
+    delete(name: String!): Boolean!
 
     # Start a WinCC OA client connection
     # Enables a previously stopped client and establishes connection to WinCC OA server
-    startWinCCOaClient(name: String!): WinCCOaClientResult!
+    start(name: String!): WinCCOaClientResult!
 
     # Stop a WinCC OA client connection
     # Disables the client and disconnects from WinCC OA server while preserving configuration
-    stopWinCCOaClient(name: String!): WinCCOaClientResult!
+    stop(name: String!): WinCCOaClientResult!
 
     # Toggle WinCC OA client enabled state
     # Enable or disable a WinCC OA client without deleting its configuration
-    toggleWinCCOaClient(name: String!, enabled: Boolean!): WinCCOaClientResult!
+    toggle(name: String!, enabled: Boolean!): WinCCOaClientResult!
 
     # Reassign a WinCC OA client to a different cluster node
     # Moves the client connector from one node to another for load balancing
     # The client configuration remains unchanged, only the deployment location changes
-    reassignWinCCOaClient(name: String!, nodeId: String!): WinCCOaClientResult!
+    reassign(name: String!, nodeId: String!): WinCCOaClientResult!
 
     # Add a new subscription address to an existing WinCC OA client
     # Defines a GraphQL query subscription for monitoring datapoint changes
     # New subscriptions will immediately start receiving updates
-    addWinCCOaClientAddress(deviceName: String!, input: WinCCOaAddressInput!): WinCCOaClientResult!
+    addAddress(deviceName: String!, input: WinCCOaAddressInput!): WinCCOaClientResult!
 
     # Remove a subscription address from a WinCC OA client
     # Stops monitoring the specified GraphQL query while keeping other subscriptions active
-    deleteWinCCOaClientAddress(deviceName: String!, query: String!): WinCCOaClientResult!
+    deleteAddress(deviceName: String!, query: String!): WinCCOaClientResult!
+}
+
+# Extend Mutations for WinCC OA clients
+extend type Mutation {
+    # Access WinCC OA device management operations
+    # Returns a WinCCOaDeviceMutations type that provides grouped mutation operations
+    winCCOaDevice: WinCCOaDeviceMutations!
 }
 
 # ===================================

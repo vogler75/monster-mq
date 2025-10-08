@@ -203,9 +203,9 @@ class KafkaClientDetailManager {
         const prevNodeId = this.clientData ? this.clientData.nodeId : null;
 
         try {
-            const mutation = `mutation UpdateKafkaClient($name: String!, $input: KafkaClientInput!) { updateKafkaClient(name: $name, input: $input) { success errors client { name } } }`;
+            const mutation = `mutation UpdateKafkaClient($name: String!, $input: KafkaClientInput!) { kafkaClient { update(name: $name, input: $input) { success errors client { name } } } }`;
             const result = await this.client.query(mutation, { name: this.clientName, input: updatedInput });
-            if (result.updateKafkaClient.success) {
+            if (result.kafkaClient.update.success) {
                 // Handle potential rename
                 const newName = updatedInput.name;
                 if (newName !== this.clientName) {
@@ -223,7 +223,7 @@ class KafkaClientDetailManager {
                 this.hideEditModal();
                 this.showSuccess('Kafka client updated successfully');
             } else {
-                const errors = result.updateKafkaClient.errors || ['Unknown error'];
+                const errors = result.kafkaClient.update.errors || ['Unknown error'];
                 this.showError('Failed to update Kafka client: ' + errors.join(', '));
             }
         } catch (e) {
@@ -234,10 +234,10 @@ class KafkaClientDetailManager {
 
     async reassignClient(newNodeId) {
         try {
-            const mutation = `mutation ReassignKafkaClient($name: String!, $nodeId: String!) { reassignKafkaClient(name: $name, nodeId: $nodeId) { success errors client { nodeId } } }`;
+            const mutation = `mutation ReassignKafkaClient($name: String!, $nodeId: String!) { kafkaClient { reassign(name: $name, nodeId: $nodeId) { success errors client { nodeId } } } }`;
             const result = await this.client.query(mutation, { name: this.clientName, nodeId: newNodeId });
-            if (!result.reassignKafkaClient.success) {
-                const errs = result.reassignKafkaClient.errors || ['Unknown error'];
+            if (!result.kafkaClient.reassign.success) {
+                const errs = result.kafkaClient.reassign.errors || ['Unknown error'];
                 this.showError('Reassign warning: ' + errs.join(', '));
             } else {
                 await this.loadClientData(); // refresh node assignment visuals
@@ -253,13 +253,13 @@ class KafkaClientDetailManager {
         if (!this.clientData) return;
         const newState = !this.clientData.enabled;
         try {
-            const mutation = `mutation ToggleKafkaClient($name: String!, $enabled: Boolean!) { toggleKafkaClient(name: $name, enabled: $enabled) { success errors client { enabled } } }`;
+            const mutation = `mutation ToggleKafkaClient($name: String!, $enabled: Boolean!) { kafkaClient { toggle(name: $name, enabled: $enabled) { success errors client { enabled } } } }`;
             const result = await this.client.query(mutation, { name: this.clientName, enabled: newState });
-            if (result.toggleKafkaClient.success) {
+            if (result.kafkaClient.toggle.success) {
                 await this.loadClientData();
                 this.showSuccess(`Kafka client ${newState ? 'started' : 'stopped'} successfully`);
             } else {
-                const errors = result.toggleKafkaClient.errors || ['Unknown error'];
+                const errors = result.kafkaClient.toggle.errors || ['Unknown error'];
                 this.showError('Failed to toggle Kafka client: ' + errors.join(', '));
             }
         } catch (e) {
@@ -271,9 +271,9 @@ class KafkaClientDetailManager {
     async deleteClient() {
         if (!confirm('Are you sure you want to delete this Kafka client?')) return; // fallback in case modal not shown
         try {
-            const mutation = `mutation DeleteKafkaClient($name: String!) { deleteKafkaClient(name: $name) }`;
+            const mutation = `mutation DeleteKafkaClient($name: String!) { kafkaClient { delete(name: $name) } }`;
             const result = await this.client.query(mutation, { name: this.clientName });
-            if (result.deleteKafkaClient) {
+            if (result.kafkaClient.delete) {
                 this.showSuccess('Kafka client deleted');
                 this.cleanup();
                 setTimeout(() => { window.location.href = '/pages/kafka-clients.html'; }, 800);
