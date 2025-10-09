@@ -92,6 +92,7 @@ class Plc4xClientDetailManager {
                                 offset
                                 deadband
                                 publishOnChange
+                                mode
                                 enabled
                             }
                         }
@@ -182,6 +183,9 @@ class Plc4xClientDetailManager {
             const publishOnChangeIcon = address.publishOnChange ? '🔄' : '📋';
             const publishOnChangeTitle = address.publishOnChange ? 'Publish on change' : 'Publish always';
 
+            // Mode icons and titles
+            const modeInfo = this.getModeInfo(address.mode || 'READ');
+
             row.innerHTML = `
                 <td>
                     <div class="address-name" title="${this.escapeHtml(address.address)}">
@@ -204,6 +208,9 @@ class Plc4xClientDetailManager {
                 </td>
                 <td>
                     <div title="${publishOnChangeTitle}">${publishOnChangeIcon}</div>
+                </td>
+                <td>
+                    <div title="${modeInfo.title}">${modeInfo.icon} ${modeInfo.short}</div>
                 </td>
                 <td>
                     <span class="status-badge ${address.enabled ? 'status-enabled' : 'status-disabled'}">
@@ -244,6 +251,7 @@ class Plc4xClientDetailManager {
             offset: parseFloat(document.getElementById('address-offset').value) || null,
             deadband: parseFloat(document.getElementById('address-deadband').value) || null,
             publishOnChange: document.getElementById('address-publish-on-change').checked,
+            mode: document.getElementById('address-mode').value,
             enabled: document.getElementById('address-enabled').checked
         };
 
@@ -396,6 +404,15 @@ class Plc4xClientDetailManager {
             'S7': 'S7'
         };
         return protocolNames[protocol] || protocol;
+    }
+
+    getModeInfo(mode) {
+        const modeMap = {
+            'READ': { icon: '📖', title: 'Read from PLC to MQTT', short: 'R' },
+            'WRITE': { icon: '✍️', title: 'Write from MQTT to PLC', short: 'W' },
+            'READ_WRITE': { icon: '🔄', title: 'Bidirectional (Read/Write)', short: 'RW' }
+        };
+        return modeMap[mode] || modeMap['READ'];
     }
 
     // UI Helper Methods

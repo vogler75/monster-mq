@@ -5,6 +5,28 @@ import io.vertx.core.json.JsonObject
 import java.time.Instant
 
 /**
+ * Operating mode for a PLC4X address
+ * - READ: Read from PLC and publish to MQTT (default)
+ * - WRITE: Subscribe to MQTT and write to PLC
+ * - READ_WRITE: Bidirectional - read from PLC to MQTT and write from MQTT to PLC
+ */
+enum class Plc4xAddressMode {
+    READ,
+    WRITE,
+    READ_WRITE;
+
+    companion object {
+        fun fromString(value: String?): Plc4xAddressMode {
+            return when (value?.uppercase()) {
+                "WRITE", "W" -> WRITE
+                "READ_WRITE", "RW" -> READ_WRITE
+                else -> READ  // Default to READ for null or "READ" or "R"
+            }
+        }
+    }
+}
+
+/**
  * Configuration for a PLC4X connection
  *
  * @property protocol The PLC4X protocol to use (e.g., S7, MODBUS_TCP, ADS)
@@ -99,6 +121,7 @@ data class Plc4xConnectionConfig(
  * @property offset Optional offset added to numeric values after scaling (value + offset)
  * @property deadband Optional deadband value - only publish if change exceeds this value
  * @property publishOnChange Only publish to MQTT when value changes (avoids duplicate values)
+ * @property mode Operating mode (READ, WRITE, or READ_WRITE)
  * @property enabled Whether this address should be polled
  */
 data class Plc4xAddress(
@@ -111,6 +134,7 @@ data class Plc4xAddress(
     val offset: Double? = null,
     val deadband: Double? = null,
     val publishOnChange: Boolean = true,
+    val mode: Plc4xAddressMode = Plc4xAddressMode.READ,
     val enabled: Boolean = true
 ) {
     companion object {
@@ -125,6 +149,7 @@ data class Plc4xAddress(
                 offset = json.getDouble("offset"),
                 deadband = json.getDouble("deadband"),
                 publishOnChange = json.getBoolean("publishOnChange", true),
+                mode = Plc4xAddressMode.fromString(json.getString("mode")),
                 enabled = json.getBoolean("enabled", true)
             )
         }
@@ -138,6 +163,7 @@ data class Plc4xAddress(
             .put("qos", qos)
             .put("retained", retained)
             .put("publishOnChange", publishOnChange)
+            .put("mode", mode.name)
             .put("enabled", enabled)
 
         scalingFactor?.let { json.put("scalingFactor", it) }
@@ -198,5 +224,18 @@ data class Plc4xAddress(
     fun exceedsDeadband(oldValue: Number, newValue: Number): Boolean {
         if (deadband == null) return true
         return Math.abs(newValue.toDouble() - oldValue.toDouble()) > deadband
+    }
+
+    /**
+     * Applies reverse transformation to a value (for writing to PLC)
+     * Reverses the offset and scaling: (value - offset) / scalingFactor
+     * @param value The transformed value (from MQTT)
+     * @return The raw value to write to the PLC
+     */
+    fun reverseTransformValue(value: Number): Double {
+        var result = value.toDouble()
+        offset?.let { result -= it }
+        scalingFactor?.let { if (it != 0.0) result /= it }
+        return result
     }
 }

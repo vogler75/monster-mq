@@ -1,11 +1,13 @@
 package at.rocworks.devices.plc4x
 
+import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.Plc4xConnectionConfig
 import at.rocworks.stores.devices.Plc4xAddress
+import at.rocworks.stores.devices.Plc4xAddressMode
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -14,6 +16,8 @@ import org.apache.plc4x.java.api.PlcConnection
 import org.apache.plc4x.java.api.PlcDriverManager
 import org.apache.plc4x.java.api.messages.PlcReadRequest
 import org.apache.plc4x.java.api.messages.PlcReadResponse
+import org.apache.plc4x.java.api.messages.PlcWriteRequest
+import org.apache.plc4x.java.api.messages.PlcWriteResponse
 import org.apache.plc4x.java.api.types.PlcResponseCode
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -24,11 +28,13 @@ import java.util.logging.Logger
  *
  * Responsibilities:
  * - Maintains PLC4X connection using PlcDriverManager
- * - Polls configured addresses at specified intervals
+ * - Polls configured addresses at specified intervals (READ and READ_WRITE modes)
+ * - Subscribes to MQTT topics and writes to PLC (WRITE and READ_WRITE modes)
  * - Applies value transformations (scaling, offset) and deadband filtering
  * - Publishes PLC values as MQTT messages via EventBus
  * - Handles reconnection and error recovery
- * - Tracks metrics (messagesIn, connected status)
+ * - Tracks metrics (messagesIn for PLC->MQTT, messagesOut for MQTT->PLC, connected status)
+ * - Loop prevention for READ_WRITE mode
  *
  * Supports multiple industrial protocols through PLC4X:
  * - Siemens S7, Modbus TCP/RTU/ASCII, Beckhoff ADS, BACnet, KNXnet/IP
@@ -36,8 +42,9 @@ import java.util.logging.Logger
  */
 class Plc4xConnector : AbstractVerticle() {
 
-    // Metrics counters (PLC -> MQTT is messagesIn)
+    // Metrics counters (PLC -> MQTT is messagesIn, MQTT -> PLC is messagesOut)
     private val messagesInCounter = java.util.concurrent.atomic.AtomicLong(0)
+    private val messagesOutCounter = java.util.concurrent.atomic.AtomicLong(0)
     private var lastMetricsReset = System.currentTimeMillis()
 
     private val logger: Logger = Utils.getLogger(this::class.java)
@@ -56,9 +63,13 @@ class Plc4xConnector : AbstractVerticle() {
     private var reconnectTimerId: Long? = null
     private var pollingTimerId: Long? = null
 
-    // Last values for deadband filtering and publish-on-change
+    // Last values for deadband filtering, publish-on-change, and loop prevention
     private val lastNumericValues = ConcurrentHashMap<String, Number>() // address.name -> last published numeric value
     private val lastRawValues = ConcurrentHashMap<String, Any>() // address.name -> last published value (any type)
+    private val lastReadValues = ConcurrentHashMap<String, Any>() // address.name -> last value READ from PLC (for loop prevention)
+
+    // Track subscribed MQTT topics for WRITE and READ_WRITE modes
+    private val subscribedTopics = ConcurrentHashMap<String, Plc4xAddress>() // mqttTopic -> address
 
     override fun start(startPromise: Promise<Void>) {
         try {
@@ -87,6 +98,9 @@ class Plc4xConnector : AbstractVerticle() {
             // Start connector successfully regardless of initial connection status
             logger.info("Plc4xConnector for device ${deviceConfig.name} started successfully")
             startPromise.complete()
+
+            // Setup MQTT subscriptions for WRITE and READ_WRITE modes
+            setupMqttSubscriptions()
 
             // Attempt initial connection in the background - if it fails, reconnection will be scheduled
             connectToPlc()
@@ -121,6 +135,17 @@ class Plc4xConnector : AbstractVerticle() {
             logger.info("Cancelled polling timer for device ${deviceConfig.name}")
         }
 
+        // Unsubscribe from all MQTT topics
+        val sessionHandler = Monster.getSessionHandler()
+        if (sessionHandler != null) {
+            subscribedTopics.forEach { (topic, address) ->
+                val clientId = "plc4x-connector-${deviceConfig.name}"
+                sessionHandler.unsubscribeInternal(clientId, topic)
+                logger.info("Unsubscribed from MQTT topic '$topic' for address ${address.name}")
+            }
+        }
+        subscribedTopics.clear()
+
         disconnectFromPlc()
             .onComplete { result ->
                 if (result.succeeded()) {
@@ -140,11 +165,12 @@ class Plc4xConnector : AbstractVerticle() {
                 val elapsedMs = now - lastMetricsReset
                 val elapsedSec = if (elapsedMs > 0) elapsedMs / 1000.0 else 1.0
                 val inCount = messagesInCounter.getAndSet(0)
+                val outCount = messagesOutCounter.getAndSet(0)
                 lastMetricsReset = now
                 val json = JsonObject()
                     .put("device", deviceConfig.name)
                     .put("messagesInRate", inCount / elapsedSec)
-                    .put("messagesOutRate", 0.0)  // PLC4X is read-only for now
+                    .put("messagesOutRate", outCount / elapsedSec)
                     .put("elapsedMs", elapsedMs)
                     .put("connected", isConnected)
                 msg.reply(json)
@@ -225,6 +251,7 @@ class Plc4xConnector : AbstractVerticle() {
                     connection = null
                     lastNumericValues.clear()
                     lastRawValues.clear()
+                    lastReadValues.clear()
                     logger.info("Disconnected from PLC: ${plc4xConfig.connectionString}")
                     null // Return null for Void
                 } catch (e: Exception) {
@@ -240,6 +267,7 @@ class Plc4xConnector : AbstractVerticle() {
             connection = null
             lastNumericValues.clear()
             lastRawValues.clear()
+            lastReadValues.clear()
             promise.complete()
         }
 
@@ -307,7 +335,10 @@ class Plc4xConnector : AbstractVerticle() {
             return
         }
 
-        val enabledAddresses = plc4xConfig.addresses.filter { it.enabled }
+        // Only poll addresses in READ or READ_WRITE mode (not WRITE-only)
+        val enabledAddresses = plc4xConfig.addresses.filter {
+            it.enabled && (it.mode == Plc4xAddressMode.READ || it.mode == Plc4xAddressMode.READ_WRITE)
+        }
         if (enabledAddresses.isEmpty()) {
             return
         }
@@ -360,6 +391,9 @@ class Plc4xConnector : AbstractVerticle() {
 
     private fun handleValueChange(address: Plc4xAddress, rawValue: Any) {
         try {
+            // Track the last value READ from PLC for loop prevention in READ_WRITE mode
+            lastReadValues[address.name] = rawValue
+
             // Convert to Number if possible for transformation and deadband
             val numericValue = when (rawValue) {
                 is Number -> rawValue
@@ -435,6 +469,135 @@ class Plc4xConnector : AbstractVerticle() {
 
         } catch (e: Exception) {
             logger.severe("Error handling value change for address ${address.name}: ${e.message}")
+        }
+    }
+
+    /**
+     * Setup MQTT subscriptions for addresses in WRITE or READ_WRITE mode
+     */
+    private fun setupMqttSubscriptions() {
+        // Find all addresses that need MQTT subscriptions (WRITE or READ_WRITE mode)
+        val writeAddresses = plc4xConfig.addresses.filter {
+            it.enabled && (it.mode == Plc4xAddressMode.WRITE || it.mode == Plc4xAddressMode.READ_WRITE)
+        }
+
+        if (writeAddresses.isEmpty()) {
+            logger.info("No addresses configured for WRITE mode for device ${deviceConfig.name}")
+            return
+        }
+
+        // Subscribe to MQTT topics using SessionHandler
+        val sessionHandler = Monster.getSessionHandler()
+        if (sessionHandler != null) {
+            writeAddresses.forEach { address ->
+                // Generate MQTT topic - use configured topic or default namespace/address pattern
+                val mqttTopic = if (address.topic.isNotBlank()) {
+                    address.topic
+                } else {
+                    "${deviceConfig.namespace}/${address.name}"
+                }
+
+                val clientId = "plc4x-connector-${deviceConfig.name}"
+                val qos = address.qos
+
+                logger.info("Internal subscription for PLC4X client '$clientId' to MQTT topic '$mqttTopic' with QoS $qos (mode: ${address.mode})")
+
+                sessionHandler.subscribeInternal(clientId, mqttTopic, qos) { message ->
+                    handleMqttMessage(address, message)
+                }
+
+                subscribedTopics[mqttTopic] = address
+            }
+        } else {
+            logger.severe("SessionHandler not available for MQTT subscriptions")
+        }
+    }
+
+    /**
+     * Handle incoming MQTT message and write value to PLC
+     */
+    private fun handleMqttMessage(address: Plc4xAddress, message: BrokerMessage) {
+        try {
+            if (!isConnected || connection == null) {
+                logger.warning("Cannot write to PLC - not connected (address: ${address.name})")
+                return
+            }
+
+            // Parse the MQTT payload to extract the value
+            val payloadString = String(message.payload)
+            val value = try {
+                val json = JsonObject(payloadString)
+                json.getValue("value")
+            } catch (e: Exception) {
+                // If not JSON, try to parse as plain value
+                payloadString.toDoubleOrNull() ?: payloadString
+            }
+
+            // Loop prevention for READ_WRITE mode
+            if (address.mode == Plc4xAddressMode.READ_WRITE) {
+                val lastReadValue = lastReadValues[address.name]
+                if (lastReadValue != null && lastReadValue == value) {
+                    // This value came from our own read - don't write it back to avoid loop
+                    logger.finest("Skipping PLC write for ${address.name} - value matches last read (loop prevention): $value")
+                    return
+                }
+            }
+
+            // Convert value to appropriate type for PLC
+            val plcValue = when (value) {
+                is Number -> {
+                    // Apply reverse transformation (undo scaling and offset)
+                    if (address.scalingFactor != null || address.offset != null) {
+                        address.reverseTransformValue(value)
+                    } else {
+                        value
+                    }
+                }
+                is String -> value.toDoubleOrNull() ?: value
+                else -> value
+            }
+
+            // Write to PLC using blocking call
+            vertx.executeBlocking<Unit> {
+                try {
+                    // Create write request
+                    val requestBuilder = connection!!.writeRequestBuilder()
+                    requestBuilder.addTagAddress(address.name, address.address, plcValue)
+
+                    // Build and execute write request
+                    val writeRequest = requestBuilder.build()
+                    val responseFuture = writeRequest.execute()
+
+                    // Wait for response
+                    val response = responseFuture.get()
+
+                    // Check response
+                    val responseCode = response.getResponseCode(address.name)
+                    if (responseCode == PlcResponseCode.OK) {
+                        messagesOutCounter.incrementAndGet()
+                        logger.fine { "Successfully wrote value to PLC: ${address.address} = $plcValue (from MQTT topic ${message.topicName})" }
+                    } else {
+                        logger.warning("Failed to write to PLC address ${address.name}: $responseCode")
+                    }
+
+                    Unit // Return Unit
+
+                } catch (e: Exception) {
+                    logger.severe("Error writing to PLC address ${address.name}: ${e.message}")
+                    throw e
+                }
+            }.onComplete { result ->
+                if (result.failed()) {
+                    // Connection might be lost - schedule reconnection
+                    if (isConnected) {
+                        isConnected = false
+                        scheduleReconnection()
+                    }
+                }
+            }
+
+        } catch (e: Exception) {
+            logger.severe("Error handling MQTT message for address ${address.name}: ${e.message}")
         }
     }
 }

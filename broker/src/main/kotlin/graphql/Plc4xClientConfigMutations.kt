@@ -6,6 +6,7 @@ import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigRequest
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.devices.Plc4xAddress
+import at.rocworks.stores.devices.Plc4xAddressMode
 import at.rocworks.stores.devices.Plc4xConnectionConfig
 import at.rocworks.devices.plc4x.Plc4xExtension
 import graphql.schema.DataFetcher
@@ -510,6 +511,9 @@ class Plc4xClientConfigMutations(
                 val scalingFactor = (inputMap["scalingFactor"] as? Number)?.toDouble()
                 val offset = (inputMap["offset"] as? Number)?.toDouble()
                 val deadband = (inputMap["deadband"] as? Number)?.toDouble()
+                val publishOnChange = inputMap["publishOnChange"] as? Boolean ?: true
+                val modeStr = inputMap["mode"] as? String
+                val mode = Plc4xAddressMode.fromString(modeStr)
                 val enabled = inputMap["enabled"] as? Boolean ?: true
 
                 if (addressName == null || addressStr == null || topic == null) {
@@ -532,6 +536,8 @@ class Plc4xClientConfigMutations(
                     scalingFactor = scalingFactor,
                     offset = offset,
                     deadband = deadband,
+                    publishOnChange = publishOnChange,
+                    mode = mode,
                     enabled = enabled
                 )
 
@@ -799,6 +805,8 @@ class Plc4xClientConfigMutations(
                         "scalingFactor" to address.scalingFactor,
                         "offset" to address.offset,
                         "deadband" to address.deadband,
+                        "publishOnChange" to address.publishOnChange,
+                        "mode" to address.mode.name,
                         "enabled" to address.enabled
                     )
                 }

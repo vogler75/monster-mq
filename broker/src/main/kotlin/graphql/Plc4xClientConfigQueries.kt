@@ -138,6 +138,7 @@ class Plc4xClientConfigQueries(
                         "offset" to address.offset,
                         "deadband" to address.deadband,
                         "publishOnChange" to address.publishOnChange,
+                        "mode" to address.mode.name,
                         "enabled" to address.enabled
                     )
                 }

@@ -2396,6 +2396,16 @@ type Plc4xDeviceMetrics {
     timestamp: String!
 }
 
+# Operating mode for PLC4X address
+enum Plc4xAddressMode {
+    # Read from PLC and publish to MQTT
+    READ
+    # Subscribe to MQTT and write to PLC
+    WRITE
+    # Bidirectional - read from PLC to MQTT and write from MQTT to PLC
+    READ_WRITE
+}
+
 # PLC4X address configuration for reading PLC tags/addresses
 type Plc4xAddress {
     # Unique name for this address within the device
@@ -2420,6 +2430,8 @@ type Plc4xAddress {
     deadband: Float
     # Only publish to MQTT when value changes (avoids duplicate values)
     publishOnChange: Boolean!
+    # Operating mode (READ, WRITE, or READ_WRITE)
+    mode: Plc4xAddressMode!
     # Whether this address should be polled
     enabled: Boolean!
 }
@@ -2518,6 +2530,8 @@ input Plc4xAddressInput {
     deadband: Float
     # Only publish to MQTT when value changes (avoids duplicate values)
     publishOnChange: Boolean = true
+    # Operating mode (READ, WRITE, or READ_WRITE)
+    mode: Plc4xAddressMode = READ
     # Whether this address should be polled
     enabled: Boolean = true
 }

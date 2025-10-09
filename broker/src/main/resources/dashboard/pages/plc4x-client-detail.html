@@ -211,13 +211,14 @@
         }
 
         /* Column widths for addresses table */
-        #addresses-table thead th:nth-child(1) { width: 20%; } /* PLC Address */
-        #addresses-table thead th:nth-child(2) { width: 20%; } /* Topic / QoS */
-        #addresses-table thead th:nth-child(3) { width: 15%; } /* Transform */
+        #addresses-table thead th:nth-child(1) { width: 18%; } /* PLC Address */
+        #addresses-table thead th:nth-child(2) { width: 18%; } /* Topic / QoS */
+        #addresses-table thead th:nth-child(3) { width: 13%; } /* Transform */
         #addresses-table thead th:nth-child(4) { width: 10%; } /* Deadband */
         #addresses-table thead th:nth-child(5) { width: 10%; } /* Options */
-        #addresses-table thead th:nth-child(6) { width: 15%; } /* Status */
-        #addresses-table thead th:nth-child(7) { width: 10%; } /* Actions */
+        #addresses-table thead th:nth-child(6) { width: 10%; } /* Mode */
+        #addresses-table thead th:nth-child(7) { width: 12%; } /* Status */
+        #addresses-table thead th:nth-child(8) { width: 9%; } /* Actions */
 
         .data-table thead th {
             background: var(--dark-surface-2);
@@ -737,7 +738,8 @@
                                             <th>Topic / QoS</th>
                                             <th>Transform</th>
                                             <th>Deadband</th>
-                                            <th>Options</th>
+                                            <th>Publish</th>
+                                            <th>Mode</th>
                                             <th>Status</th>
                                             <th>Actions</th>
                                         </tr>
@@ -829,6 +831,15 @@
                             <label for="address-publish-on-change">Publish On Change</label>
                         </div>
                         <div class="helper-text">Only publish when value actually changes (avoids duplicate values)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="address-mode">Operating Mode</label>
+                        <select id="address-mode">
+                            <option value="READ">Read (PLC → MQTT)</option>
+                            <option value="WRITE">Write (MQTT → PLC)</option>
+                            <option value="READ_WRITE">Read/Write (Bidirectional)</option>
+                        </select>
+                        <div class="helper-text">READ: Read from PLC and publish to MQTT | WRITE: Subscribe to MQTT and write to PLC | READ_WRITE: Bidirectional with loop prevention</div>
                     </div>
                     <div class="form-group">
                         <div class="checkbox-group">
