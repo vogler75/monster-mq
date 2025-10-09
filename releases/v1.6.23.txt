@@ -1,0 +1,8 @@
+Release v1.6.23
+Built from commit: c131ad2
+Date: 2025-10-09 20:56:55
+
+Changes since v1.6.22:
+---
+c131ad2 Add bulk session removal via GraphQL and dashboard
+7d20b9b Add archive group filtering and selection to topic browser
