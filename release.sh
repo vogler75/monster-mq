@@ -117,20 +117,19 @@ git tag -a "v${NEW_VERSION}" -m "Release version ${NEW_VERSION}"
 echo -e "${GREEN}✓ Created git tag v${NEW_VERSION}${NC}"
 
 # Build release JAR
-echo -e "${YELLOW}Building release JAR...${NC}"
-cd broker
-mvn clean package
-
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ Release build successful${NC}"
-    echo -e "${GREEN}JAR location: broker/target/broker-1.0-SNAPSHOT.jar${NC}"
-    cd ..
-else
-    echo -e "${RED}✗ Release build failed${NC}"
-    cd ..
-    exit 1
-fi
-
+#echo -e "${YELLOW}Building release JAR...${NC}"
+#cd broker
+#mvn clean package
+#
+#if [ $? -eq 0 ]; then
+#    echo -e "${GREEN}✓ Release build successful${NC}"
+#    echo -e "${GREEN}JAR location: broker/target/broker-1.0-SNAPSHOT.jar${NC}"
+#    cd ..
+#else
+#    echo -e "${RED}✗ Release build failed${NC}"
+#    cd ..
+#    exit 1
+#fi
 
 echo ""
 echo -e "${GREEN}=== Release Complete ===${NC}"

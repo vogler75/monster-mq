@@ -32,12 +32,17 @@ class ArchiveGroupResolver(
             // Check authorization - requires admin privileges
             if (!checkAuthorization(env, future)) return@DataFetcher future
 
+            // Extract filter parameters
+            val enabledFilter = env.getArgument<Boolean?>("enabled")
+            val lastValTypeEquals = env.getArgument<String?>("lastValTypeEquals")
+            val lastValTypeNotEquals = env.getArgument<String?>("lastValTypeNotEquals")
+
             try {
                 val configStore = archiveHandler.getConfigStore()
                 if (configStore == null) {
                     // No database config store - return runtime status from ArchiveHandler
                     val archiveGroupsJson = archiveHandler.listArchiveGroups()
-                    val result = archiveGroupsJson.list.map { json ->
+                    var result = archiveGroupsJson.list.map { json ->
                         val jsonObj = json as JsonObject
                         mapOf(
                             "name" to jsonObj.getString("name"),
@@ -54,6 +59,18 @@ class ArchiveGroupResolver(
                               "payloadFormat" to jsonObj.getString("payloadFormat", "DEFAULT")
                         )
                     }
+
+                    // Apply filters
+                    if (enabledFilter != null) {
+                        result = result.filter { it["enabled"] == enabledFilter }
+                    }
+                    if (lastValTypeEquals != null) {
+                        result = result.filter { it["lastValType"] == lastValTypeEquals }
+                    }
+                    if (lastValTypeNotEquals != null) {
+                        result = result.filter { it["lastValType"] != lastValTypeNotEquals }
+                    }
+
                     future.complete(result)
                 } else {
                     // Get from database using async call
@@ -61,7 +78,7 @@ class ArchiveGroupResolver(
                         if (asyncResult.succeeded()) {
                             try {
                                 val archiveGroupConfigs = asyncResult.result()
-                                val result = archiveGroupConfigs.map { config ->
+                                var result = archiveGroupConfigs.map { config ->
                                     // Get runtime status for this archive group
                                     val runtimeStatus = archiveHandler.getArchiveGroupStatus(config.archiveGroup.name)
                                     mapOf(
@@ -79,6 +96,18 @@ class ArchiveGroupResolver(
                                           "payloadFormat" to config.archiveGroup.payloadFormat.name
                                     )
                                 }
+
+                                // Apply filters
+                                if (enabledFilter != null) {
+                                    result = result.filter { it["enabled"] == enabledFilter }
+                                }
+                                if (lastValTypeEquals != null) {
+                                    result = result.filter { it["lastValType"] == lastValTypeEquals }
+                                }
+                                if (lastValTypeNotEquals != null) {
+                                    result = result.filter { it["lastValType"] != lastValTypeNotEquals }
+                                }
+
                                 future.complete(result)
                             } catch (e: Exception) {
                                 future.completeExceptionally(e)

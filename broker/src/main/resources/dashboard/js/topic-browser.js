@@ -4,14 +4,16 @@ class TopicBrowser {
         this.dataViewer = document.getElementById('data-viewer');
         this.searchInput = document.getElementById('search-input');
         this.searchButton = document.getElementById('search-button');
+        this.archiveGroupSelect = document.getElementById('archive-group-select');
 
         this.treeNodes = new Map(); // topic path -> TreeNode
         this.selectedTopic = null;
+        this.selectedArchiveGroup = 'Default'; // Default archiveGroup
 
         this.init();
     }
 
-    init() {
+    async init() {
         // Check authentication first
         if (!this.isLoggedIn()) {
             window.location.href = '/pages/login.html';
@@ -40,8 +42,64 @@ class TopicBrowser {
         this.browseMode.addEventListener('change', () => this.switchMode('browse'));
         this.searchMode.addEventListener('change', () => this.switchMode('search'));
 
+        // Archive group selection
+        this.archiveGroupSelect.addEventListener('change', (e) => {
+            this.selectedArchiveGroup = e.target.value;
+            localStorage.setItem('monstermq_selected_archive_group', this.selectedArchiveGroup);
+            this.browseRoot();
+        });
+
+        // Load archive groups first, then load initial tree
+        await this.loadArchiveGroups();
+
         // Load initial tree structure with root node
         this.createRootNode();
+    }
+
+    async loadArchiveGroups() {
+        try {
+            const query = `
+                query GetArchiveGroups {
+                    archiveGroups(enabled: true, lastValTypeNotEquals: NONE) {
+                        name
+                    }
+                }
+            `;
+
+            const response = await graphqlClient.query(query);
+
+            if (response && response.archiveGroups && response.archiveGroups.length > 0) {
+                const groups = response.archiveGroups;
+
+                // Clear loading option
+                this.archiveGroupSelect.innerHTML = '';
+
+                // Populate dropdown
+                groups.forEach(group => {
+                    const option = document.createElement('option');
+                    option.value = group.name;
+                    option.textContent = group.name;
+                    this.archiveGroupSelect.appendChild(option);
+                });
+
+                // Set first group as default or restore saved selection
+                const savedGroup = localStorage.getItem('monstermq_selected_archive_group');
+                if (savedGroup && groups.some(g => g.name === savedGroup)) {
+                    this.selectedArchiveGroup = savedGroup;
+                    this.archiveGroupSelect.value = savedGroup;
+                } else if (groups.length > 0) {
+                    this.selectedArchiveGroup = groups[0].name;
+                    this.archiveGroupSelect.value = groups[0].name;
+                }
+            } else {
+                // No groups found - show error
+                this.archiveGroupSelect.innerHTML = '<option value="">No archive groups available</option>';
+                console.error('No archive groups with lastValType found');
+            }
+        } catch (error) {
+            console.error('Error loading archive groups:', error);
+            this.archiveGroupSelect.innerHTML = '<option value="">Error loading groups</option>';
+        }
     }
 
     isLoggedIn() {
@@ -123,14 +181,17 @@ class TopicBrowser {
 
             // Use GraphQL to browse topics
             const query = `
-                query BrowseTopics($topic: String!) {
-                    browseTopics(topic: $topic) {
+                query BrowseTopics($topic: String!, $archiveGroup: String!) {
+                    browseTopics(topic: $topic, archiveGroup: $archiveGroup) {
                         name
                     }
                 }
             `;
 
-            const response = await graphqlClient.query(query, { topic: pattern });
+            const response = await graphqlClient.query(query, {
+                topic: pattern,
+                archiveGroup: this.selectedArchiveGroup
+            });
 
             // Remove loading item
             container.removeChild(loadingItem);
@@ -368,8 +429,8 @@ class TopicBrowser {
             this.showLoadingDataViewer();
 
             const query = `
-                query GetCurrentValue($topic: String!) {
-                    currentValue(topic: $topic) {
+                query GetCurrentValue($topic: String!, $archiveGroup: String!) {
+                    currentValue(topic: $topic, archiveGroup: $archiveGroup) {
                         topic
                         payload
                         format
@@ -379,7 +440,10 @@ class TopicBrowser {
                 }
             `;
 
-            const response = await graphqlClient.query(query, { topic: topicPath });
+            const response = await graphqlClient.query(query, {
+                topic: topicPath,
+                archiveGroup: this.selectedArchiveGroup
+            });
 
             if (response && response.currentValue) {
                 this.displayMessageData(response.currentValue);

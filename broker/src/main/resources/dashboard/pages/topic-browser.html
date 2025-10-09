@@ -334,6 +334,18 @@
                     <div class="panel-header">
                         <h2 class="panel-title">Topic Tree</h2>
 
+                        <!-- Archive Group selector -->
+                        <div style="margin: 1rem 0; display: flex; gap: 0.5rem; align-items: center;">
+                            <label for="archive-group-select" style="color: var(--text-primary); font-weight: 500; min-width: 120px;">
+                                Archive Group:
+                            </label>
+                            <select id="archive-group-select"
+                                    class="search-input"
+                                    style="flex: 1; max-width: 300px; cursor: pointer;">
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+
                         <!-- Mode selector -->
                         <div style="margin: 1rem 0; display: flex; gap: 1rem; align-items: center;">
                             <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-primary); cursor: pointer;">

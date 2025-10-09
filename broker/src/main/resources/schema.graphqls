@@ -330,7 +330,14 @@ type Query {
 
     # ArchiveGroup Management - Get data archiving configurations
     # Shows how MQTT topics are organized and stored across different databases
-    archiveGroups: [ArchiveGroupInfo!]!
+    archiveGroups(
+        # Filter by enabled status (true=only enabled, false=only disabled, null=all)
+        enabled: Boolean
+        # Filter to only include groups with this specific lastValType (e.g., POSTGRES, CRATEDB)
+        lastValTypeEquals: MessageStoreType
+        # Filter to exclude groups with this specific lastValType (e.g., NONE to exclude groups without last value stores)
+        lastValTypeNotEquals: MessageStoreType
+    ): [ArchiveGroupInfo!]!
 
     # Get detailed information about a specific ArchiveGroup
     # Includes topic filters, storage configuration, and connection status
