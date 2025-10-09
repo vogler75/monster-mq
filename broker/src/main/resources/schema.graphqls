@@ -2420,6 +2420,8 @@ type Plc4xAddress {
     offset: Float
     # Optional deadband value - only publish if change exceeds this threshold
     deadband: Float
+    # Only publish to MQTT when value changes (avoids duplicate values)
+    publishOnChange: Boolean!
     # Whether this address should be polled
     enabled: Boolean!
 }
@@ -2516,6 +2518,8 @@ input Plc4xAddressInput {
     offset: Float
     # Optional deadband threshold
     deadband: Float
+    # Only publish to MQTT when value changes (avoids duplicate values)
+    publishOnChange: Boolean = true
     # Whether this address should be polled
     enabled: Boolean = true
 }

@@ -91,6 +91,7 @@ class Plc4xClientDetailManager {
                                 scalingFactor
                                 offset
                                 deadband
+                                publishOnChange
                                 enabled
                             }
                         }
@@ -260,6 +261,7 @@ class Plc4xClientDetailManager {
             scalingFactor: parseFloat(document.getElementById('address-scaling').value) || null,
             offset: parseFloat(document.getElementById('address-offset').value) || null,
             deadband: parseFloat(document.getElementById('address-deadband').value) || null,
+            publishOnChange: document.getElementById('address-publish-on-change').checked,
             enabled: document.getElementById('address-enabled').checked
         };
 
@@ -442,6 +444,7 @@ class Plc4xClientDetailManager {
         // Reset form
         document.getElementById('add-address-form').reset();
         document.getElementById('address-enabled').checked = true;
+        document.getElementById('address-publish-on-change').checked = true;
         document.getElementById('address-qos').value = '0';
     }
 

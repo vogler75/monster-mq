@@ -137,6 +137,7 @@ class Plc4xClientConfigQueries(
                         "scalingFactor" to address.scalingFactor,
                         "offset" to address.offset,
                         "deadband" to address.deadband,
+                        "publishOnChange" to address.publishOnChange,
                         "enabled" to address.enabled
                     )
                 }

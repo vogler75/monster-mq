@@ -92,23 +92,25 @@ data class Plc4xConnectionConfig(
  *
  * @property name Unique identifier for this address within the device
  * @property address The PLC4X address string (protocol-specific format, e.g., "%DB1.DBW0:INT")
- * @property topic The MQTT topic where values should be published
+ * @property topic The MQTT topic where values should be published (auto-generated from namespace/name if empty)
  * @property qos MQTT QoS level (0, 1, or 2)
  * @property retained Whether MQTT messages should be retained
  * @property scalingFactor Optional scaling factor applied to numeric values (value * scalingFactor)
  * @property offset Optional offset added to numeric values after scaling (value + offset)
  * @property deadband Optional deadband value - only publish if change exceeds this value
+ * @property publishOnChange Only publish to MQTT when value changes (avoids duplicate values)
  * @property enabled Whether this address should be polled
  */
 data class Plc4xAddress(
     val name: String,
     val address: String,
-    val topic: String,
+    val topic: String = "",
     val qos: Int = 0,
     val retained: Boolean = false,
     val scalingFactor: Double? = null,
     val offset: Double? = null,
     val deadband: Double? = null,
+    val publishOnChange: Boolean = true,
     val enabled: Boolean = true
 ) {
     companion object {
@@ -116,12 +118,13 @@ data class Plc4xAddress(
             return Plc4xAddress(
                 name = json.getString("name") ?: throw IllegalArgumentException("name is required"),
                 address = json.getString("address") ?: throw IllegalArgumentException("address is required"),
-                topic = json.getString("topic") ?: throw IllegalArgumentException("topic is required"),
+                topic = json.getString("topic", ""),
                 qos = json.getInteger("qos", 0),
                 retained = json.getBoolean("retained", false),
                 scalingFactor = json.getDouble("scalingFactor"),
                 offset = json.getDouble("offset"),
                 deadband = json.getDouble("deadband"),
+                publishOnChange = json.getBoolean("publishOnChange", true),
                 enabled = json.getBoolean("enabled", true)
             )
         }
@@ -134,6 +137,7 @@ data class Plc4xAddress(
             .put("topic", topic)
             .put("qos", qos)
             .put("retained", retained)
+            .put("publishOnChange", publishOnChange)
             .put("enabled", enabled)
 
         scalingFactor?.let { json.put("scalingFactor", it) }
@@ -158,9 +162,7 @@ data class Plc4xAddress(
             errors.add("Address cannot be blank")
         }
 
-        if (topic.isBlank()) {
-            errors.add("Topic cannot be blank")
-        }
+        // topic is optional - auto-generated from namespace/name if empty
 
         if (qos !in 0..2) {
             errors.add("QoS must be 0, 1, or 2")

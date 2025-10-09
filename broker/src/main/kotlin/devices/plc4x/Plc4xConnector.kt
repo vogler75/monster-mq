@@ -56,8 +56,9 @@ class Plc4xConnector : AbstractVerticle() {
     private var reconnectTimerId: Long? = null
     private var pollingTimerId: Long? = null
 
-    // Last values for deadband filtering
-    private val lastValues = ConcurrentHashMap<String, Number>() // address.name -> last published value
+    // Last values for deadband filtering and publish-on-change
+    private val lastNumericValues = ConcurrentHashMap<String, Number>() // address.name -> last published numeric value
+    private val lastRawValues = ConcurrentHashMap<String, Any>() // address.name -> last published value (any type)
 
     override fun start(startPromise: Promise<Void>) {
         try {
@@ -222,7 +223,8 @@ class Plc4xConnector : AbstractVerticle() {
                     isConnected = false
                     isReconnecting = false
                     connection = null
-                    lastValues.clear()
+                    lastNumericValues.clear()
+                    lastRawValues.clear()
                     logger.info("Disconnected from PLC: ${plc4xConfig.connectionString}")
                     null // Return null for Void
                 } catch (e: Exception) {
@@ -236,7 +238,8 @@ class Plc4xConnector : AbstractVerticle() {
             isConnected = false
             isReconnecting = false
             connection = null
-            lastValues.clear()
+            lastNumericValues.clear()
+            lastRawValues.clear()
             promise.complete()
         }
 
@@ -372,9 +375,9 @@ class Plc4xConnector : AbstractVerticle() {
                 rawValue
             }
 
-            // Check deadband for numeric values
+            // Check deadband for numeric values (only if deadband is configured)
             if (numericValue != null && address.deadband != null) {
-                val lastValue = lastValues[address.name]
+                val lastValue = lastNumericValues[address.name]
                 if (lastValue != null && !address.exceedsDeadband(lastValue, numericValue)) {
                     // Value change within deadband - don't publish
                     logger.finest("Value change within deadband for ${address.name}: $lastValue -> $numericValue")
@@ -382,10 +385,21 @@ class Plc4xConnector : AbstractVerticle() {
                 }
             }
 
-            // Update last value for numeric values
-            if (numericValue != null) {
-                lastValues[address.name] = numericValue
+            // Check publish-on-change: only publish if value actually changed
+            if (address.publishOnChange) {
+                val lastValue = lastRawValues[address.name]
+                if (lastValue != null && lastValue == rawValue) {
+                    // Value hasn't changed - don't publish
+                    logger.finest("Value unchanged for ${address.name}, skipping publish: $rawValue")
+                    return
+                }
             }
+
+            // Update last values
+            if (numericValue != null) {
+                lastNumericValues[address.name] = numericValue
+            }
+            lastRawValues[address.name] = rawValue
 
             // Create MQTT message payload
             val payload = JsonObject()
