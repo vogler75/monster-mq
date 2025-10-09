@@ -203,13 +203,14 @@ class Plc4xClientDetailManager {
             const retainedIcon = address.retained ? '📌' : '📄';
             const transformIcon = (address.scalingFactor || address.offset) ? '📊' : '-';
             const deadbandIcon = address.deadband ? '🎯' : '-';
+            const publishOnChangeIcon = address.publishOnChange ? '🔄' : '📋';
+            const publishOnChangeTitle = address.publishOnChange ? 'Publish on change' : 'Publish always';
 
             row.innerHTML = `
                 <td>
-                    <div class="address-name" title="${this.escapeHtml(address.name)}">
-                        ${enabledIcon} ${this.escapeHtml(address.name)}
+                    <div class="address-name" title="${this.escapeHtml(address.address)}">
+                        ${enabledIcon} ${this.escapeHtml(address.address)}
                     </div>
-                    <small class="address-value">${this.escapeHtml(address.address)}</small>
                 </td>
                 <td>
                     <div class="topic-value">${this.escapeHtml(address.topic || 'Auto')}</div>
@@ -226,6 +227,9 @@ class Plc4xClientDetailManager {
                     </div>
                 </td>
                 <td>
+                    <div title="${publishOnChangeTitle}">${publishOnChangeIcon}</div>
+                </td>
+                <td>
                     <span class="status-badge ${address.enabled ? 'status-enabled' : 'status-disabled'}">
                         ${address.enabled ? 'Enabled' : 'Disabled'}
                     </span>
@@ -233,7 +237,7 @@ class Plc4xClientDetailManager {
                 <td>
                     <div class="action-buttons">
                         <button class="btn btn-sm btn-danger"
-                                onclick="clientDetailManager.deleteAddress('${this.escapeHtml(address.name)}')"
+                                onclick="clientDetailManager.deleteAddress('${this.escapeHtml(address.address)}')"
                                 title="Delete Address">
                             🗑️
                         </button>
@@ -252,9 +256,11 @@ class Plc4xClientDetailManager {
             return;
         }
 
+        const plcAddress = document.getElementById('address-address').value.trim();
+
         const addressData = {
-            name: document.getElementById('address-name').value.trim(),
-            address: document.getElementById('address-address').value.trim(),
+            name: plcAddress,  // Use PLC address as the name
+            address: plcAddress,
             topic: document.getElementById('address-topic').value.trim(),
             qos: parseInt(document.getElementById('address-qos').value),
             retained: document.getElementById('address-retained').checked,
@@ -288,7 +294,7 @@ class Plc4xClientDetailManager {
             if (result.plc4xDevice.addAddress.success) {
                 this.hideAddAddressModal();
                 await this.loadClient();
-                this.showSuccess(`Address "${addressData.name}" added successfully`);
+                this.showSuccess(`Address "${plcAddress}" added successfully`);
             } else {
                 const errors = result.plc4xDevice.addAddress.errors || ['Unknown error'];
                 this.showError('Failed to add address: ' + errors.join(', '));
