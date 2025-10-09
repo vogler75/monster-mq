@@ -156,7 +156,7 @@ class MessageArchiveMongoDB(
      */
     private fun performHealthCheck() {
         if (!isConnected) {
-            logger.fine("MongoDB archive [$name] not connected, attempting reconnection...")
+            logger.fine { "MongoDB archive [$name] not connected, attempting reconnection..." }
             initiateConnection()
             return
         }
@@ -255,7 +255,7 @@ class MessageArchiveMongoDB(
         endTime: Instant?,
         limit: Int
     ): JsonArray {
-        logger.fine("MongoDB getHistory: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
+        logger.fine { "MongoDB getHistory: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit" }
         
         val filters = mutableListOf<Bson>()
         
@@ -320,7 +320,7 @@ class MessageArchiveMongoDB(
                 }
             
             val queryDuration = System.currentTimeMillis() - startQuery
-            logger.fine("MongoDB query completed in ${queryDuration}ms, returned ${messages.size()} messages")
+            logger.fine { "MongoDB query completed in ${queryDuration}ms, returned ${messages.size()} messages" }
             
         } catch (e: Exception) {
             logger.severe("Error retrieving history for topic [$topic]: ${e.message}")
@@ -356,7 +356,7 @@ class MessageArchiveMongoDB(
                 }
             
             val duration = System.currentTimeMillis() - startTime
-            logger.fine("Aggregation completed in ${duration}ms with ${result.size()} results")
+            logger.fine { "Aggregation completed in ${duration}ms with ${result.size()} results" }
             
         } catch (e: Exception) {
             logger.severe("Error executing aggregation: ${e.message}")
@@ -411,7 +411,7 @@ class MessageArchiveMongoDB(
         val startTime = System.currentTimeMillis()
         var deletedCount = 0
         
-        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        logger.fine { "Starting purge for [$name] - removing messages older than $olderThan" }
         
         try {
             // For time-series collections, use Date format for filtering
@@ -428,7 +428,7 @@ class MessageArchiveMongoDB(
         val elapsedTimeMs = System.currentTimeMillis() - startTime
         val purgeResult = PurgeResult(deletedCount, elapsedTimeMs)
         
-        logger.fine("Purge completed for [$name]: deleted ${purgeResult.deletedCount} messages in ${purgeResult.elapsedTimeMs}ms")
+        logger.fine { "Purge completed for [$name]: deleted ${purgeResult.deletedCount} messages in ${purgeResult.elapsedTimeMs}ms" }
         
         return purgeResult
     }

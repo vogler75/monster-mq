@@ -442,7 +442,7 @@ class UserManager(
                             promise.complete()
                         }
                     } else {
-                        logger.fine("Anonymous user already exists")
+                        logger.fine { "Anonymous user already exists" }
                         promise.complete()
                     }
                 } else {
@@ -491,7 +491,7 @@ class UserManager(
                             promise.complete()
                         }
                     } else {
-                        logger.fine("Default admin user already exists")
+                        logger.fine { "Default admin user already exists" }
                         promise.complete()
                     }
                 } else {
@@ -522,7 +522,7 @@ class UserManager(
                         aclCache.loadFromStore(store).onComplete { result ->
                             if (result.succeeded()) {
                                 aclCache.clearPermissionCache()
-                                logger.fine("Periodic cache refresh completed")
+                                logger.fine { "Periodic cache refresh completed" }
                             } else {
                                 logger.warning("Error in periodic cache refresh: ${result.cause()?.message}")
                             }

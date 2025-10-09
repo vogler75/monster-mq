@@ -243,7 +243,7 @@ class OpcUaConnector : AbstractVerticle() {
             val parts = opcUaConfig.endpointUrl.split("://", ":", "/")
             when {
                 parts.size == 1 -> {
-                    logger.fine("Update endpoint to host [${parts[0]}]!")
+                    logger.fine { "Update endpoint to host [${parts[0]}]!" }
                     EndpointUtil.updateUrl(endpoint, parts[0])
                 }
                 parts.size > 1 -> {
@@ -251,14 +251,14 @@ class OpcUaConnector : AbstractVerticle() {
                     if (parts.size > 2) {
                         val port = parts[2].toIntOrNull()
                         if (port != null) {
-                            logger.fine("Update endpoint to host [$hostname] and port [$port]!")
+                            logger.fine { "Update endpoint to host [$hostname] and port [$port]!" }
                             EndpointUtil.updateUrl(endpoint, hostname, port)
                         } else {
-                            logger.fine("Update endpoint to host [$hostname]!")
+                            logger.fine { "Update endpoint to host [$hostname]!" }
                             EndpointUtil.updateUrl(endpoint, hostname)
                         }
                     } else {
-                        logger.fine("Update endpoint to host [$hostname]!")
+                        logger.fine { "Update endpoint to host [$hostname]!" }
                         EndpointUtil.updateUrl(endpoint, hostname)
                     }
                 }
@@ -411,7 +411,7 @@ class OpcUaConnector : AbstractVerticle() {
             .whenComplete { sub, throwable ->
                 if (throwable == null) {
                     subscription = sub
-                    logger.fine("Created OPC UA subscription: ${sub.subscriptionId}")
+                    logger.fine { "Created OPC UA subscription: ${sub.subscriptionId}" }
                     promise.complete()
                 } else {
                     logger.severe("Failed to create OPC UA subscription: ${throwable.message}")
@@ -612,7 +612,7 @@ class OpcUaConnector : AbstractVerticle() {
                 val resolvedNodeIds = mutableListOf<Pair<NodeId, String>>()
                 val pathElements = parsePathElements(browsePath)
 
-                logger.fine("Browse address [$browsePath] [${pathElements.joinToString("|")}]")
+                logger.fine { "Browse address [$browsePath] [${pathElements.joinToString("|")}]" }
 
                 fun find(nodeStr: String, itemIdx: Int, path: String): Int {
                     val item = pathElements[itemIdx]
@@ -742,7 +742,7 @@ class OpcUaConnector : AbstractVerticle() {
                         addressSubscriptions[address.address] = AddressSubscription(address, nodeId)
                         opcUaMonitoredItems[address.address] = item
 
-                        logger.fine("Created monitored item for address ${address.address}, nodeId $nodeId")
+                        logger.fine { "Created monitored item for address ${address.address}, nodeId $nodeId" }
                         promise.complete()
                     } else {
                         logger.warning("Failed to create monitored item for address ${address.address}: ${item.statusCode}")
@@ -921,7 +921,7 @@ class OpcUaConnector : AbstractVerticle() {
             vertx.eventBus().publish(OpcUaExtension.Companion.ADDRESS_OPCUA_VALUE_PUBLISH, mqttMessage)
 
             messagesInCounter.incrementAndGet()
-            logger.fine("Published OPC UA value change: $mqttTopic = $value (from ${address.address})")
+            logger.fine { "Published OPC UA value change: $mqttTopic = $value (from ${address.address})" }
 
         } catch (e: Exception) {
             logger.severe("Error handling OPC UA value change for address ${address.address}: ${e.message}")

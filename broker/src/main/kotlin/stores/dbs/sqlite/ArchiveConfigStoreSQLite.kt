@@ -117,7 +117,7 @@ class ArchiveConfigStoreSQLite(
                             }
                         }
 
-                        logger.fine("Retrieved ${results.size} archive groups from SQLite")
+                        logger.fine { "Retrieved ${results.size} archive groups from SQLite" }
                         results
                     }
                 } ?: run {

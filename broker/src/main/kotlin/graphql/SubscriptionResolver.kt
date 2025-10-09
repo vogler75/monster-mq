@@ -80,7 +80,7 @@ class SubscriptionResolver(
                     }
                 }
             }.onSuccess {
-                logger.fine("GraphQL subscription created for topic filters: $topicFilters")
+                logger.fine { "GraphQL subscription created for topic filters: $topicFilters" }
             }.onFailure { err ->
                 logger.severe("Failed to create GraphQL subscription: ${err.message}")
                 subscriber.onError(err)
@@ -158,7 +158,7 @@ class SubscriptionResolver(
                 // Clear pending messages
                 consumerIds.clear()
                 pendingMessages.clear()
-                logger.fine("GraphQL subscription cancelled")
+                logger.fine { "GraphQL subscription cancelled" }
             }
         }
     }

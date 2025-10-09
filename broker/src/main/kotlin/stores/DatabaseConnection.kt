@@ -47,7 +47,7 @@ abstract class DatabaseConnection(
     private fun open(): Future<Void> {
         val promise = Promise.promise<Void>()
         try {
-            logger.fine("Connect to database [${Utils.getCurrentFunctionName()}]")
+            logger.fine { "Connect to database [${Utils.getCurrentFunctionName()}]" }
             DriverManager.getConnection(url, username, password)
                 ?.let { connection ->
                     this.connection = connection

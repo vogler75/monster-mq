@@ -296,7 +296,7 @@ class MqttClientExtension : AbstractVerticle() {
     private fun handleMqttValuePublish(message: Message<BrokerMessage>) {
         try {
             val mqttMessage = message.body()
-            logger.fine("Forwarding MQTT Client value to MQTT bus: ${mqttMessage.topicName} = ${String(mqttMessage.payload)}")
+            logger.fine { "Forwarding MQTT Client value to MQTT bus: ${mqttMessage.topicName} = ${String(mqttMessage.payload)}" }
 
             // Use the shared SessionHandler to ensure proper archiving and distribution
             // This follows the same pattern as regular MQTT client publishing

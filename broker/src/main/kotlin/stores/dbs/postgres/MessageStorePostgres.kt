@@ -414,7 +414,7 @@ class MessageStorePostgres(
             }
         }
 
-        logger.fine("findTopicsByName result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        logger.fine { "findTopicsByName result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]" }
         return resultTopics
     }
 
@@ -447,7 +447,7 @@ class MessageStorePostgres(
             }
         }
 
-        logger.fine("findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        logger.fine { "findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]" }
         return resultTopics
     }
     
@@ -455,7 +455,7 @@ class MessageStorePostgres(
         val startTime = System.currentTimeMillis()
         var deletedCount = 0
         
-        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        logger.fine { "Starting purge for [$name] - removing messages older than $olderThan" }
         
         try {
             db.connection?.let { connection ->
@@ -473,7 +473,7 @@ class MessageStorePostgres(
         val elapsedTimeMs = System.currentTimeMillis() - startTime
         val result = PurgeResult(deletedCount, elapsedTimeMs)
         
-        logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
+        logger.fine { "Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
         
         return result
     }

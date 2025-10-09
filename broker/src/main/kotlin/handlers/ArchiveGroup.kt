@@ -104,7 +104,7 @@ class ArchiveGroup(
             logger.info("Undeploying ${childDeployments.size} child verticles for ArchiveGroup [$name]")
 
             val undeployFutures = childDeployments.map { deploymentId ->
-                logger.fine("Undeploying child verticle: $deploymentId")
+                logger.fine { "Undeploying child verticle: $deploymentId" }
                 vertx.undeploy(deploymentId).recover { error ->
                     logger.warning("Failed to undeploy child verticle $deploymentId: ${error.message}")
                     Future.succeededFuture<Void>() // Continue even if undeploy fails

@@ -150,13 +150,13 @@ open class SessionHandler(
         }
 
         vertx.eventBus().consumer<JsonObject>(clientStatusAddress) { message ->
-            logger.fine("Client status [${message.body()}]")
+            logger.fine { "Client status [${message.body()}]" }
             val clientId = message.body().getString("ClientId", "")
             val status = ClientStatus.valueOf(message.body().getString("Status", ""))
             val deliveryOptions = DeliveryOptions(JsonObject().put("NodeId", Monster.getClusterNodeId(vertx)))
 
             fun flushFinished() {
-                logger.fine("Flushed messages finished")
+                logger.fine { "Flushed messages finished" }
                 message.reply(true, deliveryOptions)
             }
 
@@ -164,17 +164,17 @@ open class SessionHandler(
                 ClientStatus.CREATED -> {
                     clientStatus[clientId] = ClientStatus.CREATED
                     waitForFlush?.let { promise ->
-                        logger.fine("Existing wait for flush...")
+                        logger.fine { "Existing wait for flush..." }
                         promise.future().onComplete { flushFinished() }
                     } ?: Promise.promise<Void>().let { promise ->
-                        logger.fine("New wait for flush...")
+                        logger.fine { "New wait for flush..." }
                         waitForFlush = promise
                         promise.future().onComplete { flushFinished() }
                     }
                 }
                 ClientStatus.ONLINE -> {
                     inFlightMessages[clientId]?.let { messages ->
-                        logger.fine("Publishing [${messages.count()}] in-flight messages to client [${clientId}] [${Utils.getCurrentFunctionName()}]")
+                        logger.fine { "Publishing [${messages.count()}] in-flight messages to client [${clientId}] [${Utils.getCurrentFunctionName()}]" }
                         messages.forEach { message -> sendMessageToClient(clientId, message)}
                     }
                     inFlightMessages.remove(clientId)
@@ -423,7 +423,7 @@ open class SessionHandler(
         blockSize: Int,
         execute: (block: List<T>)->Future<Void>
     ) /*= thread(start = true)*/ {
-        logger.fine("Start [$name] loop")
+        logger.fine { "Start [$name] loop" }
         val block = arrayListOf<T>()
         var lastCheckTime = System.currentTimeMillis()
 
@@ -499,7 +499,7 @@ open class SessionHandler(
             val outRate = if (duration > 0) kotlin.math.round(outCount / duration) else 0.0
             
             // Debug logging to understand rate calculation
-            logger.fine("Client [$clientId]: inCount=$inCount, outCount=$outCount, duration=$duration, inRate=$inRate, outRate=$outRate")
+            logger.fine { "Client [$clientId]: inCount=$inCount, outCount=$outCount, duration=$duration, inRate=$inRate, outRate=$outRate" }
             
             // Update last reset time
             sessionMetrics.lastResetTime = currentTime
@@ -547,7 +547,7 @@ open class SessionHandler(
     fun getMessageBusInCount(): Long = messageBusIn.get()
 
     fun setClient(clientId: String, cleanSession: Boolean, information: JsonObject): Future<Void> {
-        logger.fine("Set client [$clientId] clean session [$cleanSession] information [$information]")
+        logger.fine { "Set client [$clientId] clean session [$cleanSession] information [$information]" }
 
         // Initialize metrics and client details
         clientMetrics[clientId] = SessionMetrics()

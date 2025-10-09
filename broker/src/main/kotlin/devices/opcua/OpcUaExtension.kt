@@ -297,7 +297,7 @@ class OpcUaExtension : AbstractVerticle() {
     private fun handleOpcUaValuePublish(message: Message<BrokerMessage>) {
         try {
             val mqttMessage = message.body()
-            logger.fine("Forwarding OPC UA value to MQTT bus: ${mqttMessage.topicName} = ${String(mqttMessage.payload)}")
+            logger.fine { "Forwarding OPC UA value to MQTT bus: ${mqttMessage.topicName} = ${String(mqttMessage.payload)}" }
 
             // Use the shared SessionHandler to ensure proper archiving and distribution
             // This follows the same pattern as regular MQTT client publishing

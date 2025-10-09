@@ -382,7 +382,7 @@ class MessageStoreCrateDB(
         val startTime = System.currentTimeMillis()
         var deletedCount = 0
         
-        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        logger.fine { "Starting purge for [$name] - removing messages older than $olderThan" }
         
         try {
             db.connection?.let { connection ->
@@ -399,7 +399,7 @@ class MessageStoreCrateDB(
         val elapsedTimeMs = System.currentTimeMillis() - startTime
         val result = PurgeResult(deletedCount, elapsedTimeMs)
         
-        logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
+        logger.fine { "Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
         
         return result
     }
@@ -454,7 +454,7 @@ class MessageStoreCrateDB(
             logger.severe("Error finding topics by name: ${e.message}")
         }
 
-        logger.fine("findTopicsByName result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        logger.fine { "findTopicsByName result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]" }
         return resultTopics
     }
 
@@ -493,7 +493,7 @@ class MessageStoreCrateDB(
             logger.severe("Error finding topics by config: ${e.message}")
         }
 
-        logger.fine("findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        logger.fine { "findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]" }
         return resultTopics
     }
 }

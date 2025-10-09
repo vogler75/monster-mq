@@ -137,7 +137,7 @@ class HealthHandler(
         logger.info("Processing dead node [$deadNodeId] - cleaning up sessions")
 
         sessionHandler.iterateNodeClients(deadNodeId) { clientId, cleanSession, will ->
-            logger.fine("Processing client [$clientId] from dead node [$deadNodeId], cleanSession=[$cleanSession]")
+            logger.fine { "Processing client [$clientId] from dead node [$deadNodeId], cleanSession=[$cleanSession]" }
 
             // Publish last will message if present
             if (will.topicName.isNotEmpty()) {

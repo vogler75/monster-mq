@@ -364,7 +364,7 @@ class OpcUaServerInstance(
             try {
                 sessionHandler.unsubscribeInternal(internalClientId, topic)
                 subscribedTopics.remove(topic)
-                logger.fine("Unsubscribed OPC UA server '${config.name}' from topic: $topic")
+                logger.fine { "Unsubscribed OPC UA server '${config.name}' from topic: $topic" }
             } catch (e: Exception) {
                 logger.warning("Failed to unsubscribe from topic $topic: ${e.message}")
             }
@@ -377,7 +377,7 @@ class OpcUaServerInstance(
                     handleBrokerMessage(message, newConfig.addresses.find { it.mqttTopic == topic })
                 }
                 subscribedTopics[topic] = internalClientId
-                logger.fine("Subscribed OPC UA server '${config.name}' to new topic: $topic")
+                logger.fine { "Subscribed OPC UA server '${config.name}' to new topic: $topic" }
             } catch (e: Exception) {
                 logger.warning("Failed to subscribe to new topic $topic: ${e.message}")
             }
@@ -397,7 +397,7 @@ class OpcUaServerInstance(
                     handleBrokerMessage(message, address)
                 }
                 subscribedTopics[address.mqttTopic] = internalClientId
-                logger.fine("Subscribed OPC UA server '${config.name}' to MQTT topic: ${address.mqttTopic}")
+                logger.fine { "Subscribed OPC UA server '${config.name}' to MQTT topic: ${address.mqttTopic}" }
             } catch (e: Exception) {
                 logger.warning("Failed to subscribe to MQTT topic ${address.mqttTopic}: ${e.message}")
             }
@@ -411,7 +411,7 @@ class OpcUaServerInstance(
         subscribedTopics.forEach { (topic, clientId) ->
             try {
                 sessionHandler.unsubscribeInternal(clientId, topic)
-                logger.fine("Unsubscribed from MQTT topic: $topic")
+                logger.fine { "Unsubscribed from MQTT topic: $topic" }
             } catch (e: Exception) {
                 logger.warning("Failed to unsubscribe from MQTT topic $topic: ${e.message}")
             }
@@ -425,11 +425,11 @@ class OpcUaServerInstance(
     private fun handleBrokerMessage(message: BrokerMessage, addressConfig: OpcUaServerAddress? = null) {
         // Skip messages from this OPC UA server to prevent loops
         if (message.sender == internalClientId) {
-            logger.fine("Skipping message from self: ${message.topicName}")
+            logger.fine { "Skipping message from self: ${message.topicName}" }
             return
         }
 
-        logger.fine("OPC UA server '${config.name}' received MQTT message on topic: ${message.topicName}")
+        logger.fine { "OPC UA server '${config.name}' received MQTT message on topic: ${message.topicName}" }
 
         try {
             // Use the provided address config, or find one that matches
@@ -438,7 +438,7 @@ class OpcUaServerInstance(
             }
 
             if (matchingAddress != null) {
-                logger.fine("Processing MQTT message for topic: ${message.topicName}")
+                logger.fine { "Processing MQTT message for topic: ${message.topicName}" }
 
                 // Convert MQTT message to OPC UA DataValue
                 val dataValue = OpcUaDataConverter.mqttToOpcUa(
@@ -451,7 +451,7 @@ class OpcUaServerInstance(
                 createOrUpdateNode(message.topicName, matchingAddress, dataValue)
 
             } else {
-                logger.fine("No matching address pattern found for topic: ${message.topicName}")
+                logger.fine { "No matching address pattern found for topic: ${message.topicName}" }
             }
         } catch (e: Exception) {
             logger.warning("Error handling MQTT message for topic ${message.topicName}: ${e.message}")
@@ -473,9 +473,9 @@ class OpcUaServerInstance(
                 // Keep the original accessLevel from the pattern configuration
             )
             nodeManager?.createOrUpdateVariableNode(topicName, specificAddress, dataValue)
-            logger.fine("Created new OPC UA node for topic: $topicName with ${addressConfig.accessLevel} access")
+            logger.fine { "Created new OPC UA node for topic: $topicName with ${addressConfig.accessLevel} access" }
         } else {
-            logger.fine("Updated existing OPC UA node for topic: $topicName")
+            logger.fine { "Updated existing OPC UA node for topic: $topicName" }
         }
     }
 
@@ -484,13 +484,13 @@ class OpcUaServerInstance(
      * Handle OPC UA node writes and publish to MQTT
      */
     private fun handleOpcUaWrite(topic: String, dataValue: org.eclipse.milo.opcua.stack.core.types.builtin.DataValue) {
-        logger.fine("OPC UA write to node: $topic, value: ${dataValue.value}")
+        logger.fine { "OPC UA write to node: $topic, value: ${dataValue.value}" }
 
         try {
             // First, update the local OPC UA node value to notify OPC UA subscribers
             val nodeUpdated = nodeManager?.updateNodeValue(topic, dataValue) ?: false
             if (nodeUpdated) {
-                logger.fine("Updated local OPC UA node value for OPC UA subscribers: $topic")
+                logger.fine { "Updated local OPC UA node value for OPC UA subscribers: $topic" }
             }
 
             // Find any address configuration that matches this topic pattern
@@ -502,7 +502,7 @@ class OpcUaServerInstance(
             if (address != null) {
                 // Convert OPC UA DataValue to MQTT payload
                 val payload = OpcUaDataConverter.opcUaToMqtt(dataValue, address.dataType)
-                logger.fine("Publishing OPC UA write to MQTT topic: $topic")
+                logger.fine { "Publishing OPC UA write to MQTT topic: $topic" }
 
                 // Publish directly to MQTT (sessionHandler.publishInternal is already async)
                 val message = BrokerMessage(
@@ -518,7 +518,7 @@ class OpcUaServerInstance(
                 )
 
                 sessionHandler.publishInternal(internalClientId, message)
-                logger.fine("Successfully published OPC UA write to MQTT topic: $topic")
+                logger.fine { "Successfully published OPC UA write to MQTT topic: $topic" }
             } else {
                 logger.warning("No address configuration found for topic: $topic - unable to determine data type")
             }

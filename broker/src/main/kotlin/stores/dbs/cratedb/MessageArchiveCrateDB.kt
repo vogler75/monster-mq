@@ -112,7 +112,7 @@ class MessageArchiveCrateDB (
         endTime: Instant?,
         limit: Int
     ): JsonArray {
-        logger.fine("CrateDB getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
+        logger.fine { "CrateDB getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit" }
         
         val sql = StringBuilder("SELECT topic, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?")
         val params = mutableListOf<Any>(topic)
@@ -120,18 +120,18 @@ class MessageArchiveCrateDB (
         startTime?.let {
             sql.append(" AND time >= ?")
             params.add(Timestamp.from(it))
-            logger.fine("Added startTime parameter: $it")
+            logger.fine { "Added startTime parameter: $it" }
         }
         endTime?.let {
             sql.append(" AND time <= ?")
             params.add(Timestamp.from(it))
-            logger.fine("Added endTime parameter: $it")
+            logger.fine { "Added endTime parameter: $it" }
         }
         sql.append(" ORDER BY time DESC LIMIT ?")
         params.add(limit)
         
-        logger.fine("Executing CrateDB SQL: ${sql.toString()}")
-        logger.fine("With parameters: $params")
+        logger.fine { "Executing CrateDB SQL: ${sql.toString()}" }
+        logger.fine { "With parameters: $params" }
 
         val messages = JsonArray()
 
@@ -149,7 +149,7 @@ class MessageArchiveCrateDB (
                     }
                     val resultSet = preparedStatement.executeQuery()
                     val queryDuration = System.currentTimeMillis() - startTime
-                    logger.fine("CrateDB query completed in ${queryDuration}ms")
+                    logger.fine { "CrateDB query completed in ${queryDuration}ms" }
                     
                     val processingStart = System.currentTimeMillis()
                     var rowCount = 0
@@ -166,7 +166,7 @@ class MessageArchiveCrateDB (
                         messages.add(messageObj)
                     }
                     val processingDuration = System.currentTimeMillis() - processingStart
-                    logger.fine("CrateDB data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages")
+                    logger.fine { "CrateDB data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages" }
                 }
             }
         } catch (e: SQLException) {
@@ -178,7 +178,7 @@ class MessageArchiveCrateDB (
 
     override fun executeQuery(sql: String): JsonArray {
         return try {
-            logger.fine("Executing CrateDB query: $sql")
+            logger.fine { "Executing CrateDB query: $sql" }
             db.connection?.let { connection ->
                 connection.createStatement().use { statement ->
                     statement.executeQuery(sql).use { resultSet ->
@@ -201,7 +201,7 @@ class MessageArchiveCrateDB (
                             }
                             result.add(row)
                         }
-                        logger.fine("CrateDB query executed successfully with ${result.size()} rows")
+                        logger.fine { "CrateDB query executed successfully with ${result.size()} rows" }
                         result
                     }
                 }
@@ -219,7 +219,7 @@ class MessageArchiveCrateDB (
         val startTime = System.currentTimeMillis()
         var deletedCount = 0
         
-        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        logger.fine { "Starting purge for [$name] - removing messages older than $olderThan" }
         
         try {
             db.connection?.let { connection ->
@@ -237,7 +237,7 @@ class MessageArchiveCrateDB (
         val elapsedTimeMs = System.currentTimeMillis() - startTime
         val result = PurgeResult(deletedCount, elapsedTimeMs)
         
-        logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
+        logger.fine { "Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
         
         return result
     }

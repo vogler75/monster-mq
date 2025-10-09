@@ -48,7 +48,7 @@ class DataReplicator<T>(
                 vertx.eventBus().registerDefaultCodec(it.javaClass as Class<T>, it)
             } catch (e: IllegalStateException) {
                 // Codec might already be registered
-                logger.fine("Codec already registered for ${it.javaClass.simpleName}")
+                logger.fine { "Codec already registered for ${it.javaClass.simpleName}" }
             }
         }
 
@@ -113,7 +113,7 @@ class DataReplicator<T>(
             .put("eventType", EventType.CLEAR.name)
 
         vertx.eventBus().publish(eventBusAddress, event)
-        logger.fine("Cleared all entries and broadcasted to cluster")
+        logger.fine { "Cleared all entries and broadcasted to cluster" }
     }
 
     /**
@@ -128,7 +128,7 @@ class DataReplicator<T>(
             .put("batch", JsonObject(map.mapValues { serializeValue(it.value) }))
 
         vertx.eventBus().publish(eventBusAddress, event)
-        logger.fine("Put ${map.size} entries and broadcasted to cluster")
+        logger.fine { "Put ${map.size} entries and broadcasted to cluster" }
     }
 
     /**
@@ -216,7 +216,7 @@ class DataReplicator<T>(
 
             EventType.CLEAR -> {
                 localData.clear()
-                logger.fine("Received CLEAR event")
+                logger.fine { "Received CLEAR event" }
             }
 
             EventType.BATCH -> {
@@ -228,7 +228,7 @@ class DataReplicator<T>(
                             localData[entry.key] = value
                         }
                     }
-                    logger.fine("Received BATCH event with ${batch.size()} entries")
+                    logger.fine { "Received BATCH event with ${batch.size()} entries" }
                 }
             }
         }

@@ -296,7 +296,7 @@ class WinCCOaConnector : AbstractVerticle() {
 
                 // Setup binary message handler for debugging
                 ws.binaryMessageHandler { buffer ->
-                    logger.fine("Received binary WebSocket message for device ${deviceConfig.name}: ${buffer.toString()}")
+                    logger.fine { "Received binary WebSocket message for device ${deviceConfig.name}: ${buffer.toString()}" }
                 }
 
                 // Setup close handler
@@ -348,7 +348,7 @@ class WinCCOaConnector : AbstractVerticle() {
             .put("payload", payload)
 
         val messageStr = initMessage.encode()
-        logger.fine("Sending connection_init message for device ${deviceConfig.name}: $messageStr")
+        logger.fine { "Sending connection_init message for device ${deviceConfig.name}: $messageStr" }
         ws.writeTextMessage(messageStr)
     }
 
@@ -357,7 +357,7 @@ class WinCCOaConnector : AbstractVerticle() {
      */
     private fun handleWebSocketMessage(message: String) {
         try {
-            logger.fine("Received WebSocket message for device ${deviceConfig.name}: $message")
+            logger.fine { "Received WebSocket message for device ${deviceConfig.name}: $message" }
             val json = JsonObject(message)
             val type = json.getString("type")
 
@@ -384,13 +384,13 @@ class WinCCOaConnector : AbstractVerticle() {
                 }
                 "ka" -> {
                     // Keep-alive message (subscriptions-transport-ws)
-                    logger.fine("Received keep-alive message for device ${deviceConfig.name}")
+                    logger.fine { "Received keep-alive message for device ${deviceConfig.name}" }
                 }
                 "ping" -> {
                     // Ping message (graphql-ws) - should respond with pong
                     val pongMessage = JsonObject().put("type", "pong")
                     webSocket?.writeTextMessage(pongMessage.encode())
-                    logger.fine("Received ping, sent pong for device ${deviceConfig.name}")
+                    logger.fine { "Received ping, sent pong for device ${deviceConfig.name}" }
                 }
                 else -> {
                     logger.warning("Received unknown WebSocket message type '$type' for device ${deviceConfig.name}: $message")
@@ -408,7 +408,7 @@ class WinCCOaConnector : AbstractVerticle() {
     private fun handleSubscriptionData(message: JsonObject) {
         try {
             val id = message.getString("id")
-            logger.fine("Received subscription data for ID: $id")
+            logger.fine { "Received subscription data for ID: $id" }
 
             val payload = message.getJsonObject("payload")
 
@@ -438,7 +438,7 @@ class WinCCOaConnector : AbstractVerticle() {
             }
 
             if (values == null || values.size() < 2) {
-                logger.fine("No data rows for subscription ID $id (only header or empty)")
+                logger.fine { "No data rows for subscription ID $id (only header or empty)" }
                 return // No data or only header row
             }
 
@@ -448,8 +448,8 @@ class WinCCOaConnector : AbstractVerticle() {
                 return
             }
 
-            logger.fine("Found address for subscription ID $id: query='${address.query}', topic='${address.topic}', description='${address.description}'")
-            logger.fine("Processing ${values.size() - 1} data rows for subscription ID $id")
+            logger.fine { "Found address for subscription ID $id: query='${address.query}', topic='${address.topic}', description='${address.description}'" }
+            logger.fine { "Processing ${values.size() - 1} data rows for subscription ID $id" }
 
             // Parse values array
             // First row is header: ["", ":_original.._value", ":_original.._stime"]
@@ -493,7 +493,7 @@ class WinCCOaConnector : AbstractVerticle() {
      */
     private fun publishValue(address: WinCCOaAddress, dpName: String, data: JsonObject) {
         try {
-            logger.fine("Publishing value for dpName: $dpName from query: ${address.query}")
+            logger.fine { "Publishing value for dpName: $dpName from query: ${address.query}" }
 
             // Get or compute MQTT topic from cache
             val mqttTopic = topicCache.computeIfAbsent(dpName) { name ->
@@ -503,7 +503,7 @@ class WinCCOaConnector : AbstractVerticle() {
                 fullTopic
             }
 
-            logger.fine("Publishing to MQTT topic: $mqttTopic (from query: ${address.query}, dpName: $dpName)")
+            logger.fine { "Publishing to MQTT topic: $mqttTopic (from query: ${address.query}, dpName: $dpName)" }
 
             // Format message based on configuration
             val payload = formatMessage(data)
@@ -523,7 +523,7 @@ class WinCCOaConnector : AbstractVerticle() {
             vertx.eventBus().publish(WinCCOaExtension.ADDRESS_WINCCOA_VALUE_PUBLISH, mqttMessage)
 
             messagesInCounter.incrementAndGet()
-            logger.fine("Successfully published WinCC OA value: $mqttTopic = ${data.encode()}")
+            logger.fine { "Successfully published WinCC OA value: $mqttTopic = ${data.encode()}" }
 
         } catch (e: Exception) {
             logger.severe("Error publishing value for dpName '$dpName' from query '${address.query}': ${e.message}")
@@ -652,7 +652,7 @@ class WinCCOaConnector : AbstractVerticle() {
             )
 
         val messageStr = subscribeMessage.encode()
-        logger.fine("Sending subscribe message for device ${deviceConfig.name}: $messageStr")
+        logger.fine { "Sending subscribe message for device ${deviceConfig.name}: $messageStr" }
         webSocket?.writeTextMessage(messageStr)
         activeSubscriptions[subscriptionId] = address
 

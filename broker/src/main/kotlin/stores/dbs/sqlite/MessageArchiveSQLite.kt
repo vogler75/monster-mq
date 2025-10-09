@@ -92,7 +92,7 @@ class MessageArchiveSQLite(
             if (result.failed()) {
                 logger.warning("Error inserting batch history data: ${result.cause()?.message}")
             } else {
-                logger.fine("Added ${messages.size} messages to archive")
+                logger.fine { "Added ${messages.size} messages to archive" }
             }
         }
     }
@@ -103,7 +103,7 @@ class MessageArchiveSQLite(
         endTime: Instant?,
         limit: Int
     ): JsonArray {
-        logger.fine("getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
+        logger.fine { "getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit" }
         
         val sql = StringBuilder("SELECT topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?")
         val params = JsonArray().add(topic)
@@ -113,22 +113,22 @@ class MessageArchiveSQLite(
             // Use proper ISO-8601 format with proper precision
             val timeStr = it.toString()
             params.add(timeStr)
-            logger.fine("Added startTime parameter: $timeStr")
+            logger.fine { "Added startTime parameter: $timeStr" }
         }
         endTime?.let {
             sql.append(" AND time <= ?")
             val timeStr = it.toString()
             params.add(timeStr)
-            logger.fine("Added endTime parameter: $timeStr")
+            logger.fine { "Added endTime parameter: $timeStr" }
         }
         sql.append(" ORDER BY time DESC LIMIT ?")
         params.add(limit)
         
-        logger.fine("Executing SQL: ${sql.toString()}")
-        logger.fine("With parameters: $params")
+        logger.fine { "Executing SQL: ${sql.toString()}" }
+        logger.fine { "With parameters: $params" }
 
         return try {
-            logger.fine("Starting direct JDBC query at ${System.currentTimeMillis()}...")
+            logger.fine { "Starting direct JDBC query at ${System.currentTimeMillis()}..." }
             val startTime = System.currentTimeMillis()
             
             // Use direct JDBC connection to bypass event bus issues
@@ -141,7 +141,7 @@ class MessageArchiveSQLite(
                     for (i in 0 until params.size()) {
                         val param = params.getValue(i)
                         val paramIndex = i + 1
-                        logger.fine("Setting parameter at index $paramIndex: $param (type: ${param?.javaClass?.simpleName})")
+                        logger.fine { "Setting parameter at index $paramIndex: $param (type: ${param?.javaClass?.simpleName})" }
                         when (param) {
                             is String -> preparedStatement.setString(paramIndex, param)
                             is Int -> preparedStatement.setInt(paramIndex, param)
@@ -152,7 +152,7 @@ class MessageArchiveSQLite(
                     
                     val resultSet = preparedStatement.executeQuery()
                     val queryDuration = System.currentTimeMillis() - startTime
-                    logger.fine("Direct JDBC query completed in ${queryDuration}ms")
+                    logger.fine { "Direct JDBC query completed in ${queryDuration}ms" }
                     
                     val processingStart = System.currentTimeMillis()
                     var rowCount = 0
@@ -180,7 +180,7 @@ class MessageArchiveSQLite(
                         messages.add(messageObj)
                     }
                     val processingDuration = System.currentTimeMillis() - processingStart
-                    logger.fine("Data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages")
+                    logger.fine { "Data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages" }
                 }
             }
             
@@ -194,7 +194,7 @@ class MessageArchiveSQLite(
 
     override fun executeQuery(sql: String): JsonArray {
         return try {
-            logger.fine("Executing SQLite query: $sql")
+            logger.fine { "Executing SQLite query: $sql" }
             val results = sqlClient.executeQuerySync(sql, JsonArray())
             
             if (results.size() > 0) {
@@ -221,7 +221,7 @@ class MessageArchiveSQLite(
                     result.add(dataRow)
                 }
                 
-                logger.fine("SQLite query executed successfully with ${result.size()} rows")
+                logger.fine { "SQLite query executed successfully with ${result.size()} rows" }
                 result
             } else {
                 JsonArray()
@@ -235,7 +235,7 @@ class MessageArchiveSQLite(
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
         val startTime = System.currentTimeMillis()
         
-        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        logger.fine { "Starting purge for [$name] - removing messages older than $olderThan" }
         
         val sql = "DELETE FROM $tableName WHERE time < ?"
         val params = JsonArray().add(olderThan.toString())
@@ -247,7 +247,7 @@ class MessageArchiveSQLite(
             val elapsedTimeMs = System.currentTimeMillis() - startTime
             val purgeResult = PurgeResult(deletedCount, elapsedTimeMs)
             
-            logger.fine("Purge completed for [$name]: deleted ${purgeResult.deletedCount} messages in ${purgeResult.elapsedTimeMs}ms")
+            logger.fine { "Purge completed for [$name]: deleted ${purgeResult.deletedCount} messages in ${purgeResult.elapsedTimeMs}ms" }
             purgeResult
         } catch (e: Exception) {
             logger.severe("Error purging old messages from [$name]: ${e.message}")

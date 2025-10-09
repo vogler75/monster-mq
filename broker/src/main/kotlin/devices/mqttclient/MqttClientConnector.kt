@@ -353,7 +353,7 @@ class MqttClientConnector : AbstractVerticle() {
 
     private fun handleRemoteMessageArrived(topic: String, message: PahoMqttMessage) {
         try {
-            logger.fine("Received message from remote broker on topic: $topic")
+            logger.fine { "Received message from remote broker on topic: $topic" }
 
             // Find matching subscribe address
             val matchingAddress = subscribedAddresses.values.find { address ->
@@ -361,7 +361,7 @@ class MqttClientConnector : AbstractVerticle() {
             }
 
             if (matchingAddress == null) {
-                logger.fine("No matching address for remote topic: $topic")
+                logger.fine { "No matching address for remote topic: $topic" }
                 return
             }
 
@@ -388,7 +388,7 @@ class MqttClientConnector : AbstractVerticle() {
             if (sessionHandler != null) {
                 sessionHandler.publishMessage(localMessage)
                 messagesInCounter.incrementAndGet()
-                logger.fine("Forwarded remote message from $topic to local topic $localTopic")
+                logger.fine { "Forwarded remote message from $topic to local topic $localTopic" }
             } else {
                 logger.warning("SessionHandler not available for message publishing")
             }
@@ -418,7 +418,7 @@ class MqttClientConnector : AbstractVerticle() {
 
     private fun publishToRemoteBroker(remoteTopic: String, localMessage: BrokerMessage, address: MqttClientAddress) {
         if (!isConnected || client == null) {
-            logger.fine("Not connected to remote broker, skipping publish to $remoteTopic")
+            logger.fine { "Not connected to remote broker, skipping publish to $remoteTopic" }
             return
         }
 
@@ -434,7 +434,7 @@ class MqttClientConnector : AbstractVerticle() {
             client!!.publish(remoteTopic, message, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
                     messagesOutCounter.incrementAndGet()
-                    logger.fine("Published message to remote topic: $remoteTopic with QoS $effectiveQos")
+                    logger.fine { "Published message to remote topic: $remoteTopic with QoS $effectiveQos" }
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {

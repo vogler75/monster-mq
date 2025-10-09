@@ -330,7 +330,7 @@ class MetricsStoreSQLite(
                 val params = JsonArray().add(olderThan.toString())
                 val deletedCount = sqlClient.executeUpdate(deleteSQL, params)
                     .toCompletionStage().toCompletableFuture().get(5000, java.util.concurrent.TimeUnit.MILLISECONDS).toLong()
-                logger.fine("Purged $deletedCount old metrics records older than $olderThan")
+                logger.fine { "Purged $deletedCount old metrics records older than $olderThan" }
                 deletedCount
             } catch (e: Exception) {
                 logger.warning("Error purging old metrics: ${e.message}")

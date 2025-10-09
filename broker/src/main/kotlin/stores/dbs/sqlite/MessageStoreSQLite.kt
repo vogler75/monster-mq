@@ -213,7 +213,7 @@ class MessageStoreSQLite(
             if (result.failed()) {
                 logger.severe("Error inserting batch data: ${result.cause()?.message}")
             } else {
-                logger.fine("Added ${messages.size} messages to store")
+                logger.fine { "Added ${messages.size} messages to store" }
             }
         }
     }
@@ -231,7 +231,7 @@ class MessageStoreSQLite(
             if (result.failed()) {
                 logger.severe("Error deleting batch data: ${result.cause()?.message}")
             } else {
-                logger.fine("Deleted ${topics.size} topics from store")
+                logger.fine { "Deleted ${topics.size} topics from store" }
             }
         }
     }
@@ -456,7 +456,7 @@ class MessageStoreSQLite(
             resultTopics.add(fullTopic)
         }
 
-        logger.fine("findTopicsByName result: ${resultTopics.size} topics found")
+        logger.fine { "findTopicsByName result: ${resultTopics.size} topics found" }
         return resultTopics
     }
 
@@ -485,14 +485,14 @@ class MessageStoreSQLite(
             resultTopics.add(Pair(fullTopic, configJson))
         }
 
-        logger.fine("findTopicsByConfig result: ${resultTopics.size} topics found")
+        logger.fine { "findTopicsByConfig result: ${resultTopics.size} topics found" }
         return resultTopics
     }
 
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
         val startTime = System.currentTimeMillis()
         
-        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        logger.fine { "Starting purge for [$name] - removing messages older than $olderThan" }
         
         val sql = "DELETE FROM $tableName WHERE time < ?"
         val params = JsonArray().add(olderThan.toString())
@@ -504,7 +504,7 @@ class MessageStoreSQLite(
             val elapsedTimeMs = System.currentTimeMillis() - startTime
             val purgeResult = PurgeResult(deletedCount, elapsedTimeMs)
             
-            logger.fine("Purge completed for [$name]: deleted ${purgeResult.deletedCount} messages in ${purgeResult.elapsedTimeMs}ms")
+            logger.fine { "Purge completed for [$name]: deleted ${purgeResult.deletedCount} messages in ${purgeResult.elapsedTimeMs}ms" }
             purgeResult
         } catch (e: Exception) {
             logger.severe("Error purging old messages from [$name]: ${e.message}")

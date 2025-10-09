@@ -382,7 +382,7 @@ class SessionStoreSQLite(
         sqlClient.executeBatch(insertMessageSql, messageBatch)
         sqlClient.executeBatch(insertClientSql, clientBatch)
         
-        logger.fine("Enqueued ${messages.size} messages for ${messages.sumOf { it.second.size }} client mappings")
+        logger.fine { "Enqueued ${messages.size} messages for ${messages.sumOf { it.second.size }} client mappings" }
     }
 
     override fun dequeueMessages(clientId: String, callback: (BrokerMessage) -> Boolean) {
@@ -455,7 +455,7 @@ class SessionStoreSQLite(
             if (result.failed()) {
                 logger.warning("Error removing messages: ${result.cause()?.message}")
             } else {
-                logger.fine("Removed ${messages.size} message mappings")
+                logger.fine { "Removed ${messages.size} message mappings" }
             }
         }
     }
@@ -463,13 +463,13 @@ class SessionStoreSQLite(
     override fun purgeQueuedMessages() {
         val deleteSql = "DELETE FROM $queuedMessagesTableName"
         sqlClient.executeUpdateAsync(deleteSql, JsonArray())
-        logger.fine("Purged all queued messages")
+        logger.fine { "Purged all queued messages" }
     }
 
     override fun purgeSessions() {
         val deleteSql = "DELETE FROM $sessionsTableName WHERE connected = false"
         sqlClient.executeUpdateAsync(deleteSql, JsonArray())
-        logger.fine("Purged disconnected sessions")
+        logger.fine { "Purged disconnected sessions" }
     }
     
     private fun isWildcardTopic(topicName: String): Boolean {
@@ -488,7 +488,7 @@ class SessionStoreSQLite(
                 0L
             }
         } catch (e: Exception) {
-            logger.fine("Error counting queued messages: ${e.message}")
+            logger.fine { "Error counting queued messages: ${e.message}" }
             0L
         }
     }
@@ -506,7 +506,7 @@ class SessionStoreSQLite(
                 0L
             }
         } catch (e: Exception) {
-            logger.fine("Error counting queued messages for client $clientId: ${e.message}")
+            logger.fine { "Error counting queued messages for client $clientId: ${e.message}" }
             0L
         }
     }

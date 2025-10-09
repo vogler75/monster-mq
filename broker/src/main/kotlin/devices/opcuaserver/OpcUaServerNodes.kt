@@ -297,7 +297,7 @@ class OpcUaServerNodes(
         // Store write-enabled nodes for fast write access checking
         if (address.accessLevel == OpcUaAccessLevel.READ_WRITE) {
             writableTopics.add(mqttTopic)
-            logger.fine("Node $mqttTopic configured for write operations")
+            logger.fine { "Node $mqttTopic configured for write operations" }
         }
 
         // Add node to manager
@@ -312,7 +312,7 @@ class OpcUaServerNodes(
         nodeIdToTopic[nodeId] = mqttTopic
         nodeUpdateTimes[nodeId] = AtomicLong(System.currentTimeMillis())
 
-        logger.fine("Created variable node for topic: $mqttTopic with NodeId: $nodeId")
+        logger.fine { "Created variable node for topic: $mqttTopic with NodeId: $nodeId" }
         return nodeId
     }
 
@@ -382,16 +382,16 @@ class OpcUaServerNodes(
                 if (writableTopics.contains(topic)) {
                     try {
                         val dataValue = writeValue.value
-                        logger.fine("OPC UA write to node: $topic, value: ${dataValue.value}")
-                        logger.fine("Calling onNodeWrite callback for topic: $topic")
+                        logger.fine { "OPC UA write to node: $topic, value: ${dataValue.value}" }
+                        logger.fine { "Calling onNodeWrite callback for topic: $topic" }
                         onNodeWrite(topic, dataValue)
-                        logger.fine("onNodeWrite callback completed for topic: $topic")
+                        logger.fine { "onNodeWrite callback completed for topic: $topic" }
                     } catch (e: Exception) {
                         logger.warning("Error handling OPC UA write for topic $topic: ${e.message}")
                         e.printStackTrace()
                     }
                 } else {
-                    logger.fine("Write to READ_ONLY node rejected: $topic")
+                    logger.fine { "Write to READ_ONLY node rejected: $topic" }
                 }
             }
         }

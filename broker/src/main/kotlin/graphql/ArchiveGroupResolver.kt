@@ -912,14 +912,14 @@ class ArchiveGroupResolver(
                         return@DataFetcher future
                     }
 
-                logger.fine("Getting connection status for archive group [$archiveGroupName] from all nodes")
+                logger.fine { "Getting connection status for archive group [$archiveGroupName] from all nodes" }
 
                 // Use event bus to collect connection status from all nodes
                 val requestData = JsonObject().put("name", archiveGroupName)
 
                 // Collect status from all cluster nodes
                 collectClusterConnectionStatus(archiveGroupName) { nodeStatuses ->
-                    logger.fine("Retrieved connection status for archive group [$archiveGroupName] from ${nodeStatuses.size} nodes")
+                    logger.fine { "Retrieved connection status for archive group [$archiveGroupName] from ${nodeStatuses.size} nodes" }
                     future.complete(nodeStatuses)
                 }
             } catch (e: Exception) {

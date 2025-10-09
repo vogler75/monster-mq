@@ -75,7 +75,7 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
         val topicsToDelete = mutableListOf<String>()
         var checkedCount = 0
         
-        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        logger.fine { "Starting purge for [$name] - removing messages older than $olderThan" }
         
         // Iterate through all messages and collect topics to delete
         // Process in batches to avoid blocking for too long
@@ -102,7 +102,7 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
         val elapsedTimeMs = System.currentTimeMillis() - startTime
         val result = PurgeResult(topicsToDelete.size, elapsedTimeMs)
         
-        logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} of $checkedCount messages in ${result.elapsedTimeMs}ms")
+        logger.fine { "Purge completed for [$name]: deleted ${result.deletedCount} of $checkedCount messages in ${result.elapsedTimeMs}ms" }
         
         return result
     }

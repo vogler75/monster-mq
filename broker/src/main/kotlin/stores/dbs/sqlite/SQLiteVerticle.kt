@@ -60,7 +60,7 @@ class SQLiteVerticle : AbstractVerticle() {
             connections.forEach { (dbPath, connection) ->
                 try {
                     connection.close()
-                    logger.fine("Closed SQLite connection for [$dbPath]")
+                    logger.fine { "Closed SQLite connection for [$dbPath]" }
                 } catch (e: Exception) {
                     logger.warning("Error closing connection for [$dbPath]: ${e.message}")
                 }
@@ -92,7 +92,7 @@ class SQLiteVerticle : AbstractVerticle() {
             }
             
             val journalMode = if (enableWAL) "WAL" else "DELETE"
-            logger.fine("Created SQLite connection for [$path] with journal mode: $journalMode")
+            logger.fine { "Created SQLite connection for [$path] with journal mode: $journalMode" }
             connection
         }
     }

@@ -390,7 +390,7 @@ class OpcUaServerExtension(
                 // Save to store
                 store.saveDevice(deviceConfig).onComplete { result ->
                     if (result.succeeded()) {
-                        logger.fine("Saved OPC UA Server configuration for '${config.name}'")
+                        logger.fine { "Saved OPC UA Server configuration for '${config.name}'" }
                     } else {
                         logger.warning("Failed to save OPC UA Server configuration: ${result.cause()?.message}")
                     }

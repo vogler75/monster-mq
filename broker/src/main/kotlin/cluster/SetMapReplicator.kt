@@ -114,7 +114,7 @@ class SetMapReplicator(
         keysToRemove.forEach { localData.remove(it) }
 
         if (keysToRemove.isNotEmpty()) {
-            logger.fine("Removed value [$value] from all sets and cleaned up ${keysToRemove.size} empty keys")
+            logger.fine { "Removed value [$value] from all sets and cleaned up ${keysToRemove.size} empty keys" }
         }
     }
 
@@ -139,7 +139,7 @@ class SetMapReplicator(
             .put("eventType", EventType.CLEAR.name)
 
         vertx.eventBus().publish(eventBusAddress, event)
-        logger.fine("Cleared all entries and broadcasted to cluster")
+        logger.fine { "Cleared all entries and broadcasted to cluster" }
     }
 
     /**
@@ -184,7 +184,7 @@ class SetMapReplicator(
 
             EventType.CLEAR -> {
                 localData.clear()
-                logger.fine("Received CLEAR event")
+                logger.fine { "Received CLEAR event" }
             }
         }
     }

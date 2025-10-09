@@ -188,12 +188,12 @@ class WinCCUaConnector : AbstractVerticle() {
             }
         """.trimIndent()
 
-        logger.fine("Login mutation: $loginMutation")
+        logger.fine { "Login mutation: $loginMutation" }
 
         val requestBody = JsonObject()
             .put("query", loginMutation)
 
-        logger.fine("Request body: ${requestBody.encode()}")
+        logger.fine { "Request body: ${requestBody.encode()}" }
 
         webClient.postAbs(winCCUaConfig.graphqlEndpoint)
             .putHeader("Content-Type", "application/json")
@@ -295,7 +295,7 @@ class WinCCUaConnector : AbstractVerticle() {
 
                 // Setup binary message handler for debugging
                 ws.binaryMessageHandler { buffer ->
-                    logger.fine("Received binary WebSocket message for device ${deviceConfig.name}: ${buffer.toString()}")
+                    logger.fine { "Received binary WebSocket message for device ${deviceConfig.name}: ${buffer.toString()}" }
                 }
 
                 // Setup close handler
@@ -343,7 +343,7 @@ class WinCCUaConnector : AbstractVerticle() {
             .put("payload", payload)
 
         val messageStr = initMessage.encode()
-        logger.fine("Sending connection_init message for device ${deviceConfig.name}: $messageStr")
+        logger.fine { "Sending connection_init message for device ${deviceConfig.name}: $messageStr" }
         ws.writeTextMessage(messageStr)
     }
 
@@ -352,7 +352,7 @@ class WinCCUaConnector : AbstractVerticle() {
      */
     private fun handleWebSocketMessage(message: String) {
         try {
-            logger.fine("Received WebSocket message for device ${deviceConfig.name}: $message")
+            logger.fine { "Received WebSocket message for device ${deviceConfig.name}: $message" }
             val json = JsonObject(message)
             val type = json.getString("type")
 
@@ -379,13 +379,13 @@ class WinCCUaConnector : AbstractVerticle() {
                 }
                 "ka" -> {
                     // Keep-alive message
-                    logger.fine("Received keep-alive message for device ${deviceConfig.name}")
+                    logger.fine { "Received keep-alive message for device ${deviceConfig.name}" }
                 }
                 "ping" -> {
                     // Ping message - should respond with pong
                     val pongMessage = JsonObject().put("type", "pong")
                     webSocket?.writeTextMessage(pongMessage.encode())
-                    logger.fine("Received ping, sent pong for device ${deviceConfig.name}")
+                    logger.fine { "Received ping, sent pong for device ${deviceConfig.name}" }
                 }
                 else -> {
                     logger.warning("Received unknown WebSocket message type '$type' for device ${deviceConfig.name}: $message")
@@ -520,7 +520,7 @@ class WinCCUaConnector : AbstractVerticle() {
             vertx.eventBus().publish(WinCCUaExtension.ADDRESS_WINCCUA_VALUE_PUBLISH, mqttMessage)
 
             messagesInCounter.incrementAndGet()
-            logger.fine("Published WinCC Unified tag value: $mqttTopic = $value")
+            logger.fine { "Published WinCC Unified tag value: $mqttTopic = $value" }
 
         } catch (e: Exception) {
             logger.severe("Error publishing tag value for $tagName: ${e.message}")
@@ -557,7 +557,7 @@ class WinCCUaConnector : AbstractVerticle() {
             vertx.eventBus().publish(WinCCUaExtension.ADDRESS_WINCCUA_VALUE_PUBLISH, mqttMessage)
 
             messagesInCounter.incrementAndGet()
-            logger.fine("Published WinCC Unified alarm: $mqttTopic")
+            logger.fine { "Published WinCC Unified alarm: $mqttTopic" }
 
         } catch (e: Exception) {
             logger.severe("Error publishing alarm: ${e.message}")
@@ -699,8 +699,8 @@ class WinCCUaConnector : AbstractVerticle() {
             .put("query", browseQuery)
 
         logger.info("Executing browse query for address ${address.topic}")
-        logger.fine("Browse query: $browseQuery")
-        logger.fine("Request body: ${requestBody.encode()}")
+        logger.fine { "Browse query: $browseQuery" }
+        logger.fine { "Request body: ${requestBody.encode()}" }
 
         webClient.postAbs(winCCUaConfig.graphqlEndpoint)
             .putHeader("Content-Type", "application/json")
@@ -720,7 +720,7 @@ class WinCCUaConnector : AbstractVerticle() {
                     } else if (data != null) {
                         val browseArray = data.getJsonArray("browse")
                         val tagList = browseArray?.map { it as JsonObject }?.map { it.getString("name") } ?: emptyList()
-                        logger.fine("Browse query result: ${tagList.size} tags")
+                        logger.fine { "Browse query result: ${tagList.size} tags" }
                         promise.complete(tagList)
                     } else {
                         promise.fail("Invalid browse query response")
@@ -796,7 +796,7 @@ class WinCCUaConnector : AbstractVerticle() {
             )
 
         val messageStr = subscribeMessage.encode()
-        logger.fine("Sending tagValues subscribe message for device ${deviceConfig.name}: $messageStr")
+        logger.fine { "Sending tagValues subscribe message for device ${deviceConfig.name}: $messageStr" }
         webSocket?.writeTextMessage(messageStr)
         activeSubscriptions[subscriptionId] = address
 
@@ -920,7 +920,7 @@ class WinCCUaConnector : AbstractVerticle() {
             )
 
         val messageStr = subscribeMessage.encode()
-        logger.fine("Sending activeAlarms subscribe message for device ${deviceConfig.name}: $messageStr")
+        logger.fine { "Sending activeAlarms subscribe message for device ${deviceConfig.name}: $messageStr" }
         webSocket?.writeTextMessage(messageStr)
         activeSubscriptions[subscriptionId] = address
 

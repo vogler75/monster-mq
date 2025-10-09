@@ -191,7 +191,7 @@ class MessageArchivePostgres (
 
     override fun executeQuery(sql: String): JsonArray {
         return try {
-            logger.fine("Executing SQL query: $sql [${Utils.getCurrentFunctionName()}]")
+            logger.fine { "Executing SQL query: $sql [${Utils.getCurrentFunctionName()}]" }
             db.connection?.let { connection ->
                 connection.createStatement().use { statement ->
                     statement.executeQuery(sql).use { resultSet ->
@@ -214,7 +214,7 @@ class MessageArchivePostgres (
                             }
                             result.add(row)
                         }
-                        logger.fine("SQL query executed successfully with [${result.size()}] rows. [${Utils.getCurrentFunctionName()}]")
+                        logger.fine { "SQL query executed successfully with [${result.size()}] rows. [${Utils.getCurrentFunctionName()}]" }
                         result
                     }
                 }
@@ -232,7 +232,7 @@ class MessageArchivePostgres (
         val startTime = System.currentTimeMillis()
         var deletedCount = 0
         
-        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        logger.fine { "Starting purge for [$name] - removing messages older than $olderThan" }
         
         try {
             db.connection?.let { connection ->
@@ -250,7 +250,7 @@ class MessageArchivePostgres (
         val elapsedTimeMs = System.currentTimeMillis() - startTime
         val result = PurgeResult(deletedCount, elapsedTimeMs)
         
-        logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
+        logger.fine { "Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
         
         return result
     }

@@ -75,7 +75,7 @@ class MessageArchiveKafka(
             // Test connectivity by sending a test record to verify Kafka is reachable
             kafkaProducer?.write(KafkaProducerRecord.create("__test_connectivity_$topicName", "test", "test".toByteArray()))?.result()
             isConnected = true
-            logger.fine("Kafka connectivity test passed for [$name]")
+            logger.fine { "Kafka connectivity test passed for [$name]" }
         } catch (e: Exception) {
             isConnected = false
             logger.warning("Kafka connectivity test failed for [$name]: ${e.message}")
@@ -137,7 +137,7 @@ class MessageArchiveKafka(
         return try {
             isConnected && kafkaProducer != null
         } catch (e: Exception) {
-            logger.fine("Kafka connection check failed: ${e.message}")
+            logger.fine { "Kafka connection check failed: ${e.message}" }
             false
         }
     }

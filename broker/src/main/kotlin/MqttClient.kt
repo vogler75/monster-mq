@@ -76,7 +76,7 @@ class MqttClient(
 
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler, userManager: UserManager) {
             val clientId = endpoint.clientIdentifier()
-            logger.fine("Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]")
+            logger.fine { "Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]" }
             // TODO: check if the client is already connected (cluster wide)
             val client = MqttClient(endpoint, sessionHandler, userManager)
             vertx.deployVerticle(client).onComplete {
@@ -85,9 +85,9 @@ class MqttClient(
         }
 
         fun undeployEndpoint(vertx: Vertx, deploymentID: String) {
-            logger.fine("DeploymentID [$deploymentID] undeploy [${Utils.getCurrentFunctionName()}]")
+            logger.fine { "DeploymentID [$deploymentID] undeploy [${Utils.getCurrentFunctionName()}]" }
             vertx.undeploy(deploymentID).onComplete {
-                logger.fine("DeploymentID [$deploymentID] undeployed [${Utils.getCurrentFunctionName()}]")
+                logger.fine { "DeploymentID [$deploymentID] undeployed [${Utils.getCurrentFunctionName()}]" }
             }
         }
 
@@ -104,7 +104,7 @@ class MqttClient(
     }
 
     override fun stop() {
-        logger.fine("Client [${clientId}] Stop [${Utils.getCurrentFunctionName()}] ")
+        logger.fine { "Client [${clientId}] Stop [${Utils.getCurrentFunctionName()}] " }
         busConsumers.forEach { it.unregister() }
     }
 
@@ -160,7 +160,7 @@ class MqttClient(
                 information.put("clientAddress", endpoint.remoteAddress().toString())
                 information.put("sessionExpiryInterval", endpoint.keepAliveTimeSeconds())
                 sessionHandler.setClient(clientId, endpoint.isCleanSession, information).onComplete {
-                    logger.fine("Dequeue messages for client [$clientId] [${Utils.getCurrentFunctionName()}]")
+                    logger.fine { "Dequeue messages for client [$clientId] [${Utils.getCurrentFunctionName()}]" }
                     sessionHandler.dequeueMessages(clientId) { m ->
                         logger.finest { "Client [$clientId] Dequeued message [${m.messageId}] for topic [${m.topicName}] [${Utils.getCurrentFunctionName()}]" }
                         publishMessage(m.cloneWithNewMessageId(getNextMessageId())) // TODO: if qos is >0 then all messages are put in the inflight queue
@@ -204,7 +204,7 @@ class MqttClient(
                     }).onComplete { result ->
                         if (result.succeeded() && result.result() != null) {
                             authenticatedUser = result.result()
-                            logger.fine("Client [$clientId] Using Anonymous user for unauthenticated access")
+                            logger.fine { "Client [$clientId] Using Anonymous user for unauthenticated access" }
                             proceedWithConnection()
                         } else {
                             // If we can't get the Anonymous user, create a default one
@@ -259,7 +259,7 @@ class MqttClient(
             information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
             information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
             sessionHandler.setClient(clientId, endpoint.isCleanSession, information).onComplete {
-                logger.fine("Dequeue messages for client [$clientId] [${Utils.getCurrentFunctionName()}]")
+                logger.fine { "Dequeue messages for client [$clientId] [${Utils.getCurrentFunctionName()}]" }
                 sessionHandler.dequeueMessages(clientId) { m ->
                     logger.finest { "Client [$clientId] Dequeued message [${m.messageId}] for topic [${m.topicName}] [${Utils.getCurrentFunctionName()}]" }
                     publishMessage(m.cloneWithNewMessageId(getNextMessageId())) // TODO: if qos is >0 then all messages are put in the inflight queue
@@ -301,10 +301,10 @@ class MqttClient(
 
     private fun stopEndpoint() {
         if (endpoint.isCleanSession) {
-            logger.fine("Client [$clientId] Remove client, it is a clean session [${Utils.getCurrentFunctionName()}]")
+            logger.fine { "Client [$clientId] Remove client, it is a clean session [${Utils.getCurrentFunctionName()}]" }
             sessionHandler.delClient(clientId)
         } else {
-            logger.fine("Client [$clientId] Pause client, it is not a clean session [${Utils.getCurrentFunctionName()}]")
+            logger.fine { "Client [$clientId] Pause client, it is not a clean session [${Utils.getCurrentFunctionName()}]" }
             sessionHandler.pauseClient(clientId)
         }
         undeployEndpoint(vertx, this.deploymentID())
@@ -348,10 +348,10 @@ class MqttClient(
 
             // Forward allowed subscriptions to SessionHandler
             if (allowed) {
-                logger.fine("Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()}")
+                logger.fine { "Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()}" }
                 sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService())
             } else {
-                logger.fine("Client [$clientId] Subscription REJECTED for [$topic]")
+                logger.fine { "Client [$clientId] Subscription REJECTED for [$topic]" }
             }
         }
 
@@ -381,7 +381,7 @@ class MqttClient(
 
     private fun unsubscribeHandler(unsubscribe: MqttUnsubscribeMessage) {
         unsubscribe.topics().forEach { topicName ->
-            logger.fine("Client [$clientId] Unsubscribe for [${topicName}]} [${Utils.getCurrentFunctionName()}]")
+            logger.fine { "Client [$clientId] Unsubscribe for [${topicName}]} [${Utils.getCurrentFunctionName()}]" }
             sessionHandler.unsubscribeRequest(this, topicName)
         }
         endpoint.unsubscribeAcknowledge(unsubscribe.messageId())
@@ -698,7 +698,7 @@ class MqttClient(
     private fun sendLastWill() {
         endpoint.will()?.let { will ->
             if (will.isWillFlag) {
-                logger.fine("Client [$clientId] Sending Last-Will message [${Utils.getCurrentFunctionName()}]")
+                logger.fine { "Client [$clientId] Sending Last-Will message [${Utils.getCurrentFunctionName()}]" }
                 sessionHandler.publishMessage(BrokerMessage(clientId, will))
             }
         }
@@ -710,12 +710,12 @@ class MqttClient(
 
     private fun disconnectHandler() {
         // Graceful disconnect by the client, closeHandler is also called after this
-        logger.fine("Client [$clientId] Graceful disconnect [${endpoint.isConnected}] [${Utils.getCurrentFunctionName()}]")
+        logger.fine { "Client [$clientId] Graceful disconnect [${endpoint.isConnected}] [${Utils.getCurrentFunctionName()}]" }
         gracefulDisconnected = true
     }
 
     private fun closeHandler() {
-        logger.fine("Client [$clientId] Close received [${endpoint.isConnected}] [${Utils.getCurrentFunctionName()}]")
+        logger.fine { "Client [$clientId] Close received [${endpoint.isConnected}] [${Utils.getCurrentFunctionName()}]" }
         closeConnection()
     }
 
@@ -729,7 +729,7 @@ class MqttClient(
             sendLastWill()
         }
         if (endpoint.isConnected) {
-            logger.fine("Client [$clientId] Send close  [${Utils.getCurrentFunctionName()}]")
+            logger.fine { "Client [$clientId] Send close  [${Utils.getCurrentFunctionName()}]" }
             endpoint.close()
         }
         stopEndpoint()

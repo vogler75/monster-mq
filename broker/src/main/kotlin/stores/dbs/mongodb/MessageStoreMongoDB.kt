@@ -150,7 +150,7 @@ class MessageStoreMongoDB(
      */
     private fun performHealthCheck() {
         if (!isConnected) {
-            logger.fine("MongoDB store [$name] not connected, attempting reconnection...")
+            logger.fine { "MongoDB store [$name] not connected, attempting reconnection..." }
             initiateConnection()
             return
         }
@@ -221,7 +221,7 @@ class MessageStoreMongoDB(
     override fun get(topicName: String): BrokerMessage? {
         try {
             val activeCollection = getActiveCollection() ?: run {
-                logger.fine("MongoDB not connected, returning null for topic [$topicName]")
+                logger.fine { "MongoDB not connected, returning null for topic [$topicName]" }
                 return null
             }
 
@@ -363,7 +363,7 @@ class MessageStoreMongoDB(
             }
 
             val duration = System.currentTimeMillis() - startTime
-            logger.fine("Found $count messages in ${duration}ms for pattern [$topicName]")
+            logger.fine { "Found $count messages in ${duration}ms for pattern [$topicName]" }
 
         } catch (e: Exception) {
             logger.warning("Error finding messages for pattern [$topicName]: ${e.message}")
@@ -455,7 +455,7 @@ class MessageStoreMongoDB(
             }
 
             val duration = System.currentTimeMillis() - startTime
-            logger.fine("Found $count distinct topics in ${duration}ms for pattern [$topicPattern]")
+            logger.fine { "Found $count distinct topics in ${duration}ms for pattern [$topicPattern]" }
 
         } catch (e: Exception) {
             logger.warning("Error finding topics for pattern [$topicPattern]: ${e.message}")
@@ -591,7 +591,7 @@ class MessageStoreMongoDB(
             logger.severe("Error finding topics by config in MongoDB: ${e.message}")
         }
 
-        logger.fine("findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]")
+        logger.fine { "findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]" }
         return resultTopics
     }
 
@@ -602,7 +602,7 @@ class MessageStoreMongoDB(
         val startTime = System.currentTimeMillis()
         var deletedCount = 0
         
-        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        logger.fine { "Starting purge for [$name] - removing messages older than $olderThan" }
         
         try {
             val filter = Filters.lt("time", Instant.ofEpochMilli(olderThan.toEpochMilli()))
@@ -618,7 +618,7 @@ class MessageStoreMongoDB(
         val elapsedTimeMs = System.currentTimeMillis() - startTime
         val purgeResult = PurgeResult(deletedCount, elapsedTimeMs)
         
-        logger.fine("Purge completed for [$name]: deleted ${purgeResult.deletedCount} messages in ${purgeResult.elapsedTimeMs}ms")
+        logger.fine { "Purge completed for [$name]: deleted ${purgeResult.deletedCount} messages in ${purgeResult.elapsedTimeMs}ms" }
         
         return purgeResult
     }

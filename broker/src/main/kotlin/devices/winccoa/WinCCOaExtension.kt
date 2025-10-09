@@ -296,7 +296,7 @@ class WinCCOaExtension : AbstractVerticle() {
     private fun handleWinCCOaValuePublish(message: Message<BrokerMessage>) {
         try {
             val mqttMessage = message.body()
-            logger.fine("Forwarding WinCC OA value to MQTT bus: ${mqttMessage.topicName} = ${String(mqttMessage.payload)}")
+            logger.fine { "Forwarding WinCC OA value to MQTT bus: ${mqttMessage.topicName} = ${String(mqttMessage.payload)}" }
 
             // Use the shared SessionHandler to ensure proper archiving and distribution
             val sessionHandler = Monster.getSessionHandler()

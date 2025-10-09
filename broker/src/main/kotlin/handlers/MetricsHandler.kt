@@ -47,7 +47,7 @@ class MetricsHandler(
         try {
             val timestamp = Instant.now()
             val nodeId = Monster.Companion.getClusterNodeId(vertx)
-            logger.fine("Collecting metrics at $timestamp for nodeId: $nodeId (concurrent aggregation)")
+            logger.fine { "Collecting metrics at $timestamp for nodeId: $nodeId (concurrent aggregation)" }
 
             // Placeholders for concurrent aggregation
             var nodeMetrics: JsonObject? = null
@@ -95,7 +95,7 @@ class MetricsHandler(
 
                         metricsStore.storeBrokerMetrics(timestamp, nodeId, brokerMetrics).onComplete { result ->
                             if (result.succeeded()) {
-                                    logger.fine("Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal kafkaIn=$kafkaInTotal winCCOaIn=$winCCOaClientInTotal winCCUaIn=$winCCUaClientInTotal) for nodeId: $nodeId")
+                                    logger.fine { "Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal kafkaIn=$kafkaInTotal winCCOaIn=$winCCOaClientInTotal winCCUaIn=$winCCUaClientInTotal) for nodeId: $nodeId" }
                             } else {
                                 logger.warning("Error storing broker metrics: ${result.cause()?.message}")
                             }
@@ -169,7 +169,7 @@ class MetricsHandler(
                                         logger.warning("Error processing MQTT bridge metrics for $deviceName: ${e.message}")
                                     }
                                 } else {
-                                    logger.fine("No metrics for MQTT bridge $deviceName: ${mReply.cause()?.message}")
+                                    logger.fine { "No metrics for MQTT bridge $deviceName: ${mReply.cause()?.message}" }
                                 }
                                 remaining -= 1
                                 if (remaining == 0) {
@@ -180,7 +180,7 @@ class MetricsHandler(
                          }
                      }
                  } else {
-                     logger.fine("Could not retrieve MQTT bridge connector list: ${listReply.cause()?.message}")
+                     logger.fine { "Could not retrieve MQTT bridge connector list: ${listReply.cause()?.message}" }
                      bridgeDone = true
                      tryAssembleAndStore()
                  }
@@ -217,7 +217,7 @@ class MetricsHandler(
                                          logger.warning("Error processing OPC UA metrics for $deviceName: ${e.message}")
                                      }
                                  } else {
-                                     logger.fine("No metrics for OPC UA connector $deviceName: ${mReply.cause()?.message}")
+                                     logger.fine { "No metrics for OPC UA connector $deviceName: ${mReply.cause()?.message}" }
                                  }
                                  remaining -= 1
                                  if (remaining == 0) {
@@ -228,7 +228,7 @@ class MetricsHandler(
                          }
                      }
                  } else {
-                     logger.fine("Could not retrieve OPC UA connector list: ${listReply.cause()?.message}")
+                     logger.fine { "Could not retrieve OPC UA connector list: ${listReply.cause()?.message}" }
                      opcUaDone = true
                      tryAssembleAndStore()
                  }
@@ -267,7 +267,7 @@ class MetricsHandler(
                                         logger.warning("Error processing Kafka client metrics for $deviceName: ${e.message}")
                                     }
                                 } else {
-                                    logger.fine("No metrics for Kafka client $deviceName: ${mReply.cause()?.message}")
+                                    logger.fine { "No metrics for Kafka client $deviceName: ${mReply.cause()?.message}" }
                                 }
                                 remaining -= 1
                                 if (remaining == 0) {
@@ -278,7 +278,7 @@ class MetricsHandler(
                         }
                     }
                 } else {
-                    logger.fine("Could not retrieve Kafka client connector list: ${listReply.cause()?.message}")
+                    logger.fine { "Could not retrieve Kafka client connector list: ${listReply.cause()?.message}" }
                     kafkaDone = true
                     tryAssembleAndStore()
                 }
@@ -290,7 +290,7 @@ class MetricsHandler(
                 if (listReply.succeeded()) {
                     val body = listReply.result().body()
                     val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
-                    logger.fine("WinCC OA metrics aggregation: found ${devices.size()} devices")
+                    logger.fine { "WinCC OA metrics aggregation: found ${devices.size()} devices" }
                     if (devices.isEmpty) {
                         winCCOaDone = true
                         tryAssembleAndStore()
@@ -304,7 +304,7 @@ class MetricsHandler(
                                     try {
                                         val m = mReply.result().body()
                                         val inRate = m.getDouble("messagesInRate", 0.0)
-                                        logger.fine("WinCC OA client '$deviceName' metrics: messagesInRate=$inRate")
+                                        logger.fine { "WinCC OA client '$deviceName' metrics: messagesInRate=$inRate" }
                                         winCCOaClientInTotal += inRate
                                         // Store individual client metrics
                                         val winCCOaMetrics = at.rocworks.extensions.graphql.WinCCOaClientMetrics(
@@ -316,11 +316,11 @@ class MetricsHandler(
                                         logger.warning("Error processing WinCC OA client metrics for $deviceName: ${e.message}")
                                     }
                                 } else {
-                                    logger.fine("No metrics for WinCC OA client $deviceName: ${mReply.cause()?.message}")
+                                    logger.fine { "No metrics for WinCC OA client $deviceName: ${mReply.cause()?.message}" }
                                 }
                                 remaining -= 1
                                 if (remaining == 0) {
-                                    logger.fine("WinCC OA metrics collection complete. Final total: $winCCOaClientInTotal")
+                                    logger.fine { "WinCC OA metrics collection complete. Final total: $winCCOaClientInTotal" }
                                     winCCOaDone = true
                                     tryAssembleAndStore()
                                 }
@@ -328,7 +328,7 @@ class MetricsHandler(
                         }
                     }
                 } else {
-                    logger.fine("Could not retrieve WinCC OA client connector list: ${listReply.cause()?.message}")
+                    logger.fine { "Could not retrieve WinCC OA client connector list: ${listReply.cause()?.message}" }
                     winCCOaDone = true
                     tryAssembleAndStore()
                 }
@@ -340,7 +340,7 @@ class MetricsHandler(
                 if (listReply.succeeded()) {
                     val body = listReply.result().body()
                     val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
-                    logger.fine("WinCC Unified metrics aggregation: found ${devices.size()} devices")
+                    logger.fine { "WinCC Unified metrics aggregation: found ${devices.size()} devices" }
                     if (devices.isEmpty) {
                         winCCUaDone = true
                         tryAssembleAndStore()
@@ -355,7 +355,7 @@ class MetricsHandler(
                                         val m = mReply.result().body()
                                         val inRate = m.getDouble("messagesInRate", 0.0)
                                         val connected = m.getBoolean("connected", false)
-                                        logger.fine("WinCC Unified client '$deviceName' metrics: messagesInRate=$inRate connected=$connected")
+                                        logger.fine { "WinCC Unified client '$deviceName' metrics: messagesInRate=$inRate connected=$connected" }
                                         winCCUaClientInTotal += inRate
                                         // Store individual client metrics
                                         val winCCUaMetrics = at.rocworks.extensions.graphql.WinCCUaClientMetrics(
@@ -368,11 +368,11 @@ class MetricsHandler(
                                         logger.warning("Error processing WinCC Unified client metrics for $deviceName: ${e.message}")
                                     }
                                 } else {
-                                    logger.fine("No metrics for WinCC Unified client $deviceName: ${mReply.cause()?.message}")
+                                    logger.fine { "No metrics for WinCC Unified client $deviceName: ${mReply.cause()?.message}" }
                                 }
                                 remaining -= 1
                                 if (remaining == 0) {
-                                    logger.fine("WinCC Unified metrics collection complete. Final total: $winCCUaClientInTotal")
+                                    logger.fine { "WinCC Unified metrics collection complete. Final total: $winCCUaClientInTotal" }
                                     winCCUaDone = true
                                     tryAssembleAndStore()
                                 }
@@ -380,7 +380,7 @@ class MetricsHandler(
                         }
                     }
                 } else {
-                    logger.fine("Could not retrieve WinCC Unified client connector list: ${listReply.cause()?.message}")
+                    logger.fine { "Could not retrieve WinCC Unified client connector list: ${listReply.cause()?.message}" }
                     winCCUaDone = true
                     tryAssembleAndStore()
                 }
@@ -415,7 +415,7 @@ class MetricsHandler(
                                         logger.warning("Error processing archive group metrics for $groupName: ${e.message}")
                                     }
                                 } else {
-                                    logger.fine("No metrics for archive group $groupName: ${mReply.cause()?.message}")
+                                    logger.fine { "No metrics for archive group $groupName: ${mReply.cause()?.message}" }
                                 }
                                 remaining -= 1
                                 if (remaining == 0) {
@@ -426,7 +426,7 @@ class MetricsHandler(
                         }
                     }
                 } else {
-                    logger.fine("Could not retrieve archive groups list: ${listReply.cause()?.message}")
+                    logger.fine { "Could not retrieve archive groups list: ${listReply.cause()?.message}" }
                     archiveDone = true
                     tryAssembleAndStore()
                 }
@@ -442,7 +442,7 @@ class MetricsHandler(
             // Get current broker metrics via EventBus and reset counters
             val metricsAddress = EventBusAddresses.Node.metricsAndReset(nodeId)
 
-            logger.fine("Requesting broker metrics with reset from address: $metricsAddress")
+            logger.fine { "Requesting broker metrics with reset from address: $metricsAddress" }
 
             vertx.eventBus().request<JsonObject>(metricsAddress, JsonObject()).onComplete { reply ->
                 if (reply.succeeded()) {
@@ -470,7 +470,7 @@ class MetricsHandler(
 
                         metricsStore.storeBrokerMetrics(timestamp, nodeId, brokerMetrics).onComplete { result ->
                             if (result.succeeded()) {
-                                logger.fine("Successfully stored broker metrics for nodeId: $nodeId")
+                                logger.fine { "Successfully stored broker metrics for nodeId: $nodeId" }
                             } else {
                                 logger.warning("Error storing broker metrics: ${result.cause()?.message}")
                             }
@@ -493,7 +493,7 @@ class MetricsHandler(
 
                                 metricsStore.storeSessionMetrics(timestamp, clientId, sessionMetrics).onComplete { result ->
                                     if (result.succeeded()) {
-                                        logger.fine("Successfully stored session metrics for client: $clientId")
+                                        logger.fine { "Successfully stored session metrics for client: $clientId" }
                                     } else {
                                         logger.warning("Error storing session metrics for client $clientId: ${result.cause()?.message}")
                                     }
@@ -517,7 +517,7 @@ class MetricsHandler(
             // Get all active clients from session handler and reset their counters
             val allClientMetrics = sessionHandler.getAllClientMetricsAndReset()
 
-            logger.fine("Collecting session metrics for ${allClientMetrics.size} clients (with reset)")
+            logger.fine { "Collecting session metrics for ${allClientMetrics.size} clients (with reset)" }
 
             allClientMetrics.forEach { (clientId, sessionMetrics) ->
                 logger.finest("Storing session metrics for client $clientId: $sessionMetrics")
@@ -566,12 +566,12 @@ class MetricsHandler(
                                     logger.warning("Error processing MQTT bridge metrics for $deviceName: ${e.message}")
                                 }
                             } else {
-                                logger.fine("No metrics response from $metricsAddress: ${mReply.cause()?.message}")
+                                logger.fine { "No metrics response from $metricsAddress: ${mReply.cause()?.message}" }
                             }
                         }
                     }
                 } else {
-                    logger.fine("Could not retrieve MQTT bridge connector list: ${listReply.cause()?.message}")
+                    logger.fine { "Could not retrieve MQTT bridge connector list: ${listReply.cause()?.message}" }
                 }
             }
         } catch (e: Exception) {

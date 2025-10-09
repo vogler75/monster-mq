@@ -83,7 +83,7 @@ class MessageStoreHazelcast(
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
         val startTime = System.currentTimeMillis()
         
-        logger.fine("Starting purge for [$name] - removing messages older than $olderThan")
+        logger.fine { "Starting purge for [$name] - removing messages older than $olderThan" }
         
         // Use Hazelcast predicates for efficient distributed filtering
         val predicate = Predicates.lessThan<String, BrokerMessage>("time", olderThan)
@@ -108,7 +108,7 @@ class MessageStoreHazelcast(
         val elapsedTimeMs = System.currentTimeMillis() - startTime
         val result = PurgeResult(deleteCount, elapsedTimeMs)
         
-        logger.fine("Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
+        logger.fine { "Purge completed for [$name]: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
         
         return result
     }

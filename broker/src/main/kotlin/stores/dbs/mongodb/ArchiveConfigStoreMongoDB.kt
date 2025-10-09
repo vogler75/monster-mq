@@ -236,7 +236,7 @@ class ArchiveConfigStoreMongoDB(
                 collection.insertOne(defaultDoc)
                 logger.info("Default archive group created in MongoDB")
             } else {
-                logger.fine("Default archive group already exists in MongoDB")
+                logger.fine { "Default archive group already exists in MongoDB" }
             }
         } catch (e: Exception) {
             logger.warning("Error creating default archive group in MongoDB: ${e.message}")
