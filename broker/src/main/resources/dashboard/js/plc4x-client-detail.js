@@ -438,8 +438,7 @@ class Plc4xClientDetailManager {
             'MODBUS_RTU': 'Modbus RTU',
             'MODBUS_TCP': 'Modbus TCP',
             'PROFINET': 'PROFINET',
-            'S7': 'S7',
-            'SIMULATED': 'Simulated'
+            'S7': 'S7'
         };
         return protocolNames[protocol] || protocol;
     }

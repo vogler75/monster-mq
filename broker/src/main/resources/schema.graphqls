@@ -2380,8 +2380,6 @@ enum Plc4xProtocol {
     PLC4X
     # Siemens S7 protocol (S7-300, S7-400, S7-1200, S7-1500)
     S7
-    # Simulated PLC for testing
-    SIMULATED
     # Mitsubishi Electric UMAS protocol
     UMAS
     # Profinet protocol (experimental/in development)

@@ -333,11 +333,6 @@
             <artifactId>plc4j-driver-firmata</artifactId>
             <version>0.13.1</version>
         </dependency>
-        <dependency>
-            <groupId>org.apache.plc4x</groupId>
-            <artifactId>plc4j-driver-simulated</artifactId>
-            <version>0.13.1</version>
-        </dependency>
 
     </dependencies>
 
