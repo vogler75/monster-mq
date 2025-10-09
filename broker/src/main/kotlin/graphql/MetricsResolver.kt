@@ -1004,7 +1004,7 @@ callback(BrokerMetrics(
             val clientName = winCCOaClient?.get("name") as? String
 
             if (clientName == null) {
-                future.complete(listOf(WinCCOaClientMetrics(0.0, TimestampConverter.currentTimeIsoString())))
+                future.complete(listOf(WinCCOaClientMetrics(0.0, false, TimestampConverter.currentTimeIsoString())))
                 return@DataFetcher future
             }
 
@@ -1012,13 +1012,13 @@ callback(BrokerMetrics(
                 metricsStore.getWinCCOaClientMetricsList(clientName, null, null, 1).onComplete { result ->
                     if (result.succeeded() && result.result().isNotEmpty()) {
                         val m = result.result().first()
-                        future.complete(listOf(WinCCOaClientMetrics(round2(m.messagesIn), m.timestamp)))
+                        future.complete(listOf(WinCCOaClientMetrics(round2(m.messagesIn), m.connected, m.timestamp)))
                     } else {
-                        future.complete(listOf(WinCCOaClientMetrics(0.0, TimestampConverter.currentTimeIsoString())))
+                        future.complete(listOf(WinCCOaClientMetrics(0.0, false, TimestampConverter.currentTimeIsoString())))
                     }
                 }
             } else {
-                future.complete(listOf(WinCCOaClientMetrics(0.0, TimestampConverter.currentTimeIsoString())))
+                future.complete(listOf(WinCCOaClientMetrics(0.0, false, TimestampConverter.currentTimeIsoString())))
             }
 
             future
@@ -1046,7 +1046,7 @@ callback(BrokerMetrics(
 
                 metricsStore.getWinCCOaClientMetricsList(clientName, fromInstant, toInstant, lastMinutes).onComplete { result ->
                     if (result.succeeded()) {
-                        future.complete(result.result().map { WinCCOaClientMetrics(round2(it.messagesIn), it.timestamp) })
+                        future.complete(result.result().map { WinCCOaClientMetrics(round2(it.messagesIn), it.connected, it.timestamp) })
                     } else {
                         logger.warning("Failed to get historical WinCC OA client metrics: ${result.cause()?.message}")
                         future.complete(emptyList())

@@ -1848,6 +1848,8 @@ type WinCCOaConnectionConfig {
 type WinCCOaClientMetrics {
     # Messages per second received from WinCC OA server (datapoint value changes)
     messagesIn: Float!
+    # Connection status to WinCC OA server
+    connected: Boolean!
     # ISO 8601 timestamp when these metrics were captured
     timestamp: String!
 }

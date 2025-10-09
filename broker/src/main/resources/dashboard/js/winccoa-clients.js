@@ -67,6 +67,7 @@ class WinCCOaClientManager {
                         updatedAt
                         metrics {
                             messagesIn
+                            connected
                             timestamp
                         }
                         config {
@@ -116,12 +117,15 @@ class WinCCOaClientManager {
 
     updateMetrics() {
         const totalClients = this.clients.length;
-        const enabledClients = this.clients.filter(c => c.enabled).length;
+        const connectedClients = this.clients.filter(c => {
+            const metrics = c.metrics && c.metrics.length > 0 ? c.metrics[0] : null;
+            return metrics && metrics.connected;
+        }).length;
         const currentNodeClients = this.clients.filter(c => c.isOnCurrentNode).length;
         const totalAddresses = this.clients.reduce((sum, c) => sum + c.config.addresses.length, 0);
 
         document.getElementById('total-clients').textContent = totalClients;
-        document.getElementById('enabled-clients').textContent = enabledClients;
+        document.getElementById('connected-clients').textContent = connectedClients;
         document.getElementById('current-node-clients').textContent = currentNodeClients;
         document.getElementById('total-addresses').textContent = totalAddresses;
     }
@@ -135,7 +139,7 @@ class WinCCOaClientManager {
         if (this.clients.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="8" class="no-data">
+                    <td colspan="9" class="no-data">
                         No WinCC OA Clients configured. Click "Add Bridge" to get started.
                     </td>
                 </tr>
@@ -153,6 +157,9 @@ class WinCCOaClientManager {
             // Format metrics
             const metrics = client.metrics && client.metrics.length > 0 ? client.metrics[0] : null;
             const messagesIn = metrics ? Math.round(metrics.messagesIn) : '0';
+            const connected = metrics ? metrics.connected : false;
+            const connectionClass = connected ? 'status-connected' : 'status-disconnected';
+            const connectionText = connected ? 'Connected' : 'Disconnected';
 
             row.innerHTML = `
                 <td>
@@ -175,8 +182,11 @@ class WinCCOaClientManager {
                     <span class="status-badge ${statusClass}">${statusText}</span>
                 </td>
                 <td>
+                    <span class="${connectionClass}">${connectionText}</span>
+                </td>
+                <td>
                     <div class="address-count">
-                        ${client.config.addresses.length} queries
+                        ${client.config.addresses.length}
                     </div>
                 </td>
                 <td>

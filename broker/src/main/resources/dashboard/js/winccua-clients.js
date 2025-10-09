@@ -175,7 +175,7 @@ class WinCCUaClientManager {
                 </td>
                 <td>
                     <div class="address-count">
-                        ${client.config.addresses.length} subs
+                        ${client.config.addresses.length}
                     </div>
                 </td>
                 <td>

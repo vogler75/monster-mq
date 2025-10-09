@@ -167,6 +167,30 @@
             color: var(--monster-red);
             border: 1px solid rgba(239, 68, 68, 0.3);
         }
+        .status-connected {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--monster-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .status-disconnected {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--monster-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
 
     </style>
 </head>
@@ -232,10 +256,10 @@
 
                 <div class="metric-card">
                     <div class="metric-header">
-                        <span class="metric-title">Enabled Bridges</span>
+                        <span class="metric-title">Connected Bridges</span>
                         <div class="metric-icon">🟢</div>
                     </div>
-                    <div class="metric-value" id="enabled-clients">0</div>
+                    <div class="metric-value" id="connected-clients">0</div>
                     <div class="metric-label">Active Connections</div>
                 </div>
 
@@ -286,6 +310,7 @@
                             <th>Namespace</th>
                             <th>Node Assignment</th>
                             <th>Status</th>
+                            <th>Connection</th>
                             <th>Queries</th>
                             <th>Metrics (msg/s)</th>
                             <th>Actions</th>

@@ -304,11 +304,13 @@ class MetricsHandler(
                                     try {
                                         val m = mReply.result().body()
                                         val inRate = m.getDouble("messagesInRate", 0.0)
-                                        logger.fine { "WinCC OA client '$deviceName' metrics: messagesInRate=$inRate" }
+                                        val connected = m.getBoolean("connected", false)
+                                        logger.fine { "WinCC OA client '$deviceName' metrics: messagesInRate=$inRate connected=$connected" }
                                         winCCOaClientInTotal += inRate
                                         // Store individual client metrics
                                         val winCCOaMetrics = at.rocworks.extensions.graphql.WinCCOaClientMetrics(
                                             messagesIn = inRate,
+                                            connected = connected,
                                             timestamp = TimestampConverter.instantToIsoString(timestamp)
                                         )
                                         metricsStore.storeWinCCOaClientMetrics(timestamp, deviceName, winCCOaMetrics)

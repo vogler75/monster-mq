@@ -200,6 +200,7 @@ data class KafkaClientMetrics(
 // WinCC OA Client Metrics
 data class WinCCOaClientMetrics(
     val messagesIn: Double,
+    val connected: Boolean = false,
     val timestamp: String
 )
 

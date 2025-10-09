@@ -358,6 +358,7 @@ class MetricsStoreMongoDB(
 
     private fun winCCOaClientMetricsToJson(m: at.rocworks.extensions.graphql.WinCCOaClientMetrics) = JsonObject()
         .put("messagesIn", m.messagesIn)
+        .put("connected", m.connected)
         .put("timestamp", m.timestamp)
 
     private fun winCCUaClientMetricsToJson(m: at.rocworks.extensions.graphql.WinCCUaClientMetrics) = JsonObject()
@@ -430,8 +431,9 @@ class MetricsStoreMongoDB(
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 
-    private fun jsonToWinCCOaClientMetrics(j: JsonObject) = if (j.isEmpty) at.rocworks.extensions.graphql.WinCCOaClientMetrics(0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else at.rocworks.extensions.graphql.WinCCOaClientMetrics(
+    private fun jsonToWinCCOaClientMetrics(j: JsonObject) = if (j.isEmpty) at.rocworks.extensions.graphql.WinCCOaClientMetrics(0.0, false, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()) else at.rocworks.extensions.graphql.WinCCOaClientMetrics(
         messagesIn = j.getDouble("messagesIn",0.0),
+        connected = j.getBoolean("connected", false),
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 
