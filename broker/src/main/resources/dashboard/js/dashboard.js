@@ -99,7 +99,7 @@ class DashboardManager {
                 labels: [],
                 datasets: [
                     {   // 0
-                        label: 'Messages In',
+                        label: 'Msg/In',
                         data: [],
                         borderColor: '#22C55E',
                         backgroundColor: 'rgba(34, 197, 94, 0.12)',
@@ -107,7 +107,7 @@ class DashboardManager {
                         fill: true
                     },
                     {   // 1
-                        label: 'Messages Out',
+                        label: 'Msg/Out',
                         data: [],
                         borderColor: '#6366F1',
                         backgroundColor: 'rgba(99, 102, 241, 0.12)',
@@ -115,7 +115,7 @@ class DashboardManager {
                         fill: true
                     },
                     {   // 2
-                        label: 'MQTT Bridge In',
+                        label: 'MQTT/In',
                         data: [],
                         borderColor: '#0EA5E9',
                         backgroundColor: 'rgba(14, 165, 233, 0.12)',
@@ -123,7 +123,7 @@ class DashboardManager {
                         fill: true
                     },
                     {   // 3
-                        label: 'MQTT Bridge Out',
+                        label: 'MQTT/Out',
                         data: [],
                         borderColor: '#F59E0B',
                         backgroundColor: 'rgba(245, 158, 11, 0.12)',
@@ -131,7 +131,7 @@ class DashboardManager {
                         fill: true
                     },
                     {   // 4
-                        label: 'Kafka Clients In',
+                        label: 'Kafka/In',
                         data: [],
                         borderColor: '#EF4444',
                         backgroundColor: 'rgba(239, 68, 68, 0.12)',
@@ -139,7 +139,7 @@ class DashboardManager {
                         fill: true
                     },
                     {   // 5
-                        label: 'OPC UA Clients In',
+                        label: 'OPC UA/In',
                         data: [],
                         borderColor: '#14B8A6',
                         backgroundColor: 'rgba(20, 184, 166, 0.12)',
@@ -147,7 +147,7 @@ class DashboardManager {
                         fill: true
                     },
                     {   // 6
-                        label: 'OPC UA Clients Out',
+                        label: 'OPC UA/Out',
                         data: [],
                         borderColor: '#9333EA',
                         backgroundColor: 'rgba(147, 51, 234, 0.12)',
@@ -155,7 +155,7 @@ class DashboardManager {
                         fill: true
                     },
                     {   // 7
-                        label: 'WinCC OA Clients In',
+                        label: 'WinCCOA/In',
                         data: [],
                         borderColor: '#EC4899',
                         backgroundColor: 'rgba(236, 72, 153, 0.12)',
@@ -163,7 +163,7 @@ class DashboardManager {
                         fill: true
                     },
                     {   // 8
-                        label: 'WinCC UA Clients In',
+                        label: 'WinCCUA/In',
                         data: [],
                         borderColor: '#A78BFA',
                         backgroundColor: 'rgba(167, 139, 250, 0.12)',
