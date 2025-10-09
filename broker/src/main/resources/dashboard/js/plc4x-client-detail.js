@@ -44,8 +44,8 @@ class Plc4xClientDetailManager {
             const result = await this.client.query(query);
             this.clusterNodes = result.clusterNodes || [];
 
-            // Populate node selector in edit form
-            const nodeSelect = document.getElementById('edit-client-node');
+            // Populate node selector
+            const nodeSelect = document.getElementById('client-node');
             if (nodeSelect) {
                 nodeSelect.innerHTML = '<option value="">Select Node...</option>';
                 this.clusterNodes.forEach(node => {
@@ -127,49 +127,25 @@ class Plc4xClientDetailManager {
         // Update page title
         document.getElementById('client-title').textContent = `PLC4X Client: ${this.clientData.name}`;
         const protocolDisplay = this.formatProtocol(this.clientData.config.protocol);
-        document.getElementById('client-subtitle').textContent =
-            `${this.clientData.namespace} - ${protocolDisplay} - ${this.clientData.config.connectionString}`;
-
-        // Client status
-        const statusBadge = document.getElementById('client-status-badge');
-        const statusClass = this.clientData.enabled ? 'status-enabled' : 'status-disabled';
-        statusBadge.className = `status-badge ${statusClass}`;
-        statusBadge.textContent = this.clientData.enabled ? 'Enabled' : 'Disabled';
-
-        // Connection status
         const connected = this.clientData.metrics && this.clientData.metrics.length > 0
             ? this.clientData.metrics[0].connected
             : false;
-        const connectionStatus = document.getElementById('client-connection-status');
-        connectionStatus.className = `status-badge ${connected ? 'status-enabled' : 'status-disabled'}`;
-        connectionStatus.textContent = connected ? 'Connected' : 'Disconnected';
+        const connStatus = connected ? 'Connected' : 'Disconnected';
+        document.getElementById('client-subtitle').textContent =
+            `${this.clientData.namespace} - ${protocolDisplay} - ${connStatus}`;
 
-        // Client information
-        document.getElementById('client-name').textContent = this.clientData.name;
-        document.getElementById('client-namespace').textContent = this.clientData.namespace;
-        document.getElementById('client-protocol').textContent = protocolDisplay;
-        document.getElementById('client-connection').textContent = this.clientData.config.connectionString;
-        document.getElementById('client-node').textContent =
-            (this.clientData.isOnCurrentNode ? '📍 ' : '') + this.clientData.nodeId;
-        document.getElementById('client-created').textContent =
-            this.formatDateTime(this.clientData.createdAt);
+        // Populate form fields
+        document.getElementById('client-name').value = this.clientData.name;
+        document.getElementById('client-namespace').value = this.clientData.namespace;
+        document.getElementById('client-protocol').value = this.clientData.config.protocol;
+        document.getElementById('client-connection-string').value = this.clientData.config.connectionString;
+        document.getElementById('client-node').value = this.clientData.nodeId;
+        document.getElementById('client-enabled').checked = this.clientData.enabled;
 
         // Connection configuration
-        document.getElementById('config-polling').textContent =
-            this.clientData.config.pollingInterval + ' ms';
-        document.getElementById('config-reconnect').textContent =
-            this.clientData.config.reconnectDelay + ' ms';
-        document.getElementById('config-enabled').textContent =
-            this.clientData.config.enabled ? 'Yes' : 'No';
-
-        // Metrics
-        if (this.clientData.metrics && this.clientData.metrics.length > 0) {
-            const metrics = this.clientData.metrics[0];
-            document.getElementById('metric-messages-in').textContent =
-                Math.round(metrics.messagesInRate) + ' msg/s';
-        } else {
-            document.getElementById('metric-messages-in').textContent = '0 msg/s';
-        }
+        document.getElementById('client-polling-interval').value = this.clientData.config.pollingInterval;
+        document.getElementById('client-reconnect-delay').value = this.clientData.config.reconnectDelay;
+        document.getElementById('client-config-enabled').checked = this.clientData.config.enabled;
 
         // Render addresses
         this.renderAddresses();
@@ -352,40 +328,20 @@ class Plc4xClientDetailManager {
         this.deleteAddressName = null;
     }
 
-    editClient() {
+    async saveClient() {
         if (!this.clientData) return;
 
-        // Populate edit form
-        document.getElementById('edit-client-name').value = this.clientData.name;
-        document.getElementById('edit-client-namespace').value = this.clientData.namespace;
-        document.getElementById('edit-client-protocol').value = this.clientData.config.protocol;
-        document.getElementById('edit-client-connection-string').value = this.clientData.config.connectionString;
-        document.getElementById('edit-client-node').value = this.clientData.nodeId;
-        document.getElementById('edit-polling-interval').value = this.clientData.config.pollingInterval;
-        document.getElementById('edit-reconnect-delay').value = this.clientData.config.reconnectDelay;
-        document.getElementById('edit-client-enabled').checked = this.clientData.enabled;
-
-        this.showEditClientModal();
-    }
-
-    async updateClient() {
-        const form = document.getElementById('edit-client-form');
-        if (!form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
-
         const clientData = {
-            name: document.getElementById('edit-client-name').value.trim(),
-            namespace: document.getElementById('edit-client-namespace').value.trim(),
-            nodeId: document.getElementById('edit-client-node').value,
-            enabled: document.getElementById('edit-client-enabled').checked,
+            name: document.getElementById('client-name').value.trim(),
+            namespace: document.getElementById('client-namespace').value.trim(),
+            nodeId: document.getElementById('client-node').value,
+            enabled: document.getElementById('client-enabled').checked,
             config: {
-                protocol: document.getElementById('edit-client-protocol').value,
-                connectionString: document.getElementById('edit-client-connection-string').value.trim(),
-                pollingInterval: parseInt(document.getElementById('edit-polling-interval').value),
-                reconnectDelay: parseInt(document.getElementById('edit-reconnect-delay').value),
-                enabled: document.getElementById('edit-client-enabled').checked,
+                protocol: document.getElementById('client-protocol').value,
+                connectionString: document.getElementById('client-connection-string').value.trim(),
+                pollingInterval: parseInt(document.getElementById('client-polling-interval').value),
+                reconnectDelay: parseInt(document.getElementById('client-reconnect-delay').value),
+                enabled: document.getElementById('client-config-enabled').checked,
                 addresses: this.clientData.config.addresses
             }
         };
@@ -411,7 +367,6 @@ class Plc4xClientDetailManager {
             });
 
             if (result.plc4xDevice.update.success) {
-                this.hideEditClientModal();
                 await this.loadClient();
                 this.showSuccess(`Client "${this.clientName}" updated successfully`);
             } else {
@@ -455,14 +410,6 @@ class Plc4xClientDetailManager {
 
     hideAddAddressModal() {
         document.getElementById('add-address-modal').style.display = 'none';
-    }
-
-    showEditClientModal() {
-        document.getElementById('edit-client-modal').style.display = 'flex';
-    }
-
-    hideEditClientModal() {
-        document.getElementById('edit-client-modal').style.display = 'none';
     }
 
     showConfirmDeleteAddressModal() {
@@ -546,16 +493,8 @@ function addAddress() {
     clientDetailManager.addAddress();
 }
 
-function editClient() {
-    clientDetailManager.editClient();
-}
-
-function hideEditClientModal() {
-    clientDetailManager.hideEditClientModal();
-}
-
-function updateClient() {
-    clientDetailManager.updateClient();
+function saveClient() {
+    clientDetailManager.saveClient();
 }
 
 function hideConfirmDeleteAddressModal() {
@@ -581,8 +520,6 @@ document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal')) {
         if (e.target.id === 'add-address-modal') {
             clientDetailManager.hideAddAddressModal();
-        } else if (e.target.id === 'edit-client-modal') {
-            clientDetailManager.hideEditClientModal();
         } else if (e.target.id === 'confirm-delete-address-modal') {
             clientDetailManager.hideConfirmDeleteAddressModal();
         }

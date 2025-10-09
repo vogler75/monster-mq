@@ -11,150 +11,213 @@
     <script src="/js/graphql-client.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        .detail-card {
+        /* Enhanced PLC4X Client Detail Page Styles */
+
+        /* Two-column grid layout for client info */
+        .client-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Section Cards */
+        .section-card {
             background: var(--dark-surface);
             border-radius: 12px;
             border: 1px solid var(--dark-border);
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+            transition: all 0.3s ease;
         }
 
-        .detail-header {
+        .section-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+        }
+
+        .section-card.full-width {
+            grid-column: 1 / -1;
+        }
+
+        /* Section Headers */
+        .section-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.5rem;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
         }
 
-        .detail-header h3 {
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .section-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--gradient-primary);
+            color: white;
+        }
+
+        .section-title h2 {
             margin: 0;
             color: var(--text-primary);
-            font-size: 1.1rem;
+            font-size: 1.25rem;
             font-weight: 600;
         }
 
-        .detail-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
+        .section-content {
+            padding: 1.5rem;
         }
 
-        .detail-item {
+        .section-actions {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        /* Info List Layout */
+        .info-list {
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 1rem;
         }
 
-        .detail-label {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 600;
-        }
-
-        .detail-value {
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            word-break: break-all;
-        }
-
+        /* Status Badge Improvements */
         .status-badge {
             display: inline-flex;
             align-items: center;
             gap: 0.25rem;
-            padding: 0.4rem 0.8rem;
+            padding: 0.5rem 1rem;
             border-radius: 20px;
             font-size: 0.75rem;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            border: 1px solid;
         }
 
         .status-enabled {
             background: rgba(16, 185, 129, 0.15);
             color: var(--monster-green);
-            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-color: rgba(16, 185, 129, 0.3);
         }
 
         .status-disabled {
             background: rgba(239, 68, 68, 0.15);
             color: var(--monster-red);
-            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-color: rgba(239, 68, 68, 0.3);
         }
 
-        .action-buttons {
+        /* Form Input Styles */
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+
+        input::placeholder {
+            color: var(--text-muted);
+        }
+
+        input:disabled,
+        select:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        input[type="checkbox"] {
+            width: auto;
+            accent-color: var(--monster-purple);
+            transform: scale(1.2);
+        }
+
+        .checkbox-group {
             display: flex;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-        }
-
-        .btn {
-            display: inline-flex;
             align-items: center;
             gap: 0.5rem;
-            padding: 0.6rem 1.2rem;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            border: none;
+        }
+
+        .checkbox-group label {
+            margin-bottom: 0;
             cursor: pointer;
-            text-decoration: none;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 600;
             font-size: 0.875rem;
         }
 
-        .btn-primary {
-            background: linear-gradient(135deg, var(--monster-purple), var(--monster-teal));
-            color: white;
-        }
-
-        .btn-secondary {
-            background: var(--dark-surface-2);
-            border: 1px solid var(--dark-border);
-            color: var(--text-primary);
-        }
-
-        .btn-danger {
-            background: var(--monster-red);
-            color: white;
-        }
-
-        .btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-        }
-
-        .btn-sm {
-            padding: 0.4rem 0.8rem;
+        small.form-hint {
+            color: var(--text-muted);
             font-size: 0.8rem;
+            margin-top: 0.25rem;
+            display: block;
         }
 
-        /* Table Styles */
+        .helper-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+            font-style: italic;
+        }
+
+        /* Data Table Enhancements */
         .data-table {
-            background: var(--dark-surface);
-            border-radius: 12px;
-            border: 1px solid var(--dark-border);
-            overflow: hidden;
-            margin-top: 1rem;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            box-shadow: none;
+            margin: 0;
         }
 
         .data-table table {
             width: 100%;
             border-collapse: collapse;
-            table-layout: auto;
+            background: var(--dark-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            table-layout: fixed;
         }
 
-        .addresses-card {
-            padding: 1.5rem 1.5rem 0 1.5rem;
-        }
-
-        .addresses-card .data-table {
-            margin: 1rem -1.5rem 0 -1.5rem;
-            border-radius: 0;
-            border-left: none;
-            border-right: none;
-            border-bottom: none;
-        }
+        /* Column widths for addresses table */
+        #addresses-table thead th:nth-child(1) { width: 20%; } /* PLC Address */
+        #addresses-table thead th:nth-child(2) { width: 20%; } /* Topic / QoS */
+        #addresses-table thead th:nth-child(3) { width: 15%; } /* Transform */
+        #addresses-table thead th:nth-child(4) { width: 10%; } /* Deadband */
+        #addresses-table thead th:nth-child(5) { width: 10%; } /* Options */
+        #addresses-table thead th:nth-child(6) { width: 15%; } /* Status */
+        #addresses-table thead th:nth-child(7) { width: 10%; } /* Actions */
 
         .data-table thead th {
             background: var(--dark-surface-2);
@@ -167,8 +230,10 @@
 
         .data-table tbody td {
             padding: 1rem;
-            vertical-align: middle;
             border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+            vertical-align: middle;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         .data-table tbody tr:hover {
@@ -179,14 +244,25 @@
             border-bottom: none;
         }
 
-        .no-data {
-            text-align: center;
-            padding: 3rem;
-            color: var(--text-muted);
+        /* Address table content styling */
+        .address-name {
+            font-weight: 500;
+            color: var(--text-primary);
         }
 
-        .addresses-card .no-data {
-            margin: 1rem 0;
+        .topic-value {
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .qos-value {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .transform-value,
+        .deadband-value {
+            color: var(--text-secondary);
         }
 
         /* Modal Styles */
@@ -214,10 +290,6 @@
             max-height: 90vh;
             overflow-y: auto;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-        }
-
-        .large-modal {
-            max-width: 800px;
         }
 
         .modal-header {
@@ -262,88 +334,210 @@
             gap: 1rem;
         }
 
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text-primary);
-            font-weight: 600;
-            font-size: 0.875rem;
-        }
-
-        .form-control,
-        input[type="text"],
-        input[type="number"],
-        select {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            background: var(--dark-bg);
-            border: 1px solid var(--dark-border);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-            transition: all 0.2s ease;
-            box-sizing: border-box;
-        }
-
-        .form-control:focus,
-        input:focus,
-        select:focus {
-            outline: none;
-            border-color: var(--monster-purple);
-            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-        }
-
-        input[type="checkbox"] {
-            margin-right: 0.5rem;
-            accent-color: var(--monster-purple);
-            transform: scale(1.1);
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .checkbox-group label {
-            margin-bottom: 0;
-            font-weight: 500;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .form-row {
+        .modal .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 1.5rem;
             margin-bottom: 1.5rem;
         }
 
-        .form-row.single {
-            grid-template-columns: 1fr;
+        /* Button Improvements */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
         }
 
-        .helper-text {
-            font-size: 0.75rem;
+        .btn svg {
+            flex-shrink: 0;
+        }
+
+        .btn-primary {
+            background: var(--gradient-primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--dark-surface-2);
+            color: var(--text-primary);
+            border: 1px solid var(--dark-border);
+            min-width: 160px;
+            white-space: nowrap;
+        }
+
+        .btn-secondary:hover {
+            background: var(--dark-border);
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background: var(--monster-red);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        /* Page Header Enhancements */
+        .page-header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .page-header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        /* Loading and Error States */
+        .loading-indicator {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            text-align: center;
+        }
+
+        .loading-spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--dark-border);
+            border-top: 3px solid var(--monster-purple);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* No Data State */
+        .no-data {
+            padding: 0;
+            background: transparent;
+            border: none;
+        }
+
+        .no-data-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            text-align: center;
+            background: var(--dark-bg);
+            border-radius: 8px;
+            border: 2px dashed var(--dark-border);
+        }
+
+        .no-data-content svg {
+            margin-bottom: 1rem;
             color: var(--text-muted);
-            margin-top: 0.25rem;
-            font-style: italic;
+        }
+
+        .no-data-content h3 {
+            margin: 0 0 0.5rem 0;
+            color: var(--text-primary);
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .no-data-content p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        /* Action buttons for addresses table */
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--dark-surface-2);
+            border: 1px solid var(--dark-border);
+        }
+
+        .btn-action:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-delete {
+            color: var(--monster-red);
+        }
+
+        .btn-delete:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--monster-red);
+            color: #f87171;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .client-info-grid {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+
+            .modal .form-row {
+                grid-template-columns: 1fr;
+            }
         }
 
         @media (max-width: 768px) {
-            .form-row {
-                grid-template-columns: 1fr;
+            .section-header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 1rem;
             }
 
-            .detail-grid {
-                grid-template-columns: 1fr;
+            .section-title {
+                justify-content: center;
+            }
+
+            .page-header-content {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .page-header-actions {
+                justify-content: center;
+            }
+
+            .data-table table {
+                font-size: 0.875rem;
+            }
+
+            .data-table thead th,
+            .data-table tbody td {
+                padding: 0.75rem 0.5rem;
             }
         }
     </style>
@@ -394,131 +588,182 @@
     <div class="main-content" id="main-content">
         <div class="container">
             <div class="page-header">
-                <h1 class="page-title" id="client-title">PLC4X Client</h1>
-                <p class="page-subtitle" id="client-subtitle"></p>
+                <div class="page-header-content">
+                    <div>
+                        <h1 class="page-title" id="client-title">PLC4X Client</h1>
+                        <p class="page-subtitle" id="client-subtitle">Client configuration and address management</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button class="btn btn-secondary" onclick="goBack()">
+                            Back to Clients
+                        </button>
+                        <button class="btn btn-primary" onclick="saveClient()" id="save-client-btn">
+                            Save Client
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            <div class="action-buttons" style="margin-bottom: 2rem;">
-                <button class="btn btn-secondary" onclick="goBack()">
-                    ← Back to Clients
-                </button>
-                <button class="btn btn-primary" onclick="editClient()">
-                    ✏️ Edit Client
-                </button>
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading client details...</span>
             </div>
 
             <div id="client-content" style="display: none;">
-                <!-- Client Status Card -->
-                <div class="detail-card">
-                    <div class="detail-header">
-                        <h3>Client Status</h3>
-                        <div style="display: flex; gap: 1rem;">
-                            <span id="client-status-badge" class="status-badge">Disabled</span>
-                            <span id="client-connection-status" class="status-badge">Disconnected</span>
+                <!-- Two Column Layout for Client Info -->
+                <div class="client-info-grid">
+                    <!-- Basic Information Section -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                    </svg>
+                                </div>
+                                <h2>Basic Information</h2>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="info-list">
+                                <div class="form-group">
+                                    <label for="client-name">Client Name *</label>
+                                    <input type="text" id="client-name" required placeholder="e.g., plc4x-s7-1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-namespace">Namespace *</label>
+                                    <input type="text" id="client-namespace" required placeholder="e.g., plc/s7">
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-protocol">Protocol *</label>
+                                    <select id="client-protocol" required>
+                                        <option value="">Select Protocol...</option>
+                                        <option value="AB_ETHERNET">AB Ethernet (Allen-Bradley)</option>
+                                        <option value="ADS">ADS (Beckhoff TwinCAT)</option>
+                                        <option value="BACNET_IP">BACnet/IP</option>
+                                        <option value="CANOPEN">CANopen</option>
+                                        <option value="EIP">EtherNet/IP (Allen-Bradley)</option>
+                                        <option value="FIRMATA">Firmata (Arduino)</option>
+                                        <option value="KNXNET_IP">KNXnet/IP</option>
+                                        <option value="MODBUS_ASCII">Modbus ASCII</option>
+                                        <option value="MODBUS_RTU">Modbus RTU</option>
+                                        <option value="MODBUS_TCP">Modbus TCP</option>
+                                        <option value="PROFINET">PROFINET</option>
+                                        <option value="S7">Siemens S7</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-connection-string">Connection String *</label>
+                                    <input type="text" id="client-connection-string" required placeholder="e.g., s7://192.168.1.100">
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-node">Cluster Node *</label>
+                                    <select id="client-node" required>
+                                        <option value="">Select Node...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="client-enabled" checked>
+                                        <label for="client-enabled">Enabled</label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="detail-grid">
-                        <div class="detail-item">
-                            <div class="detail-label">Client Name</div>
-                            <div class="detail-value" id="client-name">-</div>
+
+                    <!-- Connection Settings Section -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM13 17h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                                    </svg>
+                                </div>
+                                <h2>Connection Settings</h2>
+                            </div>
                         </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Namespace</div>
-                            <div class="detail-value" id="client-namespace">-</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Protocol</div>
-                            <div class="detail-value" id="client-protocol">-</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Connection String</div>
-                            <div class="detail-value" id="client-connection">-</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Node Assignment</div>
-                            <div class="detail-value" id="client-node">-</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Created At</div>
-                            <div class="detail-value" id="client-created">-</div>
+                        <div class="section-content">
+                            <div class="info-list">
+                                <div class="form-group">
+                                    <label for="client-polling-interval">Polling Interval (ms)</label>
+                                    <input type="number" id="client-polling-interval" value="1000" min="100" step="100">
+                                    <small class="form-hint">How often to poll PLC addresses (minimum 100ms)</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-reconnect-delay">Reconnect Delay (ms)</label>
+                                    <input type="number" id="client-reconnect-delay" value="5000" min="1000" step="1000">
+                                    <small class="form-hint">Delay before reconnecting after connection loss</small>
+                                </div>
+                                <div class="form-group">
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" id="client-config-enabled" checked>
+                                        <label for="client-config-enabled">Config Enabled</label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Connection Configuration Card -->
-                <div class="detail-card">
-                    <div class="detail-header">
-                        <h3>Connection Configuration</h3>
+                <!-- Addresses Section - Full Width -->
+                <div id="addresses-section" class="section-card full-width">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/>
+                                </svg>
+                            </div>
+                            <h2>PLC Addresses</h2>
+                        </div>
+                        <div class="section-actions">
+                            <button class="btn btn-primary" onclick="showAddAddressModal()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                </svg>
+                                Add Address
+                            </button>
+                        </div>
                     </div>
-                    <div class="detail-grid">
-                        <div class="detail-item">
-                            <div class="detail-label">Polling Interval</div>
-                            <div class="detail-value" id="config-polling">-</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Reconnect Delay</div>
-                            <div class="detail-value" id="config-reconnect">-</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Config Enabled</div>
-                            <div class="detail-value" id="config-enabled">-</div>
+                    <div class="section-content">
+                        <div id="addresses-container">
+                            <div id="addresses-table" class="data-table">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>PLC Address</th>
+                                            <th>Topic / QoS</th>
+                                            <th>Transform</th>
+                                            <th>Deadband</th>
+                                            <th>Options</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="addresses-table-body">
+                                        <!-- Address rows will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="no-addresses" class="no-data" style="display: none;">
+                                <div class="no-data-content">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
+                                        <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/>
+                                    </svg>
+                                    <h3>No addresses configured</h3>
+                                    <p>Click "Add Address" to start monitoring PLC data</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-
-                <!-- Metrics Card -->
-                <div class="detail-card">
-                    <div class="detail-header">
-                        <h3>Metrics</h3>
-                    </div>
-                    <div class="detail-grid">
-                        <div class="detail-item">
-                            <div class="detail-label">Messages In Rate</div>
-                            <div class="detail-value" id="metric-messages-in">-</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Addresses Section -->
-                <div class="detail-card addresses-card">
-                    <div class="detail-header">
-                        <h3>Addresses</h3>
-                        <button class="btn btn-primary btn-sm" style="margin-right: 0.5rem;" onclick="showAddAddressModal()">
-                            + Add Address
-                        </button>
-                    </div>
-
-                    <div id="no-addresses" class="no-data" style="display: none;">
-                        No addresses configured. Click "Add Address" to get started.
-                    </div>
-
-                    <table id="addresses-table" class="data-table" style="display: none;">
-                        <thead>
-                            <tr>
-                                <th>PLC Address</th>
-                                <th>Topic / QoS</th>
-                                <th>Transform</th>
-                                <th>Deadband</th>
-                                <th>Options</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="addresses-table-body">
-                            <!-- Addresses will be populated here -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div id="loading-indicator" class="loading-indicator">
-                <div class="loading-spinner"></div>
-                <span>Loading client...</span>
             </div>
 
             <div id="error-message" class="error-message" style="display: none;">
                 <div class="error-content">
-                    <span class="error-icon">⚠️</span>
+                    <span class="error-icon">!</span>
                     <span class="error-text"></span>
                 </div>
             </div>
@@ -537,7 +782,7 @@
                     <div class="form-group">
                         <label for="address-address">PLC Address *</label>
                         <input type="text" id="address-address" required placeholder="e.g., %DB1.DBW0">
-                        <div class="helper-text">PLC-specific address format (e.g., S7: %DB1.DBW0, Modbus: 40001) - Also used as unique identifier</div>
+                        <div class="helper-text">PLC-specific address format - Also used as unique identifier</div>
                     </div>
                     <div class="form-group">
                         <label for="address-topic">MQTT Topic</label>
@@ -555,10 +800,8 @@
                         </div>
                         <div class="form-group">
                             <div class="checkbox-group">
-                                <label for="address-retained">
-                                    <input type="checkbox" id="address-retained">
-                                    Retained Message
-                                </label>
+                                <input type="checkbox" id="address-retained">
+                                <label for="address-retained">Retained Message</label>
                             </div>
                         </div>
                     </div>
@@ -582,19 +825,15 @@
                     </div>
                     <div class="form-group">
                         <div class="checkbox-group">
-                            <label for="address-publish-on-change">
-                                <input type="checkbox" id="address-publish-on-change" checked>
-                                Publish On Change
-                            </label>
+                            <input type="checkbox" id="address-publish-on-change" checked>
+                            <label for="address-publish-on-change">Publish On Change</label>
                         </div>
                         <div class="helper-text">Only publish when value actually changes (avoids duplicate values)</div>
                     </div>
                     <div class="form-group">
                         <div class="checkbox-group">
-                            <label for="address-enabled">
-                                <input type="checkbox" id="address-enabled" checked>
-                                Enabled
-                            </label>
+                            <input type="checkbox" id="address-enabled" checked>
+                            <label for="address-enabled">Enabled</label>
                         </div>
                     </div>
                 </form>
@@ -602,85 +841,6 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
                 <button type="submit" class="btn btn-primary" onclick="addAddress()">Add Address</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Client Modal -->
-    <div id="edit-client-modal" class="modal" style="display: none;">
-        <div class="modal-content large-modal">
-            <div class="modal-header">
-                <h3>Edit PLC4X Client</h3>
-                <button class="modal-close" onclick="hideEditClientModal()">×</button>
-            </div>
-            <div class="modal-body">
-                <form id="edit-client-form">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="edit-client-name">Client Name *</label>
-                            <input type="text" id="edit-client-name" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="edit-client-namespace">Namespace *</label>
-                            <input type="text" id="edit-client-namespace" required>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="edit-client-protocol">Protocol *</label>
-                            <select id="edit-client-protocol" required>
-                                <option value="">Select Protocol...</option>
-                                <option value="AB_ETHERNET">AB Ethernet (Allen-Bradley)</option>
-                                <option value="ADS">ADS (Beckhoff TwinCAT)</option>
-                                <option value="BACNET_IP">BACnet/IP</option>
-                                <option value="CANOPEN">CANopen</option>
-                                <option value="EIP">EtherNet/IP (Allen-Bradley)</option>
-                                <option value="FIRMATA">Firmata (Arduino)</option>
-                                <option value="KNXNET_IP">KNXnet/IP</option>
-                                <option value="MODBUS_ASCII">Modbus ASCII</option>
-                                <option value="MODBUS_RTU">Modbus RTU</option>
-                                <option value="MODBUS_TCP">Modbus TCP</option>
-                                <option value="PROFINET">PROFINET</option>
-                                <option value="S7">Siemens S7</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="edit-client-node">Cluster Node *</label>
-                            <select id="edit-client-node" required>
-                                <option value="">Select Node...</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-row single">
-                        <div class="form-group">
-                            <label for="edit-client-connection-string">Connection String *</label>
-                            <input type="text" id="edit-client-connection-string" required>
-                        </div>
-                    </div>
-                    <h4 style="margin: 1.5rem 0 1rem 0; padding-bottom: 0.5rem; border-bottom: 1px solid var(--dark-border);">Connection Settings</h4>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="edit-polling-interval">Polling Interval (ms)</label>
-                            <input type="number" id="edit-polling-interval" min="100" step="100">
-                        </div>
-                        <div class="form-group">
-                            <label for="edit-reconnect-delay">Reconnect Delay (ms)</label>
-                            <input type="number" id="edit-reconnect-delay" min="1000" step="1000">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <label for="edit-client-enabled">
-                                <input type="checkbox" id="edit-client-enabled">
-                                Enabled
-                            </label>
-                        </div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="hideEditClientModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary" onclick="updateClient()">Update Client</button>
             </div>
         </div>
     </div>
