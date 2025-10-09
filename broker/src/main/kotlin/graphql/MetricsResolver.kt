@@ -1204,4 +1204,51 @@ future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTi
             future
         }
     }
+
+    // PLC4X Client Metrics (embedded field resolvers)
+    fun plc4xClientMetrics(): DataFetcher<CompletableFuture<List<Plc4xDeviceMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Plc4xDeviceMetrics>>()
+            val client = env.getSource<Map<String, Any>>()
+            val clientName = client?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(listOf(Plc4xDeviceMetrics(0.0, false, TimestampConverter.currentTimeIsoString())))
+                return@DataFetcher future
+            }
+
+            // Fetch live metrics from connector via EventBus
+            val addr = EventBusAddresses.Plc4xBridge.connectorMetrics(clientName)
+            vertx.eventBus().request<JsonObject>(addr, JsonObject()).onComplete { reply ->
+                if (reply.succeeded()) {
+                    val body = reply.result().body()
+                    val inRate = body.getDouble("messagesInRate", 0.0)
+                    val connected = body.getBoolean("connected", false)
+                    future.complete(listOf(Plc4xDeviceMetrics(round2(inRate), connected, TimestampConverter.currentTimeIsoString())))
+                } else {
+                    future.complete(listOf(Plc4xDeviceMetrics(0.0, false, TimestampConverter.currentTimeIsoString())))
+                }
+            }
+
+            future
+        }
+    }
+
+    fun plc4xClientMetricsHistory(): DataFetcher<CompletableFuture<List<Plc4xDeviceMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Plc4xDeviceMetrics>>()
+            val client = env.getSource<Map<String, Any>>()
+            val clientName = client?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            // Metrics history not yet implemented for PLC4X - would need metricsStore support
+            future.complete(emptyList())
+
+            future
+        }
+    }
 }

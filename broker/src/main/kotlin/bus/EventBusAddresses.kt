@@ -105,6 +105,13 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // PLC4X Client (PLC4X -> MQTT)
+    object Plc4xBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.plc4x"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // Archive Groups
     object Archive {
         private const val ARCHIVE_NS = "$BASE.archive"

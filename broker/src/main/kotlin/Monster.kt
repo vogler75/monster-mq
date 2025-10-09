@@ -37,6 +37,7 @@ import at.rocworks.devices.mqttclient.MqttClientExtension
 import at.rocworks.devices.kafkaclient.KafkaClientExtension
 import at.rocworks.devices.winccoa.WinCCOaExtension
 import at.rocworks.devices.winccua.WinCCUaExtension
+import at.rocworks.devices.plc4x.Plc4xExtension
 import at.rocworks.stores.DeviceConfigStoreFactory
 import handlers.MetricsHandler
 import java.io.File
@@ -694,6 +695,12 @@ MORE INFO:
                         val winCCUaExtension = WinCCUaExtension()
                         val winCCUaDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(winCCUaExtension, winCCUaDeploymentOptions)
+                    }
+                    .compose {
+                        // PLC4X Client Extension
+                        val plc4xExtension = Plc4xExtension()
+                        val plc4xDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(plc4xExtension, plc4xDeploymentOptions)
                     }
                     .compose {
                         if (metricsCollector != null) {

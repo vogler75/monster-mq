@@ -211,6 +211,13 @@ data class WinCCUaClientMetrics(
     val timestamp: String
 )
 
+// PLC4X Client Metrics
+data class Plc4xDeviceMetrics(
+    val messagesInRate: Double,
+    val connected: Boolean = false,
+    val timestamp: String
+)
+
 data class ArchiveGroupMetrics(
     val messagesOut: Double,  // Messages written to database per second
     val bufferSize: Int,      // Average size of the write buffer

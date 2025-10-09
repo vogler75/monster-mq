@@ -2315,3 +2315,287 @@ extend type Mutation {
     # Returns a WinCCUaDeviceMutations type that provides grouped mutation operations
     winCCUaDevice: WinCCUaDeviceMutations!
 }
+
+#############################################
+# PLC4X Client Configuration                #
+#############################################
+
+"""
+PLC4X Client connects to industrial PLCs using Apache PLC4X universal protocol adapter.
+Supports multiple industrial protocols through a unified API with protocol-agnostic addressing.
+
+Supported Protocols (19+):
+- Siemens S7 (S7-300, S7-400, S7-1200, S7-1500)
+- Modbus (TCP, RTU, ASCII)
+- Beckhoff ADS (TwinCAT)
+- Allen-Bradley (AB-Ethernet, EtherNet/IP)
+- BACnet/IP
+- KNXnet/IP
+- CANopen
+- Firmata (Arduino)
+- IEC-60870-5-104
+- And more...
+
+Features:
+- Universal connection string format (protocol://host:port)
+- Protocol-specific address parsing handled automatically
+- Polling-based value reading
+- Value transformation (scaling, offset)
+- Deadband filtering to reduce MQTT traffic
+- Generic configuration works for all protocols
+"""
+
+enum Plc4xProtocol {
+    # Allen-Bradley AB-Ethernet protocol
+    AB_ETHERNET
+    # Beckhoff ADS/AMS protocol (TwinCAT)
+    ADS
+    # BACnet/IP building automation protocol
+    BACNET_IP
+    # Clipsal C-Bus home automation protocol
+    CBUS
+    # CANopen industrial network protocol
+    CANOPEN
+    # Emerson DeltaV DCS protocol
+    DELTAV
+    # Allen-Bradley DF1 serial protocol
+    DF1
+    # Rockwell Automation EtherNet/IP (formerly ControlNet)
+    ETHERNET_IP
+    # Firmata protocol for Arduino and microcontrollers
+    FIRMATA
+    # IEC 60870-5-104 telecontrol protocol for electrical engineering
+    IEC_60870
+    # KNX building automation over IP
+    KNXNET_IP
+    # Modbus TCP/IP industrial protocol
+    MODBUS_TCP
+    # Modbus RTU serial protocol
+    MODBUS_RTU
+    # Modbus ASCII serial protocol
+    MODBUS_ASCII
+    # Atlas Copco Open Protocol for assembly tools
+    OPEN_PROTOCOL
+    # Generic PLC4X protocol
+    PLC4X
+    # Siemens S7 protocol (S7-300, S7-400, S7-1200, S7-1500)
+    S7
+    # Simulated PLC for testing
+    SIMULATED
+    # Mitsubishi Electric UMAS protocol
+    UMAS
+    # Profinet protocol (experimental/in development)
+    PROFINET
+}
+
+# Metrics for a PLC4X device connector
+type Plc4xDeviceMetrics {
+    # Messages per second read from PLC device and published to MQTT
+    messagesInRate: Float!
+    # Connection status to PLC device
+    connected: Boolean!
+    # ISO 8601 timestamp when these metrics were captured
+    timestamp: String!
+}
+
+# PLC4X address configuration for reading PLC tags/addresses
+type Plc4xAddress {
+    # Unique name for this address within the device
+    name: String!
+    # PLC4X address string (protocol-specific format)
+    # Examples:
+    #   S7: "%DB1.DBW0:INT", "%M0.0:BOOL", "%DB1:100:BYTE"
+    #   Modbus: "holding-register:1:INT", "coil:100:BOOL"
+    #   ADS: "MAIN.myVariable", ".myVariable:INT"
+    address: String!
+    # MQTT topic where PLC values will be published
+    topic: String!
+    # MQTT QoS level (0, 1, or 2)
+    qos: Int!
+    # Whether to publish MQTT messages with retained flag
+    retained: Boolean!
+    # Optional scaling factor applied to numeric values (value * scalingFactor)
+    scalingFactor: Float
+    # Optional offset added to numeric values after scaling (value + offset)
+    offset: Float
+    # Optional deadband value - only publish if change exceeds this threshold
+    deadband: Float
+    # Whether this address should be polled
+    enabled: Boolean!
+}
+
+# PLC4X connection configuration
+type Plc4xConnectionConfig {
+    # PLC4X protocol to use (determines connection string format)
+    protocol: Plc4xProtocol!
+    # PLC4X connection string (format depends on protocol)
+    # Examples:
+    #   S7: "s7://192.168.1.10" or "s7://192.168.1.10:102/0/1"
+    #   Modbus: "modbus-tcp://192.168.1.20:502" or "modbus-rtu:///dev/ttyUSB0"
+    #   ADS: "ads://192.168.1.30:48898/192.168.1.30.1.1:851"
+    connectionString: String!
+    # Interval in milliseconds for polling addresses (default: 1000ms)
+    pollingInterval: Long!
+    # Delay in milliseconds before attempting reconnection (default: 5000ms)
+    reconnectDelay: Long!
+    # Configured PLC addresses to read
+    addresses: [Plc4xAddress!]!
+    # Whether polling is enabled for this connection
+    enabled: Boolean!
+}
+
+# PLC4X Client configuration
+type Plc4xClient {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Cluster node ID where this client runs
+    nodeId: String!
+    # Connection and address configuration
+    config: Plc4xConnectionConfig!
+    # Whether this client is enabled and should connect
+    enabled: Boolean!
+    # Client creation timestamp
+    createdAt: String!
+    # Client last update timestamp
+    updatedAt: String!
+    # Whether this client is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current metrics for this PLC4X client (single most recent entry)
+    metrics: [Plc4xDeviceMetrics!]!
+    # Historical metrics data for this PLC4X client
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [Plc4xDeviceMetrics!]!
+}
+
+# Result type for PLC4X Client operations
+type Plc4xClientResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected PLC4X client (null if operation failed)
+    client: Plc4xClient
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+# Input for PLC4X connection configuration
+input Plc4xConnectionConfigInput {
+    # PLC4X protocol to use
+    protocol: Plc4xProtocol!
+    # PLC4X connection string (format depends on protocol)
+    connectionString: String!
+    # Interval in milliseconds for polling addresses
+    pollingInterval: Long = 1000
+    # Delay in milliseconds before attempting reconnection
+    reconnectDelay: Long = 5000
+    # Whether polling is enabled
+    enabled: Boolean = true
+    # List of addresses to poll
+    addresses: [Plc4xAddressInput!] = []
+}
+
+# Input for PLC4X address configuration
+input Plc4xAddressInput {
+    # Unique name for this address
+    name: String!
+    # PLC4X address string (protocol-specific format)
+    address: String!
+    # MQTT topic where values will be published (auto-generated if not provided)
+    topic: String
+    # MQTT QoS level (0, 1, or 2)
+    qos: Int = 0
+    # Whether to publish with retained flag
+    retained: Boolean = false
+    # Optional scaling factor for numeric values
+    scalingFactor: Float
+    # Optional offset for numeric values
+    offset: Float
+    # Optional deadband threshold
+    deadband: Float
+    # Whether this address should be polled
+    enabled: Boolean = true
+}
+
+# Input for creating or updating a PLC4X client
+input Plc4xClientInput {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (e.g., "plc4x/siemens01")
+    namespace: String!
+    # Target cluster node (use "*" for automatic assignment)
+    nodeId: String!
+    # Whether the client should be enabled
+    enabled: Boolean = true
+    # Connection configuration
+    config: Plc4xConnectionConfigInput!
+}
+
+# Extend Queries for PLC4X clients
+extend type Query {
+    # Get all PLC4X client configurations across the entire cluster
+    # Returns clients from all cluster nodes, showing their assignment and connection status
+    plc4xClients: [Plc4xClient!]!
+
+    # Get a specific PLC4X client configuration by its unique name
+    # Client names must be unique across the entire MonsterMQ cluster
+    plc4xClient(name: String!): Plc4xClient
+
+    # Get PLC4X clients assigned to a specific cluster node
+    # Useful for monitoring client distribution and cluster load balancing
+    plc4xClientsByNode(nodeId: String!): [Plc4xClient!]!
+}
+
+# PLC4X Device Mutations - Grouped operations for PLC4X device management
+type Plc4xDeviceMutations {
+    # Create a new PLC4X client configuration to connect to an industrial PLC
+    # Creates a client connector that will be deployed on the specified cluster node
+    # The client will automatically connect and poll configured addresses
+    create(input: Plc4xClientInput!): Plc4xClientResult!
+
+    # Update an existing PLC4X client configuration
+    # Changes take effect immediately - the client connector will be redeployed with new settings
+    # Useful for modifying connection parameters, polling intervals, or addresses
+    update(name: String!, input: Plc4xClientInput!): Plc4xClientResult!
+
+    # Delete a PLC4X client configuration permanently
+    # Stops the client connector and removes all configuration data
+    # Returns true if deletion was successful, false if client was not found
+    delete(name: String!): Boolean!
+
+    # Start a PLC4X client connection
+    # Enables a previously stopped client and establishes connection to PLC
+    start(name: String!): Plc4xClientResult!
+
+    # Stop a PLC4X client connection
+    # Disables the client and disconnects from PLC while preserving configuration
+    stop(name: String!): Plc4xClientResult!
+
+    # Toggle PLC4X client enabled state
+    # Enable or disable a PLC4X client without deleting its configuration
+    toggle(name: String!, enabled: Boolean!): Plc4xClientResult!
+
+    # Reassign a PLC4X client to a different cluster node
+    # Moves the client connector from one node to another for load balancing
+    # The client configuration remains unchanged, only the deployment location changes
+    reassign(name: String!, nodeId: String!): Plc4xClientResult!
+
+    # Add a new address to an existing PLC4X client
+    # Defines a new PLC tag/address to poll and publish to MQTT
+    # New addresses will immediately start being polled
+    addAddress(deviceName: String!, input: Plc4xAddressInput!): Plc4xClientResult!
+
+    # Remove an address from a PLC4X client
+    # Stops polling the specified address while keeping other addresses active
+    deleteAddress(deviceName: String!, addressName: String!): Plc4xClientResult!
+}
+
+# Extend Mutations for PLC4X clients
+extend type Mutation {
+    # Access PLC4X device management operations
+    # Returns a Plc4xDeviceMutations type that provides grouped mutation operations
+    plc4xDevice: Plc4xDeviceMutations!
+}

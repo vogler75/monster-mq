@@ -89,6 +89,11 @@ class SidebarManager {
                         href: '/pages/winccua-clients.html',
                         icon: '<rect x="4" y="4" width="16" height="16" rx="2" fill="none"></rect><text x="12" y="17" text-anchor="middle" font-size="14" font-weight="bold" fill="currentColor" font-family="Arial, sans-serif">S</text>',
                         text: 'WinCC Unified Clients'
+                    },
+                    {
+                        href: '/pages/plc4x-clients.html',
+                        icon: '<rect x="2" y="2" width="20" height="20" rx="2" fill="none"></rect><circle cx="12" cy="12" r="3" fill="currentColor"></circle><line x1="12" y1="2" x2="12" y2="9"></line><line x1="12" y1="15" x2="12" y2="22"></line><line x1="2" y1="12" x2="9" y2="12"></line><line x1="15" y1="12" x2="22" y2="12"></line>',
+                        text: 'PLC4X Clients'
                     }
                 ]
             },

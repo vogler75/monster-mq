@@ -25,6 +25,7 @@ data class DeviceConfig(
         const val DEVICE_TYPE_KAFKA_CLIENT = "KAFKA-Client"
         const val DEVICE_TYPE_WINCCOA_CLIENT = "WinCCOA-Client"
         const val DEVICE_TYPE_WINCCUA_CLIENT = "WinCCUA-Client"
+        const val DEVICE_TYPE_PLC4X_CLIENT = "PLC4X-Client"
 
         fun fromJsonObject(json: JsonObject): DeviceConfig {
             return DeviceConfig(

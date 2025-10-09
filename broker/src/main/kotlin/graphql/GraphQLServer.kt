@@ -25,6 +25,8 @@ import at.rocworks.graphql.WinCCOaClientConfigQueries
 import at.rocworks.graphql.WinCCOaClientConfigMutations
 import at.rocworks.graphql.WinCCUaClientConfigQueries
 import at.rocworks.graphql.WinCCUaClientConfigMutations
+import at.rocworks.graphql.Plc4xClientConfigQueries
+import at.rocworks.graphql.Plc4xClientConfigMutations
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
@@ -266,6 +268,10 @@ class GraphQLServer(
         val winCCUaClientQueries = deviceStore?.let { WinCCUaClientConfigQueries(vertx, it) }
         val winCCUaClientMutations = deviceStore?.let { WinCCUaClientConfigMutations(vertx, it) }
 
+        // Initialize PLC4X Client resolvers
+        val plc4xClientQueries = deviceStore?.let { Plc4xClientConfigQueries(vertx, it) }
+        val plc4xClientMutations = deviceStore?.let { Plc4xClientConfigMutations(vertx, it) }
+
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
             .scalar(ExtendedScalars.GraphQLLong)
@@ -357,6 +363,14 @@ class GraphQLServer(
                             dataFetcher("winCCUaClientsByNode", resolver.winCCUaClientsByNode())
                         }
                     }
+                    // PLC4X Client queries
+                    .apply {
+                        plc4xClientQueries?.let { resolver ->
+                            dataFetcher("plc4xClients", resolver.plc4xClients())
+                            dataFetcher("plc4xClient", resolver.plc4xClient())
+                            dataFetcher("plc4xClientsByNode", resolver.plc4xClientsByNode())
+                        }
+                    }
             }
             // Register mutation resolvers
             .type("Mutation") { builder ->
@@ -419,6 +433,13 @@ class GraphQLServer(
                         winCCUaClientMutations?.let { _ ->
                             // Return an empty object - actual resolvers are on WinCCUaDeviceMutations type
                             dataFetcher("winCCUaDevice") { _ -> emptyMap<String, Any>() }
+                        }
+                    }
+                    // PLC4X Client mutations - grouped under plc4xDevice
+                    .apply {
+                        plc4xClientMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on Plc4xDeviceMutations type
+                            dataFetcher("plc4xDevice") { _ -> emptyMap<String, Any>() }
                         }
                     }
             }
@@ -513,6 +534,22 @@ class GraphQLServer(
                     }
                 }
             }
+            // Register PLC4X Device Mutations type
+            .type("Plc4xDeviceMutations") { builder ->
+                builder.apply {
+                    plc4xClientMutations?.let { resolver ->
+                        dataFetcher("create", resolver.create())
+                        dataFetcher("update", resolver.update())
+                        dataFetcher("delete", resolver.delete())
+                        dataFetcher("start", resolver.start())
+                        dataFetcher("stop", resolver.stop())
+                        dataFetcher("toggle", resolver.toggle())
+                        dataFetcher("reassign", resolver.reassign())
+                        dataFetcher("addAddress", resolver.addAddress())
+                        dataFetcher("deleteAddress", resolver.deleteAddress())
+                    }
+                }
+            }
             // Register Archive Group Mutations type
             .type("ArchiveGroupMutations") { builder ->
                 builder.apply {
@@ -581,6 +618,11 @@ class GraphQLServer(
                 builder
                     .dataFetcher("metrics", metricsResolver.winCCUaClientMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.winCCUaClientMetricsHistory())
+            }
+            .type("Plc4xClient") { builder ->
+                builder
+                    .dataFetcher("metrics", metricsResolver.plc4xClientMetrics())
+                    .dataFetcher("metricsHistory", metricsResolver.plc4xClientMetricsHistory())
             }
             .type("ArchiveGroupInfo") { builder ->
                 builder.apply {
