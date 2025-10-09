@@ -408,7 +408,7 @@ class WinCCOaConnector : AbstractVerticle() {
     private fun handleSubscriptionData(message: JsonObject) {
         try {
             val id = message.getString("id")
-            logger.info("Received subscription data for ID: $id")
+            logger.fine("Received subscription data for ID: $id")
 
             val payload = message.getJsonObject("payload")
 
@@ -448,8 +448,8 @@ class WinCCOaConnector : AbstractVerticle() {
                 return
             }
 
-            logger.info("Found address for subscription ID $id: query='${address.query}', topic='${address.topic}', description='${address.description}'")
-            logger.info("Processing ${values.size() - 1} data rows for subscription ID $id")
+            logger.fine("Found address for subscription ID $id: query='${address.query}', topic='${address.topic}', description='${address.description}'")
+            logger.fine("Processing ${values.size() - 1} data rows for subscription ID $id")
 
             // Parse values array
             // First row is header: ["", ":_original.._value", ":_original.._stime"]
@@ -499,11 +499,11 @@ class WinCCOaConnector : AbstractVerticle() {
             val mqttTopic = topicCache.computeIfAbsent(dpName) { name ->
                 val transformed = winCCOaConfig.transformConfig.transformDpNameToTopic(name)
                 val fullTopic = "${deviceConfig.namespace}/${address.topic}/$transformed"
-                logger.info("Computed MQTT topic for dpName '$name': $fullTopic (base topic: ${address.topic})")
+                logger.fine { "Computed MQTT topic for dpName '$name': $fullTopic (base topic: ${address.topic})" }
                 fullTopic
             }
 
-            logger.info("Publishing to MQTT topic: $mqttTopic (from query: ${address.query}, dpName: $dpName)")
+            logger.fine("Publishing to MQTT topic: $mqttTopic (from query: ${address.query}, dpName: $dpName)")
 
             // Format message based on configuration
             val payload = formatMessage(data)

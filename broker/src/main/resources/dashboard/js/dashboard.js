@@ -161,6 +161,14 @@ class DashboardManager {
                         backgroundColor: 'rgba(236, 72, 153, 0.12)',
                         tension: 0.35,
                         fill: true
+                    },
+                    {   // 8
+                        label: 'WinCC UA Clients In',
+                        data: [],
+                        borderColor: '#A78BFA',
+                        backgroundColor: 'rgba(167, 139, 250, 0.12)',
+                        tension: 0.35,
+                        fill: true
                     }
                 ]
             },
@@ -362,7 +370,8 @@ class DashboardManager {
                     mqttClientIn: 0, mqttClientOut: 0,
                     kafkaClientIn: 0,
                     opcUaClientIn: 0, opcUaClientOut: 0,
-                    winCCOaClientIn: 0
+                    winCCOaClientIn: 0,
+                    winCCUaClientIn: 0
                 };
             }
             aggregatedData[timeKey].messagesIn += point.messagesIn || 0;
@@ -376,6 +385,7 @@ class DashboardManager {
             aggregatedData[timeKey].opcUaClientIn += point.opcUaClientIn || 0;
             aggregatedData[timeKey].opcUaClientOut += point.opcUaClientOut || 0;
             aggregatedData[timeKey].winCCOaClientIn += point.winCCOaClientIn || 0;
+            aggregatedData[timeKey].winCCUaClientIn += point.winCCUaClientIn || 0;
         });
 
         // Preserve chronological order by iterating sorted allHistoricalData sequence
@@ -393,6 +403,7 @@ class DashboardManager {
             this.trafficChart.data.datasets[5].data.push(data.opcUaClientIn);
             this.trafficChart.data.datasets[6].data.push(data.opcUaClientOut);
             this.trafficChart.data.datasets[7].data.push(data.winCCOaClientIn || 0);
+            this.trafficChart.data.datasets[8].data.push(data.winCCUaClientIn || 0);
         });
 
         console.debug('Traffic history loaded', {
@@ -432,9 +443,10 @@ class DashboardManager {
                 // kafkaClientOut removed
                 opcUaClientIn: acc.opcUaClientIn + (metrics.opcUaClientIn || 0),
                 opcUaClientOut: acc.opcUaClientOut + (metrics.opcUaClientOut || 0),
-                winCCOaClientIn: acc.winCCOaClientIn + (metrics.winCCOaClientIn || 0)
+                winCCOaClientIn: acc.winCCOaClientIn + (metrics.winCCOaClientIn || 0),
+                winCCUaClientIn: acc.winCCUaClientIn + (metrics.winCCUaClientIn || 0)
             };
-        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttClientIn: 0, mqttClientOut: 0, kafkaClientIn: 0, opcUaClientIn: 0, opcUaClientOut: 0, winCCOaClientIn: 0 });
+        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttClientIn: 0, mqttClientOut: 0, kafkaClientIn: 0, opcUaClientIn: 0, opcUaClientOut: 0, winCCOaClientIn: 0, winCCUaClientIn: 0 });
 
         if (this.trafficChart.data.labels.length >= this.maxDataPoints) {
             this.trafficChart.data.labels.shift();
@@ -453,6 +465,7 @@ class DashboardManager {
         this.trafficChart.data.datasets[5].data.push(clusterTotals.opcUaClientIn);
         this.trafficChart.data.datasets[6].data.push(clusterTotals.opcUaClientOut);
         this.trafficChart.data.datasets[7].data.push(clusterTotals.winCCOaClientIn || 0);
+        this.trafficChart.data.datasets[8].data.push(clusterTotals.winCCUaClientIn || 0);
         this.trafficChart.update('none');
 
         this.messageBusChart.data.labels = brokers.map(b => b.nodeId);
@@ -491,7 +504,8 @@ class DashboardManager {
                 // kafkaClientOut removed
                 opcUaClientIn: acc.opcUaClientIn + (metrics.opcUaClientIn || 0),
                 opcUaClientOut: acc.opcUaClientOut + (metrics.opcUaClientOut || 0),
-                winCCOaClientIn: acc.winCCOaClientIn + (metrics.winCCOaClientIn || 0)
+                winCCOaClientIn: acc.winCCOaClientIn + (metrics.winCCOaClientIn || 0),
+                winCCUaClientIn: acc.winCCUaClientIn + (metrics.winCCUaClientIn || 0)
             };
         }, {
             messagesIn: 0, messagesOut: 0, totalSessions: 0, queuedMessages: 0,
@@ -499,7 +513,8 @@ class DashboardManager {
             mqttClientIn: 0, mqttClientOut: 0,
             kafkaClientIn: 0, // kafkaClientOut removed
             opcUaClientIn: 0, opcUaClientOut: 0,
-            winCCOaClientIn: 0
+            winCCOaClientIn: 0,
+            winCCUaClientIn: 0
         });
 
         const overviewContainer = document.getElementById('cluster-overview');
@@ -530,6 +545,11 @@ class DashboardManager {
                 <div class="metric-header"><span class="metric-title">WinCC OA Clients</span><div class="metric-icon">🏭</div></div>
                 <div class="metric-value">${this.formatNumber(clusterTotals.winCCOaClientIn || 0)}</div>
                 <div class="metric-label">In</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-header"><span class="metric-title">WinCC UA Clients</span><div class="metric-icon">🔧</div></div>
+                <div class="metric-value">${this.formatNumber(clusterTotals.winCCUaClientIn || 0)}</div>
+                <div class="metric-label">In</div>
             </div>`;
     }
 
@@ -552,6 +572,7 @@ class DashboardManager {
                     <td><span style="color: #EF4444;">${this.formatNumber(metrics.kafkaClientIn || 0)}</span></td>
                     <td><span style="color: #14B8A6;">${this.formatNumber(metrics.opcUaClientIn || 0)}</span> / <span style="color: #9333EA;">${this.formatNumber(metrics.opcUaClientOut || 0)}</span></td>
                     <td><span style="color: #EC4899;">${this.formatNumber(metrics.winCCOaClientIn || 0)}</span></td>
+                    <td><span style="color: #A78BFA;">${this.formatNumber(metrics.winCCUaClientIn || 0)}</span></td>
                 </tr>`;
         }).join('');
     }

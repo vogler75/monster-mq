@@ -117,6 +117,7 @@ class GraphQLDashboardClient {
                         opcUaClientIn
                         opcUaClientOut
                         winCCOaClientIn
+                        winCCUaClientIn
                         timestamp
                     }
                 }
@@ -151,6 +152,7 @@ class GraphQLDashboardClient {
                         opcUaClientIn
                         opcUaClientOut
                         winCCOaClientIn
+                        winCCUaClientIn
                         timestamp
                     }
                     metricsHistory(lastMinutes: $lastMinutes, from: $from, to: $to) {
@@ -171,6 +173,7 @@ class GraphQLDashboardClient {
                         opcUaClientIn
                         opcUaClientOut
                         winCCOaClientIn
+                        winCCUaClientIn
                         timestamp
                     }
                 }
