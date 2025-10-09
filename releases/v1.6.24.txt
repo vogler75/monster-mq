@@ -1,0 +1,12 @@
+Release v1.6.24
+Built from commit: bce6511
+Date: 2025-10-09 23:06:24
+
+Changes since v1.6.23:
+---
+bce6511 Refactor client detail page to inline editing
+e39925e Remove support for SIMULATED PLC4X protocol
+abf54c8 Refine addresses section styling in client detail page
+4f580e1 Refactor address handling to use PLC address as identifier
+b4789d7 Add publish-on-change option for PLC4X addresses
+1909054 Add PLC4X integration and GraphQL support
