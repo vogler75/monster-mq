@@ -124,18 +124,36 @@
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
         }
 
+        .btn-sm {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+        }
+
         /* Table Styles */
         .data-table {
             background: var(--dark-surface);
             border-radius: 12px;
             border: 1px solid var(--dark-border);
             overflow: hidden;
-            margin-top: 1.5rem;
+            margin-top: 1rem;
         }
 
         .data-table table {
             width: 100%;
             border-collapse: collapse;
+            table-layout: auto;
+        }
+
+        .addresses-card {
+            padding: 1.5rem 1.5rem 0 1.5rem;
+        }
+
+        .addresses-card .data-table {
+            margin: 1rem -1.5rem 0 -1.5rem;
+            border-radius: 0;
+            border-left: none;
+            border-right: none;
+            border-bottom: none;
         }
 
         .data-table thead th {
@@ -165,6 +183,10 @@
             text-align: center;
             padding: 3rem;
             color: var(--text-muted);
+        }
+
+        .addresses-card .no-data {
+            margin: 1rem 0;
         }
 
         /* Modal Styles */
@@ -458,10 +480,10 @@
                 </div>
 
                 <!-- Addresses Section -->
-                <div class="detail-card">
+                <div class="detail-card addresses-card">
                     <div class="detail-header">
                         <h3>Addresses</h3>
-                        <button class="btn btn-primary" onclick="showAddAddressModal()">
+                        <button class="btn btn-primary btn-sm" style="margin-right: 0.5rem;" onclick="showAddAddressModal()">
                             + Add Address
                         </button>
                     </div>
