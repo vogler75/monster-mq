@@ -1,0 +1,7 @@
+Release v1.6.25
+Built from commit: 106da76
+Date: 2025-10-09 23:37:36
+
+Changes since v1.6.24:
+---
+106da76 Add bidirectional PLC4X address modes (READ, WRITE, READ_WRITE)
