@@ -111,8 +111,11 @@
 
             <div class="data-table">
                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
-                    <div>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
                         <h3 style="margin: 0; color: var(--text-primary);">Active Sessions</h3>
+                        <button id="remove-selected-sessions" class="btn btn-danger" style="display: none;">
+                            Remove Selected (<span id="selected-count">0</span>)
+                        </button>
                     </div>
                     <div style="display: flex; gap: 1rem; align-items: center;">
                         <select id="node-filter" class="form-control" style="width: auto; min-width: 150px;">
@@ -132,6 +135,9 @@
                 <table>
                     <thead>
                         <tr>
+                            <th style="width: 40px;">
+                                <input type="checkbox" id="select-all-sessions" style="cursor: pointer;">
+                            </th>
                             <th>Client ID</th>
                             <th>Node</th>
                             <th>Status</th>

@@ -215,6 +215,7 @@ class GraphQLServer(
         val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
         val authenticationResolver = AuthenticationResolver(vertx, userManager)
         val archiveGroupResolver = archiveHandler?.let { ArchiveGroupResolver(vertx, it, authContext) }
+        val sessionResolver = SessionResolver(vertx, sessionStore, sessionHandler, authContext)
 
         // Initialize OPC UA resolvers
         val configStoreType = Monster.getConfigStoreType(config)
@@ -369,6 +370,8 @@ class GraphQLServer(
                     .dataFetcher("user") { _ -> emptyMap<String, Any>() }
                     // Queued messages management (requires admin token)
                     .dataFetcher("purgeQueuedMessages", mutationResolver.purgeQueuedMessages())
+                    // Session management mutations - grouped under session
+                    .dataFetcher("session") { _ -> emptyMap<String, Any>() }
                     // Archive Group mutations - grouped under archiveGroup
                     .apply {
                         archiveGroupResolver?.let { _ ->
@@ -532,6 +535,12 @@ class GraphQLServer(
                     dataFetcher("createAclRule", userManagementResolver.createAclRule())
                     dataFetcher("updateAclRule", userManagementResolver.updateAclRule())
                     dataFetcher("deleteAclRule", userManagementResolver.deleteAclRule())
+                }
+            }
+            // Register Session Management Mutations type
+            .type("SessionMutations") { builder ->
+                builder.apply {
+                    dataFetcher("removeSessions", sessionResolver.removeSessions())
                 }
             }
             // Register subscription resolvers

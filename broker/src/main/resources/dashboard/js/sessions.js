@@ -4,6 +4,7 @@ class SessionManager {
         this.distributionChart = null;
         this.currentNodeFilter = '';
         this.currentConnectionFilter = '';
+        this.selectedSessions = new Set();
 
         // Load filters from URL parameters
         this.loadFiltersFromURL();
@@ -100,6 +101,25 @@ class SessionManager {
                 const nodeId = e.target.dataset.nodeId;
                 this.showSessionDetails(clientId, nodeId);
             }
+        });
+
+        // Select all sessions checkbox
+        document.getElementById('select-all-sessions').addEventListener('change', (e) => {
+            const checked = e.target.checked;
+            document.querySelectorAll('.session-checkbox').forEach(checkbox => {
+                checkbox.checked = checked;
+                if (checked) {
+                    this.selectedSessions.add(checkbox.value);
+                } else {
+                    this.selectedSessions.delete(checkbox.value);
+                }
+            });
+            this.updateRemoveButton();
+        });
+
+        // Remove selected sessions button
+        document.getElementById('remove-selected-sessions').addEventListener('click', () => {
+            this.removeSessions();
         });
 
         // Restore filter values from URL to UI
@@ -253,10 +273,15 @@ class SessionManager {
         const sessionsToRender = this.sessions;
         const tableBody = document.getElementById('sessions-table-body');
 
+        // Clear selection state when re-rendering
+        this.selectedSessions.clear();
+        document.getElementById('select-all-sessions').checked = false;
+        this.updateRemoveButton();
+
         if (sessionsToRender.length === 0) {
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                    <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 2rem;">
                         No sessions found
                     </td>
                 </tr>
@@ -264,11 +289,15 @@ class SessionManager {
             return;
         }
 
+        const self = this;
         tableBody.innerHTML = sessionsToRender.map(session => {
             const metrics = session.metrics && session.metrics.length > 0 ? session.metrics[0] : { messagesIn: 0, messagesOut: 0 };
 
             return `
                 <tr>
+                    <td>
+                        <input type="checkbox" class="session-checkbox" value="${this.escapeHtml(session.clientId)}" style="cursor: pointer;">
+                    </td>
                     <td><strong>${this.escapeHtml(session.clientId)}</strong></td>
                     <td>${this.escapeHtml(session.nodeId)}</td>
                     <td>
@@ -297,6 +326,18 @@ class SessionManager {
                 </tr>
             `;
         }).join('');
+
+        // Add event listeners to checkboxes after rendering
+        document.querySelectorAll('.session-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    self.selectedSessions.add(e.target.value);
+                } else {
+                    self.selectedSessions.delete(e.target.value);
+                }
+                self.updateRemoveButton();
+            });
+        });
     }
 
     async showSessionDetails(clientId, nodeId) {
@@ -468,6 +509,89 @@ class SessionManager {
         // Simple error display - could be enhanced with toast notifications
         console.error(message);
         alert(message);
+    }
+
+    updateRemoveButton() {
+        const removeButton = document.getElementById('remove-selected-sessions');
+        const selectedCount = document.getElementById('selected-count');
+
+        if (this.selectedSessions.size > 0) {
+            removeButton.style.display = 'inline-block';
+            selectedCount.textContent = this.selectedSessions.size;
+        } else {
+            removeButton.style.display = 'none';
+        }
+    }
+
+    async removeSessions() {
+        if (this.selectedSessions.size === 0) {
+            return;
+        }
+
+        const clientIds = Array.from(this.selectedSessions);
+        const confirmMessage = `Are you sure you want to remove ${clientIds.length} session(s)?\n\nThis will:\n- Disconnect active sessions\n- Remove persistent session data from the database\n\nClient IDs:\n${clientIds.join('\n')}`;
+
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+
+        try {
+            const mutation = `
+                mutation RemoveSessions($clientIds: [String!]!) {
+                    session {
+                        removeSessions(clientIds: $clientIds) {
+                            success
+                            message
+                            removedCount
+                            results {
+                                clientId
+                                success
+                                error
+                                nodeId
+                            }
+                        }
+                    }
+                }
+            `;
+
+            const headers = this.getAuthHeaders();
+            const response = await fetch('/graphql', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({
+                    query: mutation,
+                    variables: { clientIds }
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.errors) {
+                throw new Error(result.errors[0].message);
+            }
+
+            const removalResult = result.data.session.removeSessions;
+
+            // Show detailed results
+            const failedRemovals = removalResult.results.filter(r => !r.success);
+            let message = removalResult.message;
+
+            if (failedRemovals.length > 0) {
+                message += '\n\nFailed removals:\n' + failedRemovals.map(r =>
+                    `- ${r.clientId}: ${r.error}`
+                ).join('\n');
+            }
+
+            alert(message);
+
+            // Clear selection and reload sessions
+            this.selectedSessions.clear();
+            await this.loadSessions();
+
+        } catch (error) {
+            console.error('Error removing sessions:', error);
+            this.showError('Failed to remove sessions: ' + error.message);
+        }
     }
 }
 

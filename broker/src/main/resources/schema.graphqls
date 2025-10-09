@@ -447,6 +447,45 @@ extend type Mutation {
     # Access user and ACL management operations
     # Returns a UserManagementMutations type that provides grouped mutation operations
     user: UserManagementMutations!
+
+    # Access session management operations
+    # Returns a SessionMutations type that provides session control operations
+    session: SessionMutations!
+}
+
+# Session Management Mutations - Grouped operations for session management
+type SessionMutations {
+    # Remove MQTT client sessions from the cluster
+    # Disconnects active sessions and removes persistent session data from the database
+    # Works across cluster nodes via event bus communication
+    removeSessions(
+        # Array of client IDs to remove
+        clientIds: [String!]!
+    ): SessionRemovalResult!
+}
+
+# Result type for session removal operations
+type SessionRemovalResult {
+    # Whether the operation succeeded overall
+    success: Boolean!
+    # Overall status message
+    message: String
+    # Number of sessions successfully removed
+    removedCount: Int!
+    # Details for each session removal attempt
+    results: [SessionRemovalDetail!]!
+}
+
+# Detailed result for a single session removal
+type SessionRemovalDetail {
+    # The client ID that was processed
+    clientId: String!
+    # Whether this specific session was successfully removed
+    success: Boolean!
+    # Error message if removal failed for this session
+    error: String
+    # The node ID where the session was located
+    nodeId: String
 }
 
 # Archive Group Mutations - Grouped operations for archive group management
