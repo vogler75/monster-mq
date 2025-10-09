@@ -6,6 +6,7 @@ class Plc4xClientDetailManager {
         this.clientData = null;
         this.clusterNodes = [];
         this.clientName = null;
+        this.isNewMode = false;
         this.deleteAddressName = null;
         this.init();
     }
@@ -19,15 +20,49 @@ class Plc4xClientDetailManager {
         // Get client name from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         this.clientName = urlParams.get('client');
+        this.isNewMode = urlParams.get('new') === 'true';
 
-        if (!this.clientName) {
+        if (!this.clientName && !this.isNewMode) {
             this.showError('No client specified');
             return;
         }
 
         // Load data
         await this.loadClusterNodes();
-        await this.loadClient();
+
+        if (this.isNewMode) {
+            this.setupNewClient();
+        } else {
+            await this.loadClient();
+        }
+    }
+
+    setupNewClient() {
+        // Update page title
+        document.getElementById('client-title').textContent = 'New PLC4X Client';
+        document.getElementById('client-subtitle').textContent = 'Configure a new PLC4X device connection';
+
+        // Set default values
+        document.getElementById('client-enabled').checked = true;
+        document.getElementById('client-config-enabled').checked = true;
+        document.getElementById('client-polling-interval').value = '1000';
+        document.getElementById('client-reconnect-delay').value = '5000';
+        document.getElementById('client-protocol').value = 'S7';
+
+        // Hide addresses section in new mode (will be available after saving)
+        const addressesSection = document.getElementById('addresses-section');
+        if (addressesSection) {
+            addressesSection.style.display = 'none';
+        }
+
+        // Show content
+        document.getElementById('client-content').style.display = 'block';
+
+        // Update save button text
+        const saveButton = document.getElementById('save-client-btn');
+        if (saveButton) {
+            saveButton.textContent = 'Create Client';
+        }
     }
 
     async loadClusterNodes() {
@@ -137,6 +172,7 @@ class Plc4xClientDetailManager {
 
         // Populate form fields
         document.getElementById('client-name').value = this.clientData.name;
+        document.getElementById('client-name').disabled = true; // Can't change name in edit mode
         document.getElementById('client-namespace').value = this.clientData.namespace;
         document.getElementById('client-protocol').value = this.clientData.config.protocol;
         document.getElementById('client-connection-string').value = this.clientData.config.connectionString;
@@ -337,54 +373,103 @@ class Plc4xClientDetailManager {
     }
 
     async saveClient() {
-        if (!this.clientData) return;
+        // Validate required fields
+        const name = document.getElementById('client-name').value.trim();
+        const namespace = document.getElementById('client-namespace').value.trim();
+        const protocol = document.getElementById('client-protocol').value;
+        const connectionString = document.getElementById('client-connection-string').value.trim();
+        const nodeId = document.getElementById('client-node').value;
+
+        if (!name || !namespace || !protocol || !connectionString || !nodeId) {
+            this.showError('Please fill in all required fields');
+            return;
+        }
 
         const clientData = {
-            name: document.getElementById('client-name').value.trim(),
-            namespace: document.getElementById('client-namespace').value.trim(),
-            nodeId: document.getElementById('client-node').value,
+            name: name,
+            namespace: namespace,
+            nodeId: nodeId,
             enabled: document.getElementById('client-enabled').checked,
             config: {
-                protocol: document.getElementById('client-protocol').value,
-                connectionString: document.getElementById('client-connection-string').value.trim(),
+                protocol: protocol,
+                connectionString: connectionString,
                 pollingInterval: parseInt(document.getElementById('client-polling-interval').value),
                 reconnectDelay: parseInt(document.getElementById('client-reconnect-delay').value),
                 enabled: document.getElementById('client-config-enabled').checked,
-                addresses: this.clientData.config.addresses
+                addresses: this.isNewMode ? [] : (this.clientData.config.addresses || [])
             }
         };
 
         try {
-            const mutation = `
-                mutation UpdatePlc4xClient($name: String!, $input: Plc4xClientInput!) {
-                    plc4xDevice {
-                        update(name: $name, input: $input) {
-                            success
-                            errors
-                            client {
-                                name
-                            }
+            if (this.isNewMode) {
+                await this.createClient(clientData);
+            } else {
+                await this.updateClient(clientData);
+            }
+        } catch (error) {
+            console.error('Error saving client:', error);
+            this.showError('Failed to save client: ' + error.message);
+        }
+    }
+
+    async createClient(clientData) {
+        const mutation = `
+            mutation CreatePlc4xClient($input: Plc4xClientInput!) {
+                plc4xDevice {
+                    create(input: $input) {
+                        success
+                        errors
+                        client {
+                            name
+                            enabled
                         }
                     }
                 }
-            `;
-
-            const result = await this.client.query(mutation, {
-                name: this.clientName,
-                input: clientData
-            });
-
-            if (result.plc4xDevice.update.success) {
-                await this.loadClient();
-                this.showSuccess(`Client "${this.clientName}" updated successfully`);
-            } else {
-                const errors = result.plc4xDevice.update.errors || ['Unknown error'];
-                this.showError('Failed to update client: ' + errors.join(', '));
             }
+        `;
 
-        } catch (error) {
-            console.error('Error updating client:', error);
-            this.showError('Failed to update client: ' + error.message);
+        const result = await this.client.query(mutation, { input: clientData });
+
+        if (result.plc4xDevice.create.success) {
+            this.showSuccess(`Client "${clientData.name}" created successfully. Redirecting to edit page...`);
+            // Redirect to edit mode so the user can add addresses
+            setTimeout(() => {
+                window.location.href = '/pages/plc4x-client-detail.html?client=' + encodeURIComponent(clientData.name);
+            }, 1500);
+        } else {
+            const errors = result.plc4xDevice.create.errors || ['Unknown error'];
+            this.showError('Failed to create client: ' + errors.join(', '));
+        }
+    }
+
+    async updateClient(clientData) {
+        const mutation = `
+            mutation UpdatePlc4xClient($name: String!, $input: Plc4xClientInput!) {
+                plc4xDevice {
+                    update(name: $name, input: $input) {
+                        success
+                        errors
+                        client {
+                            name
+                            enabled
+                        }
+                    }
+                }
+            }
+        `;
+
+        const result = await this.client.query(mutation, {
+            name: this.clientName,
+            input: clientData
+        });
+
+        if (result.plc4xDevice.update.success) {
+            this.showSuccess(`Client "${clientData.name}" updated successfully`);
+            // Reload the client data
+            await this.loadClient();
+        } else {
+            const errors = result.plc4xDevice.update.errors || ['Unknown error'];
+            this.showError('Failed to update client: ' + errors.join(', '));
         }
     }
 
