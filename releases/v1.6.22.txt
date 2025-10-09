@@ -1,0 +1,11 @@
+Release v1.6.22
+Built from commit: 7f827d7
+Date: 2025-10-09 19:32:08
+
+Changes since v1.6.21:
+---
+7f827d7 Add connection status to WinCC OA client metrics
+6ef52b5 Remove emoji from connection status text
+c6a508a Shorten chart dataset labels in dashboard.js
+2602d61 Do fine log messages with lambdas
+35b6878 Add WinCC UA client metrics to dashboard
