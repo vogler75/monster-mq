@@ -148,7 +148,7 @@ class WinCCUaClientManager {
             const messagesIn = metrics ? Math.round(metrics.messagesIn) : '0';
             const connected = metrics ? metrics.connected : false;
             const connectionClass = connected ? 'status-connected' : 'status-disconnected';
-            const connectionText = connected ? '🟢 Connected' : '🔴 Disconnected';
+            const connectionText = connected ? 'Connected' : 'Disconnected';
 
             row.innerHTML = `
                 <td>
