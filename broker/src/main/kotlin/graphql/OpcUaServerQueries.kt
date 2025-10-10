@@ -28,62 +28,87 @@ class OpcUaServerQueries(
     private val currentNodeId = Monster.getClusterNodeId(vertx)
 
     /**
-     * Get all OPC UA server configurations across the cluster
+     * Get OPC UA server configurations with optional filters
      */
     fun opcUaServers(): DataFetcher<CompletableFuture<List<OpcUaServerInfo>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<OpcUaServerInfo>>()
+            val name = env.getArgument<String?>("name")
+            val nodeId = env.getArgument<String?>("node")
 
-            deviceConfigStore.getAllDevices().onComplete { result ->
-                if (result.succeeded()) {
-                    try {
-                        val servers = result.result()
-                            .filter { it.type == DEVICE_TYPE }
-                            .map { device ->
-                                convertToOpcUaServerInfo(device)
+            when {
+                // Filter by both name and node
+                name != null && nodeId != null -> {
+                    deviceConfigStore.getDevicesByNode(nodeId).onComplete { result ->
+                        if (result.succeeded()) {
+                            try {
+                                val servers = result.result()
+                                    .filter { it.type == DEVICE_TYPE && it.name == name }
+                                    .map { device -> convertToOpcUaServerInfo(device) }
+                                getServersWithStatus(servers, future)
+                            } catch (e: Exception) {
+                                logger.severe("Error processing OPC UA servers: ${e.message}")
+                                future.completeExceptionally(e)
                             }
-
-                        // Get status for each server
-                        getServersWithStatus(servers, future)
-
-                    } catch (e: Exception) {
-                        logger.severe("Error processing OPC UA servers: ${e.message}")
-                        future.completeExceptionally(e)
+                        } else {
+                            logger.severe("Failed to load OPC UA servers: ${result.cause()?.message}")
+                            future.complete(emptyList())
+                        }
                     }
-                } else {
-                    logger.severe("Failed to load OPC UA servers: ${result.cause()?.message}")
-                    future.complete(emptyList()) // Return empty list instead of null to satisfy non-null GraphQL schema
                 }
-            }
-
-            future
-        }
-    }
-
-    /**
-     * Get a specific OPC UA server by name
-     */
-    fun opcUaServer(): DataFetcher<CompletableFuture<OpcUaServerInfo?>> {
-        return DataFetcher { env ->
-            val future = CompletableFuture<OpcUaServerInfo?>()
-            val name = env.getArgument<String>("name")
-
-            if (name == null) {
-                future.complete(null)
-                return@DataFetcher future
-            }
-
-            deviceConfigStore.getDevice(name).onComplete { result ->
-                if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
-                    try {
-                        val serverInfo = convertToOpcUaServerInfo(result.result()!!)
-                        getServerWithStatus(serverInfo, future)
-                    } catch (e: Exception) {
-                        logger.severe("Error processing OPC UA server: ${e.message}")
-                        future.completeExceptionally(e)
+                // Filter by name only
+                name != null -> {
+                    deviceConfigStore.getDevice(name).onComplete { result ->
+                        if (result.succeeded() && result.result()?.type == DEVICE_TYPE) {
+                            try {
+                                val serverInfo = convertToOpcUaServerInfo(result.result()!!)
+                                getServersWithStatus(listOf(serverInfo), future)
+                            } catch (e: Exception) {
+                                logger.severe("Error processing OPC UA server: ${e.message}")
+                                future.completeExceptionally(e)
+                            }
+                        } else {
+                            future.complete(emptyList())
+                        }
                     }
-                } else {
-                    future.complete(null)
+                }
+                // Filter by node only
+                nodeId != null -> {
+                    deviceConfigStore.getAllDevices().onComplete { result ->
+                        if (result.succeeded()) {
+                            try {
+                                val servers = result.result()
+                                    .filter { it.type == DEVICE_TYPE && (it.nodeId == nodeId || it.nodeId == "*") }
+                                    .map { device -> convertToOpcUaServerInfo(device) }
+                                getServersWithStatus(servers, future)
+                            } catch (e: Exception) {
+                                logger.severe("Error processing OPC UA servers for node $nodeId: ${e.message}")
+                                future.completeExceptionally(e)
+                            }
+                        } else {
+                            logger.severe("Failed to load OPC UA servers for node $nodeId: ${result.cause()?.message}")
+                            future.complete(emptyList())
+                        }
+                    }
+                }
+                // No filters - return all
+                else -> {
+                    deviceConfigStore.getAllDevices().onComplete { result ->
+                        if (result.succeeded()) {
+                            try {
+                                val servers = result.result()
+                                    .filter { it.type == DEVICE_TYPE }
+                                    .map { device -> convertToOpcUaServerInfo(device) }
+                                getServersWithStatus(servers, future)
+                            } catch (e: Exception) {
+                                logger.severe("Error processing OPC UA servers: ${e.message}")
+                                future.completeExceptionally(e)
+                            }
+                        } else {
+                            logger.severe("Failed to load OPC UA servers: ${result.cause()?.message}")
+                            future.complete(emptyList())
+                        }
+                    }
                 }
             }
 
@@ -143,44 +168,6 @@ class OpcUaServerQueries(
             } catch (e: Exception) {
                 logger.severe("Error in opcUaServerCertificates: ${e.message}")
                 future.completeExceptionally(e)
-            }
-
-            future
-        }
-    }
-
-    /**
-     * Get OPC UA servers assigned to a specific cluster node
-     */
-    fun opcUaServersByNode(): DataFetcher<CompletableFuture<List<OpcUaServerInfo>>> {
-        return DataFetcher { env ->
-            val future = CompletableFuture<List<OpcUaServerInfo>>()
-            val nodeId = env.getArgument<String>("nodeId")
-
-            if (nodeId == null) {
-                future.complete(emptyList())
-                return@DataFetcher future
-            }
-
-            deviceConfigStore.getAllDevices().onComplete { result ->
-                if (result.succeeded()) {
-                    try {
-                        val servers = result.result()
-                            .filter { it.type == DEVICE_TYPE && (it.nodeId == nodeId || it.nodeId == "*") }
-                            .map { device ->
-                                convertToOpcUaServerInfo(device)
-                            }
-
-                        getServersWithStatus(servers, future)
-
-                    } catch (e: Exception) {
-                        logger.severe("Error processing OPC UA servers for node $nodeId: ${e.message}")
-                        future.completeExceptionally(e)
-                    }
-                } else {
-                    logger.severe("Failed to load OPC UA servers for node $nodeId: ${result.cause()?.message}")
-                    future.complete(emptyList())
-                }
             }
 
             future
@@ -355,15 +342,6 @@ class OpcUaServerQueries(
                 logger.warning("Timeout waiting for server status, returning partial results")
                 future.complete(serversWithStatus.toList())
             }
-        }
-    }
-
-    /**
-     * Get a single server with its runtime status
-     */
-    private fun getServerWithStatus(server: OpcUaServerInfo, future: CompletableFuture<OpcUaServerInfo?>) {
-        getServerStatus(server.name, server.nodeId) { status ->
-            future.complete(server.copy(status = status))
         }
     }
 

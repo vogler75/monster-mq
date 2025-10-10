@@ -326,8 +326,6 @@ class GraphQLServer(
                     .apply {
                         opcUaQueries?.let { resolver ->
                             dataFetcher("opcUaDevices", resolver.opcUaDevices())
-                            dataFetcher("opcUaDevice", resolver.opcUaDevice())
-                            dataFetcher("opcUaDevicesByNode", resolver.opcUaDevicesByNode())
                             dataFetcher("clusterNodes", resolver.clusterNodes())
                         }
                     }
@@ -335,8 +333,6 @@ class GraphQLServer(
                     .apply {
                         opcUaServerQueries?.let { resolver ->
                             dataFetcher("opcUaServers", resolver.opcUaServers())
-                            dataFetcher("opcUaServer", resolver.opcUaServer())
-                            dataFetcher("opcUaServersByNode", resolver.opcUaServersByNode())
                             dataFetcher("opcUaServerCertificates", resolver.opcUaServerCertificates())
                         }
                     }
@@ -344,40 +340,30 @@ class GraphQLServer(
                     .apply {
                         mqttClientQueries?.let { resolver ->
                             dataFetcher("mqttClients", resolver.mqttClients())
-                            dataFetcher("mqttClient", resolver.mqttClient())
-                            dataFetcher("mqttClientsByNode", resolver.mqttClientsByNode())
                         }
                     }
                     // Kafka Client queries
                     .apply {
                         kafkaClientQueries?.let { resolver ->
                             dataFetcher("kafkaClients", resolver.kafkaClients())
-                            dataFetcher("kafkaClient", resolver.kafkaClient())
-                            dataFetcher("kafkaClientsByNode", resolver.kafkaClientsByNode())
                         }
                     }
                     // WinCC OA Client queries
                     .apply {
                         winCCOaClientQueries?.let { resolver ->
                             dataFetcher("winCCOaClients", resolver.winCCOaClients())
-                            dataFetcher("winCCOaClient", resolver.winCCOaClient())
-                            dataFetcher("winCCOaClientsByNode", resolver.winCCOaClientsByNode())
                         }
                     }
                     // WinCC Unified Client queries
                     .apply {
                         winCCUaClientQueries?.let { resolver ->
                             dataFetcher("winCCUaClients", resolver.winCCUaClients())
-                            dataFetcher("winCCUaClient", resolver.winCCUaClient())
-                            dataFetcher("winCCUaClientsByNode", resolver.winCCUaClientsByNode())
                         }
                     }
                     // PLC4X Client queries
                     .apply {
                         plc4xClientQueries?.let { resolver ->
                             dataFetcher("plc4xClients", resolver.plc4xClients())
-                            dataFetcher("plc4xClient", resolver.plc4xClient())
-                            dataFetcher("plc4xClientsByNode", resolver.plc4xClientsByNode())
                         }
                     }
             }

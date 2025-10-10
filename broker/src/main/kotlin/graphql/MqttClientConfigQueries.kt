@@ -20,90 +20,75 @@ class MqttClientConfigQueries(
     private val logger: Logger = Utils.getLogger(MqttClientConfigQueries::class.java)
 
     fun mqttClients(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
-        return DataFetcher { _ ->
+        return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any>>>()
 
             try {
-                deviceStore.getAllDevices().onComplete { result ->
-                    if (result.succeeded()) {
-                        // Filter to only return MQTT-Client type devices
-                        val deviceMaps = result.result()
-                            .filter { device -> device.type == DeviceConfig.DEVICE_TYPE_MQTT_CLIENT }
-                            .map { device -> deviceToMap(device) }
-                        future.complete(deviceMaps)
-                    } else {
-                        logger.severe("Error fetching MQTT clients: ${result.cause()?.message}")
-                        future.complete(emptyList())
+                val name = env.getArgument<String?>("name")
+                val nodeId = env.getArgument<String?>("node")
+
+                when {
+                    // Filter by both name and node
+                    name != null && nodeId != null -> {
+                        deviceStore.getDevicesByNode(nodeId).onComplete { result ->
+                            if (result.succeeded()) {
+                                val deviceMaps = result.result()
+                                    .filter { it.type == DeviceConfig.DEVICE_TYPE_MQTT_CLIENT && it.name == name }
+                                    .map { deviceToMap(it) }
+                                future.complete(deviceMaps)
+                            } else {
+                                logger.severe("Error fetching MQTT clients: ${result.cause()?.message}")
+                                future.complete(emptyList())
+                            }
+                        }
+                    }
+                    // Filter by name only
+                    name != null -> {
+                        deviceStore.getDevice(name).onComplete { result ->
+                            if (result.succeeded()) {
+                                val device = result.result()
+                                if (device != null && device.type == DeviceConfig.DEVICE_TYPE_MQTT_CLIENT) {
+                                    future.complete(listOf(deviceToMap(device)))
+                                } else {
+                                    future.complete(emptyList())
+                                }
+                            } else {
+                                logger.severe("Error fetching MQTT client: ${result.cause()?.message}")
+                                future.complete(emptyList())
+                            }
+                        }
+                    }
+                    // Filter by node only
+                    nodeId != null -> {
+                        deviceStore.getDevicesByNode(nodeId).onComplete { result ->
+                            if (result.succeeded()) {
+                                val deviceMaps = result.result()
+                                    .filter { it.type == DeviceConfig.DEVICE_TYPE_MQTT_CLIENT }
+                                    .map { deviceToMap(it) }
+                                future.complete(deviceMaps)
+                            } else {
+                                logger.severe("Error fetching MQTT clients by node: ${result.cause()?.message}")
+                                future.complete(emptyList())
+                            }
+                        }
+                    }
+                    // No filters - return all
+                    else -> {
+                        deviceStore.getAllDevices().onComplete { result ->
+                            if (result.succeeded()) {
+                                val deviceMaps = result.result()
+                                    .filter { it.type == DeviceConfig.DEVICE_TYPE_MQTT_CLIENT }
+                                    .map { deviceToMap(it) }
+                                future.complete(deviceMaps)
+                            } else {
+                                logger.severe("Error fetching MQTT clients: ${result.cause()?.message}")
+                                future.complete(emptyList())
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
                 logger.severe("Error fetching MQTT clients: ${e.message}")
-                future.complete(emptyList())
-            }
-
-            future
-        }
-    }
-
-    fun mqttClient(): DataFetcher<CompletableFuture<Map<String, Any>?>> {
-        return DataFetcher { env ->
-            val future = CompletableFuture<Map<String, Any>?>()
-
-            try {
-                val name = env.getArgument<String>("name")
-                if (name == null) {
-                    future.complete(null)
-                    return@DataFetcher future
-                }
-
-                deviceStore.getDevice(name).onComplete { result ->
-                    if (result.succeeded()) {
-                        val device = result.result()
-                        // Only return device if it's MQTT-Client type
-                        if (device != null && device.type == DeviceConfig.DEVICE_TYPE_MQTT_CLIENT) {
-                            future.complete(deviceToMap(device))
-                        } else {
-                            future.complete(null)
-                        }
-                    } else {
-                        logger.severe("Error fetching MQTT client: ${result.cause()?.message}")
-                        future.complete(null)
-                    }
-                }
-            } catch (e: Exception) {
-                logger.severe("Error fetching MQTT client: ${e.message}")
-                future.complete(null)
-            }
-
-            future
-        }
-    }
-
-    fun mqttClientsByNode(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
-        return DataFetcher { env ->
-            val future = CompletableFuture<List<Map<String, Any>>>()
-
-            try {
-                val nodeId = env.getArgument<String>("nodeId")
-                if (nodeId == null) {
-                    future.complete(emptyList())
-                    return@DataFetcher future
-                }
-
-                deviceStore.getDevicesByNode(nodeId).onComplete { result ->
-                    if (result.succeeded()) {
-                        // Filter to only return MQTT-Client type devices
-                        val deviceMaps = result.result()
-                            .filter { device -> device.type == DeviceConfig.DEVICE_TYPE_MQTT_CLIENT }
-                            .map { device -> deviceToMap(device) }
-                        future.complete(deviceMaps)
-                    } else {
-                        logger.severe("Error fetching MQTT clients by node: ${result.cause()?.message}")
-                        future.complete(emptyList())
-                    }
-                }
-            } catch (e: Exception) {
-                logger.severe("Error fetching MQTT clients by node: ${e.message}")
                 future.complete(emptyList())
             }
 

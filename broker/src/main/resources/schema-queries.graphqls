@@ -527,33 +527,29 @@ type OpcUaServerCertificate {
 
 # Extend existing Query type
 extend type Query {
-    # Get all OPC UA device configurations across the entire cluster
+    # Get OPC UA device configurations across the entire cluster
     # Returns devices from all cluster nodes, showing their assignment and status
-    opcUaDevices: [OpcUaDevice!]!
-
-    # Get a specific OPC UA device configuration by its unique name
-    # Device names must be unique across the entire MonsterMQ cluster
-    opcUaDevice(name: String!): OpcUaDevice
-
-    # Get OPC UA devices assigned to a specific cluster node
-    # Useful for monitoring device distribution and cluster load balancing
-    opcUaDevicesByNode(nodeId: String!): [OpcUaDevice!]!
+    # Use optional filters to narrow results to specific device or node
+    opcUaDevices(
+        # Filter by specific device name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [OpcUaDevice!]!
 
     # Get list of all available cluster nodes for device assignment
     # Shows which nodes are available for deploying OPC UA device connectors
     clusterNodes: [ClusterNode!]!
 
-    # Get all OPC UA server configurations across the entire cluster
+    # Get OPC UA server configurations across the entire cluster
     # Returns servers from all cluster nodes, showing their assignment and status
-    opcUaServers: [OpcUaServer!]!
-
-    # Get a specific OPC UA server configuration by its unique name
-    # Server names must be unique across the entire MonsterMQ cluster
-    opcUaServer(name: String!): OpcUaServer
-
-    # Get OPC UA servers assigned to a specific cluster node
-    # Useful for monitoring server distribution and cluster load balancing
-    opcUaServersByNode(nodeId: String!): [OpcUaServer!]!
+    # Use optional filters to narrow results to specific server or node
+    opcUaServers(
+        # Filter by specific server name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [OpcUaServer!]!
 
     # Get certificates for a specific OPC UA server
     opcUaServerCertificates(
@@ -562,20 +558,16 @@ extend type Query {
         trusted: Boolean
     ): [OpcUaServerCertificate!]!
 
-    # Get all MQTT client configurations across the entire cluster
+    # Get MQTT client configurations across the entire cluster
     # Returns clients from all cluster nodes, showing their assignment and connection status
-    mqttClients: [MqttClient!]!
-
-    # Get a specific MQTT client configuration by its unique name
-    # Client names must be unique across the entire MonsterMQ cluster
-    mqttClient(name: String!): MqttClient
-
-    # Get MQTT clients assigned to a specific cluster node
-    # Useful for monitoring client distribution and cluster load balancing
-    mqttClientsByNode(nodeId: String!): [MqttClient!]!
-
-
-    }
+    # Use optional filters to narrow results to specific client or node
+    mqttClients(
+        # Filter by specific client name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [MqttClient!]!
+}
 
 # MQTT Client Configuration Types
 #
@@ -753,18 +745,16 @@ type KafkaClient {
 
 # Extend Queries for Kafka clients
 extend type Query {
-    # Get all Kafka client bridge configurations across the entire cluster
+    # Get Kafka client bridge configurations across the entire cluster
     # Returns clients from all cluster nodes, showing their assignment and connection status
     # Kafka clients consume from external Kafka topics and republish as MQTT messages
-    kafkaClients: [KafkaClient!]!
-
-    # Get a specific Kafka client bridge configuration by its unique name
-    # Client names must be unique across the entire MonsterMQ cluster
-    kafkaClient(name: String!): KafkaClient
-
-    # Get Kafka clients assigned to a specific cluster node
-    # Useful for monitoring client distribution and cluster load balancing
-    kafkaClientsByNode(nodeId: String!): [KafkaClient!]!
+    # Use optional filters to narrow results to specific client or node
+    kafkaClients(
+        # Filter by specific client name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [KafkaClient!]!
 }
 
 #############################################
@@ -881,17 +871,15 @@ type WinCCOaClient {
 
 # Extend Queries for WinCC OA clients
 extend type Query {
-    # Get all WinCC OA client configurations across the entire cluster
+    # Get WinCC OA client configurations across the entire cluster
     # Returns clients from all cluster nodes, showing their assignment and connection status
-    winCCOaClients: [WinCCOaClient!]!
-
-    # Get a specific WinCC OA client configuration by its unique name
-    # Client names must be unique across the entire MonsterMQ cluster
-    winCCOaClient(name: String!): WinCCOaClient
-
-    # Get WinCC OA clients assigned to a specific cluster node
-    # Useful for monitoring client distribution and cluster load balancing
-    winCCOaClientsByNode(nodeId: String!): [WinCCOaClient!]!
+    # Use optional filters to narrow results to specific client or node
+    winCCOaClients(
+        # Filter by specific client name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [WinCCOaClient!]!
 }
 
 # ===================================
@@ -1008,17 +996,15 @@ type WinCCUaClient {
 
 # Extend Queries for WinCC Unified clients
 extend type Query {
-    # Get all WinCC Unified client configurations across the entire cluster
+    # Get WinCC Unified client configurations across the entire cluster
     # Returns clients from all cluster nodes, showing their assignment and connection status
-    winCCUaClients: [WinCCUaClient!]!
-
-    # Get a specific WinCC Unified client configuration by its unique name
-    # Client names must be unique across the entire MonsterMQ cluster
-    winCCUaClient(name: String!): WinCCUaClient
-
-    # Get WinCC Unified clients assigned to a specific cluster node
-    # Useful for monitoring client distribution and cluster load balancing
-    winCCUaClientsByNode(nodeId: String!): [WinCCUaClient!]!
+    # Use optional filters to narrow results to specific client or node
+    winCCUaClients(
+        # Filter by specific client name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [WinCCUaClient!]!
 }
 
 #############################################
@@ -1191,15 +1177,13 @@ type Plc4xClient {
 
 # Extend Queries for PLC4X clients
 extend type Query {
-    # Get all PLC4X client configurations across the entire cluster
+    # Get PLC4X client configurations across the entire cluster
     # Returns clients from all cluster nodes, showing their assignment and connection status
-    plc4xClients: [Plc4xClient!]!
-
-    # Get a specific PLC4X client configuration by its unique name
-    # Client names must be unique across the entire MonsterMQ cluster
-    plc4xClient(name: String!): Plc4xClient
-
-    # Get PLC4X clients assigned to a specific cluster node
-    # Useful for monitoring client distribution and cluster load balancing
-    plc4xClientsByNode(nodeId: String!): [Plc4xClient!]!
+    # Use optional filters to narrow results to specific client or node
+    plc4xClients(
+        # Filter by specific client name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [Plc4xClient!]!
 }
