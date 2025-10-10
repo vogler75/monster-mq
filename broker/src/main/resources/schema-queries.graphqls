@@ -1,0 +1,1205 @@
+type Query {
+    # Get the most recent value for a specific MQTT topic from the LastValueStore
+    # Returns the latest published value with timestamp and QoS information
+    # Useful for dashboard displays and current status monitoring
+    currentValue(
+        # Exact MQTT topic name (no wildcards allowed)
+        topic: String!,
+        # Data format for the payload: JSON (parsed) or BINARY (base64 encoded)
+        format: DataFormat = JSON,
+        # ArchiveGroup containing the topic's last value store
+        archiveGroup: String = "Default"
+    ): TopicValue
+
+    # Get current values for multiple topics matching an MQTT topic filter
+    # Supports MQTT wildcards: '+' (single level) and '#' (multi-level)
+    # Returns array of most recent values from the LastValueStore
+    currentValues(
+        # MQTT topic filter with wildcards: "sensor/+/temperature", "device/#", etc.
+        topicFilter: String!,
+        # Data format for all returned payloads
+        format: DataFormat = JSON,
+        # Maximum number of topics to return (ordered by topic name)
+        limit: Int = 100,
+        # ArchiveGroup to search within
+        archiveGroup: String = "Default"
+    ): [TopicValue!]!
+
+    # Get retained message for a specific MQTT topic from the RetainedMessageStore
+    # Retained messages persist until explicitly removed or overwritten
+    # Different from currentValue as it only includes messages published with retain=true
+    retainedMessage(
+        # Exact MQTT topic name
+        topic: String!,
+        # Data format for the payload
+        format: DataFormat = JSON
+    ): RetainedMessage
+
+    # Get all retained messages matching an MQTT topic filter
+    # Returns messages that were published with the MQTT retain flag
+    # Useful for discovering what retained data exists in the system
+    retainedMessages(
+        # MQTT topic filter with wildcards (optional - null returns all retained messages)
+        topicFilter: String,
+        # Data format for all payloads
+        format: DataFormat = JSON,
+        # Maximum number of messages to return
+        limit: Int = 100
+    ): [RetainedMessage!]!
+
+    # Query historical messages from the message archive
+    # Searches through time-series data stored for long-term analysis
+    # Returns messages within specified time range and topic filter
+    archivedMessages(
+        # MQTT topic filter with wildcards to match archived messages
+        topicFilter: String!
+        # ISO 8601 start timestamp: "2024-01-15T10:00:00Z" (optional - defaults to 24h ago)
+        startTime: String
+        # ISO 8601 end timestamp: "2024-01-15T11:00:00Z" (optional - defaults to now)
+        endTime: String
+        # Data format for all payloads
+        format: DataFormat = JSON
+        # Maximum number of messages to return (ordered by timestamp)
+        limit: Int = 100
+        # ArchiveGroup containing the message archive to search
+        archiveGroup: String = "Default"
+    ): [ArchivedMessage!]!
+
+    # Search for topics by name pattern using SQL LIKE wildcards
+    # Supports '%' (matches any sequence of characters) and '_' (matches single character)
+    # Examples:
+    #   pattern: "sensor%" → finds all topics starting with "sensor"
+    #   pattern: "%temperature%" → finds all topics containing "temperature"
+    #   pattern: "device_0_" → finds topics like "device_01", "device_02", etc.
+    # Requires an ArchiveGroup to search within its last value store
+    searchTopics(
+        # SQL LIKE pattern with % and _ wildcards
+        pattern: String!
+        # Maximum number of topics to return
+        limit: Int = 100
+        # ArchiveGroup name to search within (each group has its own last value store)
+        archiveGroup: String = "Default"
+    ): [String!]!
+
+    # Browse topics hierarchically using MQTT-style topic structure
+    # Uses MQTT topic conventions: '/' as level separator, '+' for single-level wildcard
+    # Returns only direct child topics (one level down) from the specified path
+    # Examples:
+    #   topic: "opcua" → returns ["opcua/device1", "opcua/device2"] (not deeper levels)
+    #   topic: "opcua/+" → returns all topics at opcua/device level like "opcua/device1/sensor1"
+    #   topic: "+" → returns all top-level topic categories
+    # Requires an ArchiveGroup because topics are stored in the group's last value store
+    browseTopics(
+        # MQTT topic path with optional '+' single-level wildcard
+        topic: String!
+        # ArchiveGroup name containing the topics (required for data isolation)
+        archiveGroup: String = "Default"
+    ): [Topic!]!
+
+    # Get broker node information and metrics for monitoring cluster health
+    # Returns current metrics, session counts, and node status information
+    broker(
+        # Cluster node ID (optional - if omitted, returns current node)
+        nodeId: String
+    ): Broker
+
+    # Get information about all broker nodes in the MonsterMQ cluster
+    # Useful for cluster monitoring and load distribution analysis
+    # Returns array of all active cluster nodes with their metrics
+    brokers: [Broker!]!
+
+    # Get MQTT client sessions across the cluster or from specific nodes
+    # Sessions represent MQTT client connections with their state and subscriptions
+    sessions(
+        # Filter by specific cluster node (optional - if omitted, returns sessions from all nodes)
+        nodeId: String,
+        # Filter by session type: true=clean sessions, false=persistent sessions, null=all
+        cleanSession: Boolean,
+        # Filter by connection status: true=connected, false=disconnected, null=all
+        connected: Boolean
+    ): [Session!]!
+
+    # Get detailed information about a specific MQTT client session
+    # Includes metrics, subscriptions, and connection status
+    session(
+        # MQTT client ID to look up
+        clientId: String!,
+        # Node ID where session is located (optional - will be auto-discovered if omitted)
+        nodeId: String
+    ): Session
+
+    # User Management - Get user accounts and their permissions
+    # Returns authentication and authorization information for MQTT access control
+    users(
+        # Filter by specific username (optional - if omitted, returns all users)
+        username: String
+    ): [UserInfo!]!
+
+    # ArchiveGroup Management - Get data archiving configurations
+    # Shows how MQTT topics are organized and stored across different databases
+    archiveGroups(
+        # Filter by enabled status (true=only enabled, false=only disabled, null=all)
+        enabled: Boolean
+        # Filter to only include groups with this specific lastValType (e.g., POSTGRES, CRATEDB)
+        lastValTypeEquals: MessageStoreType
+        # Filter to exclude groups with this specific lastValType (e.g., NONE to exclude groups without last value stores)
+        lastValTypeNotEquals: MessageStoreType
+    ): [ArchiveGroupInfo!]!
+
+    # Get detailed information about a specific ArchiveGroup
+    # Includes topic filters, storage configuration, and connection status
+    archiveGroup(
+        # Name of the ArchiveGroup to retrieve
+        name: String!
+    ): ArchiveGroupInfo
+}
+
+type TopicValue {
+    topic: String!
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
+    qos: Int!
+}
+
+type Topic {
+    # The topic name
+    name: String!
+    # The current value for this topic (null if no value exists)
+    value(format: DataFormat = JSON): TopicValue
+}
+
+type RetainedMessage {
+    topic: String!
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
+    qos: Int!
+}
+
+type ArchivedMessage {
+    topic: String!
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
+    qos: Int!
+    clientId: String
+}
+
+# User Management Types
+
+type UserInfo {
+    username: String!
+    enabled: Boolean!
+    canSubscribe: Boolean!
+    canPublish: Boolean!
+    isAdmin: Boolean!
+    createdAt: String
+    updatedAt: String
+    aclRules: [AclRuleInfo!]!
+}
+
+type AclRuleInfo {
+    id: String!
+    username: String!
+    topicPattern: String!
+    canSubscribe: Boolean!
+    canPublish: Boolean!
+    priority: Int!
+    createdAt: String
+}
+
+# ArchiveGroup Management Types
+#
+# ArchiveGroups are essential for organizing and managing MQTT data storage in MonsterMQ.
+# Each ArchiveGroup defines:
+# 1. Topic filters that determine which MQTT topics are stored
+# 2. Storage backends (PostgreSQL, CrateDB, MongoDB, etc.) for both last values and historical data
+# 3. Data retention policies and purge intervals
+# 4. Whether to store only retained messages or all messages matching the filters
+#
+# Why ArchiveGroups are required for searchTopics and browseTopics:
+# - MonsterMQ stores topic data in separate databases/collections per ArchiveGroup
+# - Each group has its own "last value store" containing the most recent value for each topic
+# - This isolation allows different topic categories to use different storage backends
+# - Examples: IoT sensors in PostgreSQL, OPC UA data in CrateDB, logs in MongoDB
+# - The "Default" ArchiveGroup is required and typically contains general MQTT topics
+#
+# Topic organization example:
+# - Default ArchiveGroup: general/* topics → PostgreSQL
+# - Industrial ArchiveGroup: opcua/*, modbus/* → CrateDB
+# - Logging ArchiveGroup: logs/*, events/* → MongoDB
+
+type NodeConnectionStatus {
+    nodeId: String!
+    # Connection status for different store components
+    messageArchive: Boolean
+    lastValueStore: Boolean
+    # Error message if connection failed
+    error: String
+    # Timestamp when status was checked
+    timestamp: Long!
+}
+
+type ArchiveGroupInfo {
+    name: String!
+    enabled: Boolean!
+    deployed: Boolean!
+    deploymentId: String
+    topicFilter: [String!]!
+    retainedOnly: Boolean!
+    lastValType: MessageStoreType!
+    archiveType: MessageArchiveType!
+    payloadFormat: PayloadFormat!
+    lastValRetention: String
+    archiveRetention: String
+    purgeInterval: String
+    createdAt: String
+    updatedAt: String
+    # Database connection status from all nodes in the cluster
+    connectionStatus: [NodeConnectionStatus!]!
+    # Current metrics for this archive group (single most recent entry)
+    metrics: [ArchiveGroupMetrics!]!
+    # Historical metrics data for this archive group
+    metricsHistory(
+        # ISO 8601 timestamp for start of time range (e.g., "2024-01-15T10:00:00Z")
+        from: String
+        # ISO 8601 timestamp for end of time range (e.g., "2024-01-15T11:00:00Z")
+        to: String
+        # Alternative to from/to: get metrics from the last N minutes
+        lastMinutes: Int
+    ): [ArchiveGroupMetrics!]!
+}
+
+# OPC UA Device Configuration Types
+
+enum OpcUaPublishMode {
+    SINGLE
+    SEPARATE
+}
+
+# Certificate configuration for OPC UA connections with TLS/SSL security
+type CertificateConfig {
+    # Directory for storing certificates and keystores (relative to application root)
+    securityDir: String!
+    # Application name used in certificate subject (e.g., "MonsterMQ@localhost")
+    applicationName: String!
+    # Unique application URI for OPC UA client identification
+    applicationUri: String!
+    # Organization name for certificate subject
+    organization: String!
+    # Organizational unit for certificate subject
+    organizationalUnit: String!
+    # Locality/city name for certificate subject
+    localityName: String!
+    # Two-letter country code for certificate subject (e.g., "US", "DE")
+    countryCode: String!
+    # Whether to automatically create self-signed certificates if none exist
+    createSelfSigned: Boolean!
+    # Password for protecting the keystore containing client certificates
+    keystorePassword: String!
+    # Whether to validate server certificates (enable for production security)
+    validateServerCertificate: Boolean!
+    # Auto-accept and save new server certificates to trust store (useful for initial setup)
+    autoAcceptServerCertificates: Boolean!
+}
+
+# OPC UA address configuration for subscribing to OPC UA server nodes
+type OpcUaAddress {
+    # OPC UA node address - can be either NodeId or BrowsePath format:
+    # NodeId examples: "ns=2;i=1234", "ns=2;s=MyDevice.Temperature", "ns=2;g=550e8400-e29b-41d4-a716-446655440000"
+    # BrowsePath examples: "/Root/Objects/MyDevice/Temperature", "/Objects/2:MyDevice/2:Sensor1"
+    # NodeId is more efficient, BrowsePath is more human-readable but requires browsing
+    address: String!
+    # MQTT topic where OPC UA values will be published
+    topic: String!
+    # How to publish OPC UA values: SINGLE (all in one message) or SEPARATE (individual messages)
+    publishMode: OpcUaPublishMode!
+    # Whether to remove the browse path from the topic name when using BrowsePath addresses
+    removePath: Boolean!
+}
+
+type MonitoringParameters {
+    bufferSize: Int!
+    samplingInterval: Float!
+    discardOldest: Boolean!
+}
+
+enum SecurityPolicy {
+    None
+    Basic256Sha256
+    Basic256
+    Basic128Rsa15
+    Aes256_Sha256_RsaPss
+    Aes128_Sha256_RsaOaep
+}
+
+type OpcUaConnectionConfig {
+    endpointUrl: String!
+    updateEndpointUrl: Boolean!
+    securityPolicy: SecurityPolicy!
+    username: String
+    password: String
+    subscriptionSamplingInterval: Float!
+    keepAliveFailuresAllowed: Int!
+    reconnectDelay: Long!
+    connectionTimeout: Long!
+    requestTimeout: Long!
+    monitoringParameters: MonitoringParameters!
+    addresses: [OpcUaAddress!]!
+    # Certificate configuration for TLS/SSL connections and client authentication
+    certificateConfig: CertificateConfig!
+}
+
+type OpcUaDevice {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    backupNodeId: String
+    config: OpcUaConnectionConfig!
+    enabled: Boolean!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    # Current OPC UA device metrics (single most recent entry)
+    metrics: [OpcUaDeviceMetrics!]!
+    # Historical OPC UA device metrics (time-series)
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+        limit: Int = 100
+    ): [OpcUaDeviceMetrics!]!
+}
+
+type ClusterNode {
+    nodeId: String!
+    isCurrent: Boolean!
+}
+
+# OPC UA Server configuration that exposes MQTT topics as hierarchical OPC UA nodes
+type OpcUaServer {
+    # Unique server name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Target cluster node ("*" for all nodes, specific ID for single node)
+    nodeId: String!
+    # Whether the server is enabled
+    enabled: Boolean!
+    # OPC UA server port
+    port: Int!
+    # OPC UA server endpoint path
+    path: String!
+    # OPC UA namespace index
+    namespaceIndex: Int!
+    # OPC UA namespace URI
+    namespaceUri: String!
+    # MQTT topic to OPC UA node mappings
+    addresses: [OpcUaServerAddress!]!
+    # Security configuration
+    security: OpcUaServerSecurity!
+    # Buffer size for value updates
+    bufferSize: Int!
+    # Minimum update interval in milliseconds
+    updateInterval: Long!
+    # Server creation timestamp
+    createdAt: String!
+    # Server last update timestamp
+    updatedAt: String!
+    # Whether this server is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current server status (if running on accessible node)
+    status: OpcUaServerStatus
+    # List trusted certificates for this server
+    trustedCertificates: [OpcUaServerCertificate!]!
+    # List untrusted (rejected) certificates for this server
+    untrustedCertificates: [OpcUaServerCertificate!]!
+}
+
+# MQTT topic to OPC UA node mapping configuration
+type OpcUaServerAddress {
+    # MQTT topic pattern with wildcards (e.g., "factory/+/temperature")
+    mqttTopic: String!
+    # Optional human-readable display name for the OPC UA node
+    displayName: String
+    # Optional browse name (defaults to last topic segment)
+    browseName: String
+    # Optional description for the node
+    description: String
+    # Data type conversion strategy
+    dataType: OpcUaServerDataType!
+    # OPC UA node access level
+    accessLevel: OpcUaServerAccessLevel!
+    # Optional engineering unit (e.g., "°C", "bar")
+    unit: String
+}
+
+# Data type conversion strategy between MQTT and OPC UA
+enum OpcUaServerDataType {
+    # ByteString - raw payload bytes
+    BINARY
+    # String - payload as UTF-8 text
+    TEXT
+    # Double - parse payload as number
+    NUMERIC
+    # Boolean - parse payload as true/false
+    BOOLEAN
+    # Custom JSON format: {"value": x, "timestamp": "iso", "status": int}
+    JSON
+}
+
+# OPC UA node access level
+enum OpcUaServerAccessLevel {
+    # OPC UA clients can only read
+    READ_ONLY
+    # OPC UA clients can read and write (writes go back to MQTT)
+    READ_WRITE
+}
+
+# Security configuration for OPC UA server
+type OpcUaServerSecurity {
+    # Path to keystore file (default: reuse MQTT server keystore)
+    keystorePath: String!
+    # Certificate alias in keystore
+    certificateAlias: String!
+    # Supported security policies
+    securityPolicies: [String!]!
+    # Allow anonymous access
+    allowAnonymous: Boolean!
+    # Require user authentication
+    requireAuthentication: Boolean!
+}
+
+# Current status of an OPC UA Server instance
+type OpcUaServerStatus {
+    # Server name
+    serverName: String!
+    # Node ID where server is running
+    nodeId: String!
+    # Current status
+    status: OpcUaServerStatusEnum!
+    # Server port (if running)
+    port: Int
+    # Bound addresses (if running)
+    boundAddresses: [String!]!
+    # OPC UA endpoint URL (if running)
+    endpointUrl: String
+    # Number of active client connections
+    activeConnections: Int!
+    # Number of OPC UA nodes created
+    nodeCount: Int!
+    # Error message (if status is ERROR)
+    error: String
+    # Last status update timestamp
+    lastUpdated: String!
+}
+
+# OPC UA Server status enumeration
+enum OpcUaServerStatusEnum {
+    STOPPED
+    STARTING
+    RUNNING
+    ERROR
+    STOPPING
+}
+
+# Represents a certificate file in the trust directories
+type OpcUaServerCertificate {
+    # Server name this certificate belongs to
+    serverName: String!
+    # Certificate fingerprint/hash for unique identification
+    fingerprint: String!
+    # Subject information from the certificate
+    subject: String!
+    # Issuer information
+    issuer: String!
+    # Certificate validity period
+    validFrom: String!
+    validTo: String!
+    # Whether certificate is currently trusted or untrusted
+    trusted: Boolean!
+    # File path relative to the trusted/untrusted directory
+    filePath: String!
+    # When this certificate was first detected
+    firstSeen: String!
+}
+
+# Extend existing Query type
+extend type Query {
+    # Get all OPC UA device configurations across the entire cluster
+    # Returns devices from all cluster nodes, showing their assignment and status
+    opcUaDevices: [OpcUaDevice!]!
+
+    # Get a specific OPC UA device configuration by its unique name
+    # Device names must be unique across the entire MonsterMQ cluster
+    opcUaDevice(name: String!): OpcUaDevice
+
+    # Get OPC UA devices assigned to a specific cluster node
+    # Useful for monitoring device distribution and cluster load balancing
+    opcUaDevicesByNode(nodeId: String!): [OpcUaDevice!]!
+
+    # Get list of all available cluster nodes for device assignment
+    # Shows which nodes are available for deploying OPC UA device connectors
+    clusterNodes: [ClusterNode!]!
+
+    # Get all OPC UA server configurations across the entire cluster
+    # Returns servers from all cluster nodes, showing their assignment and status
+    opcUaServers: [OpcUaServer!]!
+
+    # Get a specific OPC UA server configuration by its unique name
+    # Server names must be unique across the entire MonsterMQ cluster
+    opcUaServer(name: String!): OpcUaServer
+
+    # Get OPC UA servers assigned to a specific cluster node
+    # Useful for monitoring server distribution and cluster load balancing
+    opcUaServersByNode(nodeId: String!): [OpcUaServer!]!
+
+    # Get certificates for a specific OPC UA server
+    opcUaServerCertificates(
+        serverName: String!,
+        # Filter by trust status: true=trusted, false=untrusted, null=all
+        trusted: Boolean
+    ): [OpcUaServerCertificate!]!
+
+    # Get all MQTT client configurations across the entire cluster
+    # Returns clients from all cluster nodes, showing their assignment and connection status
+    mqttClients: [MqttClient!]!
+
+    # Get a specific MQTT client configuration by its unique name
+    # Client names must be unique across the entire MonsterMQ cluster
+    mqttClient(name: String!): MqttClient
+
+    # Get MQTT clients assigned to a specific cluster node
+    # Useful for monitoring client distribution and cluster load balancing
+    mqttClientsByNode(nodeId: String!): [MqttClient!]!
+
+
+    }
+
+# MQTT Client Configuration Types
+#
+# MQTT Clients allow MonsterMQ to act as a bridge between this broker and remote MQTT brokers.
+# Each client establishes an outbound connection and can:
+# 1. Subscribe to topics on the remote broker and republish them locally (SUBSCRIBE mode)
+# 2. Subscribe to local topics and publish them to the remote broker (PUBLISH mode)
+#
+# Common use cases:
+# - Bridging data between different MQTT infrastructures
+# - Aggregating data from multiple remote brokers into a central MonsterMQ instance
+# - Distributing data from MonsterMQ to multiple remote brokers
+# - Creating hierarchical broker topologies for large-scale IoT deployments
+
+# Connection mode for MQTT client address mappings
+enum MqttClientMode {
+    # Subscribe to remote broker topics and republish locally
+    # Data flows: Remote Broker → MonsterMQ
+    SUBSCRIBE
+    # Subscribe to local topics and publish to remote broker
+    # Data flows: MonsterMQ → Remote Broker
+    PUBLISH
+}
+
+# MQTT Client address mapping configuration
+# Defines how topics are mapped between local and remote brokers
+type MqttClientAddress {
+    # Connection mode: SUBSCRIBE (remote→local) or PUBLISH (local→remote)
+    mode: String!
+    # Topic pattern on the remote broker (supports MQTT wildcards: +, #)
+    remoteTopic: String!
+    # Topic pattern on the local broker (supports MQTT wildcards: +, #)
+    localTopic: String!
+    # Whether to remove the base path from topic names when mapping
+    # Example: remoteTopic="sensor/#" with removePath=true maps "sensor/temp/1" to "temp/1"
+    removePath: Boolean!
+    # QoS level for MQTT messages (0=At most once, 1=At least once, 2=Exactly once)
+    qos: Int
+}
+
+# MQTT Client connection configuration
+type MqttClientConnectionConfig {
+    # Connection protocol: "tcp", "tcps" (TLS), "ws" (WebSocket), "wss" (WebSocket Secure)
+    protocol: String!
+    # Remote broker hostname or IP address
+    hostname: String!
+    # Remote broker port (typically 1883 for TCP, 8883 for TLS)
+    port: Int!
+    # Username for authentication (optional)
+    username: String
+    # Client ID to use when connecting to remote broker
+    clientId: String!
+    # Whether to use a clean session (false = persistent session)
+    cleanSession: Boolean!
+    # Keep-alive interval in seconds
+    keepAlive: Int!
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long!
+    # Connection timeout in milliseconds
+    connectionTimeout: Long!
+    # Topic mappings between local and remote brokers
+    addresses: [MqttClientAddress!]!
+    # Whether to enable message buffering when disconnected
+    bufferEnabled: Boolean!
+    # Maximum number of messages to buffer when disconnected (1-100000)
+    bufferSize: Int!
+    # Whether to persist the buffer to disk (false = memory only)
+    persistBuffer: Boolean!
+    # Whether to delete oldest messages when buffer is full (true = FIFO, false = reject new)
+    deleteOldestMessages: Boolean!
+}
+
+# MQTT Client configuration
+type MqttClient {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Cluster node ID where this client runs
+    nodeId: String!
+    # Connection and mapping configuration
+    config: MqttClientConnectionConfig!
+    # Whether this client is enabled and should connect
+    enabled: Boolean!
+    # Client creation timestamp
+    createdAt: String!
+    # Client last update timestamp
+    updatedAt: String!
+    # Whether this client is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current metrics for this MQTT bridge client (single most recent entry)
+    metrics: [MqttClientMetrics!]!
+    # Historical metrics data for this MQTT bridge client
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [MqttClientMetrics!]!
+}
+
+#############################################
+# Kafka Client Bridge Configuration (NEW)  #
+#############################################
+
+"""
+Kafka client bridge connects to an external Kafka cluster and republishes consumed
+records as MQTT messages inside MonsterMQ. A single Kafka topic is consumed and each
+record is polled periodically then published to MQTT.
+
+Topic mapping strategy:
+- The Kafka topic consumed is the device namespace
+- For BINARY/TEXT formats: MQTT topic = record key (record dropped if key null)
+- For DEFAULT/JSON formats: value encodes a BrokerMessage whose internal topicName is used
+"""
+
+enum KafkaPayloadFormat {
+    # Internal encoded BrokerMessage format (default)
+    DEFAULT
+    # BrokerMessage serialized as JSON text
+    JSON
+    # Raw Kafka record value bytes -> published as binary payload (topic derived from key)
+    BINARY
+    # UTF-8 decoded Kafka record value string -> published as text payload (topic derived from key)
+    TEXT
+}
+
+type KafkaClientConfig {
+    # Comma separated host:port list
+    bootstrapServers: String!
+    # Kafka consumer group id
+    groupId: String!
+    # Payload transformation/serialization strategy
+    payloadFormat: KafkaPayloadFormat!
+
+    # Additional arbitrary Kafka consumer properties
+    extraConsumerConfig: JSON
+    # Poll interval in milliseconds
+    pollIntervalMs: Long!
+    # Max records per poll
+    maxPollRecords: Int!
+    # Reconnect delay to Kafka in milliseconds
+    reconnectDelayMs: Long!
+    # Optional prefix applied to all published MQTT topics.
+    # Rules:
+    # - Blank or whitespace disables prefixing
+    # - Trailing slash automatically appended when missing
+    # - Must not contain MQTT wildcards '+' or '#'
+    # - Legacy keyTopicPrefix input still accepted for backward compatibility
+    destinationTopicPrefix: String
+    # NOTE: Kafka topic is now derived from the device namespace
+}
+
+type KafkaClientMetrics {
+    messagesIn: Float!
+    messagesOut: Float!
+    timestamp: String!
+}
+
+type KafkaClient {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    config: KafkaClientConfig!
+    enabled: Boolean!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    metrics: [KafkaClientMetrics!]!
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [KafkaClientMetrics!]!
+}
+
+# Extend Queries for Kafka clients
+extend type Query {
+    # Get all Kafka client bridge configurations across the entire cluster
+    # Returns clients from all cluster nodes, showing their assignment and connection status
+    # Kafka clients consume from external Kafka topics and republish as MQTT messages
+    kafkaClients: [KafkaClient!]!
+
+    # Get a specific Kafka client bridge configuration by its unique name
+    # Client names must be unique across the entire MonsterMQ cluster
+    kafkaClient(name: String!): KafkaClient
+
+    # Get Kafka clients assigned to a specific cluster node
+    # Useful for monitoring client distribution and cluster load balancing
+    kafkaClientsByNode(nodeId: String!): [KafkaClient!]!
+}
+
+#############################################
+# WinCC OA Client Configuration            #
+#############################################
+
+"""
+WinCC OA Client connects to a WinCC OA GraphQL server and subscribes to datapoint changes
+via WebSocket subscriptions. Each subscription uses the dpQueryConnectSingle GraphQL function
+to monitor datapoint values and publishes them as MQTT messages.
+
+Features:
+- GraphQL authentication (username/password login or direct token)
+- WebSocket subscriptions for real-time datapoint updates
+- Configurable topic name transformation (remove system name, convert dots/underscores to slashes, regex)
+- Multiple message formats: JSON_ISO (ISO timestamps), JSON_MS (epoch milliseconds), RAW_VALUE (plain values)
+- Support for BLOB data types
+- Topic name caching for performance
+"""
+
+enum WinCCOaMessageFormat {
+    # JSON format with ISO 8601 timestamp: {"value": <value>, "time": "2025-10-06T18:03:05.984Z"}
+    JSON_ISO
+    # JSON format with epoch milliseconds: {"value": <value>, "time": 1728234185984}
+    JSON_MS
+    # Raw value only (as text or binary for BLOBs)
+    RAW_VALUE
+}
+
+type WinCCOaTransformConfig {
+    # Remove "System1:" prefix from datapoint names
+    removeSystemName: Boolean!
+    # Convert "." to "/" in datapoint names for MQTT topic hierarchy
+    convertDotToSlash: Boolean!
+    # Convert "_" to "/" in datapoint names for MQTT topic hierarchy
+    convertUnderscoreToSlash: Boolean!
+    # Optional regex pattern for additional name transformation
+    regexPattern: String
+    # Replacement string for regex pattern
+    regexReplacement: String
+}
+
+type WinCCOaAddress {
+    # GraphQL query for dpQueryConnectSingle
+    # Example: "SELECT '_original.._value', '_original.._stime' FROM 'System1:Test_*'"
+    query: String!
+    # MQTT topic prefix for this subscription
+    # Example: "test" will publish to "winccoa/plant1/test/..."
+    topic: String!
+    # Optional description for this address
+    description: String!
+    # Whether to request the answer row in dpQueryConnectSingle (initial values)
+    answer: Boolean!
+    # Whether to publish MQTT messages with retained flag
+    retained: Boolean!
+}
+
+type WinCCOaConnectionConfig {
+    # GraphQL endpoint URL (e.g., "http://winccoa:4000/graphql")
+    graphqlEndpoint: String!
+    # WebSocket endpoint URL (auto-derived from graphqlEndpoint if not specified)
+    websocketEndpoint: String
+    # Username for authentication (used with password for login mutation)
+    username: String
+    # Token for direct authentication (skips login if provided)
+    token: String
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long!
+    # Connection timeout in milliseconds
+    connectionTimeout: Long!
+    # Message format for publishing datapoint values
+    messageFormat: WinCCOaMessageFormat!
+    # Topic name transformation configuration
+    transformConfig: WinCCOaTransformConfig!
+    # Configured datapoint subscriptions
+    addresses: [WinCCOaAddress!]!
+}
+
+type WinCCOaClientMetrics {
+    # Messages per second received from WinCC OA server (datapoint value changes)
+    messagesIn: Float!
+    # Connection status to WinCC OA server
+    connected: Boolean!
+    # ISO 8601 timestamp when these metrics were captured
+    timestamp: String!
+}
+
+type WinCCOaClient {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Cluster node ID where this client runs
+    nodeId: String!
+    # Connection and subscription configuration
+    config: WinCCOaConnectionConfig!
+    # Whether this client is enabled and should connect
+    enabled: Boolean!
+    # Client creation timestamp
+    createdAt: String!
+    # Client last update timestamp
+    updatedAt: String!
+    # Whether this client is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current metrics for this WinCC OA Client client (single most recent entry)
+    metrics: [WinCCOaClientMetrics!]!
+    # Historical metrics data for this WinCC OA Client client
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [WinCCOaClientMetrics!]!
+}
+
+# Extend Queries for WinCC OA clients
+extend type Query {
+    # Get all WinCC OA client configurations across the entire cluster
+    # Returns clients from all cluster nodes, showing their assignment and connection status
+    winCCOaClients: [WinCCOaClient!]!
+
+    # Get a specific WinCC OA client configuration by its unique name
+    # Client names must be unique across the entire MonsterMQ cluster
+    winCCOaClient(name: String!): WinCCOaClient
+
+    # Get WinCC OA clients assigned to a specific cluster node
+    # Useful for monitoring client distribution and cluster load balancing
+    winCCOaClientsByNode(nodeId: String!): [WinCCOaClient!]!
+}
+
+# ===================================
+# WinCC Unified Client Configuration
+# ===================================
+
+# WinCC Unified address type enum
+enum WinCCUaAddressType {
+    # Subscribe to tag value changes
+    TAG_VALUES
+    # Subscribe to active alarms
+    ACTIVE_ALARMS
+}
+
+# WinCC Unified message format options
+enum WinCCUaMessageFormat {
+    # JSON format with ISO 8601 timestamp: {"value": <value>, "time": "2024-01-01T12:00:00Z"}
+    JSON_ISO
+    # JSON format with milliseconds since epoch: {"value": <value>, "time": 1704110400000}
+    JSON_MS
+    # Raw value only (no timestamp)
+    RAW_VALUE
+}
+
+# WinCC Unified address configuration for subscriptions
+type WinCCUaAddress {
+    # Address type (TAG_VALUES or ACTIVE_ALARMS)
+    type: WinCCUaAddressType!
+    # MQTT topic prefix for this subscription
+    topic: String!
+    # Optional description
+    description: String
+    # Whether to publish MQTT messages with retained flag
+    retained: Boolean!
+    # Name filters for TAG_VALUES type (e.g., ["HMI_*", "TANK_*"])
+    nameFilters: [String!]
+    # Whether to include quality information in TAG_VALUES data (default: false)
+    includeQuality: Boolean
+    # System names filter for ACTIVE_ALARMS type
+    systemNames: [String!]
+    # Filter string for ACTIVE_ALARMS type
+    filterString: String
+}
+
+# Topic name transformation configuration
+type WinCCUaTransformConfig {
+    # Convert "." to "/" in tag names (default: true)
+    convertDotToSlash: Boolean!
+    # Convert "_" to "/" in tag names (default: false)
+    convertUnderscoreToSlash: Boolean!
+    # Optional regex pattern for additional transformation
+    regexPattern: String
+    # Replacement string for regex pattern
+    regexReplacement: String
+}
+
+# WinCC Unified connection configuration
+type WinCCUaConnectionConfig {
+    # GraphQL endpoint URL (e.g., "http://winccua:4000/graphql")
+    graphqlEndpoint: String!
+    # WebSocket endpoint URL (defaults to graphqlEndpoint with ws:// protocol)
+    websocketEndpoint: String
+    # Username for authentication (required)
+    username: String!
+    # Password for authentication (required)
+    password: String!
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long!
+    # Connection timeout in milliseconds
+    connectionTimeout: Long!
+    # Message format for publishing tag values
+    messageFormat: WinCCUaMessageFormat!
+    # Topic name transformation configuration
+    transformConfig: WinCCUaTransformConfig!
+    # Configured subscriptions (tags and alarms)
+    addresses: [WinCCUaAddress!]!
+}
+
+type WinCCUaClientMetrics {
+    # Messages per second received from WinCC Unified server (tag values and alarms)
+    messagesIn: Float!
+    # Connection status to WinCC Unified server
+    connected: Boolean!
+    # ISO 8601 timestamp when these metrics were captured
+    timestamp: String!
+}
+
+type WinCCUaClient {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Cluster node ID where this client runs
+    nodeId: String!
+    # Connection and subscription configuration
+    config: WinCCUaConnectionConfig!
+    # Whether this client is enabled and should connect
+    enabled: Boolean!
+    # Client creation timestamp
+    createdAt: String!
+    # Client last update timestamp
+    updatedAt: String!
+    # Whether this client is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current metrics for this WinCC Unified client (single most recent entry)
+    metrics: [WinCCUaClientMetrics!]!
+    # Historical metrics data for this WinCC Unified client
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [WinCCUaClientMetrics!]!
+}
+
+# Extend Queries for WinCC Unified clients
+extend type Query {
+    # Get all WinCC Unified client configurations across the entire cluster
+    # Returns clients from all cluster nodes, showing their assignment and connection status
+    winCCUaClients: [WinCCUaClient!]!
+
+    # Get a specific WinCC Unified client configuration by its unique name
+    # Client names must be unique across the entire MonsterMQ cluster
+    winCCUaClient(name: String!): WinCCUaClient
+
+    # Get WinCC Unified clients assigned to a specific cluster node
+    # Useful for monitoring client distribution and cluster load balancing
+    winCCUaClientsByNode(nodeId: String!): [WinCCUaClient!]!
+}
+
+#############################################
+# PLC4X Client Configuration                #
+#############################################
+
+"""
+PLC4X Client connects to industrial PLCs using Apache PLC4X universal protocol adapter.
+Supports multiple industrial protocols through a unified API with protocol-agnostic addressing.
+
+Supported Protocols (19+):
+- Siemens S7 (S7-300, S7-400, S7-1200, S7-1500)
+- Modbus (TCP, RTU, ASCII)
+- Beckhoff ADS (TwinCAT)
+- Allen-Bradley (AB-Ethernet, EtherNet/IP)
+- BACnet/IP
+- KNXnet/IP
+- CANopen
+- Firmata (Arduino)
+- IEC-60870-5-104
+- And more...
+
+Features:
+- Universal connection string format (protocol://host:port)
+- Protocol-specific address parsing handled automatically
+- Polling-based value reading
+- Value transformation (scaling, offset)
+- Deadband filtering to reduce MQTT traffic
+- Generic configuration works for all protocols
+"""
+
+enum Plc4xProtocol {
+    # Allen-Bradley AB-Ethernet protocol
+    AB_ETHERNET
+    # Beckhoff ADS/AMS protocol (TwinCAT)
+    ADS
+    # BACnet/IP building automation protocol
+    BACNET_IP
+    # Clipsal C-Bus home automation protocol
+    CBUS
+    # CANopen industrial network protocol
+    CANOPEN
+    # Emerson DeltaV DCS protocol
+    DELTAV
+    # Allen-Bradley DF1 serial protocol
+    DF1
+    # Rockwell Automation EtherNet/IP (formerly ControlNet)
+    ETHERNET_IP
+    # Firmata protocol for Arduino and microcontrollers
+    FIRMATA
+    # IEC 60870-5-104 telecontrol protocol for electrical engineering
+    IEC_60870
+    # KNX building automation over IP
+    KNXNET_IP
+    # Modbus TCP/IP industrial protocol
+    MODBUS_TCP
+    # Modbus RTU serial protocol
+    MODBUS_RTU
+    # Modbus ASCII serial protocol
+    MODBUS_ASCII
+    # Atlas Copco Open Protocol for assembly tools
+    OPEN_PROTOCOL
+    # Generic PLC4X protocol
+    PLC4X
+    # Siemens S7 protocol (S7-300, S7-400, S7-1200, S7-1500)
+    S7
+    # Mitsubishi Electric UMAS protocol
+    UMAS
+    # Profinet protocol (experimental/in development)
+    PROFINET
+}
+
+# Metrics for a PLC4X device connector
+type Plc4xDeviceMetrics {
+    # Messages per second read from PLC device and published to MQTT
+    messagesInRate: Float!
+    # Connection status to PLC device
+    connected: Boolean!
+    # ISO 8601 timestamp when these metrics were captured
+    timestamp: String!
+}
+
+# Operating mode for PLC4X address
+enum Plc4xAddressMode {
+    # Read from PLC and publish to MQTT
+    READ
+    # Subscribe to MQTT and write to PLC
+    WRITE
+    # Bidirectional - read from PLC to MQTT and write from MQTT to PLC
+    READ_WRITE
+}
+
+# PLC4X address configuration for reading PLC tags/addresses
+type Plc4xAddress {
+    # Unique name for this address within the device
+    name: String!
+    # PLC4X address string (protocol-specific format)
+    # Examples:
+    #   S7: "%DB1.DBW0:INT", "%M0.0:BOOL", "%DB1:100:BYTE"
+    #   Modbus: "holding-register:1:INT", "coil:100:BOOL"
+    #   ADS: "MAIN.myVariable", ".myVariable:INT"
+    address: String!
+    # MQTT topic where PLC values will be published
+    topic: String!
+    # MQTT QoS level (0, 1, or 2)
+    qos: Int!
+    # Whether to publish MQTT messages with retained flag
+    retained: Boolean!
+    # Optional scaling factor applied to numeric values (value * scalingFactor)
+    scalingFactor: Float
+    # Optional offset added to numeric values after scaling (value + offset)
+    offset: Float
+    # Optional deadband value - only publish if change exceeds this threshold
+    deadband: Float
+    # Only publish to MQTT when value changes (avoids duplicate values)
+    publishOnChange: Boolean!
+    # Operating mode (READ, WRITE, or READ_WRITE)
+    mode: Plc4xAddressMode!
+    # Whether this address should be polled
+    enabled: Boolean!
+}
+
+# PLC4X connection configuration
+type Plc4xConnectionConfig {
+    # PLC4X protocol to use (determines connection string format)
+    protocol: Plc4xProtocol!
+    # PLC4X connection string (format depends on protocol)
+    # Examples:
+    #   S7: "s7://192.168.1.10" or "s7://192.168.1.10:102/0/1"
+    #   Modbus: "modbus-tcp://192.168.1.20:502" or "modbus-rtu:///dev/ttyUSB0"
+    #   ADS: "ads://192.168.1.30:48898/192.168.1.30.1.1:851"
+    connectionString: String!
+    # Interval in milliseconds for polling addresses (default: 1000ms)
+    pollingInterval: Long!
+    # Delay in milliseconds before attempting reconnection (default: 5000ms)
+    reconnectDelay: Long!
+    # Configured PLC addresses to read
+    addresses: [Plc4xAddress!]!
+    # Whether polling is enabled for this connection
+    enabled: Boolean!
+}
+
+# PLC4X Client configuration
+type Plc4xClient {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Cluster node ID where this client runs
+    nodeId: String!
+    # Connection and address configuration
+    config: Plc4xConnectionConfig!
+    # Whether this client is enabled and should connect
+    enabled: Boolean!
+    # Client creation timestamp
+    createdAt: String!
+    # Client last update timestamp
+    updatedAt: String!
+    # Whether this client is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current metrics for this PLC4X client (single most recent entry)
+    metrics: [Plc4xDeviceMetrics!]!
+    # Historical metrics data for this PLC4X client
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [Plc4xDeviceMetrics!]!
+}
+
+# Extend Queries for PLC4X clients
+extend type Query {
+    # Get all PLC4X client configurations across the entire cluster
+    # Returns clients from all cluster nodes, showing their assignment and connection status
+    plc4xClients: [Plc4xClient!]!
+
+    # Get a specific PLC4X client configuration by its unique name
+    # Client names must be unique across the entire MonsterMQ cluster
+    plc4xClient(name: String!): Plc4xClient
+
+    # Get PLC4X clients assigned to a specific cluster node
+    # Useful for monitoring client distribution and cluster load balancing
+    plc4xClientsByNode(nodeId: String!): [Plc4xClient!]!
+}

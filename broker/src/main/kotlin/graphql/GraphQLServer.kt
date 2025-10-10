@@ -193,10 +193,19 @@ class GraphQLServer(
     }
 
     private fun loadSchema(): String {
-        return this::class.java.classLoader.getResourceAsStream("schema.graphqls")
-            ?.bufferedReader()
-            ?.use { it.readText() }
-            ?: throw RuntimeException("Failed to load GraphQL schema")
+        val schemaFiles = listOf(
+            "schema-types.graphqls",      // Common types, scalars, and enums (must be loaded first)
+            "schema-queries.graphqls",     // Query type definitions
+            "schema-mutations.graphqls",   // Mutation type definitions
+            "schema-subscriptions.graphqls" // Subscription type definitions
+        )
+
+        return schemaFiles.joinToString("\n") { filename ->
+            this::class.java.classLoader.getResourceAsStream(filename)
+                ?.bufferedReader()
+                ?.use { it.readText() }
+                ?: throw RuntimeException("Failed to load GraphQL schema file: $filename")
+        }
     }
 
     private fun createGraphQL(schemaDefinition: String): GraphQL {

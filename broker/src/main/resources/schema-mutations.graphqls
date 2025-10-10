@@ -1,0 +1,1192 @@
+type Mutation {
+    # Authenticate with username/password to obtain a JWT token for API access
+    # Required for accessing protected mutations (publishing, user management, etc.)
+    # Returns null when user authentication is disabled in MonsterMQ configuration
+    login(
+        # Username for authentication
+        username: String!,
+        # Password for authentication
+        password: String!
+    ): LoginResult
+
+    # Publish an MQTT message to a specific topic through the broker
+    # Message will be distributed to all subscribers and optionally stored based on ArchiveGroup settings
+    # Requires valid JWT token and publish permission for the topic
+    publish(
+        # Message details including topic, payload, QoS, and retention settings
+        input: PublishInput!
+    ): PublishResult!
+
+    # Publish multiple MQTT messages in a single atomic operation
+    # Useful for bulk data ingestion and reducing API call overhead
+    # All messages must pass ACL checks or the entire batch will be rejected
+    publishBatch(
+        # Array of messages to publish simultaneously
+        inputs: [PublishInput!]!
+    ): [PublishResult!]!
+}
+
+# User Management Mutations - Grouped operations for user and ACL management
+type UserManagementMutations {
+    # Create a new user account with specified permissions and access rights
+    # Sets up authentication credentials and initial ACL permissions
+    # Requires admin JWT token for execution
+    createUser(
+        # User account details including username, password, and permission flags
+        input: CreateUserInput!
+    ): UserManagementResult!
+
+    # Update an existing user account's permissions and settings
+    # Can modify enabled status, subscription/publish rights, and admin privileges
+    # Cannot change username or password (use setPassword for password changes)
+    updateUser(
+        # Updated user details (only specified fields will be changed)
+        input: UpdateUserInput!
+    ): UserManagementResult!
+
+    # Permanently delete a user account and all associated ACL rules
+    # This action cannot be undone - the user will immediately lose access
+    # Active sessions for the user will be terminated
+    deleteUser(
+        # Username of the account to delete
+        username: String!
+    ): UserManagementResult!
+
+    # Change the password for an existing user account
+    # New password will be securely hashed before storage
+    # User's existing sessions may need to re-authenticate
+    setPassword(
+        # Username and new password details
+        input: SetPasswordInput!
+    ): UserManagementResult!
+
+    # Create a new ACL (Access Control List) rule for topic-level permissions
+    # Rules define which topics a user can subscribe to or publish on
+    # Higher priority rules override lower priority ones
+    createAclRule(
+        # ACL rule details including user, topic pattern, and permissions
+        input: CreateAclRuleInput!
+    ): UserManagementResult!
+
+    # Update an existing ACL rule's permissions or topic pattern
+    # Changes take effect immediately for new client connections
+    # Existing subscriptions may be affected based on the changes
+    updateAclRule(
+        # Updated ACL rule details (ID required, other fields optional)
+        input: UpdateAclRuleInput!
+    ): UserManagementResult!
+
+    # Delete an ACL rule permanently
+    # Users may lose access to topics if this was their only permission rule
+    # Active subscriptions using this rule may be terminated
+    deleteAclRule(
+        # Unique ID of the ACL rule to delete
+        id: String!
+    ): UserManagementResult!
+}
+
+# Extend Mutations for user management
+extend type Mutation {
+    # Remove queued messages from persistent sessions to free up memory
+    # Useful for clearing message backlogs from disconnected clients
+    # Can target a specific client or purge all queued messages cluster-wide
+    purgeQueuedMessages(
+        # Client ID to purge messages for (optional - if omitted, purges all clients)
+        clientId: String
+    ): PurgeResult!
+
+    # Access user and ACL management operations
+    # Returns a UserManagementMutations type that provides grouped mutation operations
+    user: UserManagementMutations!
+
+    # Access session management operations
+    # Returns a SessionMutations type that provides session control operations
+    session: SessionMutations!
+}
+
+# Session Management Mutations - Grouped operations for session management
+type SessionMutations {
+    # Remove MQTT client sessions from the cluster
+    # Disconnects active sessions and removes persistent session data from the database
+    # Works across cluster nodes via event bus communication
+    removeSessions(
+        # Array of client IDs to remove
+        clientIds: [String!]!
+    ): SessionRemovalResult!
+}
+
+# Result type for session removal operations
+type SessionRemovalResult {
+    # Whether the operation succeeded overall
+    success: Boolean!
+    # Overall status message
+    message: String
+    # Number of sessions successfully removed
+    removedCount: Int!
+    # Details for each session removal attempt
+    results: [SessionRemovalDetail!]!
+}
+
+# Detailed result for a single session removal
+type SessionRemovalDetail {
+    # The client ID that was processed
+    clientId: String!
+    # Whether this specific session was successfully removed
+    success: Boolean!
+    # Error message if removal failed for this session
+    error: String
+    # The node ID where the session was located
+    nodeId: String
+}
+
+# Archive Group Mutations - Grouped operations for archive group management
+type ArchiveGroupMutations {
+    # Create a new ArchiveGroup to archive MQTT topics
+    # ArchiveGroup configuration including topic filters and storage settings
+    create(
+        input: CreateArchiveGroupInput!
+    ): ArchiveGroupResult!
+
+    # Update an existing ArchiveGroup's configuration
+    # Changes to topic filters take effect immediately
+    # Database changes may require redeployment of the archive handlers
+    update(
+        # Updated ArchiveGroup settings (name required, other fields optional)
+        input: UpdateArchiveGroupInput!
+    ): ArchiveGroupResult!
+
+    # Permanently delete an ArchiveGroup and stop archiving its topics
+    # Existing archived data is preserved but no new data will be stored
+    # Cannot delete the "Default" ArchiveGroup as it's required by the system
+    delete(
+        # Name of the ArchiveGroup to delete
+        name: String!
+    ): ArchiveGroupResult!
+
+    # Enable a disabled ArchiveGroup to resume topic archiving
+    # Restarts data collection for the group's topic filters
+    # Useful for temporarily pausing and resuming data archiving
+    enable(
+        # Name of the ArchiveGroup to enable
+        name: String!
+    ): ArchiveGroupResult!
+
+    # Disable an ArchiveGroup to pause topic archiving without deleting it
+    # Stops new data collection but preserves existing archived data
+    # Configuration remains intact for future re-enabling
+    disable(
+        # Name of the ArchiveGroup to disable
+        name: String!
+    ): ArchiveGroupResult!
+}
+
+# Extend Mutations for archive groups
+extend type Mutation {
+    # Access archive group management operations
+    # Returns an ArchiveGroupMutations type that provides grouped mutation operations
+    archiveGroup: ArchiveGroupMutations!
+}
+
+input PublishInput {
+    # MQTT topic to publish the message to (no wildcards allowed for publishing)
+    # Must follow MQTT topic naming conventions: use '/' as level separator
+    topic: String!
+    # Message payload content - format depends on the 'format' field
+    # For JSON format: valid JSON string, for BINARY format: base64 encoded data
+    payload: String!
+    # Specifies how the payload should be interpreted and processed
+    # JSON: payload is parsed as JSON, BINARY: payload is treated as base64 encoded binary data
+    format: DataFormat = JSON
+    # MQTT Quality of Service level: 0 (at most once), 1 (at least once), 2 (exactly once)
+    # Higher QoS levels provide stronger delivery guarantees but with increased overhead
+    qos: Int = 0
+    # Whether this message should be retained by the broker for future subscribers
+    # Retained messages are delivered to clients that subscribe after publication
+    retained: Boolean = false
+}
+
+type PublishResult {
+    success: Boolean!
+    topic: String!
+    timestamp: Long!
+    error: String
+}
+
+input CreateUserInput {
+    username: String!
+    password: String!
+    enabled: Boolean = true
+    canSubscribe: Boolean = true
+    canPublish: Boolean = true
+    isAdmin: Boolean = false
+}
+
+input UpdateUserInput {
+    username: String!
+    enabled: Boolean
+    canSubscribe: Boolean
+    canPublish: Boolean
+    isAdmin: Boolean
+}
+
+input SetPasswordInput {
+    username: String!
+    password: String!
+}
+
+input CreateAclRuleInput {
+    username: String!
+    topicPattern: String!
+    canSubscribe: Boolean = false
+    canPublish: Boolean = false
+    priority: Int = 0
+}
+
+input UpdateAclRuleInput {
+    id: String!
+    username: String
+    topicPattern: String
+    canSubscribe: Boolean
+    canPublish: Boolean
+    priority: Int
+}
+
+
+input CreateArchiveGroupInput {
+    name: String!
+    topicFilter: [String!]!
+    retainedOnly: Boolean = false
+    lastValType: MessageStoreType!
+    archiveType: MessageArchiveType!
+    payloadFormat: PayloadFormat = DEFAULT
+    lastValRetention: String
+    archiveRetention: String
+    purgeInterval: String
+}
+
+input UpdateArchiveGroupInput {
+    name: String!
+    topicFilter: [String!]
+    retainedOnly: Boolean
+    lastValType: MessageStoreType
+    archiveType: MessageArchiveType
+    payloadFormat: PayloadFormat
+    lastValRetention: String
+    archiveRetention: String
+    purgeInterval: String
+}
+
+type ArchiveGroupResult {
+    success: Boolean!
+    message: String
+    archiveGroup: ArchiveGroupInfo
+}
+
+# Authentication Types
+type LoginResult {
+    success: Boolean!
+    token: String
+    message: String
+    username: String
+    isAdmin: Boolean!
+}
+
+type UserManagementResult {
+    success: Boolean!
+    message: String
+    user: UserInfo
+    aclRule: AclRuleInfo
+}
+
+type PurgeResult {
+    success: Boolean!
+    message: String
+    deletedCount: Long!
+}
+
+# OPC UA Device Configuration Types
+
+
+type OpcUaDeviceResult {
+    success: Boolean!
+    device: OpcUaDevice
+    errors: [String!]!
+}
+
+
+input MonitoringParametersInput {
+    bufferSize: Int = 100
+    samplingInterval: Float = 0.0
+    discardOldest: Boolean = false
+}
+
+# Input type for certificate configuration settings
+input CertificateConfigInput {
+    # Directory for storing certificates and keystores (default: "security")
+    securityDir: String = "security"
+    # Application name for certificate subject (default: "MonsterMQ@localhost")
+    applicationName: String = "MonsterMQ@localhost"
+    # Application URI for OPC UA client identification (default: "urn:MonsterMQ:Client")
+    applicationUri: String = "urn:MonsterMQ:Client"
+    # Organization name for certificate subject (default: "MonsterMQ")
+    organization: String = "MonsterMQ"
+    # Organizational unit for certificate subject (default: "Client")
+    organizationalUnit: String = "Client"
+    # Locality/city name for certificate subject (default: "Unknown")
+    localityName: String = "Unknown"
+    # Two-letter country code (default: "XX")
+    countryCode: String = "XX"
+    # Whether to create self-signed certificates automatically (default: true)
+    createSelfSigned: Boolean = true
+    # Keystore password for certificate protection (default: "password")
+    keystorePassword: String = "password"
+    # Whether to validate server certificates (default: true for security)
+    validateServerCertificate: Boolean = true
+    # Auto-accept and save new server certificates (default: false, enable for initial setup)
+    autoAcceptServerCertificates: Boolean = false
+}
+
+input OpcUaConnectionConfigInput {
+    endpointUrl: String!
+    updateEndpointUrl: Boolean = true
+    securityPolicy: SecurityPolicy = None
+    username: String
+    password: String
+    subscriptionSamplingInterval: Float = 0.0
+    keepAliveFailuresAllowed: Int = 3
+    reconnectDelay: Long = 5000
+    connectionTimeout: Long = 10000
+    requestTimeout: Long = 5000
+    monitoringParameters: MonitoringParametersInput
+    # Certificate configuration for TLS/SSL and client authentication
+    certificateConfig: CertificateConfigInput
+}
+
+input OpcUaAddressInput {
+    # OPC UA node address - supports two formats:
+    # 1. NodeId (recommended for performance): "ns=2;i=1234", "ns=2;s=MyDevice.Temperature", "ns=2;g=UUID"
+    # 2. BrowsePath (human-readable): "/Root/Objects/MyDevice/Temperature", "/Objects/2:MyDevice/2:Sensor1"
+    address: String!
+    # MQTT topic where OPC UA values will be published
+    topic: String!
+    # SINGLE: publish all subscribed values in one JSON object, SEPARATE: individual messages per value
+    publishMode: OpcUaPublishMode = SEPARATE
+    # For BrowsePath addresses: whether to remove the path prefix from generated topic names
+    removePath: Boolean = true
+}
+
+input OpcUaDeviceInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    backupNodeId: String
+    config: OpcUaConnectionConfigInput!
+    enabled: Boolean = true
+}
+
+# OPC UA Device Mutations - Grouped operations for OPC UA device management
+type OpcUaDeviceMutations {
+    # Add a new OPC UA device configuration
+    # Creates a new OPC UA device that connects to a remote OPC UA server and subscribes to node changes
+    add(input: OpcUaDeviceInput!): OpcUaDeviceResult!
+
+    # Update an existing OPC UA device configuration
+    # Changes take effect immediately - the device connector will be redeployed with new settings
+    # Useful for modifying connection parameters, security settings, or sampling intervals
+    update(name: String!, input: OpcUaDeviceInput!): OpcUaDeviceResult!
+
+    # Delete an OPC UA device configuration permanently
+    # Stops the device connector and removes all configuration data
+    # Returns true if deletion was successful, false if device was not found
+    delete(name: String!): Boolean!
+
+    # Enable or disable an OPC UA device without deleting its configuration
+    # Disabled devices stop collecting data but retain their configuration
+    # Useful for temporarily pausing data collection or troubleshooting
+    toggle(name: String!, enabled: Boolean!): OpcUaDeviceResult!
+
+    # Reassign an OPC UA device to a different cluster node
+    # Moves the device connector from one node to another for load balancing
+    # The device configuration remains unchanged, only the deployment location changes
+    reassign(name: String!, nodeId: String!): OpcUaDeviceResult!
+
+    # Add a new OPC UA address (node subscription) to an existing device
+    # The address can be either a NodeId or BrowsePath - see OpcUaAddressInput for format details
+    # New addresses will immediately start collecting data from the OPC UA server
+    addAddress(deviceName: String!, input: OpcUaAddressInput!): OpcUaDeviceResult!
+
+    # Remove an OPC UA address subscription from a device
+    # Stops data collection for the specified address while keeping other addresses active
+    # Use the exact address string that was used when adding the address
+    deleteAddress(deviceName: String!, address: String!): OpcUaDeviceResult!
+}
+
+# Extend Mutations for OPC UA devices
+extend type Mutation {
+    # Access OPC UA device management operations
+    # Returns an OpcUaDeviceMutations type that provides grouped mutation operations
+    opcUaDevice: OpcUaDeviceMutations!
+}
+
+# OPC UA Server Mutations - Grouped operations for OPC UA server management
+type OpcUaServerMutations {
+    # Add a new OPC UA server configuration
+    # Creates a new OPC UA server that exposes MQTT topics as OPC UA nodes with hierarchical structure
+    add(input: OpcUaServerInput!): OpcUaServerResult!
+
+    # Update an existing OPC UA server configuration
+    # Changes will be applied immediately - server will be restarted if currently running
+    update(name: String!, input: OpcUaServerInput!): OpcUaServerResult!
+
+    # Enable or disable an OPC UA server
+    # Controls whether the server should be running on the target cluster nodes
+    toggle(name: String!, enabled: Boolean!): OpcUaServerResult!
+
+    # Reassign an OPC UA server to different cluster node(s)
+    # Moves the server from one node to another or changes multi-node deployment
+    reassign(name: String!, nodeId: String!): OpcUaServerResult!
+
+    # Create a new OPC UA server configuration (simplified form)
+    # Creates a server using simplified configuration matching the web form
+    create(config: OpcUaServerConfigInput!): OpcUaServerOperationResult!
+
+    # Start an OPC UA server
+    start(serverName: String!, nodeId: String): OpcUaServerOperationResult!
+
+    # Stop an OPC UA server
+    stop(serverName: String!, nodeId: String): OpcUaServerOperationResult!
+
+    # Delete an OPC UA server instance
+    delete(serverName: String!): OpcUaServerOperationResult!
+
+    # Add an address mapping to an existing OPC UA Server
+    # Adds a new MQTT topic to OPC UA node mapping to the server configuration
+    addAddress(
+        serverName: String!,
+        address: OpcUaServerAddressInput!
+    ): OpcUaServerOperationResult!
+
+    # Remove an address mapping from an existing OPC UA Server
+    # Removes a mapping by its MQTT topic pattern
+    removeAddress(
+        serverName: String!,
+        mqttTopic: String!
+    ): OpcUaServerOperationResult!
+
+    # Trust one or more certificates (move from untrusted to trusted directory)
+    trustCertificates(
+        serverName: String!,
+        # Certificate fingerprints to trust
+        fingerprints: [String!]!
+    ): CertificateManagementResult!
+
+    # Delete certificates completely (from both trusted and untrusted directories)
+    deleteCertificates(
+        serverName: String!,
+        fingerprints: [String!]!
+    ): CertificateManagementResult!
+}
+
+# Extend Mutations for OPC UA servers
+extend type Mutation {
+    # Access OPC UA server management operations
+    # Returns an OpcUaServerMutations type that provides grouped mutation operations
+    opcUaServer: OpcUaServerMutations!
+}
+
+# Data type conversion strategy between MQTT and OPC UA
+# Result type for certificate operations
+type CertificateManagementResult {
+    success: Boolean!
+    message: String
+    affectedCertificates: [OpcUaServerCertificate!]!
+}
+
+# Simplified OPC UA Server information (used by mutations)
+type OpcUaServerInfo {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean!
+    port: Int!
+    path: String!
+    namespaceIndex: Int!
+    namespaceUri: String!
+    addresses: [OpcUaServerAddress!]!
+    security: OpcUaServerSecurityInfo!
+    bufferSize: Int!
+    updateInterval: Long!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    status: OpcUaServerStatus
+}
+
+# Simplified security information for OPC UA servers
+type OpcUaServerSecurityInfo {
+    keystorePath: String!
+    certificateAlias: String!
+    securityPolicies: [String!]!
+    allowAnonymous: Boolean!
+    requireAuthentication: Boolean!
+}
+
+# Result type for OPC UA Server operations
+type OpcUaServerResult {
+    success: Boolean!
+    server: OpcUaServerInfo
+    errors: [String!]!
+}
+
+# Result type for simplified OPC UA Server operations
+type OpcUaServerOperationResult {
+    success: Boolean!
+    message: String
+}
+
+# Input for creating or updating an OPC UA Server
+input OpcUaServerInput {
+    # Unique server name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (optional, defaults to "opcua/server/{name}")
+    namespace: String
+    # Target cluster node ("*" for all nodes, specific ID for single node)
+    nodeId: String = "*"
+    # Whether the server should be enabled
+    enabled: Boolean = true
+    # OPC UA server port
+    port: Int = 4840
+    # OPC UA server endpoint path
+    path: String = "server"
+    # OPC UA namespace index (must be >= 1)
+    namespaceIndex: Int = 1
+    # OPC UA namespace URI
+    namespaceUri: String = "urn:MonsterMQ:OpcUaServer"
+    # MQTT topic to OPC UA node mappings
+    addresses: [OpcUaServerAddressInput!]!
+    # Security configuration
+    security: OpcUaServerSecurityInput
+    # Buffer size for value updates
+    bufferSize: Int = 1000
+    # Minimum update interval in milliseconds
+    updateInterval: Long = 100
+}
+
+# Input for MQTT topic to OPC UA node mapping
+input OpcUaServerAddressInput {
+    # MQTT topic pattern with wildcards (e.g., "factory/+/temperature")
+    mqttTopic: String!
+    # Optional human-readable display name for the OPC UA node
+    displayName: String
+    # Optional browse name (defaults to last topic segment)
+    browseName: String
+    # Optional description for the node
+    description: String
+    # Data type conversion strategy
+    dataType: OpcUaServerDataType = TEXT
+    # OPC UA node access level
+    accessLevel: OpcUaServerAccessLevel = READ_ONLY
+    # Optional engineering unit (e.g., "°C", "bar")
+    unit: String
+}
+
+# Input for OPC UA server security configuration
+input OpcUaServerSecurityInput {
+    # Path to keystore file (default: reuse MQTT server keystore)
+    keystorePath: String = "server-keystore.jks"
+    # Keystore password
+    keystorePassword: String = "password"
+    # Certificate alias in keystore
+    certificateAlias: String = "server-cert"
+    # Supported security policies
+    securityPolicies: [String!] = ["None", "Basic256Sha256"]
+    # Allow anonymous access
+    allowAnonymous: Boolean = true
+    # Require user authentication
+    requireAuthentication: Boolean = false
+}
+
+# Simplified input for creating OPC UA servers (matches web form)
+input OpcUaServerConfigInput {
+    # Unique server name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Target cluster node ("*" for all nodes, specific ID for single node)
+    nodeId: String!
+    # Whether the server should be enabled
+    enabled: Boolean = true
+    # OPC UA server port
+    port: Int = 4840
+    # OPC UA server endpoint path
+    path: String = "monstermq"
+    # OPC UA namespace URI
+    namespaceUri: String
+    # Minimum update interval in milliseconds
+    updateInterval: Long = 1000
+    # Buffer size for value updates
+    bufferSize: Int = 1000
+}
+
+# MQTT Client Mutations - Grouped operations for MQTT client management
+type MqttClientMutations {
+    # Create a new MQTT client bridge to connect to a remote MQTT broker
+    # Creates a client connector that will be deployed on the specified cluster node
+    # The client can subscribe to remote topics or publish local topics to the remote broker
+    create(input: MqttClientInput!): MqttClientResult!
+
+    # Update an existing MQTT client configuration
+    # Changes take effect immediately - the client connector will be redeployed with new settings
+    # Useful for modifying connection parameters, credentials, or topic mappings
+    update(name: String!, input: MqttClientInput!): MqttClientResult!
+
+    # Delete an MQTT client configuration permanently
+    # Stops the client connector and removes all configuration data
+    # Returns true if deletion was successful, false if client was not found
+    delete(name: String!): Boolean!
+
+    # Start an MQTT client connection
+    # Enables a previously stopped client and establishes connection to remote broker
+    start(name: String!): MqttClientResult!
+
+    # Stop an MQTT client connection
+    # Disables the client and disconnects from remote broker while preserving configuration
+    stop(name: String!): MqttClientResult!
+
+    # Toggle MQTT client enabled state
+    # Enable or disable an MQTT client without deleting its configuration
+    toggle(name: String!, enabled: Boolean!): MqttClientResult!
+
+    # Reassign an MQTT client to a different cluster node
+    # Moves the client connector from one node to another for load balancing
+    # The client configuration remains unchanged, only the deployment location changes
+    reassign(name: String!, nodeId: String!): MqttClientResult!
+
+    # Add a new address mapping to an existing MQTT client
+    # Defines how topics are mapped between local and remote brokers (subscribe/publish)
+    # New mappings will immediately start synchronizing data
+    addAddress(deviceName: String!, input: MqttClientAddressInput!): MqttClientResult!
+
+    # Remove an address mapping from an MQTT client
+    # Stops data synchronization for the specified remote topic while keeping other mappings active
+    deleteAddress(deviceName: String!, remoteTopic: String!): MqttClientResult!
+}
+
+# Extend Mutations for MQTT clients
+extend type Mutation {
+    # Access MQTT client management operations
+    # Returns a MqttClientMutations type that provides grouped mutation operations
+    mqttClient: MqttClientMutations!
+}
+
+# Result type for MQTT Client operations
+type MqttClientResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected MQTT client (null if operation failed)
+    client: MqttClient
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+# Input for creating or updating an MQTT client
+input MqttClientInput {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (e.g., "mqtt/client1")
+    namespace: String!
+    # Target cluster node (use "*" for automatic assignment)
+    nodeId: String!
+    # Whether the client should be enabled
+    enabled: Boolean = true
+    # Connection configuration
+    config: MqttClientConnectionConfigInput!
+}
+
+# Input for MQTT client connection configuration
+input MqttClientConnectionConfigInput {
+    # Connection protocol: "tcp", "tcps", "ws", "wss"
+    protocol: String = "tcp"
+    # Remote broker hostname or IP address
+    hostname: String!
+    # Remote broker port
+    port: Int = 1883
+    # Username for authentication (optional)
+    username: String
+    # Password for authentication (optional)
+    password: String
+    # Client ID to use when connecting
+    clientId: String = "monstermq-client"
+    # Whether to use a clean session
+    cleanSession: Boolean = true
+    # Keep-alive interval in seconds
+    keepAlive: Int = 60
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long = 5000
+    # Connection timeout in milliseconds
+    connectionTimeout: Long = 30000
+    # Whether to enable message buffering when disconnected (default: false)
+    bufferEnabled: Boolean = false
+    # Maximum number of messages to buffer when disconnected (default: 5000, max: 100000)
+    bufferSize: Int = 5000
+    # Whether to persist the buffer to disk (default: false = memory only)
+    persistBuffer: Boolean = false
+    # Whether to delete oldest messages when buffer is full (default: true = FIFO, false = reject new)
+    deleteOldestMessages: Boolean = true
+}
+
+# Input for MQTT client address mapping
+input MqttClientAddressInput {
+    # Connection mode: "SUBSCRIBE" or "PUBLISH"
+    mode: String!
+    # Topic pattern on the remote broker
+    remoteTopic: String!
+    # Topic pattern on the local broker
+    localTopic: String!
+    # Whether to remove the base path from topic names
+    removePath: Boolean = true
+    # QoS level for MQTT messages (0, 1, or 2)
+    qos: Int = 0
+}
+
+# Kafka Client Mutations - Grouped operations for Kafka client management
+type KafkaClientMutations {
+    # Create a new Kafka client bridge to consume from an external Kafka cluster
+    # Creates a client connector that will be deployed on the specified cluster node
+    # The client will automatically connect to Kafka, consume records, and republish as MQTT messages
+    # Note: The Kafka topic to consume is derived from the device namespace
+    create(input: KafkaClientInput!): KafkaClientResult!
+
+    # Update an existing Kafka client configuration
+    # Changes take effect immediately - the client connector will be redeployed with new settings
+    # Useful for modifying bootstrap servers, consumer properties, or payload format
+    update(name: String!, input: KafkaClientInput!): KafkaClientResult!
+
+    # Delete a Kafka client configuration permanently
+    # Stops the client connector and removes all configuration data
+    # Returns true if deletion was successful, false if client was not found
+    delete(name: String!): Boolean!
+
+    # Start a Kafka client connection
+    # Enables a previously stopped client and begins consuming from Kafka topic
+    # Messages will be polled and republished as MQTT messages
+    start(name: String!): KafkaClientResult!
+
+    # Stop a Kafka client connection
+    # Disables the client and stops consuming from Kafka while preserving configuration
+    # Useful for temporarily pausing data ingestion or troubleshooting
+    stop(name: String!): KafkaClientResult!
+
+    # Toggle Kafka client enabled state
+    # Enable or disable a Kafka client without deleting its configuration
+    # Disabled clients stop consuming but retain their configuration and consumer group position
+    toggle(name: String!, enabled: Boolean!): KafkaClientResult!
+
+    # Reassign a Kafka client to a different cluster node
+    # Moves the client connector from one node to another for load balancing
+    # The client configuration remains unchanged, only the deployment location changes
+    # Consumer group position is preserved across reassignments
+    reassign(name: String!, nodeId: String!): KafkaClientResult!
+}
+
+# Extend Mutations for Kafka clients
+extend type Mutation {
+    # Access Kafka client management operations
+    # Returns a KafkaClientMutations type that provides grouped mutation operations
+    kafkaClient: KafkaClientMutations!
+}
+
+
+type KafkaClientResult {
+    success: Boolean!
+    client: KafkaClient
+    errors: [String!]!
+}
+
+input KafkaClientConfigInput {
+    bootstrapServers: String = "localhost:9092"
+    groupId: String = "monstermq-subscriber"
+    payloadFormat: KafkaPayloadFormat = DEFAULT
+    extraConsumerConfig: JSON
+    pollIntervalMs: Long = 500
+    maxPollRecords: Int = 100
+    reconnectDelayMs: Long = 5000
+    # Optional prefix applied to all published MQTT topics (see KafkaClientConfig.destinationTopicPrefix)
+    destinationTopicPrefix: String
+    # NOTE: Kafka topic is now derived from the device namespace
+}
+
+input KafkaClientInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean = true
+    config: KafkaClientConfigInput!
+}
+
+# WinCC OA Device Mutations - Grouped operations for WinCC OA device management
+type WinCCOaDeviceMutations {
+    # Create a new WinCC OA client configuration to connect to a WinCC OA GraphQL server
+    # Creates a client connector that will be deployed on the specified cluster node
+    # The client will automatically connect and subscribe to configured datapoint queries
+    create(input: WinCCOaClientInput!): WinCCOaClientResult!
+
+    # Update an existing WinCC OA client configuration
+    # Changes take effect immediately - the client connector will be redeployed with new settings
+    # Useful for modifying connection parameters, credentials, or subscriptions
+    update(name: String!, input: WinCCOaClientInput!): WinCCOaClientResult!
+
+    # Delete a WinCC OA client configuration permanently
+    # Stops the client connector and removes all configuration data
+    # Returns true if deletion was successful, false if client was not found
+    delete(name: String!): Boolean!
+
+    # Start a WinCC OA client connection
+    # Enables a previously stopped client and establishes connection to WinCC OA server
+    start(name: String!): WinCCOaClientResult!
+
+    # Stop a WinCC OA client connection
+    # Disables the client and disconnects from WinCC OA server while preserving configuration
+    stop(name: String!): WinCCOaClientResult!
+
+    # Toggle WinCC OA client enabled state
+    # Enable or disable a WinCC OA client without deleting its configuration
+    toggle(name: String!, enabled: Boolean!): WinCCOaClientResult!
+
+    # Reassign a WinCC OA client to a different cluster node
+    # Moves the client connector from one node to another for load balancing
+    # The client configuration remains unchanged, only the deployment location changes
+    reassign(name: String!, nodeId: String!): WinCCOaClientResult!
+
+    # Add a new subscription address to an existing WinCC OA client
+    # Defines a GraphQL query subscription for monitoring datapoint changes
+    # New subscriptions will immediately start receiving updates
+    addAddress(deviceName: String!, input: WinCCOaAddressInput!): WinCCOaClientResult!
+
+    # Remove a subscription address from a WinCC OA client
+    # Stops monitoring the specified GraphQL query while keeping other subscriptions active
+    deleteAddress(deviceName: String!, query: String!): WinCCOaClientResult!
+}
+
+# Extend Mutations for WinCC OA clients
+extend type Mutation {
+    # Access WinCC OA device management operations
+    # Returns a WinCCOaDeviceMutations type that provides grouped mutation operations
+    winCCOaDevice: WinCCOaDeviceMutations!
+}
+
+
+type WinCCOaClientResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected WinCC OA client (null if operation failed)
+    client: WinCCOaClient
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+input WinCCOaTransformConfigInput {
+    # Remove "System1:" prefix from datapoint names (default: true)
+    removeSystemName: Boolean = true
+    # Convert "." to "/" in datapoint names (default: true)
+    convertDotToSlash: Boolean = true
+    # Convert "_" to "/" in datapoint names (default: false)
+    convertUnderscoreToSlash: Boolean = false
+    # Optional regex pattern for additional transformation
+    regexPattern: String
+    # Replacement string for regex pattern
+    regexReplacement: String
+}
+
+input WinCCOaConnectionConfigInput {
+    # GraphQL endpoint URL
+    graphqlEndpoint: String = "http://winccoa:4000/graphql"
+    # WebSocket endpoint URL (optional, auto-derived if not specified)
+    websocketEndpoint: String
+    # Username for authentication (optional, omit for anonymous access)
+    # If provided, password must also be provided
+    username: String
+    # Password for authentication (optional, omit for anonymous access)
+    # If provided, username must also be provided
+    password: String
+    # Direct token for authentication (optional, skips login if provided)
+    # If provided, username/password are ignored
+    token: String
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long = 5000
+    # Connection timeout in milliseconds
+    connectionTimeout: Long = 10000
+    # Message format for publishing datapoint values
+    messageFormat: WinCCOaMessageFormat = JSON_ISO
+    # Topic name transformation configuration
+    transformConfig: WinCCOaTransformConfigInput
+    # Configured datapoint subscriptions
+    addresses: [WinCCOaAddressInput!]
+}
+
+input WinCCOaAddressInput {
+    # GraphQL query for dpQueryConnectSingle subscription
+    query: String!
+    # MQTT topic prefix for this subscription
+    topic: String!
+    # Optional description
+    description: String
+    # Whether to request the answer row in dpQueryConnectSingle (initial values)
+    answer: Boolean = false
+    # Whether to publish MQTT messages with retained flag
+    retained: Boolean = false
+}
+
+input WinCCOaClientInput {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (e.g., "winccoa/plant1")
+    namespace: String!
+    # Target cluster node (use "*" for automatic assignment)
+    nodeId: String!
+    # Whether the client should be enabled
+    enabled: Boolean = true
+    # Connection configuration
+    config: WinCCOaConnectionConfigInput!
+}
+
+# WinCC Unified Device Mutations - Grouped operations for WinCC Unified device management
+type WinCCUaDeviceMutations {
+    # Create a new WinCC Unified client configuration to connect to a WinCC Unified GraphQL server
+    # Creates a client connector that will be deployed on the specified cluster node
+    # The client will automatically connect, authenticate, and subscribe to configured tags/alarms
+    create(input: WinCCUaClientInput!): WinCCUaClientResult!
+
+    # Update an existing WinCC Unified client configuration
+    # Changes take effect immediately - the client connector will be redeployed with new settings
+    # Useful for modifying connection parameters, credentials, or subscriptions
+    update(name: String!, input: WinCCUaClientInput!): WinCCUaClientResult!
+
+    # Delete a WinCC Unified client configuration permanently
+    # Stops the client connector and removes all configuration data
+    # Returns true if deletion was successful, false if client was not found
+    delete(name: String!): Boolean!
+
+    # Start a WinCC Unified client connection
+    # Enables a previously stopped client and establishes connection to WinCC Unified server
+    start(name: String!): WinCCUaClientResult!
+
+    # Stop a WinCC Unified client connection
+    # Disables the client and disconnects from WinCC Unified server while preserving configuration
+    stop(name: String!): WinCCUaClientResult!
+
+    # Toggle WinCC Unified client enabled state
+    # Enable or disable a WinCC Unified client without deleting its configuration
+    toggle(name: String!, enabled: Boolean!): WinCCUaClientResult!
+
+    # Reassign a WinCC Unified client to a different cluster node
+    # Moves the client connector from one node to another for load balancing
+    # The client configuration remains unchanged, only the deployment location changes
+    reassign(name: String!, nodeId: String!): WinCCUaClientResult!
+
+    # Add a new subscription address to an existing WinCC Unified client
+    # Can be either TAG_VALUES (requires nameFilters) or ACTIVE_ALARMS (optional filters)
+    # New subscriptions will immediately start receiving updates
+    addAddress(deviceName: String!, input: WinCCUaAddressInput!): WinCCUaClientResult!
+
+    # Remove a subscription address from a WinCC Unified client
+    # Stops monitoring the specified topic while keeping other subscriptions active
+    deleteAddress(deviceName: String!, topic: String!): WinCCUaClientResult!
+}
+
+# Extend Mutations for WinCC Unified clients
+extend type Mutation {
+    # Access WinCC Unified device management operations
+    # Returns a WinCCUaDeviceMutations type that provides grouped mutation operations
+    winCCUaDevice: WinCCUaDeviceMutations!
+}
+
+# WinCC Unified address type enum
+
+type WinCCUaClientResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected WinCC Unified client (null if operation failed)
+    client: WinCCUaClient
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+input WinCCUaTransformConfigInput {
+    # Convert "." to "/" in tag names (default: true)
+    convertDotToSlash: Boolean = true
+    # Convert "_" to "/" in tag names (default: false)
+    convertUnderscoreToSlash: Boolean = false
+    # Optional regex pattern for additional transformation
+    regexPattern: String
+    # Replacement string for regex pattern
+    regexReplacement: String
+}
+
+input WinCCUaConnectionConfigInput {
+    # GraphQL endpoint URL (e.g., "http://winccua:4000/graphql")
+    graphqlEndpoint: String!
+    # WebSocket endpoint URL (optional, defaults to graphqlEndpoint with ws:// protocol)
+    websocketEndpoint: String
+    # Username for authentication (required)
+    username: String!
+    # Password for authentication (required)
+    password: String!
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long = 5000
+    # Connection timeout in milliseconds
+    connectionTimeout: Long = 10000
+    # Message format for publishing tag values
+    messageFormat: String = "JSON_ISO"
+    # Topic name transformation configuration
+    transformConfig: WinCCUaTransformConfigInput
+}
+
+input WinCCUaAddressInput {
+    # Address type (TAG_VALUES or ACTIVE_ALARMS)
+    type: WinCCUaAddressType!
+    # MQTT topic prefix for this subscription
+    topic: String!
+    # Optional description
+    description: String
+    # Whether to publish MQTT messages with retained flag
+    retained: Boolean = false
+    # Name filters for TAG_VALUES type (e.g., ["HMI_*", "TANK_*"])
+    nameFilters: [String!]
+    # Whether to include quality information in TAG_VALUES data (default: false)
+    includeQuality: Boolean = false
+    # System names filter for ACTIVE_ALARMS type
+    systemNames: [String!]
+    # Filter string for ACTIVE_ALARMS type
+    filterString: String
+}
+
+input WinCCUaClientInput {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (e.g., "winccua/plant1")
+    namespace: String!
+    # Target cluster node (use "*" for automatic assignment)
+    nodeId: String!
+    # Whether the client should be enabled
+    enabled: Boolean = true
+    # Connection configuration
+    config: WinCCUaConnectionConfigInput!
+}
+
+# PLC4X Device Mutations - Grouped operations for PLC4X device management
+type Plc4xDeviceMutations {
+    # Create a new PLC4X client configuration to connect to an industrial PLC
+    # Creates a client connector that will be deployed on the specified cluster node
+    # The client will automatically connect and poll configured addresses
+    create(input: Plc4xClientInput!): Plc4xClientResult!
+
+    # Update an existing PLC4X client configuration
+    # Changes take effect immediately - the client connector will be redeployed with new settings
+    # Useful for modifying connection parameters, polling intervals, or addresses
+    update(name: String!, input: Plc4xClientInput!): Plc4xClientResult!
+
+    # Delete a PLC4X client configuration permanently
+    # Stops the client connector and removes all configuration data
+    # Returns true if deletion was successful, false if client was not found
+    delete(name: String!): Boolean!
+
+    # Start a PLC4X client connection
+    # Enables a previously stopped client and establishes connection to PLC
+    start(name: String!): Plc4xClientResult!
+
+    # Stop a PLC4X client connection
+    # Disables the client and disconnects from PLC while preserving configuration
+    stop(name: String!): Plc4xClientResult!
+
+    # Toggle PLC4X client enabled state
+    # Enable or disable a PLC4X client without deleting its configuration
+    toggle(name: String!, enabled: Boolean!): Plc4xClientResult!
+
+    # Reassign a PLC4X client to a different cluster node
+    # Moves the client connector from one node to another for load balancing
+    # The client configuration remains unchanged, only the deployment location changes
+    reassign(name: String!, nodeId: String!): Plc4xClientResult!
+
+    # Add a new address to an existing PLC4X client
+    # Defines a new PLC tag/address to poll and publish to MQTT
+    # New addresses will immediately start being polled
+    addAddress(deviceName: String!, input: Plc4xAddressInput!): Plc4xClientResult!
+
+    # Remove an address from a PLC4X client
+    # Stops polling the specified address while keeping other addresses active
+    deleteAddress(deviceName: String!, addressName: String!): Plc4xClientResult!
+}
+
+# Extend Mutations for PLC4X clients
+extend type Mutation {
+    # Access PLC4X device management operations
+    # Returns a Plc4xDeviceMutations type that provides grouped mutation operations
+    plc4xDevice: Plc4xDeviceMutations!
+}
+
+
+type Plc4xClientResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected PLC4X client (null if operation failed)
+    client: Plc4xClient
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+# Input for PLC4X connection configuration
+input Plc4xConnectionConfigInput {
+    # PLC4X protocol to use
+    protocol: Plc4xProtocol!
+    # PLC4X connection string (format depends on protocol)
+    connectionString: String!
+    # Interval in milliseconds for polling addresses
+    pollingInterval: Long = 1000
+    # Delay in milliseconds before attempting reconnection
+    reconnectDelay: Long = 5000
+    # Whether polling is enabled
+    enabled: Boolean = true
+    # List of addresses to poll
+    addresses: [Plc4xAddressInput!] = []
+}
+
+# Input for PLC4X address configuration
+input Plc4xAddressInput {
+    # Unique name for this address
+    name: String!
+    # PLC4X address string (protocol-specific format)
+    address: String!
+    # MQTT topic where values will be published (auto-generated if not provided)
+    topic: String
+    # MQTT QoS level (0, 1, or 2)
+    qos: Int = 0
+    # Whether to publish with retained flag
+    retained: Boolean = false
+    # Optional scaling factor for numeric values
+    scalingFactor: Float
+    # Optional offset for numeric values
+    offset: Float
+    # Optional deadband threshold
+    deadband: Float
+    # Only publish to MQTT when value changes (avoids duplicate values)
+    publishOnChange: Boolean = true
+    # Operating mode (READ, WRITE, or READ_WRITE)
+    mode: Plc4xAddressMode = READ
+    # Whether this address should be polled
+    enabled: Boolean = true
+}
+
+# Input for creating or updating a PLC4X client
+input Plc4xClientInput {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (e.g., "plc4x/siemens01")
+    namespace: String!
+    # Target cluster node (use "*" for automatic assignment)
+    nodeId: String!
+    # Whether the client should be enabled
+    enabled: Boolean = true
+    # Connection configuration
+    config: Plc4xConnectionConfigInput!
+}

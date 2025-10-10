@@ -1,0 +1,36 @@
+
+type Subscription {
+    # Subscribe to real-time MQTT message updates for topics matching a filter
+    # Creates a persistent GraphQL subscription that streams live data as messages are published
+    # Uses WebSocket connection to deliver low-latency updates to dashboards and monitoring tools
+    # Subscription will remain active until client disconnects or unsubscribes
+    topicUpdates(
+        # MQTT topic filter with wildcards: "sensor/+/temperature", "device/#", etc.
+        # Supports both single-level (+) and multi-level (#) MQTT wildcards
+        topicFilter: String!,
+        # Data format for streamed message payloads
+        format: DataFormat = JSON
+    ): TopicUpdate!
+
+    # Subscribe to real-time updates from multiple topic filters simultaneously
+    # Efficient way to monitor different topic categories in a single subscription
+    # All matching messages from any of the specified filters will be streamed
+    # Useful for comprehensive dashboard monitoring across topic hierarchies
+    multiTopicUpdates(
+        # Array of MQTT topic filters to monitor simultaneously
+        # Each filter supports MQTT wildcards independently
+        topicFilters: [String!]!,
+        # Data format for all streamed message payloads
+        format: DataFormat = JSON
+    ): TopicUpdate!
+}
+
+type TopicUpdate {
+    topic: String!
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
+    qos: Int!
+    retained: Boolean!
+    clientId: String
+}

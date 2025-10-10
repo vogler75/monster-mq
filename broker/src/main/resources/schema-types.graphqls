@@ -1,0 +1,192 @@
+scalar Long
+scalar JSON
+
+# Data format specification for MQTT message payloads
+# Determines how payload data is interpreted and processed by the GraphQL API
+enum DataFormat {
+    # JSON format: payload is parsed as JSON and returned as structured data
+    # Allows for rich querying and manipulation of message content
+    # Invalid JSON will result in parsing errors
+    JSON
+    # Binary format: payload is treated as raw binary data encoded in base64
+    # Preserves exact byte content for non-text data (images, files, etc.)
+    # Always safe for any payload content regardless of encoding
+    BINARY
+}
+
+enum MessageStoreType {
+    NONE
+    MEMORY
+    HAZELCAST
+    POSTGRES
+    CRATEDB
+    MONGODB
+    SQLITE
+}
+
+enum MessageArchiveType {
+    NONE
+    POSTGRES
+    CRATEDB
+    MONGODB
+    KAFKA
+    SQLITE
+}
+
+enum PayloadFormat {
+    DEFAULT
+    JSON
+}
+
+# Metrics for the broker
+type BrokerMetrics {
+    # Messages per second received from clients on this node
+    messagesIn: Float!
+    # Messages per second sent to clients on this node
+    messagesOut: Float!
+    # Number of sessions on this node
+    nodeSessionCount: Int!
+    # Total number of sessions in the cluster
+    clusterSessionCount: Int!
+    # Total number of queued messages in the cluster
+    queuedMessagesCount: Long!
+    # Size of the topic index (TopicTree)
+    topicIndexSize: Int!
+    # Size of the client-to-node mapping
+    clientNodeMappingSize: Int!
+    # Total size of topic-to-node mapping sets
+    topicNodeMappingSize: Int!
+    # Messages per second received from other nodes via message bus
+    messageBusIn: Float!
+    # Messages per second sent to other nodes via message bus
+    messageBusOut: Float!
+    # Messages per second received via MQTT bridge clients (remote -> local)
+    mqttClientIn: Float!
+    # Messages per second sent via MQTT bridge clients (local -> remote)
+    mqttClientOut: Float!
+    # Messages per second received via Kafka bridge clients (Kafka -> MQTT)
+    kafkaClientIn: Float!
+    # Messages per second published via Kafka bridge clients (MQTT -> Kafka)
+    kafkaClientOut: Float!
+    # Messages per second received from OPC UA devices (value changes)
+    opcUaClientIn: Float!
+    # Messages per second sent to OPC UA devices (writes)
+    opcUaClientOut: Float!
+    # Messages per second received from WinCC OA clients (datapoint value changes)
+    winCCOaClientIn: Float!
+    # Messages per second received from WinCC Unified clients (tag values and alarms)
+    winCCUaClientIn: Float!
+    # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
+    timestamp: String!
+}
+
+# Metrics for an OPC UA device connector
+# messagesIn: value changes received from OPC UA server into broker
+# messagesOut: values written from broker to OPC UA server
+ type OpcUaDeviceMetrics {
+     messagesIn: Float!
+     messagesOut: Float!
+     timestamp: String!
+ }
+
+
+# Represents a broker node in the MonsterMQ cluster
+# Each broker node runs independently and can handle MQTT clients, message processing, and data storage
+type Broker {
+    # Unique identifier for this cluster node (used for load balancing and device assignment)
+    nodeId: String!
+    # MonsterMQ version string (e.g., "1.6.5+9945c5a")
+    version: String!
+    # Current performance metrics for this broker node (latest snapshot)
+    # Returns array with single most recent metrics entry for consistency with metricsHistory
+    metrics: [BrokerMetrics!]!
+    # Historical performance metrics over a specified time range
+    # Useful for monitoring trends, performance analysis, and capacity planning
+    metricsHistory(
+        # ISO 8601 start timestamp (optional - defaults to 24 hours ago)
+        from: String
+        # ISO 8601 end timestamp (optional - defaults to now)
+        to: String
+        # Alternative time range: metrics from the last N minutes (overrides from/to if specified)
+        lastMinutes: Int
+    ): [BrokerMetrics!]!
+    # MQTT client sessions managed by this broker node
+    # Sessions persist client state, subscriptions, and queued messages
+    sessions(
+        # Filter by session persistence type: true=clean, false=persistent, null=all
+        cleanSession: Boolean,
+        # Filter by connection status: true=active connections, false=disconnected, null=all
+        connected: Boolean
+    ): [Session!]!
+}
+
+# Represents a client session
+type Session {
+    # The client ID
+    clientId: String!
+    # The ID of the node this session is connected to
+    nodeId: String!
+    # Current metrics for this session (single most recent entry)
+    metrics: [SessionMetrics!]!
+    # Historical metrics data for this session
+    metricsHistory(
+        # ISO 8601 timestamp for start of time range (e.g., "2024-01-15T10:00:00Z")
+        from: String
+        # ISO 8601 timestamp for end of time range (e.g., "2024-01-15T11:00:00Z")
+        to: String
+        # Alternative to from/to: get metrics from the last N minutes
+        lastMinutes: Int
+    ): [SessionMetrics!]!
+    # The subscriptions for this session
+    subscriptions: [MqttSubscription!]!
+    # Is the session clean
+    cleanSession: Boolean!
+    # The session expiry interval
+    sessionExpiryInterval: Long!
+    # The client's address
+    clientAddress: String
+    # Whether the client is currently connected
+    connected: Boolean!
+    # Number of queued messages for this session
+    queuedMessageCount: Long!
+    # Additional session information as JSON
+    information: String
+}
+
+# Metrics for a single session
+type SessionMetrics {
+    # Messages per second received from this client
+    messagesIn: Float!
+    # Messages per second sent to this client
+    messagesOut: Float!
+    # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
+    timestamp: String!
+}
+
+# Metrics for a MQTT bridge client
+ type MqttClientMetrics {
+     # Messages per second received from remote broker (SUBSCRIBE flow)
+     messagesIn: Float!
+     # Messages per second published to remote broker (PUBLISH flow)
+     messagesOut: Float!
+     # ISO 8601 timestamp when these metrics were captured
+     timestamp: String!
+ }
+
+# Metrics for an archive group
+type ArchiveGroupMetrics {
+    # Messages per second being written to the archive database
+    messagesOut: Float!
+    # Average buffer size (number of queued messages waiting to be written)
+    bufferSize: Int!
+    # ISO 8601 timestamp when these metrics were captured
+    timestamp: String!
+}
+
+# Represents an MQTT subscription
+type MqttSubscription {
+    # The topic filter
+    topicFilter: String!
+    # The Quality of Service level
+    qos: Int!
+}
