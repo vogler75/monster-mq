@@ -612,7 +612,7 @@ MORE INFO:
                         val store = at.rocworks.stores.MetricsStoreFactory.create(storeType, configJson, "metrics")
                         val collectionInterval = metricsConfig.getInteger("CollectionInterval", 1)
                         logger.info("Starting Metrics Store: ${store.getName()} (${store.getType()}) with ${collectionInterval}s collection interval")
-                        val collector = MetricsHandler(sessionHandler, store, collectionInterval)
+                        val collector = MetricsHandler(sessionHandler, store, messageBus, messageHandler, collectionInterval)
                         store to collector
                     } catch (e: Exception) {
                         logger.warning("Failed to create metrics store: ${e.message}")
