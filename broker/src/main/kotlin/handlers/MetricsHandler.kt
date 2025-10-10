@@ -174,12 +174,27 @@ class MetricsHandler(
                                 }
                             }
 
-                            // Publish session metrics to $SYS topic
+                            // Publish session metrics to $SYS topic with connection statistics
                             val sessionMetricsJson = JsonObject()
                                 .put("messagesIn", messagesInRate)
                                 .put("messagesOut", messagesOutRate)
                                 .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
-                            publishMetrics("\$SYS/sessions/${clientId}/metrics", sessionMetricsJson)
+
+                            // Add connection statistics if available
+                            if (sessionMetric.containsKey("connected")) {
+                                sessionMetricsJson.put("connected", sessionMetric.getBoolean("connected", false))
+                            }
+                            if (sessionMetric.containsKey("lastPing")) {
+                                sessionMetricsJson.put("lastPing", sessionMetric.getString("lastPing", ""))
+                            }
+                            if (sessionMetric.containsKey("inFlightMessagesRcv")) {
+                                sessionMetricsJson.put("inFlightMessagesRcv", sessionMetric.getInteger("inFlightMessagesRcv", 0))
+                            }
+                            if (sessionMetric.containsKey("inFlightMessagesSnd")) {
+                                sessionMetricsJson.put("inFlightMessagesSnd", sessionMetric.getInteger("inFlightMessagesSnd", 0))
+                            }
+
+                            publishMetrics("\$SYS/sessions/mqtt/${clientId}/metrics", sessionMetricsJson)
                         }
                     } catch (e: Exception) {
                         logger.warning("Error assembling aggregated broker metrics: ${e.message}")
@@ -229,12 +244,12 @@ class MetricsHandler(
                                         )
                                         metricsStore.storeMqttClientMetrics(timestamp, deviceName, mqttMetrics)
 
-                                        // Publish MQTT client metrics to $SYS topic
+                                        // Publish MQTT bridge metrics to $SYS topic
                                         val mqttMetricsJson = JsonObject()
                                             .put("messagesIn", inRate)
                                             .put("messagesOut", outRate)
                                             .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
-                                        publishMetrics("\$SYS/mqttclients/${deviceName}/metrics", mqttMetricsJson)
+                                        publishMetrics("\$SYS/sessions/mqtt-bridge/${deviceName}/metrics", mqttMetricsJson)
                                     } catch (e: Exception) {
                                         logger.warning("Error processing MQTT bridge metrics for $deviceName: ${e.message}")
                                     }
@@ -285,8 +300,8 @@ class MetricsHandler(
                                              .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
                                          metricsStore.storeMetrics(at.rocworks.stores.MetricKind.OPCUADEVICE, timestamp, deviceName, opcUaMetricsJson)
 
-                                         // Publish OPC UA client metrics to $SYS topic
-                                         publishMetrics("\$SYS/opcuaclients/${deviceName}/metrics", opcUaMetricsJson)
+                                         // Publish OPC UA session metrics to $SYS topic
+                                         publishMetrics("\$SYS/sessions/opcua/${deviceName}/metrics", opcUaMetricsJson)
                                      } catch (e: Exception) {
                                          logger.warning("Error processing OPC UA metrics for $deviceName: ${e.message}")
                                      }
@@ -338,12 +353,12 @@ class MetricsHandler(
                                          )
                                          metricsStore.storeKafkaClientMetrics(timestamp, deviceName, kafkaMetrics)
 
-                                         // Publish Kafka client metrics to $SYS topic
+                                         // Publish Kafka session metrics to $SYS topic
                                          val kafkaMetricsJson = JsonObject()
                                              .put("messagesIn", inRate)
                                              .put("messagesOut", outRate)
                                              .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
-                                         publishMetrics("\$SYS/kafkaclients/${deviceName}/metrics", kafkaMetricsJson)
+                                         publishMetrics("\$SYS/sessions/kafka/${deviceName}/metrics", kafkaMetricsJson)
                                     } catch (e: Exception) {
                                         logger.warning("Error processing Kafka client metrics for $deviceName: ${e.message}")
                                     }
@@ -396,12 +411,12 @@ class MetricsHandler(
                                         )
                                         metricsStore.storeWinCCOaClientMetrics(timestamp, deviceName, winCCOaMetrics)
 
-                                        // Publish WinCC OA client metrics to $SYS topic
+                                        // Publish WinCC OA session metrics to $SYS topic
                                         val winCCOaMetricsJson = JsonObject()
                                             .put("messagesIn", inRate)
                                             .put("connected", connected)
                                             .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
-                                        publishMetrics("\$SYS/winccoaclients/${deviceName}/metrics", winCCOaMetricsJson)
+                                        publishMetrics("\$SYS/sessions/winccoa/${deviceName}/metrics", winCCOaMetricsJson)
                                     } catch (e: Exception) {
                                         logger.warning("Error processing WinCC OA client metrics for $deviceName: ${e.message}")
                                     }
@@ -455,12 +470,12 @@ class MetricsHandler(
                                         )
                                         metricsStore.storeWinCCUaClientMetrics(timestamp, deviceName, winCCUaMetrics)
 
-                                        // Publish WinCC UA client metrics to $SYS topic
+                                        // Publish WinCC UA session metrics to $SYS topic
                                         val winCCUaMetricsJson = JsonObject()
                                             .put("messagesIn", inRate)
                                             .put("connected", connected)
                                             .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
-                                        publishMetrics("\$SYS/winccuaclients/${deviceName}/metrics", winCCUaMetricsJson)
+                                        publishMetrics("\$SYS/sessions/winccua/${deviceName}/metrics", winCCUaMetricsJson)
                                     } catch (e: Exception) {
                                         logger.warning("Error processing WinCC Unified client metrics for $deviceName: ${e.message}")
                                     }

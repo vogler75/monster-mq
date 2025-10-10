@@ -99,7 +99,6 @@ class MqttClient(
     override fun start() {
         vertx.setPeriodic(1000) { receivingInFlightMessagesPeriodicCheck() }
         vertx.setPeriodic(1000) { sendingInFlightMessagesPeriodicCheck() }
-        vertx.setPeriodic(1000) { publishStatistics() }
         vertx.setPeriodic(1000) { checkRateLimits() }
     }
 
@@ -366,6 +365,10 @@ class MqttClient(
                 logger.info("Client [$clientId] Status command received [${Utils.getCurrentFunctionName()}]")
                 message.reply(JsonObject().put("Connected", endpoint.isConnected))
             }
+            Const.COMMAND_STATISTICS -> {
+                logger.finest("Client [$clientId] Statistics command received [${Utils.getCurrentFunctionName()}]")
+                message.reply(getConnectionStatistics())
+            }
             Const.COMMAND_DISCONNECT -> {
                 val reason = command.getString("Reason")
                 logger.info("Client [$clientId] Disconnect command received" + (reason?.let { ": $it" } ?: "") + " [${Utils.getCurrentFunctionName()}]")
@@ -387,18 +390,16 @@ class MqttClient(
         endpoint.unsubscribeAcknowledge(unsubscribe.messageId())
     }
 
-    private fun publishStatistics() {
-        val data = JsonObject()
-            .put("Connected", endpoint.isConnected)
-            .put("LastPing", lastPing.toString())
-            .put("InFlightMessagesRcv", inFlightMessagesRcv.size)
-            .put("InFlightMessagesSnd", inFlightMessagesSnd.size)
-        val payload = data.encode()
-        if (lastStatisticsMessage != payload) {
-            lastStatisticsMessage = payload
-            val message = BrokerMessage(clientId, "\$SYS/clients/${clientId}/statistics", payload)
-            sessionHandler.publishMessage(message)
-        }
+    /**
+     * Get connection statistics for this client
+     * Used by SessionHandler for unified metrics publishing
+     */
+    fun getConnectionStatistics(): JsonObject {
+        return JsonObject()
+            .put("connected", endpoint.isConnected)
+            .put("lastPing", lastPing.toString())
+            .put("inFlightMessagesRcv", inFlightMessagesRcv.size)
+            .put("inFlightMessagesSnd", inFlightMessagesSnd.size)
     }
 
     private fun checkRateLimits() {

@@ -159,6 +159,14 @@ type SessionMetrics {
     messagesIn: Float!
     # Messages per second sent to this client
     messagesOut: Float!
+    # Whether the client is currently connected (only available for MQTT clients)
+    connected: Boolean
+    # ISO 8601 timestamp of last ping received (only available for MQTT clients)
+    lastPing: String
+    # Number of QoS 2 messages in flight (receiving) (only available for MQTT clients)
+    inFlightMessagesRcv: Int
+    # Number of QoS 1/2 messages in flight (sending) (only available for MQTT clients)
+    inFlightMessagesSnd: Int
     # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
     timestamp: String!
 }

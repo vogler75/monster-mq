@@ -240,56 +240,86 @@ open class SessionHandler(
             var totalMessagesOutRate = 0.0
             val sessionMetricsArray = io.vertx.core.json.JsonArray()
 
-            // Get and reset session metrics with rate calculation
+            // Collect all client metrics with connection statistics
+            val clientStatsFutures = mutableListOf<Future<Void>>()
+
             clientMetrics.forEach { (clientId, sessionMetrics) ->
                 val inCount = sessionMetrics.messagesIn.getAndSet(0)
                 val outCount = sessionMetrics.messagesOut.getAndSet(0)
-                
+
                 // Calculate duration since last reset for this client
                 val duration = (currentTime - sessionMetrics.lastResetTime) / 1000.0 // seconds
                 val inRate = if (duration > 0) kotlin.math.round(inCount / duration) else 0.0
                 val outRate = if (duration > 0) kotlin.math.round(outCount / duration) else 0.0
-                
+
                 // Update last reset time
                 sessionMetrics.lastResetTime = currentTime
-                
+
                 totalMessagesIn += inCount
                 totalMessagesOut += outCount
                 totalMessagesInRate += inRate
                 totalMessagesOutRate += outRate
 
-                // Add individual client metrics to the response
-                sessionMetricsArray.add(JsonObject()
+                // Build client metrics object
+                val clientMetricsJson = JsonObject()
                     .put("clientId", clientId)
                     .put("messagesIn", inCount)
                     .put("messagesOut", outCount)
                     .put("messagesInRate", inRate)
                     .put("messagesOutRate", outRate)
-                )
+
+                // Try to get connection statistics from the client (if it's an MQTT client)
+                val statsPromise = Promise.promise<Void>()
+                val statsRequest = JsonObject().put(Const.COMMAND_KEY, Const.COMMAND_STATISTICS)
+                vertx.eventBus().request<JsonObject>(
+                    MqttClient.getCommandAddress(clientId),
+                    statsRequest,
+                    io.vertx.core.eventbus.DeliveryOptions().setSendTimeout(100)
+                ).onComplete { statsResult ->
+                    if (statsResult.succeeded()) {
+                        val stats = statsResult.result().body()
+                        clientMetricsJson
+                            .put("connected", stats.getBoolean("connected", false))
+                            .put("lastPing", stats.getString("lastPing", ""))
+                            .put("inFlightMessagesRcv", stats.getInteger("inFlightMessagesRcv", 0))
+                            .put("inFlightMessagesSnd", stats.getInteger("inFlightMessagesSnd", 0))
+                    }
+                    sessionMetricsArray.add(clientMetricsJson)
+                    statsPromise.complete()
+                }.onFailure { _ ->
+                    // Client not available or not an MQTT client, add metrics without connection stats
+                    sessionMetricsArray.add(clientMetricsJson)
+                    statsPromise.complete()
+                }
+
+                clientStatsFutures.add(statsPromise.future())
             }
 
-            // Calculate message bus rates
-            val messageBusInCount = messageBusIn.getAndSet(0)
-            val messageBusOutCount = messageBusOut.getAndSet(0)
-            val lastBusResetTime = messageBusLastResetTime.getAndSet(currentTime)
-            val busDuration = (currentTime - lastBusResetTime) / 1000.0 // seconds
-            val messageBusInRate = if (busDuration > 0) kotlin.math.round(messageBusInCount / busDuration) else 0.0
-            val messageBusOutRate = if (busDuration > 0) kotlin.math.round(messageBusOutCount / busDuration) else 0.0
+            // Wait for all connection statistics to be collected, then reply
+            Future.all<Void>(clientStatsFutures).onComplete { _ ->
+                // Calculate message bus rates
+                val messageBusInCount = messageBusIn.getAndSet(0)
+                val messageBusOutCount = messageBusOut.getAndSet(0)
+                val lastBusResetTime = messageBusLastResetTime.getAndSet(currentTime)
+                val busDuration = (currentTime - lastBusResetTime) / 1000.0 // seconds
+                val messageBusInRate = if (busDuration > 0) kotlin.math.round(messageBusInCount / busDuration) else 0.0
+                val messageBusOutRate = if (busDuration > 0) kotlin.math.round(messageBusOutCount / busDuration) else 0.0
 
-            metrics.put("messagesIn", totalMessagesIn)
-                   .put("messagesOut", totalMessagesOut)
-                   .put("messagesInRate", totalMessagesInRate)
-                   .put("messagesOutRate", totalMessagesOutRate)
-                   .put("nodeSessionCount", clientMetrics.size)
-                   .put("messageBusIn", messageBusInCount)
-                   .put("messageBusOut", messageBusOutCount)
-                   .put("messageBusInRate", messageBusInRate)
-                   .put("messageBusOutRate", messageBusOutRate)
-                   .put("topicIndexSize", topicIndex.size())
-                   .put("clientNodeMappingSize", clientNodeMapping.size())
-                   .put("topicNodeMappingSize", topicNodeMapping.size())
-                   .put("sessionMetrics", sessionMetricsArray)
-            message.reply(metrics)
+                metrics.put("messagesIn", totalMessagesIn)
+                       .put("messagesOut", totalMessagesOut)
+                       .put("messagesInRate", totalMessagesInRate)
+                       .put("messagesOutRate", totalMessagesOutRate)
+                       .put("nodeSessionCount", clientMetrics.size)
+                       .put("messageBusIn", messageBusInCount)
+                       .put("messageBusOut", messageBusOutCount)
+                       .put("messageBusInRate", messageBusInRate)
+                       .put("messageBusOutRate", messageBusOutRate)
+                       .put("topicIndexSize", topicIndex.size())
+                       .put("clientNodeMappingSize", clientNodeMapping.size())
+                       .put("topicNodeMappingSize", topicNodeMapping.size())
+                       .put("sessionMetrics", sessionMetricsArray)
+                message.reply(metrics)
+            }
         }
 
         // Individual session metrics handler - non-destructive
