@@ -1,0 +1,14 @@
+Release v1.6.26
+Built from commit: 6bd4c61
+Date: 2025-10-11 12:15:00
+
+Changes since v1.6.25:
+---
+6bd4c61 Refactor dashboard client detail forms and add OPC UA server detail
+a9ba4e2 Update GraphQL queries to use plural endpoints
+638e965 Add Neo4j client bridge integration
+afe9add Add connection statistics to session metrics
+ecc58c4 Publish metrics to $SYS topics as retained messages
+0a09a1b Unify device query filters and update GraphQL schema
+ffe4110 Refactor GraphQL schema into modular files
+bd261b2 Add new client creation flow to PLC4X dashboard
