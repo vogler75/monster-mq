@@ -36,7 +36,7 @@ class KafkaClientDetailManager {
             const query = `query GetClusterNodes { clusterNodes { nodeId isCurrent } }`;
             const result = await this.client.query(query);
             this.clusterNodes = result.clusterNodes || [];
-            const nodeSelect = document.getElementById('edit-client-node');
+            const nodeSelect = document.getElementById('client-node');
             if (nodeSelect) {
                 nodeSelect.innerHTML = '<option value="">Select Node...</option>';
                 this.clusterNodes.forEach(node => {
@@ -81,30 +81,40 @@ class KafkaClientDetailManager {
         if (!this.clientData) return;
         const d = this.clientData;
         const cfg = d.config;
+
+        // Update page title and subtitle
         document.getElementById('page-title').textContent = `Kafka Client: ${d.name}`;
-        this.setText('client-name-display', d.name);
-        this.setText('client-namespace', d.namespace);
-        this.setText('client-node-id', d.nodeId + (d.isOnCurrentNode ? ' (Current)' : ''));
-        this.setText('client-bootstrap', cfg.bootstrapServers);
+        document.getElementById('page-subtitle').textContent = `${d.namespace} - ${cfg.bootstrapServers}`;
 
-        this.setText('client-group-id', cfg.groupId);
+        // Populate form fields
+        document.getElementById('client-name').value = d.name;
+        document.getElementById('client-name').disabled = true; // Can't change name in edit mode
+        document.getElementById('client-namespace').value = d.namespace;
+        document.getElementById('client-node').value = d.nodeId;
+        document.getElementById('client-bootstrap').value = cfg.bootstrapServers;
+        document.getElementById('client-group-id').value = cfg.groupId;
+        document.getElementById('client-payload-format').value = cfg.payloadFormat;
+        document.getElementById('client-destination-prefix').value = cfg.destinationTopicPrefix || '';
+        document.getElementById('client-poll-interval').value = cfg.pollIntervalMs;
+        document.getElementById('client-max-poll').value = cfg.maxPollRecords;
+        document.getElementById('client-reconnect-delay').value = cfg.reconnectDelayMs;
+        document.getElementById('client-enabled').checked = d.enabled;
 
-        this.setText('client-payload-format', cfg.payloadFormat);
-        const destPref = cfg.destinationTopicPrefix ? cfg.destinationTopicPrefix : '(none)';
-        this.setText('client-destination-prefix', destPref);
- 
-        this.setText('client-poll-interval', `${cfg.pollIntervalMs} ms`);
-        this.setText('client-max-poll', cfg.maxPollRecords);
-        this.setText('client-reconnect-delay', `${cfg.reconnectDelayMs} ms`);
-        this.setText('client-created-at', new Date(d.createdAt).toLocaleString());
-        this.setText('client-updated-at', new Date(d.updatedAt).toLocaleString());
-        // Extra config display
-        const extraCfgEl = document.getElementById('client-extra-config');
-        if (extraCfgEl) {
-            const extra = cfg.extraConsumerConfig && Object.keys(cfg.extraConsumerConfig).length>0 ? JSON.stringify(cfg.extraConsumerConfig, null, 2) : 'None';
-            extraCfgEl.textContent = extra;
+        // Extra config
+        const extra = cfg.extraConsumerConfig ? JSON.stringify(cfg.extraConsumerConfig, null, 2) : '';
+        document.getElementById('client-extra').value = extra;
+
+        // Ensure trailing slash visually (normalization handled server-side)
+        const destInput = document.getElementById('client-destination-prefix');
+        if (destInput && destInput.value && !destInput.value.endsWith('/')) {
+            destInput.value = destInput.value + '/';
         }
 
+        // Timestamps (read-only)
+        this.setText('client-created-at', new Date(d.createdAt).toLocaleString());
+        this.setText('client-updated-at', new Date(d.updatedAt).toLocaleString());
+
+        // Status badge
         const statusBadge = document.getElementById('client-status');
         if (d.enabled) {
             statusBadge.className = 'status-badge status-enabled';
@@ -113,12 +123,16 @@ class KafkaClientDetailManager {
             statusBadge.className = 'status-badge status-disabled';
             statusBadge.textContent = 'DISABLED';
         }
+
+        // Toggle button
         const toggleBtn = document.getElementById('toggle-client-btn');
         if (toggleBtn) {
             toggleBtn.textContent = d.enabled ? 'Stop Client' : 'Start Client';
             toggleBtn.className = d.enabled ? 'btn btn-warning' : 'btn btn-success';
         }
-        this.populateEditForm();
+
+        // Show content
+        document.getElementById('client-content').style.display = 'block';
     }
 
     renderMetrics() {
@@ -145,36 +159,12 @@ class KafkaClientDetailManager {
         }
     }
 
-    populateEditForm() {
-        if (!this.clientData) return;
-        const d = this.clientData; const cfg = d.config;
-        this.setValue('edit-client-name', d.name);
-        this.setValue('edit-client-namespace', d.namespace);
-        this.setValue('edit-client-node', d.nodeId);
-        this.setValue('edit-client-bootstrap', cfg.bootstrapServers);
-
-        this.setValue('edit-client-group-id', cfg.groupId);
-        this.setValue('edit-client-destination-prefix', cfg.destinationTopicPrefix || '');
- 
-        this.setValue('edit-client-payload-format', cfg.payloadFormat);
-
-
-        this.setValue('edit-client-poll-interval', cfg.pollIntervalMs);
-        this.setValue('edit-client-max-poll', cfg.maxPollRecords);
-        this.setValue('edit-client-reconnect-delay', cfg.reconnectDelayMs);
-        document.getElementById('edit-client-enabled').checked = d.enabled;
-        const extra = cfg.extraConsumerConfig ? JSON.stringify(cfg.extraConsumerConfig, null, 2) : '';
-        this.setValue('edit-client-extra', extra);
-        // Ensure trailing slash visually (normalization handled server-side)
-        const destInput = document.getElementById('edit-client-destination-prefix');
-        if(destInput && destInput.value && !destInput.value.endsWith('/')) destInput.value = destInput.value + '/';
-    }
-
-    async updateClient() {
-        const form = document.getElementById('edit-client-form');
+    async saveClient() {
+        const form = document.getElementById('client-form');
         if (!form.checkValidity()) { form.reportValidity(); return; }
+
         // Build input
-        let extraConfigText = document.getElementById('edit-client-extra').value.trim();
+        let extraConfigText = document.getElementById('client-extra').value.trim();
         let extraConfig = null;
         if (extraConfigText.length > 0) {
             try { extraConfig = JSON.parse(extraConfigText); } catch (e) { this.showError('Invalid JSON in Extra Consumer Config: ' + e.message); return; }
@@ -182,22 +172,22 @@ class KafkaClientDetailManager {
                 this.showError('Extra Consumer Config must be a JSON object'); return;
             }
         }
-        const updatedInput = {
-            name: document.getElementById('edit-client-name').value.trim(),
-            namespace: document.getElementById('edit-client-namespace').value.trim(),
-            nodeId: document.getElementById('edit-client-node').value,
-            enabled: document.getElementById('edit-client-enabled').checked,
-                config: {
-                    bootstrapServers: document.getElementById('edit-client-bootstrap').value.trim(),
-                    groupId: document.getElementById('edit-client-group-id').value.trim(),
-                    destinationTopicPrefix: (function(){ const v=document.getElementById('edit-client-destination-prefix').value.trim(); return v.length>0? v : null; })(),
-                    payloadFormat: document.getElementById('edit-client-payload-format').value,
-                    extraConsumerConfig: extraConfig,
-                    pollIntervalMs: parseInt(document.getElementById('edit-client-poll-interval').value),
-                    maxPollRecords: parseInt(document.getElementById('edit-client-max-poll').value),
-                    reconnectDelayMs: parseInt(document.getElementById('edit-client-reconnect-delay').value)
-                }
 
+        const updatedInput = {
+            name: document.getElementById('client-name').value.trim(),
+            namespace: document.getElementById('client-namespace').value.trim(),
+            nodeId: document.getElementById('client-node').value,
+            enabled: document.getElementById('client-enabled').checked,
+            config: {
+                bootstrapServers: document.getElementById('client-bootstrap').value.trim(),
+                groupId: document.getElementById('client-group-id').value.trim(),
+                destinationTopicPrefix: (function(){ const v=document.getElementById('client-destination-prefix').value.trim(); return v.length>0? v : null; })(),
+                payloadFormat: document.getElementById('client-payload-format').value,
+                extraConsumerConfig: extraConfig,
+                pollIntervalMs: parseInt(document.getElementById('client-poll-interval').value),
+                maxPollRecords: parseInt(document.getElementById('client-max-poll').value),
+                reconnectDelayMs: parseInt(document.getElementById('client-reconnect-delay').value)
+            }
         };
 
         const prevNodeId = this.clientData ? this.clientData.nodeId : null;
@@ -220,7 +210,6 @@ class KafkaClientDetailManager {
                 if (prevNodeId && updatedInput.nodeId && updatedInput.nodeId !== prevNodeId) {
                     await this.reassignClient(updatedInput.nodeId);
                 }
-                this.hideEditModal();
                 this.showSuccess('Kafka client updated successfully');
             } else {
                 const errors = result.kafkaClient.update.errors || ['Unknown error'];
@@ -269,7 +258,6 @@ class KafkaClientDetailManager {
     }
 
     async deleteClient() {
-        if (!confirm('Are you sure you want to delete this Kafka client?')) return; // fallback in case modal not shown
         try {
             const mutation = `mutation DeleteKafkaClient($name: String!) { kafkaClient { delete(name: $name) } }`;
             const result = await this.client.query(mutation, { name: this.clientName });
@@ -287,9 +275,11 @@ class KafkaClientDetailManager {
     }
 
     // UI helpers
-    showEditModal() { this.populateEditForm(); document.getElementById('edit-client-modal').style.display = 'flex'; const input=document.getElementById('edit-client-destination-prefix'); if(input && input.value && !input.value.endsWith('/')) { input.value = input.value + '/'; }}
-    hideEditModal() { document.getElementById('edit-client-modal').style.display = 'none'; }
-    showDeleteModal() { const span=document.getElementById('delete-client-name'); if(span && this.clientData) span.textContent=this.clientData.name; document.getElementById('delete-client-modal').style.display = 'flex'; }
+    showDeleteModal() {
+        const span = document.getElementById('delete-client-name');
+        if (span && this.clientData) span.textContent = this.clientData.name;
+        document.getElementById('delete-client-modal').style.display = 'flex';
+    }
     hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
     confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
     goBack() { this.cleanup(); window.location.href = '/pages/kafka-clients.html'; }
@@ -301,14 +291,11 @@ class KafkaClientDetailManager {
     escapeHtml(t){ const div=document.createElement('div'); div.textContent=t; return div.innerHTML; }
 
     setText(id, value) { const el = document.getElementById(id); if (el) el.textContent = value; }
-    setValue(id, value) { const el = document.getElementById(id); if (el) el.value = value; }
 }
 
 // Global wrappers
 let kafkaClientDetailManager;
-function showEditModal() { kafkaClientDetailManager.showEditModal(); }
-function hideEditModal() { kafkaClientDetailManager.hideEditModal(); }
-function updateClient() { kafkaClientDetailManager.updateClient(); }
+function saveClient() { kafkaClientDetailManager.saveClient(); }
 function toggleClient() { kafkaClientDetailManager.toggleClient(); }
 function goBack() { kafkaClientDetailManager.goBack(); }
 function showDeleteModal() { kafkaClientDetailManager.showDeleteModal(); }
@@ -318,4 +305,4 @@ function confirmDeleteClient() { kafkaClientDetailManager.confirmDeleteClient();
 // Initialize
 document.addEventListener('DOMContentLoaded', () => { kafkaClientDetailManager = new KafkaClientDetailManager(); });
 
-document.addEventListener('click', e => { if (e.target.classList.contains('modal')) { if (e.target.id === 'edit-client-modal') kafkaClientDetailManager.hideEditModal(); else if (e.target.id === 'delete-client-modal') kafkaClientDetailManager.hideDeleteModal(); }});
+document.addEventListener('click', e => { if (e.target.classList.contains('modal')) { if (e.target.id === 'delete-client-modal') kafkaClientDetailManager.hideDeleteModal(); }});

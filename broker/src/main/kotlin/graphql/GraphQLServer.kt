@@ -538,6 +538,7 @@ class GraphQLServer(
                 builder.apply {
                     opcUaServerMutations?.let { resolver ->
                         dataFetcher("create", resolver.createOpcUaServer())
+                        dataFetcher("update", resolver.updateOpcUaServer())
                         dataFetcher("start", resolver.startOpcUaServer())
                         dataFetcher("stop", resolver.stopOpcUaServer())
                         dataFetcher("delete", resolver.deleteOpcUaServer())

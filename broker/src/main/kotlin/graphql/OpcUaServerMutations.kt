@@ -96,6 +96,126 @@ class OpcUaServerMutations(
     }
 
     /**
+     * Update an existing OPC UA Server configuration
+     */
+    fun updateOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerResult>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<OpcUaServerResult>()
+
+            try {
+                val serverName = env.getArgument<String>("name")
+                    ?: throw IllegalArgumentException("Server name is required")
+
+                val inputMap = env.getArgument<Map<String, Any>>("input")
+                    ?: throw IllegalArgumentException("Input is required")
+
+                // Get existing server configuration
+                deviceConfigStore.getDevice(serverName).onComplete { getResult ->
+                    if (getResult.succeeded() && getResult.result()?.type == DEVICE_TYPE) {
+                        try {
+                            val existingDeviceConfig = getResult.result()!!
+
+                            // Parse the input server config
+                            val serverConfig = parseServerInputForUpdate(inputMap, existingDeviceConfig)
+
+                            // Validate configuration
+                            validateServerConfig(serverConfig)
+
+                            // Convert to DeviceConfig format
+                            val updatedDeviceConfig = convertToDeviceConfig(serverConfig).copy(
+                                createdAt = existingDeviceConfig.createdAt // Preserve creation time
+                            )
+
+                            // Check if enabled status changed
+                            val wasEnabled = existingDeviceConfig.enabled
+                            val isEnabled = updatedDeviceConfig.enabled
+
+                            // Save updated configuration
+                            deviceConfigStore.saveDevice(updatedDeviceConfig).onComplete { saveResult ->
+                                if (saveResult.succeeded()) {
+                                    // Handle server state transitions
+                                    if (wasEnabled && !isEnabled) {
+                                        // Was enabled, now disabled - stop the server
+                                        stopServerCommand(serverName, serverConfig.nodeId) { success, message ->
+                                            future.complete(OpcUaServerResult(
+                                                success = true,
+                                                message = "OPC UA Server updated and stopped successfully",
+                                                server = convertToOpcUaServerInfo(updatedDeviceConfig),
+                                                errors = if (!success && message != null) listOf("Warning: " + message) else emptyList()
+                                            ))
+                                        }
+                                    } else if (!wasEnabled && isEnabled) {
+                                        // Was disabled, now enabled - start the server
+                                        startServerCommand(serverConfig) { success, message ->
+                                            future.complete(OpcUaServerResult(
+                                                success = success,
+                                                message = if (success) "OPC UA Server updated and started successfully" else message,
+                                                server = if (success) convertToOpcUaServerInfo(updatedDeviceConfig) else null,
+                                                errors = if (!success && message != null) listOf(message) else emptyList()
+                                            ))
+                                        }
+                                    } else if (isEnabled) {
+                                        // Stays enabled - send update command
+                                        updateServerCommand(serverConfig) { success, message ->
+                                            future.complete(OpcUaServerResult(
+                                                success = success,
+                                                message = if (success) "OPC UA Server updated successfully" else message,
+                                                server = if (success) convertToOpcUaServerInfo(updatedDeviceConfig) else null,
+                                                errors = if (!success && message != null) listOf(message) else emptyList()
+                                            ))
+                                        }
+                                    } else {
+                                        // Stays disabled - just update config
+                                        future.complete(OpcUaServerResult(
+                                            success = true,
+                                            message = "OPC UA Server configuration updated successfully",
+                                            server = convertToOpcUaServerInfo(updatedDeviceConfig),
+                                            errors = emptyList()
+                                        ))
+                                    }
+                                } else {
+                                    logger.severe("Failed to save updated OPC UA Server configuration: ${saveResult.cause()?.message}")
+                                    future.complete(OpcUaServerResult(
+                                        success = false,
+                                        message = "Failed to save server configuration",
+                                        server = null,
+                                        errors = listOf(saveResult.cause()?.message ?: "Unknown error")
+                                    ))
+                                }
+                            }
+                        } catch (e: Exception) {
+                            logger.severe("Error updating OPC UA Server $serverName: ${e.message}")
+                            future.complete(OpcUaServerResult(
+                                success = false,
+                                message = "Failed to update server",
+                                server = null,
+                                errors = listOf(e.message ?: "Unknown error")
+                            ))
+                        }
+                    } else {
+                        future.complete(OpcUaServerResult(
+                            success = false,
+                            message = "Server '$serverName' not found",
+                            server = null,
+                            errors = listOf("Server not found")
+                        ))
+                    }
+                }
+            } catch (e: Exception) {
+                logger.severe("Error in updateOpcUaServer: ${e.message}")
+                future.complete(OpcUaServerResult(
+                    success = false,
+                    message = "Failed to update server",
+                    server = null,
+                    errors = listOf(e.message ?: "Unknown error")
+                ))
+            }
+
+            future
+        }
+    }
+
+    /**
      * Start an OPC UA Server
      */
     fun startOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerOperationResult>> {
@@ -386,6 +506,47 @@ class OpcUaServerMutations(
             security = security,
             bufferSize = (config["bufferSize"] as? Number)?.toInt() ?: 1000,
             updateInterval = (config["updateInterval"] as? Number)?.toLong() ?: 1000L
+        )
+    }
+
+    /**
+     * Parse server configuration from GraphQL input for update operations
+     * This preserves existing addresses from the stored configuration
+     */
+    private fun parseServerInputForUpdate(input: Map<String, Any>, existingDeviceConfig: DeviceConfig): OpcUaServerConfig {
+        // Load existing server config to get current addresses
+        val existingConfig = loadServerConfigFromDeviceConfig(existingDeviceConfig)
+
+        // Parse addresses from input if provided, otherwise keep existing addresses
+        val addresses = (input["addresses"] as? List<Map<String, Any>>)?.map { addrInput ->
+            parseOpcUaServerAddress(addrInput)
+        } ?: existingConfig.addresses
+
+        // Parse security from input if provided, otherwise keep existing security
+        val security = (input["security"] as? Map<String, Any>)?.let { secInput ->
+            OpcUaServerSecurity(
+                keystorePath = secInput["keystorePath"] as? String ?: "server-keystore.jks",
+                keystorePassword = secInput["keystorePassword"] as? String ?: "password",
+                certificateAlias = secInput["certificateAlias"] as? String ?: "server-cert",
+                securityPolicies = (secInput["securityPolicies"] as? List<String>) ?: listOf("None"),
+                allowAnonymous = secInput["allowAnonymous"] as? Boolean ?: true,
+                requireAuthentication = secInput["requireAuthentication"] as? Boolean ?: false
+            )
+        } ?: existingConfig.security
+
+        return OpcUaServerConfig(
+            name = input["name"] as? String ?: existingConfig.name,
+            namespace = input["namespace"] as? String ?: existingConfig.namespace,
+            nodeId = input["nodeId"] as? String ?: existingConfig.nodeId,
+            enabled = input["enabled"] as? Boolean ?: existingConfig.enabled,
+            port = (input["port"] as? Number)?.toInt() ?: existingConfig.port,
+            path = input["path"] as? String ?: existingConfig.path,
+            namespaceIndex = (input["namespaceIndex"] as? Number)?.toInt() ?: existingConfig.namespaceIndex,
+            namespaceUri = input["namespaceUri"] as? String ?: existingConfig.namespaceUri,
+            addresses = addresses,
+            security = security,
+            bufferSize = (input["bufferSize"] as? Number)?.toInt() ?: existingConfig.bufferSize,
+            updateInterval = (input["updateInterval"] as? Number)?.toLong() ?: existingConfig.updateInterval
         )
     }
 

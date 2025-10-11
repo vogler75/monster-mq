@@ -58,8 +58,8 @@ class OpcUaDeviceDetailManager {
             const result = await this.client.query(query);
             this.clusterNodes = result.clusterNodes || [];
 
-            // Populate node selector in edit form
-            const nodeSelect = document.getElementById('edit-device-node');
+            // Populate node selector in form
+            const nodeSelect = document.getElementById('device-node');
             if (nodeSelect) {
                 nodeSelect.innerHTML = '<option value="">Select Node...</option>';
                 this.clusterNodes.forEach(node => {
@@ -151,7 +151,7 @@ class OpcUaDeviceDetailManager {
         if (!this.device) return;
 
         // Update page title
-        document.getElementById('device-title').textContent = `OPC UA Device: ${this.device.name}`;
+        document.getElementById('device-title').textContent = `OPC UA Client: ${this.device.name}`;
         document.getElementById('device-subtitle').textContent = `${this.device.namespace} - ${this.device.config.endpointUrl}`;
 
         // Device status
@@ -160,47 +160,39 @@ class OpcUaDeviceDetailManager {
         statusBadge.className = `status-badge ${statusClass}`;
         statusBadge.textContent = this.device.enabled ? 'Enabled' : 'Disabled';
 
-        // Device information
-        document.getElementById('device-name').textContent = this.device.name;
-        document.getElementById('device-namespace').textContent = this.device.namespace;
-        document.getElementById('device-endpoint').textContent = this.device.config.endpointUrl;
-        document.getElementById('device-security').textContent = this.device.config.securityPolicy;
-        document.getElementById('device-node').textContent =
-            (this.device.isOnCurrentNode ? '📍 ' : '') + this.device.nodeId;
-        document.getElementById('device-update-endpoint').textContent =
-            this.device.config.updateEndpointUrl ? 'Yes' : 'No';
-        document.getElementById('device-username').textContent =
-            this.device.config.username || 'Not configured';
-        document.getElementById('device-created').textContent =
-            this.formatDateTime(this.device.createdAt);
+        // Populate form fields - Device information
+        document.getElementById('device-name').value = this.device.name;
+        document.getElementById('device-namespace').value = this.device.namespace;
+        document.getElementById('device-endpoint').value = this.device.config.endpointUrl;
+        document.getElementById('device-security').value = this.device.config.securityPolicy;
+        document.getElementById('device-node').value = this.device.nodeId;
+        document.getElementById('device-update-endpoint').checked = this.device.config.updateEndpointUrl;
+        document.getElementById('device-username').value = this.device.config.username || '';
+        document.getElementById('device-enabled').checked = this.device.enabled;
+        document.getElementById('device-created').textContent = this.formatDateTime(this.device.createdAt);
 
         // Connection configuration
-        document.getElementById('config-sampling').textContent =
-            this.device.config.subscriptionSamplingInterval + ' ms';
-        document.getElementById('config-keepalive').textContent =
-            this.device.config.keepAliveFailuresAllowed;
-        document.getElementById('config-reconnect').textContent =
-            this.device.config.reconnectDelay + ' ms';
-        document.getElementById('config-connection-timeout').textContent =
-            this.device.config.connectionTimeout + ' ms';
-        document.getElementById('config-request-timeout').textContent =
-            this.device.config.requestTimeout + ' ms';
-        document.getElementById('config-buffer-size').textContent =
-            this.device.config.monitoringParameters.bufferSize;
-        document.getElementById('config-monitoring-sampling').textContent =
-            this.device.config.monitoringParameters.samplingInterval + ' ms';
-        document.getElementById('config-discard-oldest').textContent =
-            this.device.config.monitoringParameters.discardOldest ? 'Yes' : 'No';
+        document.getElementById('config-sampling').value = this.device.config.subscriptionSamplingInterval;
+        document.getElementById('config-keepalive').value = this.device.config.keepAliveFailuresAllowed;
+        document.getElementById('config-reconnect').value = this.device.config.reconnectDelay;
+        document.getElementById('config-connection-timeout').value = this.device.config.connectionTimeout;
+        document.getElementById('config-request-timeout').value = this.device.config.requestTimeout;
+        document.getElementById('config-buffer-size').value = this.device.config.monitoringParameters.bufferSize;
+        document.getElementById('config-monitoring-sampling').value = this.device.config.monitoringParameters.samplingInterval;
+        document.getElementById('config-discard-oldest').checked = this.device.config.monitoringParameters.discardOldest;
 
         // Certificate configuration
         const certConfig = this.device.config.certificateConfig;
-        document.getElementById('cert-security-dir').textContent = certConfig.securityDir;
-        document.getElementById('cert-application-name').textContent = certConfig.applicationName;
-        document.getElementById('cert-application-uri').textContent = certConfig.applicationUri;
-        document.getElementById('cert-organization').textContent = certConfig.organization;
-        document.getElementById('cert-create-self-signed').textContent = certConfig.createSelfSigned ? 'Yes' : 'No';
-        document.getElementById('cert-validate-server').textContent = certConfig.validateServerCertificate ? 'Yes' : 'No';
-        document.getElementById('cert-auto-accept').textContent = certConfig.autoAcceptServerCertificates ? 'Yes' : 'No';
+        document.getElementById('cert-security-dir').value = certConfig.securityDir;
+        document.getElementById('cert-application-name').value = certConfig.applicationName;
+        document.getElementById('cert-application-uri').value = certConfig.applicationUri;
+        document.getElementById('cert-organization').value = certConfig.organization;
+        document.getElementById('cert-organizational-unit').value = certConfig.organizationalUnit;
+        document.getElementById('cert-locality').value = certConfig.localityName;
+        document.getElementById('cert-country').value = certConfig.countryCode;
+        document.getElementById('cert-create-self-signed').checked = certConfig.createSelfSigned;
+        document.getElementById('cert-validate-server').checked = certConfig.validateServerCertificate;
+        document.getElementById('cert-auto-accept').checked = certConfig.autoAcceptServerCertificates;
 
         // Render addresses
         this.renderAddresses();
@@ -368,95 +360,48 @@ class OpcUaDeviceDetailManager {
         this.deleteAddressName = null;
     }
 
-    editDevice() {
-        if (!this.device) return;
-
-        // Populate edit form
-        document.getElementById('edit-device-name').value = this.device.name;
-        document.getElementById('edit-device-namespace').value = this.device.namespace;
-        document.getElementById('edit-device-endpoint').value = this.device.config.endpointUrl;
-        document.getElementById('edit-device-node').value = this.device.nodeId;
-        document.getElementById('edit-device-security').value = this.device.config.securityPolicy;
-        document.getElementById('edit-device-username').value = this.device.config.username || '';
-        document.getElementById('edit-device-password').value = '';
-        document.getElementById('edit-device-enabled').checked = this.device.enabled;
-        document.getElementById('edit-device-update-endpoint').checked = this.device.config.updateEndpointUrl;
-
-        // Populate certificate configuration
-        const certConfig = this.device.config.certificateConfig;
-        document.getElementById('edit-cert-security-dir').value = certConfig.securityDir;
-        document.getElementById('edit-cert-application-name').value = certConfig.applicationName;
-        document.getElementById('edit-cert-application-uri').value = certConfig.applicationUri;
-        document.getElementById('edit-cert-organization').value = certConfig.organization;
-        document.getElementById('edit-cert-organizational-unit').value = certConfig.organizationalUnit;
-        document.getElementById('edit-cert-locality').value = certConfig.localityName;
-        document.getElementById('edit-cert-country').value = certConfig.countryCode;
-        document.getElementById('edit-cert-create-self-signed').checked = certConfig.createSelfSigned;
-        document.getElementById('edit-cert-validate-server-certificate').checked = certConfig.validateServerCertificate;
-        document.getElementById('edit-cert-auto-accept-server-certificates').checked = certConfig.autoAcceptServerCertificates;
-        document.getElementById('edit-cert-keystore-password').value = '';
-
-        // Populate connection settings
-        document.getElementById('edit-subscription-sampling').value = this.device.config.subscriptionSamplingInterval;
-        document.getElementById('edit-keep-alive-failures').value = this.device.config.keepAliveFailuresAllowed;
-        document.getElementById('edit-reconnect-delay').value = this.device.config.reconnectDelay;
-        document.getElementById('edit-connection-timeout').value = this.device.config.connectionTimeout;
-        document.getElementById('edit-request-timeout').value = this.device.config.requestTimeout;
-        document.getElementById('edit-monitoring-buffer-size').value = this.device.config.monitoringParameters.bufferSize;
-        document.getElementById('edit-monitoring-sampling').value = this.device.config.monitoringParameters.samplingInterval;
-        document.getElementById('edit-monitoring-discard-oldest').checked = this.device.config.monitoringParameters.discardOldest;
-
-        // Reset password update checkboxes and hide password fields
-        document.getElementById('edit-device-update-password').checked = false;
-        document.getElementById('password-field-group').style.display = 'none';
-        document.getElementById('edit-cert-update-keystore-password').checked = false;
-        document.getElementById('keystore-password-field-group').style.display = 'none';
-
-        this.showEditDeviceModal();
-    }
-
-    async updateDevice() {
-        const form = document.getElementById('edit-device-form');
+    async saveDevice() {
+        const form = document.getElementById('device-form');
         if (!form.checkValidity()) {
             form.reportValidity();
             return;
         }
 
         const deviceData = {
-            name: document.getElementById('edit-device-name').value.trim(),
-            namespace: document.getElementById('edit-device-namespace').value.trim(),
-            nodeId: document.getElementById('edit-device-node').value,
-            enabled: document.getElementById('edit-device-enabled').checked,
+            name: document.getElementById('device-name').value.trim(),
+            namespace: document.getElementById('device-namespace').value.trim(),
+            nodeId: document.getElementById('device-node').value,
+            enabled: document.getElementById('device-enabled').checked,
             config: {
-                endpointUrl: document.getElementById('edit-device-endpoint').value.trim(),
-                updateEndpointUrl: document.getElementById('edit-device-update-endpoint').checked,
-                securityPolicy: document.getElementById('edit-device-security').value,
-                username: document.getElementById('edit-device-username').value.trim() || null,
-                password: document.getElementById('edit-device-update-password').checked ?
-                    document.getElementById('edit-device-password').value || null : undefined,
-                subscriptionSamplingInterval: parseFloat(document.getElementById('edit-subscription-sampling').value),
-                keepAliveFailuresAllowed: parseInt(document.getElementById('edit-keep-alive-failures').value),
-                reconnectDelay: parseInt(document.getElementById('edit-reconnect-delay').value),
-                connectionTimeout: parseInt(document.getElementById('edit-connection-timeout').value),
-                requestTimeout: parseInt(document.getElementById('edit-request-timeout').value),
+                endpointUrl: document.getElementById('device-endpoint').value.trim(),
+                updateEndpointUrl: document.getElementById('device-update-endpoint').checked,
+                securityPolicy: document.getElementById('device-security').value,
+                username: document.getElementById('device-username').value.trim() || null,
+                password: document.getElementById('device-update-password').checked ?
+                    document.getElementById('device-password').value || null : undefined,
+                subscriptionSamplingInterval: parseFloat(document.getElementById('config-sampling').value),
+                keepAliveFailuresAllowed: parseInt(document.getElementById('config-keepalive').value),
+                reconnectDelay: parseInt(document.getElementById('config-reconnect').value),
+                connectionTimeout: parseInt(document.getElementById('config-connection-timeout').value),
+                requestTimeout: parseInt(document.getElementById('config-request-timeout').value),
                 monitoringParameters: {
-                    bufferSize: parseInt(document.getElementById('edit-monitoring-buffer-size').value),
-                    samplingInterval: parseFloat(document.getElementById('edit-monitoring-sampling').value),
-                    discardOldest: document.getElementById('edit-monitoring-discard-oldest').checked
+                    bufferSize: parseInt(document.getElementById('config-buffer-size').value),
+                    samplingInterval: parseFloat(document.getElementById('config-monitoring-sampling').value),
+                    discardOldest: document.getElementById('config-discard-oldest').checked
                 },
                 certificateConfig: {
-                    securityDir: document.getElementById('edit-cert-security-dir').value.trim(),
-                    applicationName: document.getElementById('edit-cert-application-name').value.trim(),
-                    applicationUri: document.getElementById('edit-cert-application-uri').value.trim(),
-                    organization: document.getElementById('edit-cert-organization').value.trim(),
-                    organizationalUnit: document.getElementById('edit-cert-organizational-unit').value.trim(),
-                    localityName: document.getElementById('edit-cert-locality').value.trim(),
-                    countryCode: document.getElementById('edit-cert-country').value.trim(),
-                    createSelfSigned: document.getElementById('edit-cert-create-self-signed').checked,
-                    keystorePassword: document.getElementById('edit-cert-update-keystore-password').checked ?
-                        document.getElementById('edit-cert-keystore-password').value || null : undefined,
-                    validateServerCertificate: document.getElementById('edit-cert-validate-server-certificate').checked,
-                    autoAcceptServerCertificates: document.getElementById('edit-cert-auto-accept-server-certificates').checked
+                    securityDir: document.getElementById('cert-security-dir').value.trim(),
+                    applicationName: document.getElementById('cert-application-name').value.trim(),
+                    applicationUri: document.getElementById('cert-application-uri').value.trim(),
+                    organization: document.getElementById('cert-organization').value.trim(),
+                    organizationalUnit: document.getElementById('cert-organizational-unit').value.trim(),
+                    localityName: document.getElementById('cert-locality').value.trim(),
+                    countryCode: document.getElementById('cert-country').value.trim(),
+                    createSelfSigned: document.getElementById('cert-create-self-signed').checked,
+                    keystorePassword: document.getElementById('cert-update-keystore-password').checked ?
+                        document.getElementById('cert-keystore-password').value || null : undefined,
+                    validateServerCertificate: document.getElementById('cert-validate-server').checked,
+                    autoAcceptServerCertificates: document.getElementById('cert-auto-accept').checked
                 }
             }
         };
@@ -482,7 +427,6 @@ class OpcUaDeviceDetailManager {
             });
 
             if (result.opcUaDevice.update.success) {
-                this.hideEditDeviceModal();
                 await this.loadDevice();
                 this.showSuccess(`Device "${this.deviceName}" updated successfully`);
             } else {
@@ -507,14 +451,6 @@ class OpcUaDeviceDetailManager {
 
     hideAddAddressModal() {
         document.getElementById('add-address-modal').style.display = 'none';
-    }
-
-    showEditDeviceModal() {
-        document.getElementById('edit-device-modal').style.display = 'flex';
-    }
-
-    hideEditDeviceModal() {
-        document.getElementById('edit-device-modal').style.display = 'none';
     }
 
     showConfirmDeleteAddressModal() {
@@ -598,16 +534,8 @@ function addAddress() {
     deviceDetailManager.addAddress();
 }
 
-function editDevice() {
-    deviceDetailManager.editDevice();
-}
-
-function hideEditDeviceModal() {
-    deviceDetailManager.hideEditDeviceModal();
-}
-
-function updateDevice() {
-    deviceDetailManager.updateDevice();
+function saveDevice() {
+    deviceDetailManager.saveDevice();
 }
 
 function hideConfirmDeleteAddressModal() {
@@ -633,8 +561,6 @@ document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal')) {
         if (e.target.id === 'add-address-modal') {
             deviceDetailManager.hideAddAddressModal();
-        } else if (e.target.id === 'edit-device-modal') {
-            deviceDetailManager.hideEditDeviceModal();
         } else if (e.target.id === 'confirm-delete-address-modal') {
             deviceDetailManager.hideConfirmDeleteAddressModal();
         }

@@ -471,31 +471,7 @@ async function deleteServer(serverName) {
 let currentEditingServer = null;
 
 function editServer(serverName) {
-    const server = servers.find(s => s.name === serverName);
-    if (!server) {
-        showErrorMessage('Server not found');
-        return;
-    }
-
-    currentEditingServer = server;
-
-    // Populate configuration form
-    document.getElementById('edit-server-name').value = server.name;
-    document.getElementById('edit-server-namespace').value = server.namespace || '';
-    document.getElementById('edit-server-port').value = server.port;
-    document.getElementById('edit-server-path').value = server.path || 'monstermq';
-    document.getElementById('edit-server-namespace-uri').value = server.namespaceUri || '';
-    document.getElementById('edit-server-enabled').checked = server.enabled;
-
-    // Update node selector for edit form
-    updateEditNodeSelector();
-    document.getElementById('edit-server-node').value = server.nodeId || '';
-
-    // Populate addresses
-    updateAddressesList();
-
-    // Show modal
-    document.getElementById('edit-server-modal').style.display = 'flex';
+    window.location.href = `/pages/opcua-server-detail.html?server=${encodeURIComponent(serverName)}`;
 }
 
 function hideEditServerModal() {

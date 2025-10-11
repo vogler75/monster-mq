@@ -11,7 +11,6 @@ class MqttClientDetailManager {
     }
 
     async init() {
-        // Get client name from URL parameter
         const urlParams = new URLSearchParams(window.location.search);
         this.clientName = urlParams.get('client');
 
@@ -26,19 +25,11 @@ class MqttClientDetailManager {
 
     async loadClusterNodes() {
         try {
-            const query = `
-                query GetClusterNodes {
-                    clusterNodes {
-                        nodeId
-                        isCurrent
-                    }
-                }
-            `;
-
+            const query = `query GetClusterNodes { clusterNodes { nodeId isCurrent } }`;
             const result = await this.client.query(query);
             this.clusterNodes = result.clusterNodes || [];
 
-            const nodeSelect = document.getElementById('edit-client-node');
+            const nodeSelect = document.getElementById('client-node');
             if (nodeSelect) {
                 nodeSelect.innerHTML = '<option value="">Select Node...</option>';
                 this.clusterNodes.forEach(node => {
@@ -61,34 +52,11 @@ class MqttClientDetailManager {
             const query = `
                 query GetMqttClients($name: String!) {
                     mqttClients(name: $name) {
-                        name
-                        namespace
-                        nodeId
-                        enabled
-                        isOnCurrentNode
-                        createdAt
-                        updatedAt
+                        name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
                         config {
-                            protocol
-                            hostname
-                            port
-                            username
-                            clientId
-                            cleanSession
-                            keepAlive
-                            reconnectDelay
-                            connectionTimeout
-                            bufferEnabled
-                            bufferSize
-                            persistBuffer
-                            deleteOldestMessages
-                            addresses {
-                                mode
-                                remoteTopic
-                                localTopic
-                                removePath
-                                qos
-                            }
+                            protocol hostname port username clientId cleanSession keepAlive reconnectDelay connectionTimeout
+                            bufferEnabled bufferSize persistBuffer deleteOldestMessages
+                            addresses { mode remoteTopic localTopic removePath qos }
                         }
                     }
                 }
@@ -115,27 +83,40 @@ class MqttClientDetailManager {
     renderClientInfo() {
         if (!this.clientData) return;
 
-        document.getElementById('page-title').textContent = `MQTT Bridge: ${this.clientData.name}`;
-        document.getElementById('client-name-display').textContent = this.clientData.name;
-        document.getElementById('client-namespace').textContent = this.clientData.namespace;
-        document.getElementById('client-broker-url').textContent =
-            `${this.clientData.config.protocol}://${this.clientData.config.hostname}:${this.clientData.config.port}`;
-        document.getElementById('client-node-id').textContent = this.clientData.nodeId;
-        document.getElementById('client-client-id').textContent = this.clientData.config.clientId;
-        document.getElementById('client-username').textContent = this.clientData.config.username || 'None';
-        document.getElementById('client-clean-session').textContent = this.clientData.config.cleanSession ? 'Yes' : 'No';
-        document.getElementById('client-keep-alive').textContent = `${this.clientData.config.keepAlive}s`;
-        document.getElementById('client-reconnect-delay').textContent = `${this.clientData.config.reconnectDelay}ms`;
-        document.getElementById('client-connection-timeout').textContent = `${this.clientData.config.connectionTimeout}ms`;
-        document.getElementById('client-buffer-enabled').textContent = this.clientData.config.bufferEnabled ? 'Yes' : 'No';
-        document.getElementById('client-buffer-size').textContent = `${this.clientData.config.bufferSize || 5000} messages`;
-        document.getElementById('client-persist-buffer').textContent = this.clientData.config.persistBuffer ? 'Yes' : 'No';
-        document.getElementById('client-delete-oldest').textContent = (this.clientData.config.deleteOldestMessages !== undefined ? this.clientData.config.deleteOldestMessages : true) ? 'Yes' : 'No';
-        document.getElementById('client-created-at').textContent = new Date(this.clientData.createdAt).toLocaleString();
-        document.getElementById('client-updated-at').textContent = new Date(this.clientData.updatedAt).toLocaleString();
+        const d = this.clientData;
+        const cfg = d.config;
 
+        // Update page title
+        document.getElementById('page-title').textContent = `MQTT Bridge: ${d.name}`;
+        document.getElementById('page-subtitle').textContent = `${d.namespace} - ${cfg.protocol}://${cfg.hostname}:${cfg.port}`;
+
+        // Populate form fields
+        document.getElementById('client-name').value = d.name;
+        document.getElementById('client-name').disabled = true; // Can't change name in edit mode
+        document.getElementById('client-namespace').value = d.namespace;
+        document.getElementById('client-protocol').value = cfg.protocol;
+        document.getElementById('client-hostname').value = cfg.hostname;
+        document.getElementById('client-port').value = cfg.port;
+        document.getElementById('client-username').value = cfg.username || '';
+        document.getElementById('client-id').value = cfg.clientId;
+        document.getElementById('client-node').value = d.nodeId;
+        document.getElementById('client-keep-alive').value = cfg.keepAlive;
+        document.getElementById('client-reconnect-delay').value = cfg.reconnectDelay;
+        document.getElementById('client-connection-timeout').value = cfg.connectionTimeout;
+        document.getElementById('client-enabled').checked = d.enabled;
+        document.getElementById('client-clean-session').checked = cfg.cleanSession;
+        document.getElementById('client-buffer-enabled').checked = cfg.bufferEnabled || false;
+        document.getElementById('client-buffer-size').value = cfg.bufferSize || 5000;
+        document.getElementById('client-persist-buffer').checked = cfg.persistBuffer || false;
+        document.getElementById('client-delete-oldest').checked = cfg.deleteOldestMessages !== undefined ? cfg.deleteOldestMessages : true;
+
+        // Timestamps (read-only)
+        this.setText('client-created-at', new Date(d.createdAt).toLocaleString());
+        this.setText('client-updated-at', new Date(d.updatedAt).toLocaleString());
+
+        // Status badge
         const statusBadge = document.getElementById('client-status');
-        if (this.clientData.enabled) {
+        if (d.enabled) {
             statusBadge.className = 'status-badge status-enabled';
             statusBadge.textContent = 'ENABLED';
         } else {
@@ -146,34 +127,12 @@ class MqttClientDetailManager {
         // Update action buttons
         const toggleBtn = document.getElementById('toggle-client-btn');
         if (toggleBtn) {
-            toggleBtn.textContent = this.clientData.enabled ? 'Stop Bridge' : 'Start Bridge';
-            toggleBtn.className = this.clientData.enabled ? 'btn btn-warning' : 'btn btn-success';
+            toggleBtn.textContent = d.enabled ? 'Stop Bridge' : 'Start Bridge';
+            toggleBtn.className = d.enabled ? 'btn btn-warning' : 'btn btn-success';
         }
 
-        // Populate edit form
-        this.populateEditForm();
-    }
-
-    populateEditForm() {
-        if (!this.clientData) return;
-
-        document.getElementById('edit-client-name').value = this.clientData.name;
-        document.getElementById('edit-client-namespace').value = this.clientData.namespace;
-        document.getElementById('edit-client-protocol').value = this.clientData.config.protocol;
-        document.getElementById('edit-client-hostname').value = this.clientData.config.hostname;
-        document.getElementById('edit-client-port').value = this.clientData.config.port;
-        document.getElementById('edit-client-username').value = this.clientData.config.username || '';
-        document.getElementById('edit-client-id').value = this.clientData.config.clientId;
-        document.getElementById('edit-client-node').value = this.clientData.nodeId;
-        document.getElementById('edit-client-keep-alive').value = this.clientData.config.keepAlive;
-        document.getElementById('edit-client-reconnect-delay').value = this.clientData.config.reconnectDelay;
-        document.getElementById('edit-client-connection-timeout').value = this.clientData.config.connectionTimeout;
-        document.getElementById('edit-client-enabled').checked = this.clientData.enabled;
-        document.getElementById('edit-client-clean-session').checked = this.clientData.config.cleanSession;
-        document.getElementById('edit-client-buffer-enabled').checked = this.clientData.config.bufferEnabled || false;
-        document.getElementById('edit-client-buffer-size').value = this.clientData.config.bufferSize || 5000;
-        document.getElementById('edit-client-persist-buffer').checked = this.clientData.config.persistBuffer || false;
-        document.getElementById('edit-client-delete-oldest').checked = this.clientData.config.deleteOldestMessages !== undefined ? this.clientData.config.deleteOldestMessages : true;
+        // Show content
+        document.getElementById('client-content').style.display = 'block';
     }
 
     renderAddressesList() {
@@ -185,7 +144,7 @@ class MqttClientDetailManager {
         if (this.clientData.config.addresses.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="5" class="no-data">
+                    <td colspan="6" class="no-data">
                         No address mappings configured. Click "Add Address" to create one.
                     </td>
                 </tr>
@@ -222,33 +181,33 @@ class MqttClientDetailManager {
         });
     }
 
-    async updateClient() {
-        const form = document.getElementById('edit-client-form');
+    async saveClient() {
+        const form = document.getElementById('client-form');
         if (!form.checkValidity()) {
             form.reportValidity();
             return;
         }
 
         const updateData = {
-            name: document.getElementById('edit-client-name').value.trim(),
-            namespace: document.getElementById('edit-client-namespace').value.trim(),
-            nodeId: document.getElementById('edit-client-node').value,
-            enabled: document.getElementById('edit-client-enabled').checked,
+            name: document.getElementById('client-name').value.trim(),
+            namespace: document.getElementById('client-namespace').value.trim(),
+            nodeId: document.getElementById('client-node').value,
+            enabled: document.getElementById('client-enabled').checked,
             config: {
-                protocol: document.getElementById('edit-client-protocol').value,
-                hostname: document.getElementById('edit-client-hostname').value.trim(),
-                port: parseInt(document.getElementById('edit-client-port').value),
-                username: document.getElementById('edit-client-username').value.trim() || null,
-                password: document.getElementById('edit-client-password').value || null,
-                clientId: document.getElementById('edit-client-id').value.trim(),
-                cleanSession: document.getElementById('edit-client-clean-session').checked,
-                keepAlive: parseInt(document.getElementById('edit-client-keep-alive').value),
-                reconnectDelay: parseInt(document.getElementById('edit-client-reconnect-delay').value),
-                connectionTimeout: parseInt(document.getElementById('edit-client-connection-timeout').value),
-                bufferEnabled: document.getElementById('edit-client-buffer-enabled').checked,
-                bufferSize: parseInt(document.getElementById('edit-client-buffer-size').value),
-                persistBuffer: document.getElementById('edit-client-persist-buffer').checked,
-                deleteOldestMessages: document.getElementById('edit-client-delete-oldest').checked
+                protocol: document.getElementById('client-protocol').value,
+                hostname: document.getElementById('client-hostname').value.trim(),
+                port: parseInt(document.getElementById('client-port').value),
+                username: document.getElementById('client-username').value.trim() || null,
+                password: document.getElementById('client-password').value || null,
+                clientId: document.getElementById('client-id').value.trim(),
+                cleanSession: document.getElementById('client-clean-session').checked,
+                keepAlive: parseInt(document.getElementById('client-keep-alive').value),
+                reconnectDelay: parseInt(document.getElementById('client-reconnect-delay').value),
+                connectionTimeout: parseInt(document.getElementById('client-connection-timeout').value),
+                bufferEnabled: document.getElementById('client-buffer-enabled').checked,
+                bufferSize: parseInt(document.getElementById('client-buffer-size').value),
+                persistBuffer: document.getElementById('client-persist-buffer').checked,
+                deleteOldestMessages: document.getElementById('client-delete-oldest').checked
             }
         };
 
@@ -273,7 +232,6 @@ class MqttClientDetailManager {
             });
 
             if (result.mqttClient.update.success) {
-                this.hideEditModal();
                 await this.loadClientData();
                 this.showSuccess('Bridge updated successfully');
             } else {
@@ -414,15 +372,6 @@ class MqttClientDetailManager {
     }
 
     // UI Helper Methods
-    showEditModal() {
-        this.populateEditForm();
-        document.getElementById('edit-client-modal').style.display = 'flex';
-    }
-
-    hideEditModal() {
-        document.getElementById('edit-client-modal').style.display = 'none';
-    }
-
     showAddAddressModal() {
         document.getElementById('add-address-modal').style.display = 'flex';
         document.getElementById('add-address-form').reset();
@@ -487,22 +436,21 @@ class MqttClientDetailManager {
         return div.innerHTML;
     }
 
+    setText(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+
     goBack() {
         window.location.href = '/pages/mqtt-clients.html';
     }
 }
 
 // Global functions
-function showEditModal() {
-    mqttClientDetailManager.showEditModal();
-}
+let mqttClientDetailManager;
 
-function hideEditModal() {
-    mqttClientDetailManager.hideEditModal();
-}
-
-function updateClient() {
-    mqttClientDetailManager.updateClient();
+function saveClient() {
+    mqttClientDetailManager.saveClient();
 }
 
 function toggleClient() {
@@ -534,7 +482,6 @@ function goBack() {
 }
 
 // Initialize
-let mqttClientDetailManager;
 document.addEventListener('DOMContentLoaded', () => {
     mqttClientDetailManager = new MqttClientDetailManager();
 });
@@ -542,9 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Handle modal clicks
 document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal')) {
-        if (e.target.id === 'edit-client-modal') {
-            mqttClientDetailManager.hideEditModal();
-        } else if (e.target.id === 'add-address-modal') {
+        if (e.target.id === 'add-address-modal') {
             mqttClientDetailManager.hideAddAddressModal();
         } else if (e.target.id === 'confirm-delete-address-modal') {
             mqttClientDetailManager.hideConfirmDeleteAddressModal();

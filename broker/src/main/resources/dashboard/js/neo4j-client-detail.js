@@ -36,7 +36,7 @@ class Neo4jClientDetailManager {
             const query = `query GetClusterNodes { clusterNodes { nodeId isCurrent } }`;
             const result = await this.client.query(query);
             this.clusterNodes = result.clusterNodes || [];
-            const nodeSelect = document.getElementById('edit-client-node');
+            const nodeSelect = document.getElementById('client-node');
             if (nodeSelect) {
                 nodeSelect.innerHTML = '<option value="">Select Node...</option>';
                 this.clusterNodes.forEach(node => {
@@ -81,27 +81,34 @@ class Neo4jClientDetailManager {
         if (!this.clientData) return;
         const d = this.clientData;
         const cfg = d.config;
+
+        // Update page title and subtitle
         document.getElementById('page-title').textContent = `Neo4j Client: ${d.name}`;
-        this.setText('client-name-display', d.name);
-        this.setText('client-namespace', d.namespace);
-        this.setText('client-node-id', d.nodeId + (d.isOnCurrentNode ? ' (Current)' : ''));
-        this.setText('client-url', cfg.url);
-        this.setText('client-username', cfg.username);
-        this.setText('client-queue-size', cfg.queueSize);
-        this.setText('client-batch-size', cfg.batchSize);
-        this.setText('client-reconnect-delay', `${cfg.reconnectDelayMs} ms`);
+        document.getElementById('page-subtitle').textContent = `${d.namespace} - ${cfg.url}`;
+
+        // Populate form fields
+        document.getElementById('client-name').value = d.name;
+        document.getElementById('client-name').disabled = true; // Can't change name in edit mode
+        document.getElementById('client-namespace').value = d.namespace;
+        document.getElementById('client-node').value = d.nodeId;
+        document.getElementById('client-url').value = cfg.url;
+        document.getElementById('client-username').value = cfg.username;
+        document.getElementById('client-queue-size').value = cfg.queueSize;
+        document.getElementById('client-batch-size').value = cfg.batchSize;
+        document.getElementById('client-reconnect-delay').value = cfg.reconnectDelayMs;
+        document.getElementById('client-enabled').checked = d.enabled;
+
+        // Topic filters - populate textarea
+        const topicFilters = cfg.topicFilters && cfg.topicFilters.length > 0
+            ? cfg.topicFilters.join('\n')
+            : '#';
+        document.getElementById('client-topic-filters').value = topicFilters;
+
+        // Timestamps (read-only)
         this.setText('client-created-at', new Date(d.createdAt).toLocaleString());
         this.setText('client-updated-at', new Date(d.updatedAt).toLocaleString());
 
-        // Topic filters display
-        const topicFiltersEl = document.getElementById('client-topic-filters');
-        if (topicFiltersEl) {
-            const filters = cfg.topicFilters && cfg.topicFilters.length > 0
-                ? cfg.topicFilters.join('\n')
-                : 'None';
-            topicFiltersEl.textContent = filters;
-        }
-
+        // Status badge
         const statusBadge = document.getElementById('client-status');
         if (d.enabled) {
             statusBadge.className = 'status-badge status-enabled';
@@ -110,12 +117,16 @@ class Neo4jClientDetailManager {
             statusBadge.className = 'status-badge status-disabled';
             statusBadge.textContent = 'DISABLED';
         }
+
+        // Toggle button
         const toggleBtn = document.getElementById('toggle-client-btn');
         if (toggleBtn) {
             toggleBtn.textContent = d.enabled ? 'Stop Client' : 'Start Client';
             toggleBtn.className = d.enabled ? 'btn btn-warning' : 'btn btn-success';
         }
-        this.populateEditForm();
+
+        // Show content
+        document.getElementById('client-content').style.display = 'block';
     }
 
     renderMetrics() {
@@ -152,55 +163,34 @@ class Neo4jClientDetailManager {
         }
     }
 
-    populateEditForm() {
-        if (!this.clientData) return;
-        const d = this.clientData;
-        const cfg = d.config;
-        this.setValue('edit-client-name', d.name);
-        this.setValue('edit-client-namespace', d.namespace);
-        this.setValue('edit-client-node', d.nodeId);
-        this.setValue('edit-client-url', cfg.url);
-        this.setValue('edit-client-username', cfg.username);
-        // Don't populate password for security
-        this.setValue('edit-client-password', '');
-        const topicFilters = cfg.topicFilters && cfg.topicFilters.length > 0
-            ? cfg.topicFilters.join('\n')
-            : '#';
-        this.setValue('edit-client-topic-filters', topicFilters);
-        this.setValue('edit-client-queue-size', cfg.queueSize);
-        this.setValue('edit-client-batch-size', cfg.batchSize);
-        this.setValue('edit-client-reconnect-delay', cfg.reconnectDelayMs);
-        document.getElementById('edit-client-enabled').checked = d.enabled;
-    }
-
-    async updateClient() {
-        const form = document.getElementById('edit-client-form');
+    async saveClient() {
+        const form = document.getElementById('client-form');
         if (!form.checkValidity()) { form.reportValidity(); return; }
 
         // Parse topic filters from textarea
-        const topicFiltersText = document.getElementById('edit-client-topic-filters').value.trim();
+        const topicFiltersText = document.getElementById('client-topic-filters').value.trim();
         const topicFilters = topicFiltersText
             .split('\n')
             .map(line => line.trim())
             .filter(line => line.length > 0);
 
         // Handle password - only include if changed
-        const passwordField = document.getElementById('edit-client-password');
+        const passwordField = document.getElementById('client-password');
         const password = passwordField.value.trim();
 
         const updatedInput = {
-            name: document.getElementById('edit-client-name').value.trim(),
-            namespace: document.getElementById('edit-client-namespace').value.trim(),
-            nodeId: document.getElementById('edit-client-node').value,
-            enabled: document.getElementById('edit-client-enabled').checked,
+            name: document.getElementById('client-name').value.trim(),
+            namespace: document.getElementById('client-namespace').value.trim(),
+            nodeId: document.getElementById('client-node').value,
+            enabled: document.getElementById('client-enabled').checked,
             config: {
-                url: document.getElementById('edit-client-url').value.trim(),
-                username: document.getElementById('edit-client-username').value.trim(),
+                url: document.getElementById('client-url').value.trim(),
+                username: document.getElementById('client-username').value.trim(),
                 password: password.length > 0 ? password : this.clientData?.config?.password || '',
                 topicFilters: topicFilters,
-                queueSize: parseInt(document.getElementById('edit-client-queue-size').value),
-                batchSize: parseInt(document.getElementById('edit-client-batch-size').value),
-                reconnectDelayMs: parseInt(document.getElementById('edit-client-reconnect-delay').value)
+                queueSize: parseInt(document.getElementById('client-queue-size').value),
+                batchSize: parseInt(document.getElementById('client-batch-size').value),
+                reconnectDelayMs: parseInt(document.getElementById('client-reconnect-delay').value)
             }
         };
 
@@ -230,7 +220,6 @@ class Neo4jClientDetailManager {
                 if (prevNodeId && updatedInput.nodeId && updatedInput.nodeId !== prevNodeId) {
                     await this.reassignClient(updatedInput.nodeId);
                 }
-                this.hideEditModal();
                 this.showSuccess('Neo4j client updated successfully');
             } else {
                 const errors = result.neo4jClient.update.errors || ['Unknown error'];
@@ -291,7 +280,6 @@ class Neo4jClientDetailManager {
     }
 
     async deleteClient() {
-        if (!confirm('Are you sure you want to delete this Neo4j client?')) return;
         try {
             const mutation = `mutation DeleteNeo4jClient($name: String!) { neo4jClient { delete(name: $name) } }`;
             const result = await this.client.query(mutation, { name: this.clientName });
@@ -309,11 +297,6 @@ class Neo4jClientDetailManager {
     }
 
     // UI helpers
-    showEditModal() {
-        this.populateEditForm();
-        document.getElementById('edit-client-modal').style.display = 'flex';
-    }
-    hideEditModal() { document.getElementById('edit-client-modal').style.display = 'none'; }
     showDeleteModal() {
         const span = document.getElementById('delete-client-name');
         if (span && this.clientData) span.textContent = this.clientData.name;
@@ -330,14 +313,11 @@ class Neo4jClientDetailManager {
     escapeHtml(t){ const div=document.createElement('div'); div.textContent=t; return div.innerHTML; }
 
     setText(id, value) { const el = document.getElementById(id); if (el) el.textContent = value; }
-    setValue(id, value) { const el = document.getElementById(id); if (el) el.value = value; }
 }
 
 // Global wrappers
 let neo4jClientDetailManager;
-function showEditModal() { neo4jClientDetailManager.showEditModal(); }
-function hideEditModal() { neo4jClientDetailManager.hideEditModal(); }
-function updateClient() { neo4jClientDetailManager.updateClient(); }
+function saveClient() { neo4jClientDetailManager.saveClient(); }
 function toggleClient() { neo4jClientDetailManager.toggleClient(); }
 function goBack() { neo4jClientDetailManager.goBack(); }
 function showDeleteModal() { neo4jClientDetailManager.showDeleteModal(); }
@@ -347,4 +327,4 @@ function confirmDeleteClient() { neo4jClientDetailManager.confirmDeleteClient();
 // Initialize
 document.addEventListener('DOMContentLoaded', () => { neo4jClientDetailManager = new Neo4jClientDetailManager(); });
 
-document.addEventListener('click', e => { if (e.target.classList.contains('modal')) { if (e.target.id === 'edit-client-modal') neo4jClientDetailManager.hideEditModal(); else if (e.target.id === 'delete-client-modal') neo4jClientDetailManager.hideDeleteModal(); }});
+document.addEventListener('click', e => { if (e.target.classList.contains('modal')) { if (e.target.id === 'delete-client-modal') neo4jClientDetailManager.hideDeleteModal(); }});
