@@ -1190,3 +1190,87 @@ input Plc4xClientInput {
     # Connection configuration
     config: Plc4xConnectionConfigInput!
 }
+
+# Neo4j Client Mutations - Grouped operations for Neo4j client management
+type Neo4jClientMutations {
+    # Create a new Neo4j client configuration to write MQTT topics to Neo4j graph database
+    # Creates a client connector that will be deployed on the specified cluster node
+    # The client will subscribe to specified topics and write them as graph nodes
+    create(input: Neo4jClientInput!): Neo4jClientResult!
+
+    # Update an existing Neo4j client configuration
+    # Changes take effect immediately - the client connector will be redeployed with new settings
+    # Useful for modifying connection parameters, credentials, or topic filters
+    update(name: String!, input: Neo4jClientInput!): Neo4jClientResult!
+
+    # Delete a Neo4j client configuration permanently
+    # Stops the client connector and removes all configuration data
+    # Returns true if deletion was successful, false if client was not found
+    delete(name: String!): Boolean!
+
+    # Start a Neo4j client connection
+    # Enables a previously stopped client and establishes connection to Neo4j database
+    start(name: String!): Neo4jClientResult!
+
+    # Stop a Neo4j client connection
+    # Disables the client and disconnects from Neo4j while preserving configuration
+    stop(name: String!): Neo4jClientResult!
+
+    # Toggle Neo4j client enabled state
+    # Enable or disable a Neo4j client without deleting its configuration
+    toggle(name: String!, enabled: Boolean!): Neo4jClientResult!
+
+    # Reassign a Neo4j client to a different cluster node
+    # Moves the client connector from one node to another for load balancing
+    # The client configuration remains unchanged, only the deployment location changes
+    reassign(name: String!, nodeId: String!): Neo4jClientResult!
+}
+
+# Extend Mutations for Neo4j clients
+extend type Mutation {
+    # Access Neo4j client management operations
+    # Returns a Neo4jClientMutations type that provides grouped mutation operations
+    neo4jClient: Neo4jClientMutations!
+}
+
+# Result type for Neo4j Client operations
+type Neo4jClientResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected Neo4j client (null if operation failed)
+    client: Neo4jClient
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+# Input for Neo4j connection configuration
+input Neo4jClientConfigInput {
+    # Neo4j connection URL (e.g., "bolt://localhost:7687", "neo4j://localhost:7687")
+    url: String!
+    # Username for Neo4j authentication
+    username: String!
+    # Password for Neo4j authentication
+    password: String!
+    # MQTT topic filters to subscribe to (supports wildcards +, #)
+    topicFilters: [String!]!
+    # Maximum size of the path creation queue
+    queueSize: Int = 10000
+    # Number of messages to batch before writing to Neo4j
+    batchSize: Int = 100
+    # Delay in milliseconds before attempting reconnection
+    reconnectDelayMs: Long = 5000
+}
+
+# Input for creating or updating a Neo4j client
+input Neo4jClientInput {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (e.g., "neo4j/mqtt-graph")
+    namespace: String!
+    # Target cluster node (use "*" for automatic assignment)
+    nodeId: String!
+    # Whether the client should be enabled
+    enabled: Boolean = true
+    # Connection configuration
+    config: Neo4jClientConfigInput!
+}

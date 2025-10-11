@@ -218,6 +218,17 @@ data class Plc4xDeviceMetrics(
     val timestamp: String
 )
 
+// Neo4j Client Metrics
+data class Neo4jClientMetrics(
+    val messagesIn: Double,
+    val messagesWritten: Double,
+    val errors: Double,
+    val pathQueueSize: Int,
+    val messagesInRate: Double,
+    val messagesWrittenRate: Double,
+    val timestamp: String
+)
+
 data class ArchiveGroupMetrics(
     val messagesOut: Double,  // Messages written to database per second
     val bufferSize: Int,      // Average size of the write buffer

@@ -1251,4 +1251,63 @@ future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTi
             future
         }
     }
+
+    // Neo4j Client Metrics (embedded field resolvers)
+    fun neo4jClientMetrics(): DataFetcher<CompletableFuture<List<Neo4jClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Neo4jClientMetrics>>()
+            val client = env.getSource<Map<String, Any>>()
+            val clientName = client?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(listOf(Neo4jClientMetrics(0.0, 0.0, 0.0, 0, 0.0, 0.0, TimestampConverter.currentTimeIsoString())))
+                return@DataFetcher future
+            }
+
+            // Fetch live metrics from connector via EventBus
+            val addr = EventBusAddresses.Neo4jBridge.connectorMetrics(clientName)
+            vertx.eventBus().request<JsonObject>(addr, JsonObject()).onComplete { reply ->
+                if (reply.succeeded()) {
+                    val body = reply.result().body()
+                    val messagesIn = body.getDouble("messagesIn", 0.0)
+                    val messagesWritten = body.getDouble("messagesWritten", 0.0)
+                    val errors = body.getDouble("errors", 0.0)
+                    val pathQueueSize = body.getInteger("pathQueueSize", 0)
+                    val messagesInRate = body.getDouble("messagesInRate", 0.0)
+                    val messagesWrittenRate = body.getDouble("messagesWrittenRate", 0.0)
+                    future.complete(listOf(Neo4jClientMetrics(
+                        round2(messagesIn),
+                        round2(messagesWritten),
+                        round2(errors),
+                        pathQueueSize,
+                        round2(messagesInRate),
+                        round2(messagesWrittenRate),
+                        TimestampConverter.currentTimeIsoString()
+                    )))
+                } else {
+                    future.complete(listOf(Neo4jClientMetrics(0.0, 0.0, 0.0, 0, 0.0, 0.0, TimestampConverter.currentTimeIsoString())))
+                }
+            }
+
+            future
+        }
+    }
+
+    fun neo4jClientMetricsHistory(): DataFetcher<CompletableFuture<List<Neo4jClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Neo4jClientMetrics>>()
+            val client = env.getSource<Map<String, Any>>()
+            val clientName = client?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            // Metrics history not yet implemented for Neo4j - would need metricsStore support
+            future.complete(emptyList())
+
+            future
+        }
+    }
 }

@@ -112,6 +112,13 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // Neo4j Client (MQTT -> Neo4j)
+    object Neo4jBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.neo4j"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // Archive Groups
     object Archive {
         private const val ARCHIVE_NS = "$BASE.archive"

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Neo4j Client Detail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+         .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); margin-bottom: 2rem; box-shadow: var(--card-shadow);}
+         .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);}
+         .section-title h2 { margin:0; color: var(--text-primary); font-size:1.25rem; font-weight:600;}
+         .section-content { padding:1.5rem;}
+         .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem;}
+         .info-item { display:flex; flex-direction:column; padding:1rem; background:var(--dark-bg); border-radius:8px; border:1px solid var(--dark-border);}
+         .info-label { font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:0.5rem;}
+         .info-value { color:var(--text-primary); font-weight:600;}
+         .status-badge { display:inline-flex; padding:0.4rem 0.8rem; border-radius:20px; font-size:0.7rem; font-weight:600; text-transform:uppercase;}
+         .status-enabled { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3);}
+         .status-disabled { background:rgba(239,68,68,0.15); color:var(--monster-red); border:1px solid rgba(239,68,68,0.3);}
+         .action-buttons { display:flex; gap:0.5rem; flex-wrap:wrap;}
+         .btn { display:inline-flex; align-items:center; gap:0.5rem; padding:0.75rem 1.5rem; border-radius:8px; font-weight:600; transition:all 0.2s ease; border:none; cursor:pointer;}
+         .btn-primary { background:linear-gradient(135deg, var(--monster-purple), var(--monster-teal)); color:white;}
+         .btn-secondary { background:var(--dark-surface-2); border:1px solid var(--dark-border); color:var(--text-primary);}
+         .btn-success { background:var(--monster-green); color:white;}
+         .btn-warning { background:var(--monster-orange); color:white;}
+         .btn-danger { background:var(--monster-red); color:white; }
+         .btn-danger:hover { filter:brightness(1.1); }
+         .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; justify-content:center; align-items:center; z-index:9999; padding:2rem;}
+         .modal-content { background:var(--dark-surface); border-radius:12px; border:1px solid var(--dark-border); max-width:650px; width:100%; max-height:90vh; overflow-y:auto;}
+         .modal-header { padding:1.5rem 2rem; border-bottom:1px solid var(--dark-border); display:flex; justify-content:space-between; align-items:center;}
+         .modal-header h3 { margin:0; color:var(--text-primary);}
+         .modal-close { background:none; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;}
+         .modal-body { padding:2rem;}
+         .modal-footer { padding:1.5rem 2rem; border-top:1px solid var(--dark-border); display:flex; justify-content:flex-end; gap:1rem;}
+         .form-group { margin-bottom:1.5rem;}
+         .form-group label { display:block; margin-bottom:0.5rem; color:var(--text-primary); font-weight:600;}
+         .form-control, input[type=text], input[type=password], input[type=number], select, textarea { width:100%; padding:0.75rem 1rem; background:var(--dark-bg); border:1px solid var(--dark-border); border-radius:8px; color:var(--text-primary); box-sizing:border-box; font-family:inherit; font-size:0.9rem;}
+         .form-control:focus, input:focus, select:focus, textarea:focus { outline:none; border-color:var(--monster-purple);}
+         .checkbox-group { display:flex; align-items:center; gap:0.5rem;}
+         .checkbox-group input[type=checkbox] { accent-color:var(--monster-purple);}
+         .json-hint { color:var(--text-muted); font-size:0.7rem; margin-top:0.4rem; display:block;}
+         textarea { resize:vertical; min-height:80px; }
+         @media (max-width: 1000px) { .info-grid { grid-template-columns:1fr; } }
+     </style>
+</head>
+<body>
+<div class="top-bar">
+    <div class="sidebar-brand">
+        <img src="/assets/logo.png" alt="MonsterMQ Logo">
+        <span class="brand-name">MonsterMQ</span>
+    </div>
+    <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+</div>
+
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="sidebar-toggle" onclick="toggleSidebar()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15,18 9,12 15,6"></polyline>
+            </svg>
+        </button>
+    </div>
+
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+</aside>
+
+<div class="main-content" id="main-content">
+    <div class="container">
+        <div class="page-header">
+            <div>
+                <button class="btn btn-secondary" onclick="goBack()" style="margin-bottom:1rem;">← Back to Neo4j Clients</button>
+                <h1 class="page-title" id="page-title">Neo4j Client</h1>
+            </div>
+            <div class="action-buttons">
+                <button class="btn btn-secondary" onclick="showEditModal()">Edit Configuration</button>
+                <button class="btn btn-success" id="toggle-client-btn" onclick="toggleClient()">Start Client</button>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-header">
+                <div class="section-title"><h2>Client Information</h2></div>
+                <div style="display:flex; align-items:center; gap:0.75rem;">
+                    <span class="status-badge status-enabled" id="client-status">ENABLED</span>
+                    <button class="btn btn-secondary" style="padding:0.4rem 0.9rem; font-size:0.7rem;" onclick="showDeleteModal()">Delete</button>
+                </div>
+            </div>
+            <div class="section-content">
+                <div class="info-grid">
+                    <div class="info-item"><div class="info-label">Name</div><div class="info-value" id="client-name-display">-</div></div>
+                    <div class="info-item"><div class="info-label">Namespace</div><div class="info-value" id="client-namespace">-</div></div>
+                    <div class="info-item"><div class="info-label">Node Assignment</div><div class="info-value" id="client-node-id">-</div></div>
+                    <div class="info-item"><div class="info-label">Neo4j URL</div><div class="info-value" id="client-url">-</div></div>
+                    <div class="info-item"><div class="info-label">Username</div><div class="info-value" id="client-username">-</div></div>
+                    <div class="info-item"><div class="info-label">Queue Size</div><div class="info-value" id="client-queue-size">-</div></div>
+                    <div class="info-item"><div class="info-label">Batch Size</div><div class="info-value" id="client-batch-size">-</div></div>
+                    <div class="info-item"><div class="info-label">Reconnect Delay</div><div class="info-value" id="client-reconnect-delay">-</div></div>
+                    <div class="info-item"><div class="info-label">Created At</div><div class="info-value" id="client-created-at">-</div></div>
+                    <div class="info-item"><div class="info-label">Updated At</div><div class="info-value" id="client-updated-at">-</div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <div class="section-header">
+                <div class="section-title"><h2>Topic Filters</h2></div>
+            </div>
+            <div class="section-content">
+                <div class="info-item" style="grid-column:1 / -1;">
+                    <div class="info-label">Subscribed Topic Filters</div>
+                    <pre id="client-topic-filters" style="background:var(--dark-bg); padding:1rem; border:1px solid var(--dark-border); border-radius:8px; max-height:200px; overflow:auto; margin:0; font-size:0.85rem; line-height:1.5; white-space:pre-wrap;">None</pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-card" id="metrics-section">
+            <div class="section-header">
+                <div class="section-title"><h2>Current Metrics</h2></div>
+            </div>
+            <div class="section-content">
+                <div class="info-grid" id="metrics-grid">
+                    <div class="info-item"><div class="info-label">Messages In</div><div class="info-value" id="metric-messages-in">0</div></div>
+                    <div class="info-item"><div class="info-label">Messages Written</div><div class="info-value" id="metric-messages-written">0</div></div>
+                    <div class="info-item"><div class="info-label">Errors</div><div class="info-value" id="metric-errors">0</div></div>
+                    <div class="info-item"><div class="info-label">Path Queue Size</div><div class="info-value" id="metric-path-queue-size">0</div></div>
+                    <div class="info-item"><div class="info-label">Messages In Rate (msg/s)</div><div class="info-value" id="metric-messages-in-rate">0</div></div>
+                    <div class="info-item"><div class="info-label">Written Rate (msg/s)</div><div class="info-value" id="metric-messages-written-rate">0</div></div>
+                    <div class="info-item" style="grid-column:1 / -1;"><div class="info-label">Metrics Timestamp</div><div class="info-value" id="metric-timestamp">-</div></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="loading-indicator" class="loading-indicator" style="display:none;">
+            <div class="loading-spinner"></div>
+            <span>Loading...</span>
+        </div>
+
+        <div id="error-message" class="error-message" style="display:none;">
+            <div class="error-content">
+                <span class="error-icon">⚠️</span>
+                <span class="error-text"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Neo4j Client Modal -->
+<div id="edit-client-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Edit Neo4j Client</h3>
+            <button class="modal-close" onclick="hideEditModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <form id="edit-client-form">
+                <div class="form-group">
+                    <label for="edit-client-name">Client Name *</label>
+                    <input type="text" id="edit-client-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-client-namespace">Namespace *</label>
+                    <input type="text" id="edit-client-namespace" required>
+                    <span class="json-hint">The MQTT topic namespace prefix for this client.</span>
+                </div>
+                <div class="form-group">
+                    <label for="edit-client-node">Cluster Node *</label>
+                    <select id="edit-client-node" required><option value="">Select Node...</option></select>
+                </div>
+                <div class="form-group">
+                    <label for="edit-client-url">Neo4j URL *</label>
+                    <input type="text" id="edit-client-url" required placeholder="bolt://localhost:7687">
+                </div>
+                <div class="form-group">
+                    <label for="edit-client-username">Username *</label>
+                    <input type="text" id="edit-client-username" required placeholder="neo4j">
+                </div>
+                <div class="form-group">
+                    <label for="edit-client-password">Password</label>
+                    <input type="password" id="edit-client-password" placeholder="Leave blank to keep current password">
+                    <span class="json-hint">Leave blank to keep the existing password unchanged.</span>
+                </div>
+                <div class="form-group">
+                    <label for="edit-client-topic-filters">Topic Filters</label>
+                    <textarea id="edit-client-topic-filters" placeholder="Enter topic filters, one per line"></textarea>
+                    <span class="json-hint">MQTT topic filters to subscribe to. Use # for all topics, or specify patterns like sensors/+/temp.</span>
+                </div>
+                <div class="form-group">
+                    <label for="edit-client-queue-size">Queue Size</label>
+                    <input type="number" id="edit-client-queue-size" min="100" max="100000" value="10000">
+                    <span class="json-hint">Maximum number of messages to buffer.</span>
+                </div>
+                <div class="form-group">
+                    <label for="edit-client-batch-size">Batch Size</label>
+                    <input type="number" id="edit-client-batch-size" min="1" max="1000" value="100">
+                    <span class="json-hint">Number of messages to write in each batch.</span>
+                </div>
+                <div class="form-group">
+                    <label for="edit-client-reconnect-delay">Reconnect Delay (ms)</label>
+                    <input type="number" id="edit-client-reconnect-delay" min="1000" max="60000" value="5000">
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="edit-client-enabled">
+                        <label for="edit-client-enabled">Enabled</label>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideEditModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary" onclick="updateClient()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div id="delete-client-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Confirm Delete</h3>
+            <button class="modal-close" onclick="hideDeleteModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to delete this Neo4j client "<span id="delete-client-name"></span>"?</p>
+            <p>This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideDeleteModal()">Cancel</button>
+            <button type="button" class="btn btn-danger" onclick="confirmDeleteClient()">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/neo4j-client-detail.js"></script>
+</body>
+</html>

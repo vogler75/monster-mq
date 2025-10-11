@@ -94,6 +94,11 @@ class SidebarManager {
                         href: '/pages/plc4x-clients.html',
                         icon: '<rect x="2" y="2" width="20" height="20" rx="2" fill="none"></rect><circle cx="12" cy="12" r="3" fill="currentColor"></circle><line x1="12" y1="2" x2="12" y2="9"></line><line x1="12" y1="15" x2="12" y2="22"></line><line x1="2" y1="12" x2="9" y2="12"></line><line x1="15" y1="12" x2="22" y2="12"></line>',
                         text: 'PLC4X Clients'
+                    },
+                    {
+                        href: '/pages/neo4j-clients.html',
+                        icon: '<circle cx="6" cy="12" r="2" fill="currentColor"></circle><circle cx="12" cy="6" r="2" fill="currentColor"></circle><circle cx="12" cy="18" r="2" fill="currentColor"></circle><circle cx="18" cy="12" r="2" fill="currentColor"></circle><line x1="7.5" y1="10.5" x2="10.5" y2="7.5"></line><line x1="7.5" y1="13.5" x2="10.5" y2="16.5"></line><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"></line><line x1="13.5" y1="16.5" x2="16.5" y2="13.5"></line>',
+                        text: 'Neo4j Clients'
                     }
                 ]
             },

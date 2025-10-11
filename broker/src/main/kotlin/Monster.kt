@@ -38,6 +38,7 @@ import at.rocworks.devices.kafkaclient.KafkaClientExtension
 import at.rocworks.devices.winccoa.WinCCOaExtension
 import at.rocworks.devices.winccua.WinCCUaExtension
 import at.rocworks.devices.plc4x.Plc4xExtension
+import at.rocworks.devices.neo4j.Neo4jExtension
 import at.rocworks.stores.DeviceConfigStoreFactory
 import handlers.MetricsHandler
 import java.io.File
@@ -701,6 +702,12 @@ MORE INFO:
                         val plc4xExtension = Plc4xExtension()
                         val plc4xDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(plc4xExtension, plc4xDeploymentOptions)
+                    }
+                    .compose {
+                        // Neo4j Client Extension
+                        val neo4jExtension = Neo4jExtension()
+                        val neo4jDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(neo4jExtension, neo4jDeploymentOptions)
                     }
                     .compose {
                         if (metricsCollector != null) {

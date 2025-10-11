@@ -27,6 +27,8 @@ import at.rocworks.graphql.WinCCUaClientConfigQueries
 import at.rocworks.graphql.WinCCUaClientConfigMutations
 import at.rocworks.graphql.Plc4xClientConfigQueries
 import at.rocworks.graphql.Plc4xClientConfigMutations
+import at.rocworks.graphql.Neo4jClientConfigQueries
+import at.rocworks.graphql.Neo4jClientConfigMutations
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
@@ -281,6 +283,10 @@ class GraphQLServer(
         val plc4xClientQueries = deviceStore?.let { Plc4xClientConfigQueries(vertx, it) }
         val plc4xClientMutations = deviceStore?.let { Plc4xClientConfigMutations(vertx, it) }
 
+        // Initialize Neo4j Client resolvers
+        val neo4jClientQueries = deviceStore?.let { Neo4jClientConfigQueries(vertx, it) }
+        val neo4jClientMutations = deviceStore?.let { Neo4jClientConfigMutations(vertx, it) }
+
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
             .scalar(ExtendedScalars.GraphQLLong)
@@ -366,6 +372,12 @@ class GraphQLServer(
                             dataFetcher("plc4xClients", resolver.plc4xClients())
                         }
                     }
+                    // Neo4j Client queries
+                    .apply {
+                        neo4jClientQueries?.let { resolver ->
+                            dataFetcher("neo4jClients", resolver.neo4jClients())
+                        }
+                    }
             }
             // Register mutation resolvers
             .type("Mutation") { builder ->
@@ -435,6 +447,13 @@ class GraphQLServer(
                         plc4xClientMutations?.let { _ ->
                             // Return an empty object - actual resolvers are on Plc4xDeviceMutations type
                             dataFetcher("plc4xDevice") { _ -> emptyMap<String, Any>() }
+                        }
+                    }
+                    // Neo4j Client mutations - grouped under neo4jClient
+                    .apply {
+                        neo4jClientMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on Neo4jClientMutations type
+                            dataFetcher("neo4jClient") { _ -> emptyMap<String, Any>() }
                         }
                     }
             }
@@ -545,6 +564,20 @@ class GraphQLServer(
                     }
                 }
             }
+            // Register Neo4j Client Mutations type
+            .type("Neo4jClientMutations") { builder ->
+                builder.apply {
+                    neo4jClientMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createNeo4jClient())
+                        dataFetcher("update", resolver.updateNeo4jClient())
+                        dataFetcher("delete", resolver.deleteNeo4jClient())
+                        dataFetcher("start", resolver.startNeo4jClient())
+                        dataFetcher("stop", resolver.stopNeo4jClient())
+                        dataFetcher("toggle", resolver.toggleNeo4jClient())
+                        dataFetcher("reassign", resolver.reassignNeo4jClient())
+                    }
+                }
+            }
             // Register Archive Group Mutations type
             .type("ArchiveGroupMutations") { builder ->
                 builder.apply {
@@ -618,6 +651,11 @@ class GraphQLServer(
                 builder
                     .dataFetcher("metrics", metricsResolver.plc4xClientMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.plc4xClientMetricsHistory())
+            }
+            .type("Neo4jClient") { builder ->
+                builder
+                    .dataFetcher("metrics", metricsResolver.neo4jClientMetrics())
+                    .dataFetcher("metricsHistory", metricsResolver.neo4jClientMetricsHistory())
             }
             .type("ArchiveGroupInfo") { builder ->
                 builder.apply {

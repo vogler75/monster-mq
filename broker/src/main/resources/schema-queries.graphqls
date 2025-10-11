@@ -1187,3 +1187,102 @@ extend type Query {
         node: String
     ): [Plc4xClient!]!
 }
+
+#############################################
+# Neo4j Client Configuration                #
+#############################################
+
+"""
+Neo4j Client subscribes to MQTT topics and writes them to a Neo4j graph database,
+creating a hierarchical representation of the topic tree.
+
+Features:
+- Topic tree stored as graph nodes (MqttNode for hierarchy, MqttValue for leaf nodes)
+- Batch writing for efficient data insertion
+- Asynchronous path creation to avoid blocking
+- Configurable topic filters to select which topics to store
+- Metrics tracking for monitoring connector health
+
+Graph Structure:
+- MqttNode: Represents topic hierarchy levels (e.g., "factory", "factory/machine1")
+- MqttValue: Represents actual topic values (leaf nodes)
+- HAS relationships: Connect nodes in the hierarchy (parent HAS child)
+"""
+
+# Neo4j client connection configuration
+type Neo4jClientConfig {
+    # Neo4j connection URL (e.g., "bolt://localhost:7687", "neo4j://localhost:7687")
+    url: String!
+    # Username for Neo4j authentication
+    username: String!
+    # Password for Neo4j authentication (not exposed in queries for security)
+    password: String
+    # MQTT topic filters to subscribe to (supports wildcards +, #)
+    topicFilters: [String!]!
+    # Maximum size of the path creation queue
+    queueSize: Int!
+    # Number of messages to batch before writing to Neo4j
+    batchSize: Int!
+    # Delay in milliseconds before attempting reconnection
+    reconnectDelayMs: Long!
+}
+
+# Metrics for a Neo4j client connector
+type Neo4jClientMetrics {
+    # Messages per second received from MQTT broker
+    messagesIn: Float!
+    # Messages per second written to Neo4j database
+    messagesWritten: Float!
+    # Number of errors encountered
+    errors: Float!
+    # Current size of the path creation queue
+    pathQueueSize: Int!
+    # Messages in rate per second
+    messagesInRate: Float!
+    # Messages written rate per second
+    messagesWrittenRate: Float!
+    # ISO 8601 timestamp when these metrics were captured
+    timestamp: String!
+}
+
+# Neo4j Client configuration
+type Neo4jClient {
+    # Unique client name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Cluster node ID where this client runs
+    nodeId: String!
+    # Connection and subscription configuration
+    config: Neo4jClientConfig!
+    # Whether this client is enabled and should connect
+    enabled: Boolean!
+    # Client creation timestamp
+    createdAt: String!
+    # Client last update timestamp
+    updatedAt: String!
+    # Whether this client is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current metrics for this Neo4j client (single most recent entry)
+    metrics: [Neo4jClientMetrics!]!
+    # Historical metrics data for this Neo4j client
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [Neo4jClientMetrics!]!
+}
+
+# Extend Queries for Neo4j clients
+extend type Query {
+    # Get Neo4j client configurations across the entire cluster
+    # Returns clients from all cluster nodes, showing their assignment and connection status
+    # Neo4j clients subscribe to MQTT topics and write topic trees to Neo4j graph database
+    # Use optional filters to narrow results to specific client or node
+    neo4jClients(
+        # Filter by specific client name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [Neo4jClient!]!
+}
