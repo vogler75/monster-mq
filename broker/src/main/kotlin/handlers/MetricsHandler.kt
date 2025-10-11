@@ -21,14 +21,17 @@ class MetricsHandler(
     private val metricsStore: IMetricsStoreAsync,
     private val messageBus: IMessageBus,
     private val messageHandler: at.rocworks.handlers.MessageHandler,
-    private val collectionIntervalSeconds: Int = 1
+    private val collectionIntervalSeconds: Int = 1,
+    private val retentionHours: Int = 24
 ) : AbstractVerticle() {
     companion object {
         private val logger: Logger = Utils.getLogger(MetricsHandler::class.java)
         private const val SYSTEM_CLIENT_ID = "\$SYS"
+        private const val PURGE_INTERVAL_HOURS = 1
     }
 
     private val collectionIntervalMs = collectionIntervalSeconds * 1000L
+    private val purgeIntervalMs = PURGE_INTERVAL_HOURS * 60 * 60 * 1000L
 
     /**
      * Publish metrics to a $SYS topic as retained message
@@ -62,17 +65,43 @@ class MetricsHandler(
     override fun start(startPromise: Promise<Void>) {
         metricsStore.startStore(vertx).onComplete { storeResult ->
             if (storeResult.succeeded()) {
+                // Perform initial purge on startup
+                performPurge()
+
                 // Start periodic metrics collection
                 vertx.setPeriodic(collectionIntervalMs) { _ ->
                     collectAndStoreMetrics()
                 }
 
-                logger.info("MetricsCollector started with ${collectionIntervalSeconds}s (${collectionIntervalMs}ms) interval")
+                // Start periodic metrics purging (every hour)
+                vertx.setPeriodic(purgeIntervalMs) { _ ->
+                    performPurge()
+                }
+
+                logger.info("MetricsCollector started with ${collectionIntervalSeconds}s (${collectionIntervalMs}ms) interval, retention: ${retentionHours}h")
                 startPromise.complete()
             } else {
                 logger.severe("Failed to start metrics collector: ${storeResult.cause()?.message}")
                 startPromise.fail(storeResult.cause())
             }
+        }
+    }
+
+    private fun performPurge() {
+        try {
+            val cutoffTime = Instant.now().minusSeconds(retentionHours * 3600L)
+            logger.info("Purging metrics older than $cutoffTime (retention: ${retentionHours}h)")
+
+            metricsStore.purgeOldMetrics(cutoffTime).onComplete { result ->
+                if (result.succeeded()) {
+                    val deletedCount = result.result()
+                    logger.info("Successfully purged $deletedCount old metric records")
+                } else {
+                    logger.warning("Failed to purge old metrics: ${result.cause()?.message}")
+                }
+            }
+        } catch (e: Exception) {
+            logger.warning("Error during metrics purge: ${e.message}")
         }
     }
 
