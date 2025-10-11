@@ -59,8 +59,8 @@ class Neo4jClientDetailManager {
                 query GetNeo4jClients($name: String!) {
                     neo4jClients(name: $name) {
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
-                        config { url username topicFilters queueSize batchSize reconnectDelayMs }
-                        metrics { messagesIn messagesWritten errors pathQueueSize messagesInRate messagesWrittenRate timestamp }
+                        config { url username topicFilters queueSize batchSize reconnectDelayMs maxChangeRateSeconds }
+                        metrics { messagesIn messagesWritten messagesSuppressed errors pathQueueSize messagesInRate messagesWrittenRate timestamp }
                     }
                 }
             `;
@@ -96,6 +96,7 @@ class Neo4jClientDetailManager {
         document.getElementById('client-queue-size').value = cfg.queueSize;
         document.getElementById('client-batch-size').value = cfg.batchSize;
         document.getElementById('client-reconnect-delay').value = cfg.reconnectDelayMs;
+        document.getElementById('client-max-change-rate').value = cfg.maxChangeRateSeconds || 0;
         document.getElementById('client-enabled').checked = d.enabled;
 
         // Topic filters - populate textarea
@@ -136,6 +137,7 @@ class Neo4jClientDetailManager {
         const latest = m[0];
         this.setText('metric-messages-in', Math.round(latest.messagesIn));
         this.setText('metric-messages-written', Math.round(latest.messagesWritten));
+        this.setText('metric-messages-suppressed', Math.round(latest.messagesSuppressed || 0));
         this.setText('metric-errors', Math.round(latest.errors));
         this.setText('metric-path-queue-size', latest.pathQueueSize);
         this.setText('metric-messages-in-rate', Math.round(latest.messagesInRate * 10) / 10);
@@ -149,7 +151,7 @@ class Neo4jClientDetailManager {
             const query = `
                 query GetNeo4jClientMetrics($name: String!) {
                     neo4jClients(name: $name) {
-                        metrics { messagesIn messagesWritten errors pathQueueSize messagesInRate messagesWrittenRate timestamp }
+                        metrics { messagesIn messagesWritten messagesSuppressed errors pathQueueSize messagesInRate messagesWrittenRate timestamp }
                     }
                 }
             `;
@@ -190,7 +192,8 @@ class Neo4jClientDetailManager {
                 topicFilters: topicFilters,
                 queueSize: parseInt(document.getElementById('client-queue-size').value),
                 batchSize: parseInt(document.getElementById('client-batch-size').value),
-                reconnectDelayMs: parseInt(document.getElementById('client-reconnect-delay').value)
+                reconnectDelayMs: parseInt(document.getElementById('client-reconnect-delay').value),
+                maxChangeRateSeconds: parseInt(document.getElementById('client-max-change-rate').value)
             }
         };
 

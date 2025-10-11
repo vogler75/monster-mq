@@ -1225,6 +1225,8 @@ type Neo4jClientConfig {
     batchSize: Int!
     # Delay in milliseconds before attempting reconnection
     reconnectDelayMs: Long!
+    # Minimum seconds between value changes per topic (0 = no suppression)
+    maxChangeRateSeconds: Int!
 }
 
 # Metrics for a Neo4j client connector
@@ -1233,6 +1235,8 @@ type Neo4jClientMetrics {
     messagesIn: Float!
     # Messages per second written to Neo4j database
     messagesWritten: Float!
+    # Number of messages suppressed due to rate limiting
+    messagesSuppressed: Float!
     # Number of errors encountered
     errors: Float!
     # Current size of the path creation queue

@@ -45,8 +45,12 @@ class Neo4jConnector : AbstractVerticle() {
     // Metrics
     private val messagesIn = AtomicLong(0)
     private val messagesWritten = AtomicLong(0)
+    private val messagesSuppressed = AtomicLong(0)
     private val errors = AtomicLong(0)
     private var lastResetTime = System.currentTimeMillis()
+
+    // Message suppression tracking (topic -> last timestamp in milliseconds)
+    private val topicLastUpdateTime = mutableMapOf<String, Long>()
 
     // Batch accumulation
     private val messageBatch = mutableListOf<BrokerMessage>()
@@ -265,6 +269,29 @@ class Neo4jConnector : AbstractVerticle() {
             logger.finest("Received message: ${message.topicName}")
             messagesIn.incrementAndGet()
 
+            // Check message suppression based on max change rate
+            if (cfg.maxChangeRateSeconds > 0) {
+                val currentTime = System.currentTimeMillis()
+                val lastUpdateTime = synchronized(topicLastUpdateTime) {
+                    topicLastUpdateTime[message.topicName]
+                }
+
+                if (lastUpdateTime != null) {
+                    val elapsedSeconds = (currentTime - lastUpdateTime) / 1000.0
+                    if (elapsedSeconds < cfg.maxChangeRateSeconds) {
+                        // Suppress this message - not enough time has elapsed
+                        messagesSuppressed.incrementAndGet()
+                        logger.finest("Suppressed message for topic ${message.topicName} (elapsed: ${elapsedSeconds}s < ${cfg.maxChangeRateSeconds}s)")
+                        return
+                    }
+                }
+
+                // Update last update time for this topic
+                synchronized(topicLastUpdateTime) {
+                    topicLastUpdateTime[message.topicName] = currentTime
+                }
+            }
+
             synchronized(messageBatch) {
                 messageBatch.add(message)
 
@@ -433,6 +460,7 @@ class Neo4jConnector : AbstractVerticle() {
                     .put("device", device.name)
                     .put("messagesIn", messagesIn.getAndSet(0))
                     .put("messagesWritten", messagesWritten.getAndSet(0))
+                    .put("messagesSuppressed", messagesSuppressed.getAndSet(0))
                     .put("errors", errors.get())
                     .put("pathQueueSize", writePathQueue.size)
                     .put("messagesInRate", inRate)

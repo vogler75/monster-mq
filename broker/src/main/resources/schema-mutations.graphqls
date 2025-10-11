@@ -1259,6 +1259,8 @@ input Neo4jClientConfigInput {
     batchSize: Int = 100
     # Delay in milliseconds before attempting reconnection
     reconnectDelayMs: Long = 5000
+    # Minimum seconds between value changes per topic (0 = no suppression)
+    maxChangeRateSeconds: Int = 0
 }
 
 # Input for creating or updating a Neo4j client

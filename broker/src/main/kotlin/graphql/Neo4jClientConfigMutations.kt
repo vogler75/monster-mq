@@ -105,7 +105,18 @@ class Neo4jClientConfigMutations(
                     }
 
                     val request = parseDeviceConfigRequest(input)
-                    val validationErrors = request.validate() + validateNeo4jConfig(request.config)
+
+                    // Preserve existing password if the new one is blank
+                    val existingConfig = Neo4jClientConfig.fromJson(existingDevice.config)
+                    val requestConfig = Neo4jClientConfig.fromJson(request.config)
+                    val mergedConfig = if (requestConfig.password.isBlank()) {
+                        requestConfig.copy(password = existingConfig.password)
+                    } else {
+                        requestConfig
+                    }
+                    val mergedConfigJson = mergedConfig.toJson()
+
+                    val validationErrors = request.validate() + validateNeo4jConfig(mergedConfigJson)
                     if (validationErrors.isNotEmpty()) {
                         future.complete(mapOf("success" to false, "errors" to validationErrors))
                         return@onComplete
@@ -121,11 +132,14 @@ class Neo4jClientConfigMutations(
                             return@onComplete
                         }
 
-                        val requestConfig = Neo4jClientConfig.fromJson(request.config)
-                        val newConfig = requestConfig
-                        val updatedDevice = request.toDeviceConfig().copy(
+                        val updatedDevice = DeviceConfig(
+                            name = request.name,
+                            namespace = request.namespace,
+                            nodeId = request.nodeId,
+                            enabled = request.enabled,
+                            type = request.type,
+                            config = mergedConfig.toJson(),
                             createdAt = existingDevice.createdAt,
-                            config = JsonObject.mapFrom(newConfig),
                             updatedAt = Instant.now()
                         )
                         deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
@@ -280,10 +294,11 @@ class Neo4jClientConfigMutations(
             topicFilters = (configMap["topicFilters"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
             queueSize = (configMap["queueSize"] as? Number)?.toInt() ?: 10000,
             batchSize = (configMap["batchSize"] as? Number)?.toInt() ?: 100,
-            reconnectDelayMs = (configMap["reconnectDelayMs"] as? Number)?.toLong() ?: 5000L
+            reconnectDelayMs = (configMap["reconnectDelayMs"] as? Number)?.toLong() ?: 5000L,
+            maxChangeRateSeconds = (configMap["maxChangeRateSeconds"] as? Number)?.toInt() ?: 0
         )
 
-        val configJson = JsonObject.mapFrom(neo4jConfig)
+        val configJson = neo4jConfig.toJson()
         return DeviceConfigRequest(
             name = input["name"] as String,
             namespace = input["namespace"] as String,
@@ -330,7 +345,8 @@ class Neo4jClientConfigMutations(
                 "topicFilters" to config.topicFilters,
                 "queueSize" to config.queueSize,
                 "batchSize" to config.batchSize,
-                "reconnectDelayMs" to config.reconnectDelayMs
+                "reconnectDelayMs" to config.reconnectDelayMs,
+                "maxChangeRateSeconds" to config.maxChangeRateSeconds
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

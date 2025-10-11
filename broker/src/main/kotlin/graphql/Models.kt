@@ -222,6 +222,7 @@ data class Plc4xDeviceMetrics(
 data class Neo4jClientMetrics(
     val messagesIn: Double,
     val messagesWritten: Double,
+    val messagesSuppressed: Double,
     val errors: Double,
     val pathQueueSize: Int,
     val messagesInRate: Double,

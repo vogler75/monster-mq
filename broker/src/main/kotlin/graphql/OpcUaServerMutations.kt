@@ -518,17 +518,21 @@ class OpcUaServerMutations(
         val existingConfig = loadServerConfigFromDeviceConfig(existingDeviceConfig)
 
         // Parse addresses from input if provided, otherwise keep existing addresses
+        @Suppress("UNCHECKED_CAST")
         val addresses = (input["addresses"] as? List<Map<String, Any>>)?.map { addrInput ->
             parseOpcUaServerAddress(addrInput)
         } ?: existingConfig.addresses
 
         // Parse security from input if provided, otherwise keep existing security
+        @Suppress("UNCHECKED_CAST")
         val security = (input["security"] as? Map<String, Any>)?.let { secInput ->
+            @Suppress("UNCHECKED_CAST")
+            val securityPolicies = (secInput["securityPolicies"] as? List<String>) ?: listOf("None")
             OpcUaServerSecurity(
                 keystorePath = secInput["keystorePath"] as? String ?: "server-keystore.jks",
                 keystorePassword = secInput["keystorePassword"] as? String ?: "password",
                 certificateAlias = secInput["certificateAlias"] as? String ?: "server-cert",
-                securityPolicies = (secInput["securityPolicies"] as? List<String>) ?: listOf("None"),
+                securityPolicies = securityPolicies,
                 allowAnonymous = secInput["allowAnonymous"] as? Boolean ?: true,
                 requireAuthentication = secInput["requireAuthentication"] as? Boolean ?: false
             )

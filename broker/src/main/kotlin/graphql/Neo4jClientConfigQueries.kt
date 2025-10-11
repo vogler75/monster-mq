@@ -114,7 +114,8 @@ class Neo4jClientConfigQueries(
                 "topicFilters" to config.topicFilters,
                 "queueSize" to config.queueSize,
                 "batchSize" to config.batchSize,
-                "reconnectDelayMs" to config.reconnectDelayMs
+                "reconnectDelayMs" to config.reconnectDelayMs,
+                "maxChangeRateSeconds" to config.maxChangeRateSeconds
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

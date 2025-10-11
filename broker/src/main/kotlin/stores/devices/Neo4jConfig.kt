@@ -14,7 +14,8 @@ data class Neo4jClientConfig(
     val topicFilters: List<String> = emptyList(),  // MQTT topic patterns to subscribe (e.g., ["sensors/#", "plc/+/data"])
     val queueSize: Int = 10000,                     // Size of the path writer queue
     val batchSize: Int = 100,                       // Number of values to batch before writing
-    val reconnectDelayMs: Long = 5000               // Delay before reconnecting on failure
+    val reconnectDelayMs: Long = 5000,              // Delay before reconnecting on failure
+    val maxChangeRateSeconds: Int = 0               // Minimum seconds between value changes per topic (0 = no suppression)
 ) {
     companion object {
         fun fromJson(obj: JsonObject): Neo4jClientConfig {
@@ -28,7 +29,8 @@ data class Neo4jClientConfig(
                 topicFilters = topicFilters,
                 queueSize = obj.getInteger("queueSize", 10000),
                 batchSize = obj.getInteger("batchSize", 100),
-                reconnectDelayMs = obj.getLong("reconnectDelayMs", 5000)
+                reconnectDelayMs = obj.getLong("reconnectDelayMs", 5000),
+                maxChangeRateSeconds = obj.getInteger("maxChangeRateSeconds", 0)
             )
         }
     }
@@ -42,6 +44,7 @@ data class Neo4jClientConfig(
             .put("queueSize", queueSize)
             .put("batchSize", batchSize)
             .put("reconnectDelayMs", reconnectDelayMs)
+            .put("maxChangeRateSeconds", maxChangeRateSeconds)
     }
 
     fun validate(): List<String> {
@@ -77,6 +80,10 @@ data class Neo4jClientConfig(
 
         if (reconnectDelayMs < 500) {
             errors.add("reconnectDelayMs should be >= 500")
+        }
+
+        if (maxChangeRateSeconds < 0) {
+            errors.add("maxChangeRateSeconds must be >= 0 (0 means no suppression)")
         }
 
         return errors
