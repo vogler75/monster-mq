@@ -56,8 +56,8 @@ class KafkaClientDetailManager {
         this.hideError();
         try {
             const query = `
-                query GetKafkaClient($name: String!) {
-                    kafkaClient(name: $name) {
+                query GetKafkaClients($name: String!) {
+                    kafkaClients(name: $name) {
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
                         config { bootstrapServers groupId payloadFormat destinationTopicPrefix extraConsumerConfig pollIntervalMs maxPollRecords reconnectDelayMs }
                         metrics { messagesIn messagesOut timestamp }
@@ -65,8 +65,8 @@ class KafkaClientDetailManager {
                 }
             `;
             const result = await this.client.query(query, { name: this.clientName });
-            if (!result.kafkaClient) throw new Error('Kafka client not found');
-            this.clientData = result.kafkaClient;
+            if (!result.kafkaClients || result.kafkaClients.length === 0) throw new Error('Kafka client not found');
+            this.clientData = result.kafkaClients[0];
             this.renderClientInfo();
             this.renderMetrics();
         } catch (e) {
@@ -134,10 +134,10 @@ class KafkaClientDetailManager {
     async refreshMetrics() {
         if (!this.clientName) return;
         try {
-            const query = `query GetKafkaClientMetrics($name: String!) { kafkaClient(name: $name) { metrics { messagesIn messagesOut timestamp } } }`;
+            const query = `query GetKafkaClientMetrics($name: String!) { kafkaClients(name: $name) { metrics { messagesIn messagesOut timestamp } } }`;
             const result = await this.client.query(query, { name: this.clientName });
-            if (result.kafkaClient) {
-                this.clientData.metrics = result.kafkaClient.metrics;
+            if (result.kafkaClients && result.kafkaClients.length > 0) {
+                this.clientData.metrics = result.kafkaClients[0].metrics;
                 this.renderMetrics();
             }
         } catch (e) {

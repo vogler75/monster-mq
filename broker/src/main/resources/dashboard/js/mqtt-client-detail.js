@@ -59,8 +59,8 @@ class MqttClientDetailManager {
 
         try {
             const query = `
-                query GetMqttClient($name: String!) {
-                    mqttClient(name: $name) {
+                query GetMqttClients($name: String!) {
+                    mqttClients(name: $name) {
                         name
                         namespace
                         nodeId
@@ -78,6 +78,10 @@ class MqttClientDetailManager {
                             keepAlive
                             reconnectDelay
                             connectionTimeout
+                            bufferEnabled
+                            bufferSize
+                            persistBuffer
+                            deleteOldestMessages
                             addresses {
                                 mode
                                 remoteTopic
@@ -92,11 +96,11 @@ class MqttClientDetailManager {
 
             const result = await this.client.query(query, { name: this.clientName });
 
-            if (!result.mqttClient) {
+            if (!result.mqttClients || result.mqttClients.length === 0) {
                 throw new Error('Bridge not found');
             }
 
-            this.clientData = result.mqttClient;
+            this.clientData = result.mqttClients[0];
             this.renderClientInfo();
             this.renderAddressesList();
 

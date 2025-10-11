@@ -81,8 +81,8 @@ class OpcUaDeviceDetailManager {
 
         try {
             const query = `
-                query GetOpcUaDevice($name: String!) {
-                    opcUaDevice(name: $name) {
+                query GetOpcUaDevices($name: String!) {
+                    opcUaDevices(name: $name) {
                         name
                         namespace
                         nodeId
@@ -130,7 +130,7 @@ class OpcUaDeviceDetailManager {
             `;
 
             const result = await this.client.query(query, { name: this.deviceName });
-            this.device = result.opcUaDevice;
+            this.device = result.opcUaDevices && result.opcUaDevices.length > 0 ? result.opcUaDevices[0] : null;
 
             if (!this.device) {
                 this.showError(`Device "${this.deviceName}" not found`);

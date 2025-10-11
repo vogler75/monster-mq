@@ -126,8 +126,8 @@ class WinCCUaClientDetailManager {
 
         try {
             const query = `
-                query GetWinCCUaClient($name: String!) {
-                    winCCUaClient(name: $name) {
+                query GetWinCCUaClients($name: String!) {
+                    winCCUaClients(name: $name) {
                         name
                         namespace
                         nodeId
@@ -164,7 +164,7 @@ class WinCCUaClientDetailManager {
             `;
 
             const result = await this.client.query(query, { name: this.clientName });
-            this.clientData = result.winCCUaClient;
+            this.clientData = result.winCCUaClients && result.winCCUaClients.length > 0 ? result.winCCUaClients[0] : null;
 
             if (!this.clientData) {
                 this.showError(`Client "${this.clientName}" not found`);

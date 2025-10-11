@@ -102,8 +102,8 @@ class Plc4xClientDetailManager {
 
         try {
             const query = `
-                query GetPlc4xClient($name: String!) {
-                    plc4xClient(name: $name) {
+                query GetPlc4xClients($name: String!) {
+                    plc4xClients(name: $name) {
                         name
                         namespace
                         nodeId
@@ -140,7 +140,7 @@ class Plc4xClientDetailManager {
             `;
 
             const result = await this.client.query(query, { name: this.clientName });
-            this.clientData = result.plc4xClient;
+            this.clientData = result.plc4xClients && result.plc4xClients.length > 0 ? result.plc4xClients[0] : null;
 
             if (!this.clientData) {
                 this.showError(`Client "${this.clientName}" not found`);
