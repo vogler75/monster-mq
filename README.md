@@ -12,6 +12,7 @@ A MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data sto
 - **OPC UA Server** - Industrial protocol server with MQTT bridge and real-time subscriptions
 - **WinCC OA Client** - High-performance bulk message transfer from Siemens WinCC Open Architecture SCADA systems
 - **WinCC Unified Client** - GraphQL/WebSocket integration for Siemens WinCC Unified tag values and alarms
+- **Neo4j Client** - Graph database integration for topic hierarchy analysis and path-based data modeling
 - **GraphQL API** - Real-time data access and management interface
 - **MCP Server** - AI model integration through Model Context Protocol
 - **User Authentication** - BCrypt-secured user management with ACL rules
@@ -113,6 +114,11 @@ MCP:
 │   AI Models     │◀───┤              │
 │ • MCP Server    │    │              │
 │ • Analytics     │    │              │
+└─────────────────┘    │              │    ┌─────────────────┐
+                       │              │───▶│   Neo4j Graph   │
+┌─────────────────┐    │              │    │ • Topic Trees   │
+│ Graph Analytics │◀───┤              │    │ • Relationships │
+│ • Neo4j Client  │    │              │    └─────────────────┘
 └─────────────────┘    └──────────────┘
 ```
 
@@ -129,6 +135,8 @@ For detailed documentation, see the [`doc/`](doc/) directory:
 - **[Access Control Lists (ACL)](doc/acl.md)** - Comprehensive ACL documentation and examples
 - **[OPC UA Integration](doc/opcua.md)** - Industrial protocol support and certificates
 - **[WinCC OA Integration](doc/winccoa.md)** - Siemens WinCC OA SCADA system integration
+- **[WinCC Unified Integration](doc/winccua.md)** - Siemens WinCC Unified GraphQL/WebSocket integration
+- **[Neo4j Integration](doc/neo4j.md)** - Graph database for MQTT topic hierarchies
 - **[GraphQL API](doc/graphql.md)** - Real-time data access and management
 - **[MCP Server](doc/mcp.md)** - AI model integration and analytics
 - **[Kafka Integration](doc/kafka.md)** - Stream processing and event sourcing
@@ -273,37 +281,31 @@ See the [WinCC OA Integration documentation](doc/winccoa.md) for detailed config
 
 MonsterMQ includes a WinCC Unified client that connects to Siemens WinCC Unified systems using their GraphQL API over WebSocket for real-time tag values and alarm notifications.
 
-### Key Features
+### Key Benefits
 
 - **GraphQL Subscriptions** - Real-time tag value updates via WebSocket
 - **Active Alarms** - Subscribe to alarm notifications with full alarm details
-- **Quality Information** - Optional OPC UA quality data in tag values
-- **Flexible Filtering** - Name filters with wildcards (e.g., `HMI_*`, `TANK_*`) for tag subscriptions
-- **Topic Transformation** - Convert tag names to MQTT topic hierarchies with regex support
+- **Flexible Filtering** - Name filters with wildcards for tag subscriptions
+- **Topic Transformation** - Convert tag names to MQTT topic hierarchies
 - **Multiple Formats** - JSON with ISO timestamps, milliseconds, or raw values
 
-### Example Configuration
+See the [WinCC Unified Integration documentation](doc/winccua.md) for detailed configuration and setup instructions.
 
-```yaml
-WinCCUa:
-  Clients:
-    - Name: "winccua-plant1"
-      Namespace: "winccua/plant1"
-      GraphqlEndpoint: "http://winccua-server:4000/graphql"
-      Username: "admin"
-      Password: "password"
-      MessageFormat: "JSON_ISO"
-      Addresses:
-        - Type: TAG_VALUES
-          Topic: "tags"
-          NameFilters: ["HMI_*", "TANK_*"]
-          IncludeQuality: true
-        - Type: ACTIVE_ALARMS
-          Topic: "alarms"
-          SystemNames: ["System1"]
-```
+## 🕸️ Neo4j Graph Database Integration
 
-See the device integration documentation for detailed configuration and setup instructions.
+**MQTT Topic Hierarchy as Graph Database**
+
+MonsterMQ includes a native Neo4j client that automatically converts MQTT topic hierarchies into graph database structures, enabling powerful path-based queries and relationship analysis.
+
+### Why Graph Database?
+
+MQTT topics naturally form hierarchical structures. Neo4j excels at:
+- **Path Queries** - Find all sensors under a building or floor
+- **Relationship Analysis** - Discover connections between devices
+- **Hierarchical Visualization** - Graph-based UI for topic exploration
+- **Message Rate Limiting** - Prevent database overload with configurable suppression
+
+See the [Neo4j Integration documentation](doc/neo4j.md) for detailed configuration, query examples, and best practices.
 
 ## 📋 Requirements
 
