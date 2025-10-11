@@ -92,16 +92,18 @@ class MetricsHandler(
             var kafkaOutTotal = 0.0
             var winCCOaClientInTotal = 0.0
             var winCCUaClientInTotal = 0.0
+            var neo4jClientInTotal = 0.0
             var brokerDone = false
             var bridgeDone = false
             var opcUaDone = false
             var kafkaDone = false
             var winCCOaDone = false
             var winCCUaDone = false
+            var neo4jDone = false
             var archiveDone = false
 
             fun tryAssembleAndStore() {
-                if (brokerDone && bridgeDone && opcUaDone && kafkaDone && winCCOaDone && winCCUaDone && archiveDone && nodeMetrics != null) {
+                if (brokerDone && bridgeDone && opcUaDone && kafkaDone && winCCOaDone && winCCUaDone && neo4jDone && archiveDone && nodeMetrics != null) {
                     try {
                         val nm = nodeMetrics!!
                         val brokerMetrics = BrokerMetrics(
@@ -116,19 +118,20 @@ class MetricsHandler(
                             messageBusIn = nm.getDouble("messageBusInRate", 0.0),
                             messageBusOut = nm.getDouble("messageBusOutRate", 0.0),
                             mqttClientIn = bridgeInTotal,
-                             mqttClientOut = bridgeOutTotal,
-                             opcUaClientIn = opcUaClientInTotal,
-                             opcUaClientOut = opcUaClientOutTotal,
-                             kafkaClientIn = kafkaInTotal,
-                             kafkaClientOut = kafkaOutTotal,
-                             winCCOaClientIn = winCCOaClientInTotal,
-                             winCCUaClientIn = winCCUaClientInTotal,
+                            mqttClientOut = bridgeOutTotal,
+                            opcUaClientIn = opcUaClientInTotal,
+                            opcUaClientOut = opcUaClientOutTotal,
+                            kafkaClientIn = kafkaInTotal,
+                            kafkaClientOut = kafkaOutTotal,
+                            winCCOaClientIn = winCCOaClientInTotal,
+                            winCCUaClientIn = winCCUaClientInTotal,
+                            neo4jClientIn = neo4jClientInTotal,
                             timestamp = TimestampConverter.instantToIsoString(timestamp)
                         )
 
                         metricsStore.storeBrokerMetrics(timestamp, nodeId, brokerMetrics).onComplete { result ->
                             if (result.succeeded()) {
-                                    logger.fine { "Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal kafkaIn=$kafkaInTotal winCCOaIn=$winCCOaClientInTotal winCCUaIn=$winCCUaClientInTotal) for nodeId: $nodeId" }
+                                    logger.fine { "Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal kafkaIn=$kafkaInTotal winCCOaIn=$winCCOaClientInTotal winCCUaIn=$winCCUaClientInTotal neo4jIn=$neo4jClientInTotal) for nodeId: $nodeId" }
                             } else {
                                 logger.warning("Error storing broker metrics: ${result.cause()?.message}")
                             }
@@ -154,6 +157,7 @@ class MetricsHandler(
                             .put("kafkaClientOut", brokerMetrics.kafkaClientOut)
                             .put("winCCOaClientIn", brokerMetrics.winCCOaClientIn)
                             .put("winCCUaClientIn", brokerMetrics.winCCUaClientIn)
+                            .put("neo4jClientIn", brokerMetrics.neo4jClientIn)
                             .put("timestamp", brokerMetrics.timestamp)
                         publishMetrics("\$SYS/brokers/$nodeId/metrics", brokerMetricsJson)
 
@@ -494,6 +498,64 @@ class MetricsHandler(
                 } else {
                     logger.fine { "Could not retrieve WinCC Unified client connector list: ${listReply.cause()?.message}" }
                     winCCUaDone = true
+                    tryAssembleAndStore()
+                }
+            }
+
+            // Neo4j Client metrics aggregation
+            val neo4jListAddress = EventBusAddresses.Neo4jBridge.CONNECTORS_LIST
+            vertx.eventBus().request<JsonObject>(neo4jListAddress, JsonObject()).onComplete { listReply ->
+                if (listReply.succeeded()) {
+                    val body = listReply.result().body()
+                    val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
+                    logger.fine { "Neo4j metrics aggregation: found ${devices.size()} devices" }
+                    if (devices.isEmpty) {
+                        neo4jDone = true
+                        tryAssembleAndStore()
+                    } else {
+                        var remaining = devices.size()
+                        devices.forEach { d ->
+                            val deviceName = d as String
+                            val mAddr = EventBusAddresses.Neo4jBridge.connectorMetrics(deviceName)
+                            vertx.eventBus().request<JsonObject>(mAddr, JsonObject()).onComplete { mReply ->
+                                if (mReply.succeeded()) {
+                                    try {
+                                        val m = mReply.result().body()
+                                        val inRate = m.getDouble("messagesInRate", 0.0)
+                                        logger.fine { "Neo4j client '$deviceName' metrics: messagesInRate=$inRate" }
+                                        neo4jClientInTotal += inRate
+                                        // Store individual client metrics
+                                        val neo4jMetricsJson = JsonObject()
+                                            .put("messagesIn", m.getDouble("messagesIn", 0.0))
+                                            .put("messagesWritten", m.getDouble("messagesWritten", 0.0))
+                                            .put("messagesSuppressed", m.getDouble("messagesSuppressed", 0.0))
+                                            .put("errors", m.getDouble("errors", 0.0))
+                                            .put("pathQueueSize", m.getInteger("pathQueueSize", 0))
+                                            .put("messagesInRate", inRate)
+                                            .put("messagesWrittenRate", m.getDouble("messagesWrittenRate", 0.0))
+                                            .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
+                                        metricsStore.storeMetrics(at.rocworks.stores.MetricKind.NEO4JCLIENT, timestamp, deviceName, neo4jMetricsJson)
+
+                                        // Publish Neo4j session metrics to $SYS topic
+                                        publishMetrics("\$SYS/sessions/neo4j/${deviceName}/metrics", neo4jMetricsJson)
+                                    } catch (e: Exception) {
+                                        logger.warning("Error processing Neo4j client metrics for $deviceName: ${e.message}")
+                                    }
+                                } else {
+                                    logger.fine { "No metrics for Neo4j client $deviceName: ${mReply.cause()?.message}" }
+                                }
+                                remaining -= 1
+                                if (remaining == 0) {
+                                    logger.fine { "Neo4j metrics collection complete. Final total: $neo4jClientInTotal" }
+                                    neo4jDone = true
+                                    tryAssembleAndStore()
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    logger.fine { "Could not retrieve Neo4j client connector list: ${listReply.cause()?.message}" }
+                    neo4jDone = true
                     tryAssembleAndStore()
                 }
             }

@@ -62,13 +62,15 @@ class MetricsResolver(
                                 messageBusIn = nodeMetrics.getDouble("messageBusInRate", 0.0),
                                 messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
                                 mqttClientIn = 0.0,
-                            mqttClientOut = 0.0,
-                            opcUaClientIn = 0.0,
-                            opcUaClientOut = 0.0,
-                            kafkaClientIn = 0.0,
-                            kafkaClientOut = 0.0,
-                            winCCUaClientIn = 0.0,
-                            timestamp = TimestampConverter.currentTimeIsoString()
+                                mqttClientOut = 0.0,
+                                opcUaClientIn = 0.0,
+                                opcUaClientOut = 0.0,
+                                kafkaClientIn = 0.0,
+                                kafkaClientOut = 0.0,
+                                winCCOaClientIn = 0.0,
+                                winCCUaClientIn = 0.0,
+                                neo4jClientIn = 0.0,
+                                timestamp = TimestampConverter.currentTimeIsoString()
                             )
                         } catch (e: Exception) {
                             logger.severe("Error getting cluster metrics: ${e.message}")
@@ -127,6 +129,9 @@ class MetricsResolver(
                                     opcUaClientOut = 0.0,
                                     kafkaClientIn = 0.0,
                                     kafkaClientOut = 0.0,
+                                    winCCOaClientIn = 0.0,
+                                    winCCUaClientIn = 0.0,
+                                    neo4jClientIn = 0.0,
                                     timestamp = TimestampConverter.currentTimeIsoString()
                                 )
                             } catch (e: Exception) {
@@ -542,7 +547,9 @@ class MetricsResolver(
                                 opcUaClientOut = round2(bm.opcUaClientOut),
                                 kafkaClientIn = round2(bm.kafkaClientIn),
                                 kafkaClientOut = round2(bm.kafkaClientOut),
+                                winCCOaClientIn = round2(bm.winCCOaClientIn),
                                 winCCUaClientIn = round2(bm.winCCUaClientIn),
+                                neo4jClientIn = round2(bm.neo4jClientIn),
                                 timestamp = bm.timestamp
                             )
                         })
@@ -672,6 +679,7 @@ class MetricsResolver(
                 kafkaClientOut = round2(bm.kafkaClientOut),
                 winCCOaClientIn = round2(bm.winCCOaClientIn),
                 winCCUaClientIn = round2(bm.winCCUaClientIn),
+                neo4jClientIn = round2(bm.neo4jClientIn),
                 timestamp = bm.timestamp
             )
         }
@@ -725,6 +733,7 @@ class MetricsResolver(
                             kafkaClientOut = 0.0,
                             winCCOaClientIn = 0.0,
                             winCCUaClientIn = 0.0,
+                            neo4jClientIn = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         )
                     } catch (e: Exception) {
@@ -736,7 +745,7 @@ class MetricsResolver(
                         callback(result.result())
                     } else {
                         logger.warning("Failed to get cluster metrics: ${result.cause()?.message}")
-callback(BrokerMetrics(
+                        callback(BrokerMetrics(
                             messagesIn = 0.0,
                             messagesOut = 0.0,
                             nodeSessionCount = 0,
@@ -753,7 +762,9 @@ callback(BrokerMetrics(
                             opcUaClientOut = 0.0,
                             kafkaClientIn = 0.0,
                             kafkaClientOut = 0.0,
+                            winCCOaClientIn = 0.0,
                             winCCUaClientIn = 0.0,
+                            neo4jClientIn = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         ))
                     }
@@ -779,6 +790,7 @@ callback(BrokerMetrics(
                             kafkaClientOut = 0.0,
                             winCCOaClientIn = 0.0,
                             winCCUaClientIn = 0.0,
+                            neo4jClientIn = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         ))
             }
@@ -1306,8 +1318,46 @@ future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTi
                 return@DataFetcher future
             }
 
-            // Metrics history not yet implemented for Neo4j - would need metricsStore support
-            future.complete(emptyList())
+            if (metricsStore == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            val from = env.getArgument<String?>("from")
+            val to = env.getArgument<String?>("to")
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            val limit = env.getArgument<Int?>("limit") ?: 100
+
+            val fromInstant = from?.let { java.time.Instant.parse(it) }
+            val toInstant = to?.let { java.time.Instant.parse(it) }
+
+            metricsStore.getMetricsHistory(at.rocworks.stores.MetricKind.NEO4JCLIENT, clientName, fromInstant, toInstant, lastMinutes, limit).onComplete { result ->
+                if (result.succeeded()) {
+                    val list = result.result().map { (timestamp, metricsJson) ->
+                        val messagesIn = metricsJson.getDouble("messagesIn", 0.0)
+                        val messagesWritten = metricsJson.getDouble("messagesWritten", 0.0)
+                        val messagesSuppressed = metricsJson.getDouble("messagesSuppressed", 0.0)
+                        val errors = metricsJson.getDouble("errors", 0.0)
+                        val pathQueueSize = metricsJson.getInteger("pathQueueSize", 0)
+                        val messagesInRate = metricsJson.getDouble("messagesInRate", 0.0)
+                        val messagesWrittenRate = metricsJson.getDouble("messagesWrittenRate", 0.0)
+                        Neo4jClientMetrics(
+                            round2(messagesIn),
+                            round2(messagesWritten),
+                            round2(messagesSuppressed),
+                            round2(errors),
+                            pathQueueSize,
+                            round2(messagesInRate),
+                            round2(messagesWrittenRate),
+                            TimestampConverter.instantToIsoString(timestamp)
+                        )
+                    }
+                    future.complete(list)
+                } else {
+                    logger.warning("Failed to get Neo4j client metrics history for $clientName: ${result.cause()?.message}")
+                    future.complete(emptyList())
+                }
+            }
 
             future
         }

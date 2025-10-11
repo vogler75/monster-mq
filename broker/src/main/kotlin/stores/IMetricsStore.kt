@@ -14,7 +14,7 @@ enum class MetricsStoreType {
 }
 
 enum class MetricKind {
-    BROKER, SESSION, MQTTCLIENT, KAFKACLIENT, WINCCOACLIENT, WINCCUACLIENT, OPCUADEVICE, ARCHIVEGROUP;
+    BROKER, SESSION, MQTTCLIENT, KAFKACLIENT, WINCCOACLIENT, WINCCUACLIENT, OPCUADEVICE, ARCHIVEGROUP, NEO4JCLIENT;
 
     fun toDbString(): String = when (this) {
         BROKER -> "broker"
@@ -25,6 +25,7 @@ enum class MetricKind {
         WINCCUACLIENT -> "winccua"
         OPCUADEVICE -> "opcua"
         ARCHIVEGROUP -> "archive"
+        NEO4JCLIENT -> "neo4j"
     }
 }
 
