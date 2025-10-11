@@ -1,0 +1,7 @@
+Release v1.6.27
+Built from commit: 6ff4840
+Date: 2025-10-11 13:08:47
+
+Changes since v1.6.26:
+---
+6ff4840 Add message suppression to Neo4j connector
