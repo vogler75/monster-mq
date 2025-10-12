@@ -301,34 +301,30 @@ class FlowInstanceExecutor(
         logger.info("  Language: ${node.language}")
 
         // Execute everything in a blocking context to avoid GraalVM issues
-        vertx.executeBlocking {
-            try {
-                // Get or create script engine for this node
-                // GraalVM Context initialization must happen on a worker thread, not event loop
-                val scriptEngine = scriptEngines.computeIfAbsent(node.id) {
-                    logger.info("  Creating new FlowScriptEngine for node ${node.id} on worker thread...")
-                    FlowScriptEngine()
-                }
-
-                logger.info("  Calling scriptEngine.execute()...")
-
-                // Execute the script
-                scriptEngine.execute(
-                    script = script,
-                    language = node.language,
-                    inputs = inputs,
-                    state = nodeState,
-                    flowVariables = flowVars,
-                    onOutput = { portName, value ->
-                        logger.info("  Script called outputs.send($portName, $value)")
-                        handleNodeOutput(node.id, portName, value)
-                    }
-                )
-            } catch (e: Exception) {
-                logger.severe("Script execution exception: ${e.message}")
-                e.printStackTrace()
-                throw e
+        vertx.executeBlocking<FlowScriptEngine.ExecutionResult> {
+            // Get or create script engine for this node
+            // GraalVM Context initialization must happen on a worker thread, not event loop
+            val scriptEngine = scriptEngines[node.id] ?: run {
+                logger.info("  Creating new FlowScriptEngine for node ${node.id} on worker thread...")
+                val engine = FlowScriptEngine()
+                scriptEngines[node.id] = engine
+                engine
             }
+
+            logger.info("  Calling scriptEngine.execute()...")
+
+            // Execute the script
+            scriptEngine.execute(
+                script = script,
+                language = node.language,
+                inputs = inputs,
+                state = nodeState,
+                flowVariables = flowVars,
+                onOutput = { portName, value ->
+                    logger.info("  Script called outputs.send($portName, $value)")
+                    handleNodeOutput(node.id, portName, value)
+                }
+            )
         }.onComplete { asyncResult ->
             if (asyncResult.succeeded()) {
                 val result = asyncResult.result()

@@ -343,17 +343,19 @@
 
         <!-- GraalVM Polyglot API for Flow Engine (JavaScript + Python) -->
         <!-- GraalJS and GraalPy are included as Maven dependencies for ease of deployment -->
+        <!-- Updated to version 25.0.0 to match GraalVM JDK 25 for optimal performance -->
         <dependency>
             <groupId>org.graalvm.polyglot</groupId>
             <artifactId>polyglot</artifactId>
-            <version>24.0.0</version>
+            <version>25.0.0</version>
         </dependency>
 
         <!-- GraalVM JavaScript (GraalJS) -->
+        <!-- Note: Changed from js-community to js (new artifact name in v25) -->
         <dependency>
             <groupId>org.graalvm.polyglot</groupId>
-            <artifactId>js-community</artifactId>
-            <version>24.0.0</version>
+            <artifactId>js</artifactId>
+            <version>25.0.0</version>
             <type>pom</type>
         </dependency>
 

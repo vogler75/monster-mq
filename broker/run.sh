@@ -62,5 +62,16 @@ else
 fi
 
 echo "Starting MonsterMQ..."
-java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt "${REMAINING_ARGS[@]}"
 
+# Detect if Java is GraalVM
+JAVA_VERSION=$(java -version 2>&1)
+if echo "$JAVA_VERSION" | grep -q "GraalVM"; then
+    echo "Detected GraalVM - enabling JVMCI for optimal JavaScript performance"
+    JAVA_OPTS="-XX:+EnableJVMCI -XX:+UseJVMCICompiler"
+else
+    echo "Using standard JVM (GraalVM not detected)"
+    JAVA_OPTS=""
+fi
+
+# Start MonsterMQ
+java $JAVA_OPTS -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt "${REMAINING_ARGS[@]}"
