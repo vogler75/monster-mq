@@ -1,0 +1,46 @@
+TCP: 1883
+TPCS: 8883
+WS: 9000
+WSS: 9001
+
+MaxMessageSizeKb: 512
+QueuedMessagesEnabled: true
+AllowRootWildcardSubscription: true
+
+# Rate limiting for MQTT clients (0 = unlimited)
+MaxPublishRate: 10000    # Max messages per second a client can publish
+MaxSubscribeRate: 10000  # Max messages per second a client can receive
+
+DefaultStoreType: POSTGRES
+
+# User Management configuration
+UserManagement:
+  Enabled: true  # Set to true to enable user authentication and ACL
+  PasswordAlgorithm: bcrypt
+  CacheRefreshInterval: 60  # seconds
+  DisconnectOnUnauthorized: true
+
+Metrics:
+  Enabled: true
+  RetentionHours: 1   # Default 1 day
+  CollectionInterval: 10  # Collection interval in seconds (default: 1)
+
+# SQLite configuration
+SQLite:
+  Path: "monstermq.db"
+  EnableWAL: false  # Set to true for better performance, false for easier multi-client access
+
+# PostgreSQL configuration
+Postgres:
+  Url: jdbc:postgresql://database:5432/postgres
+  User: system
+  Pass: manager
+
+MCP:
+  Enabled: true
+  Port: 3000
+
+GraphQL:
+  Enabled: true
+  Port: 4000
+  Path: /graphql

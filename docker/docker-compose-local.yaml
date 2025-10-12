@@ -1,0 +1,32 @@
+services:
+  database:
+    image: timescale/timescaledb:latest-pg16
+    container_name: timescale
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: system
+      POSTGRES_PASSWORD: manager
+  monstermq:
+    image: rocworks/monstermq:latest
+    container_name: monstermq
+    restart: unless-stopped
+    ports:
+      - 1883:1883
+      - 8883:8883
+      - 9000:9000
+      - 9001:9001
+      - 3000:3000
+      - 4000:4000
+      - 4840:4840
+    volumes:
+      - ./log:/app/log
+      - ./config-local.yaml:/app/config.yaml
+    command: ["-log INFO"]
+
+volumes:
+  timescale_data:
+    driver: local

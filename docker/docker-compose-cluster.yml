@@ -8,6 +8,6 @@ services:
       - HAZELCAST_CONFIG=hazelcast.xml
     volumes:
       - ./log:/app/log
-      - ./config.yaml:/app/config.yaml
+      - ./config-cluster.yaml:/app/config.yaml
       - ./hazelcast.xml:/app/hazelcast.xml
     command: ["-cluster"]
