@@ -217,6 +217,47 @@
             justify-content: space-between;
             color: #b8bcc8;
         }
+        .node-port {
+            position: relative;
+            padding: 0.25rem 0.5rem;
+            margin: 2px 0;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+        }
+        .node-port.input-port:hover {
+            background: rgba(220, 53, 69, 0.12);
+            border-color: #dc3545;
+            box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.2);
+        }
+        .node-port.output-port:hover {
+            background: rgba(46, 213, 115, 0.12);
+            border-color: #2ed573;
+            box-shadow: 0 0 0 2px rgba(46, 213, 115, 0.25);
+        }
+        .node-port.output-port.connecting {
+            background: rgba(124, 58, 237, 0.2);
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.4), 0 0 6px rgba(124, 58, 237, 0.6);
+        }
+        .node-port.input-port.valid-target:hover {
+            background: rgba(124, 58, 237, 0.15);
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.4);
+        }
+        .port-hint-badge {
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            background: #2d3142;
+            color: #9aa0b5;
+            margin-left: 6px;
+        }
+        .node-port.output-port .port-hint-badge { background: #24352d; color: #46e08c; }
+        .node-port.input-port .port-hint-badge { background: #3a2528; color: #f28b95; }
         .flow-port-dot {
             width: 12px;
             height: 12px;

@@ -507,18 +507,20 @@ function renderNodes() {
                 <div class="flow-node-inputs">
                     ${node.inputs.map(input => `
                         <div class="node-port input-port"
+                             title="Input port. ${connectingFrom ? (connectingFrom.portType==='output' ? 'Click to connect output → this input' : 'Outputs start connections') : 'Connections end here'}"
                              data-port="${escapeHtml(input)}"
                              onclick="startConnection('${node.id}', '${escapeHtml(input)}', 'input')">
-                            ${escapeHtml(input)}
+                            <span>${escapeHtml(input)}</span><span class="port-hint-badge">IN</span>
                         </div>
                     `).join('')}
                 </div>
                 <div class="flow-node-outputs">
                     ${node.outputs.map(output => `
-                        <div class="node-port output-port"
+                        <div class="node-port output-port ${connectingFrom && connectingFrom.nodeId===node.id && connectingFrom.portName===output ? 'connecting' : ''}"
+                             title="Output port. ${connectingFrom ? (connectingFrom.portType==='output' ? 'Select an input to finish' : 'Start from an output') : 'Click to start a connection'}"
                              data-port="${escapeHtml(output)}"
                              onclick="startConnection('${node.id}', '${escapeHtml(output)}', 'output')">
-                            ${escapeHtml(output)}
+                            <span>${escapeHtml(output)}</span><span class="port-hint-badge">OUT</span>
                         </div>
                     `).join('')}
                 </div>
@@ -702,6 +704,11 @@ function startConnection(nodeId, portName, portType) {
         if (portType === 'output') {
             connectingFrom = { nodeId, portName, portType };
             showNotification('Click on an input port to complete connection', 'info');
+            // Add valid-target class to all input ports
+            canvas.querySelectorAll('.input-port').forEach(el => {
+                el.classList.add('valid-target');
+            });
+            renderNodes();
         } else {
             showNotification('Connections must start from output ports', 'error');
         }
@@ -732,6 +739,9 @@ function startConnection(nodeId, portName, portType) {
             showNotification('Invalid connection', 'error');
         }
         connectingFrom = null;
+        // Remove valid-target highlight
+        canvas.querySelectorAll('.input-port.valid-target').forEach(el => el.classList.remove('valid-target'));
+        renderNodes();
     }
 }
 
