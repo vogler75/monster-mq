@@ -1,0 +1,14 @@
+Release v1.6.28
+Built from commit: da93d6e
+Date: 2025-10-12 11:17:38
+
+Changes since v1.6.27:
+---
+da93d6e Order user lists and improve ACL modal UX
+207df2e Persist JWT secret key and add ACL bulk delete UI
+21ebd4a Add drag-and-drop topic browser to ACL modal
+6d7d702 Remove debug console.log statements from topic-browser.js
+5adaa6e Refactor Docker configs for local and cluster setups
+b587028 Add metrics retention and periodic purging
+a49edcc Add Neo4j client metrics aggregation and history
+528f062 Add Neo4j and WinCC Unified integration docs
