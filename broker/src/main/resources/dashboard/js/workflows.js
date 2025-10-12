@@ -28,7 +28,76 @@ let svgLayer = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     initWorkflowsPage();
+    document.addEventListener('keydown', (e) => {
+        const active = document.activeElement;
+        if (!active) return;
+        const rowEl = active.closest('tr');
+        if (!rowEl) return;
+        const inputContainer = active.closest('#input-mappings');
+        const outputContainer = active.closest('#output-mappings');
+        if (!inputContainer && !outputContainer) return;
+
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const metaKey = isMac ? e.metaKey : e.ctrlKey;
+
+        if (inputContainer) {
+            const rows = Array.from(inputContainer.querySelectorAll('tbody tr'));
+            const idx = rows.indexOf(rowEl);
+            if (idx === -1) return;
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                addInputMapping();
+                focusLastRow('#input-mappings');
+            } else if (metaKey && e.key.toLowerCase() === 'd') {
+                e.preventDefault();
+                duplicateInputMapping(idx);
+                focusRow('#input-mappings', idx + 1);
+            } else if ((e.key === 'Delete' || e.key === 'Backspace') && !(active.tagName === 'INPUT' && active.value && e.key === 'Backspace')) {
+                e.preventDefault();
+                removeInputMapping(idx);
+                focusRow('#input-mappings', Math.max(0, idx - 1));
+            }
+        } else if (outputContainer) {
+            const rows = Array.from(outputContainer.querySelectorAll('tbody tr'));
+            const idx = rows.indexOf(rowEl);
+            if (idx === -1) return;
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                addOutputMapping();
+                focusLastRow('#output-mappings');
+            } else if (metaKey && e.key.toLowerCase() === 'd') {
+                e.preventDefault();
+                duplicateOutputMapping(idx);
+                focusRow('#output-mappings', idx + 1);
+            } else if ((e.key === 'Delete' || e.key === 'Backspace') && !(active.tagName === 'INPUT' && active.value && e.key === 'Backspace')) {
+                e.preventDefault();
+                removeOutputMapping(idx);
+                focusRow('#output-mappings', Math.max(0, idx - 1));
+            }
+        }
+    });
 });
+
+function focusLastRow(containerSelector) {
+    const container = document.querySelector(containerSelector);
+    if (!container) return;
+    const rows = container.querySelectorAll('tbody tr');
+    const last = rows[rows.length - 1];
+    if (last) {
+        const input = last.querySelector('input, select');
+        if (input) input.focus();
+    }
+}
+
+function focusRow(containerSelector, idx) {
+    const container = document.querySelector(containerSelector);
+    if (!container) return;
+    const rows = container.querySelectorAll('tbody tr');
+    if (idx < 0 || idx >= rows.length) return;
+    const row = rows[idx];
+    const input = row.querySelector('input, select');
+    if (input) input.focus();
+}
 
 async function initWorkflowsPage() {
     canvas = document.getElementById('flow-canvas');
