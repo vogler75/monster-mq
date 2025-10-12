@@ -417,7 +417,8 @@ class UserManager {
             if (result.success) {
                 this.showAlert('ACL rule deleted', 'success');
                 await this.loadUsers();
-                this.showAclRules(username);
+                // Refresh only the ACL rules table, not the entire modal (keeps tree state)
+                this.refreshAclRulesTable();
             } else {
                 this.showAlert(result.message || 'Failed to delete rule', 'error');
             }
@@ -427,12 +428,11 @@ class UserManager {
         }
     }
 
-    showAclRules(username) {
-        this.currentAclUsername = username;
-        const user = this.users.find(u => u.username === username);
-        if (!user) return;
+    refreshAclRulesTable() {
+        if (!this.currentAclUsername) return;
 
-        document.getElementById('acl-modal-title').textContent = `ACL Rules for ${username}`;
+        const user = this.users.find(u => u.username === this.currentAclUsername);
+        if (!user) return;
 
         const aclRules = user.aclRules || [];
         const aclContent = document.getElementById('acl-rules-content');
@@ -476,7 +476,7 @@ class UserManager {
                                     <td>${rule.priority}</td>
                                     <td>${rule.createdAt ? new Date(rule.createdAt).toLocaleDateString() : 'N/A'}</td>
                                     <td>
-                                        <button class="btn btn-secondary delete-acl-btn" data-id="${rule.id}" data-username="${this.escapeHtml(username)}" style="padding: 0.25rem 0.5rem; font-size: 0.65rem; background: var(--monster-red); border: 1px solid var(--monster-red); color: #fff;">Delete</button>
+                                        <button class="btn btn-secondary delete-acl-btn" data-id="${rule.id}" data-username="${this.escapeHtml(this.currentAclUsername)}" style="padding: 0.25rem 0.5rem; font-size: 0.65rem; background: var(--monster-red); border: 1px solid var(--monster-red); color: #fff;">Delete</button>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -486,11 +486,107 @@ class UserManager {
             `;
         }
 
+        // Re-setup drop zone after DOM replacement
+        this.setupDropZone();
+    }
+
+    showAclRules(username) {
+        this.currentAclUsername = username;
+        const user = this.users.find(u => u.username === username);
+        if (!user) return;
+
+        document.getElementById('acl-modal-title').textContent = `ACL Rules for ${username}`;
+
+        // Render the table
+        this.refreshAclRulesTable();
+
+        // Initialize topic browser if not already initialized
+        if (!this.aclTopicBrowser) {
+            this.aclTopicBrowser = new AclTopicBrowser(this);
+        }
+        this.aclTopicBrowser.init();
+
         document.getElementById('acl-modal').style.display = 'block';
     }
 
     hideAclModal() {
         document.getElementById('acl-modal').style.display = 'none';
+    }
+
+    setupDropZone() {
+        const dropZone = document.getElementById('acl-rules-content');
+
+        // Remove existing event listeners by cloning and replacing the element
+        // This prevents duplicate event handlers when modal is opened multiple times
+        const newDropZone = dropZone.cloneNode(true);
+        dropZone.parentNode.replaceChild(newDropZone, dropZone);
+        const freshDropZone = document.getElementById('acl-rules-content');
+
+        freshDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            freshDropZone.classList.add('drag-over');
+        });
+
+        freshDropZone.addEventListener('dragleave', (e) => {
+            if (e.target === freshDropZone) {
+                freshDropZone.classList.remove('drag-over');
+            }
+        });
+
+        freshDropZone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            freshDropZone.classList.remove('drag-over');
+
+            const topic = e.dataTransfer.getData('text/plain');
+            if (!topic || !this.currentAclUsername) return;
+
+            await this.addTopicToAcl(topic);
+        });
+    }
+
+    async addTopicToAcl(topic) {
+        if (!this.currentAclUsername) return;
+
+        // Get selected permissions from drag controls
+        const canSubscribe = document.getElementById('drag-can-subscribe').checked;
+        const canPublish = document.getElementById('drag-can-publish').checked;
+        const useWildcard = document.getElementById('drag-wildcard').checked;
+        const priority = parseInt(document.getElementById('drag-priority').value || '0', 10);
+
+        if (!canSubscribe && !canPublish) {
+            this.showAlert('Please select at least one permission (Subscribe or Publish)', 'error');
+            return;
+        }
+
+        // Apply wildcard if checked
+        let topicPattern = topic;
+        if (useWildcard) {
+            topicPattern = topic + '/#';
+        }
+
+        // Create ACL rule
+        try {
+            const input = {
+                username: this.currentAclUsername,
+                topicPattern: topicPattern,
+                canSubscribe,
+                canPublish,
+                priority
+            };
+            const result = await window.graphqlClient.createAclRule(input);
+            if (result.success) {
+                this.showAlert(`ACL rule added for topic: ${topicPattern}`, 'success');
+                await this.loadUsers();
+                // Refresh only the ACL rules table, not the entire modal (keeps tree state)
+                this.refreshAclRulesTable();
+            } else {
+                this.showAlert(result.message || 'Failed to add rule', 'error');
+            }
+        } catch (err) {
+            console.error('Add ACL rule error', err);
+            this.showAlert('Error adding rule: ' + err.message, 'error');
+        }
     }
 
     showAlert(message, type = 'error') {
@@ -510,6 +606,438 @@ class UserManager {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+}
+
+// ACL Topic Browser for drag-and-drop functionality
+class AclTopicBrowser {
+    constructor(userManager) {
+        this.userManager = userManager;
+        this.tree = document.getElementById('acl-topic-tree');
+        this.searchInput = document.getElementById('acl-search-input');
+        this.searchButton = document.getElementById('acl-search-button');
+        this.browseButton = document.getElementById('acl-browse-button');
+        this.archiveGroupSelect = document.getElementById('acl-archive-group-select');
+
+        this.treeNodes = new Map();
+        this.selectedArchiveGroup = 'Default';
+        this.initialized = false;
+    }
+
+    async init() {
+        if (!this.initialized) {
+            this.setupEventListeners();
+            await this.loadArchiveGroups();
+            this.initialized = true;
+        }
+        this.browseRoot();
+    }
+
+    setupEventListeners() {
+        // Browse/Search mode switching
+        const browseMode = document.querySelector('input[name="acl-browse-mode"][value="browse"]');
+        const searchMode = document.querySelector('input[name="acl-browse-mode"][value="search"]');
+
+        browseMode.addEventListener('change', () => this.switchMode('browse'));
+        searchMode.addEventListener('change', () => this.switchMode('search'));
+
+        // Search/Browse buttons
+        this.searchButton.addEventListener('click', () => this.performSearch());
+        this.browseButton.addEventListener('click', () => this.browseRoot());
+
+        // Enter key in search input
+        this.searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.performSearch();
+            }
+        });
+
+        // Archive group selection
+        this.archiveGroupSelect.addEventListener('change', (e) => {
+            this.selectedArchiveGroup = e.target.value;
+            this.browseRoot();
+        });
+    }
+
+    switchMode(mode) {
+        if (mode === 'browse') {
+            this.searchInput.disabled = true;
+            this.searchInput.placeholder = 'Select "Search Topics" mode to search';
+            this.browseButton.style.display = 'inline-block';
+            this.searchButton.style.display = 'none';
+        } else {
+            this.searchInput.disabled = false;
+            this.searchInput.placeholder = 'Search topics (e.g., sensor/+/temperature)...';
+            this.browseButton.style.display = 'none';
+            this.searchButton.style.display = 'inline-block';
+        }
+    }
+
+    async loadArchiveGroups() {
+        try {
+            const query = `
+                query GetArchiveGroups {
+                    archiveGroups(enabled: true, lastValTypeNotEquals: NONE) {
+                        name
+                    }
+                }
+            `;
+
+            const response = await graphqlClient.query(query);
+
+            if (response && response.archiveGroups && response.archiveGroups.length > 0) {
+                const groups = response.archiveGroups;
+                this.archiveGroupSelect.innerHTML = '';
+
+                groups.forEach(group => {
+                    const option = document.createElement('option');
+                    option.value = group.name;
+                    option.textContent = group.name;
+                    this.archiveGroupSelect.appendChild(option);
+                });
+
+                this.selectedArchiveGroup = groups[0].name;
+                this.archiveGroupSelect.value = groups[0].name;
+            } else {
+                this.archiveGroupSelect.innerHTML = '<option value="">No archive groups available</option>';
+            }
+        } catch (error) {
+            console.error('Error loading archive groups:', error);
+            this.archiveGroupSelect.innerHTML = '<option value="">Error loading groups</option>';
+        }
+    }
+
+    browseRoot() {
+        this.tree.innerHTML = '';
+        this.treeNodes.clear();
+        this.createRootNode();
+    }
+
+    createRootNode() {
+        const rootItem = this.createTreeItem('Broker', 'root', false, true);
+        this.tree.appendChild(rootItem);
+
+        const childContainer = document.createElement('ul');
+        childContainer.className = 'tree-children';
+        rootItem.appendChild(childContainer);
+
+        this.loadTopicLevel('+', childContainer, '');
+
+        const rootData = this.treeNodes.get('root');
+        if (rootData) {
+            rootData.toggle.classList.add('expanded');
+            rootData.expanded = true;
+        }
+    }
+
+    async loadTopicLevel(pattern, container, parentPath = '') {
+        try {
+            const loadingItem = document.createElement('li');
+            loadingItem.className = 'loading';
+            loadingItem.textContent = 'Loading...';
+            container.appendChild(loadingItem);
+
+            const query = `
+                query BrowseTopics($topic: String!, $archiveGroup: String!) {
+                    browseTopics(topic: $topic, archiveGroup: $archiveGroup) {
+                        name
+                    }
+                }
+            `;
+
+            const response = await graphqlClient.query(query, {
+                topic: pattern,
+                archiveGroup: this.selectedArchiveGroup
+            });
+
+            container.removeChild(loadingItem);
+
+            if (response && response.browseTopics && response.browseTopics.length > 0) {
+                const topics = response.browseTopics;
+                const topicList = topics.map(topic => ({
+                    topic: topic.name,
+                    hasValue: true
+                }));
+
+                const groupedTopics = this.groupTopicsByLevel(topicList, parentPath);
+
+                for (const [levelName, topicData] of groupedTopics) {
+                    const fullPath = parentPath ? `${parentPath}/${levelName}` : levelName;
+                    const treeItem = this.createTreeItem(levelName, fullPath, topicData.hasValue, topicData.hasChildren);
+                    container.appendChild(treeItem);
+                }
+            } else {
+                const emptyItem = document.createElement('li');
+                emptyItem.className = 'tree-node';
+                emptyItem.innerHTML = '<div class="tree-item" style="color: var(--text-muted); font-style: italic;">No topics found</div>';
+                container.appendChild(emptyItem);
+            }
+        } catch (error) {
+            console.error('Error loading topic level:', error);
+            const errorItem = document.createElement('li');
+            errorItem.className = 'error';
+            errorItem.textContent = 'Error: ' + error.message;
+            container.appendChild(errorItem);
+        }
+    }
+
+    groupTopicsByLevel(topics, parentPath) {
+        const grouped = new Map();
+        const parentLevels = parentPath ? parentPath.split('/').length : 0;
+
+        for (const topic of topics) {
+            const levels = topic.topic.split('/');
+
+            if (parentLevels === 0) {
+                const topLevel = levels[0];
+                // For browse mode, assume topics can be expanded (we can't know without querying deeper)
+                // Check if THIS specific topic has more levels (e.g., "winccoa/alerts" vs "winccoa")
+                const topicHasChildren = levels.length > 1;
+                const hasValue = levels.length === 1 && topic.hasValue;
+
+                if (!grouped.has(topLevel)) {
+                    // Start with assumption that topic can be expanded
+                    grouped.set(topLevel, { hasValue, hasChildren: true });
+                } else {
+                    const existing = grouped.get(topLevel);
+                    existing.hasValue = existing.hasValue || hasValue;
+                    // If we see a deeper topic, we know for sure it has children
+                    if (topicHasChildren) {
+                        existing.hasChildren = true;
+                    }
+                }
+            } else if (levels.length > parentLevels) {
+                const nextLevel = levels[parentLevels];
+                // Check if this topic has more levels beyond the current one
+                const topicHasChildren = levels.length > parentLevels + 1;
+                const hasValue = levels.length === parentLevels + 1 && topic.hasValue;
+
+                if (!grouped.has(nextLevel)) {
+                    // Start with assumption that topic can be expanded
+                    grouped.set(nextLevel, { hasValue, hasChildren: true });
+                } else {
+                    const existing = grouped.get(nextLevel);
+                    existing.hasValue = existing.hasValue || hasValue;
+                    // If we see a deeper topic, we know for sure it has children
+                    if (topicHasChildren) {
+                        existing.hasChildren = true;
+                    }
+                }
+            }
+        }
+
+        return grouped;
+    }
+
+    createTreeItem(name, fullPath, hasValue, hasChildren) {
+        const li = document.createElement('li');
+        li.className = 'tree-node';
+
+        const item = document.createElement('div');
+        item.className = 'tree-item';
+        if (hasValue) {
+            item.classList.add('has-data');
+        }
+
+        // Make topics with values draggable and double-clickable
+        // Note: Topics can be both expandable AND draggable (e.g., "winccoa" can be expanded
+        // to see children, but can also be dragged to add "winccoa/#" as an ACL rule)
+        if (hasValue) {
+            item.draggable = true;
+            item.classList.add('draggable');
+            this.setupDragHandlers(item, fullPath);
+
+            // Add double-click handler as alternative to drag-and-drop
+            item.addEventListener('dblclick', () => {
+                this.userManager.addTopicToAcl(fullPath);
+            });
+
+            // Add visual hint for double-click
+            item.title = 'Drag to ACL rules or double-click to add';
+        }
+
+        const toggle = document.createElement('button');
+        toggle.className = 'tree-toggle';
+        if (hasChildren) {
+            toggle.innerHTML = '▶';
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleNode(li, fullPath);
+            });
+        }
+
+        const icon = document.createElement('span');
+        icon.className = `tree-icon ${hasChildren ? 'folder' : 'topic'}`;
+        icon.innerHTML = hasChildren ? '📁' : '📄';
+
+        const label = document.createElement('span');
+        label.textContent = name;
+
+        item.appendChild(toggle);
+        item.appendChild(icon);
+        item.appendChild(label);
+        li.appendChild(item);
+
+        this.treeNodes.set(fullPath, {
+            element: li,
+            item: item,
+            toggle: toggle,
+            expanded: false,
+            hasChildren: hasChildren,
+            hasValue: hasValue
+        });
+
+        return li;
+    }
+
+    setupDragHandlers(item, topicPath) {
+        item.addEventListener('dragstart', (e) => {
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('text/plain', topicPath);
+            item.classList.add('dragging');
+
+            // Create drag ghost element
+            const ghost = document.createElement('div');
+            ghost.className = 'drag-ghost';
+            ghost.textContent = `📄 ${topicPath}`;
+            document.body.appendChild(ghost);
+            e.dataTransfer.setDragImage(ghost, 0, 0);
+
+            setTimeout(() => {
+                document.body.removeChild(ghost);
+            }, 0);
+        });
+
+        item.addEventListener('dragend', () => {
+            item.classList.remove('dragging');
+        });
+    }
+
+    async toggleNode(nodeElement, topicPath) {
+        const nodeData = this.treeNodes.get(topicPath);
+        if (!nodeData || !nodeData.hasChildren) return;
+
+        if (nodeData.expanded) {
+            const childContainer = nodeElement.querySelector('.tree-children');
+            if (childContainer) {
+                childContainer.classList.add('collapsed');
+                nodeData.toggle.classList.remove('expanded');
+                nodeData.expanded = false;
+            }
+        } else {
+            let childContainer = nodeElement.querySelector('.tree-children');
+            if (!childContainer) {
+                childContainer = document.createElement('ul');
+                childContainer.className = 'tree-children';
+                nodeElement.appendChild(childContainer);
+
+                const pattern = topicPath === 'root' ? '+' : `${topicPath}/+`;
+                const parentPath = topicPath === 'root' ? '' : topicPath;
+                await this.loadTopicLevel(pattern, childContainer, parentPath);
+            } else {
+                childContainer.classList.remove('collapsed');
+            }
+
+            nodeData.toggle.classList.add('expanded');
+            nodeData.expanded = true;
+        }
+    }
+
+    async performSearch() {
+        const searchTerm = this.searchInput.value.trim();
+        if (!searchTerm) return;
+
+        try {
+            this.tree.innerHTML = '<li class="loading">Searching topics...</li>';
+
+            const query = `
+                query SearchTopics($pattern: String!) {
+                    searchTopics(pattern: $pattern)
+                }
+            `;
+
+            const response = await graphqlClient.query(query, { pattern: searchTerm });
+
+            if (response && response.searchTopics) {
+                this.buildSearchTree(response.searchTopics);
+            }
+        } catch (error) {
+            console.error('Error searching topics:', error);
+            this.tree.innerHTML = `<li class="error">Search error: ${error.message}</li>`;
+        }
+    }
+
+    buildSearchTree(topics) {
+        this.tree.innerHTML = '';
+        this.treeNodes.clear();
+
+        if (topics.length === 0) {
+            const emptyItem = document.createElement('li');
+            emptyItem.className = 'tree-node';
+            emptyItem.innerHTML = '<div class="tree-item" style="color: var(--text-muted);">No topics found</div>';
+            this.tree.appendChild(emptyItem);
+            return;
+        }
+
+        const topicList = topics.map(topicName => ({
+            topic: topicName,
+            hasValue: true
+        }));
+
+        const treeStructure = this.buildTreeStructure(topicList);
+        this.renderTreeStructure(treeStructure, this.tree, '');
+    }
+
+    buildTreeStructure(topics) {
+        const structure = new Map();
+
+        for (const topic of topics) {
+            const parts = topic.topic.split('/');
+            let currentLevel = structure;
+
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+
+                if (!currentLevel.has(part)) {
+                    currentLevel.set(part, {
+                        children: new Map(),
+                        hasValue: false,
+                        fullPath: parts.slice(0, i + 1).join('/')
+                    });
+                }
+
+                const node = currentLevel.get(part);
+                if (i === parts.length - 1) {
+                    node.hasValue = topic.hasValue;
+                }
+
+                currentLevel = node.children;
+            }
+        }
+
+        return structure;
+    }
+
+    renderTreeStructure(structure, container, parentPath) {
+        for (const [name, data] of structure) {
+            const hasChildren = data.children.size > 0;
+            const treeItem = this.createTreeItem(name, data.fullPath, data.hasValue, hasChildren);
+            container.appendChild(treeItem);
+
+            if (hasChildren) {
+                const childContainer = document.createElement('ul');
+                childContainer.className = 'tree-children';
+                treeItem.appendChild(childContainer);
+
+                this.renderTreeStructure(data.children, childContainer, data.fullPath);
+
+                const nodeData = this.treeNodes.get(data.fullPath);
+                if (nodeData) {
+                    nodeData.toggle.classList.add('expanded');
+                    nodeData.expanded = true;
+                }
+            }
+        }
     }
 }
 

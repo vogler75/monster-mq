@@ -10,6 +10,139 @@
     <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/graphql-client.js"></script>
     <script src="/js/sidebar.js"></script>
+    <style>
+        /* Topic Tree Styles */
+        .tree-node {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .tree-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+            user-select: none;
+        }
+
+        .tree-item:hover {
+            background: rgba(124, 58, 237, 0.1);
+        }
+
+        .tree-item.selected {
+            background: rgba(124, 58, 237, 0.2);
+            color: var(--monster-light);
+        }
+
+        .tree-item.has-data {
+            color: var(--monster-green);
+            font-weight: 500;
+        }
+
+        .tree-item.draggable {
+            cursor: grab;
+        }
+
+        .tree-item.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+
+        .tree-toggle {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 0.5rem;
+            border: none;
+            background: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        .tree-toggle:hover {
+            background: var(--dark-border);
+            color: var(--text-primary);
+        }
+
+        .tree-toggle.expanded {
+            transform: rotate(90deg);
+        }
+
+        .tree-toggle:empty {
+            visibility: hidden;
+        }
+
+        .tree-children {
+            margin-left: 1.5rem;
+            border-left: 1px solid var(--dark-border);
+            padding-left: 0.5rem;
+        }
+
+        .tree-children.collapsed {
+            display: none;
+        }
+
+        .tree-icon {
+            margin-right: 0.5rem;
+            color: var(--text-muted);
+        }
+
+        .tree-icon.folder {
+            color: var(--monster-purple);
+        }
+
+        .tree-icon.topic {
+            color: var(--monster-green);
+        }
+
+        /* Drag & Drop Styles */
+        .acl-drop-zone {
+            transition: all 0.3s ease;
+        }
+
+        .acl-drop-zone.drag-over {
+            border: 2px dashed var(--monster-purple) !important;
+            background: rgba(124, 58, 237, 0.1) !important;
+        }
+
+        .drag-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 10000;
+            background: var(--monster-purple);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            opacity: 0.9;
+        }
+
+        /* Loading and Error States */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: var(--text-muted);
+        }
+
+        .error {
+            color: var(--monster-red);
+            padding: 1rem;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            margin: 1rem;
+        }
+    </style>
 </head>
 <body>
     <!-- Mobile Top Bar -->
@@ -198,38 +331,105 @@
     </div>
 
     <!-- ACL Rules Modal -->
-    <div id="acl-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 2000; padding: 2rem;">
-        <div style="max-width: 800px; margin: 0 auto; background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-height: 90vh; overflow-y: auto;">
-            <div style="padding: 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center;">
+    <div id="acl-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 2000; padding: 1rem;">
+        <div style="max-width: 1400px; margin: 0 auto; background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); height: 95vh; display: flex; flex-direction: column;">
+            <div style="padding: 1.5rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center;">
                 <h2 style="margin: 0; color: var(--text-primary);" id="acl-modal-title">ACL Rules</h2>
                 <button id="close-acl-modal" class="btn btn-secondary">Close</button>
             </div>
-            <div style="padding: 2rem;">
-                <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end;">
-                    <div style="flex:1 1 240px;">
-                        <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Topic Pattern</label>
-                        <input type="text" id="acl-topic-pattern" class="form-control" placeholder="sensors/+/temp" />
-                    </div>
-                    <div>
-                        <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Priority</label>
-                        <input type="number" id="acl-priority" class="form-control" value="0" style="width:100px;" />
-                    </div>
-                    <div style="display:flex; gap:0.75rem;">
-                        <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
-                            <input type="checkbox" id="acl-can-subscribe" />
-                            <span style="font-size:0.8rem;">Subscribe</span>
-                        </label>
-                        <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
-                            <input type="checkbox" id="acl-can-publish" />
-                            <span style="font-size:0.8rem;">Publish</span>
-                        </label>
-                    </div>
-                    <div>
-                        <button id="add-acl-rule-btn" class="btn btn-primary" style="margin-top:0.25rem;">Add Rule</button>
+            <div style="flex: 1; display: flex; gap: 1rem; overflow: hidden;">
+                <!-- Left Panel: ACL Rules Management -->
+                <div style="flex: 0 0 45%; display: flex; flex-direction: column; overflow: hidden;">
+                    <div style="padding: 1.5rem; background: var(--dark-bg); border-radius: 8px;">
+                        <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end;">
+                            <div style="flex:1 1 200px;">
+                                <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Topic Pattern</label>
+                                <input type="text" id="acl-topic-pattern" class="form-control" placeholder="sensors/+/temp" />
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Priority</label>
+                                <input type="number" id="acl-priority" class="form-control" value="0" style="width:80px;" />
+                            </div>
+                            <div style="display:flex; gap:0.5rem; font-size:0.85rem;">
+                                <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+                                    <input type="checkbox" id="acl-can-subscribe" />
+                                    <span>Sub</span>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+                                    <input type="checkbox" id="acl-can-publish" />
+                                    <span>Pub</span>
+                                </label>
+                            </div>
+                            <div>
+                                <button id="add-acl-rule-btn" class="btn btn-primary" style="margin-top:0.25rem; padding: 0.5rem 0.75rem; font-size: 0.875rem;">Add</button>
+                            </div>
+                        </div>
+                        <div id="acl-rules-content" class="acl-drop-zone" style="max-height: calc(100vh - 350px); overflow-y: auto; min-height: 200px;">
+                            <!-- ACL rules will be populated here -->
+                        </div>
                     </div>
                 </div>
-                <div id="acl-rules-content">
-                    <!-- ACL rules will be populated here -->
+
+                <!-- Right Panel: Topic Browser -->
+                <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--dark-surface); border-radius: 8px; padding: 1.5rem;">
+                    <h3 style="margin: 0 0 0.75rem 0; color: var(--text-primary); font-size: 1.1rem;">Topic Browser</h3>
+
+                    <!-- Permission Selector for Drag & Drop -->
+                    <div style="background: var(--dark-surface-2); padding: 0.75rem; border-radius: 6px; margin-bottom: 0.75rem; border: 2px solid var(--monster-purple);">
+                        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; font-size: 0.875rem;">
+                            <div style="font-weight: 600; color: var(--text-primary);">Add Permissions:</div>
+                            <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                                <input type="checkbox" id="drag-can-subscribe" checked />
+                                <span>Subscribe</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                                <input type="checkbox" id="drag-can-publish" checked />
+                                <span>Publish</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                                <input type="checkbox" id="drag-wildcard" />
+                                <span>Wildcard (/#)</span>
+                            </label>
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <label>Priority:</label>
+                                <input type="number" id="drag-priority" value="0" min="0" style="width: 70px; padding: 0.4rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 4px; color: var(--text-primary);" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Archive Group & Mode Selector -->
+                    <div style="margin-bottom: 0.75rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; font-size: 0.875rem;">
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <label for="acl-archive-group-select" style="color: var(--text-primary); font-weight: 500;">
+                                Archive:
+                            </label>
+                            <select id="acl-archive-group-select" style="padding: 0.4rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 4px; color: var(--text-primary); cursor: pointer; font-size: 0.875rem;">
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                        <label style="display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); cursor: pointer;">
+                            <input type="radio" name="acl-browse-mode" value="browse" checked style="margin: 0;">
+                            Browse
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); cursor: pointer;">
+                            <input type="radio" name="acl-browse-mode" value="search" style="margin: 0;">
+                            Search
+                        </label>
+                    </div>
+
+                    <!-- Search/Browse Controls -->
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+                        <input type="text" id="acl-search-input" placeholder="Search topics..." disabled style="flex: 1; padding: 0.5rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 6px; color: var(--text-primary); font-size: 0.875rem;" />
+                        <button id="acl-browse-button" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Browse</button>
+                        <button id="acl-search-button" class="btn btn-primary" style="display: none; padding: 0.5rem 1rem; font-size: 0.875rem;">Search</button>
+                    </div>
+
+                    <!-- Topic Tree Container -->
+                    <div style="flex: 1; overflow-y: auto; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 6px; padding: 0.75rem;">
+                        <ul id="acl-topic-tree" class="tree-node" style="margin: 0; padding: 0; list-style: none;">
+                            <!-- Tree will be populated here -->
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
