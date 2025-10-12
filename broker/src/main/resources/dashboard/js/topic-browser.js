@@ -196,7 +196,6 @@ class TopicBrowser {
             // Remove loading item
             container.removeChild(loadingItem);
 
-            console.log('GraphQL response:', response);
             if (response && response.browseTopics && response.browseTopics.length > 0) {
                 const topics = response.browseTopics;
 
@@ -205,13 +204,10 @@ class TopicBrowser {
                     topic: topic.name,
                     hasValue: true // browseTopics only returns topics that have values
                 }));
-                console.log('Topic list:', topicList);
 
                 const groupedTopics = this.groupTopicsByLevel(topicList, parentPath);
-                console.log('Grouped topics:', groupedTopics);
 
                 if (groupedTopics.size === 0) {
-                    console.log('No grouped topics found');
                     const emptyItem = document.createElement('li');
                     emptyItem.className = 'tree-node';
                     emptyItem.innerHTML = '<div class="tree-item" style="color: var(--text-muted); font-style: italic;">No topics found after grouping</div>';
@@ -221,14 +217,8 @@ class TopicBrowser {
 
                 for (const [levelName, topicData] of groupedTopics) {
                     const fullPath = parentPath ? `${parentPath}/${levelName}` : levelName;
-                    console.log('Creating tree item for level:', levelName);
-                    console.log('Parent path:', parentPath);
-                    console.log('Full path:', fullPath);
-                    console.log('Topic data:', topicData);
                     const treeItem = this.createTreeItem(levelName, fullPath, topicData.hasValue, topicData.hasChildren);
-                    console.log('Created tree item element:', treeItem);
                     container.appendChild(treeItem);
-                    console.log('Added tree item to container');
                 }
             } else {
                 // Show a message when no topics are found
@@ -250,11 +240,8 @@ class TopicBrowser {
         const grouped = new Map();
         const parentLevels = parentPath ? parentPath.split('/').length : 0;
 
-        console.log('Grouping topics:', topics, 'Parent path:', parentPath, 'Parent levels:', parentLevels);
-
         for (const topic of topics) {
             const levels = topic.topic.split('/');
-            console.log('Processing topic:', topic.topic, 'Levels:', levels);
 
             if (parentLevels === 0) {
                 // Root level - show the first part of each topic
@@ -264,8 +251,6 @@ class TopicBrowser {
                 // since browseTopics only returns topics that exist
                 const hasChildren = true; // Always assume children for browse results
                 const hasValue = levels.length === 1 && topic.hasValue;
-
-                console.log('Root level processing:', topLevel, 'hasChildren:', hasChildren, 'hasValue:', hasValue);
 
                 if (!grouped.has(topLevel)) {
                     grouped.set(topLevel, {
@@ -277,8 +262,6 @@ class TopicBrowser {
                     existing.hasValue = existing.hasValue || hasValue;
                     existing.hasChildren = existing.hasChildren || hasChildren;
                 }
-
-                console.log('Final result for', topLevel, ':', grouped.get(topLevel));
             } else if (levels.length > parentLevels) {
                 // Deeper levels
                 const nextLevel = levels[parentLevels];
@@ -287,8 +270,6 @@ class TopicBrowser {
                 // since browseTopics only returns topics that exist in the hierarchy
                 const hasChildren = true; // Always assume children for browse results
                 const hasValue = levels.length === parentLevels + 1 && topic.hasValue;
-
-                console.log('Deeper level processing:', nextLevel, 'hasChildren:', hasChildren, 'hasValue:', hasValue);
 
                 if (!grouped.has(nextLevel)) {
                     grouped.set(nextLevel, {
@@ -300,20 +281,15 @@ class TopicBrowser {
                     existing.hasValue = existing.hasValue || hasValue;
                     existing.hasChildren = existing.hasChildren || hasChildren;
                 }
-
-                console.log('Final result for', nextLevel, ':', grouped.get(nextLevel));
             }
         }
 
-        console.log('Final grouped result:', grouped);
         return grouped;
     }
 
     createTreeItem(name, fullPath, hasValue, hasChildren) {
-        console.log('createTreeItem called with:', { name, fullPath, hasValue, hasChildren });
         const li = document.createElement('li');
         li.className = 'tree-node';
-        console.log('Created li element:', li);
 
         const item = document.createElement('div');
         item.className = 'tree-item';
@@ -362,8 +338,6 @@ class TopicBrowser {
             hasValue: hasValue
         });
 
-        console.log('Completed tree item:', li);
-        console.log('Tree item HTML:', li.outerHTML);
         return li;
     }
 
