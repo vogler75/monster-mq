@@ -115,22 +115,12 @@ extend type Query {
         name: String
     ): [FlowClass!]!
 
-    # Get a specific flow class
-    flowClass(
-        name: String!
-    ): FlowClass
-
     # Get all flow instances
     flowInstances(
         flowClassId: String
         nodeId: String
         enabled: Boolean
     ): [FlowInstance!]!
-
-    # Get a specific flow instance
-    flowInstance(
-        name: String!
-    ): FlowInstance
 
     # Get available node types
     flowNodeTypes: [FlowNodeType!]!

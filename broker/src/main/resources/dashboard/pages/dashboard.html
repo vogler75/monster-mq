@@ -73,6 +73,57 @@
                 <!-- Cluster overview metrics will be populated here -->
             </div>
 
+            <div style="margin: 2rem 0;">
+                <h2 style="margin-bottom: 1rem; color: var(--text-primary);">Quick Links</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">
+                    <a href="/pages/workflows.html" style="text-decoration: none;">
+                        <div class="metric-card" style="cursor: pointer; transition: transform 0.2s;">
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                    <polyline points="7.5 4.21 12 6.81 16.5 4.21"></polyline>
+                                    <polyline points="7.5 19.79 7.5 14.6 3 12"></polyline>
+                                    <polyline points="21 12 16.5 14.6 16.5 19.79"></polyline>
+                                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                </svg>
+                                <div>
+                                    <div style="font-size: 1.1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Workflows</div>
+                                    <div style="font-size: 0.9rem; color: var(--text-secondary);">Manage flow classes & instances</div>
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/pages/topic-browser.html" style="text-decoration: none;">
+                        <div class="metric-card" style="cursor: pointer; transition: transform 0.2s;">
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <path d="M21 21l-4.35-4.35"></path>
+                                </svg>
+                                <div>
+                                    <div style="font-size: 1.1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Topic Browser</div>
+                                    <div style="font-size: 0.9rem; color: var(--text-secondary);">Browse and inspect topics</div>
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/pages/archive-groups.html" style="text-decoration: none;">
+                        <div class="metric-card" style="cursor: pointer; transition: transform 0.2s;">
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"></polyline>
+                                </svg>
+                                <div>
+                                    <div style="font-size: 1.1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">Archives</div>
+                                    <div style="font-size: 0.9rem; color: var(--text-secondary);">Configure archive groups</div>
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
             <div class="chart-container">
                 <div class="chart-header">
                     <h2 class="chart-title">Message Traffic Trends</h2>

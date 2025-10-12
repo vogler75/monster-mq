@@ -1,0 +1,1197 @@
+/**
+ * MonsterMQ Workflow Editor
+ * Visual editor for Flow Classes and Flow Instances
+ */
+
+// ======================
+// Global State
+// ======================
+
+let flowClasses = [];
+let flowInstances = [];
+let flowNodeTypes = [];
+let currentFlowClass = null;
+let currentFlowInstance = null;
+let selectedNode = null;
+
+// Node editor state
+let nodes = [];
+let connections = [];
+let draggedNode = null;
+let connectingFrom = null;
+let canvas = null;
+let svgLayer = null;
+
+// ======================
+// Initialization
+// ======================
+
+document.addEventListener('DOMContentLoaded', function() {
+    initWorkflowsPage();
+});
+
+async function initWorkflowsPage() {
+    canvas = document.getElementById('flow-canvas');
+    svgLayer = document.getElementById('connections-svg');
+
+    // Load initial data
+    await Promise.all([
+        loadFlowClasses(),
+        loadFlowInstances(),
+        loadFlowNodeTypes()
+    ]);
+
+    // Set up event listeners
+    setupEventListeners();
+
+    // Show first tab
+    switchTab('classes');
+}
+
+function setupEventListeners() {
+    // Canvas events for node dragging
+    if (canvas) {
+        canvas.addEventListener('mousedown', handleCanvasMouseDown);
+        canvas.addEventListener('mousemove', handleCanvasMouseMove);
+        canvas.addEventListener('mouseup', handleCanvasMouseUp);
+    }
+}
+
+// ======================
+// Tab Management
+// ======================
+
+function switchTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.tab').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector(`[onclick="switchTab('${tabName}')"]`)?.classList.add('active');
+
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    document.getElementById(`${tabName}-tab`)?.classList.add('active');
+}
+
+// ======================
+// GraphQL API Functions
+// ======================
+
+async function graphqlQuery(query, variables = {}) {
+    try {
+        return await window.graphqlClient.query(query, variables);
+    } catch (error) {
+        showNotification('GraphQL error: ' + error.message, 'error');
+        throw error;
+    }
+}
+
+// ======================
+// Load Data Functions
+// ======================
+
+async function loadFlowClasses() {
+    const query = `
+        query {
+            flowClasses {
+                name
+                namespace
+                version
+                description
+                nodes {
+                    id
+                    type
+                    name
+                    config
+                    inputs
+                    outputs
+                    language
+                    position { x y }
+                }
+                connections {
+                    fromNode
+                    fromOutput
+                    toNode
+                    toInput
+                }
+                createdAt
+                updatedAt
+            }
+        }
+    `;
+
+    try {
+        const data = await graphqlQuery(query);
+        flowClasses = data.flowClasses || [];
+        renderFlowClasses();
+    } catch (error) {
+        console.error('Error loading flow classes:', error);
+        showNotification('Failed to load flow classes', 'error');
+    }
+}
+
+async function loadFlowInstances() {
+    const query = `
+        query {
+            flowInstances {
+                name
+                namespace
+                nodeId
+                flowClassId
+                inputMappings {
+                    nodeInput
+                    type
+                    value
+                }
+                outputMappings {
+                    nodeOutput
+                    topic
+                }
+                variables
+                enabled
+                status {
+                    running
+                    lastExecution
+                    executionCount
+                    errorCount
+                    lastError
+                    subscribedTopics
+                }
+                createdAt
+                updatedAt
+                isOnCurrentNode
+            }
+        }
+    `;
+
+    try {
+        const data = await graphqlQuery(query);
+        flowInstances = data.flowInstances || [];
+        renderFlowInstances();
+    } catch (error) {
+        console.error('Error loading flow instances:', error);
+        showNotification('Failed to load flow instances', 'error');
+    }
+}
+
+async function loadFlowNodeTypes() {
+    const query = `
+        query {
+            flowNodeTypes {
+                type
+                category
+                description
+                defaultInputs
+                defaultOutputs
+                configSchema
+                icon
+            }
+        }
+    `;
+
+    try {
+        const data = await graphqlQuery(query);
+        // Filter to show only function nodes
+        flowNodeTypes = (data.flowNodeTypes || []).filter(nt => nt.type === 'function');
+        renderNodePalette();
+    } catch (error) {
+        console.error('Error loading node types:', error);
+    }
+}
+
+// ======================
+// Render Functions
+// ======================
+
+function renderFlowClasses() {
+    const grid = document.getElementById('classes-grid');
+    if (!grid) return;
+
+    if (flowClasses.length === 0) {
+        grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #6c757d;">No flow classes defined. Create your first workflow!</p>';
+        return;
+    }
+
+    grid.innerHTML = flowClasses.map(flowClass => `
+        <div class="workflow-card">
+            <div class="workflow-card-header">
+                <h3 class="workflow-card-title">${escapeHtml(flowClass.name)}</h3>
+                <span class="workflow-card-badge">${escapeHtml(flowClass.version)}</span>
+            </div>
+            <div class="workflow-card-info">
+                <div><strong>Namespace:</strong> ${escapeHtml(flowClass.namespace)}</div>
+                ${flowClass.description ? `<div><strong>Description:</strong> ${escapeHtml(flowClass.description)}</div>` : ''}
+                <div><strong>Nodes:</strong> ${flowClass.nodes.length}</div>
+                <div><strong>Connections:</strong> ${flowClass.connections.length}</div>
+            </div>
+            <div class="workflow-card-actions">
+                <button class="btn btn-primary" onclick="editFlowClass('${escapeHtml(flowClass.name)}')">
+                    Edit
+                </button>
+                <button class="btn btn-danger" onclick="deleteFlowClass('${escapeHtml(flowClass.name)}')">
+                    Delete
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderFlowInstances() {
+    const grid = document.getElementById('instances-grid');
+    if (!grid) return;
+
+    if (flowInstances.length === 0) {
+        grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #6c757d;">No flow instances defined. Create an instance of a flow class!</p>';
+        return;
+    }
+
+    grid.innerHTML = flowInstances.map(instance => {
+        const statusBadge = instance.enabled
+            ? '<span class="workflow-card-badge enabled">Enabled</span>'
+            : '<span class="workflow-card-badge disabled">Disabled</span>';
+
+        const executionInfo = instance.status
+            ? `<div><strong>Executions:</strong> ${instance.status.executionCount}</div>
+               ${instance.status.errorCount > 0 ? `<div style="color: #dc3545;"><strong>Errors:</strong> ${instance.status.errorCount}</div>` : ''}`
+            : '';
+
+        return `
+            <div class="workflow-card">
+                <div class="workflow-card-header">
+                    <h3 class="workflow-card-title">${escapeHtml(instance.name)}</h3>
+                    ${statusBadge}
+                </div>
+                <div class="workflow-card-info">
+                    <div><strong>Namespace:</strong> ${escapeHtml(instance.namespace)}</div>
+                    <div><strong>Flow Class:</strong> ${escapeHtml(instance.flowClassId)}</div>
+                    <div><strong>Node:</strong> ${escapeHtml(instance.nodeId)}</div>
+                    <div><strong>Inputs:</strong> ${instance.inputMappings.length}</div>
+                    <div><strong>Outputs:</strong> ${instance.outputMappings.length}</div>
+                    ${executionInfo}
+                </div>
+                <div class="workflow-card-actions">
+                    <button class="btn btn-primary" onclick="editFlowInstance('${escapeHtml(instance.name)}')">
+                        Edit
+                    </button>
+                    <button class="btn btn-danger" onclick="deleteFlowInstance('${escapeHtml(instance.name)}')">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderNodePalette() {
+    const palette = document.querySelector('.node-palette');
+    if (!palette) return;
+
+    palette.innerHTML = '<h4>Node Types</h4>' + flowNodeTypes.map(nodeType => `
+        <div class="palette-item" onclick="addNodeToCanvas('${nodeType.type}')">
+            <div class="palette-icon">${nodeType.icon || '📦'}</div>
+            <div class="palette-label">${nodeType.type}</div>
+        </div>
+    `).join('');
+}
+
+// ======================
+// Flow Class Management
+// ======================
+
+function createFlowClass() {
+    currentFlowClass = {
+        name: '',
+        namespace: 'default',
+        version: '1.0.0',
+        description: '',
+        nodes: [],
+        connections: []
+    };
+
+    nodes = [];
+    connections = [];
+    selectedNode = null;
+
+    document.getElementById('class-name').value = '';
+    document.getElementById('class-namespace').value = 'default';
+    document.getElementById('class-description').value = '';
+
+    // Open modal first
+    document.getElementById('class-editor-modal').classList.add('active');
+
+    // Re-initialize canvas and SVG layer now that modal is visible
+    canvas = document.getElementById('flow-canvas');
+    svgLayer = document.getElementById('connections-svg');
+
+    renderNodes();
+    renderConnections();
+    updateNodeConfig();
+}
+
+function editFlowClass(name) {
+    const flowClass = flowClasses.find(fc => fc.name === name);
+    if (!flowClass) return;
+
+    currentFlowClass = JSON.parse(JSON.stringify(flowClass)); // Deep copy
+    nodes = currentFlowClass.nodes.map(node => ({
+        ...node,
+        position: node.position || { x: 100, y: 100 }
+    }));
+    connections = currentFlowClass.connections;
+    selectedNode = null;
+
+    document.getElementById('class-name').value = currentFlowClass.name;
+    document.getElementById('class-namespace').value = currentFlowClass.namespace;
+    document.getElementById('class-description').value = currentFlowClass.description || '';
+
+    // Open modal first
+    document.getElementById('class-editor-modal').classList.add('active');
+
+    // Re-initialize canvas and SVG layer now that modal is visible
+    canvas = document.getElementById('flow-canvas');
+    svgLayer = document.getElementById('connections-svg');
+
+    renderNodes();
+    renderConnections();
+    updateNodeConfig();
+}
+
+async function saveFlowClass() {
+    const name = document.getElementById('class-name').value.trim();
+    const namespace = document.getElementById('class-namespace').value.trim();
+    const description = document.getElementById('class-description').value.trim();
+
+    if (!name || !namespace) {
+        showNotification('Name and namespace are required', 'error');
+        return;
+    }
+
+    const input = {
+        name,
+        namespace,
+        version: currentFlowClass?.version || '1.0.0',
+        description: description || null,
+        nodes: nodes.map(node => ({
+            id: node.id,
+            type: node.type,
+            name: node.name,
+            config: node.config,
+            inputs: node.inputs,
+            outputs: node.outputs,
+            language: node.language || 'javascript',
+            position: node.position
+        })),
+        connections: connections.map(conn => ({
+            fromNode: conn.fromNode,
+            fromOutput: conn.fromOutput,
+            toNode: conn.toNode,
+            toInput: conn.toInput
+        }))
+    };
+
+    const mutation = currentFlowClass && currentFlowClass.name === name
+        ? `mutation($name: String!, $input: FlowClassInput!) {
+            flow {
+                updateClass(name: $name, input: $input) {
+                    name
+                }
+            }
+        }`
+        : `mutation($input: FlowClassInput!) {
+            flow {
+                createClass(input: $input) {
+                    name
+                }
+            }
+        }`;
+
+    const variables = currentFlowClass && currentFlowClass.name === name
+        ? { name: currentFlowClass.name, input }
+        : { input };
+
+    try {
+        await graphqlQuery(mutation, variables);
+        showNotification('Flow class saved successfully', 'success');
+        closeClassEditor();
+        await loadFlowClasses();
+    } catch (error) {
+        console.error('Error saving flow class:', error);
+        showNotification('Failed to save flow class', 'error');
+    }
+}
+
+async function deleteFlowClass(name) {
+    if (!confirm(`Are you sure you want to delete flow class "${name}"?`)) {
+        return;
+    }
+
+    const mutation = `
+        mutation($name: String!) {
+            flow {
+                deleteClass(name: $name)
+            }
+        }
+    `;
+
+    try {
+        await graphqlQuery(mutation, { name });
+        showNotification('Flow class deleted successfully', 'success');
+        await loadFlowClasses();
+    } catch (error) {
+        console.error('Error deleting flow class:', error);
+        showNotification('Failed to delete flow class', 'error');
+    }
+}
+
+function deleteCurrentClass() {
+    if (currentFlowClass && currentFlowClass.name) {
+        deleteFlowClass(currentFlowClass.name);
+    }
+}
+
+function closeClassEditor() {
+    document.getElementById('class-editor-modal').classList.remove('active');
+    currentFlowClass = null;
+    nodes = [];
+    connections = [];
+    selectedNode = null;
+}
+
+// ======================
+// Visual Node Editor
+// ======================
+
+function addNodeToCanvas(type) {
+    const nodeType = flowNodeTypes.find(nt => nt.type === type);
+    if (!nodeType) return;
+
+    const nodeId = 'node_' + Date.now();
+    const node = {
+        id: nodeId,
+        type: type,
+        name: type + '_' + nodes.length,
+        config: {},
+        inputs: [...nodeType.defaultInputs],
+        outputs: [...nodeType.defaultOutputs],
+        language: 'javascript',
+        position: {
+            x: 50 + (nodes.length * 30) % 400,
+            y: 50 + Math.floor(nodes.length / 10) * 100
+        }
+    };
+
+    nodes.push(node);
+    renderNodes();
+    selectNode(nodeId);
+}
+
+function renderNodes() {
+    if (!canvas) return;
+
+    // Remove old nodes
+    canvas.querySelectorAll('.flow-node').forEach(el => el.remove());
+
+    // Render new nodes
+    nodes.forEach(node => {
+        const nodeEl = document.createElement('div');
+        nodeEl.className = 'flow-node' + (selectedNode === node.id ? ' selected' : '');
+        nodeEl.style.left = node.position.x + 'px';
+        nodeEl.style.top = node.position.y + 'px';
+        nodeEl.setAttribute('data-node-id', node.id);
+
+        nodeEl.innerHTML = `
+            <div class="flow-node-header">${escapeHtml(node.name)}</div>
+            <div class="flow-node-ports">
+                <div class="flow-node-inputs">
+                    ${node.inputs.map(input => `
+                        <div class="node-port input-port"
+                             data-port="${escapeHtml(input)}"
+                             onclick="startConnection('${node.id}', '${escapeHtml(input)}', 'input')">
+                            ${escapeHtml(input)}
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="flow-node-outputs">
+                    ${node.outputs.map(output => `
+                        <div class="node-port output-port"
+                             data-port="${escapeHtml(output)}"
+                             onclick="startConnection('${node.id}', '${escapeHtml(output)}', 'output')">
+                            ${escapeHtml(output)}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        nodeEl.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.node-port')) return; // Don't drag when clicking ports
+            selectNode(node.id);
+            draggedNode = node;
+            e.stopPropagation();
+        });
+
+        canvas.appendChild(nodeEl);
+    });
+
+    renderConnections();
+}
+
+function selectNode(nodeId) {
+    selectedNode = nodeId;
+    renderNodes();
+    updateNodeConfig();
+}
+
+function updateNodeConfig() {
+    const configPanel = document.getElementById('node-config-content');
+    if (!configPanel) return;
+
+    if (!selectedNode) {
+        configPanel.innerHTML = '<p style="color: #6c757d; padding: 1rem;">Select a node to configure</p>';
+        return;
+    }
+
+    const node = nodes.find(n => n.id === selectedNode);
+    if (!node) return;
+
+    const nodeType = flowNodeTypes.find(nt => nt.type === node.type);
+    const scriptRequired = node.type === 'function';
+
+    configPanel.innerHTML = `
+        <h4>Configure Node</h4>
+        <div class="form-group">
+            <label>Node Name:</label>
+            <input type="text" id="node-name" class="form-control" value="${escapeHtml(node.name)}">
+        </div>
+        <div class="form-group">
+            <label>Execution Type:</label>
+            <select id="node-execution-type" class="form-control" onchange="toggleExecutionConfig()">
+                <option value="event" ${(node.config.executionType || 'event') === 'event' ? 'selected' : ''}>Event-Driven (on input)</option>
+                <option value="periodic" ${node.config.executionType === 'periodic' ? 'selected' : ''}>Periodic (timer-based)</option>
+            </select>
+        </div>
+        <div id="periodic-config" style="display: ${node.config.executionType === 'periodic' ? 'block' : 'none'};">
+            <div class="form-group">
+                <label>Interval (milliseconds):</label>
+                <input type="number" id="node-interval" class="form-control" value="${node.config.interval || 1000}" min="100" step="100">
+                <small style="color: #6c757d;">Minimum: 100ms. Example: 1000 = 1 second, 60000 = 1 minute</small>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Inputs (comma-separated):</label>
+            <input type="text" id="node-inputs" class="form-control" value="${node.inputs.join(', ')}">
+            <small style="color: #6c757d;">Leave empty for periodic execution without inputs</small>
+        </div>
+        <div class="form-group">
+            <label>Outputs (comma-separated):</label>
+            <input type="text" id="node-outputs" class="form-control" value="${node.outputs.join(', ')}">
+        </div>
+        ${scriptRequired ? `
+            <div class="form-group">
+                <label>Language:</label>
+                <select id="node-language" class="form-control">
+                    <option value="javascript" ${node.language === 'javascript' ? 'selected' : ''}>JavaScript</option>
+                    <option value="python" ${node.language === 'python' ? 'selected' : ''}>Python</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Script:</label>
+                <button class="btn btn-secondary" onclick="openScriptEditor()" style="width: 100%; margin-bottom: 0.5rem;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 0.5rem;">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="9" y1="3" x2="9" y2="21"></line>
+                    </svg>
+                    Open Full Editor
+                </button>
+                <textarea id="node-script" class="form-control" rows="5" style="font-family: monospace; font-size: 0.85rem;">${escapeHtml(node.config.script || '')}</textarea>
+                <small style="color: #6c757d;">
+                    Available: inputs (object), state (object), variables (object), outputs.send(port, value)
+                </small>
+            </div>
+        ` : ''}
+        <div class="form-group" style="display: flex; gap: 0.5rem;">
+            <button class="btn btn-primary" onclick="saveNodeConfig()">Save</button>
+            <button class="btn btn-danger" onclick="deleteSelectedNode()">Delete Node</button>
+        </div>
+    `;
+}
+
+function toggleExecutionConfig() {
+    const executionType = document.getElementById('node-execution-type').value;
+    const periodicConfig = document.getElementById('periodic-config');
+    if (periodicConfig) {
+        periodicConfig.style.display = executionType === 'periodic' ? 'block' : 'none';
+    }
+}
+
+function saveNodeConfig() {
+    if (!selectedNode) return;
+
+    const node = nodes.find(n => n.id === selectedNode);
+    if (!node) return;
+
+    node.name = document.getElementById('node-name')?.value || node.name;
+    node.inputs = document.getElementById('node-inputs')?.value.split(',').map(s => s.trim()).filter(s => s) || node.inputs;
+    node.outputs = document.getElementById('node-outputs')?.value.split(',').map(s => s.trim()).filter(s => s) || node.outputs;
+
+    if (node.type === 'function') {
+        node.language = document.getElementById('node-language')?.value || 'javascript';
+        node.config.script = document.getElementById('node-script')?.value || '';
+        node.config.executionType = document.getElementById('node-execution-type')?.value || 'event';
+
+        if (node.config.executionType === 'periodic') {
+            const interval = parseInt(document.getElementById('node-interval')?.value || '1000');
+            node.config.interval = Math.max(100, interval); // Minimum 100ms
+        } else {
+            delete node.config.interval;
+        }
+    }
+
+    renderNodes();
+    showNotification('Node configuration saved', 'success');
+}
+
+function deleteSelectedNode() {
+    if (!selectedNode) return;
+
+    // Remove node
+    nodes = nodes.filter(n => n.id !== selectedNode);
+
+    // Remove connections involving this node
+    connections = connections.filter(conn =>
+        conn.fromNode !== selectedNode && conn.toNode !== selectedNode
+    );
+
+    selectedNode = null;
+    renderNodes();
+    updateNodeConfig();
+    showNotification('Node deleted', 'success');
+}
+
+function handleCanvasMouseDown(e) {
+    if (e.target === canvas) {
+        selectedNode = null;
+        renderNodes();
+        updateNodeConfig();
+    }
+}
+
+function handleCanvasMouseMove(e) {
+    if (!draggedNode) return;
+
+    const rect = canvas.getBoundingClientRect();
+    draggedNode.position.x = e.clientX - rect.left - 75; // Center on cursor
+    draggedNode.position.y = e.clientY - rect.top - 20;
+
+    renderNodes();
+}
+
+function handleCanvasMouseUp(e) {
+    draggedNode = null;
+}
+
+// ======================
+// Connection Management
+// ======================
+
+function startConnection(nodeId, portName, portType) {
+    if (!connectingFrom) {
+        // Start connection
+        if (portType === 'output') {
+            connectingFrom = { nodeId, portName, portType };
+            showNotification('Click on an input port to complete connection', 'info');
+        } else {
+            showNotification('Connections must start from output ports', 'error');
+        }
+    } else {
+        // Complete connection
+        if (portType === 'input' && connectingFrom.portType === 'output') {
+            const connection = {
+                fromNode: connectingFrom.nodeId,
+                fromOutput: connectingFrom.portName,
+                toNode: nodeId,
+                toInput: portName
+            };
+
+            // Check for duplicate
+            const exists = connections.some(c =>
+                c.fromNode === connection.fromNode &&
+                c.fromOutput === connection.fromOutput &&
+                c.toNode === connection.toNode &&
+                c.toInput === connection.toInput
+            );
+
+            if (!exists) {
+                connections.push(connection);
+                renderConnections();
+                showNotification('Connection created', 'success');
+            }
+        } else {
+            showNotification('Invalid connection', 'error');
+        }
+        connectingFrom = null;
+    }
+}
+
+function renderConnections() {
+    if (!svgLayer || !canvas) return;
+
+    svgLayer.innerHTML = '';
+
+    connections.forEach((conn, idx) => {
+        const fromNode = nodes.find(n => n.id === conn.fromNode);
+        const toNode = nodes.find(n => n.id === conn.toNode);
+
+        if (!fromNode || !toNode) return;
+
+        // Calculate port positions
+        const fromEl = canvas.querySelector(`[data-node-id="${conn.fromNode}"]`);
+        const toEl = canvas.querySelector(`[data-node-id="${conn.toNode}"]`);
+
+        if (!fromEl || !toEl) return;
+
+        const fromRect = fromEl.getBoundingClientRect();
+        const toRect = toEl.getBoundingClientRect();
+        const canvasRect = canvas.getBoundingClientRect();
+
+        const x1 = fromRect.right - canvasRect.left;
+        const y1 = fromRect.top - canvasRect.top + 40;
+        const x2 = toRect.left - canvasRect.left;
+        const y2 = toRect.top - canvasRect.top + 40;
+
+        // Create curved path
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const curve = Math.min(Math.abs(dx) / 2, 50);
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', `M ${x1} ${y1} C ${x1 + curve} ${y1}, ${x2 - curve} ${y2}, ${x2} ${y2}`);
+        path.setAttribute('class', 'connection-line');
+        path.style.cursor = 'pointer';
+        path.onclick = () => deleteConnection(idx);
+
+        svgLayer.appendChild(path);
+    });
+}
+
+function deleteConnection(index) {
+    if (confirm('Delete this connection?')) {
+        connections.splice(index, 1);
+        renderConnections();
+        showNotification('Connection deleted', 'success');
+    }
+}
+
+// ======================
+// Flow Instance Management
+// ======================
+
+function createFlowInstance() {
+    if (flowClasses.length === 0) {
+        showNotification('Create a flow class first', 'error');
+        return;
+    }
+
+    currentFlowInstance = {
+        name: '',
+        namespace: 'default',
+        nodeId: 'local',
+        flowClassId: flowClasses[0].name,
+        inputMappings: [],
+        outputMappings: [],
+        variables: {},
+        enabled: true
+    };
+
+    populateInstanceForm();
+    document.getElementById('instance-editor-modal').classList.add('active');
+}
+
+function editFlowInstance(name) {
+    const instance = flowInstances.find(fi => fi.name === name);
+    if (!instance) return;
+
+    currentFlowInstance = JSON.parse(JSON.stringify(instance));
+    populateInstanceForm();
+    document.getElementById('instance-editor-modal').classList.add('active');
+}
+
+function populateInstanceForm() {
+    document.getElementById('instance-name').value = currentFlowInstance.name;
+    document.getElementById('instance-namespace').value = currentFlowInstance.namespace;
+    document.getElementById('instance-node-id').value = currentFlowInstance.nodeId;
+    document.getElementById('instance-enabled').checked = currentFlowInstance.enabled;
+
+    // Populate flow class dropdown
+    const select = document.getElementById('instance-flow-class');
+    select.innerHTML = flowClasses.map(fc =>
+        `<option value="${escapeHtml(fc.name)}" ${fc.name === currentFlowInstance.flowClassId ? 'selected' : ''}>
+            ${escapeHtml(fc.name)}
+        </option>`
+    ).join('');
+
+    renderInputMappings();
+    renderOutputMappings();
+}
+
+function renderInputMappings() {
+    const container = document.getElementById('input-mappings');
+    if (!container) return;
+
+    container.innerHTML = '<h4>Input Mappings</h4>';
+
+    // Get available inputs from selected flow class
+    const flowClass = flowClasses.find(fc => fc.name === currentFlowInstance.flowClassId);
+    if (!flowClass) {
+        container.innerHTML += '<p style="color: #6c757d;">Select a flow class first</p>';
+        return;
+    }
+
+    currentFlowInstance.inputMappings.forEach((mapping, idx) => {
+        const div = document.createElement('div');
+        div.className = 'mapping-item';
+        div.innerHTML = `
+            <div class="form-group">
+                <label>Node Input:</label>
+                <input type="text" class="form-control" value="${escapeHtml(mapping.nodeInput)}"
+                       onchange="updateInputMapping(${idx}, 'nodeInput', this.value)">
+                <small>Format: nodeId.inputName</small>
+            </div>
+            <div class="form-group">
+                <label>Type:</label>
+                <select class="form-control" onchange="updateInputMapping(${idx}, 'type', this.value)">
+                    <option value="TOPIC" ${mapping.type === 'TOPIC' ? 'selected' : ''}>MQTT Topic</option>
+                    <option value="TEXT" ${mapping.type === 'TEXT' ? 'selected' : ''}>Text Constant</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Value:</label>
+                <input type="text" class="form-control" value="${escapeHtml(mapping.value)}"
+                       onchange="updateInputMapping(${idx}, 'value', this.value)"
+                       placeholder="${mapping.type === 'TOPIC' ? 'e.g., sensor/# (wildcards supported)' : 'Constant value'}">
+                ${mapping.type === 'TOPIC' ? '<small style="color: #17a2b8;">Wildcards supported: # (multi-level), + (single-level)</small>' : ''}
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="removeInputMapping(${idx})">Remove</button>
+        `;
+        container.appendChild(div);
+    });
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn btn-secondary';
+    addBtn.textContent = '+ Add Input Mapping';
+    addBtn.onclick = addInputMapping;
+    container.appendChild(addBtn);
+}
+
+function addInputMapping() {
+    currentFlowInstance.inputMappings.push({
+        nodeInput: '',
+        type: 'TOPIC',
+        value: ''
+    });
+    renderInputMappings();
+}
+
+function updateInputMapping(idx, field, value) {
+    if (currentFlowInstance.inputMappings[idx]) {
+        currentFlowInstance.inputMappings[idx][field] = value;
+        if (field === 'type') {
+            renderInputMappings(); // Re-render to update placeholder
+        }
+    }
+}
+
+function removeInputMapping(idx) {
+    currentFlowInstance.inputMappings.splice(idx, 1);
+    renderInputMappings();
+}
+
+function renderOutputMappings() {
+    const container = document.getElementById('output-mappings');
+    if (!container) return;
+
+    container.innerHTML = '<h4>Output Mappings</h4>';
+
+    currentFlowInstance.outputMappings.forEach((mapping, idx) => {
+        const div = document.createElement('div');
+        div.className = 'mapping-item';
+        div.innerHTML = `
+            <div class="form-group">
+                <label>Node Output:</label>
+                <input type="text" class="form-control" value="${escapeHtml(mapping.nodeOutput)}"
+                       onchange="updateOutputMapping(${idx}, 'nodeOutput', this.value)">
+                <small>Format: nodeId.outputName</small>
+            </div>
+            <div class="form-group">
+                <label>MQTT Topic:</label>
+                <input type="text" class="form-control" value="${escapeHtml(mapping.topic)}"
+                       onchange="updateOutputMapping(${idx}, 'topic', this.value)"
+                       placeholder="e.g., sensor/output">
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="removeOutputMapping(${idx})">Remove</button>
+        `;
+        container.appendChild(div);
+    });
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn btn-secondary';
+    addBtn.textContent = '+ Add Output Mapping';
+    addBtn.onclick = addOutputMapping;
+    container.appendChild(addBtn);
+}
+
+function addOutputMapping() {
+    currentFlowInstance.outputMappings.push({
+        nodeOutput: '',
+        topic: ''
+    });
+    renderOutputMappings();
+}
+
+function updateOutputMapping(idx, field, value) {
+    if (currentFlowInstance.outputMappings[idx]) {
+        currentFlowInstance.outputMappings[idx][field] = value;
+    }
+}
+
+function removeOutputMapping(idx) {
+    currentFlowInstance.outputMappings.splice(idx, 1);
+    renderOutputMappings();
+}
+
+async function saveFlowInstance() {
+    const name = document.getElementById('instance-name').value.trim();
+    const namespace = document.getElementById('instance-namespace').value.trim();
+    const nodeId = document.getElementById('instance-node-id').value.trim();
+    const flowClassId = document.getElementById('instance-flow-class').value;
+    const enabled = document.getElementById('instance-enabled').checked;
+
+    if (!name || !namespace || !nodeId || !flowClassId) {
+        showNotification('All required fields must be filled', 'error');
+        return;
+    }
+
+    // Validate wildcard topics
+    const topicMappings = currentFlowInstance.inputMappings.filter(m => m.type === 'TOPIC');
+    for (const mapping of topicMappings) {
+        if (!validateMqttTopic(mapping.value)) {
+            showNotification(`Invalid MQTT topic: ${mapping.value}`, 'error');
+            return;
+        }
+    }
+
+    const input = {
+        name,
+        namespace,
+        nodeId,
+        flowClassId,
+        inputMappings: currentFlowInstance.inputMappings.map(m => ({
+            nodeInput: m.nodeInput,
+            type: m.type,
+            value: m.value
+        })),
+        outputMappings: currentFlowInstance.outputMappings.map(m => ({
+            nodeOutput: m.nodeOutput,
+            topic: m.topic
+        })),
+        variables: currentFlowInstance.variables || {},
+        enabled
+    };
+
+    const mutation = currentFlowInstance && flowInstances.some(fi => fi.name === currentFlowInstance.name && fi.name === name)
+        ? `mutation($name: String!, $input: FlowInstanceInput!) {
+            flow {
+                updateInstance(name: $name, input: $input) {
+                    name
+                }
+            }
+        }`
+        : `mutation($input: FlowInstanceInput!) {
+            flow {
+                createInstance(input: $input) {
+                    name
+                }
+            }
+        }`;
+
+    const variables = currentFlowInstance && flowInstances.some(fi => fi.name === currentFlowInstance.name && fi.name === name)
+        ? { name: currentFlowInstance.name, input }
+        : { input };
+
+    try {
+        await graphqlQuery(mutation, variables);
+        showNotification('Flow instance saved successfully', 'success');
+        closeInstanceEditor();
+        await loadFlowInstances();
+    } catch (error) {
+        console.error('Error saving flow instance:', error);
+        showNotification('Failed to save flow instance', 'error');
+    }
+}
+
+async function deleteFlowInstance(name) {
+    if (!confirm(`Are you sure you want to delete flow instance "${name}"?`)) {
+        return;
+    }
+
+    const mutation = `
+        mutation($name: String!) {
+            flow {
+                deleteInstance(name: $name)
+            }
+        }
+    `;
+
+    try {
+        await graphqlQuery(mutation, { name });
+        showNotification('Flow instance deleted successfully', 'success');
+        await loadFlowInstances();
+    } catch (error) {
+        console.error('Error deleting flow instance:', error);
+        showNotification('Failed to delete flow instance', 'error');
+    }
+}
+
+function deleteCurrentInstance() {
+    if (currentFlowInstance && currentFlowInstance.name) {
+        deleteFlowInstance(currentFlowInstance.name);
+    }
+}
+
+function closeInstanceEditor() {
+    document.getElementById('instance-editor-modal').classList.remove('active');
+    currentFlowInstance = null;
+}
+
+// ======================
+// Utility Functions
+// ======================
+
+function validateMqttTopic(topic) {
+    if (!topic) return false;
+
+    // MQTT topic validation rules:
+    // - Cannot be empty
+    // - Cannot start or end with /
+    // - + wildcard matches single level
+    // - # wildcard matches multiple levels (must be last character)
+    // - # can only appear at end preceded by /
+
+    if (topic.startsWith('/') || topic.endsWith('/')) return false;
+
+    const hashIndex = topic.indexOf('#');
+    if (hashIndex !== -1 && hashIndex !== topic.length - 1) return false;
+    if (hashIndex > 0 && topic[hashIndex - 1] !== '/') return false;
+
+    return true;
+}
+
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
+}
+
+function showNotification(message, type = 'info') {
+    // Simple notification system
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        background: ${type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#17a2b8'};
+        color: white;
+        border-radius: 4px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 10000;
+        animation: slideIn 0.3s ease;
+    `;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// ======================
+// Script Editor Modal
+// ======================
+
+function openScriptEditor() {
+    if (!selectedNode) return;
+
+    const node = nodes.find(n => n.id === selectedNode);
+    if (!node) return;
+
+    // Sync with inline editor before opening
+    const inlineScript = document.getElementById('node-script');
+    if (inlineScript) {
+        node.config.script = inlineScript.value;
+    }
+
+    const modal = document.getElementById('script-editor-modal');
+    const textarea = document.getElementById('script-editor-textarea');
+    const languageSelect = document.getElementById('script-editor-language');
+    const nodeName = document.getElementById('script-editor-node-name');
+
+    if (modal && textarea) {
+        textarea.value = node.config.script || '';
+        languageSelect.value = node.language || 'javascript';
+        nodeName.textContent = node.name;
+        modal.classList.add('active');
+        textarea.focus();
+    }
+}
+
+function closeScriptEditor() {
+    const modal = document.getElementById('script-editor-modal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+function saveScriptFromEditor() {
+    if (!selectedNode) return;
+
+    const node = nodes.find(n => n.id === selectedNode);
+    if (!node) return;
+
+    const textarea = document.getElementById('script-editor-textarea');
+    const languageSelect = document.getElementById('script-editor-language');
+
+    if (textarea && languageSelect) {
+        node.config.script = textarea.value;
+        node.language = languageSelect.value;
+
+        // Update inline editor too
+        const inlineScript = document.getElementById('node-script');
+        const inlineLanguage = document.getElementById('node-language');
+        if (inlineScript) inlineScript.value = textarea.value;
+        if (inlineLanguage) inlineLanguage.value = languageSelect.value;
+
+        showNotification('Script saved', 'success');
+        closeScriptEditor();
+    }
+}
+
+// Add animation keyframes
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from { transform: translateX(400px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(400px); opacity: 0; }
+    }
+`;
+document.head.appendChild(style);

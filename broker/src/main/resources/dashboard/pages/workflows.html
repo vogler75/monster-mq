@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Workflows</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 2rem;
+        }
+        .tab {
+            padding: 1rem 2rem;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .tab:hover {
+            color: var(--text-primary);
+            background: var(--background-secondary);
+        }
+        .tab.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .workflow-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+        .workflow-card {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .workflow-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-color: var(--primary-color);
+        }
+        .workflow-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+        .workflow-card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .workflow-card-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .workflow-card-badge.enabled {
+            background: rgba(46, 213, 115, 0.1);
+            color: #2ed573;
+        }
+        .workflow-card-badge.disabled {
+            background: rgba(255, 71, 87, 0.1);
+            color: #ff4757;
+        }
+        .workflow-card-info {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin: 0.5rem 0;
+        }
+        .workflow-card-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+        .btn-icon {
+            background: none;
+            border: none;
+            padding: 0.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .btn-icon:hover {
+            background: var(--background-secondary);
+            color: var(--primary-color);
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: #1a1d28;
+            border-radius: 12px;
+            max-width: 95vw;
+            max-height: 95vh;
+            width: 1400px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid #2d3142;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #e4e6eb;
+        }
+        .modal-body {
+            padding: 2rem;
+            overflow-y: auto;
+            flex: 1;
+            background: #1a1d28;
+        }
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid #2d3142;
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            background: #1a1d28;
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 600px;
+            background: #12141c;
+            border: 2px solid #2d3142;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .flow-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: calc(100% - 300px);
+            height: 100%;
+            cursor: grab;
+        }
+        .flow-canvas.grabbing {
+            cursor: grabbing;
+        }
+        .flow-node {
+            position: absolute;
+            background: #252936;
+            border: 2px solid #3d4153;
+            border-radius: 8px;
+            padding: 1rem;
+            min-width: 200px;
+            cursor: move;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .flow-node.selected {
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.3);
+        }
+        .flow-node-header {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #e4e6eb;
+        }
+        .flow-node-ports {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .flow-port {
+            position: relative;
+            padding: 0.5rem;
+            background: #1a1d28;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: #b8bcc8;
+        }
+        .flow-port-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #7c3aed;
+            cursor: crosshair;
+        }
+        .flow-port-dot:hover {
+            transform: scale(1.3);
+        }
+        .connection-line {
+            stroke: #7c3aed;
+            stroke-width: 2;
+            fill: none;
+            pointer-events: stroke;
+        }
+        .sidebar-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 300px;
+            height: 100%;
+            background: #1a1d28;
+            border-left: 1px solid #2d3142;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+        .sidebar-panel h3, .sidebar-panel h4 {
+            color: #e4e6eb;
+        }
+        .node-palette {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .palette-item {
+            padding: 1rem;
+            background: #252936;
+            border: 1px solid #3d4153;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #e4e6eb;
+        }
+        .palette-item:hover {
+            border-color: #7c3aed;
+            background: #2d3142;
+        }
+        .mapping-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .mapping-item {
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+        }
+        .wildcard-hint {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-style: italic;
+            margin-top: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Top Bar -->
+    <div class="top-bar">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <button class="sidebar-toggle" onclick="toggleSidebar()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15,18 9,12 15,6"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">U</div>
+                <div class="user-details">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-role">Administrator</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">Workflows</h1>
+                <p class="page-subtitle">Create and manage flow classes and instances</p>
+            </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('classes')">Flow Classes</button>
+            <button class="tab" onclick="switchTab('instances')">Flow Instances</button>
+        </div>
+
+        <!-- Flow Classes Tab -->
+        <div id="classes-tab" class="tab-content active">
+            <div class="card-header">
+                <h2>Flow Classes</h2>
+                <button class="btn btn-primary" onclick="createFlowClass()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    New Flow Class
+                </button>
+            </div>
+            <div id="classes-grid" class="workflow-grid"></div>
+        </div>
+
+        <!-- Flow Instances Tab -->
+        <div id="instances-tab" class="tab-content">
+            <div class="card-header">
+                <h2>Flow Instances</h2>
+                <button class="btn btn-primary" onclick="createFlowInstance()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    New Flow Instance
+                </button>
+            </div>
+            <div id="instances-grid" class="workflow-grid"></div>
+        </div>
+        </div>
+    </div>
+
+    <!-- Flow Class Editor Modal -->
+    <div id="class-editor-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="class-editor-title">Edit Flow Class</h2>
+                <button class="btn-icon" onclick="closeClassEditor()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="class-name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Namespace</label>
+                    <input type="text" id="class-namespace" class="form-control" value="default">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="class-description" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Visual Editor</label>
+                    <div class="canvas-container">
+                        <svg id="connections-svg" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;"></svg>
+                        <div id="flow-canvas" class="flow-canvas"></div>
+                        <div class="sidebar-panel">
+                            <h3 style="margin-bottom: 1rem;">Add Nodes</h3>
+                            <div class="node-palette">
+                                <!-- Node types will be dynamically rendered here by JavaScript -->
+                            </div>
+                            <div id="node-config" style="margin-top: 2rem;">
+                                <h3 style="margin-bottom: 1rem;">Node Configuration</h3>
+                                <div id="node-config-content"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeClassEditor()">Cancel</button>
+                <button class="btn btn-danger" id="delete-class-btn" onclick="deleteCurrentClass()" style="display: none; margin-right: auto;">Delete</button>
+                <button class="btn btn-primary" onclick="saveFlowClass()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flow Instance Editor Modal -->
+    <div id="instance-editor-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="instance-editor-title">Edit Flow Instance</h2>
+                <button class="btn-icon" onclick="closeInstanceEditor()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="instance-name" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Namespace</label>
+                    <input type="text" id="instance-namespace" class="form-control" value="default">
+                </div>
+                <div class="form-group">
+                    <label>Node ID</label>
+                    <input type="text" id="instance-node-id" class="form-control" value="local">
+                </div>
+                <div class="form-group">
+                    <label>Flow Class</label>
+                    <select id="instance-flow-class" class="form-control" onchange="loadFlowClassForInstance()"></select>
+                </div>
+                <div class="form-group">
+                    <label>Enabled</label>
+                    <input type="checkbox" id="instance-enabled" checked>
+                </div>
+                <div class="form-group">
+                    <label>Input Mappings</label>
+                    <div id="input-mappings" class="mapping-list"></div>
+                </div>
+                <div class="form-group">
+                    <label>Output Mappings</label>
+                    <div id="output-mappings" class="mapping-list"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeInstanceEditor()">Cancel</button>
+                <button class="btn btn-danger" id="delete-instance-btn" onclick="deleteCurrentInstance()" style="display: none; margin-right: auto;">Delete</button>
+                <button class="btn btn-primary" onclick="saveFlowInstance()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Editor Modal -->
+    <div id="script-editor-modal" class="modal">
+        <div class="modal-content" style="width: 95vw; height: 95vh; max-width: 1800px; max-height: 95vh;">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title">Script Editor</h2>
+                    <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                        Editing: <span id="script-editor-node-name" style="color: var(--primary-color); font-weight: 500;">Node</span>
+                    </div>
+                </div>
+                <button class="btn-icon" onclick="closeScriptEditor()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem; display: flex; flex-direction: column; height: 100%;">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label>Language:</label>
+                    <select id="script-editor-language" class="form-control" style="max-width: 200px;">
+                        <option value="javascript">JavaScript</option>
+                        <option value="python">Python</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1; display: flex; flex-direction: column; margin-bottom: 0;">
+                    <label style="margin-bottom: 0.5rem;">Script Code:</label>
+                    <textarea
+                        id="script-editor-textarea"
+                        class="form-control"
+                        style="
+                            flex: 1;
+                            font-family: 'Courier New', Consolas, monospace;
+                            font-size: 0.9rem;
+                            line-height: 1.5;
+                            resize: none;
+                            min-height: 0;
+                        "
+                        placeholder="// Write your script here...
+// Available variables:
+// - input: The input data received by the node
+// - context: Flow context for storing data between executions
+// - publish: Function to publish MQTT messages, e.g., publish('topic/name', 'payload')
+//
+// Return value will be passed to output nodes"
+                    ></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeScriptEditor()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveScriptFromEditor()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 0.5rem;">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                        <polyline points="7 3 7 8 15 8"></polyline>
+                    </svg>
+                    Save Script
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/workflows.js"></script>
+</body>
+</html>
