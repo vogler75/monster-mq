@@ -68,37 +68,6 @@ class FlowQueries(
         }
     }
 
-    /**
-     * Query a specific flow class
-     */
-    fun flowClass(): DataFetcher<CompletableFuture<Map<String, Any>?>> {
-        return DataFetcher { env ->
-            val future = CompletableFuture<Map<String, Any>?>()
-
-            try {
-                val name = env.getArgument<String>("name")!!
-
-                deviceStore.getDevice(name).onComplete { result ->
-                    if (result.succeeded()) {
-                        val device = result.result()
-                        if (device != null && device.type == DeviceConfig.DEVICE_TYPE_FLOW_CLASS) {
-                            future.complete(flowClassToMap(device))
-                        } else {
-                            future.complete(null)
-                        }
-                    } else {
-                        logger.severe("Error fetching flow class: ${result.cause()?.message}")
-                        future.complete(null)
-                    }
-                }
-            } catch (e: Exception) {
-                logger.severe("Error fetching flow class: ${e.message}")
-                future.complete(null)
-            }
-
-            future
-        }
-    }
 
     /**
      * Query flow instances
@@ -147,38 +116,6 @@ class FlowQueries(
         }
     }
 
-    /**
-     * Query a specific flow instance
-     */
-    fun flowInstance(): DataFetcher<CompletableFuture<Map<String, Any>?>> {
-        return DataFetcher { env ->
-            val future = CompletableFuture<Map<String, Any>?>()
-
-            try {
-                val name = env.getArgument<String>("name")!!
-
-                deviceStore.getDevice(name).onComplete { result ->
-                    if (result.succeeded()) {
-                        val device = result.result()
-                        if (device != null && device.type == DeviceConfig.DEVICE_TYPE_FLOW_OBJECT) {
-                            @Suppress("UNCHECKED_CAST")
-                            future.complete(flowInstanceToMap(device) as Map<String, Any>?)
-                        } else {
-                            future.complete(null)
-                        }
-                    } else {
-                        logger.severe("Error fetching flow instance: ${result.cause()?.message}")
-                        future.complete(null)
-                    }
-                }
-            } catch (e: Exception) {
-                logger.severe("Error fetching flow instance: ${e.message}")
-                future.complete(null)
-            }
-
-            future
-        }
-    }
 
     /**
      * Query available flow node types

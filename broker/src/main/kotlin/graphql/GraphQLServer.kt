@@ -389,9 +389,7 @@ class GraphQLServer(
                     .apply {
                         flowQueries?.let { resolver ->
                             dataFetcher("flowClasses", resolver.flowClasses())
-                            dataFetcher("flowClass", resolver.flowClass())
                             dataFetcher("flowInstances", resolver.flowInstances())
-                            dataFetcher("flowInstance", resolver.flowInstance())
                             dataFetcher("flowNodeTypes", resolver.flowNodeTypes())
                         }
                     }
