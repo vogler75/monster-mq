@@ -4,6 +4,9 @@ import at.rocworks.Utils
 import io.jsonwebtoken.Claims
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.*
@@ -12,14 +15,51 @@ import javax.crypto.SecretKey
 
 object JwtService {
     private val logger: Logger = Utils.getLogger(JwtService::class.java)
-    
-    // Generate a secure key for JWT signing
-    // In production, this should be configurable and stored securely
-    private val secretKey: SecretKey = Jwts.SIG.HS256.key().build()
+
+    private const val JWT_KEY_FILE = "./security/jwt-secret.key"
+
+    // Load or generate a secure key for JWT signing
+    // The key is persisted to disk so tokens remain valid across broker restarts
+    private val secretKey: SecretKey = loadOrGenerateSecretKey()
     
     // Token expiration time (24 hours)
     private const val TOKEN_EXPIRATION_HOURS = 24L
-    
+
+    /**
+     * Load the JWT secret key from disk, or generate and save a new one if it doesn't exist
+     */
+    private fun loadOrGenerateSecretKey(): SecretKey {
+        val keyFile = File(JWT_KEY_FILE)
+
+        return if (keyFile.exists()) {
+            try {
+                logger.info("Loading existing JWT secret key from $JWT_KEY_FILE")
+                val keyBytes = Files.readAllBytes(Paths.get(JWT_KEY_FILE))
+                Keys.hmacShaKeyFor(keyBytes)
+            } catch (e: Exception) {
+                logger.warning("Failed to load JWT key from $JWT_KEY_FILE: ${e.message}. Generating new key.")
+                generateAndSaveSecretKey()
+            }
+        } else {
+            logger.info("JWT secret key not found. Generating new key and saving to $JWT_KEY_FILE")
+            generateAndSaveSecretKey()
+        }
+    }
+
+    /**
+     * Generate a new secret key and save it to disk
+     */
+    private fun generateAndSaveSecretKey(): SecretKey {
+        val key = Jwts.SIG.HS256.key().build()
+        try {
+            Files.write(Paths.get(JWT_KEY_FILE), key.encoded)
+            logger.info("JWT secret key saved to $JWT_KEY_FILE")
+        } catch (e: Exception) {
+            logger.severe("Failed to save JWT secret key to $JWT_KEY_FILE: ${e.message}")
+        }
+        return key
+    }
+
     /**
      * Generate a JWT token for a user
      */

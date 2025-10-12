@@ -445,49 +445,180 @@ class UserManager {
             `;
         } else {
             aclContent.innerHTML = `
-                <div class="data-table">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Topic Pattern</th>
-                                <th>Subscribe</th>
-                                <th>Publish</th>
-                                <th>Priority</th>
-                                <th>Created</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${aclRules.map(rule => `
+                <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; align-items: center;">
+                    <button id="delete-selected-acl-btn" class="btn" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; background: var(--monster-red); border: 1px solid var(--monster-red); color: #fff; opacity: 0.5; cursor: not-allowed;" disabled>
+                        Delete Selected (<span id="selected-count">0</span>)
+                    </button>
+                    <button id="select-all-acl-btn" class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">
+                        Select All
+                    </button>
+                </div>
+                <div style="overflow-x: auto;">
+                    <div class="data-table">
+                        <table style="min-width: 600px;">
+                            <thead>
                                 <tr>
-                                    <td style="font-family: monospace;">${this.escapeHtml(rule.topicPattern)}</td>
-                                    <td>
-                                        ${rule.canSubscribe ?
-                                            '<span style="color: var(--monster-green);">✓</span>' :
-                                            '<span style="color: var(--text-muted);">✗</span>'
-                                        }
-                                    </td>
-                                    <td>
-                                        ${rule.canPublish ?
-                                            '<span style="color: var(--monster-green);">✓</span>' :
-                                            '<span style="color: var(--text-muted);">✗</span>'
-                                        }
-                                    </td>
-                                    <td>${rule.priority}</td>
-                                    <td>${rule.createdAt ? new Date(rule.createdAt).toLocaleDateString() : 'N/A'}</td>
-                                    <td>
-                                        <button class="btn btn-secondary delete-acl-btn" data-id="${rule.id}" data-username="${this.escapeHtml(this.currentAclUsername)}" style="padding: 0.25rem 0.5rem; font-size: 0.65rem; background: var(--monster-red); border: 1px solid var(--monster-red); color: #fff;">Delete</button>
-                                    </td>
+                                    <th style="width: 40px; text-align: center;">
+                                        <input type="checkbox" id="select-all-checkbox" style="cursor: pointer;">
+                                    </th>
+                                    <th style="min-width: 150px;">Topic Pattern</th>
+                                    <th style="width: 50px; text-align: center;">Sub</th>
+                                    <th style="width: 50px; text-align: center;">Pub</th>
+                                    <th style="width: 60px; text-align: center;">Prio</th>
+                                    <th style="width: 100px;">Created</th>
+                                    <th style="width: 50px; text-align: center;"></th>
                                 </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                ${aclRules.map(rule => `
+                                    <tr>
+                                        <td style="text-align: center;">
+                                            <input type="checkbox" class="acl-rule-checkbox" data-id="${rule.id}" style="cursor: pointer;">
+                                        </td>
+                                        <td style="font-family: monospace; word-break: break-all;">${this.escapeHtml(rule.topicPattern)}</td>
+                                        <td style="text-align: center;">
+                                            ${rule.canSubscribe ?
+                                                '<span style="color: var(--monster-green);">✓</span>' :
+                                                '<span style="color: var(--text-muted);">✗</span>'
+                                            }
+                                        </td>
+                                        <td style="text-align: center;">
+                                            ${rule.canPublish ?
+                                                '<span style="color: var(--monster-green);">✓</span>' :
+                                                '<span style="color: var(--text-muted);">✗</span>'
+                                            }
+                                        </td>
+                                        <td style="text-align: center;">${rule.priority}</td>
+                                        <td style="font-size: 0.75rem;">${rule.createdAt ? new Date(rule.createdAt).toLocaleDateString() : 'N/A'}</td>
+                                        <td style="text-align: center;">
+                                            <button class="btn delete-acl-btn" data-id="${rule.id}" data-username="${this.escapeHtml(this.currentAclUsername)}"
+                                                    style="padding: 0.25rem 0.4rem; font-size: 0.75rem; background: var(--monster-red); border: 1px solid var(--monster-red); color: #fff; min-width: 0;"
+                                                    title="Delete this rule">✕</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             `;
+
         }
 
         // Re-setup drop zone after DOM replacement
         this.setupDropZone();
+
+        // Setup event handlers for checkboxes AFTER drop zone setup
+        // (drop zone clones the element which removes event handlers)
+        this.setupAclCheckboxHandlers();
+    }
+
+    setupAclCheckboxHandlers() {
+        const selectAllCheckbox = document.getElementById('select-all-checkbox');
+        const checkboxes = document.querySelectorAll('.acl-rule-checkbox');
+        const deleteSelectedBtn = document.getElementById('delete-selected-acl-btn');
+        const selectAllBtn = document.getElementById('select-all-acl-btn');
+        const selectedCount = document.getElementById('selected-count');
+
+        const updateDeleteButton = () => {
+            const checkedBoxes = document.querySelectorAll('.acl-rule-checkbox:checked');
+            selectedCount.textContent = checkedBoxes.length;
+
+            if (checkedBoxes.length > 0) {
+                deleteSelectedBtn.disabled = false;
+                deleteSelectedBtn.style.opacity = '1';
+                deleteSelectedBtn.style.cursor = 'pointer';
+            } else {
+                deleteSelectedBtn.disabled = true;
+                deleteSelectedBtn.style.opacity = '0.5';
+                deleteSelectedBtn.style.cursor = 'not-allowed';
+            }
+
+            // Update select-all checkbox state
+            if (checkedBoxes.length === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (checkedBoxes.length === checkboxes.length) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+        };
+
+        // Individual checkbox change
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateDeleteButton);
+        });
+
+        // Select all checkbox
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', (e) => {
+                checkboxes.forEach(cb => cb.checked = e.target.checked);
+                updateDeleteButton();
+            });
+        }
+
+        // Select all button
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', () => {
+                const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                checkboxes.forEach(cb => cb.checked = !allChecked);
+                updateDeleteButton();
+            });
+        }
+
+        // Delete selected button
+        if (deleteSelectedBtn) {
+            deleteSelectedBtn.addEventListener('click', () => {
+                this.deleteSelectedAclRules();
+            });
+        }
+
+        updateDeleteButton();
+    }
+
+    async deleteSelectedAclRules() {
+        const checkedBoxes = document.querySelectorAll('.acl-rule-checkbox:checked');
+        const ruleIds = Array.from(checkedBoxes).map(cb => cb.dataset.id);
+
+        if (ruleIds.length === 0) return;
+
+        const confirmMsg = `Delete ${ruleIds.length} selected ACL rule${ruleIds.length > 1 ? 's' : ''}?`;
+        if (!confirm(confirmMsg)) return;
+
+        try {
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const ruleId of ruleIds) {
+                try {
+                    const result = await window.graphqlClient.deleteAclRule(ruleId);
+                    if (result.success) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                } catch (err) {
+                    failCount++;
+                    console.error('Error deleting rule:', ruleId, err);
+                }
+            }
+
+            if (successCount > 0) {
+                this.showAlert(`Successfully deleted ${successCount} ACL rule${successCount > 1 ? 's' : ''}`, 'success');
+                await this.loadUsers();
+                this.refreshAclRulesTable();
+            }
+
+            if (failCount > 0) {
+                this.showAlert(`Failed to delete ${failCount} ACL rule${failCount > 1 ? 's' : ''}`, 'error');
+            }
+        } catch (err) {
+            console.error('Delete selected rules error', err);
+            this.showAlert('Error deleting rules: ' + err.message, 'error');
+        }
     }
 
     showAclRules(username) {
@@ -515,34 +646,45 @@ class UserManager {
 
     setupDropZone() {
         const dropZone = document.getElementById('acl-rules-content');
+        if (!dropZone) return;
 
-        // Remove existing event listeners by cloning and replacing the element
-        // This prevents duplicate event handlers when modal is opened multiple times
-        const newDropZone = dropZone.cloneNode(true);
-        dropZone.parentNode.replaceChild(newDropZone, dropZone);
-        const freshDropZone = document.getElementById('acl-rules-content');
+        // Use bound methods to avoid duplicates - get fresh reference each time
+        if (!this._dropZoneHandlers) {
+            this._dropZoneHandlers = {
+                dragover: (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                    const zone = document.getElementById('acl-rules-content');
+                    if (zone) zone.classList.add('drag-over');
+                },
+                dragleave: (e) => {
+                    const zone = document.getElementById('acl-rules-content');
+                    if (zone && e.target === zone) {
+                        zone.classList.remove('drag-over');
+                    }
+                },
+                drop: async (e) => {
+                    e.preventDefault();
+                    const zone = document.getElementById('acl-rules-content');
+                    if (zone) zone.classList.remove('drag-over');
 
-        freshDropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-            freshDropZone.classList.add('drag-over');
-        });
+                    const topic = e.dataTransfer.getData('text/plain');
+                    if (!topic || !this.currentAclUsername) return;
 
-        freshDropZone.addEventListener('dragleave', (e) => {
-            if (e.target === freshDropZone) {
-                freshDropZone.classList.remove('drag-over');
-            }
-        });
+                    await this.addTopicToAcl(topic);
+                }
+            };
+        }
 
-        freshDropZone.addEventListener('drop', async (e) => {
-            e.preventDefault();
-            freshDropZone.classList.remove('drag-over');
+        // Remove old listeners if they exist
+        dropZone.removeEventListener('dragover', this._dropZoneHandlers.dragover);
+        dropZone.removeEventListener('dragleave', this._dropZoneHandlers.dragleave);
+        dropZone.removeEventListener('drop', this._dropZoneHandlers.drop);
 
-            const topic = e.dataTransfer.getData('text/plain');
-            if (!topic || !this.currentAclUsername) return;
-
-            await this.addTopicToAcl(topic);
-        });
+        // Add new listeners
+        dropZone.addEventListener('dragover', this._dropZoneHandlers.dragover);
+        dropZone.addEventListener('dragleave', this._dropZoneHandlers.dragleave);
+        dropZone.addEventListener('drop', this._dropZoneHandlers.drop);
     }
 
     async addTopicToAcl(topic) {
