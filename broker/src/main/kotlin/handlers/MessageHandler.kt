@@ -273,6 +273,9 @@ class MessageHandler(
             }
         }
 
+        // Publish to Flow Engine for flow processing
+        vertx.eventBus().publish("flowengine.mqtt.message", message)
+
         return Future.succeededFuture()
     }
 

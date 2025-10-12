@@ -29,6 +29,8 @@ import at.rocworks.graphql.Plc4xClientConfigQueries
 import at.rocworks.graphql.Plc4xClientConfigMutations
 import at.rocworks.graphql.Neo4jClientConfigQueries
 import at.rocworks.graphql.Neo4jClientConfigMutations
+import at.rocworks.graphql.FlowQueries
+import at.rocworks.graphql.FlowMutations
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
@@ -199,7 +201,8 @@ class GraphQLServer(
             "schema-types.graphqls",      // Common types, scalars, and enums (must be loaded first)
             "schema-queries.graphqls",     // Query type definitions
             "schema-mutations.graphqls",   // Mutation type definitions
-            "schema-subscriptions.graphqls" // Subscription type definitions
+            "schema-subscriptions.graphqls", // Subscription type definitions
+            "schema-flows.graphqls"        // Flow Engine types and operations
         )
 
         return schemaFiles.joinToString("\n") { filename ->
@@ -286,6 +289,10 @@ class GraphQLServer(
         // Initialize Neo4j Client resolvers
         val neo4jClientQueries = deviceStore?.let { Neo4jClientConfigQueries(vertx, it) }
         val neo4jClientMutations = deviceStore?.let { Neo4jClientConfigMutations(vertx, it) }
+
+        // Initialize Flow Engine resolvers
+        val flowQueries = deviceStore?.let { FlowQueries(vertx, it) }
+        val flowMutations = deviceStore?.let { FlowMutations(vertx, it) }
 
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
@@ -378,6 +385,16 @@ class GraphQLServer(
                             dataFetcher("neo4jClients", resolver.neo4jClients())
                         }
                     }
+                    // Flow Engine queries
+                    .apply {
+                        flowQueries?.let { resolver ->
+                            dataFetcher("flowClasses", resolver.flowClasses())
+                            dataFetcher("flowClass", resolver.flowClass())
+                            dataFetcher("flowInstances", resolver.flowInstances())
+                            dataFetcher("flowInstance", resolver.flowInstance())
+                            dataFetcher("flowNodeTypes", resolver.flowNodeTypes())
+                        }
+                    }
             }
             // Register mutation resolvers
             .type("Mutation") { builder ->
@@ -454,6 +471,13 @@ class GraphQLServer(
                         neo4jClientMutations?.let { _ ->
                             // Return an empty object - actual resolvers are on Neo4jClientMutations type
                             dataFetcher("neo4jClient") { _ -> emptyMap<String, Any>() }
+                        }
+                    }
+                    // Flow Engine mutations - grouped under flow
+                    .apply {
+                        flowMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on FlowMutations type
+                            dataFetcher("flow") { _ -> emptyMap<String, Any>() }
                         }
                     }
             }
@@ -576,6 +600,23 @@ class GraphQLServer(
                         dataFetcher("stop", resolver.stopNeo4jClient())
                         dataFetcher("toggle", resolver.toggleNeo4jClient())
                         dataFetcher("reassign", resolver.reassignNeo4jClient())
+                    }
+                }
+            }
+            // Register Flow Engine Mutations type
+            .type("FlowMutations") { builder ->
+                builder.apply {
+                    flowMutations?.let { resolver ->
+                        dataFetcher("createClass", resolver.createClass())
+                        dataFetcher("updateClass", resolver.updateClass())
+                        dataFetcher("deleteClass", resolver.deleteClass())
+                        dataFetcher("createInstance", resolver.createInstance())
+                        dataFetcher("updateInstance", resolver.updateInstance())
+                        dataFetcher("deleteInstance", resolver.deleteInstance())
+                        dataFetcher("enableInstance", resolver.enableInstance())
+                        dataFetcher("disableInstance", resolver.disableInstance())
+                        dataFetcher("reassignInstance", resolver.reassignInstance())
+                        dataFetcher("testNode", resolver.testNode())
                     }
                 }
             }

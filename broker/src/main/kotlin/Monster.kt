@@ -40,6 +40,7 @@ import at.rocworks.devices.winccua.WinCCUaExtension
 import at.rocworks.devices.plc4x.Plc4xExtension
 import at.rocworks.devices.neo4j.Neo4jExtension
 import at.rocworks.stores.DeviceConfigStoreFactory
+import at.rocworks.flowengine.FlowEngineExtension
 import handlers.MetricsHandler
 import java.io.File
 import java.util.logging.Level
@@ -709,6 +710,12 @@ MORE INFO:
                         val neo4jExtension = Neo4jExtension()
                         val neo4jDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(neo4jExtension, neo4jDeploymentOptions)
+                    }
+                    .compose {
+                        // Flow Engine Extension
+                        val flowEngineExtension = FlowEngineExtension()
+                        val flowEngineDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(flowEngineExtension, flowEngineDeploymentOptions)
                     }
                     .compose {
                         if (metricsCollector != null) {

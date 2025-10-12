@@ -1,0 +1,227 @@
+# =======================
+# Flow Engine Types
+# =======================
+
+# Position of a node in the visual flow editor
+type FlowPosition {
+    x: Float!
+    y: Float!
+}
+
+# A node in a flow with named inputs and outputs
+type FlowNode {
+    id: String!
+    type: String!
+    name: String!
+    config: JSON!
+    inputs: [String!]!
+    outputs: [String!]!
+    language: String!        # Script language: "javascript" or "python"
+    position: FlowPosition
+}
+
+# Connection between nodes using named ports
+type FlowConnection {
+    fromNode: String!
+    fromOutput: String!
+    toNode: String!
+    toInput: String!
+}
+
+# Flow Class - Template/blueprint for flows
+type FlowClass {
+    name: String!
+    namespace: String!
+    version: String!
+    description: String
+    nodes: [FlowNode!]!
+    connections: [FlowConnection!]!
+    createdAt: String!
+    updatedAt: String!
+}
+
+# Type of flow input
+enum FlowInputType {
+    TOPIC   # MQTT topic subscription (triggers flow)
+    TEXT    # Fixed text constant
+}
+
+# Input mapping for a flow instance
+type FlowInputMapping {
+    nodeInput: String!      # "nodeId.inputName"
+    type: FlowInputType!
+    value: String!
+}
+
+# Output mapping for a flow instance
+type FlowOutputMapping {
+    nodeOutput: String!     # "nodeId.outputName"
+    topic: String!
+}
+
+# Flow Instance - Concrete instance of a flow class
+type FlowInstance {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    flowClassId: String!
+    inputMappings: [FlowInputMapping!]!
+    outputMappings: [FlowOutputMapping!]!
+    variables: JSON
+    enabled: Boolean!
+    status: FlowInstanceStatus
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+}
+
+# Runtime status of a flow instance
+type FlowInstanceStatus {
+    running: Boolean!
+    lastExecution: String
+    executionCount: Long!
+    errorCount: Long!
+    lastError: String
+    subscribedTopics: [String!]!
+}
+
+# Available node type definition
+type FlowNodeType {
+    type: String!
+    category: String!
+    description: String!
+    defaultInputs: [String!]!
+    defaultOutputs: [String!]!
+    configSchema: JSON!
+    icon: String
+}
+
+# Test result for flow node execution
+type FlowTestResult {
+    success: Boolean!
+    outputs: JSON
+    logs: [String!]!
+    errors: [String!]!
+    executionTime: Int!
+}
+
+# =======================
+# Flow Queries
+# =======================
+
+extend type Query {
+    # Get all flow classes
+    flowClasses(
+        name: String
+    ): [FlowClass!]!
+
+    # Get a specific flow class
+    flowClass(
+        name: String!
+    ): FlowClass
+
+    # Get all flow instances
+    flowInstances(
+        flowClassId: String
+        nodeId: String
+        enabled: Boolean
+    ): [FlowInstance!]!
+
+    # Get a specific flow instance
+    flowInstance(
+        name: String!
+    ): FlowInstance
+
+    # Get available node types
+    flowNodeTypes: [FlowNodeType!]!
+}
+
+# =======================
+# Flow Mutations
+# =======================
+
+extend type Mutation {
+    flow: FlowMutations
+}
+
+type FlowMutations {
+    # Flow Class Management
+    createClass(input: FlowClassInput!): FlowClass!
+    updateClass(name: String!, input: FlowClassInput!): FlowClass!
+    deleteClass(name: String!): Boolean!
+
+    # Flow Instance Management
+    createInstance(input: FlowInstanceInput!): FlowInstance!
+    updateInstance(name: String!, input: FlowInstanceInput!): FlowInstance!
+    deleteInstance(name: String!): Boolean!
+
+    # Instance Control
+    enableInstance(name: String!): FlowInstance!
+    disableInstance(name: String!): FlowInstance!
+    reassignInstance(name: String!, nodeId: String!): FlowInstance!
+
+    # Testing
+    testNode(
+        flowClassName: String!
+        nodeId: String!
+        testInputs: JSON!
+    ): FlowTestResult!
+}
+
+# =======================
+# Input Types
+# =======================
+
+input FlowClassInput {
+    name: String!
+    namespace: String!
+    version: String
+    description: String
+    nodes: [FlowNodeInput!]!
+    connections: [FlowConnectionInput!]!
+}
+
+input FlowNodeInput {
+    id: String!
+    type: String!
+    name: String!
+    config: JSON!
+    inputs: [String!]!
+    outputs: [String!]!
+    language: String         # Script language: "javascript" or "python" (defaults to "javascript")
+    position: FlowPositionInput
+}
+
+input FlowConnectionInput {
+    fromNode: String!
+    fromOutput: String!
+    toNode: String!
+    toInput: String!
+}
+
+input FlowPositionInput {
+    x: Float!
+    y: Float!
+}
+
+input FlowInstanceInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    flowClassId: String!
+    inputMappings: [FlowInputMappingInput!]!
+    outputMappings: [FlowOutputMappingInput!]!
+    variables: JSON
+    enabled: Boolean
+}
+
+input FlowInputMappingInput {
+    nodeInput: String!      # "nodeId.inputName"
+    type: FlowInputType!
+    value: String!
+}
+
+input FlowOutputMappingInput {
+    nodeOutput: String!     # "nodeId.outputName"
+    topic: String!
+}
