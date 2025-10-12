@@ -252,7 +252,7 @@ class UserStoreMongoDB(
 
         vertx.executeBlocking(Callable {
             try {
-                usersCollection?.find()?.map { documentToUser(it) }?.toList() ?: emptyList()
+                usersCollection?.find()?.sort(Document("_id", 1))?.map { documentToUser(it) }?.toList() ?: emptyList()
             } catch (e: Exception) {
                 logger.warning("Error getting all users: ${e.message} [${Utils.getCurrentFunctionName()}]")
                 emptyList()

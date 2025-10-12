@@ -507,6 +507,7 @@ class UserManager {
 
         // Re-setup drop zone after DOM replacement
         this.setupDropZone();
+        this.setupTopicPatternDropZone();
 
         // Setup event handlers for checkboxes AFTER drop zone setup
         // (drop zone clones the element which removes event handlers)
@@ -685,6 +686,51 @@ class UserManager {
         dropZone.addEventListener('dragover', this._dropZoneHandlers.dragover);
         dropZone.addEventListener('dragleave', this._dropZoneHandlers.dragleave);
         dropZone.addEventListener('drop', this._dropZoneHandlers.drop);
+    }
+
+    setupTopicPatternDropZone() {
+        const inputField = document.getElementById('acl-topic-pattern');
+        if (!inputField) return;
+
+        // Use bound methods to avoid duplicates
+        if (!this._inputDropHandlers) {
+            this._inputDropHandlers = {
+                dragover: (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                    const input = document.getElementById('acl-topic-pattern');
+                    if (input) input.classList.add('drag-over');
+                },
+                dragleave: (e) => {
+                    const input = document.getElementById('acl-topic-pattern');
+                    if (input && e.target === input) {
+                        input.classList.remove('drag-over');
+                    }
+                },
+                drop: (e) => {
+                    e.preventDefault();
+                    const input = document.getElementById('acl-topic-pattern');
+                    if (input) input.classList.remove('drag-over');
+
+                    const topic = e.dataTransfer.getData('text/plain');
+                    if (!topic) return;
+
+                    // Just populate the input field, don't add the rule yet
+                    input.value = topic;
+                    input.focus();
+                }
+            };
+        }
+
+        // Remove old listeners if they exist
+        inputField.removeEventListener('dragover', this._inputDropHandlers.dragover);
+        inputField.removeEventListener('dragleave', this._inputDropHandlers.dragleave);
+        inputField.removeEventListener('drop', this._inputDropHandlers.drop);
+
+        // Add new listeners
+        inputField.addEventListener('dragover', this._inputDropHandlers.dragover);
+        inputField.addEventListener('dragleave', this._inputDropHandlers.dragleave);
+        inputField.addEventListener('drop', this._inputDropHandlers.drop);
     }
 
     async addTopicToAcl(topic) {

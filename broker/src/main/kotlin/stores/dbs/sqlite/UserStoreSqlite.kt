@@ -268,7 +268,7 @@ class UserStoreSqlite(
         val promise = Promise.promise<List<User>>()
 
         vertx.executeBlocking(Callable {
-            val sql = "SELECT username, password_hash, enabled, can_subscribe, can_publish, is_admin, created_at, updated_at FROM $usersTableName"
+            val sql = "SELECT username, password_hash, enabled, can_subscribe, can_publish, is_admin, created_at, updated_at FROM $usersTableName ORDER BY username"
             try {
                 connection?.let { conn ->
                     conn.prepareStatement(sql).use { stmt ->

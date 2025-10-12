@@ -331,20 +331,20 @@
     </div>
 
     <!-- ACL Rules Modal -->
-    <div id="acl-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 2000; padding: 1rem;">
-        <div style="max-width: 1400px; margin: 0 auto; background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); height: 95vh; display: flex; flex-direction: column;">
-            <div style="padding: 1.5rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center;">
+    <div id="acl-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 2000; padding: 0.5rem;">
+        <div style="width: calc(100% - 1rem); max-width: 98vw; margin: 0 auto; background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); height: calc(100vh - 1rem); display: flex; flex-direction: column;">
+            <div style="padding: 1rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
                 <h2 style="margin: 0; color: var(--text-primary);" id="acl-modal-title">ACL Rules</h2>
                 <button id="close-acl-modal" class="btn btn-secondary">Close</button>
             </div>
-            <div style="flex: 1; display: flex; gap: 1rem; overflow: hidden;">
+            <div style="flex: 1; display: flex; gap: 1rem; overflow: hidden; padding: 1rem;">
                 <!-- Left Panel: ACL Rules Management -->
-                <div style="flex: 0 0 45%; display: flex; flex-direction: column; overflow: hidden;">
-                    <div style="padding: 1.5rem; background: var(--dark-bg); border-radius: 8px;">
-                        <div style="margin-bottom:1.5rem; display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end;">
+                <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                    <div style="padding: 1rem; background: var(--dark-bg); border-radius: 8px; height: 100%; display: flex; flex-direction: column;">
+                        <div style="margin-bottom:1rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end; flex-shrink: 0;">
                             <div style="flex:1 1 200px;">
                                 <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Topic Pattern</label>
-                                <input type="text" id="acl-topic-pattern" class="form-control" placeholder="sensors/+/temp" />
+                                <input type="text" id="acl-topic-pattern" class="form-control acl-drop-zone" placeholder="sensors/+/temp" />
                             </div>
                             <div>
                                 <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Priority</label>
@@ -364,15 +364,15 @@
                                 <button id="add-acl-rule-btn" class="btn btn-primary" style="margin-top:0.25rem; padding: 0.5rem 0.75rem; font-size: 0.875rem;">Add</button>
                             </div>
                         </div>
-                        <div id="acl-rules-content" class="acl-drop-zone" style="max-height: calc(100vh - 350px); overflow-y: auto; min-height: 200px;">
+                        <div id="acl-rules-content" class="acl-drop-zone" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0;">
                             <!-- ACL rules will be populated here -->
                         </div>
                     </div>
                 </div>
 
                 <!-- Right Panel: Topic Browser -->
-                <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--dark-surface); border-radius: 8px; padding: 1.5rem;">
-                    <h3 style="margin: 0 0 0.75rem 0; color: var(--text-primary); font-size: 1.1rem;">Topic Browser</h3>
+                <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--dark-surface); border-radius: 8px; padding: 1rem;">
+                    <h3 style="margin: 0 0 0.75rem 0; color: var(--text-primary); font-size: 1.1rem; flex-shrink: 0;">Topic Browser</h3>
 
                     <!-- Permission Selector for Drag & Drop -->
                     <div style="background: var(--dark-surface-2); padding: 0.75rem; border-radius: 6px; margin-bottom: 0.75rem; border: 2px solid var(--monster-purple);">
