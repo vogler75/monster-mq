@@ -849,50 +849,42 @@ function populateInstanceForm() {
 function renderInputMappings() {
     const container = document.getElementById('input-mappings');
     if (!container) return;
-
-    container.innerHTML = '<h4>Input Mappings</h4>';
-
-    // Get available inputs from selected flow class
+    // Header
+    let html = '<h4 style="margin-bottom:0.5rem;">Input Mappings</h4>';
     const flowClass = flowClasses.find(fc => fc.name === currentFlowInstance.flowClassId);
     if (!flowClass) {
-        container.innerHTML += '<p style="color: #6c757d;">Select a flow class first</p>';
+        container.innerHTML = html + '<p style="color:#6c757d;">Select a flow class first</p>';
         return;
     }
 
-    currentFlowInstance.inputMappings.forEach((mapping, idx) => {
-        const div = document.createElement('div');
-        div.className = 'mapping-item';
-        div.innerHTML = `
-            <div class="form-group">
-                <label>Node Input:</label>
-                <input type="text" class="form-control" value="${escapeHtml(mapping.nodeInput)}"
-                       onchange="updateInputMapping(${idx}, 'nodeInput', this.value)">
-                <small>Format: nodeId.inputName</small>
-            </div>
-            <div class="form-group">
-                <label>Type:</label>
-                <select class="form-control" onchange="updateInputMapping(${idx}, 'type', this.value)">
-                    <option value="TOPIC" ${mapping.type === 'TOPIC' ? 'selected' : ''}>MQTT Topic</option>
-                    <option value="TEXT" ${mapping.type === 'TEXT' ? 'selected' : ''}>Text Constant</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Value:</label>
-                <input type="text" class="form-control" value="${escapeHtml(mapping.value)}"
-                       onchange="updateInputMapping(${idx}, 'value', this.value)"
-                       placeholder="${mapping.type === 'TOPIC' ? 'e.g., sensor/# (wildcards supported)' : 'Constant value'}">
-                ${mapping.type === 'TOPIC' ? '<small style="color: #17a2b8;">Wildcards supported: # (multi-level), + (single-level)</small>' : ''}
-            </div>
-            <button class="btn btn-danger btn-sm" onclick="removeInputMapping(${idx})">Remove</button>
-        `;
-        container.appendChild(div);
-    });
+    html += '<div class="mapping-table-wrapper"><table class="mapping-table"><thead><tr>' +
+        '<th style="width:25%">Node Input</th>' +
+        '<th style="width:15%">Type</th>' +
+        '<th style="width:45%">Value</th>' +
+        '<th style="width:15%">Actions</th>' +
+        '</tr></thead><tbody>';
 
-    const addBtn = document.createElement('button');
-    addBtn.className = 'btn btn-secondary';
-    addBtn.textContent = '+ Add Input Mapping';
-    addBtn.onclick = addInputMapping;
-    container.appendChild(addBtn);
+    if (currentFlowInstance.inputMappings.length === 0) {
+        html += '<tr><td colspan="4" style="text-align:center; color:#6c757d; font-style:italic;">No input mappings</td></tr>';
+    } else {
+        currentFlowInstance.inputMappings.forEach((mapping, idx) => {
+            html += `<tr>
+                <td><input type="text" value="${escapeHtml(mapping.nodeInput)}" placeholder="nodeId.input" onchange="updateInputMapping(${idx}, 'nodeInput', this.value)"></td>
+                <td><select onchange="updateInputMapping(${idx}, 'type', this.value)">
+                        <option value="TOPIC" ${mapping.type === 'TOPIC' ? 'selected' : ''}>TOPIC</option>
+                        <option value="TEXT" ${mapping.type === 'TEXT' ? 'selected' : ''}>TEXT</option>
+                    </select></td>
+                <td><input type="text" value="${escapeHtml(mapping.value)}" placeholder="${mapping.type === 'TOPIC' ? 'sensor/#' : 'Constant value'}" onchange="updateInputMapping(${idx}, 'value', this.value)">
+                    ${mapping.type === 'TOPIC' ? '<div style="font-size:0.6rem; color:#17a2b8; margin-top:2px;">Wildcards: # multi, + single</div>' : ''}
+                </td>
+                <td><div class="table-actions"><button class="btn-icon-small" title="Duplicate" onclick="duplicateInputMapping(${idx})">⧉</button><button class="btn-icon-small" title="Remove" onclick="removeInputMapping(${idx})">✕</button></div></td>
+            </tr>`;
+        });
+    }
+
+    html += '</tbody></table></div>';
+    html += '<div class="add-row-bar"><button class="btn btn-secondary" onclick="addInputMapping()">+ Add Input</button></div>';
+    container.innerHTML = html;
 }
 
 function addInputMapping() {
@@ -918,38 +910,40 @@ function removeInputMapping(idx) {
     renderInputMappings();
 }
 
+function duplicateInputMapping(idx) {
+    const src = currentFlowInstance.inputMappings[idx];
+    if (src) {
+        currentFlowInstance.inputMappings.splice(idx + 1, 0, { ...src });
+        renderInputMappings();
+    }
+}
+
 function renderOutputMappings() {
     const container = document.getElementById('output-mappings');
     if (!container) return;
+    let html = '<h4 style="margin-bottom:0.5rem;">Output Mappings</h4>';
 
-    container.innerHTML = '<h4>Output Mappings</h4>';
+    html += '<div class="mapping-table-wrapper"><table class="mapping-table"><thead><tr>' +
+        '<th style="width:35%">Node Output</th>' +
+        '<th style="width:50%">MQTT Topic</th>' +
+        '<th style="width:15%">Actions</th>' +
+        '</tr></thead><tbody>';
 
-    currentFlowInstance.outputMappings.forEach((mapping, idx) => {
-        const div = document.createElement('div');
-        div.className = 'mapping-item';
-        div.innerHTML = `
-            <div class="form-group">
-                <label>Node Output:</label>
-                <input type="text" class="form-control" value="${escapeHtml(mapping.nodeOutput)}"
-                       onchange="updateOutputMapping(${idx}, 'nodeOutput', this.value)">
-                <small>Format: nodeId.outputName</small>
-            </div>
-            <div class="form-group">
-                <label>MQTT Topic:</label>
-                <input type="text" class="form-control" value="${escapeHtml(mapping.topic)}"
-                       onchange="updateOutputMapping(${idx}, 'topic', this.value)"
-                       placeholder="e.g., sensor/output">
-            </div>
-            <button class="btn btn-danger btn-sm" onclick="removeOutputMapping(${idx})">Remove</button>
-        `;
-        container.appendChild(div);
-    });
+    if (currentFlowInstance.outputMappings.length === 0) {
+        html += '<tr><td colspan="3" style="text-align:center; color:#6c757d; font-style:italic;">No output mappings</td></tr>';
+    } else {
+        currentFlowInstance.outputMappings.forEach((mapping, idx) => {
+            html += `<tr>
+                <td><input type="text" value="${escapeHtml(mapping.nodeOutput)}" placeholder="nodeId.output" onchange="updateOutputMapping(${idx}, 'nodeOutput', this.value)"></td>
+                <td><input type="text" value="${escapeHtml(mapping.topic)}" placeholder="sensor/output" onchange="updateOutputMapping(${idx}, 'topic', this.value)"></td>
+                <td><div class="table-actions"><button class="btn-icon-small" title="Duplicate" onclick="duplicateOutputMapping(${idx})">⧉</button><button class="btn-icon-small" title="Remove" onclick="removeOutputMapping(${idx})">✕</button></div></td>
+            </tr>`;
+        });
+    }
 
-    const addBtn = document.createElement('button');
-    addBtn.className = 'btn btn-secondary';
-    addBtn.textContent = '+ Add Output Mapping';
-    addBtn.onclick = addOutputMapping;
-    container.appendChild(addBtn);
+    html += '</tbody></table></div>';
+    html += '<div class="add-row-bar"><button class="btn btn-secondary" onclick="addOutputMapping()">+ Add Output</button></div>';
+    container.innerHTML = html;
 }
 
 function addOutputMapping() {
@@ -969,6 +963,14 @@ function updateOutputMapping(idx, field, value) {
 function removeOutputMapping(idx) {
     currentFlowInstance.outputMappings.splice(idx, 1);
     renderOutputMappings();
+}
+
+function duplicateOutputMapping(idx) {
+    const src = currentFlowInstance.outputMappings[idx];
+    if (src) {
+        currentFlowInstance.outputMappings.splice(idx + 1, 0, { ...src });
+        renderOutputMappings();
+    }
 }
 
 async function saveFlowInstance() {
