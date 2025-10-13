@@ -170,8 +170,11 @@
     /* Canvas */
     .canvas-wrapper {
       position: relative;
-      overflow: auto;
+      overflow-x: auto;
+      overflow-y: auto;
       background: linear-gradient(to bottom, #0f1117 0%, #151820 100%);
+      width: 100%;
+      height: 100%;
     }
 
     .canvas-grid {
@@ -568,7 +571,10 @@
           <path d="M19 12H5M12 19l-7-7 7-7"/>
         </svg>
       </button>
-      <h1 id="page-title">Visual Flow Editor</h1>
+      <div>
+        <h1 id="page-title">Visual Flow Editor</h1>
+        <p id="page-subtitle" style="font-size: 0.75rem; color: var(--text-secondary); margin: 0;"></p>
+      </div>
       <span class="status" id="status-text">Ready</span>
     </div>
     <div class="actions">
