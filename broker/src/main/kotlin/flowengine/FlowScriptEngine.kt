@@ -24,6 +24,9 @@ class FlowScriptEngine {
         .option("js.ecmascript-version", "2022")
         .build()
 
+    // Cache for compiled script functions
+    private val compiledScripts = mutableMapOf<String, org.graalvm.polyglot.Value>()
+
     init {
         logger.info("GraalVM script engine initialized with languages: ${context.engine.languages.keys}")
     }
@@ -99,8 +102,19 @@ class FlowScriptEngine {
             val consoleProxy = ConsoleProxy()
             bindings.putMember("console", consoleProxy)
 
-            // Execute script
-            context.eval(normalizeLanguage(language), script)
+            // Get or compile the script function
+            val scriptFunction = compiledScripts.getOrPut(script) {
+                // Wrap user script in a function to provide fresh scope on each execution
+                val wrappedScript = """
+                    (function() {
+                        ${script}
+                    })
+                """.trimIndent()
+                context.eval(normalizeLanguage(language), wrappedScript)
+            }
+
+            // Execute the compiled function
+            scriptFunction.execute()
 
             return ExecutionResult(
                 success = true,
@@ -157,6 +171,7 @@ class FlowScriptEngine {
      * Close the script engine and release resources
      */
     fun close() {
+        compiledScripts.clear()
         context.close()
     }
 
