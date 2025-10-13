@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MonsterMQ - Visual Flow Editor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/assets/monster-theme.css" />
+  <script src="/js/graphql-client.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <style>
+    body,html { height:100%; }
+    .editor-layout { display:grid; grid-template-columns:260px 1fr 320px; gap:0; height:calc(100vh - 60px); }
+    .panel { background:var(--background-secondary); border-right:1px solid var(--border-color); overflow:auto; }
+    .panel.right { border-right:none; border-left:1px solid var(--border-color); }
+    .panel h3 { margin:1rem; font-size:.9rem; letter-spacing:.5px; text-transform:uppercase; opacity:.75; }
+    .palette-item { padding:.5rem .75rem; margin:.25rem .5rem; background:var(--background-tertiary); border:1px solid var(--border-color); border-radius:4px; cursor:pointer; font-size:.8rem; display:flex; align-items:center; gap:.5rem; }
+    .palette-item:hover { background:var(--background-hover); }
+    .canvas-wrapper { position:relative; overflow:auto; background:#12141c; }
+    #flow-canvas { position:relative; width:2000px; height:1200px; }
+    #connections-svg { position:absolute; left:0; top:0; width:2000px; height:1200px; pointer-events:none; }
+    .flow-node { position:absolute; min-width:180px; background:#252936; border:2px solid #3d4153; border-radius:8px; padding:.6rem .6rem .4rem; font-size:.75rem; cursor:move; box-shadow:0 2px 6px rgba(0,0,0,.35); }
+    .flow-node.selected { border-color:#7c3aed; box-shadow:0 0 0 3px rgba(124,58,237,.35); }
+    .flow-node-header { font-weight:600; margin-bottom:.4rem; display:flex; justify-content:space-between; align-items:center; }
+    .node-port { background:#1a1d28; padding:.25rem .4rem; border-radius:4px; margin:2px 0; display:flex; justify-content:space-between; gap:.5rem; border:1px solid transparent; cursor:pointer; }
+    .node-port.input-port:hover { border-color:#dc3545; background:rgba(220,53,69,.12); }
+    .node-port.output-port:hover { border-color:#2ed573; background:rgba(46,213,115,.12); }
+    .node-port.output-port.connecting { background:rgba(124,58,237,.25); border-color:#7c3aed; }
+    .node-port.input-port.valid-target { background:rgba(124,58,237,.15); border-color:#7c3aed; }
+    .port-hint-badge { font-size:.55rem; letter-spacing:.5px; padding:2px 4px; border-radius:3px; background:#2d3142; }
+    .connection-line { stroke:#7c3aed; stroke-width:2; fill:none; cursor:pointer; pointer-events:stroke; }
+    .form-section { padding:0 1rem 1.2rem; }
+    .form-group { margin:.6rem 0; display:flex; flex-direction:column; gap:.35rem; }
+    .form-group input, .form-group textarea { font-size:.75rem; }
+    .small-label { font-size:.65rem; letter-spacing:.5px; text-transform:uppercase; opacity:.65; }
+    .inline-btns { display:flex; gap:.4rem; flex-wrap:wrap; }
+    .footer-bar { padding:.6rem 1rem; background:var(--background-secondary); border-top:1px solid var(--border-color); display:flex; gap:.5rem; }
+    .code-area { font-family:monospace; font-size:.7rem; min-height:120px; }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div class="sidebar-brand"><img src="/assets/logo.png" alt="Logo"><span class="brand-name">MonsterMQ</span></div>
+    <div style="display:flex; gap:1rem; align-items:center;">
+      <a href="/pages/workflows.html" class="btn btn-secondary btn-small">← Back</a>
+      <span id="status-text" style="font-size:.7rem; opacity:.7;">Loading...</span>
+    </div>
+  </div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-brand"><img src="/assets/logo.png" alt="MonsterMQ Logo"><span class="brand-name">MonsterMQ</span></div>
+      <button class="sidebar-toggle" onclick="toggleSidebar()">&lt;</button>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  </aside>
+  <div class="main-content">
+    <div class="container" style="max-width:100%; padding:0;">
+      <div class="page-header" style="padding:1rem 1rem .5rem;">
+        <h1 class="page-title" id="page-title">Visual Flow Editor</h1>
+        <p class="page-subtitle" id="page-subtitle"></p>
+      </div>
+      <div class="editor-layout">
+        <div class="panel" id="left-panel">
+          <h3>Palette</h3>
+          <div id="node-palette"></div>
+          <h3 style="margin-top:1.5rem;">Class</h3>
+          <div class="form-section">
+            <div class="form-group"><label class="small-label">Name</label><input id="fc-name"></div>
+            <div class="form-group"><label class="small-label">Namespace</label><input id="fc-namespace" value="default"></div>
+            <div class="form-group"><label class="small-label">Version</label><input id="fc-version" value="1.0.0"></div>
+            <div class="form-group"><label class="small-label">Description</label><textarea id="fc-description" rows="2"></textarea></div>
+            <div class="inline-btns"><button class="btn btn-primary btn-small" onclick="VisualFlow.saveClass()">Save Class</button><button id="delete-class-btn" class="btn btn-danger btn-small" style="display:none;" onclick="VisualFlow.deleteClass()">Delete</button></div>
+          </div>
+          <h3 style="margin-top:1.5rem;">Connect</h3>
+          <div class="form-section" style="border-top:1px solid var(--border-color);">
+            <div class="form-group">
+              <label class="small-label">From (node.output)</label>
+              <select id="conn-from" style="font-size:.7rem;"></select>
+            </div>
+            <div class="form-group">
+              <label class="small-label">To (node.input)</label>
+              <select id="conn-to" style="font-size:.7rem;"></select>
+            </div>
+            <div class="inline-btns">
+              <button class="btn btn-secondary btn-small" onclick="VisualFlow.addConnectionHelper()">Add Connection</button>
+              <button class="btn btn-small" onclick="VisualFlow.refreshConnectionHelper()">↻</button>
+            </div>
+          </div>
+        </div>
+        <div class="canvas-wrapper" id="canvas-wrapper">
+          <div id="stage" style="position:relative; width:2000px; height:1200px; transform-origin:0 0;">
+            <svg id="connections-svg"></svg>
+            <div id="flow-canvas"></div>
+          </div>
+        </div>
+        <div class="panel right" id="right-panel">
+          <h3>Node</h3>
+          <div class="form-section" id="node-panel">
+            <p style="font-size:.7rem; opacity:.6;" id="node-panel-empty">Select a node...</p>
+            <div id="node-form" style="display:none;">
+              <div class="form-group"><label class="small-label">ID</label><input id="n-id" disabled></div>
+              <div class="form-group"><label class="small-label">Name</label><input id="n-name"></div>
+              <div class="form-group"><label class="small-label">Inputs (comma)</label><input id="n-inputs"></div>
+              <div class="form-group"><label class="small-label">Outputs (comma)</label><input id="n-outputs"></div>
+              <div class="form-group"><label class="small-label">Script</label>
+                <div class="code-editor" style="position:relative; display:flex; border:1px solid var(--border-color); border-radius:4px; background:#1b1f29;">
+                  <div id="n-script-lines" style="user-select:none; padding:.4rem .5rem; text-align:right; font-family:monospace; font-size:.65rem; line-height:1.2; color:#6c7380; min-width:2.2rem; border-right:1px solid #2a2f3a; background:#191d26;">1</div>
+                  <textarea id="n-script" class="code-area" style="flex:1; border:0; resize:vertical; background:transparent; padding:.4rem .6rem; outline:none; line-height:1.2;" spellcheck="false"></textarea>
+                </div>
+              </div>
+              <div class="inline-btns"><button class="btn btn-primary btn-small" onclick="VisualFlow.saveNode()">Update Node</button><button class="btn btn-secondary btn-small" onclick="VisualFlow.deleteNode()">Delete Node</button></div>
+            </div>
+          </div>
+          <h3 style="margin-top:1rem;">Connections</h3>
+          <div class="form-section" id="connections-list" style="font-size:.65rem; line-height:1.2;">
+            <p id="no-connections" style="opacity:.6;">No connections</p>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bar">
+        <button class="btn btn-secondary btn-small" onclick="VisualFlow.addNodeType('function')">+ Function Node</button>
+        <span style="flex:1;"></span>
+        <button class="btn btn-secondary btn-small" onclick="VisualFlow.resetView()">Center</button>
+      </div>
+    </div>
+  </div>
+  <script src="/js/workflows-visual.js"></script>
+</body>
+</html>

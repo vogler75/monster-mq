@@ -56,53 +56,7 @@
             font-family: 'JetBrains Mono', monospace;
         }
 
-        .action-buttons {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
-
-        .btn-action {
-            padding: 0.4rem 0.8rem;
-            border: none;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            min-width: 60px;
-        }
-
-        .btn-enable {
-            background: var(--accent-green);
-            color: white;
-        }
-
-        .btn-disable {
-            background: #ef4444;
-            color: white;
-        }
-
-        .btn-edit {
-            background: var(--accent-blue);
-            color: white;
-        }
-
-        .btn-delete {
-            background: #dc2626;
-            color: white;
-        }
-
-        .btn-action:hover:not(:disabled) {
-            transform: translateY(-1px);
-            opacity: 0.9;
-        }
-
-        .btn-action:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
+        .action-buttons { display:flex; gap:0.5rem; flex-wrap:wrap; }
 
         /* Enhanced Modal Styles - matching sessions page */
         .modal {

@@ -359,6 +359,22 @@
     .mapping-table-wrapper { position: relative; }
     .mapping-table-wrapper:before { content: ""; position: absolute; inset: 0; pointer-events:none; border-radius:6px; box-shadow: 0 0 0 1px rgba(255,255,255,0.03), 0 4px 10px -2px rgba(0,0,0,0.4); }
     .shortcut-hint { font-size: 0.6rem; text-transform: uppercase; letter-spacing: .5px; color: #7d8492; margin: 4px 0 0; text-align: right; }
+    /* --- Full-width first table (Flow Classes) adjustments --- */
+    .main-content .container { max-width: 100%; }
+    #classes-section { margin-right: 0; }
+    #classes-section .table-wrapper { width: 100%; padding-right: 1.25rem; box-sizing: border-box; }
+    #classes-section table.data-table { width: 100%; table-layout: auto; }
+    /* Ensure horizontal overflow handled gracefully */
+    #classes-section .table-wrapper { overflow-x: auto; }
+    /* Slight padding on header row so last column not glued to edge */
+    #classes-section table.data-table th:last-child, 
+    #classes-section table.data-table td:last-child { padding-right: 0.75rem; }
+    /* Mirror for Flow Instances table */
+    #instances-section { margin-right: 0; }
+    #instances-section .table-wrapper { width: 100%; padding-right: 1.25rem; box-sizing: border-box; overflow-x:auto; }
+    #instances-section table.data-table { width: 100%; table-layout: auto; }
+    #instances-section table.data-table th:last-child, 
+    #instances-section table.data-table td:last-child { padding-right: 0.75rem; }
     </style>
 </head>
 <body>
@@ -412,206 +428,54 @@
                 <p class="page-subtitle">Create and manage flow classes and instances</p>
             </div>
 
-        <!-- Tabs -->
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('classes')">Flow Classes</button>
-            <button class="tab" onclick="switchTab('instances')">Flow Instances</button>
-        </div>
-
-        <!-- Flow Classes Tab -->
-        <div id="classes-tab" class="tab-content active">
-            <div class="card-header">
-                <h2>Flow Classes</h2>
-                <button class="btn btn-primary" onclick="createFlowClass()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    New Flow Class
-                </button>
-            </div>
-            <div id="classes-grid" class="workflow-grid"></div>
-        </div>
-
-        <!-- Flow Instances Tab -->
-        <div id="instances-tab" class="tab-content">
-            <div class="card-header">
-                <h2>Flow Instances</h2>
-                <button class="btn btn-primary" onclick="createFlowInstance()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    New Flow Instance
-                </button>
-            </div>
-            <div id="instances-grid" class="workflow-grid"></div>
-        </div>
-        </div>
-    </div>
-
-    <!-- Flow Class Editor Modal -->
-    <div id="class-editor-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title" id="class-editor-title">Edit Flow Class</h2>
-                <button class="btn-icon" onclick="closeClassEditor()">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" id="class-name" class="form-control">
-                </div>
-                <div class="form-group">
-                    <label>Namespace</label>
-                    <input type="text" id="class-namespace" class="form-control" value="default">
-                </div>
-                <div class="form-group">
-                    <label>Description</label>
-                    <textarea id="class-description" class="form-control" rows="2"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>Visual Editor</label>
-                    <div class="canvas-container">
-                        <svg id="connections-svg" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1;"></svg>
-                        <div id="flow-canvas" class="flow-canvas"></div>
-                        <div class="sidebar-panel">
-                            <h3 style="margin-bottom: 1rem;">Add Nodes</h3>
-                            <div class="node-palette">
-                                <!-- Node types will be dynamically rendered here by JavaScript -->
-                            </div>
-                            <div id="node-config" style="margin-top: 2rem;">
-                                <h3 style="margin-bottom: 1rem;">Node Configuration</h3>
-                                <div id="node-config-content"></div>
-                            </div>
-                        </div>
+                <div class="section" id="classes-section">
+                    <div class="card-header" style="align-items:center; gap:1rem;">
+                        <h2 style="margin:0;">Flow Classes</h2>
+                        <input type="text" id="class-search" placeholder="Search..." class="form-control" style="max-width:220px;">
+                        <button class="btn btn-primary" onclick="location.href='/pages/workflows-edit.html?type=class'">+ New Flow Class</button>
+                    </div>
+                    <div class="table-wrapper" style="margin-top:1rem;">
+                        <table class="data-table" id="classes-table">
+                            <thead><tr>
+                                <th data-sort="name">Name</th>
+                                <th data-sort="namespace">Namespace</th>
+                                <th data-sort="version">Version</th>
+                                <th data-sort="nodes" style="text-align:right;">Nodes</th>
+                                <th data-sort="connections" style="text-align:right;">Connections</th>
+                                <th data-sort="updatedAt">Updated</th>
+                                <th style="width:110px;">Actions</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
                     </div>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeClassEditor()">Cancel</button>
-                <button class="btn btn-danger" id="delete-class-btn" onclick="deleteCurrentClass()" style="display: none; margin-right: auto;">Delete</button>
-                <button class="btn btn-primary" onclick="saveFlowClass()">Save</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Flow Instance Editor Modal -->
-    <div id="instance-editor-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title" id="instance-editor-title">Edit Flow Instance</h2>
-                <button class="btn-icon" onclick="closeInstanceEditor()">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" id="instance-name" class="form-control">
-                </div>
-                <div class="form-group">
-                    <label>Namespace</label>
-                    <input type="text" id="instance-namespace" class="form-control" value="default">
-                </div>
-                <div class="form-group">
-                    <label>Node ID</label>
-                    <input type="text" id="instance-node-id" class="form-control" value="local">
-                </div>
-                <div class="form-group">
-                    <label>Flow Class</label>
-                    <select id="instance-flow-class" class="form-control" onchange="loadFlowClassForInstance()"></select>
-                </div>
-                <div class="form-group">
-                    <label>Enabled</label>
-                    <input type="checkbox" id="instance-enabled" checked>
-                </div>
-                <div class="form-group">
-                    <label>Input Mappings</label>
-                    <div id="input-mappings" class="mapping-list"></div>
-                </div>
-                <div class="form-group">
-                    <label>Output Mappings</label>
-                    <div id="output-mappings" class="mapping-list"></div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeInstanceEditor()">Cancel</button>
-                <button class="btn btn-danger" id="delete-instance-btn" onclick="deleteCurrentInstance()" style="display: none; margin-right: auto;">Delete</button>
-                <button class="btn btn-primary" onclick="saveFlowInstance()">Save</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Script Editor Modal -->
-    <div id="script-editor-modal" class="modal">
-        <div class="modal-content" style="width: 95vw; height: 95vh; max-width: 1800px; max-height: 95vh;">
-            <div class="modal-header">
-                <div>
-                    <h2 class="modal-title">Script Editor</h2>
-                    <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                        Editing: <span id="script-editor-node-name" style="color: var(--primary-color); font-weight: 500;">Node</span>
+                <div class="section" id="instances-section" style="margin-top:3rem;">
+                    <div class="card-header" style="align-items:center; gap:1rem;">
+                        <h2 style="margin:0;">Flow Instances</h2>
+                        <input type="text" id="instance-search" placeholder="Search..." class="form-control" style="max-width:220px;">
+                        <button class="btn btn-primary" onclick="location.href='/pages/workflows-edit.html?type=instance'">+ New Flow Instance</button>
+                    </div>
+                    <div class="table-wrapper" style="margin-top:1rem;">
+                        <table class="data-table" id="instances-table">
+                            <thead><tr>
+                                <th data-sort="name">Name</th>
+                                <th data-sort="namespace">Namespace</th>
+                                <th data-sort="flowClassId">Flow Class</th>
+                                <th data-sort="nodeId">Node</th>
+                                <th data-sort="inputs" style="text-align:right;">Inputs</th>
+                                <th data-sort="outputs" style="text-align:right;">Outputs</th>
+                                <th data-sort="enabled">Enabled</th>
+                                <th data-sort="executions" style="text-align:right;">Execs</th>
+                                <th data-sort="updatedAt">Updated</th>
+                                <th style="width:110px;">Actions</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
                     </div>
                 </div>
-                <button class="btn-icon" onclick="closeScriptEditor()">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-            </div>
-            <div class="modal-body" style="padding: 1.5rem; display: flex; flex-direction: column; height: 100%;">
-                <div class="form-group" style="margin-bottom: 1rem;">
-                    <label>Language:</label>
-                    <select id="script-editor-language" class="form-control" style="max-width: 200px;">
-                        <option value="javascript">JavaScript</option>
-                        <option value="python">Python</option>
-                    </select>
-                </div>
-                <div class="form-group" style="flex: 1; display: flex; flex-direction: column; margin-bottom: 0;">
-                    <label style="margin-bottom: 0.5rem;">Script Code:</label>
-                    <textarea
-                        id="script-editor-textarea"
-                        class="form-control"
-                        style="
-                            flex: 1;
-                            font-family: 'Courier New', Consolas, monospace;
-                            font-size: 0.9rem;
-                            line-height: 1.5;
-                            resize: none;
-                            min-height: 0;
-                        "
-                        placeholder="// Write your script here...
-// Available variables:
-// - input: The input data received by the node
-// - context: Flow context for storing data between executions
-// - publish: Function to publish MQTT messages, e.g., publish('topic/name', 'payload')
-//
-// Return value will be passed to output nodes"
-                    ></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeScriptEditor()">Cancel</button>
-                <button class="btn btn-primary" onclick="saveScriptFromEditor()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 0.5rem;">
-                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                        <polyline points="7 3 7 8 15 8"></polyline>
-                    </svg>
-                    Save Script
-                </button>
-            </div>
         </div>
     </div>
+
 
     <script src="/js/workflows.js"></script>
 </body>

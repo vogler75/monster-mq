@@ -6,6 +6,7 @@
     --monster-teal: #14B8A6;
     --monster-red: #EF4444;
     --monster-orange: #F97316;
+    --accent-blue: #3B82F6; /* Added for unified action buttons */
     --dark-bg: #0F172A;
     --dark-surface: #1E293B;
     --dark-surface-2: #334155;
@@ -356,7 +357,6 @@ body {
         border-radius: 6px;
     }
 }
-}
 
 .login-container {
     display: flex;
@@ -468,6 +468,31 @@ body {
 .btn-secondary:hover {
     background: var(--dark-border);
 }
+
+/* Compact action buttons (shared across pages) */
+.btn-action {
+    padding: 0.4rem 0.8rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #3a3f4b;
+    color: #fff;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 30px;
+}
+.btn-action.btn-edit { background: var(--accent-blue); }
+.btn-action.btn-delete { background: #dc2626; }
+.btn-action.btn-visual { background: var(--monster-teal); }
+.btn-action:hover { transform: translateY(-1px); opacity: 0.9; }
+.btn-action:active { transform: translateY(0); }
+
 
 .btn:disabled {
     opacity: 0.6;

@@ -1,102 +1,138 @@
 /**
- * MonsterMQ Workflow Editor
- * Visual editor for Flow Classes and Flow Instances
+ * MonsterMQ Workflows List Page (Refactored)
+ * Table-based listing of Flow Classes & Flow Instances.
+ * Editing moved to workflows-edit.html + workflows-edit.js.
  */
-
-// ======================
-// Global State
-// ======================
 
 let flowClasses = [];
 let flowInstances = [];
-let flowNodeTypes = [];
-let currentFlowClass = null;
-let currentFlowInstance = null;
-let selectedNode = null;
+let sortState = { classes: { key: 'name', dir: 'asc' }, instances: { key: 'name', dir: 'asc' } };
+let filters = { classes: '', instances: '' };
 
-// Node editor state
-let nodes = [];
-let connections = [];
-let draggedNode = null;
-let connectingFrom = null;
-let canvas = null;
-let svgLayer = null;
+document.addEventListener('DOMContentLoaded', initListPage);
 
-// ======================
-// Initialization
-// ======================
-
-document.addEventListener('DOMContentLoaded', function() {
-    initWorkflowsPage();
-    document.addEventListener('keydown', (e) => {
-        const active = document.activeElement;
-        if (!active) return;
-        const rowEl = active.closest('tr');
-        if (!rowEl) return;
-        const inputContainer = active.closest('#input-mappings');
-        const outputContainer = active.closest('#output-mappings');
-        if (!inputContainer && !outputContainer) return;
-
-        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-        const metaKey = isMac ? e.metaKey : e.ctrlKey;
-
-        if (inputContainer) {
-            const rows = Array.from(inputContainer.querySelectorAll('tbody tr'));
-            const idx = rows.indexOf(rowEl);
-            if (idx === -1) return;
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                addInputMapping();
-                focusLastRow('#input-mappings');
-            } else if (metaKey && e.key.toLowerCase() === 'd') {
-                e.preventDefault();
-                duplicateInputMapping(idx);
-                focusRow('#input-mappings', idx + 1);
-            } else if ((e.key === 'Delete' || e.key === 'Backspace') && !(active.tagName === 'INPUT' && active.value && e.key === 'Backspace')) {
-                e.preventDefault();
-                removeInputMapping(idx);
-                focusRow('#input-mappings', Math.max(0, idx - 1));
-            }
-        } else if (outputContainer) {
-            const rows = Array.from(outputContainer.querySelectorAll('tbody tr'));
-            const idx = rows.indexOf(rowEl);
-            if (idx === -1) return;
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                addOutputMapping();
-                focusLastRow('#output-mappings');
-            } else if (metaKey && e.key.toLowerCase() === 'd') {
-                e.preventDefault();
-                duplicateOutputMapping(idx);
-                focusRow('#output-mappings', idx + 1);
-            } else if ((e.key === 'Delete' || e.key === 'Backspace') && !(active.tagName === 'INPUT' && active.value && e.key === 'Backspace')) {
-                e.preventDefault();
-                removeOutputMapping(idx);
-                focusRow('#output-mappings', Math.max(0, idx - 1));
-            }
-        }
-    });
-});
-
-function focusLastRow(containerSelector) {
-    const container = document.querySelector(containerSelector);
-    if (!container) return;
-    const rows = container.querySelectorAll('tbody tr');
-    const last = rows[rows.length - 1];
-    if (last) {
-        const input = last.querySelector('input, select');
-        if (input) input.focus();
-    }
+async function initListPage(){
+    await Promise.all([loadFlowClasses(), loadFlowInstances()]);
+    setupListInteractions();
+    renderClassesTable();
+    renderInstancesTable();
 }
 
-function focusRow(containerSelector, idx) {
-    const container = document.querySelector(containerSelector);
-    if (!container) return;
-    const rows = container.querySelectorAll('tbody tr');
-    if (idx < 0 || idx >= rows.length) return;
-    const row = rows[idx];
-    const input = row.querySelector('input, select');
-    if (input) input.focus();
+// ---------------------- GraphQL ----------------------
+async function graphqlQuery(query, variables = {}) {
+    try { return await window.graphqlClient.query(query, variables); }
+    catch (e) { showNotification('GraphQL error: '+e.message,'error'); throw e; }
+}
+
+async function loadFlowClasses(){
+    const q = `query { flowClasses { name namespace version description nodes { id } connections { fromNode toNode fromOutput toInput } updatedAt } }`;
+    try { const data = await graphqlQuery(q); flowClasses = data.flowClasses||[]; }
+    catch(e){ console.error(e); showNotification('Failed to load flow classes','error'); }
+}
+
+async function loadFlowInstances(){
+    const q = `query { flowInstances { name namespace nodeId flowClassId inputMappings { nodeInput } outputMappings { nodeOutput } enabled status { executionCount errorCount } updatedAt } }`;
+    try { const data = await graphqlQuery(q); flowInstances = data.flowInstances||[]; }
+    catch(e){ console.error(e); showNotification('Failed to load flow instances','error'); }
+}
+
+// ---------------------- Interactions ----------------------
+function setupListInteractions(){
+    const clsSearch = document.getElementById('class-search');
+    if(clsSearch) clsSearch.addEventListener('input', e=>{ filters.classes=e.target.value.toLowerCase(); renderClassesTable(); });
+    const instSearch = document.getElementById('instance-search');
+    if(instSearch) instSearch.addEventListener('input', e=>{ filters.instances=e.target.value.toLowerCase(); renderInstancesTable(); });
+    document.querySelectorAll('#classes-table thead th[data-sort]').forEach(th=>{ th.style.cursor='pointer'; th.addEventListener('click', ()=>toggleSort('classes', th.getAttribute('data-sort'))); });
+    document.querySelectorAll('#instances-table thead th[data-sort]').forEach(th=>{ th.style.cursor='pointer'; th.addEventListener('click', ()=>toggleSort('instances', th.getAttribute('data-sort'))); });
+}
+
+// ---------------------- Rendering ----------------------
+function renderClassesTable(){
+    const tbody = document.querySelector('#classes-table tbody'); if(!tbody) return;
+    let rows = flowClasses.slice();
+    if(filters.classes) rows = rows.filter(r => (r.name+" "+r.namespace).toLowerCase().includes(filters.classes));
+    const { key, dir } = sortState.classes; rows.sort((a,b)=>compareValues(a,b,key,dir));
+    if(rows.length===0){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center; color:#6c757d;">No flow classes</td></tr>'; return; }
+    tbody.innerHTML = rows.map(r=>`<tr>
+        <td>${escapeHtml(r.name)}</td>
+        <td>${escapeHtml(r.namespace||'')}</td>
+        <td>${escapeHtml(r.version||'')}</td>
+        <td style="text-align:right;">${r.nodes.length}</td>
+        <td style="text-align:right;">${r.connections.length}</td>
+        <td>${escapeHtml(r.updatedAt||'')}</td>
+          <td style="display:flex; gap:.4rem;">
+              <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=class&name=${encodeURIComponent(r.name)}'">Edit</button>
+              <button class="btn-action btn-visual" onclick="location.href='/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Visual</button>
+              <button class="btn-action btn-delete" onclick="listPageDeleteFlowClass('${escapeHtml(r.name)}')">Delete</button>
+          </td>
+    </tr>`).join('');
+}
+
+function renderInstancesTable(){
+    const tbody = document.querySelector('#instances-table tbody'); if(!tbody) return;
+    let rows = flowInstances.slice();
+    if(filters.instances) rows = rows.filter(r => (r.name+" "+r.namespace+" "+r.flowClassId).toLowerCase().includes(filters.instances));
+    const { key, dir } = sortState.instances; rows.sort((a,b)=>compareValues(a,b,key,dir));
+    if(rows.length===0){ tbody.innerHTML='<tr><td colspan="10" style="text-align:center; color:#6c757d;">No flow instances</td></tr>'; return; }
+    tbody.innerHTML = rows.map(r=>{ const execs = r.status? `${r.status.executionCount}${r.status.errorCount>0?' / '+r.status.errorCount+'⚠':''}`:''; return `<tr>
+        <td>${escapeHtml(r.name)}</td>
+        <td>${escapeHtml(r.namespace||'')}</td>
+        <td><a href="/pages/workflows-edit.html?type=class&name=${encodeURIComponent(r.flowClassId)}">${escapeHtml(r.flowClassId)}</a></td>
+        <td>${escapeHtml(r.nodeId||'')}</td>
+        <td style="text-align:right;">${r.inputMappings.length}</td>
+        <td style="text-align:right;">${r.outputMappings.length}</td>
+        <td>${r.enabled?'<span style="color:#2ed573;">Yes</span>':'<span style="color:#ff4757;">No</span>'}</td>
+        <td style="text-align:right;">${execs}</td>
+        <td>${escapeHtml(r.updatedAt||'')}</td>
+    <td style="display:flex; gap:.4rem;">
+        <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=instance&name=${encodeURIComponent(r.name)}'">Edit</button>
+        <button class="btn-action btn-delete" onclick="listPageDeleteFlowInstance('${escapeHtml(r.name)}')">Delete</button>
+    </td>
+    </tr>`; }).join('');
+}
+
+// ---------------------- Actions ----------------------
+// Use unique internal names to avoid being shadowed by legacy functions defined later in file.
+async function listPageDeleteFlowClass(name){
+    if(!confirm(`Delete flow class "${name}"?`)) return;
+    const mutation = `mutation($name:String!){ flow { deleteClass(name:$name) } }`;
+    try { await graphqlQuery(mutation,{name}); showNotification('Deleted','success'); await loadFlowClasses(); renderClassesTable(); }
+    catch(e){ console.error(e); showNotification('Delete failed','error'); }
+}
+
+async function listPageDeleteFlowInstance(name){
+    if(!confirm(`Delete flow instance "${name}"?`)) return;
+    const mutation = `mutation($name:String!){ flow { deleteInstance(name:$name) } }`;
+    try { await graphqlQuery(mutation,{name}); showNotification('Deleted','success'); await loadFlowInstances(); renderInstancesTable(); }
+    catch(e){ console.error(e); showNotification('Delete failed','error'); }
+}
+
+// ---------------------- Sorting & Helpers ----------------------
+function compareValues(a,b,key,dir){
+    let av,bv;
+    switch(key){
+        case 'nodes': av=a.nodes.length; bv=b.nodes.length; break;
+        case 'connections': av=a.connections.length; bv=b.connections.length; break;
+        case 'inputs': av=a.inputMappings.length; bv=b.inputMappings.length; break;
+        case 'outputs': av=a.outputMappings.length; bv=b.outputMappings.length; break;
+        case 'executions': av=a.status? a.status.executionCount:0; bv=b.status? b.status.executionCount:0; break;
+        default: av=a[key]||''; bv=b[key]||''; break;
+    }
+    if(typeof av==='string') av=av.toLowerCase();
+    if(typeof bv==='string') bv=bv.toLowerCase();
+    const cmp = av>bv?1: av<bv?-1:0; return dir==='asc'?cmp:-cmp;
+}
+function toggleSort(table,key){ const st=sortState[table]; if(st.key===key){ st.dir=st.dir==='asc'?'desc':'asc'; } else { st.key=key; st.dir='asc'; } if(table==='classes') renderClassesTable(); else renderInstancesTable(); }
+
+// ---------------------- Utilities ----------------------
+function escapeHtml(text){ if(text===null||text===undefined) return ''; const div=document.createElement('div'); div.textContent=String(text); return div.innerHTML; }
+
+function showNotification(message, type='info') {
+    const notification = document.createElement('div');
+    notification.textContent = message;
+    notification.style.cssText = `position:fixed;top:20px;right:20px;padding:.6rem 1rem;background:${type==='success'?'#28a745':type==='error'?'#dc3545':'#17a2b8'};color:#fff;border-radius:4px;z-index:10000;font-size:.75rem;`;
+    document.body.appendChild(notification);
+    setTimeout(()=>{ notification.style.opacity='0'; setTimeout(()=>notification.remove(),300); },2500);
 }
 
 async function initWorkflowsPage() {

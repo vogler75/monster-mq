@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MonsterMQ - Edit Flow</title>
+    <link rel="stylesheet" href="/assets/monster-theme.css" />
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .form-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit,minmax(240px,1fr)); }
+        .section { margin-top: 2rem; }
+        .data-table { width:100%; border-collapse: collapse; font-size: 0.85rem; }
+        .data-table th, .data-table td { padding: .5rem .6rem; border-bottom: 1px solid var(--border-color); text-align: left; }
+        .data-table th { background: var(--background-secondary); position: sticky; top:0; z-index:1; }
+        .table-actions { display:flex; gap:.4rem; }
+        .inline-editor { background: var(--background-secondary); padding: 1rem; border:1px solid var(--border-color); border-radius:6px; margin-top:1rem; }
+        .badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:.65rem; letter-spacing:.5px; text-transform:uppercase; }
+        .badge-node { background:#24352d; color:#46e08c; }
+        .connections-grid { margin-top: 0.5rem; }
+        textarea.script { font-family: monospace; font-size: .75rem; width:100%; min-height:140px; }
+        .toolbar { display:flex; gap:.5rem; margin-bottom:.75rem; align-items:center; }
+        .toolbar h2 { flex:1; margin:0; }
+        .keyvalue-table td input { width:100%; }
+        .link-back { font-size: .8rem; color: var(--primary-color); text-decoration:none; }
+        .link-back:hover { text-decoration: underline; }
+        .danger { color:#ff4757; }
+    </style>
+</head>
+<body>
+<div class="top-bar">
+    <div class="sidebar-brand"><img src="/assets/logo.png" alt="Logo"><span class="brand-name">MonsterMQ</span></div>
+    <a href="/pages/workflows.html" class="link-back">&larr; Back to Workflows</a>
+</div>
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-brand"><img src="/assets/logo.png" alt="MonsterMQ Logo"><span class="brand-name">MonsterMQ</span></div>
+        <button class="sidebar-toggle" onclick="toggleSidebar()">&lt;</button>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+</aside>
+<div class="main-content" id="main-content">
+    <div class="container" id="editor-root">
+        <div class="page-header">
+            <h1 class="page-title" id="page-title">Edit Flow</h1>
+            <p class="page-subtitle" id="page-subtitle"></p>
+        </div>
+
+        <div id="form-section"></div>
+
+        <div class="section" id="nodes-section" style="display:none;">
+            <div class="toolbar">
+                <h2>Nodes</h2>
+                <button class="btn btn-secondary" onclick="FlowEdit.addNode()">+ Add Node</button>
+            </div>
+            <table class="data-table" id="nodes-table">
+                <thead><tr>
+                    <th>ID</th><th>Name</th><th>Inputs</th><th>Outputs</th><th>Lang</th><th>Actions</th>
+                </tr></thead>
+                <tbody></tbody>
+            </table>
+            <div id="node-inline-editor" class="inline-editor" style="display:none;"></div>
+            <div class="section">
+                <div class="toolbar">
+                    <h2 style="font-size:1.1rem;">Connections</h2>
+                    <button class="btn btn-secondary" onclick="FlowEdit.addConnectionRow()">+ Add Connection</button>
+                </div>
+                <table class="data-table" id="connections-table">
+                    <thead><tr><th>From Node</th><th>From Output</th><th>To Node</th><th>To Input</th><th></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section" id="mappings-section" style="display:none;">
+            <h2>Input Mappings</h2>
+            <div class="toolbar"><button class="btn btn-secondary" onclick="FlowEdit.addInputMapping()">+ Add Input</button></div>
+            <table class="data-table" id="input-mappings-table"><thead><tr><th>Node Input</th><th>Type</th><th>Value</th><th></th></tr></thead><tbody></tbody></table>
+            <h2 style="margin-top:2rem;">Output Mappings</h2>
+            <div class="toolbar"><button class="btn btn-secondary" onclick="FlowEdit.addOutputMapping()">+ Add Output</button></div>
+            <table class="data-table" id="output-mappings-table"><thead><tr><th>Node Output</th><th>Topic</th><th></th></tr></thead><tbody></tbody></table>
+            <h2 style="margin-top:2rem;">Variables</h2>
+            <div class="toolbar"><button class="btn btn-secondary" onclick="FlowEdit.addVariable()">+ Add Variable</button></div>
+            <table class="data-table keyvalue-table" id="variables-table"><thead><tr><th>Key</th><th>Value</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+
+        <div class="section" id="actions-section" style="display:none;">
+            <button class="btn btn-primary" onclick="FlowEdit.save()">Save</button>
+            <button class="btn btn-secondary" onclick="FlowEdit.cancel()">Cancel</button>
+            <button class="btn btn-danger" id="delete-button" style="display:none;" onclick="FlowEdit.deleteItem()">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/workflows-edit.js"></script>
+</body>
+</html>
