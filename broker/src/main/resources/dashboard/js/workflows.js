@@ -31,7 +31,7 @@ async function loadFlowClasses(){
 }
 
 async function loadFlowInstances(){
-    const q = `query { flowInstances { name namespace nodeId flowClassId inputMappings { nodeInput } outputMappings { nodeOutput } enabled status { executionCount errorCount } updatedAt } }`;
+    const q = `query { flowInstances { name namespace nodeId flowClassId inputMappings { nodeInput } outputMappings { nodeOutput } enabled status { running executionCount errorCount } updatedAt } }`;
     try { const data = await graphqlQuery(q); flowInstances = data.flowInstances||[]; }
     catch(e){ console.error(e); showNotification('Failed to load flow instances','error'); }
 }
@@ -74,7 +74,12 @@ function renderInstancesTable(){
     if(filters.instances) rows = rows.filter(r => (r.name+" "+r.namespace+" "+r.flowClassId).toLowerCase().includes(filters.instances));
     const { key, dir } = sortState.instances; rows.sort((a,b)=>compareValues(a,b,key,dir));
     if(rows.length===0){ tbody.innerHTML='<tr><td colspan="10" style="text-align:center; color:#6c757d;">No flow instances</td></tr>'; return; }
-    tbody.innerHTML = rows.map(r=>{ const execs = r.status? `${r.status.executionCount}${r.status.errorCount>0?' / '+r.status.errorCount+'⚠':''}`:''; return `<tr>
+    tbody.innerHTML = rows.map(r=>{
+        const execs = r.status? `${r.status.executionCount}${r.status.errorCount>0?' / '+r.status.errorCount+'⚠':''}`:''
+        const startStopBtn = r.enabled
+            ? `<button class="btn-icon" title="Stop" onclick="listPageStopFlowInstance('${escapeHtml(r.name)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg></button>`
+            : `<button class="btn-icon" title="Start" onclick="listPageStartFlowInstance('${escapeHtml(r.name)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></button>`;
+        return `<tr>
         <td>${escapeHtml(r.name)}</td>
         <td>${escapeHtml(r.namespace||'')}</td>
         <td><a href="/pages/workflows-edit.html?type=class&name=${encodeURIComponent(r.flowClassId)}">${escapeHtml(r.flowClassId)}</a></td>
@@ -85,6 +90,7 @@ function renderInstancesTable(){
         <td style="text-align:right;">${execs}</td>
         <td>${escapeHtml(r.updatedAt||'')}</td>
     <td style="display:flex; gap:.4rem;">
+        ${startStopBtn}
         <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=instance&name=${encodeURIComponent(r.name)}'">Edit</button>
         <button class="btn-action btn-delete" onclick="listPageDeleteFlowInstance('${escapeHtml(r.name)}')">Delete</button>
     </td>
@@ -105,6 +111,18 @@ async function listPageDeleteFlowInstance(name){
     const mutation = `mutation($name:String!){ flow { deleteInstance(name:$name) } }`;
     try { await graphqlQuery(mutation,{name}); showNotification('Deleted','success'); await loadFlowInstances(); renderInstancesTable(); }
     catch(e){ console.error(e); showNotification('Delete failed','error'); }
+}
+
+async function listPageStartFlowInstance(name){
+    const mutation = `mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`;
+    try { await graphqlQuery(mutation,{name}); showNotification('Instance enabled','success'); await loadFlowInstances(); renderInstancesTable(); }
+    catch(e){ console.error(e); showNotification('Enable failed: '+e.message,'error'); }
+}
+
+async function listPageStopFlowInstance(name){
+    const mutation = `mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`;
+    try { await graphqlQuery(mutation,{name}); showNotification('Instance disabled','success'); await loadFlowInstances(); renderInstancesTable(); }
+    catch(e){ console.error(e); showNotification('Disable failed: '+e.message,'error'); }
 }
 
 // ---------------------- Sorting & Helpers ----------------------

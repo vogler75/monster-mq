@@ -10,6 +10,7 @@ const VisualFlow = (() => {
     connections: [],
     nodeTypes: [],
     selectedNodeId: null,
+    selectedConnectionIndex: null,
     dragging: { node: null, offsetX:0, offsetY:0 },
     connectingFrom: null,
     dirty: false,
@@ -29,6 +30,7 @@ const VisualFlow = (() => {
       buildPalette();
       populateClassForm();
       renderAll();
+      refreshConnectionHelper();
       qs('#status-text').textContent = 'Ready';
     } catch(e){
       notify('Init error: '+e.message,'error');
@@ -83,7 +85,15 @@ const VisualFlow = (() => {
   // ------------- Palette & Class Form -------------
   function buildPalette(){
     const pal = qs('#node-palette'); if(!pal) return;
-    pal.innerHTML = state.nodeTypes.map(nt=>`<div class="palette-item" onclick="VisualFlow.addNodeType('${nt.type}')">${escape(nt.icon||'📦')} <span>${escape(nt.type)}</span></div>`).join('');
+    pal.innerHTML = state.nodeTypes.map(nt=>`
+      <div class="palette-item" onclick="VisualFlow.addNodeType('${nt.type}')">
+        <div class="palette-item-icon">${escape(nt.icon||'📦')}</div>
+        <div class="palette-item-info">
+          <div class="palette-item-name">${escape(nt.type)}</div>
+          <div class="palette-item-desc">Click to add node</div>
+        </div>
+      </div>
+    `).join('');
   }
   function populateClassForm(){
     const fc = state.flowClass || { name:'', namespace:'default', version:'1.0.0', description:''};
@@ -103,18 +113,74 @@ const VisualFlow = (() => {
     state.nodes.push({ id, type, name: type+'_'+state.nodes.length, config:{ script:''}, inputs:[...def.defaultInputs], outputs:[...def.defaultOutputs], language:'javascript', position:{ x:120 + (state.nodes.length*30)%400, y:120 + Math.floor(state.nodes.length/10)*100 }});
     selectNode(id);
     renderAll();
+    refreshConnectionHelper();
     markDirty();
   }
-  function selectNode(id){ state.selectedNodeId = id; updateNodePanel(); renderNodes(); }
-  function deleteNode(){ if(!state.selectedNodeId) return; state.connections = state.connections.filter(c=>c.fromNode!==state.selectedNodeId && c.toNode!==state.selectedNodeId); state.nodes = state.nodes.filter(n=>n.id!==state.selectedNodeId); state.selectedNodeId=null; updateNodePanel(); renderAll(); markDirty(); }
-  function saveNode(){ const n=currentNode(); if(!n) return; n.name=qs('#n-name').value.trim()||n.id; n.inputs=qs('#n-inputs').value.split(',').map(s=>s.trim()).filter(Boolean); n.outputs=qs('#n-outputs').value.split(',').map(s=>s.trim()).filter(Boolean); n.config.script=qs('#n-script').value; renderAll(); markDirty(); notify('Node updated','success'); }
+  function selectNode(id){ state.selectedNodeId = id; state.selectedConnectionIndex=null; updateNodePanel(); renderNodes(); }
+  function deleteNode(){ if(!state.selectedNodeId) return; state.connections = state.connections.filter(c=>c.fromNode!==state.selectedNodeId && c.toNode!==state.selectedNodeId); state.nodes = state.nodes.filter(n=>n.id!==state.selectedNodeId); state.selectedNodeId=null; updateNodePanel(); renderAll(); refreshConnectionHelper(); markDirty(); }
+  function saveNode(){ const n=currentNode(); if(!n) return; n.name=qs('#n-name').value.trim()||n.id; n.inputs=qs('#n-inputs').value.split(',').map(s=>s.trim()).filter(Boolean); n.outputs=qs('#n-outputs').value.split(',').map(s=>s.trim()).filter(Boolean); n.config.script=qs('#n-script').value; renderAll(); refreshConnectionHelper(); markDirty(); notify('Node updated','success'); }
   function currentNode(){ return state.nodes.find(n=>n.id===state.selectedNodeId); }
 
   // ------------- Canvas Rendering -------------
   function renderAll(){ renderNodes(); renderConnections(); renderConnectionsList(); }
   function renderNodes(){ const canvas=qs('#flow-canvas'); if(!canvas) return; canvas.querySelectorAll('.flow-node').forEach(el=>el.remove()); state.nodes.forEach(node=>{ const el=ce('div'); el.className='flow-node'+(state.selectedNodeId===node.id?' selected':''); el.style.left=node.position.x+'px'; el.style.top=node.position.y+'px'; el.dataset.nodeId=node.id; el.innerHTML = `<div class=\"flow-node-header\"><span>${escape(node.name)}</span></div><div class=\"flow-node-ports\"><div>${node.inputs.map(p=>`<div class='node-port input-port' data-port='${escape(p)}' onclick=\"VisualFlow.handlePortClick('${node.id}','${escape(p)}','input')\">${escape(p)} <span class='port-hint-badge'>IN</span></div>`).join('')}</div><div>${node.outputs.map(p=>`<div class='node-port output-port ${(state.connectingFrom && state.connectingFrom.nodeId===node.id && state.connectingFrom.portName===p)?'connecting':''}' data-port='${escape(p)}' onclick=\"VisualFlow.handlePortClick('${node.id}','${escape(p)}','output')\">${escape(p)} <span class='port-hint-badge'>OUT</span></div>`).join('')}</div></div>`; el.addEventListener('mousedown',e=>{ if(e.target.closest('.node-port')) return; state.dragging.node=node; state.dragging.offsetX=e.offsetX; state.dragging.offsetY=e.offsetY; selectNode(node.id); }); canvas.appendChild(el); }); applyViewTransform(); }
-  function renderConnections(){ const svg=qs('#connections-svg'); const canvas=qs('#flow-canvas'); const stage=qs('#stage'); if(!svg||!canvas||!stage) return; svg.setAttribute('width', stage.style.width||'2000px'); svg.setAttribute('height', stage.style.height||'1200px'); svg.innerHTML=''; state.connections.forEach((c,i)=>{ const from=canvas.querySelector(`[data-node-id='${c.fromNode}']`); const to=canvas.querySelector(`[data-node-id='${c.toNode}']`); if(!from||!to) return; const x1=from.offsetLeft + from.offsetWidth; const y1=from.offsetTop + 40; const x2=to.offsetLeft; const y2=to.offsetTop + 40; const dx=x2-x1; const curve=Math.min(Math.abs(dx)/2,60); const path=document.createElementNS('http://www.w3.org/2000/svg','path'); path.setAttribute('d',`M ${x1} ${y1} C ${x1+curve} ${y1}, ${x2-curve} ${y2}, ${x2} ${y2}`); path.setAttribute('class','connection-line'); path.onclick=()=>{ if(confirm('Delete connection?')){ state.connections.splice(i,1); renderAll(); markDirty(); } }; svg.appendChild(path); }); applyViewTransform(); }
-  function renderConnectionsList(){ const list=qs('#connections-list'); if(!list) return; if(state.connections.length===0){ qs('#no-connections').style.display='block'; list.querySelectorAll('.conn-item').forEach(e=>e.remove()); return; } qs('#no-connections').style.display='none'; list.innerHTML = state.connections.map((c,i)=>`<div class='conn-item' style='margin:.25rem 0; display:flex; justify-content:space-between; gap:.25rem;'><span>${escape(c.fromNode)}.${escape(c.fromOutput)} → ${escape(c.toNode)}.${escape(c.toInput)}</span><button class='btn btn-danger btn-small' style='padding:2px 4px;font-size:.55rem;' onclick='VisualFlow.deleteConnection(${i})'>✕</button></div>`).join(''); }
+  function renderConnections(){
+    const svg=qs('#connections-svg');
+    const canvas=qs('#flow-canvas');
+    const stage=qs('#stage');
+    if(!svg||!canvas||!stage) return;
+
+    svg.setAttribute('width', stage.style.width||'2000px');
+    svg.setAttribute('height', stage.style.height||'1200px');
+    svg.innerHTML='';
+
+    state.connections.forEach((c,i)=>{
+      const fromNode=canvas.querySelector(`[data-node-id='${c.fromNode}']`);
+      const toNode=canvas.querySelector(`[data-node-id='${c.toNode}']`);
+      if(!fromNode||!toNode) return;
+
+      // Find the specific output port
+      const fromPort=fromNode.querySelector(`.output-port[data-port='${c.fromOutput}']`);
+      const toPort=toNode.querySelector(`.input-port[data-port='${c.toInput}']`);
+
+      let x1, y1, x2, y2;
+
+      if(fromPort){
+        x1 = fromNode.offsetLeft + fromNode.offsetWidth;
+        y1 = fromNode.offsetTop + fromPort.offsetTop + fromPort.offsetHeight/2;
+      } else {
+        x1 = fromNode.offsetLeft + fromNode.offsetWidth;
+        y1 = fromNode.offsetTop + 40;
+      }
+
+      if(toPort){
+        x2 = toNode.offsetLeft;
+        y2 = toNode.offsetTop + toPort.offsetTop + toPort.offsetHeight/2;
+      } else {
+        x2 = toNode.offsetLeft;
+        y2 = toNode.offsetTop + 40;
+      }
+
+      const dx=x2-x1;
+      const curve=Math.min(Math.abs(dx)/2,60);
+
+      const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d',`M ${x1} ${y1} C ${x1+curve} ${y1}, ${x2-curve} ${y2}, ${x2} ${y2}`);
+      path.setAttribute('class',`connection-line${state.selectedConnectionIndex===i?' selected':''}`);
+      path.dataset.connectionIndex=i;
+      path.onclick=(e)=>{
+        e.stopPropagation();
+        state.selectedConnectionIndex=i;
+        state.selectedNodeId=null;
+        updateNodePanel();
+        renderAll();
+      };
+      svg.appendChild(path);
+    });
+
+    applyViewTransform();
+  }
+  function renderConnectionsList(){ const list=qs('#connections-list'); if(!list) return; if(state.connections.length===0){ const noConn=qs('#no-connections'); if(noConn){ noConn.style.display='block'; } else { list.innerHTML='<p id="no-connections" class="empty-state">No connections yet</p>'; } list.querySelectorAll('.conn-item').forEach(e=>e.remove()); return; } const noConn=qs('#no-connections'); if(noConn){ noConn.style.display='none'; } list.innerHTML = state.connections.map((c,i)=>`<div class='conn-item' style='margin:.25rem 0; display:flex; justify-content:space-between; gap:.25rem;'><span>${escape(c.fromNode)}.${escape(c.fromOutput)} → ${escape(c.toNode)}.${escape(c.toInput)}</span><button class='btn btn-danger btn-small' style='padding:2px 4px;font-size:.55rem;' onclick='VisualFlow.deleteConnection(${i})'>✕</button></div>`).join(''); }
 
   // ------------- Interaction -------------
   function handleMouseMove(e){
@@ -127,17 +193,64 @@ const VisualFlow = (() => {
     }
     if(!state.dragging.node) return; state.dragging.node.position.x += e.movementX / state.view.scale; state.dragging.node.position.y += e.movementY / state.view.scale; renderAll(); markDirty(); }
   function handleMouseUp(){ if(state.dragging.node){ state.dragging.node=null; } state.view.isPanning=false; }
-  function handlePortClick(nodeId, portName, portType){ if(!state.connectingFrom){ if(portType==='output'){ state.connectingFrom={ nodeId, portName, portType }; highlightInputs(true); } } else { if(portType==='input' && state.connectingFrom.portType==='output'){ const connection={ fromNode: state.connectingFrom.nodeId, fromOutput: state.connectingFrom.portName, toNode: nodeId, toInput: portName }; if(!state.connections.some(c=>c.fromNode===connection.fromNode && c.fromOutput===connection.fromOutput && c.toNode===connection.toNode && c.toInput===connection.toInput)){ state.connections.push(connection); renderAll(); markDirty(); notify('Connection added','success'); } } state.connectingFrom=null; highlightInputs(false); renderNodes(); } }
+  function handlePortClick(nodeId, portName, portType){
+    if(!state.connectingFrom){
+      if(portType==='output'){
+        state.connectingFrom={ nodeId, portName, portType };
+        highlightInputs(true);
+        notify('Click an input port to connect, or press ESC/right-click to cancel','info');
+      }
+    } else {
+      if(portType==='input' && state.connectingFrom.portType==='output'){
+        const connection={ fromNode: state.connectingFrom.nodeId, fromOutput: state.connectingFrom.portName, toNode: nodeId, toInput: portName };
+        if(!state.connections.some(c=>c.fromNode===connection.fromNode && c.fromOutput===connection.fromOutput && c.toNode===connection.toNode && c.toInput===connection.toInput)){
+          state.connections.push(connection);
+          renderAll();
+          markDirty();
+          notify('Connection added','success');
+        } else {
+          notify('Connection already exists','error');
+        }
+      }
+      state.connectingFrom=null;
+      highlightInputs(false);
+      renderNodes();
+    }
+  }
   function highlightInputs(on){ const canvas=qs('#flow-canvas'); canvas.querySelectorAll('.input-port').forEach(el=>{ if(on) el.classList.add('valid-target'); else el.classList.remove('valid-target'); }); }
   function deleteConnection(i){ state.connections.splice(i,1); renderAll(); }
 
   // ------------- Node Panel -------------
   function updateNodePanel(){ const n=currentNode(); const empty=qs('#node-panel-empty'); const form=qs('#node-form'); if(!n){ empty.style.display='block'; form.style.display='none'; return; } empty.style.display='none'; form.style.display='block'; qs('#n-id').value=n.id; qs('#n-name').value=n.name; qs('#n-inputs').value=n.inputs.join(', '); qs('#n-outputs').value=n.outputs.join(', '); qs('#n-script').value=n.config?.script||''; enhanceScriptEditor(); }
   // Enhance script area after panel update
-  function enhanceScriptEditor(){ const ta=qs('#n-script'); const gutter=qs('#n-script-lines'); if(!ta||!gutter) return; const updateLines=()=>{ const count = (ta.value||'').split(/\n/).length; let html=''; for(let i=1;i<=count;i++) html+=i+'\n'; gutter.textContent=html.trimEnd(); }; if(!ta._enhanced){ ta.addEventListener('input',()=>{ updateLines(); autoGrow(); }); ta.addEventListener('keydown',e=>{ if(e.key==='Tab'){ e.preventDefault(); const start=ta.selectionStart; const end=ta.selectionEnd; const val=ta.value; ta.value=val.substring(0,start)+'  '+val.substring(end); ta.selectionStart=ta.selectionEnd=start+2; ta.dispatchEvent(new Event('input')); }}); const autoGrow=()=>{ ta.style.height='auto'; ta.style.height=Math.min(500, ta.scrollHeight)+'px'; }; ta._enhanced=true; updateLines(); autoGrow(); } else { updateLines(); }
-    // Sync scroll
-    ta.addEventListener('scroll',()=>{ gutter.scrollTop=ta.scrollTop; }); }
-  enhanceScriptEditor();
+  function enhanceScriptEditor(){
+    const ta=qs('#n-script');
+    if(!ta) return;
+
+    if(!ta._enhanced){
+      // Handle Tab key to insert spaces
+      ta.addEventListener('keydown',e=>{
+        if(e.key==='Tab'){
+          e.preventDefault();
+          const start=ta.selectionStart;
+          const end=ta.selectionEnd;
+          const val=ta.value;
+          ta.value=val.substring(0,start)+'  '+val.substring(end);
+          ta.selectionStart=ta.selectionEnd=start+2;
+        }
+      });
+
+      // Auto-grow height
+      const autoGrow=()=>{
+        ta.style.height='auto';
+        ta.style.height=Math.min(500, ta.scrollHeight)+'px';
+      };
+      ta.addEventListener('input',autoGrow);
+
+      ta._enhanced=true;
+      autoGrow();
+    }
+  }
 
   // ------------- Save/Delete Class -------------
   async function saveClass(){ const name=qs('#fc-name').value.trim(); const namespace=qs('#fc-namespace').value.trim(); const version=qs('#fc-version').value.trim()||'1.0.0'; if(!name||!namespace){ notify('Name & namespace required','error'); return; } const input={ name, namespace, version, description: qs('#fc-description').value.trim()||null, nodes: state.nodes.map(n=>({ id:n.id, type:n.type, name:n.name, config:{ script:n.config.script||'' }, inputs:n.inputs, outputs:n.outputs, language:n.language||'javascript', position: n.position? { x:n.position.x, y:n.position.y }: null })), connections: state.connections.map(c=>({ fromNode:c.fromNode, fromOutput:c.fromOutput, toNode:c.toNode, toInput:c.toInput })) }; const isUpdate = !!state.flowClass && state.flowClass.name === name; const mutation=isUpdate?`mutation($name:String!,$input:FlowClassInput!){ flow { updateClass(name:$name,input:$input){ name } } }`:`mutation($input:FlowClassInput!){ flow { createClass(input:$input){ name } } }`; try { await gql(mutation, isUpdate? { name, input } : { input }); notify('Class saved','success'); state.dirty=false; updateTitleDirty(); if(!isUpdate){ // redirect with name param
@@ -190,13 +303,39 @@ const VisualFlow = (() => {
     zoom(dir>0 ? -1 : 1, cx, cy); // reuse zoom semantics (deltaY<0 => in)
   }
   function handleKeyDown(e){
-    if(e.code==='Space'){
+    // Don't handle shortcuts if user is typing in an input/textarea
+    const target = e.target;
+    const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
+
+    if(e.code==='Space' && !isInputField){
       if(!state.view.isPanning){ state.view.isPanning=true; document.body.style.cursor='grab'; }
       e.preventDefault();
-    } else if((e.key==='+') || (e.key==='=' && (e.shiftKey||!e.shiftKey))){
+    } else if(((e.key==='+') || (e.key==='=' && (e.shiftKey||!e.shiftKey))) && !isInputField){
       keyboardZoom(1); e.preventDefault();
-    } else if(e.key==='-' || e.key==='_'){
+    } else if((e.key==='-' || e.key==='_') && !isInputField){
       keyboardZoom(-1); e.preventDefault();
+    } else if(e.key==='Escape'){
+      if(state.connectingFrom){
+        state.connectingFrom=null;
+        highlightInputs(false);
+        renderNodes();
+        notify('Connection cancelled','info');
+        e.preventDefault();
+      } else if(state.selectedConnectionIndex!==null){
+        state.selectedConnectionIndex=null;
+        renderAll();
+        e.preventDefault();
+      }
+    } else if((e.key==='Delete' || e.key==='Backspace') && !isInputField){
+      if(state.selectedConnectionIndex!==null){
+        state.connections.splice(state.selectedConnectionIndex,1);
+        state.selectedConnectionIndex=null;
+        renderAll();
+        refreshConnectionHelper();
+        markDirty();
+        notify('Connection deleted','success');
+        e.preventDefault();
+      }
     }
   }
   function handleKeyUp(e){ if(e.code==='Space'){ state.view.isPanning=false; document.body.style.cursor=''; } }
@@ -204,6 +343,28 @@ const VisualFlow = (() => {
   // allow middle mouse pan
   document.addEventListener('mousedown', e=>{ if(e.button===1){ state.view.isPanning=true; e.preventDefault(); }});
   document.addEventListener('mouseup', e=>{ if(e.button===1){ state.view.isPanning=false; }});
+
+  // Right-click to cancel connections
+  document.addEventListener('contextmenu', e=>{
+    if(state.connectingFrom){
+      e.preventDefault();
+      state.connectingFrom=null;
+      highlightInputs(false);
+      renderNodes();
+      notify('Connection cancelled','info');
+    }
+  });
+
+  // Click on canvas to deselect
+  document.addEventListener('click', e=>{
+    const canvasWrapper = qs('#canvas-wrapper');
+    if(canvasWrapper && e.target === canvasWrapper){
+      if(state.selectedConnectionIndex!==null){
+        state.selectedConnectionIndex=null;
+        renderAll();
+      }
+    }
+  });
 
   // ------------- Dirty Tracking -------------
   function markDirty(){ if(!state.dirty){ state.dirty=true; updateTitleDirty(); } }
@@ -218,8 +379,50 @@ const VisualFlow = (() => {
   });
 
   // ------------- Connection Helper -------------
-  function refreshConnectionHelper(){ const fromSel=qs('#conn-from'); const toSel=qs('#conn-to'); if(!fromSel||!toSel) return; const nodeMap = Object.fromEntries(state.nodes.map(n=>[n.id,n])); const fromOptions=[]; state.nodes.forEach(n=>{ n.outputs.forEach(o=> fromOptions.push(`${n.id}.${o}`)); }); const toOptions=[]; state.nodes.forEach(n=>{ n.inputs.forEach(i=> toOptions.push(`${n.id}.${i}`)); }); const selValFrom=fromSel.value; const selValTo=toSel.value; fromSel.innerHTML='<option value="">(select)</option>'+fromOptions.map(v=>`<option>${v}</option>`).join(''); toSel.innerHTML='<option value="">(select)</option>'+toOptions.map(v=>`<option>${v}</option>`).join(''); if(fromOptions.includes(selValFrom)) fromSel.value=selValFrom; if(toOptions.includes(selValTo)) toSel.value=selValTo; }
-  function addConnectionHelper(){ const from=qs('#conn-from').value; const to=qs('#conn-to').value; if(!from||!to) { notify('Select both endpoints','error'); return; } const [fromNode, fromOutput]=from.split('.'); const [toNode,toInput]=to.split('.'); if(fromNode===toNode){ notify('Cannot connect node to itself','error'); return; } if(state.connections.some(c=>c.fromNode===fromNode && c.fromOutput===fromOutput && c.toNode===toNode && c.toInput===toInput)){ notify('Connection exists','error'); return; } state.connections.push({ fromNode, fromOutput, toNode, toInput }); renderAll(); markDirty(); notify('Connection added','success'); }
+  function refreshConnectionHelper(){
+    const fromSel=qs('#conn-from');
+    const toSel=qs('#conn-to');
+    if(!fromSel||!toSel) return;
+
+    const fromOptions=[];
+    state.nodes.forEach(n=>{
+      n.outputs.forEach(o=> fromOptions.push({ value: `${n.id}.${o}`, label: `${n.name}.${o}` }));
+    });
+
+    const toOptions=[];
+    state.nodes.forEach(n=>{
+      n.inputs.forEach(i=> toOptions.push({ value: `${n.id}.${i}`, label: `${n.name}.${i}` }));
+    });
+
+    const selValFrom=fromSel.value;
+    const selValTo=toSel.value;
+
+    fromSel.innerHTML='<option value="">(select)</option>'+fromOptions.map(opt=>`<option value="${opt.value}">${escape(opt.label)}</option>`).join('');
+    toSel.innerHTML='<option value="">(select)</option>'+toOptions.map(opt=>`<option value="${opt.value}">${escape(opt.label)}</option>`).join('');
+
+    if(fromOptions.some(opt=>opt.value===selValFrom)) fromSel.value=selValFrom;
+    if(toOptions.some(opt=>opt.value===selValTo)) toSel.value=selValTo;
+  }
+
+  function addConnectionHelper(){
+    const from=qs('#conn-from').value;
+    const to=qs('#conn-to').value;
+    if(!from||!to) { notify('Select both endpoints','error'); return; }
+
+    const [fromNode, fromOutput]=from.split('.');
+    const [toNode,toInput]=to.split('.');
+
+    if(fromNode===toNode){ notify('Cannot connect node to itself','error'); return; }
+    if(state.connections.some(c=>c.fromNode===fromNode && c.fromOutput===fromOutput && c.toNode===toNode && c.toInput===toInput)){
+      notify('Connection exists','error');
+      return;
+    }
+
+    state.connections.push({ fromNode, fromOutput, toNode, toInput });
+    renderAll();
+    markDirty();
+    notify('Connection added','success');
+  }
 
   // initial population after load will call refresh in updateTitleDirty()
 

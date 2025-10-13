@@ -188,6 +188,7 @@
       position: relative;
       width: 3000px;
       height: 2000px;
+      z-index: 1;
     }
 
     #connections-svg {
@@ -197,6 +198,7 @@
       width: 3000px;
       height: 2000px;
       pointer-events: none;
+      z-index: 10;
     }
 
     /* Flow nodes */
@@ -324,8 +326,20 @@
       stroke-width: 2;
       fill: none;
       cursor: pointer;
-      pointer-events: stroke;
+      pointer-events: all;
       filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+      transition: stroke-width 0.2s, stroke 0.2s;
+    }
+
+    .connection-line:hover {
+      stroke: #9f67ff;
+      stroke-width: 3;
+    }
+
+    .connection-line.selected {
+      stroke: #ffb020;
+      stroke-width: 4;
+      filter: drop-shadow(0 0 8px rgba(255,176,32,0.6));
     }
 
     /* Toolbar */
@@ -460,21 +474,9 @@
       display: flex;
     }
 
-    .code-editor-lines {
-      user-select: none;
-      padding: 0.75rem 0.5rem;
-      text-align: right;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      line-height: 1.5;
-      color: var(--text-secondary);
-      min-width: 2.5rem;
-      border-right: 1px solid var(--border-color);
-      background: rgba(0,0,0,0.2);
-    }
-
     .code-editor textarea {
       flex: 1;
+      width: 100%;
       border: 0;
       background: transparent;
       padding: 0.75rem;
@@ -483,7 +485,7 @@
       line-height: 1.5;
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.75rem;
-      min-height: 150px;
+      min-height: 200px;
     }
 
     .inline-hint {
@@ -715,7 +717,6 @@
                 <span class="code-editor-lang">JavaScript</span>
               </div>
               <div class="code-editor-body">
-                <div id="n-script-lines">1</div>
                 <textarea id="n-script" placeholder="// Write your node logic here..." spellcheck="false"></textarea>
               </div>
             </div>

@@ -373,6 +373,36 @@ class FlowEngineExtension : AbstractVerticle() {
                             }
                         }
 
+                        "toggle" -> {
+                            // Reload device from store to get current enabled state
+                            deviceStore.getDevice(deviceName).onComplete { result ->
+                                if (result.succeeded() && result.result() != null) {
+                                    val device = result.result()!!
+                                    if (device.isAssignedToNode(currentNodeId) && device.enabled) {
+                                        // Enable: Deploy the flow
+                                        undeployFlow(deviceName)
+                                            .compose { deployFlow(device) }
+                                            .onComplete { deployResult ->
+                                                if (deployResult.succeeded()) {
+                                                    logger.info("Enabled and deployed flow: $deviceName")
+                                                    message.reply(JsonObject().put("success", true))
+                                                } else {
+                                                    message.fail(500, deployResult.cause()?.message ?: "Deployment failed")
+                                                }
+                                            }
+                                    } else {
+                                        // Disable or not for this node: Undeploy the flow
+                                        undeployFlow(deviceName).onComplete {
+                                            logger.info("Disabled and undeployed flow: $deviceName")
+                                            message.reply(JsonObject().put("success", true))
+                                        }
+                                    }
+                                } else {
+                                    message.fail(500, "Failed to load device")
+                                }
+                            }
+                        }
+
                         "delete" -> {
                             undeployFlow(deviceName)
                                 .onComplete { message.reply(JsonObject().put("success", true)) }
