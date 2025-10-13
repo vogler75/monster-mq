@@ -60,11 +60,11 @@ function renderClassesTable(){
         <td style="text-align:right;">${r.nodes.length}</td>
         <td style="text-align:right;">${r.connections.length}</td>
         <td>${escapeHtml(r.updatedAt||'')}</td>
-          <td style="display:flex; gap:.4rem;">
+          <td><div style="display:flex; gap:.4rem;">
               <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=class&name=${encodeURIComponent(r.name)}'">Edit</button>
               <button class="btn-action btn-visual" onclick="location.href='/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Visual</button>
               <button class="btn-action btn-delete" onclick="listPageDeleteFlowClass('${escapeHtml(r.name)}')">Delete</button>
-          </td>
+          </div></td>
     </tr>`).join('');
 }
 
@@ -89,11 +89,11 @@ function renderInstancesTable(){
         <td>${r.enabled?'<span style="color:#2ed573;">Yes</span>':'<span style="color:#ff4757;">No</span>'}</td>
         <td style="text-align:right;">${execs}</td>
         <td>${escapeHtml(r.updatedAt||'')}</td>
-    <td style="display:flex; gap:.4rem;">
+    <td><div style="display:flex; gap:.4rem;">
         ${startStopBtn}
         <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=instance&name=${encodeURIComponent(r.name)}'">Edit</button>
         <button class="btn-action btn-delete" onclick="listPageDeleteFlowInstance('${escapeHtml(r.name)}')">Delete</button>
-    </td>
+    </div></td>
     </tr>`; }).join('');
 }
 
