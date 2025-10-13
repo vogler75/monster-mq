@@ -59,6 +59,7 @@ class Monster(args: Array<String>) {
     private val configFile: String
     private var configJson: JsonObject = JsonObject()
     private val archiveConfigFile: String?
+    private val dashboardPath: String?
     var archiveHandler: ArchiveHandler? = null
 
     // Cluster manager reference for Vert.x 5 compatibility
@@ -216,7 +217,7 @@ class Monster(args: Array<String>) {
         }
 
         // Validate command-line arguments
-        val validArguments = setOf("-cluster", "-config", "-archiveConfig", "-log", "-help", "--help", "-h")
+        val validArguments = setOf("-cluster", "-config", "-archiveConfig", "-log", "-dashboardPath", "-help", "--help", "-h")
         var i = 0
         while (i < args.size) {
             val arg = args[i]
@@ -227,7 +228,7 @@ class Monster(args: Array<String>) {
                     exitProcess(1)
                 }
                 // Check if argument expects a value
-                if (arg in setOf("-config", "-archiveConfig", "-log")) {
+                if (arg in setOf("-config", "-archiveConfig", "-log", "-dashboardPath")) {
                     if (i + 1 >= args.size || args[i + 1].startsWith("-")) {
                         println("ERROR: Argument $arg requires a value")
                         exitProcess(1)
@@ -263,6 +264,13 @@ class Monster(args: Array<String>) {
             null
         }
 
+        // Dashboard path for development (optional)
+        val dashboardPathIndex = args.indexOf("-dashboardPath")
+        dashboardPath = if (dashboardPathIndex != -1 && dashboardPathIndex + 1 < args.size) {
+            args[dashboardPathIndex + 1]
+        } else {
+            null
+        }
 
         args.indexOf("-log").let {
             if (it != -1) {
@@ -297,10 +305,14 @@ OPTIONS:
                         Otherwise: merges with main config in memory
 
   -cluster              Enable Hazelcast clustering mode for multi-node deployment
-                        
+
   -log <level>          Set logging level
                         Levels: ALL, FINEST, FINER, FINE, INFO, WARNING, SEVERE
                         Default: INFO
+
+  -dashboardPath <path> Serve dashboard files from filesystem path (development only)
+                        Example: broker/src/main/resources/dashboard
+                        Default: serve from classpath resources
 
 EXAMPLES:
   # Start with default configuration
@@ -644,7 +656,8 @@ MORE INFO:
                         sessionStore,
                         sessionHandler,
                         metricsStore,
-                        this.archiveHandler
+                        this.archiveHandler,
+                        dashboardPath
                     )
                 } else {
                     logger.info("GraphQL server is disabled in configuration")
