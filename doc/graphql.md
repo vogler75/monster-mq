@@ -131,3 +131,248 @@ Authentication rules for subscriptions mirror the ones used for queries and muta
 4. The HTTP endpoint also serves the static dashboard under `/dashboard` (see `GraphQLServer.start()` for details).
 5. Migration: Root queries `opcUaDeviceMetrics` and `opcUaDeviceMetricsHistory` were removed in favor of embedded fields on `OpcUaDevice` (`metrics` and `metricsHistory`). Update clients accordingly.
 6. PayloadFormat enum: Supported values are `DEFAULT` and `JSON`. The former `JAVA` name has been removed; use `DEFAULT`.
+
+## Endpoints
+
+Unless overridden in configuration:
+
+- HTTP GraphQL endpoint: `http://localhost:4000/graphql` (example port)
+- WebSocket endpoint (subscriptions): `ws://localhost:4000/graphqlws` (path suffix `ws` is appended internally)
+- Health endpoint: `http://localhost:4000/health`
+
+Adjust host/port/path according to your `GraphQL` configuration block.
+
+## Examples
+
+The following end‑to‑end examples consolidate and supersede the legacy `broker/graphql-examples.md` file.
+
+### Current Value
+
+```graphql
+query GetCurrentValue {
+  currentValue(topic: "sensor/temperature", format: JSON) {
+    topic
+    payload
+    format
+    timestamp
+    qos
+  }
+}
+```
+
+### Current Values (Wildcard)
+
+```graphql
+query GetCurrentValues {
+  currentValues(topicFilter: "sensor/+/temperature", format: JSON, limit: 10) {
+    topic
+    payload
+    format
+    timestamp
+    qos
+  }
+}
+```
+
+### Retained Message
+
+```graphql
+query GetRetainedMessage {
+  retainedMessage(topic: "config/device1", format: JSON) {
+    topic
+    payload
+    format
+    timestamp
+    qos
+  }
+}
+```
+
+### Retained Messages
+
+```graphql
+query GetRetainedMessages {
+  retainedMessages(topicFilter: "config/#", format: JSON, limit: 50) {
+    topic
+    payload
+    format
+    timestamp
+    qos
+  }
+}
+```
+
+### Archived Messages (Time Range)
+
+```graphql
+query GetArchivedMessages {
+  archivedMessages(
+    topicFilter: "sensor/#"
+    startTime: "2024-01-01T00:00:00Z"
+    endTime:   "2024-01-02T00:00:00Z"
+    format: JSON
+    limit: 100
+  ) {
+    topic
+    payload
+    format
+    timestamp
+    qos
+    clientId
+  }
+}
+```
+
+### Publish Single Message
+
+```graphql
+mutation PublishMessage {
+  publish(input: {
+    topic: "sensor/temperature"
+    payload: "{\"value\": 23.5, \"unit\": \"celsius\"}"
+    format: JSON
+    qos: 1
+    retained: false
+  }) {
+    success
+    topic
+    timestamp
+    error
+  }
+}
+```
+
+### Publish Binary (Base64)
+
+```graphql
+mutation PublishBinary {
+  publish(input: {
+    topic: "camera/snapshot"
+    payload: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+    format: BINARY
+    qos: 0
+    retained: true
+  }) {
+    success
+    topic
+    timestamp
+    error
+  }
+}
+```
+
+### Batch Publish
+
+```graphql
+mutation BatchPublish {
+  publishBatch(inputs: [
+    { topic: "sensor/temperature", payload: "{\"value\": 23.5}", format: JSON, qos: 1 },
+    { topic: "sensor/humidity",    payload: "{\"value\": 65}",  format: JSON, qos: 1 }
+  ]) {
+    success
+    topic
+    timestamp
+    error
+  }
+}
+```
+
+### Subscribe (Single Filter)
+
+```graphql
+subscription SubscribeToTopic {
+  topicUpdates(topicFilter: "sensor/+/temperature", format: JSON) {
+    topic
+    payload
+    format
+    timestamp
+    qos
+    retained
+    clientId
+  }
+}
+```
+
+### Subscribe (Multiple Filters)
+
+```graphql
+subscription SubscribeToMultipleTopics {
+  multiTopicUpdates(
+    topicFilters: ["sensor/temperature", "sensor/humidity", "sensor/pressure"]
+    format: JSON
+  ) {
+    topic
+    payload
+    format
+    timestamp
+    qos
+    retained
+    clientId
+  }
+}
+```
+
+### MQTT Bridge Client Metrics
+
+```graphql
+query GetMqttClientMetrics {
+  mqttClients {
+    name
+    metrics { messagesIn messagesOut timestamp }
+  }
+}
+```
+
+### MQTT Bridge Client Metrics History
+
+```graphql
+query GetMqttClientMetricsHistory {
+  mqttClient(name: "bridge-client-1") {
+    name
+    metricsHistory(lastMinutes: 60) {
+      messagesIn
+      messagesOut
+      timestamp
+    }
+  }
+}
+```
+
+### curl Examples
+
+```bash
+curl -X POST http://localhost:4000/graphql \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "query { currentValue(topic: \"sensor/temperature\") { topic payload timestamp } }"
+  }'
+
+curl -X POST http://localhost:4000/graphql \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "mutation { publish(input: { topic: \"test/topic\", payload: \"Hello MQTT\", format: JSON }) { success timestamp } }"
+  }'
+```
+
+## Date/Time Formats
+
+All ISO‑8601 variants supported, e.g.:
+
+```text
+2024-01-01T10:30:00Z
+2024-01-01T10:30:00+01:00
+2024-01-01T10:30:00.123Z
+```
+
+## Data Formats
+
+Two payload formats are supported when publishing / querying:
+
+- JSON  – Payload treated (and validated) as JSON text
+- BINARY – Base64 encoded arbitrary bytes (images, protobuf, etc.)
+
+If a stored payload is binary but requested as JSON it is returned as Base64 with `format: BINARY`.
+
+## Migration Notes
+
+The standalone examples file `broker/graphql-examples.md` has been merged into this document for a single source of truth. Remove or stop referencing the old file to avoid drift.

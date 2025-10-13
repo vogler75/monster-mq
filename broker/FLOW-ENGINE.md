@@ -36,7 +36,21 @@ Flow classes define the template/blueprint with nodes that have named inputs and
         "position": {"x": 100, "y": 100}
       },
       {
-        "id": "alarm-1",
+        # Flow Engine (Current Implementation)
+
+        This document describes the **implemented** Flow Engine inside MonsterMQ. It purposefully omits any GUI / visual editor plans and focuses strictly on the runtime, data model, deployment mechanics, scripting, and operational behavior that exist in the codebase (`flowengine/*`, `stores/devices/FlowConfig.kt`).
+
+        Implemented scope:
+        - DeviceConfig-backed storage of Flow Classes (`Flow-Class`) and Flow Instances (`Flow-Object`).
+        - Per-instance Vert.x verticle execution (`FlowInstanceExecutor`).
+        - Cluster-aware deployment via `FlowEngineExtension` (only flows assigned to the current node are deployed).
+        - JavaScript execution using GraalVM (per node function scripts).
+        - TOPIC and TEXT input mapping types (TOPIC triggers execution; TEXT provides constants).
+        - Named input/output ports with explicit connections.
+        - Output mapping publishes MQTT messages through internal `SessionHandler`.
+        - Internal node-to-node value propagation using a synthetic internal topic namespace.
+
+        Not yet implemented (future / out-of-scope for this doc): visual React/ReactFlow editor, advanced node library (switch/change/template/delay/etc.), metrics, persistence of node state, test harness GraphQL mutations, additional scripting languages beyond the existing JavaScript context.
         "type": "function",
         "name": "Check Alarm Threshold",
         "config": {
@@ -86,9 +100,6 @@ Flow instances map the template's inputs to concrete values (topics or constants
         "value": "Building 1 main sensor"
       }
     },
-    "outputMappings": {
-      "alarm-1.alarm": "building/1/alarms/temperature"
-    },
     "variables": {
       "threshold": 80,
       "building": "Building 1"
@@ -128,8 +139,6 @@ class FlowInstanceRuntime(
 ```
 
 ---
-
-## 2. Scripting Language: **GraalVM JavaScript** ✓
 
 **Why JavaScript?**
 - Industry standard for flow programming (Node-RED compatibility)
@@ -195,19 +204,11 @@ if (temp > threshold) {
   });
 
   // Update state
-  state.lastAlarmTime = Date.now();
-  state.alarmCount = (state.alarmCount || 0) + 1;
-} else {
-  outputs.send('normal', {
     temperature: temp,
     building: building
   });
 }
 ```
-
----
-
-## 3. Component Architecture
 
 ### Core Components
 
@@ -219,10 +220,6 @@ broker/src/main/kotlin/
 │   ├── FlowNodeExecutor.kt            # Executes individual nodes
 │   ├── FlowNodeRegistry.kt            # Registry of node types
 │   ├── FlowScriptEngine.kt            # JavaScript execution wrapper
-│   ├── FlowContext.kt                 # Execution context for scripts
-│   └── nodes/
-│       ├── FunctionNode.kt            # JavaScript function node
-│       ├── SwitchNode.kt              # Conditional routing
 │       ├── ChangeNode.kt              # Value transformation
 │       ├── TemplateNode.kt            # String templates
 │       ├── DelayNode.kt               # Rate limiting/debounce
@@ -232,10 +229,6 @@ broker/src/main/kotlin/
 │   └── FlowNodeTypes.kt               # Node type definitions
 └── graphql/
     ├── FlowQueries.kt                 # GraphQL queries
-    ├── FlowMutations.kt               # GraphQL mutations
-    └── schema-flows.graphqls          # Flow schema definitions
-```
-
 ### Execution Flow
 
 ```
@@ -243,10 +236,6 @@ broker/src/main/kotlin/
    └→ Topic: "building/1/sensors/temperature" = 85°C
 
 2. FlowEngine finds matching instances
-   └→ Finds instance "building-1-temp-alarm"
-   └→ Input mapping: "convert-1.celsius" → "building/1/sensors/temperature"
-
-3. Update instance state
    └→ topicValues["building/1/sensors/temperature"] = {value: 85, timestamp: ...}
 
 4. Execute node "convert-1" with inputs:
@@ -255,20 +244,12 @@ broker/src/main/kotlin/
 
 5. Node outputs to port "fahrenheit":
    └→ { fahrenheit: 185 }
-
-6. Follow connection "convert-1.fahrenheit → alarm-1.fahrenheit"
-   └→ Execute node "alarm-1"
-
 7. Node "alarm-1" outputs to port "alarm":
    └→ { alarm: 'Temperature critical!' }
 
 8. Map output to MQTT topic
    └→ Publish to "building/1/alarms/temperature"
 ```
-
----
-
-## 4. Node Types
 
 ### Built-in Node Types
 
@@ -277,10 +258,6 @@ broker/src/main/kotlin/
 - **Inputs:** Dynamic (defined in node config)
 - **Outputs:** Dynamic (defined in node config)
 - **Config:**
-  ```json
-  {
-    "script": "return { result: msg.value * 2 };"
-  }
   ```
 
 #### 2. **switch** (Conditional Routing)
@@ -302,25 +279,11 @@ broker/src/main/kotlin/
 - Modify message properties
 - **Inputs:** `["in"]`
 - **Outputs:** `["out"]`
-- **Config:**
-  ```json
-  {
     "rules": [
-      {"type": "set", "to": "msg.temperature", "value": "msg.value"},
-      {"type": "delete", "property": "msg.value"}
-    ]
-  }
-  ```
-
 #### 4. **template** (String Template)
-- Format output strings using template syntax
 - **Inputs:** Dynamic (any inputs available in template)
-- **Outputs:** `["result"]`
 - **Config:**
-  ```json
-  {
     "template": "Temperature in {{building}} is {{temperature}}°C",
-    "format": "plain|json|yaml"
   }
   ```
 
