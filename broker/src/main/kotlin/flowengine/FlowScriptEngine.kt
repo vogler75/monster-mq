@@ -28,7 +28,7 @@ class FlowScriptEngine {
     private val compiledScripts = mutableMapOf<String, org.graalvm.polyglot.Value>()
 
     init {
-        logger.info("GraalVM script engine initialized with languages: ${context.engine.languages.keys}")
+        logger.fine { "GraalVM script engine initialized with languages: ${context.engine.languages.keys}" }
     }
 
     /**
@@ -104,7 +104,7 @@ class FlowScriptEngine {
 
             // Get or compile the script function
             val scriptFunction = compiledScripts.getOrPut(script) {
-                logger.fine("Compiling script for first time:\n$script")
+                logger.fine { "Compiling script for first time:\n$script" }
                 // Wrap user script in a function to provide fresh scope on each execution
                 val wrappedScript = """
                     (function() {

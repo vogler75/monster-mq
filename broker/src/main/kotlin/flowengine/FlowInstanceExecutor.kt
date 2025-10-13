@@ -70,9 +70,9 @@ class FlowInstanceExecutor(
     override fun start(startPromise: Promise<Void>) {
         try {
             logger.info("Starting flow instance: ${instanceConfig.name}")
-            logger.fine("  - Topic inputs: ${topicInputMappings.size}")
-            logger.fine("  - Text inputs: ${textInputMappings.size}")
-            logger.fine("  - Subscribed topics: ${topicToNodeInputs.keys}")
+            logger.fine { "  - Topic inputs: ${topicInputMappings.size}" }
+            logger.fine { "  - Text inputs: ${textInputMappings.size}" }
+            logger.fine { "  - Subscribed topics: ${topicToNodeInputs.keys}" }
 
             // Subscribe to MQTT topics
             subscribeToTopics()
@@ -120,7 +120,7 @@ class FlowInstanceExecutor(
 
         val topics = topicToNodeInputs.keys
         topics.forEach { topic ->
-            logger.info("  Subscribing to MQTT topic: $topic")
+            logger.fine { "  Subscribing to MQTT topic: $topic" }
             sessionHandler.subscribeInternal(
                 clientId = "flow-${instanceConfig.name}",
                 topicFilter = topic,
@@ -143,7 +143,7 @@ class FlowInstanceExecutor(
 
         val topics = topicToNodeInputs.keys
         topics.forEach { topic ->
-            logger.info("  Unsubscribing from MQTT topic: $topic")
+            logger.fine { "  Unsubscribing from MQTT topic: $topic" }
             sessionHandler.unsubscribeInternal(
                 clientId = "flow-${instanceConfig.name}",
                 topicFilter = topic
@@ -173,17 +173,17 @@ class FlowInstanceExecutor(
             )
             topicValues[topic] = topicValue
 
-            logger.info("Flow ${instanceConfig.name}: Received message on topic $topic, payload: ${String(message.payload)}")
-            logger.info("  Parsed value: ${topicValue.value}")
+            logger.fine { "Flow ${instanceConfig.name}: Received message on topic $topic, payload: ${String(message.payload)}" }
+            logger.fine { "  Parsed value: ${topicValue.value}" }
 
             // Find all node inputs mapped to this topic
             val nodeInputs = topicToNodeInputs[topic] ?: emptyList()
-            logger.info("  Node inputs to trigger: $nodeInputs (found ${nodeInputs.size} mappings)")
+            logger.fine { "  Node inputs to trigger: $nodeInputs (found ${nodeInputs.size} mappings)" }
 
             // Trigger execution for each affected node
             nodeInputs.forEach { nodeInput ->
                 val (nodeId, _) = parseNodeInput(nodeInput)
-                logger.info("  Executing node: $nodeId for input $nodeInput")
+                logger.fine { "  Executing node: $nodeId for input $nodeInput" }
                 executeNode(nodeId, topic)
             }
 
@@ -207,13 +207,13 @@ class FlowInstanceExecutor(
                 return
             }
 
-            logger.info("Executing node: $nodeId (${node.type}) in flow ${instanceConfig.name}")
+            logger.fine { "Executing node: $nodeId (${node.type}) in flow ${instanceConfig.name}" }
 
             // Prepare inputs for this node
             val inputs = prepareNodeInputs(node, triggeringTopic)
-            logger.info("  Prepared inputs: ${inputs.keys} (${inputs.size} inputs)")
+            logger.fine { "  Prepared inputs: ${inputs.keys} (${inputs.size} inputs)" }
             inputs.forEach { (name, value) ->
-                logger.info("    $name: ${value.value} (type: ${value.type})")
+                logger.fine { "    $name: ${value.value} (type: ${value.type})" }
             }
 
             // Get or create node state
@@ -225,7 +225,7 @@ class FlowInstanceExecutor(
             // Execute node based on type
             when (node.type) {
                 "function" -> {
-                    logger.info("  Executing function node...")
+                    logger.fine { "  Executing function node..." }
                     executeFunctionNode(node, inputs, nodeState, flowVars)
                 }
                 else -> {
@@ -319,21 +319,21 @@ class FlowInstanceExecutor(
             return
         }
 
-        logger.info("  Script to execute:\n$script")
-        logger.info("  Language: ${node.language}")
+        logger.fine { "  Script to execute:\n$script" }
+        logger.fine { "  Language: ${node.language}" }
 
         // Execute everything in a blocking context to avoid GraalVM issues
         vertx.executeBlocking<FlowScriptEngine.ExecutionResult> {
             // Get or create script engine for this node
             // GraalVM Context initialization must happen on a worker thread, not event loop
             val scriptEngine = scriptEngines[node.id] ?: run {
-                logger.info("  Creating new FlowScriptEngine for node ${node.id} on worker thread...")
+                logger.fine { "  Creating new FlowScriptEngine for node ${node.id} on worker thread..." }
                 val engine = FlowScriptEngine()
                 scriptEngines[node.id] = engine
                 engine
             }
 
-            logger.info("  Calling scriptEngine.execute()...")
+            logger.fine { "  Calling scriptEngine.execute()..." }
 
             // Execute the script
             scriptEngine.execute(
@@ -343,14 +343,14 @@ class FlowInstanceExecutor(
                 state = nodeState,
                 flowVariables = flowVars,
                 onOutput = { portName, value ->
-                    logger.info("  Script called outputs.send($portName, $value)")
+                    logger.fine { "  Script called outputs.send($portName, $value)" }
                     handleNodeOutput(node.id, portName, value)
                 }
             )
         }.onComplete { asyncResult ->
             if (asyncResult.succeeded()) {
                 val result = asyncResult.result()
-                logger.info("  Script execution completed: success=${result.success}, logs=${result.logs.size}, errors=${result.errors.size}")
+                logger.fine { "  Script execution completed: success=${result.success}, logs=${result.logs.size}, errors=${result.errors.size}" }
 
                 if (!result.success) {
                     logger.severe("Script execution failed for node ${node.id}: ${result.errors}")
@@ -360,7 +360,7 @@ class FlowInstanceExecutor(
 
                 // Log console output
                 result.logs.forEach { log ->
-                    logger.info("Node ${node.id}: $log")
+                    logger.fine { "Node ${node.id}: $log" }
                 }
             } else {
                 logger.severe("Async script execution failed: ${asyncResult.cause()?.message}")
@@ -442,7 +442,7 @@ class FlowInstanceExecutor(
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
                 sessionHandler.publishMessage(message)
-                logger.info("Published to MQTT topic $topic: $value")
+                logger.fine { "Published to MQTT topic $topic: $value" }
             } else {
                 logger.severe("SessionHandler not available for publishing")
             }
