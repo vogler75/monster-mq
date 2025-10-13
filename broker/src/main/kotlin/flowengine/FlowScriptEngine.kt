@@ -63,7 +63,9 @@ class FlowScriptEngine {
                 )
             }
             // Parse JSON in JavaScript context to create proper JavaScript object
-            val inputsJsObj = context.eval("js", "JSON.parse('${inputsObj.encode().replace("'", "\\'")}')")
+            // Escape backslashes and double quotes for safe embedding in JS string
+            val jsonString = inputsObj.encode().replace("\\", "\\\\").replace("\"", "\\\"")
+            val inputsJsObj = context.eval("js", "JSON.parse(\"$jsonString\")")
             bindings.putMember("inputs", inputsJsObj)
 
             // Prepare msg object
@@ -73,17 +75,20 @@ class FlowScriptEngine {
                     .put("value", triggerInput.value)
                     .put("timestamp", triggerInput.timestamp)
                     .put("topic", triggerInput.topic)
-                val msgJsObj = context.eval("js", "JSON.parse('${msgJson.encode().replace("'", "\\'")}')")
+                val msgJsonString = msgJson.encode().replace("\\", "\\\\").replace("\"", "\\\"")
+                val msgJsObj = context.eval("js", "JSON.parse(\"$msgJsonString\")")
                 bindings.putMember("msg", msgJsObj)
             }
 
             // State and flow variables as JavaScript objects
             val stateJson = JsonObject(state as Map<String, Any>)
-            val stateJsObj = context.eval("js", "JSON.parse('${stateJson.encode().replace("'", "\\'")}')")
+            val stateJsonString = stateJson.encode().replace("\\", "\\\\").replace("\"", "\\\"")
+            val stateJsObj = context.eval("js", "JSON.parse(\"$stateJsonString\")")
             bindings.putMember("state", stateJsObj)
 
             val flowJson = JsonObject(flowVariables)
-            val flowJsObj = context.eval("js", "JSON.parse('${flowJson.encode().replace("'", "\\'")}')")
+            val flowJsonString = flowJson.encode().replace("\\", "\\\\").replace("\"", "\\\"")
+            val flowJsObj = context.eval("js", "JSON.parse(\"$flowJsonString\")")
             bindings.putMember("flow", flowJsObj)
 
             // Outputs helper
@@ -104,11 +109,46 @@ class FlowScriptEngine {
             )
 
         } catch (e: Exception) {
-            logger.warning("Script execution error: ${e.message}")
+            // Extract detailed error information including line numbers
+            val errorMessage = StringBuilder()
+            errorMessage.append(e.message ?: "Unknown error")
+
+            // Try to get polyglot exception with source location
+            if (e is org.graalvm.polyglot.PolyglotException) {
+                errorMessage.append("\n")
+                if (e.isGuestException) {
+                    val sourceLocation = e.sourceLocation
+                    if (sourceLocation != null) {
+                        errorMessage.append("  at line ${sourceLocation.startLine}")
+                        if (sourceLocation.startColumn > 0) {
+                            errorMessage.append(", column ${sourceLocation.startColumn}")
+                        }
+                        errorMessage.append("\n")
+                    }
+                }
+
+                // Add stack trace
+                val stackTrace = e.polyglotStackTrace.toList()
+                if (stackTrace.isNotEmpty()) {
+                    errorMessage.append("Stack trace:\n")
+                    stackTrace.take(5).forEach { frame ->
+                        errorMessage.append("  at ${frame.rootName ?: "<anonymous>"}")
+                        val loc = frame.sourceLocation
+                        if (loc != null) {
+                            errorMessage.append(" (line ${loc.startLine})")
+                        }
+                        errorMessage.append("\n")
+                    }
+                }
+            }
+
+            val fullError = errorMessage.toString()
+            logger.warning("Script execution error:\n$fullError")
+
             return ExecutionResult(
                 success = false,
                 logs = emptyList(),
-                errors = listOf(e.message ?: "Unknown error")
+                errors = listOf(fullError)
             )
         }
     }

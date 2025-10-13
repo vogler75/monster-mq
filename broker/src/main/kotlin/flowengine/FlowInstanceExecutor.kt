@@ -469,19 +469,8 @@ class FlowInstanceExecutor(
 
     // Helper functions
 
-    private fun parsePayload(payload: ByteArray): Any? {
-        return try {
-            val str = String(payload)
-            // Try to parse as JSON
-            try {
-                JsonObject(str).map
-            } catch (e: Exception) {
-                // If not JSON, try as number
-                str.toDoubleOrNull() ?: str
-            }
-        } catch (e: Exception) {
-            null
-        }
+    private fun parsePayload(payload: ByteArray): String {
+        return String(payload)
     }
 
     private fun parseNodeInput(nodeInput: String): Pair<String, String> {
