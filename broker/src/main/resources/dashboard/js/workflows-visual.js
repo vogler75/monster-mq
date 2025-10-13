@@ -436,8 +436,307 @@ const VisualFlow = (() => {
   document.addEventListener('keydown', handleKeyDown);
   document.addEventListener('keyup', handleKeyUp);
 
+  // ------------- Script Validation -------------
+  function validateScript(){
+    const scriptEl = qs('#n-script');
+    const validationEl = qs('#script-validation');
+    if(!scriptEl || !validationEl) return;
+
+    const script = scriptEl.value.trim();
+    if(!script){
+      validationEl.style.display = 'block';
+      validationEl.style.background = 'rgba(255,193,7,0.15)';
+      validationEl.style.borderColor = '#ffc107';
+      validationEl.style.color = '#ffc107';
+      validationEl.innerHTML = '⚠ Script is empty';
+      return;
+    }
+
+    try {
+      // Validate JavaScript syntax using Function constructor
+      new Function(script);
+      validationEl.style.display = 'block';
+      validationEl.style.background = 'rgba(46,213,115,0.15)';
+      validationEl.style.borderColor = '#2ed573';
+      validationEl.style.color = '#2ed573';
+      validationEl.innerHTML = '✓ JavaScript syntax is valid';
+      notify('Script validated successfully', 'success');
+    } catch(e) {
+      validationEl.style.display = 'block';
+      validationEl.style.background = 'rgba(220,53,69,0.15)';
+      validationEl.style.borderColor = '#dc3545';
+      validationEl.style.color = '#dc3545';
+      validationEl.innerHTML = `✗ Syntax error: ${escape(e.message)}`;
+      notify('Script has syntax errors', 'error');
+    }
+  }
+
+  // ------------- Script Popup Window -------------
+  let scriptPopupWindow = null;
+
+  function openScriptInWindow(){
+    const scriptEl = qs('#n-script');
+    if(!scriptEl) return;
+
+    const node = currentNode();
+    if(!node) {
+      notify('No node selected', 'error');
+      return;
+    }
+
+    const script = scriptEl.value;
+    const nodeName = node.name;
+
+    // Close existing popup if any
+    if(scriptPopupWindow && !scriptPopupWindow.closed){
+      scriptPopupWindow.focus();
+      return;
+    }
+
+    // Open new popup window
+    const width = 900;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    scriptPopupWindow = window.open('about:blank', 'ScriptEditor',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`);
+
+    if(!scriptPopupWindow) {
+      notify('Popup blocked! Please allow popups for this site', 'error');
+      return;
+    }
+
+    // Write content to popup
+    scriptPopupWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Script Editor - ${escape(nodeName)}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e8eaed;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .header {
+      background: #1a1d28;
+      border-bottom: 1px solid #2d3139;
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #e8eaed;
+    }
+    .header .node-name {
+      font-size: 0.85rem;
+      color: #9ca3af;
+      margin-top: 0.25rem;
+    }
+    .actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .btn {
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-validate {
+      background: #2d3139;
+      color: #e8eaed;
+      border: 1px solid #3d4153;
+    }
+    .btn-validate:hover {
+      background: #3d4153;
+    }
+    .btn-save {
+      background: #7c3aed;
+      color: white;
+    }
+    .btn-save:hover {
+      background: #9f67ff;
+    }
+    .btn-close {
+      background: #2d3139;
+      color: #e8eaed;
+      border: 1px solid #3d4153;
+    }
+    .btn-close:hover {
+      background: #3d4153;
+    }
+    .editor {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      overflow: hidden;
+    }
+    textarea {
+      flex: 1;
+      width: 100%;
+      background: #1a1d28;
+      border: 1px solid #2d3139;
+      border-radius: 8px;
+      color: #e8eaed;
+      padding: 1rem;
+      font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      resize: none;
+      outline: none;
+      tab-size: 2;
+    }
+    textarea:focus {
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.2);
+    }
+    .validation {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      display: none;
+    }
+    .validation.success {
+      background: rgba(46,213,115,0.15);
+      border: 1px solid #2ed573;
+      color: #2ed573;
+    }
+    .validation.error {
+      background: rgba(220,53,69,0.15);
+      border: 1px solid #dc3545;
+      color: #dc3545;
+    }
+    .validation.warning {
+      background: rgba(255,193,7,0.15);
+      border: 1px solid #ffc107;
+      color: #ffc107;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h2>Script Editor</h2>
+      <div class="node-name">Node: ${escape(nodeName)}</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-validate" onclick="validateScript()">Validate</button>
+      <button class="btn btn-save" onclick="saveAndClose()">Save & Close</button>
+      <button class="btn btn-close" onclick="window.close()">Close</button>
+    </div>
+  </div>
+  <div class="editor">
+    <textarea id="script-textarea" spellcheck="false" autofocus></textarea>
+    <div id="validation" class="validation"></div>
+  </div>
+  <script>
+    const textarea = document.getElementById('script-textarea');
+    const validation = document.getElementById('validation');
+
+    // Set initial value
+    textarea.value = ${JSON.stringify(script)};
+
+    // Tab key handler
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        textarea.value = textarea.value.substring(0, start) + '  ' + textarea.value.substring(end);
+        textarea.selectionStart = textarea.selectionEnd = start + 2;
+      }
+    });
+
+    function validateScript() {
+      const script = textarea.value.trim();
+
+      if (!script) {
+        validation.className = 'validation warning';
+        validation.style.display = 'block';
+        validation.textContent = '⚠ Script is empty';
+        return false;
+      }
+
+      try {
+        new Function(script);
+        validation.className = 'validation success';
+        validation.style.display = 'block';
+        validation.textContent = '✓ JavaScript syntax is valid';
+        return true;
+      } catch (e) {
+        validation.className = 'validation error';
+        validation.style.display = 'block';
+        validation.textContent = '✗ Syntax error: ' + e.message;
+        return false;
+      }
+    }
+
+    function saveAndClose() {
+      const script = textarea.value;
+
+      // Call parent window to update the script
+      if (window.opener && !window.opener.closed) {
+        window.opener.VisualFlow.updateScriptFromPopup(script);
+      }
+
+      window.close();
+    }
+
+    // Auto-validate on blur
+    textarea.addEventListener('blur', () => {
+      if (textarea.value.trim()) {
+        validateScript();
+      }
+    });
+
+    // Clear validation on input
+    textarea.addEventListener('input', () => {
+      validation.style.display = 'none';
+    });
+  </script>
+</body>
+</html>
+    `);
+
+    scriptPopupWindow.document.close();
+    scriptPopupWindow.focus();
+  }
+
+  function updateScriptFromPopup(script){
+    const scriptEl = qs('#n-script');
+    if(!scriptEl) return;
+
+    scriptEl.value = script;
+
+    const node = currentNode();
+    if(node){
+      node.config.script = script;
+      markDirty();
+    }
+
+    notify('Script updated from popup', 'success');
+  }
+
   function cancel(){ state.dirty=false; location.href='/pages/workflows.html'; }
-  return { init, addNodeType, saveClass, deleteClass, handlePortClick, deleteConnection, saveNode, deleteNode, addNodeType: addNodeType, resetView, addConnectionHelper, refreshConnectionHelper, keyboardZoom, cancel };
+  return { init, addNodeType, saveClass, deleteClass, handlePortClick, deleteConnection, saveNode, deleteNode, addNodeType: addNodeType, resetView, addConnectionHelper, refreshConnectionHelper, keyboardZoom, validateScript, openScriptInWindow, updateScriptFromPopup, cancel };
 })();
+
+// Make VisualFlow accessible from popup windows
+window.VisualFlow = VisualFlow;
 
 document.addEventListener('DOMContentLoaded', ()=> VisualFlow.init());
