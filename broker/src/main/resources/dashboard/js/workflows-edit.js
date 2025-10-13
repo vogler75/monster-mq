@@ -218,7 +218,18 @@ const FlowEdit = (() => {
         <div class="form-group"><label>Language</label><select id="n-language" class="form-control"><option value="javascript" ${node.language==='javascript'?'selected':''}>JavaScript</option></select></div>
         <div class="form-group" style="grid-column:1/-1;"><label>Inputs (comma)</label><input id="n-inputs" class="form-control" value="${escape(node.inputs.join(', '))}"></div>
         <div class="form-group" style="grid-column:1/-1;"><label>Outputs (comma)</label><input id="n-outputs" class="form-control" value="${escape(node.outputs.join(', '))}"></div>
-        <div class="form-group" style="grid-column:1/-1;"><label>Script</label><textarea id="n-script" class="script">${escape(node.config?.script||'')}</textarea></div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Script</span>
+            <button class="btn btn-secondary btn-small" style="padding:0.35rem 0.75rem; font-size:0.75rem;" onclick="FlowEdit.openScriptEditor('${node.id}')" title="Open full-screen script editor">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:0.25rem;">
+                <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+              </svg>
+              Expand Editor
+            </button>
+          </label>
+          <textarea id="n-script" class="script">${escape(node.config?.script||'')}</textarea>
+        </div>
       </div>
       <div style="margin-top:1rem; display:flex; gap:.5rem;">
         <button class="btn btn-primary" onclick="FlowEdit.saveNode('${node.id}')">Save Node</button>
@@ -242,6 +253,27 @@ const FlowEdit = (() => {
     node.config.script = qs('#n-script').value;
     renderNodesTable();
     notify('Node saved','success');
+  }
+
+  function openScriptEditor(id) {
+    const node = state.nodes.find(n=>n.id===id); if(!node) return;
+    const scriptEl = qs('#n-script');
+    if(!scriptEl) return;
+
+    const currentScript = scriptEl.value;
+    const nodeName = node.name;
+
+    // Open shared modal
+    ScriptEditorModal.open({
+      title: 'Script Editor',
+      subtitle: `Node: ${nodeName}`,
+      initialScript: currentScript,
+      onSave: (updatedScript) => {
+        scriptEl.value = updatedScript;
+        node.config.script = updatedScript;
+        notify('Script updated', 'success');
+      }
+    });
   }
 
   function cancelNodeEdit(){ qs('#node-inline-editor').style.display='none'; }
@@ -372,7 +404,7 @@ const FlowEdit = (() => {
   function escape(str){ return (str??'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
   return {
-    init, addNode, editNode, saveNode, cancelNodeEdit, removeNode, addConnectionRow, removeConnection,
+    init, addNode, editNode, saveNode, openScriptEditor, cancelNodeEdit, removeNode, addConnectionRow, removeConnection,
     addInputMapping, updateInputMapping, removeInputMapping, addOutputMapping, updateOutputMapping, removeOutputMapping,
     addVariable, updateVariableKey, updateVariableVal, removeVariable, save, deleteItem, cancel, addOutputMappingRow: addOutputMapping
   };
