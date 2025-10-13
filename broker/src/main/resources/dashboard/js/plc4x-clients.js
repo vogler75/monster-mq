@@ -204,12 +204,12 @@ class Plc4xClientManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-action btn-view" onclick="plc4xManager.viewClient('${client.name}')" title="Edit Client">
+                        <button class="btn-icon btn-view" onclick="plc4xManager.viewClient('${client.name}')" title="Edit Client" aria-label="Edit Client">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
                             </svg>
                         </button>
-                        <button class="btn-action ${client.enabled ? 'btn-pause' : 'btn-play'}"
+            <button class="btn-icon ${client.enabled ? 'btn-pause' : 'btn-play'}"
                                 onclick="plc4xManager.toggleClient('${client.name}', ${!client.enabled})"
                                 title="${client.enabled ? 'Disable Client' : 'Enable Client'}">
                             ${client.enabled ?
@@ -217,7 +217,7 @@ class Plc4xClientManager {
                                 '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
                             }
                         </button>
-                        <button class="btn-action btn-delete" onclick="plc4xManager.deleteClient('${client.name}')" title="Delete Client">
+                        <button class="btn-icon btn-delete" onclick="plc4xManager.deleteClient('${client.name}')" title="Delete Client" aria-label="Delete Client">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                             </svg>

@@ -186,12 +186,12 @@ function createServerRow(server) {
         <td>${statusBadge}</td>
         <td>
             <div class="action-buttons">
-                <button class="btn-action btn-view" onclick="editServer('${escapeHtml(server.name)}')" title="Edit Server">
+                <button class="btn-icon btn-view" onclick="editServer('${escapeHtml(server.name)}')" title="Edit Server" aria-label="Edit Server">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
                     </svg>
                 </button>
-                <button class="btn-action ${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'btn-play' : 'btn-pause'}"
+        <button class="btn-icon ${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'btn-play' : 'btn-pause'}"
                         onclick="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? `startServer('${escapeHtml(server.name)}')` : `stopServer('${escapeHtml(server.name)}')`}"
                         title="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'Start Server' : 'Stop Server'}">
                     ${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ?
@@ -199,12 +199,12 @@ function createServerRow(server) {
                         '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
                     }
                 </button>
-                <button class="btn-action btn-cert" onclick="manageCertificates('${escapeHtml(server.name)}')" title="Manage Certificates">
+                <button class="btn-icon btn-cert" onclick="manageCertificates('${escapeHtml(server.name)}')" title="Manage Certificates" aria-label="Manage Certificates">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
                     </svg>
                 </button>
-                <button class="btn-action btn-delete" onclick="deleteServer('${escapeHtml(server.name)}')" title="Delete Server">
+                <button class="btn-icon btn-delete" onclick="deleteServer('${escapeHtml(server.name)}')" title="Delete Server" aria-label="Delete Server">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                     </svg>
@@ -527,7 +527,7 @@ function createAddressRow(address) {
         <td style="padding: 1rem; vertical-align: middle; color: var(--text-secondary);">${address.dataType}</td>
         <td style="padding: 1rem; vertical-align: middle; color: var(--text-secondary);">${address.accessLevel.replace('_', ' ')}</td>
         <td style="padding: 1rem; vertical-align: middle; text-align: center;">
-            <button class="btn-action btn-delete" onclick="deleteAddress('${escapeHtml(address.mqttTopic)}')" title="Delete address">
+            <button class="btn-icon btn-delete" onclick="deleteAddress('${escapeHtml(address.mqttTopic)}')" title="Delete address" aria-label="Delete address">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                 </svg>

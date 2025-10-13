@@ -518,6 +518,7 @@ body {
 .btn-icon.btn-view { color: var(--monster-purple); }
 .btn-icon.btn-play { color: var(--monster-green); }
 .btn-icon.btn-pause { color: var(--monster-orange); }
+.btn-icon.btn-cert { color: var(--accent-blue); }
 .btn-icon.btn-delete {
     color: #ef4444; /* icon color */
     background: transparent;

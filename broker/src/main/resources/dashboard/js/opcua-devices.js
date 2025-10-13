@@ -188,12 +188,12 @@ class OpcUaDeviceManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-action btn-view" onclick="opcuaManager.viewDevice('${device.name}')" title="Edit Device">
+                        <button class="btn-icon btn-view" onclick="opcuaManager.viewDevice('${device.name}')" title="Edit Device" aria-label="Edit Device">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
                             </svg>
                         </button>
-                        <button class="btn-action ${device.enabled ? 'btn-pause' : 'btn-play'}"
+            <button class="btn-icon ${device.enabled ? 'btn-pause' : 'btn-play'}"
                                 onclick="opcuaManager.toggleDevice('${device.name}', ${!device.enabled})"
                                 title="${device.enabled ? 'Disable Device' : 'Enable Device'}">
                             ${device.enabled ?
@@ -201,7 +201,7 @@ class OpcUaDeviceManager {
                                 '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
                             }
                         </button>
-                        <button class="btn-action btn-delete" onclick="opcuaManager.deleteDevice('${device.name}')" title="Delete Device">
+                        <button class="btn-icon btn-delete" onclick="opcuaManager.deleteDevice('${device.name}')" title="Delete Device" aria-label="Delete Device">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                             </svg>
