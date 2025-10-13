@@ -255,7 +255,7 @@ class FlowInstanceExecutor(
         node.inputs.forEach { inputName ->
             val nodeInput = "${node.id}.$inputName"
 
-            // Check if this is a topic input
+            // Check if this is a topic input (from MQTT)
             val topicMapping = topicInputMappings[nodeInput]
             if (topicMapping != null) {
                 val topicValue = topicValues[topicMapping]
@@ -269,12 +269,34 @@ class FlowInstanceExecutor(
                 }
             }
 
-            // Check if this is a text input
+            // Check if this is a text input (constant)
             val textMapping = textInputMappings[nodeInput]
             if (textMapping != null) {
                 inputs[inputName] = FlowScriptEngine.InputValue(
                     value = textMapping,
                     type = FlowScriptEngine.InputType.TEXT
+                )
+            }
+
+            // Check if this is an internal connection (from another node)
+            val internalTopic = "flow:${instanceConfig.name}:$nodeInput"
+            val internalValue = topicValues[internalTopic]
+            if (internalValue != null) {
+                // Find the source connection to get the output port name
+                val sourceConnection = flowClass.connections.find {
+                    it.toNode == node.id && it.toInput == inputName
+                }
+                val topicName = if (sourceConnection != null) {
+                    "${sourceConnection.fromNode}.${sourceConnection.fromOutput}"
+                } else {
+                    null
+                }
+
+                inputs[inputName] = FlowScriptEngine.InputValue(
+                    value = internalValue.value,
+                    type = FlowScriptEngine.InputType.TOPIC,
+                    timestamp = internalValue.timestamp,
+                    topic = topicName
                 )
             }
         }
