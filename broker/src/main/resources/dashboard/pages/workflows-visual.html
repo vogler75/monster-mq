@@ -30,19 +30,39 @@
     .connection-line { stroke:#7c3aed; stroke-width:2; fill:none; cursor:pointer; pointer-events:stroke; }
     .form-section { padding:0 1rem 1.2rem; }
     .form-group { margin:.6rem 0; display:flex; flex-direction:column; gap:.35rem; }
-    .form-group input, .form-group textarea { font-size:.75rem; }
+  .form-group input, .form-group textarea, .form-group select { font-size:.75rem; }
     .small-label { font-size:.65rem; letter-spacing:.5px; text-transform:uppercase; opacity:.65; }
     .inline-btns { display:flex; gap:.4rem; flex-wrap:wrap; }
     .footer-bar { padding:.6rem 1rem; background:var(--background-secondary); border-top:1px solid var(--border-color); display:flex; gap:.5rem; }
-    .code-area { font-family:monospace; font-size:.7rem; min-height:120px; }
+  .code-area { font-family:monospace; font-size:.7rem; min-height:120px; }
+  .panel input, .panel textarea, .panel select { background:#1b1f27; border:1px solid var(--border-color); color:var(--text-primary); padding:.4rem .5rem; border-radius:4px; font-family:inherit; }
+  .panel input:focus, .panel textarea:focus, .panel select:focus { outline:2px solid #7c3aed55; border-color:#7c3aed; }
+  .panel textarea { resize:vertical; }
+  .inline-hint { font-size:.55rem; opacity:.55; margin-top:-.25rem; margin-bottom:.4rem; line-height:1.2; }
+  .toolbar { position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:.5rem; background:#1d212d; padding:.4rem .6rem; border:1px solid var(--border-color); border-radius:40px; box-shadow:0 4px 16px rgba(0,0,0,.4); backdrop-filter:blur(4px); }
+  .toolbar button { background:#262b37; border:1px solid var(--border-color); width:34px; height:34px; border-radius:50%; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:.9rem; }
+  .toolbar button:hover { background:#323846; color:var(--text-primary); }
+  .zoom-indicator { font-size:.65rem; letter-spacing:.5px; display:flex; align-items:center; padding:0 .25rem; color:var(--text-secondary); }
+  .code-editor { box-shadow:0 0 0 1px #2a2f3a, 0 6px 14px -6px rgba(0,0,0,.6); }
+  #n-script { font-family:"JetBrains Mono", monospace; }
+  .help-badge { display:inline-block; background:#2d3342; color:#9ca3af; font-size:.55rem; padding:2px 6px; border-radius:10px; cursor:help; }
   </style>
 </head>
 <body>
   <div class="top-bar">
     <div class="sidebar-brand"><img src="/assets/logo.png" alt="Logo"><span class="brand-name">MonsterMQ</span></div>
-    <div style="display:flex; gap:1rem; align-items:center;">
-      <a href="/pages/workflows.html" class="btn btn-secondary btn-small">← Back</a>
-      <span id="status-text" style="font-size:.7rem; opacity:.7;">Loading...</span>
+    <div style="display:flex; gap:1rem; align-items:center; flex:1;">
+      <div class="action-bar" style="display:flex; gap:.6rem; align-items:center; margin-left:1rem;">
+        <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'">← Back</button>
+        <button class="btn btn-secondary btn-small" onclick="VisualFlow.resetView()" title="Center / Reset">Center</button>
+      </div>
+      <span style="flex:1;"></span>
+      <div class="action-group" style="display:flex; gap:.5rem;">
+        <button class="btn btn-secondary btn-small" onclick="VisualFlow.cancel && VisualFlow.cancel()">Cancel</button>
+        <button class="btn btn-primary btn-small" onclick="VisualFlow.saveClass()">Save</button>
+        <button class="btn btn-danger btn-small" id="delete-class-btn" style="display:none;" onclick="VisualFlow.deleteClass()">Delete</button>
+      </div>
+      <span id="status-text" style="font-size:.7rem; opacity:.7; margin-left:.75rem;">Loading...</span>
     </div>
   </div>
   <aside class="sidebar" id="sidebar">
@@ -70,7 +90,7 @@
             <div class="form-group"><label class="small-label">Description</label><textarea id="fc-description" rows="2"></textarea></div>
             <div class="inline-btns"><button class="btn btn-primary btn-small" onclick="VisualFlow.saveClass()">Save Class</button><button id="delete-class-btn" class="btn btn-danger btn-small" style="display:none;" onclick="VisualFlow.deleteClass()">Delete</button></div>
           </div>
-          <h3 style="margin-top:1.5rem;">Connect</h3>
+          <h3 style="margin-top:1.5rem;">Connect <span class="help-badge" title="Choose an output (From) then an input (To) to create a connection. Or click OUT port then IN port on nodes. Shift+Wheel = zoom, Space+Drag or Middle Mouse = pan.">?</span></h3>
           <div class="form-section" style="border-top:1px solid var(--border-color);">
             <div class="form-group">
               <label class="small-label">From (node.output)</label>
@@ -84,9 +104,16 @@
               <button class="btn btn-secondary btn-small" onclick="VisualFlow.addConnectionHelper()">Add Connection</button>
               <button class="btn btn-small" onclick="VisualFlow.refreshConnectionHelper()">↻</button>
             </div>
+            <p class="inline-hint">Tip: Click an OUT port, then an IN port directly on the nodes for faster linking.</p>
           </div>
         </div>
         <div class="canvas-wrapper" id="canvas-wrapper">
+          <div class="toolbar">
+            <button title="Zoom In (+)" onclick="VisualFlow.keyboardZoom(1)">+</button>
+            <button title="Zoom Out (-)" onclick="VisualFlow.keyboardZoom(-1)">−</button>
+            <button title="Reset / Center" onclick="VisualFlow.resetView()">◎</button>
+            <div class="zoom-indicator" id="zoom-indicator">100%</div>
+          </div>
           <div id="stage" style="position:relative; width:2000px; height:1200px; transform-origin:0 0;">
             <svg id="connections-svg"></svg>
             <div id="flow-canvas"></div>

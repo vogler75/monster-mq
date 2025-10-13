@@ -56,12 +56,27 @@ const VisualFlow = (() => {
 
   async function loadFlowClassIfNeeded(){
     if(!state.className) return; // new class
-    const q = `query($name:String){ flowClasses(name:$name){ name namespace version description nodes { id type name config inputs outputs language position { x y } } connections { fromNode fromOutput toNode toInput } } }`;
-    const data = await gql(q,{name: state.className});
+    // Request script inside config (object) if supported by schema
+    // If the server returns config as a JSON scalar, this still works (ignored sub-selection will error) – fallback handled below.
+    // If it errors in practice, adjust schema query accordingly.
+    let data;
+    try {
+      const q = `query($name:String){ flowClasses(name:$name){ name namespace version description nodes { id type name config { script } inputs outputs language position { x y } } connections { fromNode fromOutput toNode toInput } } }`;
+      data = await gql(q,{name: state.className});
+    } catch(err){
+      console.warn('Query with config { script } failed, retrying with raw config:', err.message);
+      const qFallback = `query($name:String){ flowClasses(name:$name){ name namespace version description nodes { id type name config inputs outputs language position { x y } } connections { fromNode fromOutput toNode toInput } } }`;
+      data = await gql(qFallback,{name: state.className});
+    }
     const list = data.flowClasses||[];
     state.flowClass = list[0]||null;
     if(!state.flowClass){ notify('Flow class not found','error'); return; }
-    state.nodes = state.flowClass.nodes.map(n=>({ ...n, position: n.position||{x:100,y:100} }));
+    state.nodes = state.flowClass.nodes.map(n=>({
+      ...n,
+      // Normalize config to ensure script present
+      config: (n.config && typeof n.config === 'object') ? { script: n.config.script||'' } : { script: '' },
+      position: n.position||{x:100,y:100}
+    }));
     state.connections = state.flowClass.connections.map(c=>({ ...c }));
   }
 
@@ -119,7 +134,7 @@ const VisualFlow = (() => {
   // ------------- Node Panel -------------
   function updateNodePanel(){ const n=currentNode(); const empty=qs('#node-panel-empty'); const form=qs('#node-form'); if(!n){ empty.style.display='block'; form.style.display='none'; return; } empty.style.display='none'; form.style.display='block'; qs('#n-id').value=n.id; qs('#n-name').value=n.name; qs('#n-inputs').value=n.inputs.join(', '); qs('#n-outputs').value=n.outputs.join(', '); qs('#n-script').value=n.config?.script||''; enhanceScriptEditor(); }
   // Enhance script area after panel update
-  function enhanceScriptEditor(){ const ta=qs('#n-script'); const gutter=qs('#n-script-lines'); if(!ta||!gutter) return; const updateLines=()=>{ const count = ta.value.split(/\n/).length; let html=''; for(let i=1;i<=count;i++) html+=i+'\n'; gutter.textContent=html.trimEnd(); }; if(!ta._enhanced){ ta.addEventListener('input',()=>{ updateLines(); autoGrow(); }); ta.addEventListener('keydown',e=>{ if(e.key==='Tab'){ e.preventDefault(); const start=ta.selectionStart; const end=ta.selectionEnd; const val=ta.value; ta.value=val.substring(0,start)+'  '+val.substring(end); ta.selectionStart=ta.selectionEnd=start+2; ta.dispatchEvent(new Event('input')); }}); const autoGrow=()=>{ ta.style.height='auto'; ta.style.height=Math.min(500, ta.scrollHeight)+'px'; }; ta._enhanced=true; updateLines(); autoGrow(); } else { updateLines(); }
+  function enhanceScriptEditor(){ const ta=qs('#n-script'); const gutter=qs('#n-script-lines'); if(!ta||!gutter) return; const updateLines=()=>{ const count = (ta.value||'').split(/\n/).length; let html=''; for(let i=1;i<=count;i++) html+=i+'\n'; gutter.textContent=html.trimEnd(); }; if(!ta._enhanced){ ta.addEventListener('input',()=>{ updateLines(); autoGrow(); }); ta.addEventListener('keydown',e=>{ if(e.key==='Tab'){ e.preventDefault(); const start=ta.selectionStart; const end=ta.selectionEnd; const val=ta.value; ta.value=val.substring(0,start)+'  '+val.substring(end); ta.selectionStart=ta.selectionEnd=start+2; ta.dispatchEvent(new Event('input')); }}); const autoGrow=()=>{ ta.style.height='auto'; ta.style.height=Math.min(500, ta.scrollHeight)+'px'; }; ta._enhanced=true; updateLines(); autoGrow(); } else { updateLines(); }
     // Sync scroll
     ta.addEventListener('scroll',()=>{ gutter.scrollTop=ta.scrollTop; }); }
   enhanceScriptEditor();
@@ -134,21 +149,56 @@ const VisualFlow = (() => {
 
   // ------------- View Helpers -------------
   function resetView(){ state.view.scale=1; state.view.x=0; state.view.y=0; applyViewTransform(); }
-  function applyViewTransform(){ const stage=qs('#stage'); if(!stage) return; const { scale,x,y } = state.view; stage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`; }
-  function zoom(delta, centerX, centerY){ const prevScale=state.view.scale; const newScale = Math.min(2, Math.max(0.25, prevScale * (delta>0?0.9:1.1))); if(newScale===prevScale) return; const wrapper=qs('#canvas-wrapper'); const rect=wrapper.getBoundingClientRect(); const cx = centerX - rect.left; const cy = centerY - rect.top; // adjust translation so point stays stable
+  function applyViewTransform(){ const stage=qs('#stage'); if(!stage) return; const { scale,x,y } = state.view; stage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`; const zi=qs('#zoom-indicator'); if(zi) zi.textContent = Math.round(scale*100)+'%'; }
+  function zoom(deltaY, centerX, centerY){
+    const prevScale=state.view.scale;
+    // deltaY < 0 (wheel up) => zoom in, deltaY > 0 (wheel down) => zoom out
+    const direction = deltaY < 0 ? 1 : -1;
+    const factor = direction > 0 ? 1.1 : 0.9;
+    const newScale = Math.min(2.5, Math.max(0.2, prevScale * factor));
+    if(newScale===prevScale) return;
+    const wrapper=qs('#canvas-wrapper'); const rect=wrapper.getBoundingClientRect();
+    const cx = centerX - rect.left; const cy = centerY - rect.top;
+    // Keep cursor position stable
     state.view.x = cx/prevScale - (cx/newScale - state.view.x);
     state.view.y = cy/prevScale - (cy/newScale - state.view.y);
-    state.view.scale = newScale; applyViewTransform(); }
+    state.view.scale = newScale; applyViewTransform();
+  }
 
   function handleWheel(e){
-    // Only zoom when Shift + wheel (and not ctrl/cmd pinch gesture)
-    if(e.ctrlKey || e.metaKey) return; // let browser handle pinch zoom or native behaviors
-    if(e.shiftKey){
-      e.preventDefault();
-      zoom(e.deltaY, e.clientX, e.clientY);
-    } // else: allow normal vertical scroll of the canvas wrapper
+    // Only zoom when Shift + wheel (avoid interfering with scroll)
+    if(e.ctrlKey || e.metaKey) return;
+    if(!e.shiftKey) return;
+    // Prevent page scroll / horizontal scroll translation
+    e.preventDefault();
+    // Some devices send inverted signs or use deltaX when Shift is held.
+    let dy = e.deltaY;
+    if(Math.abs(dy) < 0.01 && Math.abs(e.deltaX) > Math.abs(dy)) {
+      // Fallback: use horizontal as vertical intent while holding Shift
+      dy = e.deltaX;
+    }
+    // Normalize dy to a consistent magnitude bucket so tiny deltas still trigger a step
+    if(dy === 0) return;
+    // On some trackpads positive deltaY means scroll down (should zoom out)
+    zoom(dy, e.clientX, e.clientY);
   }
-  function handleKeyDown(e){ if(e.code==='Space'){ if(!state.view.isPanning){ state.view.isPanning=true; document.body.style.cursor='grab'; } e.preventDefault(); } }
+  function keyboardZoom(dir){
+    const wrapper=qs('#canvas-wrapper');
+    const rect=wrapper.getBoundingClientRect();
+    const cx = rect.left + rect.width/2;
+    const cy = rect.top + rect.height/2;
+    zoom(dir>0 ? -1 : 1, cx, cy); // reuse zoom semantics (deltaY<0 => in)
+  }
+  function handleKeyDown(e){
+    if(e.code==='Space'){
+      if(!state.view.isPanning){ state.view.isPanning=true; document.body.style.cursor='grab'; }
+      e.preventDefault();
+    } else if((e.key==='+') || (e.key==='=' && (e.shiftKey||!e.shiftKey))){
+      keyboardZoom(1); e.preventDefault();
+    } else if(e.key==='-' || e.key==='_'){
+      keyboardZoom(-1); e.preventDefault();
+    }
+  }
   function handleKeyUp(e){ if(e.code==='Space'){ state.view.isPanning=false; document.body.style.cursor=''; } }
 
   // allow middle mouse pan
@@ -183,7 +233,8 @@ const VisualFlow = (() => {
   document.addEventListener('keydown', handleKeyDown);
   document.addEventListener('keyup', handleKeyUp);
 
-  return { init, addNodeType, saveClass, deleteClass, handlePortClick, deleteConnection, saveNode, deleteNode, addNodeType: addNodeType, resetView, addConnectionHelper, refreshConnectionHelper };
+  function cancel(){ state.dirty=false; location.href='/pages/workflows.html'; }
+  return { init, addNodeType, saveClass, deleteClass, handlePortClick, deleteConnection, saveNode, deleteNode, addNodeType: addNodeType, resetView, addConnectionHelper, refreshConnectionHelper, keyboardZoom, cancel };
 })();
 
 document.addEventListener('DOMContentLoaded', ()=> VisualFlow.init());

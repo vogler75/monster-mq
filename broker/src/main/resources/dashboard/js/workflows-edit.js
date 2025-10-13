@@ -356,7 +356,11 @@ const FlowEdit = (() => {
     location.href = '/pages/workflows.html';
   }
 
-  function cancel(){ if(confirm('Discard changes?')) location.href='/pages/workflows.html'; }
+  function cancel(){
+    // Cancel should not ask for confirmation per new UX requirement.
+    state.dirty = false; // prevent any beforeunload handler (if added later) from prompting
+    location.href='/pages/workflows.html';
+  }
 
   function notify(msg,type='info') {
     const div = document.createElement('div');

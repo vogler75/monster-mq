@@ -85,9 +85,17 @@
         </div>
 
         <div class="section" id="actions-section" style="display:none;">
-            <button class="btn btn-primary" onclick="FlowEdit.save()">Save</button>
-            <button class="btn btn-secondary" onclick="FlowEdit.cancel()">Cancel</button>
-            <button class="btn btn-danger" id="delete-button" style="display:none;" onclick="FlowEdit.deleteItem()">Delete</button>
+            <div class="action-bar" style="display:flex; flex-wrap:wrap; gap:.6rem; align-items:center; background:var(--background-secondary); padding:1rem 1.25rem; border:1px solid var(--border-color); border-radius:10px;">
+                <div style="display:flex; gap:.5rem;">
+                    <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'">← Back</button>
+                </div>
+                <div style="flex:1;"></div>
+                <div class="action-group" style="display:flex; gap:.5rem;">
+                    <button class="btn btn-secondary btn-small" onclick="FlowEdit.cancel()">Cancel</button>
+                    <button class="btn btn-primary btn-small" style="min-width:90px;" onclick="FlowEdit.save()">Save</button>
+                    <button class="btn btn-danger btn-small" id="delete-button" style="display:none;" onclick="FlowEdit.deleteItem()">Delete</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
