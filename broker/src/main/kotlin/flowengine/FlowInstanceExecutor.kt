@@ -69,15 +69,15 @@ class FlowInstanceExecutor(
 
     override fun start(startPromise: Promise<Void>) {
         try {
-            logger.info("Starting flow instance verticle: ${instanceConfig.name}")
-            logger.info("  - Topic inputs: ${topicInputMappings.size}")
-            logger.info("  - Text inputs: ${textInputMappings.size}")
-            logger.info("  - Subscribed topics: ${topicToNodeInputs.keys}")
+            logger.info("Starting flow instance: ${instanceConfig.name}")
+            logger.fine("  - Topic inputs: ${topicInputMappings.size}")
+            logger.fine("  - Text inputs: ${textInputMappings.size}")
+            logger.fine("  - Subscribed topics: ${topicToNodeInputs.keys}")
 
             // Subscribe to MQTT topics
             subscribeToTopics()
 
-            logger.info("Flow instance verticle ${instanceConfig.name} started successfully")
+            logger.info("Flow instance ${instanceConfig.name} started successfully")
             startPromise.complete()
 
         } catch (e: Exception) {
@@ -89,7 +89,7 @@ class FlowInstanceExecutor(
 
     override fun stop(stopPromise: Promise<Void>) {
         try {
-            logger.info("Stopping flow instance verticle: ${instanceConfig.name}")
+            logger.info("Stopping flow instance: ${instanceConfig.name}")
 
             // Unsubscribe from MQTT topics
             unsubscribeFromTopics()
@@ -98,7 +98,7 @@ class FlowInstanceExecutor(
             scriptEngines.values.forEach { it.close() }
             scriptEngines.clear()
 
-            logger.info("Flow instance verticle ${instanceConfig.name} stopped successfully")
+            logger.info("Flow instance ${instanceConfig.name} stopped successfully")
             stopPromise.complete()
 
         } catch (e: Exception) {

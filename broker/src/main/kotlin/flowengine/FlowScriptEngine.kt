@@ -104,6 +104,7 @@ class FlowScriptEngine {
 
             // Get or compile the script function
             val scriptFunction = compiledScripts.getOrPut(script) {
+                logger.fine("Compiling script for first time:\n$script")
                 // Wrap user script in a function to provide fresh scope on each execution
                 val wrappedScript = """
                     (function() {
