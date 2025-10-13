@@ -493,6 +493,46 @@ body {
 .btn-action:hover { transform: translateY(-1px); opacity: 0.9; }
 .btn-action:active { transform: translateY(0); }
 
+/* Icon-only square buttons */
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: var(--dark-surface-2);
+    border: 1px solid var(--dark-border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.95rem;
+}
+.btn-icon:hover { background: var(--dark-border); color: var(--text-primary); transform: translateY(-2px); }
+.btn-icon:active { transform: translateY(0); }
+.btn-icon.small { width:32px; height:32px; }
+
+/* Contextual icon color variants */
+.btn-icon.btn-view { color: var(--monster-purple); }
+.btn-icon.btn-play { color: var(--monster-green); }
+.btn-icon.btn-pause { color: var(--monster-orange); }
+.btn-icon.btn-delete {
+    color: #ef4444; /* vivid icon */
+    background: var(--dark-surface-2);
+    border: 1px solid rgba(239,68,68,0.45);
+}
+.btn-icon.btn-delete:hover {
+    background: rgba(239,68,68,0.10);
+    color: #f87171;
+    border-color: rgba(239,68,68,0.65);
+}
+.btn-icon.btn-delete:active {
+    background: rgba(239,68,68,0.18);
+    color: #fca5a5;
+}
+
 
 .btn:disabled {
     opacity: 0.6;
