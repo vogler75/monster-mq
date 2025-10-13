@@ -118,7 +118,48 @@ const VisualFlow = (() => {
   }
   function selectNode(id){ state.selectedNodeId = id; state.selectedConnectionIndex=null; updateNodePanel(); renderNodes(); }
   function deleteNode(){ if(!state.selectedNodeId) return; state.connections = state.connections.filter(c=>c.fromNode!==state.selectedNodeId && c.toNode!==state.selectedNodeId); state.nodes = state.nodes.filter(n=>n.id!==state.selectedNodeId); state.selectedNodeId=null; updateNodePanel(); renderAll(); refreshConnectionHelper(); markDirty(); }
-  function saveNode(){ const n=currentNode(); if(!n) return; n.name=qs('#n-name').value.trim()||n.id; n.inputs=qs('#n-inputs').value.split(',').map(s=>s.trim()).filter(Boolean); n.outputs=qs('#n-outputs').value.split(',').map(s=>s.trim()).filter(Boolean); n.config.script=qs('#n-script').value; renderAll(); refreshConnectionHelper(); markDirty(); notify('Node updated','success'); }
+  function saveNode(){
+    const n=currentNode();
+    if(!n) return;
+
+    // Get new ID and validate
+    const newId = qs('#n-id').value.trim();
+    if(!newId) {
+      notify('Node ID cannot be empty', 'error');
+      return;
+    }
+
+    const oldId = n.id;
+
+    // Check if ID changed and validate uniqueness
+    if(newId !== oldId) {
+      if(state.nodes.some(node => node.id === newId && node !== n)) {
+        notify('Node ID already exists. Choose a unique ID.', 'error');
+        return;
+      }
+
+      // Update all connections that reference the old ID
+      state.connections.forEach(c => {
+        if(c.fromNode === oldId) c.fromNode = newId;
+        if(c.toNode === oldId) c.toNode = newId;
+      });
+
+      // Update the node ID
+      n.id = newId;
+
+      // Update selected node ID
+      state.selectedNodeId = newId;
+    }
+
+    n.name=qs('#n-name').value.trim()||n.id;
+    n.inputs=qs('#n-inputs').value.split(',').map(s=>s.trim()).filter(Boolean);
+    n.outputs=qs('#n-outputs').value.split(',').map(s=>s.trim()).filter(Boolean);
+    n.config.script=qs('#n-script').value;
+    renderAll();
+    refreshConnectionHelper();
+    markDirty();
+    notify('Node updated','success');
+  }
   function currentNode(){ return state.nodes.find(n=>n.id===state.selectedNodeId); }
 
   // ------------- Canvas Rendering -------------
@@ -374,7 +415,7 @@ const VisualFlow = (() => {
   window.addEventListener('beforeunload', (e)=>{ if(state.dirty){ e.preventDefault(); e.returnValue='You have unsaved changes.'; } });
 
   // Mark dirty on form edits
-  ['fc-name','fc-namespace','fc-version','fc-description','n-name','n-inputs','n-outputs','n-script'].forEach(id=>{
+  ['fc-name','fc-namespace','fc-version','fc-description','n-id','n-name','n-inputs','n-outputs','n-script'].forEach(id=>{
     document.addEventListener('input', ev=>{ if(ev.target && ev.target.id===id) markDirty(); });
   });
 
