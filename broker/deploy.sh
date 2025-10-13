@@ -1,1 +1,0 @@
-scp -r target/broker-1.0-SNAPSHOT.jar target/dependencies vogler@linux0:MonsterMQ
