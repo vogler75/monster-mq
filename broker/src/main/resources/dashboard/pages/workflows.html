@@ -429,10 +429,11 @@
             </div>
 
                 <div class="section" id="classes-section">
-                    <div class="card-header" style="align-items:center; gap:1rem;">
-                        <h2 style="margin:0;">Flow Classes</h2>
-                        <input type="text" id="class-search" placeholder="Search..." class="form-control" style="max-width:220px;">
-                        <button class="btn btn-primary" onclick="location.href='/pages/workflows-edit.html?type=class'">+ New Flow Class</button>
+                    <div class="card-header" style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                        <h2 style="margin: 0; flex-shrink: 0;">Flow Classes</h2>
+                        <input type="text" id="class-search" placeholder="Search..." class="form-control" style="max-width: 200px; flex-shrink: 0;">
+                        <button class="btn btn-primary btn-small" onclick="location.href='/pages/workflows-visual.html'">+ New</button>
+                        <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows-edit.html?type=class'">JSON Editor</button>
                     </div>
                     <div class="table-wrapper" style="margin-top:1rem;">
                         <table class="data-table" id="classes-table">
@@ -450,10 +451,10 @@
                     </div>
                 </div>
                 <div class="section" id="instances-section" style="margin-top:3rem;">
-                    <div class="card-header" style="align-items:center; gap:1rem;">
-                        <h2 style="margin:0;">Flow Instances</h2>
-                        <input type="text" id="instance-search" placeholder="Search..." class="form-control" style="max-width:220px;">
-                        <button class="btn btn-primary" onclick="location.href='/pages/workflows-edit.html?type=instance'">+ New Flow Instance</button>
+                    <div class="card-header" style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                        <h2 style="margin: 0; flex-shrink: 0;">Flow Instances</h2>
+                        <input type="text" id="instance-search" placeholder="Search..." class="form-control" style="max-width: 200px; flex-shrink: 0;">
+                        <button class="btn btn-primary btn-small" onclick="location.href='/pages/workflows-edit.html?type=instance'">+ New</button>
                     </div>
                     <div class="table-wrapper" style="margin-top:1rem;">
                         <table class="data-table" id="instances-table">

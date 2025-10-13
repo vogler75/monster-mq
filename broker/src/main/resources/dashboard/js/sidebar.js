@@ -21,6 +21,7 @@ class SidebarManager {
         this.renderMenu();
         this.setupUI();
         this.restoreSidebarState();
+        this.restoreSidebarScroll();
         this.setActiveNavItem();
         this.setupEventListeners();
     }
@@ -190,6 +191,19 @@ class SidebarManager {
         }
     }
 
+    restoreSidebarScroll() {
+        const savedScroll = localStorage.getItem('monstermq_sidebar_scroll');
+        if (savedScroll) {
+            const sidebarNav = document.getElementById('sidebar-nav');
+            if (sidebarNav) {
+                // Use requestAnimationFrame to ensure DOM is fully rendered
+                requestAnimationFrame(() => {
+                    sidebarNav.scrollTop = parseInt(savedScroll, 10);
+                });
+            }
+        }
+    }
+
     setupEventListeners() {
         // Make logo clickable to expand sidebar when collapsed
         const sidebar = document.getElementById('sidebar');
@@ -201,6 +215,17 @@ class SidebarManager {
                 }
             });
         }
+
+        // Save sidebar scroll position before navigating
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const sidebarNav = document.getElementById('sidebar-nav');
+                if (sidebarNav) {
+                    localStorage.setItem('monstermq_sidebar_scroll', sidebarNav.scrollTop.toString());
+                }
+            });
+        });
 
         // Handle responsive behavior on window resize
         window.addEventListener('resize', () => {

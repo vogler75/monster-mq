@@ -8,148 +8,730 @@
   <script src="/js/graphql-client.js"></script>
   <script src="/js/sidebar.js"></script>
   <style>
-    body,html { height:100%; }
-    .editor-layout { display:grid; grid-template-columns:260px 1fr 320px; gap:0; height:calc(100vh - 60px); }
-    .panel { background:var(--background-secondary); border-right:1px solid var(--border-color); overflow:auto; }
-    .panel.right { border-right:none; border-left:1px solid var(--border-color); }
-    .panel h3 { margin:1rem; font-size:.9rem; letter-spacing:.5px; text-transform:uppercase; opacity:.75; }
-    .palette-item { padding:.5rem .75rem; margin:.25rem .5rem; background:var(--background-tertiary); border:1px solid var(--border-color); border-radius:4px; cursor:pointer; font-size:.8rem; display:flex; align-items:center; gap:.5rem; }
-    .palette-item:hover { background:var(--background-hover); }
-    .canvas-wrapper { position:relative; overflow:auto; background:#12141c; }
-    #flow-canvas { position:relative; width:2000px; height:1200px; }
-    #connections-svg { position:absolute; left:0; top:0; width:2000px; height:1200px; pointer-events:none; }
-    .flow-node { position:absolute; min-width:180px; background:#252936; border:2px solid #3d4153; border-radius:8px; padding:.6rem .6rem .4rem; font-size:.75rem; cursor:move; box-shadow:0 2px 6px rgba(0,0,0,.35); }
-    .flow-node.selected { border-color:#7c3aed; box-shadow:0 0 0 3px rgba(124,58,237,.35); }
-    .flow-node-header { font-weight:600; margin-bottom:.4rem; display:flex; justify-content:space-between; align-items:center; }
-    .node-port { background:#1a1d28; padding:.25rem .4rem; border-radius:4px; margin:2px 0; display:flex; justify-content:space-between; gap:.5rem; border:1px solid transparent; cursor:pointer; }
-    .node-port.input-port:hover { border-color:#dc3545; background:rgba(220,53,69,.12); }
-    .node-port.output-port:hover { border-color:#2ed573; background:rgba(46,213,115,.12); }
-    .node-port.output-port.connecting { background:rgba(124,58,237,.25); border-color:#7c3aed; }
-    .node-port.input-port.valid-target { background:rgba(124,58,237,.15); border-color:#7c3aed; }
-    .port-hint-badge { font-size:.55rem; letter-spacing:.5px; padding:2px 4px; border-radius:3px; background:#2d3142; }
-    .connection-line { stroke:#7c3aed; stroke-width:2; fill:none; cursor:pointer; pointer-events:stroke; }
-    .form-section { padding:0 1rem 1.2rem; }
-    .form-group { margin:.6rem 0; display:flex; flex-direction:column; gap:.35rem; }
-  .form-group input, .form-group textarea, .form-group select { font-size:.75rem; }
-    .small-label { font-size:.65rem; letter-spacing:.5px; text-transform:uppercase; opacity:.65; }
-    .inline-btns { display:flex; gap:.4rem; flex-wrap:wrap; }
-    .footer-bar { padding:.6rem 1rem; background:var(--background-secondary); border-top:1px solid var(--border-color); display:flex; gap:.5rem; }
-  .code-area { font-family:monospace; font-size:.7rem; min-height:120px; }
-  .panel input, .panel textarea, .panel select { background:#1b1f27; border:1px solid var(--border-color); color:var(--text-primary); padding:.4rem .5rem; border-radius:4px; font-family:inherit; }
-  .panel input:focus, .panel textarea:focus, .panel select:focus { outline:2px solid #7c3aed55; border-color:#7c3aed; }
-  .panel textarea { resize:vertical; }
-  .inline-hint { font-size:.55rem; opacity:.55; margin-top:-.25rem; margin-bottom:.4rem; line-height:1.2; }
-  .toolbar { position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:.5rem; background:#1d212d; padding:.4rem .6rem; border:1px solid var(--border-color); border-radius:40px; box-shadow:0 4px 16px rgba(0,0,0,.4); backdrop-filter:blur(4px); }
-  .toolbar button { background:#262b37; border:1px solid var(--border-color); width:34px; height:34px; border-radius:50%; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:.9rem; }
-  .toolbar button:hover { background:#323846; color:var(--text-primary); }
-  .zoom-indicator { font-size:.65rem; letter-spacing:.5px; display:flex; align-items:center; padding:0 .25rem; color:var(--text-secondary); }
-  .code-editor { box-shadow:0 0 0 1px #2a2f3a, 0 6px 14px -6px rgba(0,0,0,.6); }
-  #n-script { font-family:"JetBrains Mono", monospace; }
-  .help-badge { display:inline-block; background:#2d3342; color:#9ca3af; font-size:.55rem; padding:2px 6px; border-radius:10px; cursor:help; }
+    body, html {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    /* Top action bar */
+    .editor-top-bar {
+      background: var(--background-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      height: 56px;
+      box-sizing: border-box;
+    }
+
+    .editor-top-bar .title-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex: 1;
+    }
+
+    .editor-top-bar h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .editor-top-bar .status {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      padding: 0.25rem 0.75rem;
+      background: var(--background-tertiary);
+      border-radius: 12px;
+    }
+
+    .editor-top-bar .actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    /* Main editor layout */
+    .editor-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr 340px;
+      gap: 0;
+      height: calc(100vh - 56px);
+      overflow: hidden;
+    }
+
+    /* Side panels */
+    .panel {
+      background: var(--background-secondary);
+      border-right: 1px solid var(--border-color);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel.right {
+      border-right: none;
+      border-left: 1px solid var(--border-color);
+    }
+
+    .panel-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--background-primary);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .panel-header h3 {
+      margin: 0;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .panel-content {
+      padding: 1rem 1.25rem;
+      flex: 1;
+    }
+
+    .panel-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .panel-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .panel-section-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Node Palette */
+    .palette-item {
+      padding: 0.75rem;
+      margin-bottom: 0.5rem;
+      background: var(--background-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      transition: all 0.2s;
+    }
+
+    .palette-item:hover {
+      background: var(--background-hover);
+      border-color: var(--primary-color);
+      transform: translateX(4px);
+    }
+
+    .palette-item-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      background: var(--primary-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+
+    .palette-item-info {
+      flex: 1;
+    }
+
+    .palette-item-name {
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 0.15rem;
+    }
+
+    .palette-item-desc {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+    }
+
+    /* Canvas */
+    .canvas-wrapper {
+      position: relative;
+      overflow: auto;
+      background: linear-gradient(to bottom, #0f1117 0%, #151820 100%);
+    }
+
+    .canvas-grid {
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    #flow-canvas {
+      position: relative;
+      width: 3000px;
+      height: 2000px;
+    }
+
+    #connections-svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 3000px;
+      height: 2000px;
+      pointer-events: none;
+    }
+
+    /* Flow nodes */
+    .flow-node {
+      position: absolute;
+      min-width: 200px;
+      background: linear-gradient(135deg, #252936 0%, #1f2230 100%);
+      border: 2px solid #3d4153;
+      border-radius: 10px;
+      padding: 0;
+      font-size: 0.8rem;
+      cursor: move;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      transition: box-shadow 0.2s, border-color 0.2s;
+      overflow: hidden;
+    }
+
+    .flow-node:hover {
+      box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    }
+
+    .flow-node.selected {
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.3), 0 6px 20px rgba(0,0,0,0.5);
+    }
+
+    .flow-node-header {
+      font-weight: 600;
+      padding: 0.75rem 1rem;
+      background: rgba(0,0,0,0.2);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--text-primary);
+    }
+
+    .flow-node-body {
+      padding: 0.75rem 1rem;
+    }
+
+    .node-port-group {
+      margin-bottom: 0.5rem;
+    }
+
+    .node-port-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .node-port-group-title {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+
+    .node-port {
+      background: rgba(26,29,40,0.6);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      margin: 4px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .node-port.input-port:hover {
+      border-color: #dc3545;
+      background: rgba(220,53,69,0.15);
+      transform: translateX(-2px);
+    }
+
+    .node-port.output-port:hover {
+      border-color: #2ed573;
+      background: rgba(46,213,115,0.15);
+      transform: translateX(2px);
+    }
+
+    .node-port.output-port.connecting {
+      background: rgba(124,58,237,0.25);
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 2px rgba(124,58,237,0.3);
+    }
+
+    .node-port.input-port.valid-target {
+      background: rgba(124,58,237,0.2);
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 2px rgba(124,58,237,0.3);
+    }
+
+    .port-name {
+      flex: 1;
+      font-size: 0.75rem;
+      color: var(--text-primary);
+    }
+
+    .port-hint-badge {
+      font-size: 0.6rem;
+      letter-spacing: 0.5px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: var(--background-tertiary);
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+
+    .node-port.output-port .port-hint-badge {
+      background: rgba(46,213,115,0.15);
+      color: #46e08c;
+    }
+
+    .node-port.input-port .port-hint-badge {
+      background: rgba(220,53,69,0.15);
+      color: #f28b95;
+    }
+
+    .connection-line {
+      stroke: #7c3aed;
+      stroke-width: 2;
+      fill: none;
+      cursor: pointer;
+      pointer-events: stroke;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    }
+
+    /* Toolbar */
+    .toolbar {
+      position: absolute;
+      top: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 0.5rem;
+      background: rgba(29,33,45,0.95);
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+    }
+
+    .toolbar button {
+      background: var(--background-tertiary);
+      border: 1px solid var(--border-color);
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+
+    .toolbar button:hover {
+      background: var(--background-hover);
+      color: var(--text-primary);
+      border-color: var(--primary-color);
+      transform: translateY(-2px);
+    }
+
+    .toolbar button:active {
+      transform: translateY(0);
+    }
+
+    .zoom-indicator {
+      font-size: 0.75rem;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      padding: 0 0.75rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    /* Forms */
+    .form-group {
+      margin-bottom: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .panel input,
+    .panel textarea,
+    .panel select {
+      background: var(--background-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 0.6rem 0.75rem;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+
+    .panel input:focus,
+    .panel textarea:focus,
+    .panel select:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.2);
+    }
+
+    .panel textarea {
+      resize: vertical;
+      min-height: 100px;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-size: 0.75rem;
+      line-height: 1.5;
+    }
+
+    .code-editor {
+      background: var(--background-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .code-editor-header {
+      background: rgba(0,0,0,0.2);
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .code-editor-lang {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      padding: 0.15rem 0.5rem;
+      background: var(--background-primary);
+      border-radius: 4px;
+    }
+
+    .code-editor-body {
+      display: flex;
+    }
+
+    .code-editor-lines {
+      user-select: none;
+      padding: 0.75rem 0.5rem;
+      text-align: right;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      line-height: 1.5;
+      color: var(--text-secondary);
+      min-width: 2.5rem;
+      border-right: 1px solid var(--border-color);
+      background: rgba(0,0,0,0.2);
+    }
+
+    .code-editor textarea {
+      flex: 1;
+      border: 0;
+      background: transparent;
+      padding: 0.75rem;
+      resize: vertical;
+      outline: none;
+      line-height: 1.5;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      min-height: 150px;
+    }
+
+    .inline-hint {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      margin-top: 0.25rem;
+    }
+
+    .help-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--background-tertiary);
+      color: var(--text-secondary);
+      font-size: 0.7rem;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      cursor: help;
+      border: 1px solid var(--border-color);
+    }
+
+    .help-badge:hover {
+      background: var(--primary-color);
+      color: white;
+      border-color: var(--primary-color);
+    }
+
+    .connections-list {
+      font-size: 0.75rem;
+      line-height: 1.5;
+    }
+
+    .connection-item {
+      padding: 0.5rem 0.75rem;
+      background: var(--background-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .connection-item:hover {
+      background: var(--background-hover);
+    }
+
+    .connection-delete {
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 0.25rem;
+      border-radius: 4px;
+    }
+
+    .connection-delete:hover {
+      background: rgba(255,71,87,0.2);
+      color: #ff4757;
+    }
+
+    .empty-state {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border-color);
+      margin: 1rem 0;
+    }
   </style>
 </head>
 <body>
-  <div class="top-bar">
-    <div class="sidebar-brand"><img src="/assets/logo.png" alt="Logo"><span class="brand-name">MonsterMQ</span></div>
-    <div style="display:flex; gap:1rem; align-items:center; flex:1;">
-      <div class="action-bar" style="display:flex; gap:.6rem; align-items:center; margin-left:1rem;">
-        <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'">← Back</button>
-        <button class="btn btn-secondary btn-small" onclick="VisualFlow.resetView()" title="Center / Reset">Center</button>
-      </div>
-      <span style="flex:1;"></span>
-      <div class="action-group" style="display:flex; gap:.5rem;">
-        <button class="btn btn-secondary btn-small" onclick="VisualFlow.cancel && VisualFlow.cancel()">Cancel</button>
-        <button class="btn btn-primary btn-small" onclick="VisualFlow.saveClass()">Save</button>
-        <button class="btn btn-danger btn-small" id="delete-class-btn" style="display:none;" onclick="VisualFlow.deleteClass()">Delete</button>
-      </div>
-      <span id="status-text" style="font-size:.7rem; opacity:.7; margin-left:.75rem;">Loading...</span>
+  <!-- Top Action Bar -->
+  <div class="editor-top-bar">
+    <div class="title-group">
+      <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'" title="Back to Workflows">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+      </button>
+      <h1 id="page-title">Visual Flow Editor</h1>
+      <span class="status" id="status-text">Ready</span>
+    </div>
+    <div class="actions">
+      <button class="btn btn-secondary btn-small" onclick="VisualFlow.cancel && VisualFlow.cancel()">Cancel</button>
+      <button class="btn btn-primary btn-small" onclick="VisualFlow.saveClass()">Save Flow</button>
+      <button class="btn btn-danger btn-small" id="delete-class-btn" style="display:none;" onclick="VisualFlow.deleteClass()">Delete</button>
     </div>
   </div>
-  <aside class="sidebar" id="sidebar">
+
+  <!-- Sidebar (hidden in editor mode) -->
+  <aside class="sidebar" id="sidebar" style="display: none;">
     <div class="sidebar-header">
-      <div class="sidebar-brand"><img src="/assets/logo.png" alt="MonsterMQ Logo"><span class="brand-name">MonsterMQ</span></div>
-      <button class="sidebar-toggle" onclick="toggleSidebar()">&lt;</button>
+      <div class="sidebar-brand">
+        <img src="/assets/logo.png" alt="MonsterMQ Logo">
+        <span class="brand-name">MonsterMQ</span>
+      </div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav"></nav>
   </aside>
-  <div class="main-content">
-    <div class="container" style="max-width:100%; padding:0;">
-      <div class="page-header" style="padding:1rem 1rem .5rem;">
-        <h1 class="page-title" id="page-title">Visual Flow Editor</h1>
-        <p class="page-subtitle" id="page-subtitle"></p>
+
+  <!-- Main Editor -->
+  <div class="editor-layout">
+    <!-- Left Panel: Palette & Class Info -->
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Node Palette</h3>
       </div>
-      <div class="editor-layout">
-        <div class="panel" id="left-panel">
-          <h3>Palette</h3>
-          <div id="node-palette"></div>
-          <h3 style="margin-top:1.5rem;">Class</h3>
-          <div class="form-section">
-            <div class="form-group"><label class="small-label">Name</label><input id="fc-name"></div>
-            <div class="form-group"><label class="small-label">Namespace</label><input id="fc-namespace" value="default"></div>
-            <div class="form-group"><label class="small-label">Version</label><input id="fc-version" value="1.0.0"></div>
-            <div class="form-group"><label class="small-label">Description</label><textarea id="fc-description" rows="2"></textarea></div>
-            <div class="inline-btns"><button class="btn btn-primary btn-small" onclick="VisualFlow.saveClass()">Save Class</button><button id="delete-class-btn" class="btn btn-danger btn-small" style="display:none;" onclick="VisualFlow.deleteClass()">Delete</button></div>
-          </div>
-          <h3 style="margin-top:1.5rem;">Connect <span class="help-badge" title="Choose an output (From) then an input (To) to create a connection. Or click OUT port then IN port on nodes. Shift+Wheel = zoom, Space+Drag or Middle Mouse = pan.">?</span></h3>
-          <div class="form-section" style="border-top:1px solid var(--border-color);">
-            <div class="form-group">
-              <label class="small-label">From (node.output)</label>
-              <select id="conn-from" style="font-size:.7rem;"></select>
-            </div>
-            <div class="form-group">
-              <label class="small-label">To (node.input)</label>
-              <select id="conn-to" style="font-size:.7rem;"></select>
-            </div>
-            <div class="inline-btns">
-              <button class="btn btn-secondary btn-small" onclick="VisualFlow.addConnectionHelper()">Add Connection</button>
-              <button class="btn btn-small" onclick="VisualFlow.refreshConnectionHelper()">↻</button>
-            </div>
-            <p class="inline-hint">Tip: Click an OUT port, then an IN port directly on the nodes for faster linking.</p>
-          </div>
+      <div class="panel-content">
+        <div id="node-palette"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="panel-content">
+        <div class="panel-section-title">Flow Class</div>
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input id="fc-name" placeholder="Enter flow name">
         </div>
-        <div class="canvas-wrapper" id="canvas-wrapper">
-          <div class="toolbar">
-            <button title="Zoom In (+)" onclick="VisualFlow.keyboardZoom(1)">+</button>
-            <button title="Zoom Out (-)" onclick="VisualFlow.keyboardZoom(-1)">−</button>
-            <button title="Reset / Center" onclick="VisualFlow.resetView()">◎</button>
-            <div class="zoom-indicator" id="zoom-indicator">100%</div>
-          </div>
-          <div id="stage" style="position:relative; width:2000px; height:1200px; transform-origin:0 0;">
-            <svg id="connections-svg"></svg>
-            <div id="flow-canvas"></div>
-          </div>
+        <div class="form-group">
+          <label class="form-label">Namespace</label>
+          <input id="fc-namespace" value="default" placeholder="default">
         </div>
-        <div class="panel right" id="right-panel">
-          <h3>Node</h3>
-          <div class="form-section" id="node-panel">
-            <p style="font-size:.7rem; opacity:.6;" id="node-panel-empty">Select a node...</p>
-            <div id="node-form" style="display:none;">
-              <div class="form-group"><label class="small-label">ID</label><input id="n-id" disabled></div>
-              <div class="form-group"><label class="small-label">Name</label><input id="n-name"></div>
-              <div class="form-group"><label class="small-label">Inputs (comma)</label><input id="n-inputs"></div>
-              <div class="form-group"><label class="small-label">Outputs (comma)</label><input id="n-outputs"></div>
-              <div class="form-group"><label class="small-label">Script</label>
-                <div class="code-editor" style="position:relative; display:flex; border:1px solid var(--border-color); border-radius:4px; background:#1b1f29;">
-                  <div id="n-script-lines" style="user-select:none; padding:.4rem .5rem; text-align:right; font-family:monospace; font-size:.65rem; line-height:1.2; color:#6c7380; min-width:2.2rem; border-right:1px solid #2a2f3a; background:#191d26;">1</div>
-                  <textarea id="n-script" class="code-area" style="flex:1; border:0; resize:vertical; background:transparent; padding:.4rem .6rem; outline:none; line-height:1.2;" spellcheck="false"></textarea>
-                </div>
+        <div class="form-group">
+          <label class="form-label">Version</label>
+          <input id="fc-version" value="1.0.0" placeholder="1.0.0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea id="fc-description" rows="3" placeholder="Describe what this flow does..."></textarea>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="panel-content">
+        <div class="panel-section-title">
+          Quick Connect
+          <span class="help-badge" title="Select an output node, then an input node to create a connection">?</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">From (Output)</label>
+          <select id="conn-from"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">To (Input)</label>
+          <select id="conn-to"></select>
+        </div>
+        <button class="btn btn-primary btn-small" style="width: 100%;" onclick="VisualFlow.addConnectionHelper()">
+          Add Connection
+        </button>
+        <p class="inline-hint">💡 Tip: Click an output port, then an input port on the canvas for faster connecting.</p>
+      </div>
+    </div>
+
+    <!-- Center: Canvas -->
+    <div class="canvas-wrapper canvas-grid" id="canvas-wrapper">
+      <div class="toolbar">
+        <button title="Zoom In (+)" onclick="VisualFlow.keyboardZoom(1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+        <button title="Zoom Out (-)" onclick="VisualFlow.keyboardZoom(-1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+        <button title="Reset View" onclick="VisualFlow.resetView()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+        <div class="zoom-indicator" id="zoom-indicator">100%</div>
+      </div>
+      <div id="stage" style="position:relative; width:3000px; height:2000px; transform-origin:0 0;">
+        <svg id="connections-svg"></svg>
+        <div id="flow-canvas"></div>
+      </div>
+    </div>
+
+    <!-- Right Panel: Node Editor -->
+    <div class="panel right">
+      <div class="panel-header">
+        <h3>Node Properties</h3>
+      </div>
+      <div class="panel-content" id="node-panel">
+        <div class="empty-state" id="node-panel-empty">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.3; margin-bottom: 1rem;">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path d="M3 9h18M9 21V9"/>
+          </svg>
+          <p>Select a node to edit its properties</p>
+        </div>
+        <div id="node-form" style="display:none;">
+          <div class="form-group">
+            <label class="form-label">Node ID</label>
+            <input id="n-id" disabled>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Name</label>
+            <input id="n-name" placeholder="Node name">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Inputs</label>
+            <input id="n-inputs" placeholder="input1, input2, input3">
+            <span class="inline-hint">Comma-separated port names</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Outputs</label>
+            <input id="n-outputs" placeholder="output1, output2">
+            <span class="inline-hint">Comma-separated port names</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Script</label>
+            <div class="code-editor">
+              <div class="code-editor-header">
+                <span class="code-editor-lang">JavaScript</span>
               </div>
-              <div class="inline-btns"><button class="btn btn-primary btn-small" onclick="VisualFlow.saveNode()">Update Node</button><button class="btn btn-secondary btn-small" onclick="VisualFlow.deleteNode()">Delete Node</button></div>
+              <div class="code-editor-body">
+                <div id="n-script-lines">1</div>
+                <textarea id="n-script" placeholder="// Write your node logic here..." spellcheck="false"></textarea>
+              </div>
             </div>
           </div>
-          <h3 style="margin-top:1rem;">Connections</h3>
-          <div class="form-section" id="connections-list" style="font-size:.65rem; line-height:1.2;">
-            <p id="no-connections" style="opacity:.6;">No connections</p>
+          <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+            <button class="btn btn-primary btn-small" style="flex: 1;" onclick="VisualFlow.saveNode()">Update</button>
+            <button class="btn btn-danger btn-small" onclick="VisualFlow.deleteNode()">Delete</button>
           </div>
         </div>
       </div>
-      <div class="footer-bar">
-        <button class="btn btn-secondary btn-small" onclick="VisualFlow.addNodeType('function')">+ Function Node</button>
-        <span style="flex:1;"></span>
-        <button class="btn btn-secondary btn-small" onclick="VisualFlow.resetView()">Center</button>
+
+      <div class="divider"></div>
+
+      <div class="panel-content">
+        <div class="panel-section-title">Connections</div>
+        <div id="connections-list" class="connections-list">
+          <p id="no-connections" class="empty-state">No connections yet</p>
+        </div>
       </div>
     </div>
   </div>
+
   <script src="/js/workflows-visual.js"></script>
 </body>
 </html>
