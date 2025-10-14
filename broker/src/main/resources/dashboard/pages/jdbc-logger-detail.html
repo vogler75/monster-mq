@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - JDBC Logger Detail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .logger-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
+        .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); overflow: hidden; box-shadow: var(--card-shadow); transition: all 0.3s ease; }
+        .section-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4); }
+        .section-card.full-width { grid-column: 1 / -1; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); }
+        .section-title { display: flex; align-items: center; gap: 0.75rem; }
+        .section-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--gradient-primary); color: white; }
+        .section-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .section-content { padding: 1.5rem; }
+        .info-list { display: flex; flex-direction: column; gap: 1rem; }
+        .info-item { display: flex; flex-direction: column; padding: 1rem; background: var(--dark-bg); border-radius: 8px; border: 1px solid var(--dark-border); }
+        .info-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem; }
+        .info-value { color: var(--text-primary); font-weight: 600; }
+        .status-badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid; }
+        .status-enabled { background: rgba(16, 185, 129, 0.15); color: var(--monster-green); border-color: rgba(16, 185, 129, 0.3); }
+        .status-disabled { background: rgba(239, 68, 68, 0.15); color: var(--monster-red); border-color: rgba(239, 68, 68, 0.3); }
+        input[type="text"], input[type="password"], input[type="number"], select, textarea { width: 100%; padding: 0.75rem 1rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; color: var(--text-primary); font-size: 0.875rem; transition: all 0.2s ease; box-sizing: border-box; font-family: inherit; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--monster-purple); box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1); }
+        input::placeholder, textarea::placeholder { color: var(--text-muted); }
+        input:disabled, select:disabled, textarea:disabled { opacity: 0.5; cursor: not-allowed; }
+        input[type="checkbox"] { width: auto; accent-color: var(--monster-purple); transform: scale(1.2); }
+        .checkbox-group { display: flex; align-items: center; gap: 0.5rem; }
+        .checkbox-group label { margin-bottom: 0; cursor: pointer; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600; font-size: 0.875rem; }
+        small.form-hint { color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem; display: block; }
+        textarea { resize: vertical; min-height: 120px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 500; transition: all 0.2s ease; border: none; cursor: pointer; text-decoration: none; }
+        .btn-primary { background: var(--gradient-primary); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3); }
+        .btn-secondary { background: var(--dark-surface-2); color: var(--text-primary); border: 1px solid var(--dark-border); min-width: 160px; white-space: nowrap; }
+        .btn-secondary:hover { background: var(--dark-border); transform: translateY(-1px); }
+        .btn-danger { background: var(--monster-red); color: white; }
+        .btn-danger:hover { opacity: 0.9; transform: translateY(-1px); }
+        .page-header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .page-header-actions { display: flex; gap: 0.75rem; align-items: center; }
+        .loading-indicator { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem; text-align: center; }
+        .loading-spinner { width: 32px; height: 32px; border: 3px solid var(--dark-border); border-top: 3px solid var(--monster-purple); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: center; z-index: 9999; padding: 2rem; box-sizing: border-box; }
+        .modal-content { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); }
+        .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; padding: 0.25rem; line-height: 1; transition: color 0.2s ease; }
+        .modal-close:hover { color: var(--text-primary); }
+        .modal-body { padding: 2rem; }
+        .modal-footer { padding: 1.5rem 2rem; border-top: 1px solid var(--dark-border); display: flex; justify-content: flex-end; gap: 1rem; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        @media (max-width: 1024px) { .logger-info-grid, .info-grid { grid-template-columns: 1fr; gap: 1.5rem; } }
+    </style>
+</head>
+<body>
+<div class="top-bar">
+    <div class="sidebar-brand">
+        <img src="/assets/logo.png" alt="MonsterMQ Logo">
+        <span class="brand-name">MonsterMQ</span>
+    </div>
+    <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+</div>
+
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="sidebar-toggle" onclick="toggleSidebar()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15,18 9,12 15,6"></polyline>
+            </svg>
+        </button>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+</aside>
+
+<div class="main-content" id="main-content">
+    <div class="container">
+        <div class="page-header">
+            <div class="page-header-content">
+                <div>
+                    <h1 class="page-title" id="logger-title">JDBC Logger</h1>
+                    <p class="page-subtitle" id="logger-subtitle">Logger configuration and settings</p>
+                </div>
+                <div class="page-header-actions">
+                    <button class="btn btn-secondary" onclick="goBack()">Back to Loggers</button>
+                    <button class="btn btn-primary" onclick="saveLogger()" id="save-logger-btn">Save Logger</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="loading-indicator" class="loading-indicator" style="display: none;">
+            <div class="loading-spinner"></div>
+            <span>Loading logger details...</span>
+        </div>
+
+        <div id="logger-content" style="display: none;">
+            <div class="logger-info-grid">
+                <!-- Basic Information Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                </svg>
+                            </div>
+                            <h2>Basic Information</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-list">
+                            <div class="form-group">
+                                <label for="logger-name">Logger Name *</label>
+                                <input type="text" id="logger-name" required placeholder="e.g., jdbc-logger-1">
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-namespace">Namespace *</label>
+                                <input type="text" id="logger-namespace" required placeholder="e.g., sensors/data">
+                                <small class="form-hint">The MQTT topic namespace prefix for this logger</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-node">Cluster Node *</label>
+                                <select id="logger-node" required>
+                                    <option value="">Select Node...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="logger-enabled" checked>
+                                    <label for="logger-enabled">Enabled</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Database Configuration Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 3C7.58 3 4 4.79 4 7s3.58 4 8 4 8-1.79 8-4-3.58-4-8-4zM4 9v3c0 2.21 3.58 4 8 4s8-1.79 8-4V9c0 2.21-3.58 4-8 4s-8-1.79-8-4zm0 5v3c0 2.21 3.58 4 8 4s8-1.79 8-4v-3c0 2.21-3.58 4-8 4s-8-1.79-8-4z"/>
+                                </svg>
+                            </div>
+                            <h2>Database Configuration</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-list">
+                            <div class="form-group">
+                                <label for="logger-db-type">Database Type *</label>
+                                <select id="logger-db-type" required>
+                                    <option value="">Select Database Type...</option>
+                                    <option value="QUESTDB">QuestDB</option>
+                                    <option value="POSTGRESQL">PostgreSQL</option>
+                                    <option value="TIMESCALEDB">TimescaleDB</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-jdbc-url">JDBC URL *</label>
+                                <input type="text" id="logger-jdbc-url" required placeholder="jdbc:postgresql://localhost:8812/qdb">
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-username">Username *</label>
+                                <input type="text" id="logger-username" required placeholder="admin">
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-password">Password *</label>
+                                <input type="password" id="logger-password" placeholder="Leave blank to keep current password">
+                                <small class="form-hint">Leave blank when editing to keep the existing password</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MQTT Configuration Section -->
+                <div class="section-card full-width">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+                                </svg>
+                            </div>
+                            <h2>MQTT Configuration</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="form-group">
+                            <label for="logger-topic-filters">Topic Filters *</label>
+                            <textarea id="logger-topic-filters" placeholder="Enter topic filters, one per line (e.g., sensors/+/temperature)"></textarea>
+                            <small class="form-hint">MQTT topic filters to subscribe to. Enter one filter per line.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="logger-payload-format">Payload Format *</label>
+                            <select id="logger-payload-format" required>
+                                <option value="JSON">JSON</option>
+                                <option value="RAW">Raw</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Table Configuration Section -->
+                <div class="section-card full-width">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M10 3H3v8h7V3zM21 3h-7v8h7V3zM21 13h-7v8h7v-8zM10 13H3v8h7v-8z"/>
+                                </svg>
+                            </div>
+                            <h2>Table Configuration</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-list">
+                            <div class="form-group">
+                                <label for="logger-table-name">Fixed Table Name</label>
+                                <input type="text" id="logger-table-name" placeholder="e.g., sensor_data">
+                                <small class="form-hint">Use a fixed table name OR a JSONPath expression (not both)</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-table-jsonpath">Table Name JSONPath</label>
+                                <input type="text" id="logger-table-jsonpath" placeholder="e.g., $.device_type">
+                                <small class="form-hint">Extract table name from message using JSONPath</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- JSON Schema Section -->
+                <div class="section-card full-width">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                                </svg>
+                            </div>
+                            <h2>JSON Schema</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="form-group">
+                            <label for="logger-json-schema">JSON Schema *</label>
+                            <textarea id="logger-json-schema" required placeholder='{"timestamp": "$.ts", "value": "$.value", "sensor_id": "$.sensor"}'></textarea>
+                            <small class="form-hint">Define how to extract and map fields from MQTT messages to database columns using JSONPath</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Queue Configuration Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
+                                </svg>
+                            </div>
+                            <h2>Queue Configuration</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-list">
+                            <div class="form-group">
+                                <label for="logger-queue-type">Queue Type</label>
+                                <select id="logger-queue-type">
+                                    <option value="MEMORY">Memory</option>
+                                    <option value="DISK">Disk</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-queue-size">Queue Size</label>
+                                <input type="number" id="logger-queue-size" value="10000" min="100" max="1000000">
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-disk-path">Disk Path</label>
+                                <input type="text" id="logger-disk-path" value="./buffer" placeholder="./buffer">
+                                <small class="form-hint">Used when Queue Type is DISK</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bulk Write Configuration Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                                </svg>
+                            </div>
+                            <h2>Bulk Write Configuration</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-list">
+                            <div class="form-group">
+                                <label for="logger-bulk-size">Bulk Size</label>
+                                <input type="number" id="logger-bulk-size" value="1000" min="1" max="10000">
+                                <small class="form-hint">Number of messages to batch before writing</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-bulk-timeout">Bulk Timeout (ms)</label>
+                                <input type="number" id="logger-bulk-timeout" value="5000" min="100" max="60000">
+                                <small class="form-hint">Maximum time to wait before writing batch</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-reconnect-delay">Reconnect Delay (ms)</label>
+                                <input type="number" id="logger-reconnect-delay" value="5000" min="1000" max="60000">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timestamps Section (only visible when editing) -->
+            <div id="timestamps-section" class="section-card full-width" style="display: none;">
+                <div class="section-header">
+                    <div class="section-title">
+                        <div class="section-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+                            </svg>
+                        </div>
+                        <h2>Timestamps</h2>
+                    </div>
+                </div>
+                <div class="section-content">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Created At</div>
+                            <div class="info-value" id="logger-created-at">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Updated At</div>
+                            <div class="info-value" id="logger-updated-at">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metrics Section (only visible when editing) -->
+            <div id="metrics-section" class="section-card full-width" style="display: none;">
+                <div class="section-header">
+                    <div class="section-title">
+                        <div class="section-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                            </svg>
+                        </div>
+                        <h2>Current Metrics</h2>
+                    </div>
+                </div>
+                <div class="section-content">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Messages In</div>
+                            <div class="info-value" id="metric-messages-in">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Messages Written</div>
+                            <div class="info-value" id="metric-messages-written">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Queue Size</div>
+                            <div class="info-value" id="metric-queue-size">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Metrics Timestamp</div>
+                            <div class="info-value" id="metric-timestamp">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="error-message" class="error-message" style="display: none;">
+            <div class="error-content">
+                <span class="error-icon">⚠️</span>
+                <span class="error-text"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div id="delete-logger-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Confirm Delete</h3>
+            <button class="modal-close" onclick="hideDeleteModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to delete this JDBC logger "<span id="delete-logger-name"></span>"?</p>
+            <p>This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideDeleteModal()">Cancel</button>
+            <button type="button" class="btn btn-danger" onclick="confirmDeleteLogger()">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/jdbc-logger-detail.js"></script>
+</body>
+</html>

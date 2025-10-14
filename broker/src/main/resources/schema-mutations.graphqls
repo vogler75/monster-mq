@@ -1337,8 +1337,8 @@ input JDBCLoggerConfigInput {
     jdbcUrl: String!
     # Database username
     username: String!
-    # Database password
-    password: String!
+    # Database password (optional when editing existing logger - leave blank to keep current password)
+    password: String
     # MQTT topic filters to subscribe to (supports wildcards +, #)
     topicFilters: [String!]!
     # Fixed table name (mutually exclusive with tableNameJsonPath)
