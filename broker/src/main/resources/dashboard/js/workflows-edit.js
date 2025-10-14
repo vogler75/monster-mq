@@ -110,6 +110,14 @@ const FlowEdit = (() => {
     qs('#page-title').textContent = editing? 'Edit Flow Class' : 'New Flow Class';
     qs('#page-subtitle').textContent = editing? state.name : 'Create a new flow class';
     qs('#delete-button').style.display = editing ? 'inline-block' : 'none';
+    
+    // Remove enabled checkbox if it exists (when switching from instance to class)
+    const headerActions = qs('#header-actions');
+    const existingCheckbox = headerActions.querySelector('.header-checkbox-wrapper');
+    if (existingCheckbox) {
+      existingCheckbox.remove();
+    }
+    
     const root = qs('#form-section');
     root.innerHTML = `
       <div class="section-card">
@@ -134,6 +142,29 @@ const FlowEdit = (() => {
     qs('#page-title').textContent = editing? 'Edit Flow Instance' : 'New Flow Instance';
     qs('#page-subtitle').textContent = editing? state.name : 'Create a new flow instance';
     qs('#delete-button').style.display = editing ? 'inline-block' : 'none';
+    
+    // Add enabled checkbox to header for flow instances
+    const headerActions = qs('#header-actions');
+    // Remove any existing enabled checkbox first
+    const existingCheckbox = headerActions.querySelector('.header-checkbox-wrapper');
+    if (existingCheckbox) {
+      existingCheckbox.remove();
+    }
+    
+    const enabledCheckboxHTML = `
+      <div class="header-checkbox-wrapper">
+        <label class="header-checkbox">
+          <input type="checkbox" id="fi-enabled" ${state.flowInstance.enabled?'checked':''}>
+          <span>Enabled</span>
+        </label>
+      </div>
+    `;
+    // Insert the checkbox before the first button
+    const firstButton = headerActions.querySelector('button');
+    if (firstButton) {
+      firstButton.insertAdjacentHTML('beforebegin', enabledCheckboxHTML);
+    }
+    
     const root = qs('#form-section');
     const classOptions = state.flowClasses.map(fc => `<option value="${escape(fc.name)}" ${fc.name===state.flowInstance.flowClassId?'selected':''}>${escape(fc.name)}</option>`).join('');
     root.innerHTML = `
@@ -145,7 +176,6 @@ const FlowEdit = (() => {
             <div class="form-group"><label>Namespace</label><input id="fi-namespace" class="form-control" value="${escape(state.flowInstance.namespace||'default')}"></div>
             <div class="form-group"><label>Node ID</label><input id="fi-nodeId" class="form-control" value="${escape(state.flowInstance.nodeId||'local')}"></div>
             <div class="form-group"><label>Flow Class</label><select id="fi-flowClass" class="form-control">${classOptions}</select></div>
-            <div class="form-group"><label>Enabled</label><input type="checkbox" id="fi-enabled" ${state.flowInstance.enabled?'checked':''}></div>
           </div>
         </div>
       </div>`;

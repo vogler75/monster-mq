@@ -62,6 +62,33 @@
             flex-shrink: 0;
         }
 
+        /* Header Checkbox Styling */
+        .header-checkbox-wrapper {
+            margin-right: 1rem;
+        }
+
+        .header-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .header-checkbox input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin: 0;
+            cursor: pointer;
+            accent-color: var(--monster-purple, var(--primary-color));
+        }
+
+        .header-checkbox span {
+            font-weight: 500;
+        }
+
         /* Form Styling */
         .form-grid {
             display: grid;
