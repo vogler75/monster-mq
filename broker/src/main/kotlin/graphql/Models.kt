@@ -234,10 +234,14 @@ data class Neo4jClientMetrics(
 // JDBC Logger Metrics
 data class JDBCLoggerMetrics(
     val messagesIn: Double,
+    val messagesValidated: Double,
     val messagesWritten: Double,
-    val errors: Int,
+    val messagesSkipped: Double,
+    val validationErrors: Double,
+    val writeErrors: Double,
     val queueSize: Int,
-    val connected: Boolean,
+    val queueCapacity: Int,
+    val queueFull: Boolean,
     val timestamp: String
 )
 

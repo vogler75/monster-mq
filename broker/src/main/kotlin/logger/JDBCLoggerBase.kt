@@ -47,16 +47,20 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
     private val writerThreadStop = AtomicBoolean(false)
     private var writerThread: Thread? = null
 
-    // Metrics
-    private val messagesIn = AtomicLong(0)
-    private val messagesValidated = AtomicLong(0)
-    private val messagesSkipped = AtomicLong(0)
-    private val messagesWritten = AtomicLong(0)
-    private val validationErrors = AtomicLong(0)
-    private val writeErrors = AtomicLong(0)
+    // Metrics counters (reset on each metrics request to calculate rates)
+    private val messagesInCounter = AtomicLong(0)
+    private val messagesValidatedCounter = AtomicLong(0)
+    private val messagesSkippedCounter = AtomicLong(0)
+    private val messagesWrittenCounter = AtomicLong(0)
+    private val validationErrorsCounter = AtomicLong(0)
+    private val writeErrorsCounter = AtomicLong(0)
+    private var lastMetricsReset = System.currentTimeMillis()
 
     // Bulk timeout tracking
     private var lastBulkWrite = System.currentTimeMillis()
+
+    // Connection state
+    private val isReconnecting = AtomicBoolean(false)
 
     /**
      * Buffered row ready for database write
@@ -257,12 +261,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
 
     private fun handleIncomingMessage(message: BrokerMessage) {
         try {
-            messagesIn.incrementAndGet()
-
-            // Temporary INFO logging to diagnose message flow (every 1000 messages)
-            if (messagesIn.get() % 1000 == 0L) {
-                logger.info("Received ${messagesIn.get()} messages (validated: ${messagesValidated.get()}, errors: ${validationErrors.get()}, skipped: ${messagesSkipped.get()}, queue: ${queue.getSize()}/${queue.getCapacity()})")
-            }
+            messagesInCounter.incrementAndGet()
 
             logger.finest { "Received message on topic: ${message.topicName}" }
 
@@ -273,9 +272,9 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             try {
                 payloadJson = JSONObject(payloadString)
             } catch (e: Exception) {
-                validationErrors.incrementAndGet()
-                if (validationErrors.get() % 100 == 0L) {
-                    logger.warning("Failed to parse JSON (${validationErrors.get()} total): ${e.message}")
+                validationErrorsCounter.incrementAndGet()
+                if (validationErrorsCounter.get() % 100 == 0L) {
+                    logger.warning("Failed to parse JSON (${validationErrorsCounter.get()} total): ${e.message}")
                 }
                 return
             }
@@ -284,7 +283,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             try {
                 jsonSchemaValidator.validate(payloadJson)
             } catch (e: ValidationException) {
-                validationErrors.incrementAndGet()
+                validationErrorsCounter.incrementAndGet()
                 logger.warning("Schema validation failed for topic ${message.topicName}: ${e.message}")
                 return
             }
@@ -292,9 +291,9 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             // Extract table name
             val tableName = extractTableName(payloadJson)
             if (tableName == null) {
-                messagesSkipped.incrementAndGet()
-                if (messagesSkipped.get() % 100 == 0L) {
-                    logger.warning("Could not extract table name (${messagesSkipped.get()} total skipped)")
+                messagesSkippedCounter.incrementAndGet()
+                if (messagesSkippedCounter.get() % 100 == 0L) {
+                    logger.warning("Could not extract table name (${messagesSkippedCounter.get()} total skipped)")
                 }
                 return
             }
@@ -328,20 +327,20 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
 
                                 // Check if all required fields are present
                                 if (hasRequiredFields(fields)) {
-                                    messagesValidated.incrementAndGet()
+                                    messagesValidatedCounter.incrementAndGet()
                                     queue.add(message)
                                 } else {
-                                    messagesSkipped.incrementAndGet()
+                                    messagesSkippedCounter.incrementAndGet()
                                     logger.fine { "Missing required fields in array item from topic ${message.topicName}" }
                                 }
                             }
                         }
                     } else {
                         logger.warning("arrayPath '$arrayPath' did not return an array")
-                        messagesSkipped.incrementAndGet()
+                        messagesSkippedCounter.incrementAndGet()
                     }
                 } catch (e: Exception) {
-                    validationErrors.incrementAndGet()
+                    validationErrorsCounter.incrementAndGet()
                     logger.warning("Error expanding array from path '$arrayPath': ${e.message}")
                 }
             } else {
@@ -350,17 +349,17 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
 
                 // Check if all required fields are present
                 if (!hasRequiredFields(fields)) {
-                    messagesSkipped.incrementAndGet()
+                    messagesSkippedCounter.incrementAndGet()
                     logger.fine { "Missing required fields in message on topic ${message.topicName}" }
                     return
                 }
 
-                messagesValidated.incrementAndGet()
+                messagesValidatedCounter.incrementAndGet()
                 queue.add(message)
             }
 
         } catch (e: Exception) {
-            validationErrors.incrementAndGet()
+            validationErrorsCounter.incrementAndGet()
             logger.warning("Error handling message from topic ${message.topicName}: ${e.message}")
         }
     }
@@ -548,15 +547,46 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                 try {
                     logger.fine { "Writing bulk of ${tableRows.size} rows to table $tableName" }
                     writeBulk(tableName, tableRows)
-                    messagesWritten.addAndGet(tableRows.size.toLong())
+                    messagesWrittenCounter.addAndGet(tableRows.size.toLong())
                 } catch (e: Exception) {
-                    writeErrors.incrementAndGet()
+                    writeErrorsCounter.incrementAndGet()
 
-                    // Check if it's a connection error (these should retry)
+                    // Check if it's a connection error (these should reconnect)
                     if (isConnectionError(e)) {
-                        logger.warning("Database connection error detected, will retry accumulated buffer: ${e.javaClass.simpleName}: ${e.message}")
-                        // Sleep and retry next iteration (rows stay in accumulatedRows)
-                        Thread.sleep(1000)
+                        logger.warning("Database connection error detected, will attempt to reconnect: ${e.javaClass.simpleName}: ${e.message}")
+
+                        // Attempt to reconnect (only one thread should try to reconnect)
+                        if (isReconnecting.compareAndSet(false, true)) {
+                            try {
+                                logger.info("Attempting to reconnect to database...")
+
+                                // Disconnect first
+                                try {
+                                    disconnect().toCompletionStage().toCompletableFuture().get(5, java.util.concurrent.TimeUnit.SECONDS)
+                                    logger.info("Disconnected from database")
+                                } catch (de: Exception) {
+                                    logger.warning("Error during disconnect: ${de.message}")
+                                }
+
+                                // Wait before reconnecting
+                                Thread.sleep(cfg.reconnectDelayMs)
+
+                                // Reconnect
+                                connect().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS)
+                                logger.info("Successfully reconnected to database")
+
+                            } catch (re: Exception) {
+                                logger.severe("Failed to reconnect to database: ${re.message}")
+                                // Will retry on next iteration
+                            } finally {
+                                isReconnecting.set(false)
+                            }
+                        } else {
+                            logger.info("Another thread is already reconnecting, waiting...")
+                            Thread.sleep(1000)
+                        }
+
+                        // Retry next iteration (rows stay in accumulatedRows)
                         return
                     }
 
@@ -605,13 +635,26 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
 
     // Metrics
     fun getMetrics(): Map<String, Any> {
+        val now = System.currentTimeMillis()
+        val elapsedMs = now - lastMetricsReset
+        val elapsedSec = if (elapsedMs > 0) elapsedMs / 1000.0 else 1.0
+
+        // Get counter values and reset them
+        val inCount = messagesInCounter.getAndSet(0)
+        val validatedCount = messagesValidatedCounter.getAndSet(0)
+        val writtenCount = messagesWrittenCounter.getAndSet(0)
+        val skippedCount = messagesSkippedCounter.getAndSet(0)
+        val validationErrorCount = validationErrorsCounter.getAndSet(0)
+        val writeErrorCount = writeErrorsCounter.getAndSet(0)
+        lastMetricsReset = now
+
         return mapOf(
-            "messagesIn" to messagesIn.get(),
-            "messagesValidated" to messagesValidated.get(),
-            "messagesSkipped" to messagesSkipped.get(),
-            "messagesWritten" to messagesWritten.get(),
-            "validationErrors" to validationErrors.get(),
-            "writeErrors" to writeErrors.get(),
+            "messagesIn" to (inCount / elapsedSec),
+            "messagesValidated" to (validatedCount / elapsedSec),
+            "messagesWritten" to (writtenCount / elapsedSec),
+            "messagesSkipped" to (skippedCount / elapsedSec),
+            "validationErrors" to (validationErrorCount / elapsedSec),
+            "writeErrors" to (writeErrorCount / elapsedSec),
             "queueSize" to queue.getSize(),
             "queueCapacity" to queue.getCapacity(),
             "queueFull" to queue.isQueueFull()

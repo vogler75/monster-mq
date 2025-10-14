@@ -1371,7 +1371,7 @@ future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTi
             val loggerName = logger?.get("name") as? String
 
             if (loggerName == null) {
-                future.complete(listOf(JDBCLoggerMetrics(0.0, 0.0, 0, 0, false, TimestampConverter.currentTimeIsoString())))
+                future.complete(listOf(JDBCLoggerMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, false, TimestampConverter.currentTimeIsoString())))
                 return@DataFetcher future
             }
 
@@ -1381,20 +1381,28 @@ future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTi
                 if (reply.succeeded()) {
                     val body = reply.result().body()
                     val messagesIn = body.getDouble("messagesIn", 0.0)
+                    val messagesValidated = body.getDouble("messagesValidated", 0.0)
                     val messagesWritten = body.getDouble("messagesWritten", 0.0)
-                    val errors = body.getInteger("errors", 0)
+                    val messagesSkipped = body.getDouble("messagesSkipped", 0.0)
+                    val validationErrors = body.getDouble("validationErrors", 0.0)
+                    val writeErrors = body.getDouble("writeErrors", 0.0)
                     val queueSize = body.getInteger("queueSize", 0)
-                    val connected = body.getBoolean("connected", false)
+                    val queueCapacity = body.getInteger("queueCapacity", 0)
+                    val queueFull = body.getBoolean("queueFull", false)
                     future.complete(listOf(JDBCLoggerMetrics(
                         round2(messagesIn),
+                        round2(messagesValidated),
                         round2(messagesWritten),
-                        errors,
+                        round2(messagesSkipped),
+                        round2(validationErrors),
+                        round2(writeErrors),
                         queueSize,
-                        connected,
+                        queueCapacity,
+                        queueFull,
                         TimestampConverter.currentTimeIsoString()
                     )))
                 } else {
-                    future.complete(listOf(JDBCLoggerMetrics(0.0, 0.0, 0, 0, false, TimestampConverter.currentTimeIsoString())))
+                    future.complete(listOf(JDBCLoggerMetrics(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, false, TimestampConverter.currentTimeIsoString())))
                 }
             }
 
@@ -1430,16 +1438,24 @@ future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTi
                 if (result.succeeded()) {
                     val list = result.result().map { (timestamp, metricsJson) ->
                         val messagesIn = metricsJson.getDouble("messagesIn", 0.0)
+                        val messagesValidated = metricsJson.getDouble("messagesValidated", 0.0)
                         val messagesWritten = metricsJson.getDouble("messagesWritten", 0.0)
-                        val errors = metricsJson.getInteger("errors", 0)
+                        val messagesSkipped = metricsJson.getDouble("messagesSkipped", 0.0)
+                        val validationErrors = metricsJson.getDouble("validationErrors", 0.0)
+                        val writeErrors = metricsJson.getDouble("writeErrors", 0.0)
                         val queueSize = metricsJson.getInteger("queueSize", 0)
-                        val connected = metricsJson.getBoolean("connected", false)
+                        val queueCapacity = metricsJson.getInteger("queueCapacity", 0)
+                        val queueFull = metricsJson.getBoolean("queueFull", false)
                         JDBCLoggerMetrics(
                             round2(messagesIn),
+                            round2(messagesValidated),
                             round2(messagesWritten),
-                            errors,
+                            round2(messagesSkipped),
+                            round2(validationErrors),
+                            round2(writeErrors),
                             queueSize,
-                            connected,
+                            queueCapacity,
+                            queueFull,
                             TimestampConverter.instantToIsoString(timestamp)
                         )
                     }
