@@ -98,6 +98,17 @@
   gap: 0.4rem;
 }
 
+.script-editor-btn-help {
+  background: #2d3139;
+  color: #14b8a6;
+  border: 1px solid #3d4153;
+}
+
+.script-editor-btn-help:hover {
+  background: rgba(20, 184, 166, 0.15);
+  border-color: #14b8a6;
+}
+
 .script-editor-btn-validate {
   background: #2d3139;
   color: #e8eaed;

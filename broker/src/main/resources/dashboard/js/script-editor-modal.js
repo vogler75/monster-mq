@@ -27,6 +27,14 @@ const ScriptEditorModal = (() => {
               <div class="script-editor-subtitle" id="script-editor-subtitle"></div>
             </div>
             <div class="script-editor-actions">
+              <button class="script-editor-btn script-editor-btn-help" onclick="openHelp('script-api')" title="Help: Script API Reference">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+                Help
+              </button>
               <button class="script-editor-btn script-editor-btn-validate" id="script-editor-validate">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="20 6 9 17 4 12"></polyline>

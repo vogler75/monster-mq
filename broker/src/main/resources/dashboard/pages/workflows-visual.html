@@ -9,6 +9,7 @@
   <script src="/js/graphql-client.js"></script>
   <script src="/js/sidebar.js"></script>
   <script src="/js/script-editor-modal.js"></script>
+  <script src="/js/help-modal.js"></script>
   <style>
     body, html {
       height: 100%;
@@ -635,11 +636,7 @@
   <!-- Top Action Bar -->
   <div class="editor-top-bar">
     <div class="title-group">
-      <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'" title="Back to Workflows">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M19 12H5M12 19l-7-7 7-7"/>
-        </svg>
-      </button>
+      <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'" title="Back to Workflows">Back</button>
       <div>
         <h1 id="page-title">Visual Flow Editor</h1>
         <p id="page-subtitle" style="font-size: 0.75rem; color: var(--text-secondary); margin: 0;"></p>
@@ -648,7 +645,7 @@
     </div>
     <div class="actions">
       <button class="btn btn-secondary btn-small" onclick="VisualFlow.cancel && VisualFlow.cancel()">Cancel</button>
-      <button class="btn btn-primary btn-small" onclick="VisualFlow.saveClass()">Save Flow</button>
+      <button class="btn btn-primary btn-small" onclick="VisualFlow.saveClass()">Save</button>
       <button class="btn btn-danger btn-small" id="delete-class-btn" style="display:none;" onclick="VisualFlow.deleteClass()">Delete</button>
     </div>
   </div>
@@ -768,18 +765,25 @@
             <input id="n-name" placeholder="Node name">
           </div>
           <div class="form-group">
-            <label class="form-label">Inputs</label>
+            <label class="form-label">
+              Inputs
+              <button onclick="openHelp('nodes')" class="help-badge" style="border: none; cursor: pointer;" title="Help: Node Inputs">?</button>
+            </label>
             <input id="n-inputs" placeholder="input1, input2, input3">
             <span class="inline-hint">Comma-separated port names</span>
           </div>
           <div class="form-group">
-            <label class="form-label">Outputs</label>
+            <label class="form-label">
+              Outputs
+              <button onclick="openHelp('nodes')" class="help-badge" style="border: none; cursor: pointer;" title="Help: Node Outputs">?</button>
+            </label>
             <input id="n-outputs" placeholder="output1, output2">
             <span class="inline-hint">Comma-separated port names</span>
           </div>
           <div class="form-group">
             <label class="form-label">
               Script
+              <button onclick="openHelp('script-api')" class="help-badge" style="border: none; cursor: pointer;" title="Help: Script API">?</button>
               <button class="btn btn-secondary btn-small" style="float: right; padding: 0.25rem 0.5rem; font-size: 0.7rem;" onclick="VisualFlow.openScriptInWindow()" title="Open full-screen script editor">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"></path>

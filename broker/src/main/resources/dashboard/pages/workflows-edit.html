@@ -9,6 +9,7 @@
     <script src="/js/graphql-client.js"></script>
     <script src="/js/sidebar.js"></script>
     <script src="/js/script-editor-modal.js"></script>
+    <script src="/js/help-modal.js"></script>
     <style>
         /* Section Card Styling */
         .section-card {
@@ -298,7 +299,9 @@
         <div id="mappings-section" style="display:none;">
             <div class="section-card">
                 <div class="section-header">
-                    <h2>Input Mappings</h2>
+                    <h2>Input Mappings
+                        <button onclick="openHelp('inputs')" class="btn-icon" style="margin-left: 0.5rem; width: 24px; height: 24px; font-size: 0.75rem; border: none; background: transparent; cursor: pointer;" title="Help: Input Mappings">?</button>
+                    </h2>
                     <button class="btn btn-secondary btn-small" onclick="FlowEdit.addInputMapping()">+ Add Input</button>
                 </div>
                 <div class="section-content">
@@ -311,7 +314,9 @@
 
             <div class="section-card">
                 <div class="section-header">
-                    <h2>Output Mappings</h2>
+                    <h2>Output Mappings
+                        <button onclick="openHelp('outputs')" class="btn-icon" style="margin-left: 0.5rem; width: 24px; height: 24px; font-size: 0.75rem; border: none; background: transparent; cursor: pointer;" title="Help: Output Mappings">?</button>
+                    </h2>
                     <button class="btn btn-secondary btn-small" onclick="FlowEdit.addOutputMapping()">+ Add Output</button>
                 </div>
                 <div class="section-content">
@@ -324,7 +329,9 @@
 
             <div class="section-card">
                 <div class="section-header">
-                    <h2>Variables</h2>
+                    <h2>Variables
+                        <button onclick="openHelp('variables')" class="btn-icon" style="margin-left: 0.5rem; width: 24px; height: 24px; font-size: 0.75rem; border: none; background: transparent; cursor: pointer;" title="Help: Variables - How to use them in scripts">?</button>
+                    </h2>
                     <button class="btn btn-secondary btn-small" onclick="FlowEdit.addVariable()">+ Add Variable</button>
                 </div>
                 <div class="section-content">

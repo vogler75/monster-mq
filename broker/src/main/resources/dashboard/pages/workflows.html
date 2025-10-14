@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/graphql-client.js"></script>
     <script src="/js/sidebar.js"></script>
+    <script src="/js/help-modal.js"></script>
     <style>
         .tabs {
             display: flex;
@@ -424,8 +425,20 @@
     <div class="main-content" id="main-content">
         <div class="container">
             <div class="page-header">
-                <h1 class="page-title">Workflows</h1>
-                <p class="page-subtitle">Create and manage flow classes and instances</p>
+                <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
+                    <div>
+                        <h1 class="page-title">Workflows</h1>
+                        <p class="page-subtitle">Create and manage flow classes and instances</p>
+                    </div>
+                    <button onclick="openHelp('overview')" class="btn btn-secondary btn-small" style="display: flex; align-items: center; gap: 0.5rem;" title="Open Workflow Help">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        Help
+                    </button>
+                </div>
             </div>
 
                 <div class="section" id="classes-section">

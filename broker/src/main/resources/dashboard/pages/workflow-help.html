@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MonsterMQ - Workflow Help</title>
+    <link rel="stylesheet" href="/assets/monster-theme.css" />
+    <script src="/js/sidebar.js"></script>
+    <style>
+        /* Always modal style with left navigation */
+        .help-container {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            gap: 0;
+            max-width: 100%;
+            height: 100%;
+        }
+
+        .help-nav {
+            position: sticky;
+            top: 0;
+            align-self: start;
+            background: var(--background-primary);
+            border-right: 1px solid var(--border-color);
+            padding: 1.5rem 1rem;
+            max-height: 100vh;
+            overflow-y: auto;
+        }
+
+        .page-header-actions {
+            display: none;
+        }
+
+        .top-bar {
+            display: none;
+        }
+
+        .sidebar {
+            display: none;
+        }
+
+        .page-header {
+            display: none;
+        }
+
+        .container {
+            max-width: 100%;
+            padding: 0;
+            height: 100%;
+        }
+
+        .main-content {
+            padding: 0;
+        }
+        .help-nav h3 {
+            margin: 0 0 0.75rem 0;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            font-weight: 700;
+        }
+
+        .help-nav-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .help-nav-list li {
+            margin-bottom: 0.25rem;
+        }
+
+        .help-nav-list a {
+            display: block;
+            padding: 0.5rem 0.6rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .help-nav-list a:hover {
+            background: rgba(124, 58, 237, 0.1);
+            color: var(--monster-purple);
+        }
+
+        .help-nav-list a.active {
+            background: rgba(124, 58, 237, 0.15);
+            color: var(--monster-purple);
+            font-weight: 600;
+        }
+
+        .help-content {
+            background: var(--background-secondary);
+            padding: 2rem 2.5rem;
+            overflow-y: auto;
+            height: 100%;
+        }
+
+        .help-section {
+            margin-bottom: 4rem;
+        }
+
+        .help-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .help-section h2 {
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            color: var(--monster-purple);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.75rem;
+        }
+
+        .help-section h3 {
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+        }
+
+        .help-section h4 {
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .help-section p {
+            margin-bottom: 1rem;
+            line-height: 1.7;
+            color: var(--text-secondary);
+        }
+
+        .help-section ul,
+        .help-section ol {
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+            line-height: 1.7;
+            color: var(--text-secondary);
+        }
+
+        .help-section li {
+            margin-bottom: 0.5rem;
+        }
+
+        .code-block {
+            background: var(--background-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin: 1.5rem 0;
+            overflow-x: auto;
+        }
+
+        .code-block code {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            color: var(--text-primary);
+        }
+
+        .code-inline {
+            background: var(--background-primary);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.875em;
+            color: var(--monster-purple);
+        }
+
+        .info-box {
+            background: rgba(20, 184, 166, 0.1);
+            border-left: 3px solid var(--monster-teal);
+            padding: 1rem 1.25rem;
+            margin: 1.5rem 0;
+            border-radius: 6px;
+        }
+
+        .info-box-title {
+            font-weight: 600;
+            color: var(--monster-teal);
+            margin-bottom: 0.5rem;
+        }
+
+        .warning-box {
+            background: rgba(255, 176, 32, 0.1);
+            border-left: 3px solid #ffb020;
+            padding: 1rem 1.25rem;
+            margin: 1.5rem 0;
+            border-radius: 6px;
+        }
+
+        .warning-box-title {
+            font-weight: 600;
+            color: #ffb020;
+            margin-bottom: 0.5rem;
+        }
+
+        .example-box {
+            background: rgba(124, 58, 237, 0.05);
+            border: 1px solid rgba(124, 58, 237, 0.2);
+            padding: 1.25rem;
+            margin: 1.5rem 0;
+            border-radius: 8px;
+        }
+
+        .example-box-title {
+            font-weight: 600;
+            color: var(--monster-purple);
+            margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+
+        .api-section {
+            background: var(--background-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin: 1rem 0;
+        }
+
+        .api-section-title {
+            font-weight: 600;
+            color: var(--monster-purple);
+            margin-bottom: 0.75rem;
+            font-size: 0.95rem;
+        }
+
+        .property-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .property-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .property-list li:last-child {
+            border-bottom: none;
+        }
+
+        .property-name {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-weight: 600;
+            color: var(--monster-teal);
+        }
+
+        .property-desc {
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+<div class="top-bar">
+    <div class="sidebar-brand"><img src="/assets/logo.png" alt="Logo"><span class="brand-name">MonsterMQ</span></div>
+    <a href="/pages/workflows.html" class="link-back" style="font-size: 0.8rem; color: var(--primary-color); text-decoration: none;">Back to Workflows</a>
+</div>
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-brand"><img src="/assets/logo.png" alt="MonsterMQ Logo"><span class="brand-name">MonsterMQ</span></div>
+        <button class="sidebar-toggle" onclick="toggleSidebar()">&lt;</button>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+</aside>
+<div class="main-content" id="main-content">
+    <div class="container">
+        <div class="page-header">
+            <h1 class="page-title">Workflow Help & Documentation</h1>
+            <p class="page-subtitle">Complete guide to the MonsterMQ workflow engine</p>
+        </div>
+
+        <div class="help-container">
+            <nav class="help-nav">
+                <h3>Contents</h3>
+                <ul class="help-nav-list">
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#flow-classes">Flow Classes</a></li>
+                    <li><a href="#flow-instances">Flow Instances</a></li>
+                    <li><a href="#nodes">Nodes</a></li>
+                    <li><a href="#connections">Connections</a></li>
+                    <li><a href="#inputs">Input Mappings</a></li>
+                    <li><a href="#outputs">Output Mappings</a></li>
+                    <li><a href="#variables">Variables</a></li>
+                    <li><a href="#script-api">Script API</a></li>
+                    <li><a href="#examples">Examples</a></li>
+                    <li><a href="#troubleshooting">Troubleshooting</a></li>
+                </ul>
+            </nav>
+
+            <div class="help-content">
+                <!-- OVERVIEW -->
+                <section id="overview" class="help-section">
+                    <h2>📖 Overview</h2>
+                    <p>
+                        The MonsterMQ workflow engine provides a visual, node-based programming environment for processing MQTT messages.
+                        Create reusable data transformation pipelines that execute JavaScript code in response to MQTT messages.
+                    </p>
+
+                    <h3>Key Concepts</h3>
+                    <ul>
+                        <li><strong>Flow Classes</strong> - Reusable templates that define the processing logic</li>
+                        <li><strong>Flow Instances</strong> - Deployed instances with specific input/output configuration</li>
+                        <li><strong>Nodes</strong> - Individual processing units that execute JavaScript</li>
+                        <li><strong>Connections</strong> - Links between nodes that define data flow</li>
+                        <li><strong>Variables</strong> - Instance-specific configuration values</li>
+                    </ul>
+
+                    <div class="info-box">
+                        <div class="info-box-title">💡 Think of it this way:</div>
+                        <p>
+                            A <strong>Flow Class</strong> is like a function definition - it describes what to do.<br>
+                            A <strong>Flow Instance</strong> is like calling that function - it actually does the work with specific inputs.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- FLOW CLASSES -->
+                <section id="flow-classes" class="help-section">
+                    <h2>📦 Flow Classes</h2>
+                    <p>
+                        A Flow Class is a reusable template that defines your data processing logic. It contains nodes (processing steps)
+                        and connections (data flow) but doesn't specify which MQTT topics to use.
+                    </p>
+
+                    <h3>What a Flow Class Contains</h3>
+                    <ul>
+                        <li><strong>Nodes</strong> - Processing units with inputs, outputs, and JavaScript code</li>
+                        <li><strong>Connections</strong> - Links between node outputs and inputs</li>
+                        <li><strong>Metadata</strong> - Name, namespace, version, description</li>
+                    </ul>
+
+                    <h3>When to Create a Flow Class</h3>
+                    <p>Create a Flow Class when you have processing logic that you want to:</p>
+                    <ul>
+                        <li>Reuse with different MQTT topics</li>
+                        <li>Deploy multiple times with different configuration</li>
+                        <li>Version and maintain independently</li>
+                        <li>Share across different parts of your system</li>
+                    </ul>
+
+                    <div class="example-box">
+                        <div class="example-box-title">Example: Temperature Converter Flow Class</div>
+                        <p>
+                            A flow class that converts Celsius to Fahrenheit. You can create multiple instances of this class
+                            to convert temperatures from different sensors without duplicating the conversion logic.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- FLOW INSTANCES -->
+                <section id="flow-instances" class="help-section">
+                    <h2>🚀 Flow Instances</h2>
+                    <p>
+                        A Flow Instance is a deployed, running instance of a Flow Class. It specifies which MQTT topics to subscribe to,
+                        where to publish results, and any instance-specific configuration.
+                    </p>
+
+                    <h3>What a Flow Instance Contains</h3>
+                    <ul>
+                        <li><strong>Flow Class Reference</strong> - Which template to use</li>
+                        <li><strong>Input Mappings</strong> - Connect MQTT topics or constants to node inputs</li>
+                        <li><strong>Output Mappings</strong> - Publish node outputs to MQTT topics</li>
+                        <li><strong>Variables</strong> - Instance-specific configuration values</li>
+                        <li><strong>Enable/Disable</strong> - Control whether the instance is running</li>
+                    </ul>
+
+                    <h3>Instance Lifecycle</h3>
+                    <ol>
+                        <li><strong>Create</strong> - Select a Flow Class and configure inputs/outputs</li>
+                        <li><strong>Enable</strong> - Start the instance and begin processing messages</li>
+                        <li><strong>Running</strong> - Process MQTT messages as they arrive</li>
+                        <li><strong>Disable</strong> - Stop processing (unsubscribe from topics)</li>
+                        <li><strong>Update</strong> - Change configuration (requires restart)</li>
+                        <li><strong>Delete</strong> - Remove the instance</li>
+                    </ol>
+
+                    <div class="info-box">
+                        <div class="info-box-title">💡 Multiple Instances</div>
+                        <p>
+                            You can create multiple instances of the same Flow Class with different configurations.
+                            For example, a "TemperatureAlert" class can have instances for each room with different threshold values.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- NODES -->
+                <section id="nodes" class="help-section">
+                    <h2>⚙️ Nodes</h2>
+                    <p>
+                        Nodes are the building blocks of flows. Each node has inputs, outputs, and JavaScript code that processes data.
+                    </p>
+
+                    <h3>Node Components</h3>
+                    <ul>
+                        <li><strong>ID</strong> - Unique identifier within the flow (e.g., "node1", "temperature_check")</li>
+                        <li><strong>Name</strong> - Display name for the node</li>
+                        <li><strong>Inputs</strong> - Named input ports that receive data</li>
+                        <li><strong>Outputs</strong> - Named output ports that send data</li>
+                        <li><strong>Script</strong> - JavaScript code that processes inputs and produces outputs</li>
+                        <li><strong>Language</strong> - Script language (currently only "javascript")</li>
+                    </ul>
+
+                    <h3>Input and Output Ports</h3>
+                    <p>
+                        Define input and output ports as comma-separated names. These become available in your script
+                        via the <code class="code-inline">inputs</code> object and <code class="code-inline">outputs.send()</code> function.
+                    </p>
+
+                    <div class="example-box">
+                        <div class="example-box-title">Example: Node Configuration</div>
+                        <p><strong>Inputs:</strong> <code class="code-inline">temp, threshold</code></p>
+                        <p><strong>Outputs:</strong> <code class="code-inline">alert, normal</code></p>
+                        <p>In your script, access inputs as <code class="code-inline">inputs.temp.value</code> and send output with <code class="code-inline">outputs.send("alert", data)</code></p>
+                    </div>
+
+                    <h3>Node Script</h3>
+                    <p>
+                        The node script is executed every time the node receives input. Your script has access to:
+                    </p>
+                    <ul>
+                        <li><code class="code-inline">inputs</code> - All input values</li>
+                        <li><code class="code-inline">msg</code> - The triggering message</li>
+                        <li><code class="code-inline">outputs</code> - Object to send data to output ports</li>
+                        <li><code class="code-inline">state</code> - Persistent node-level storage</li>
+                        <li><code class="code-inline">flow</code> - Flow instance variables</li>
+                        <li><code class="code-inline">console</code> - Logging functions</li>
+                    </ul>
+                </section>
+
+                <!-- CONNECTIONS -->
+                <section id="connections" class="help-section">
+                    <h2>🔗 Connections</h2>
+                    <p>
+                        Connections link nodes together by connecting an output port of one node to an input port of another.
+                        When a node sends data to an output port, all connected nodes receive that data on their input port.
+                    </p>
+
+                    <h3>Creating Connections</h3>
+                    <p>In the visual editor:</p>
+                    <ol>
+                        <li>Click an output port (right side of a node)</li>
+                        <li>Click an input port on another node (left side)</li>
+                        <li>A connection line appears showing the data flow</li>
+                    </ol>
+
+                    <p>Or use the "Quick Connect" form in the left panel.</p>
+
+                    <h3>Connection Rules</h3>
+                    <ul>
+                        <li>One output can connect to multiple inputs</li>
+                        <li>One input can receive from multiple outputs (values merged)</li>
+                        <li>Connections cannot create circular loops (will cause infinite execution)</li>
+                        <li>Data flows automatically when <code class="code-inline">outputs.send()</code> is called</li>
+                    </ul>
+
+                    <div class="warning-box">
+                        <div class="warning-box-title">⚠️ Avoid Circular Loops</div>
+                        <p>
+                            Do not create connections that form a loop (e.g., Node A → Node B → Node A).
+                            This will cause infinite execution and may crash your flow.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- INPUTS -->
+                <section id="inputs" class="help-section">
+                    <h2>📥 Input Mappings</h2>
+                    <p>
+                        Input Mappings define how external data enters your flow. They connect node inputs to either MQTT topics or constant values.
+                    </p>
+
+                    <h3>Input Types</h3>
+
+                    <h4>TOPIC Inputs (Dynamic)</h4>
+                    <p>
+                        Subscribe to MQTT topics and trigger flow execution when messages arrive. Each message on the topic
+                        causes the node to execute with fresh data.
+                    </p>
+                    <ul>
+                        <li><strong>Triggers execution</strong> - Node runs when message arrives</li>
+                        <li><strong>Real-time data</strong> - Always current values</li>
+                        <li><strong>Example:</strong> <code class="code-inline">sensors/warehouse/temperature</code></li>
+                    </ul>
+
+                    <h4>TEXT Inputs (Static)</h4>
+                    <p>
+                        Provide constant values or configuration strings. These don't trigger execution but are available
+                        when the node runs (triggered by another input or connection).
+                    </p>
+                    <ul>
+                        <li><strong>Does not trigger</strong> - Only provides context</li>
+                        <li><strong>Constant value</strong> - Same value every execution</li>
+                        <li><strong>Example:</strong> <code class="code-inline">25</code> (threshold value)</li>
+                    </ul>
+
+                    <h3>Configuring Input Mappings</h3>
+                    <ol>
+                        <li>Select which node input to map (format: <code class="code-inline">nodeId.inputName</code>)</li>
+                        <li>Choose type: TOPIC or TEXT</li>
+                        <li>Enter the MQTT topic or constant value</li>
+                        <li>Add more mappings as needed</li>
+                    </ol>
+
+                    <div class="example-box">
+                        <div class="example-box-title">Example: Temperature Alert Inputs</div>
+                        <p><strong>node1.temperature</strong> → TOPIC: <code class="code-inline">sensors/room1/temp</code><br>
+                        <em>Triggers execution with each temperature reading</em></p>
+
+                        <p><strong>node1.threshold</strong> → TEXT: <code class="code-inline">25</code><br>
+                        <em>Provides threshold value for comparison</em></p>
+                    </div>
+                </section>
+
+                <!-- OUTPUTS -->
+                <section id="outputs" class="help-section">
+                    <h2>📤 Output Mappings</h2>
+                    <p>
+                        Output Mappings define where flow results are published. They connect node output ports to MQTT topics.
+                    </p>
+
+                    <h3>How Output Mappings Work</h3>
+                    <p>
+                        When a node calls <code class="code-inline">outputs.send("portName", value)</code>, the system checks if that output
+                        port is mapped to an MQTT topic. If yes, it publishes the value to that topic.
+                    </p>
+
+                    <h3>Configuring Output Mappings</h3>
+                    <ol>
+                        <li>Select which node output to map (format: <code class="code-inline">nodeId.outputName</code>)</li>
+                        <li>Enter the MQTT topic to publish to</li>
+                        <li>Add more mappings as needed</li>
+                    </ol>
+
+                    <h3>Output Data Format</h3>
+                    <p>The system automatically converts output values to MQTT payloads:</p>
+                    <ul>
+                        <li><strong>Strings</strong> - Published as-is</li>
+                        <li><strong>Numbers</strong> - Converted to string</li>
+                        <li><strong>Objects</strong> - Converted to JSON string</li>
+                        <li><strong>Arrays</strong> - Converted to JSON string</li>
+                    </ul>
+
+                    <div class="example-box">
+                        <div class="example-box-title">Example: Alert Output</div>
+                        <p><strong>node1.alert</strong> → <code class="code-inline">alerts/temperature/room1</code></p>
+                        <p>When the node calls <code class="code-inline">outputs.send("alert", {temp: 30, status: "high"})</code>,
+                        the system publishes this JSON to the alert topic.</p>
+                    </div>
+                </section>
+
+                <!-- VARIABLES -->
+                <section id="variables" class="help-section">
+                    <h2>📝 Variables</h2>
+                    <p>
+                        Variables are key-value pairs that provide instance-specific configuration. They're accessible to all nodes in the flow
+                        via the <code class="code-inline">flow</code> object in your scripts.
+                    </p>
+
+                    <h3>Why Use Variables?</h3>
+                    <ul>
+                        <li><strong>Reusability</strong> - Same Flow Class, different configurations</li>
+                        <li><strong>Centralized Config</strong> - Change values without editing node scripts</li>
+                        <li><strong>Instance-specific</strong> - Different values for each instance</li>
+                        <li><strong>Clean Code</strong> - Avoid hardcoding values in scripts</li>
+                    </ul>
+
+                    <h3>Common Use Cases</h3>
+                    <ul>
+                        <li><strong>Thresholds</strong> - Alert limits, min/max values</li>
+                        <li><strong>API Keys</strong> - External service credentials</li>
+                        <li><strong>URLs</strong> - Endpoint addresses</li>
+                        <li><strong>Location Info</strong> - Building, room, floor identifiers</li>
+                        <li><strong>Feature Flags</strong> - Enable/disable optional behavior</li>
+                    </ul>
+
+                    <h3>Accessing Variables in Scripts</h3>
+                    <div class="code-block"><code>// Variables set in the UI:
+// { "threshold": "25", "location": "Warehouse A", "alertEmail": "ops@example.com" }
+
+let threshold = parseFloat(flow.threshold);
+let location = flow.location;
+let email = flow.alertEmail;
+
+console.log("Using threshold:", threshold, "for", location);
+
+if (inputs.temp.value > threshold) {
+    outputs.send("alert", {
+        temperature: inputs.temp.value,
+        threshold: threshold,
+        location: location,
+        notifyEmail: email
+    });
+}</code></div>
+
+                    <div class="info-box">
+                        <div class="info-box-title">💡 Variables vs. State</div>
+                        <p>
+                            <strong>Variables</strong> are read-only, set via the UI, and shared across all nodes.<br>
+                            <strong>State</strong> is read-write, persists across executions, and specific to each node.
+                        </p>
+                    </div>
+
+                    <div class="warning-box">
+                        <div class="warning-box-title">⚠️ Type Conversion</div>
+                        <p>
+                            Variables are stored as strings. Use <code class="code-inline">parseFloat()</code> or
+                            <code class="code-inline">parseInt()</code> to convert numeric values.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- SCRIPT API -->
+                <section id="script-api" class="help-section">
+                    <h2>💻 Script API</h2>
+                    <p>
+                        Your node scripts execute in a JavaScript runtime with access to the following global objects and functions.
+                    </p>
+
+                    <div class="api-section">
+                        <div class="api-section-title">inputs Object</div>
+                        <p>Access input values from MQTT topics or connected nodes:</p>
+                        <ul class="property-list">
+                            <li>
+                                <div class="property-name">inputs.&lt;portName&gt;.value</div>
+                                <div class="property-desc">The actual data value</div>
+                            </li>
+                            <li>
+                                <div class="property-name">inputs.&lt;portName&gt;.type</div>
+                                <div class="property-desc">"topic" or "text"</div>
+                            </li>
+                            <li>
+                                <div class="property-name">inputs.&lt;portName&gt;.timestamp</div>
+                                <div class="property-desc">When the data was received (milliseconds)</div>
+                            </li>
+                            <li>
+                                <div class="property-name">inputs.&lt;portName&gt;.topic</div>
+                                <div class="property-desc">Source MQTT topic (for topic inputs)</div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="api-section">
+                        <div class="api-section-title">msg Object</div>
+                        <p>Shorthand for the triggering input message:</p>
+                        <ul class="property-list">
+                            <li>
+                                <div class="property-name">msg.value</div>
+                                <div class="property-desc">The triggering message value</div>
+                            </li>
+                            <li>
+                                <div class="property-name">msg.timestamp</div>
+                                <div class="property-desc">When it was received</div>
+                            </li>
+                            <li>
+                                <div class="property-name">msg.topic</div>
+                                <div class="property-desc">Source MQTT topic</div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="api-section">
+                        <div class="api-section-title">outputs Object</div>
+                        <p>Send data to output ports:</p>
+                        <ul class="property-list">
+                            <li>
+                                <div class="property-name">outputs.send(portName, value)</div>
+                                <div class="property-desc">Send value to the specified output port. Connected nodes will receive this value.</div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="api-section">
+                        <div class="api-section-title">state Object</div>
+                        <p>Persistent node-level storage (survives across executions):</p>
+                        <div class="code-block"><code>// Initialize on first run
+if (!state.count) {
+    state.count = 0;
+    state.values = [];
+}
+
+// Update state
+state.count++;
+state.values.push(msg.value);
+
+// Keep only last 10 values
+if (state.values.length > 10) {
+    state.values.shift();
+}</code></div>
+                    </div>
+
+                    <div class="api-section">
+                        <div class="api-section-title">flow Object</div>
+                        <p>Read-only instance variables (set via UI):</p>
+                        <div class="code-block"><code>// Access variables
+let threshold = parseFloat(flow.threshold);
+let apiKey = flow.apiKey;
+let location = flow.location;</code></div>
+                    </div>
+
+                    <div class="api-section">
+                        <div class="api-section-title">console Object</div>
+                        <p>Logging functions:</p>
+                        <ul class="property-list">
+                            <li>
+                                <div class="property-name">console.log(...args)</div>
+                                <div class="property-desc">Log informational messages</div>
+                            </li>
+                            <li>
+                                <div class="property-name">console.warn(...args)</div>
+                                <div class="property-desc">Log warning messages</div>
+                            </li>
+                            <li>
+                                <div class="property-name">console.error(...args)</div>
+                                <div class="property-desc">Log error messages</div>
+                            </li>
+                        </ul>
+                    </div>
+                </section>
+
+                <!-- EXAMPLES -->
+                <section id="examples" class="help-section">
+                    <h2>📚 Examples</h2>
+
+                    <h3>Example 1: Simple Temperature Alert</h3>
+                    <div class="code-block"><code>let temperature = parseFloat(inputs.temp.value);
+let threshold = parseFloat(flow.threshold);
+
+if (temperature > threshold) {
+    outputs.send("alert", {
+        temperature: temperature,
+        threshold: threshold,
+        location: flow.location,
+        message: "Temperature exceeded threshold!"
+    });
+    console.warn("ALERT: Temperature", temperature, "exceeds", threshold);
+} else {
+    outputs.send("normal", {
+        temperature: temperature,
+        status: "OK"
+    });
+}</code></div>
+
+                    <h3>Example 2: Rolling Average</h3>
+                    <div class="code-block"><code>// Initialize state
+if (!state.values) {
+    state.values = [];
+}
+
+// Add new value
+let value = parseFloat(inputs.value.value);
+state.values.push(value);
+
+// Keep only last N values
+let windowSize = parseInt(flow.windowSize || "10");
+if (state.values.length > windowSize) {
+    state.values.shift();
+}
+
+// Calculate average
+let sum = state.values.reduce((a, b) => a + b, 0);
+let average = sum / state.values.length;
+
+console.log("Average:", average, "over", state.values.length, "values");
+
+outputs.send("average", average);
+outputs.send("count", state.values.length);</code></div>
+
+                    <h3>Example 3: Data Validation</h3>
+                    <div class="code-block"><code>let data = inputs.data.value;
+
+// Validate input
+if (typeof data === 'object' && data.temp !== undefined) {
+    let temp = parseFloat(data.temp);
+
+    // Range check
+    if (temp >= -50 && temp <= 150) {
+        outputs.send("valid", {
+            temperature: temp,
+            timestamp: new Date().toISOString(),
+            source: msg.topic
+        });
+    } else {
+        outputs.send("invalid", {
+            reason: "Temperature out of range",
+            value: temp,
+            expected: "-50 to 150"
+        });
+        console.error("Invalid temperature:", temp);
+    }
+} else {
+    outputs.send("invalid", {
+        reason: "Invalid data format",
+        received: data
+    });
+    console.error("Expected object with 'temp' property");
+}</code></div>
+                </section>
+
+                <!-- TROUBLESHOOTING -->
+                <section id="troubleshooting" class="help-section">
+                    <h2>🔧 Troubleshooting</h2>
+
+                    <h3>Flow Not Executing</h3>
+                    <ul>
+                        <li>Check that the instance is <strong>enabled</strong></li>
+                        <li>Verify input mappings use correct MQTT topics</li>
+                        <li>Confirm the broker is receiving messages on those topics</li>
+                        <li>Check server logs for errors</li>
+                        <li>Ensure at least one input is type TOPIC (to trigger execution)</li>
+                    </ul>
+
+                    <h3>Script Errors</h3>
+                    <ul>
+                        <li>Use <code class="code-inline">console.log()</code> to debug values</li>
+                        <li>Click "Validate" button in script editor to check syntax</li>
+                        <li>Check flow status for error messages</li>
+                        <li>Verify all inputs exist before accessing them</li>
+                        <li>Use try-catch blocks for robust error handling</li>
+                    </ul>
+
+                    <h3>Missing Output</h3>
+                    <ul>
+                        <li>Verify connections are correct in visual editor</li>
+                        <li>Ensure <code class="code-inline">outputs.send()</code> is called in script</li>
+                        <li>Check output mappings are configured</li>
+                        <li>Monitor MQTT topics with mosquitto_sub</li>
+                        <li>Check server logs for publishing errors</li>
+                    </ul>
+
+                    <h3>Variables Not Working</h3>
+                    <ul>
+                        <li>Remember variables are strings - use <code class="code-inline">parseFloat()</code> for numbers</li>
+                        <li>Check variable names match exactly (case-sensitive)</li>
+                        <li>Restart instance after changing variables</li>
+                        <li>Use <code class="code-inline">console.log(flow)</code> to see all variables</li>
+                    </ul>
+
+                    <h3>Performance Issues</h3>
+                    <ul>
+                        <li>Limit state size (avoid storing large arrays)</li>
+                        <li>Reduce output message frequency if possible</li>
+                        <li>Use specific topics instead of wildcards</li>
+                        <li>Break complex scripts into multiple simpler nodes</li>
+                    </ul>
+
+                    <div class="info-box">
+                        <div class="info-box-title">💡 Getting Help</div>
+                        <p>
+                            Check the server logs for detailed error messages. Enable detailed logging with the
+                            <code class="code-inline">-log FINE</code> command line option.
+                        </p>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Update active navigation link based on scroll position
+    const sections = document.querySelectorAll('.help-section');
+    const navLinks = document.querySelectorAll('.help-nav-list a');
+
+    window.addEventListener('scroll', () => {
+        let current = '';
+        sections.forEach(section => {
+            const sectionTop = section.offsetTop;
+            if (window.pageYOffset >= (sectionTop - 150)) {
+                current = section.getAttribute('id');
+            }
+        });
+
+        navLinks.forEach(link => {
+            link.classList.remove('active');
+            if (link.getAttribute('href') === `#${current}`) {
+                link.classList.add('active');
+            }
+        });
+    });
+
+    // Smooth scroll for navigation links
+    navLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const targetId = link.getAttribute('href');
+            const targetSection = document.querySelector(targetId);
+            if (targetSection) {
+                targetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
+
+    // Handle initial hash if present (e.g., from modal opening with #script-api)
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.location.hash) {
+            setTimeout(() => {
+                const target = document.querySelector(window.location.hash);
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 100);
+        }
+    });
+</script>
+</body>
+</html>

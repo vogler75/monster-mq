@@ -8,6 +8,7 @@ A MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data sto
 - **Multi-Database Support** - PostgreSQL, CrateDB, MongoDB, SQLite backends
 - **Hazelcast Clustering** - Multi-node scalability with automatic failover
 - **Message Archiving** - Persistent storage with configurable retention policies
+- **Workflows (Flow Engine)** - Visual flow-based programming with JavaScript runtime for data processing pipelines
 - **Rate Limiting** - Configurable publish/subscribe rate protection against client overload
 - **OPC UA Server** - Industrial protocol server with MQTT bridge and real-time subscriptions
 - **WinCC OA Client** - High-performance bulk message transfer from Siemens WinCC Open Architecture SCADA systems
@@ -139,6 +140,7 @@ For detailed documentation, see the [`doc/`](doc/) directory:
 - **[Neo4j Integration](doc/neo4j.md)** - Graph database for MQTT topic hierarchies
 - **[GraphQL API](doc/graphql.md)** - Real-time data access and management
 - **[MCP Server](doc/mcp.md)** - AI model integration and analytics
+- **[Workflows (Flow Engine)](doc/workflows.md)** - Visual flow-based programming and data processing
 - **[Kafka Integration](doc/kafka.md)** - Stream processing and event sourcing
 - **[Security](doc/security.md)** - TLS, certificates, and best practices
 - **[Development](doc/development.md)** - Building, testing, and contributing
@@ -306,6 +308,74 @@ MQTT topics naturally form hierarchical structures. Neo4j excels at:
 - **Message Rate Limiting** - Prevent database overload with configurable suppression
 
 See the [Neo4j Integration documentation](doc/neo4j.md) for detailed configuration, query examples, and best practices.
+
+## 🔀 Workflows (Flow Engine)
+
+**Visual Flow-Based Programming for MQTT Data Processing**
+
+MonsterMQ includes a powerful workflow engine that enables visual data processing and transformation pipelines using a node-based programming model.
+
+### Key Features
+
+- **Visual Flow Editor** - Drag-and-drop interface for creating data processing flows
+- **JavaScript Runtime** - Execute custom logic using GraalVM JavaScript engine
+- **Flow Classes** - Reusable flow templates/blueprints
+- **Flow Instances** - Deployable instances with custom configuration
+- **Real-time Processing** - Process MQTT messages as they arrive
+- **Instance Variables** - Configure flows with instance-specific values
+
+### Quick Example
+
+Create a temperature alert flow:
+
+```javascript
+// Node script: check_threshold
+let temperature = inputs.temp.value;
+let threshold = inputs.threshold.value;
+
+if (temperature > threshold) {
+    outputs.send("alert", {
+        temperature: temperature,
+        threshold: threshold,
+        message: "Temperature exceeded!"
+    });
+}
+```
+
+Connect MQTT topics and deploy:
+- **Input**: Subscribe to `sensors/warehouse/temperature`
+- **Output**: Publish alerts to `alerts/warehouse/temperature`
+- **Variables**: `location: "Warehouse A"`, `alertEmail: "ops@example.com"`
+
+### Script API
+
+Workflows provide the following globals in node scripts:
+
+```javascript
+// Input values from connected nodes or MQTT topics
+inputs.temperature.value
+inputs.threshold.value
+
+// Message shorthand for triggering input
+msg.value
+msg.topic
+msg.timestamp
+
+// Send data to output ports
+outputs.send("out", result);
+
+// Persistent node-level state
+state.count = (state.count || 0) + 1;
+
+// Read-only instance configuration
+let apiKey = flow.apiKey;
+let serverUrl = flow.serverUrl;
+
+// Logging
+console.log("Processing:", msg.value);
+```
+
+See the [Workflows documentation](doc/workflows.md) for complete guide, examples, and API reference.
 
 ## 📋 Requirements
 
