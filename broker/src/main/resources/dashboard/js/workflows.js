@@ -147,8 +147,8 @@ function escapeHtml(text){ if(text===null||text===undefined) return ''; const di
 
 function formatDateTime(dateStr) {
     if (!dateStr) return '';
-    // Truncate to minutes (e.g., 2024-01-15T10:30:45.123Z -> 2024-01-15 10:30)
-    return dateStr.replace(/:\d{2}(\.\d{3})?Z?$/, '').replace('T', ' ');
+    // Remove fractional seconds (e.g., 2024-01-15T10:30:45.123456Z -> 2024-01-15 10:30:45)
+    return dateStr.replace(/\.\d+Z?$/, '').replace('T', ' ');
 }
 
 function showNotification(message, type='info') {
