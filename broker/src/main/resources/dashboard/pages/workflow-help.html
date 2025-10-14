@@ -8,12 +8,21 @@
     <script src="/js/sidebar.js"></script>
     <style>
         /* Always modal style with left navigation */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
         .help-container {
             display: grid;
             grid-template-columns: 200px 1fr;
             gap: 0;
-            max-width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
         }
 
         .help-nav {
@@ -25,6 +34,7 @@
             padding: 1.5rem 1rem;
             max-height: 100vh;
             overflow-y: auto;
+            margin: 0;
         }
 
         .page-header-actions {
@@ -44,13 +54,17 @@
         }
 
         .container {
-            max-width: 100%;
-            padding: 0;
+            width: 100%;
             height: 100%;
+            padding: 0;
+            margin: 0;
         }
 
         .main-content {
+            width: 100%;
+            height: 100%;
             padding: 0;
+            margin: 0;
         }
         .help-nav h3 {
             margin: 0 0 0.75rem 0;
@@ -96,7 +110,8 @@
             background: var(--background-secondary);
             padding: 2rem 2.5rem;
             overflow-y: auto;
-            height: 100%;
+            height: 100vh;
+            margin: 0;
         }
 
         .help-section {
