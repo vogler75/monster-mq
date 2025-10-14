@@ -725,6 +725,12 @@ MORE INFO:
                         vertx.deployVerticle(neo4jExtension, neo4jDeploymentOptions)
                     }
                     .compose {
+                        // JDBC Logger Extension
+                        val jdbcLoggerExtension = at.rocworks.logger.JDBCLoggerExtension()
+                        val jdbcLoggerDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(jdbcLoggerExtension, jdbcLoggerDeploymentOptions)
+                    }
+                    .compose {
                         // Flow Engine Extension
                         val flowEngineExtension = FlowEngineExtension()
                         val flowEngineDeploymentOptions = DeploymentOptions().setConfig(configJson)

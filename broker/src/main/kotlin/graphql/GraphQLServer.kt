@@ -29,6 +29,8 @@ import at.rocworks.graphql.Plc4xClientConfigQueries
 import at.rocworks.graphql.Plc4xClientConfigMutations
 import at.rocworks.graphql.Neo4jClientConfigQueries
 import at.rocworks.graphql.Neo4jClientConfigMutations
+import at.rocworks.graphql.JDBCLoggerQueries
+import at.rocworks.graphql.JDBCLoggerMutations
 import at.rocworks.graphql.FlowQueries
 import at.rocworks.graphql.FlowMutations
 import at.rocworks.stores.DeviceConfigStoreFactory
@@ -302,6 +304,10 @@ class GraphQLServer(
         val neo4jClientQueries = deviceStore?.let { Neo4jClientConfigQueries(vertx, it) }
         val neo4jClientMutations = deviceStore?.let { Neo4jClientConfigMutations(vertx, it) }
 
+        // Initialize JDBC Logger resolvers
+        val jdbcLoggerQueries = deviceStore?.let { JDBCLoggerQueries(vertx, it) }
+        val jdbcLoggerMutations = deviceStore?.let { JDBCLoggerMutations(vertx, it) }
+
         // Initialize Flow Engine resolvers
         val flowQueries = deviceStore?.let { FlowQueries(vertx, it) }
         val flowMutations = deviceStore?.let { FlowMutations(vertx, it) }
@@ -397,6 +403,12 @@ class GraphQLServer(
                             dataFetcher("neo4jClients", resolver.neo4jClients())
                         }
                     }
+                    // JDBC Logger queries
+                    .apply {
+                        jdbcLoggerQueries?.let { resolver ->
+                            dataFetcher("jdbcLoggers", resolver.jdbcLoggers())
+                        }
+                    }
                     // Flow Engine queries
                     .apply {
                         flowQueries?.let { resolver ->
@@ -481,6 +493,13 @@ class GraphQLServer(
                         neo4jClientMutations?.let { _ ->
                             // Return an empty object - actual resolvers are on Neo4jClientMutations type
                             dataFetcher("neo4jClient") { _ -> emptyMap<String, Any>() }
+                        }
+                    }
+                    // JDBC Logger mutations - grouped under jdbcLogger
+                    .apply {
+                        jdbcLoggerMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on JDBCLoggerMutations type
+                            dataFetcher("jdbcLogger") { _ -> emptyMap<String, Any>() }
                         }
                     }
                     // Flow Engine mutations - grouped under flow
@@ -613,6 +632,20 @@ class GraphQLServer(
                     }
                 }
             }
+            // Register JDBC Logger Mutations type
+            .type("JDBCLoggerMutations") { builder ->
+                builder.apply {
+                    jdbcLoggerMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createJDBCLogger())
+                        dataFetcher("update", resolver.updateJDBCLogger())
+                        dataFetcher("delete", resolver.deleteJDBCLogger())
+                        dataFetcher("start", resolver.startJDBCLogger())
+                        dataFetcher("stop", resolver.stopJDBCLogger())
+                        dataFetcher("toggle", resolver.toggleJDBCLogger())
+                        dataFetcher("reassign", resolver.reassignJDBCLogger())
+                    }
+                }
+            }
             // Register Flow Engine Mutations type
             .type("FlowMutations") { builder ->
                 builder.apply {
@@ -708,6 +741,11 @@ class GraphQLServer(
                 builder
                     .dataFetcher("metrics", metricsResolver.neo4jClientMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.neo4jClientMetricsHistory())
+            }
+            .type("JDBCLogger") { builder ->
+                builder
+                    .dataFetcher("metrics", metricsResolver.jdbcLoggerMetrics())
+                    .dataFetcher("metricsHistory", metricsResolver.jdbcLoggerMetricsHistory())
             }
             .type("ArchiveGroupInfo") { builder ->
                 builder.apply {

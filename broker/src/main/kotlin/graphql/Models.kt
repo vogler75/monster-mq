@@ -231,6 +231,16 @@ data class Neo4jClientMetrics(
     val timestamp: String
 )
 
+// JDBC Logger Metrics
+data class JDBCLoggerMetrics(
+    val messagesIn: Double,
+    val messagesWritten: Double,
+    val errors: Int,
+    val queueSize: Int,
+    val connected: Boolean,
+    val timestamp: String
+)
+
 data class ArchiveGroupMetrics(
     val messagesOut: Double,  // Messages written to database per second
     val bufferSize: Int,      // Average size of the write buffer

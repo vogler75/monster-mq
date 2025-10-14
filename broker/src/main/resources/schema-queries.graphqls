@@ -1290,3 +1290,151 @@ extend type Query {
         node: String
     ): [Neo4jClient!]!
 }
+
+#############################################
+# JDBC Logger Configuration                 #
+#############################################
+
+"""
+JDBC Logger subscribes to MQTT topics and writes validated JSON messages to database tables
+using JDBC bulk operations. It validates incoming messages against a JSON Schema and extracts
+fields for database insertion.
+
+Features:
+- JSON Schema validation for incoming messages
+- Configurable field extraction and mapping
+- Dynamic or fixed table name selection via JSONPath
+- Memory or disk-based buffering for resilience
+- JDBC bulk/batch writing for performance
+- Connection failure handling with automatic retry
+- Support for multiple database types (QuestDB, PostgreSQL, TimescaleDB)
+
+Use Cases:
+- Time-series data logging to QuestDB for fast ingestion
+- IoT sensor data archival to PostgreSQL
+- Industrial data collection to TimescaleDB
+"""
+
+# Database type enum for JDBC Logger
+enum JDBCLoggerDatabaseType {
+    # QuestDB - high-performance time-series database
+    QUESTDB
+    # PostgreSQL - general-purpose relational database
+    POSTGRESQL
+    # TimescaleDB - PostgreSQL extension for time-series data
+    TIMESCALEDB
+}
+
+# Queue type enum for JDBC Logger buffering
+enum JDBCLoggerQueueType {
+    # In-memory queue (faster, lost on restart)
+    MEMORY
+    # Disk-backed queue (persistent, survives restart and DB outages)
+    DISK
+}
+
+# Payload format enum for JDBC Logger
+enum JDBCLoggerPayloadFormat {
+    # JSON format (currently supported)
+    JSON
+    # XML format (future support)
+    XML
+}
+
+# JDBC Logger configuration
+type JDBCLoggerConfig {
+    # Database type
+    databaseType: JDBCLoggerDatabaseType!
+    # JDBC connection URL (e.g., "jdbc:questdb:http://localhost:9000")
+    jdbcUrl: String!
+    # Database username for authentication
+    username: String!
+    # MQTT topic filters to subscribe to (supports wildcards +, #)
+    topicFilters: [String!]!
+    # Fixed table name (mutually exclusive with tableNameJsonPath)
+    tableName: String
+    # JSONPath to extract table name from payload (e.g., "$.metadata.table")
+    tableNameJsonPath: String
+    # Payload format (JSON or XML)
+    payloadFormat: JDBCLoggerPayloadFormat!
+    # JSON Schema for validation and field extraction
+    jsonSchema: JSON!
+    # Queue type (MEMORY or DISK)
+    queueType: JDBCLoggerQueueType!
+    # Maximum buffered messages
+    queueSize: Int!
+    # Path for disk queue files (when queueType is DISK)
+    diskPath: String!
+    # JDBC batch size - write when reached
+    bulkSize: Int!
+    # Maximum time to collect bulk in milliseconds - write when reached
+    bulkTimeoutMs: Long!
+    # Delay before reconnecting on failure in milliseconds
+    reconnectDelayMs: Long!
+}
+
+# Metrics for a JDBC Logger connector
+type JDBCLoggerMetrics {
+    # Messages per second received from MQTT broker
+    messagesIn: Float!
+    # Messages per second successfully validated
+    messagesValidated: Float!
+    # Messages per second skipped (validation failed or missing fields)
+    messagesSkipped: Float!
+    # Messages per second written to database
+    messagesWritten: Float!
+    # Validation errors per second
+    validationErrors: Float!
+    # Write errors per second
+    writeErrors: Float!
+    # Current queue size
+    queueSize: Int!
+    # Queue capacity
+    queueCapacity: Int!
+    # Whether queue is full
+    queueFull: Boolean!
+    # ISO 8601 timestamp when these metrics were captured
+    timestamp: String!
+}
+
+# JDBC Logger configuration
+type JDBCLogger {
+    # Unique logger name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Cluster node ID where this logger runs
+    nodeId: String!
+    # Connection and subscription configuration
+    config: JDBCLoggerConfig!
+    # Whether this logger is enabled and should run
+    enabled: Boolean!
+    # Logger creation timestamp
+    createdAt: String!
+    # Logger last update timestamp
+    updatedAt: String!
+    # Whether this logger is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current metrics for this JDBC Logger (single most recent entry)
+    metrics: [JDBCLoggerMetrics!]!
+    # Historical metrics data for this JDBC Logger
+    metricsHistory(
+        from: String
+        to: String
+        lastMinutes: Int
+    ): [JDBCLoggerMetrics!]!
+}
+
+# Extend Queries for JDBC Loggers
+extend type Query {
+    # Get JDBC Logger configurations across the entire cluster
+    # Returns loggers from all cluster nodes, showing their assignment and status
+    # JDBC Loggers subscribe to MQTT topics and write validated data to database tables
+    # Use optional filters to narrow results to specific logger or node
+    jdbcLoggers(
+        # Filter by specific logger name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [JDBCLogger!]!
+}

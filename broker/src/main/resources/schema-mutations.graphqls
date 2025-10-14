@@ -1276,3 +1276,103 @@ input Neo4jClientInput {
     # Connection configuration
     config: Neo4jClientConfigInput!
 }
+
+# JDBC Logger Mutations - Grouped operations for JDBC Logger management
+type JDBCLoggerMutations {
+    # Create a new JDBC Logger configuration
+    # Creates a logger connector that will be deployed on the specified cluster node
+    # The logger will subscribe to MQTT topics, validate messages, and write to database tables
+    create(input: JDBCLoggerInput!): JDBCLoggerResult!
+
+    # Update an existing JDBC Logger configuration
+    # Changes take effect immediately - the logger connector will be redeployed with new settings
+    # Useful for modifying database connection, topic filters, or validation schema
+    update(name: String!, input: JDBCLoggerInput!): JDBCLoggerResult!
+
+    # Delete a JDBC Logger configuration permanently
+    # Stops the logger connector and removes all configuration data
+    # Returns true if deletion was successful, false if logger was not found
+    delete(name: String!): Boolean!
+
+    # Start a JDBC Logger
+    # Enables a previously stopped logger and begins consuming MQTT messages
+    start(name: String!): JDBCLoggerResult!
+
+    # Stop a JDBC Logger
+    # Disables the logger and stops consuming MQTT messages while preserving configuration
+    stop(name: String!): JDBCLoggerResult!
+
+    # Toggle JDBC Logger enabled state
+    # Enable or disable a JDBC Logger without deleting its configuration
+    toggle(name: String!, enabled: Boolean!): JDBCLoggerResult!
+
+    # Reassign a JDBC Logger to a different cluster node
+    # Moves the logger connector from one node to another for load balancing
+    # The logger configuration remains unchanged, only the deployment location changes
+    reassign(name: String!, nodeId: String!): JDBCLoggerResult!
+}
+
+# Extend Mutations for JDBC Loggers
+extend type Mutation {
+    # Access JDBC Logger management operations
+    # Returns a JDBCLoggerMutations type that provides grouped mutation operations
+    jdbcLogger: JDBCLoggerMutations!
+}
+
+# Result type for JDBC Logger operations
+type JDBCLoggerResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected JDBC Logger (null if operation failed)
+    logger: JDBCLogger
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+# Input for JDBC Logger configuration
+input JDBCLoggerConfigInput {
+    # Database type (QuestDB, PostgreSQL, TimescaleDB)
+    databaseType: JDBCLoggerDatabaseType!
+    # JDBC connection URL (e.g., "jdbc:questdb:http://localhost:9000")
+    jdbcUrl: String!
+    # Database username
+    username: String!
+    # Database password
+    password: String!
+    # MQTT topic filters to subscribe to (supports wildcards +, #)
+    topicFilters: [String!]!
+    # Fixed table name (mutually exclusive with tableNameJsonPath)
+    tableName: String
+    # JSONPath to extract table name from payload (e.g., "$.metadata.table")
+    tableNameJsonPath: String
+    # Payload format (JSON or XML)
+    payloadFormat: JDBCLoggerPayloadFormat = JSON
+    # JSON Schema for validation and field extraction
+    jsonSchema: JSON!
+    # Queue type (MEMORY or DISK)
+    queueType: JDBCLoggerQueueType = MEMORY
+    # Maximum buffered messages
+    queueSize: Int = 10000
+    # Path for disk queue files
+    diskPath: String = "./buffer"
+    # JDBC batch size
+    bulkSize: Int = 1000
+    # Maximum time to collect bulk in milliseconds
+    bulkTimeoutMs: Long = 5000
+    # Delay before reconnecting on failure in milliseconds
+    reconnectDelayMs: Long = 5000
+}
+
+# Input for creating or updating a JDBC Logger
+input JDBCLoggerInput {
+    # Unique logger name across the cluster
+    name: String!
+    # MQTT namespace for internal communication (e.g., "jdbc/logger1")
+    namespace: String!
+    # Target cluster node (use "*" for automatic assignment)
+    nodeId: String!
+    # Whether the logger should be enabled
+    enabled: Boolean = true
+    # Connection and validation configuration
+    config: JDBCLoggerConfigInput!
+}

@@ -1362,4 +1362,95 @@ future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTi
             future
         }
     }
+
+    // JDBC Logger Metrics (embedded field resolvers)
+    fun jdbcLoggerMetrics(): DataFetcher<CompletableFuture<List<JDBCLoggerMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<JDBCLoggerMetrics>>()
+            val logger = env.getSource<Map<String, Any>>()
+            val loggerName = logger?.get("name") as? String
+
+            if (loggerName == null) {
+                future.complete(listOf(JDBCLoggerMetrics(0.0, 0.0, 0, 0, false, TimestampConverter.currentTimeIsoString())))
+                return@DataFetcher future
+            }
+
+            // Fetch live metrics from logger via EventBus
+            val addr = EventBusAddresses.JDBCLoggerBridge.connectorMetrics(loggerName)
+            vertx.eventBus().request<JsonObject>(addr, JsonObject()).onComplete { reply ->
+                if (reply.succeeded()) {
+                    val body = reply.result().body()
+                    val messagesIn = body.getDouble("messagesIn", 0.0)
+                    val messagesWritten = body.getDouble("messagesWritten", 0.0)
+                    val errors = body.getInteger("errors", 0)
+                    val queueSize = body.getInteger("queueSize", 0)
+                    val connected = body.getBoolean("connected", false)
+                    future.complete(listOf(JDBCLoggerMetrics(
+                        round2(messagesIn),
+                        round2(messagesWritten),
+                        errors,
+                        queueSize,
+                        connected,
+                        TimestampConverter.currentTimeIsoString()
+                    )))
+                } else {
+                    future.complete(listOf(JDBCLoggerMetrics(0.0, 0.0, 0, 0, false, TimestampConverter.currentTimeIsoString())))
+                }
+            }
+
+            future
+        }
+    }
+
+    fun jdbcLoggerMetricsHistory(): DataFetcher<CompletableFuture<List<JDBCLoggerMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<JDBCLoggerMetrics>>()
+            val logger = env.getSource<Map<String, Any>>()
+            val loggerName = logger?.get("name") as? String
+
+            if (loggerName == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            if (metricsStore == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            val from = env.getArgument<String?>("from")
+            val to = env.getArgument<String?>("to")
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            val limit = env.getArgument<Int?>("limit") ?: 100
+
+            val fromInstant = from?.let { java.time.Instant.parse(it) }
+            val toInstant = to?.let { java.time.Instant.parse(it) }
+
+            metricsStore.getMetricsHistory(at.rocworks.stores.MetricKind.JDBCLOGGER, loggerName, fromInstant, toInstant, lastMinutes, limit).onComplete { result ->
+                if (result.succeeded()) {
+                    val list = result.result().map { (timestamp, metricsJson) ->
+                        val messagesIn = metricsJson.getDouble("messagesIn", 0.0)
+                        val messagesWritten = metricsJson.getDouble("messagesWritten", 0.0)
+                        val errors = metricsJson.getInteger("errors", 0)
+                        val queueSize = metricsJson.getInteger("queueSize", 0)
+                        val connected = metricsJson.getBoolean("connected", false)
+                        JDBCLoggerMetrics(
+                            round2(messagesIn),
+                            round2(messagesWritten),
+                            errors,
+                            queueSize,
+                            connected,
+                            TimestampConverter.instantToIsoString(timestamp)
+                        )
+                    }
+                    future.complete(list)
+                } else {
+                    Companion.logger.warning("Failed to get JDBC Logger metrics history for $loggerName: ${result.cause()?.message}")
+                    future.complete(emptyList())
+                }
+            }
+
+            future
+        }
+    }
 }

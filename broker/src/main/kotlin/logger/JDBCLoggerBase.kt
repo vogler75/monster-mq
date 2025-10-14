@@ -1,0 +1,454 @@
+package at.rocworks.logger
+
+import at.rocworks.Monster
+import at.rocworks.Utils
+import at.rocworks.data.BrokerMessage
+import at.rocworks.logger.queue.ILoggerQueue
+import at.rocworks.logger.queue.LoggerQueueDisk
+import at.rocworks.logger.queue.LoggerQueueMemory
+import at.rocworks.stores.DeviceConfig
+import at.rocworks.stores.devices.JDBCLoggerConfig
+import com.jayway.jsonpath.JsonPath
+import io.vertx.core.AbstractVerticle
+import io.vertx.core.Future
+import io.vertx.core.Promise
+import org.everit.json.schema.Schema
+import org.everit.json.schema.ValidationException
+import org.everit.json.schema.loader.SchemaLoader
+import org.json.JSONObject
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.logging.Logger
+import kotlin.concurrent.thread
+
+/**
+ * Abstract base class for JDBC Logger implementations.
+ * Provides queue management, JSON schema validation, topic subscription, and bulk writing logic.
+ * Subclasses implement database-specific connection and write operations.
+ */
+abstract class JDBCLoggerBase : AbstractVerticle() {
+
+    protected val logger: Logger = Utils.getLogger(this::class.java)
+
+    protected lateinit var device: DeviceConfig
+    protected lateinit var cfg: JDBCLoggerConfig
+
+    // JSON Schema validator
+    private lateinit var jsonSchemaValidator: Schema
+
+    // JSONPath for dynamic table name extraction
+    private var tableNameJsonPath: JsonPath? = null
+
+    // Message queue (memory or disk-backed)
+    private lateinit var queue: ILoggerQueue
+
+    // Writer thread
+    private val writerThreadStop = AtomicBoolean(false)
+    private var writerThread: Thread? = null
+
+    // Metrics
+    private val messagesIn = AtomicLong(0)
+    private val messagesValidated = AtomicLong(0)
+    private val messagesSkipped = AtomicLong(0)
+    private val messagesWritten = AtomicLong(0)
+    private val validationErrors = AtomicLong(0)
+    private val writeErrors = AtomicLong(0)
+
+    // Bulk timeout tracking
+    private var lastBulkWrite = System.currentTimeMillis()
+
+    /**
+     * Buffered row ready for database write
+     */
+    data class BufferedRow(
+        val tableName: String,
+        val fields: Map<String, Any?>,
+        val timestamp: Instant,
+        val topic: String
+    )
+
+    override fun start(startPromise: Promise<Void>) {
+        try {
+            // Load device configuration
+            val cfgJson = config().getJsonObject("device")
+            device = DeviceConfig.fromJsonObject(cfgJson)
+            cfg = JDBCLoggerConfig.fromJson(device.config)
+
+            logger.info("Starting JDBC Logger: ${device.name} (${cfg.databaseType})")
+
+            // Validate configuration
+            val validationErrors = cfg.validate()
+            if (validationErrors.isNotEmpty()) {
+                throw IllegalArgumentException("Config validation failed: ${validationErrors.joinToString(", ")}")
+            }
+
+            // Initialize JSON Schema validator
+            initializeJsonSchemaValidator()
+
+            // Initialize JSONPath if configured for dynamic table names
+            if (cfg.tableNameJsonPath != null) {
+                tableNameJsonPath = JsonPath.compile(cfg.tableNameJsonPath)
+                logger.info("Using dynamic table name extraction: ${cfg.tableNameJsonPath}")
+            } else {
+                logger.info("Using fixed table name: ${cfg.tableName}")
+            }
+
+            // Initialize queue (memory or disk)
+            initializeQueue()
+
+            // Connect to database
+            connect()
+                .onSuccess {
+                    logger.info("Database connection established")
+
+                    // Subscribe to MQTT topics
+                    subscribeToTopics()
+
+                    // Start writer thread
+                    startWriterThread()
+
+                    logger.info("JDBC Logger ${device.name} started successfully")
+                    startPromise.complete()
+                }
+                .onFailure { error ->
+                    logger.severe("Failed to connect to database: ${error.message}")
+                    startPromise.fail(error)
+                }
+
+        } catch (e: Exception) {
+            logger.severe("Failed to start JDBC Logger: ${e.message}")
+            e.printStackTrace()
+            startPromise.fail(e)
+        }
+    }
+
+    override fun stop(stopPromise: Promise<Void>) {
+        try {
+            logger.info("Stopping JDBC Logger: ${device.name}")
+
+            // Stop writer thread
+            writerThreadStop.set(true)
+            writerThread?.join(5000) // Wait up to 5 seconds
+
+            // Unsubscribe from topics
+            unsubscribeFromTopics()
+
+            // Close database connection
+            disconnect()
+                .onSuccess {
+                    // Close queue
+                    queue.close()
+                    logger.info("JDBC Logger ${device.name} stopped successfully")
+                    stopPromise.complete()
+                }
+                .onFailure { error ->
+                    logger.warning("Error during disconnect: ${error.message}")
+                    stopPromise.complete() // Complete anyway
+                }
+
+        } catch (e: Exception) {
+            logger.warning("Error stopping JDBC Logger: ${e.message}")
+            stopPromise.complete()
+        }
+    }
+
+    private fun initializeJsonSchemaValidator() {
+        try {
+            val schemaJson = JSONObject(cfg.jsonSchema.encode())
+            val schemaLoader = SchemaLoader.builder()
+                .schemaJson(schemaJson)
+                .build()
+            jsonSchemaValidator = schemaLoader.load().build()
+            logger.info("JSON Schema validator initialized")
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Failed to load JSON Schema: ${e.message}", e)
+        }
+    }
+
+    private fun initializeQueue() {
+        queue = when (cfg.queueType) {
+            "MEMORY" -> {
+                logger.info("Using MEMORY queue (size: ${cfg.queueSize}, block: ${cfg.bulkSize})")
+                LoggerQueueMemory(
+                    logger = logger,
+                    queueSize = cfg.queueSize,
+                    blockSize = cfg.bulkSize,
+                    pollTimeout = 10L // 10ms poll timeout
+                )
+            }
+            "DISK" -> {
+                logger.info("Using DISK queue (size: ${cfg.queueSize}, block: ${cfg.bulkSize}, path: ${cfg.diskPath})")
+                LoggerQueueDisk(
+                    deviceName = device.name,
+                    logger = logger,
+                    queueSize = cfg.queueSize,
+                    blockSize = cfg.bulkSize,
+                    pollTimeout = 10L,
+                    diskPath = cfg.diskPath
+                )
+            }
+            else -> {
+                logger.warning("Unknown queue type: ${cfg.queueType}, using MEMORY")
+                LoggerQueueMemory(logger, cfg.queueSize, cfg.bulkSize, 10L)
+            }
+        }
+    }
+
+    private fun subscribeToTopics() {
+        val sessionHandler = Monster.getSessionHandler()
+        if (sessionHandler == null) {
+            logger.warning("SessionHandler not available, cannot subscribe to topics")
+            return
+        }
+
+        cfg.topicFilters.forEach { topicFilter ->
+            logger.info("Subscribing to MQTT topic filter: $topicFilter")
+            sessionHandler.subscribeInternal(
+                clientId = "jdbc-logger-${device.name}",
+                topicFilter = topicFilter,
+                qos = 0
+            ) { message ->
+                handleIncomingMessage(message)
+            }
+        }
+    }
+
+    private fun unsubscribeFromTopics() {
+        val sessionHandler = Monster.getSessionHandler()
+        if (sessionHandler == null) {
+            return
+        }
+
+        cfg.topicFilters.forEach { topicFilter ->
+            logger.info("Unsubscribing from MQTT topic filter: $topicFilter")
+            sessionHandler.unsubscribeInternal("jdbc-logger-${device.name}", topicFilter)
+        }
+    }
+
+    private fun handleIncomingMessage(message: BrokerMessage) {
+        try {
+            messagesIn.incrementAndGet()
+
+            logger.finest { "Received message on topic: ${message.topicName}" }
+
+            // Parse payload as JSON
+            val payloadString = String(message.payload, Charsets.UTF_8)
+            val payloadJson: JSONObject
+
+            try {
+                payloadJson = JSONObject(payloadString)
+            } catch (e: Exception) {
+                validationErrors.incrementAndGet()
+                logger.fine { "Failed to parse JSON from topic ${message.topicName}: ${e.message}" }
+                return
+            }
+
+            // Validate against JSON Schema
+            try {
+                jsonSchemaValidator.validate(payloadJson)
+            } catch (e: ValidationException) {
+                validationErrors.incrementAndGet()
+                logger.fine { "Schema validation failed for topic ${message.topicName}: ${e.message}" }
+                return
+            }
+
+            // Extract table name
+            val tableName = extractTableName(payloadJson)
+            if (tableName == null) {
+                messagesSkipped.incrementAndGet()
+                logger.fine { "Could not extract table name from message on topic ${message.topicName}" }
+                return
+            }
+
+            // Extract fields from JSON based on schema
+            val fields = extractFields(payloadJson)
+
+            // Check if all required fields are present
+            if (!hasRequiredFields(fields)) {
+                messagesSkipped.incrementAndGet()
+                logger.fine { "Missing required fields in message on topic ${message.topicName}" }
+                return
+            }
+
+            messagesValidated.incrementAndGet()
+
+            // Add to queue
+            queue.add(message)
+
+        } catch (e: Exception) {
+            validationErrors.incrementAndGet()
+            logger.warning("Error handling message from topic ${message.topicName}: ${e.message}")
+        }
+    }
+
+    private fun extractTableName(payloadJson: JSONObject): String? {
+        return try {
+            if (cfg.tableName != null) {
+                // Fixed table name
+                cfg.tableName
+            } else if (tableNameJsonPath != null) {
+                // Extract from JSON using JSONPath
+                val result = tableNameJsonPath!!.read<Any>(payloadJson.toString())
+                result?.toString()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            logger.warning("Failed to extract table name using JSONPath: ${e.message}")
+            null
+        }
+    }
+
+    private fun extractFields(payloadJson: JSONObject): Map<String, Any?> {
+        val fields = mutableMapOf<String, Any?>()
+
+        // Extract only fields defined in JSON Schema properties
+        val schemaProperties = cfg.jsonSchema.getJsonObject("properties")
+        schemaProperties?.fieldNames()?.forEach { fieldName ->
+            if (payloadJson.has(fieldName)) {
+                // Get value and handle nested objects
+                val value = payloadJson.get(fieldName)
+                fields[fieldName] = when (value) {
+                    JSONObject.NULL -> null
+                    is JSONObject -> value.toString() // Convert nested objects to JSON string
+                    is org.json.JSONArray -> value.toString() // Convert arrays to JSON string
+                    else -> value
+                }
+            }
+        }
+
+        return fields
+    }
+
+    private fun hasRequiredFields(fields: Map<String, Any?>): Boolean {
+        val required = cfg.jsonSchema.getJsonArray("required") ?: return true
+        return required.all { requiredField ->
+            fields.containsKey(requiredField.toString()) && fields[requiredField.toString()] != null
+        }
+    }
+
+    private fun startWriterThread() {
+        writerThread = thread(start = true, name = "jdbc-logger-${device.name}") {
+            logger.info("Writer thread started")
+            writerThreadStop.set(false)
+            lastBulkWrite = System.currentTimeMillis()
+
+            while (!writerThreadStop.get()) {
+                try {
+                    writeExecutor()
+                } catch (e: Exception) {
+                    logger.warning("Error in writer thread: ${e.message}")
+                    e.printStackTrace()
+                    Thread.sleep(1000) // Wait before retrying
+                }
+            }
+
+            logger.info("Writer thread stopped")
+        }
+    }
+
+    private fun writeExecutor() {
+        val rows = mutableListOf<BufferedRow>()
+
+        // Poll block from queue
+        val blockSize = queue.pollBlock { message ->
+            try {
+                // Parse and process each message
+                val payloadString = String(message.payload, Charsets.UTF_8)
+                val payloadJson = JSONObject(payloadString)
+
+                val tableName = extractTableName(payloadJson)
+                if (tableName != null) {
+                    val fields = extractFields(payloadJson)
+                    if (hasRequiredFields(fields)) {
+                        rows.add(BufferedRow(tableName, fields, message.time, message.topicName))
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warning("Error processing message in write executor: ${e.message}")
+            }
+        }
+
+        // Check if we should write based on timeout
+        val now = System.currentTimeMillis()
+        val timeoutReached = (now - lastBulkWrite) >= cfg.bulkTimeoutMs
+
+        if (rows.isNotEmpty() && (rows.size >= cfg.bulkSize || timeoutReached)) {
+            // Group by table name
+            val byTable = rows.groupBy { it.tableName }
+
+            var allSuccess = true
+
+            // Write each table's bulk
+            byTable.forEach { (tableName, tableRows) ->
+                try {
+                    logger.fine { "Writing bulk of ${tableRows.size} rows to table $tableName" }
+                    writeBulk(tableName, tableRows)
+                    messagesWritten.addAndGet(tableRows.size.toLong())
+                } catch (e: Exception) {
+                    allSuccess = false
+                    writeErrors.incrementAndGet()
+                    logger.warning("Error writing bulk to table $tableName: ${e.message}")
+
+                    // Check if it's a connection error
+                    if (isConnectionError(e)) {
+                        logger.warning("Database connection error detected, will retry block")
+                        // Don't commit - block will be retried
+                        return
+                    }
+                }
+            }
+
+            if (allSuccess) {
+                // Commit the block (clears retry buffer)
+                queue.pollCommit()
+                lastBulkWrite = now
+            }
+        } else if (blockSize == 0) {
+            // No messages, sleep briefly
+            Thread.sleep(10)
+        }
+    }
+
+    // Abstract methods to be implemented by subclasses
+
+    /**
+     * Connect to the database
+     */
+    abstract fun connect(): Future<Void>
+
+    /**
+     * Disconnect from the database
+     */
+    abstract fun disconnect(): Future<Void>
+
+    /**
+     * Write a bulk of rows to the specified table using JDBC batch
+     * @param tableName The table to write to
+     * @param rows The rows to write
+     */
+    abstract fun writeBulk(tableName: String, rows: List<BufferedRow>)
+
+    /**
+     * Check if an exception is a connection error (for retry logic)
+     * @param e The exception to check
+     * @return true if this is a connection error that should trigger retry
+     */
+    abstract fun isConnectionError(e: Exception): Boolean
+
+    // Metrics
+    fun getMetrics(): Map<String, Any> {
+        return mapOf(
+            "messagesIn" to messagesIn.get(),
+            "messagesValidated" to messagesValidated.get(),
+            "messagesSkipped" to messagesSkipped.get(),
+            "messagesWritten" to messagesWritten.get(),
+            "validationErrors" to validationErrors.get(),
+            "writeErrors" to writeErrors.get(),
+            "queueSize" to queue.getSize(),
+            "queueCapacity" to queue.getCapacity(),
+            "queueFull" to queue.isQueueFull()
+        )
+    }
+}
