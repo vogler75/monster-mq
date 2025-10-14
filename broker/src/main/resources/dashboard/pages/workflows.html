@@ -368,14 +368,110 @@
     /* Ensure horizontal overflow handled gracefully */
     #classes-section .table-wrapper { overflow-x: auto; }
     /* Slight padding on header row so last column not glued to edge */
-    #classes-section table.data-table th:last-child, 
+    #classes-section table.data-table th:last-child,
     #classes-section table.data-table td:last-child { padding-right: 0.75rem; }
     /* Mirror for Flow Instances table */
     #instances-section { margin-right: 0; }
     #instances-section .table-wrapper { width: 100%; padding-right: 1.25rem; box-sizing: border-box; overflow-x:auto; }
     #instances-section table.data-table { width: 100%; table-layout: auto; }
-    #instances-section table.data-table th:last-child, 
+    #instances-section table.data-table th:last-child,
     #instances-section table.data-table td:last-child { padding-right: 0.75rem; }
+
+    /* Table header styling to match OPC UA devices page */
+    .table-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+        background: var(--dark-bg);
+        border-bottom: 1px solid var(--dark-border);
+        border-radius: 12px 12px 0 0;
+    }
+
+    .table-title h2 {
+        margin: 0;
+        color: var(--text-primary);
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+
+    .table-actions {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    .btn-icon {
+        padding: 0.6rem;
+        min-width: auto;
+        width: auto;
+    }
+
+    .btn-icon svg {
+        margin: 0;
+    }
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        border: none;
+        cursor: pointer;
+        text-decoration: none;
+        padding: 0.6rem 1.25rem;
+        font-size: 0.875rem;
+    }
+
+    .btn svg {
+        flex-shrink: 0;
+    }
+
+    .section-container {
+        background: var(--dark-surface);
+        border-radius: 12px;
+        border: 1px solid var(--dark-border);
+        overflow: hidden;
+        box-shadow: var(--card-shadow);
+        margin-bottom: 2rem;
+    }
+
+    .section-container .table-wrapper {
+        overflow-x: auto;
+        margin: 0;
+        padding: 0;
+    }
+
+    .section-container table.data-table {
+        margin: 0;
+        border-radius: 0;
+        border: none;
+        background: transparent;
+    }
+
+    .section-container thead th {
+        background: var(--dark-surface-2);
+        padding: 1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        border-bottom: 1px solid var(--dark-border);
+    }
+
+    .section-container tbody td {
+        padding: 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+    }
+
+    .section-container tbody tr:hover {
+        background: rgba(71, 85, 105, 0.1);
+    }
+
+    .section-container tbody tr:last-child td {
+        border-bottom: none;
+    }
     </style>
 </head>
 <body>
@@ -441,13 +537,26 @@
                 </div>
             </div>
 
-                <div class="section" id="classes-section">
-                    <div class="card-header" style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-                        <h2 style="margin: 0; flex-shrink: 0;">Flow Classes</h2>
-                        <input type="text" id="class-search" placeholder="Search..." class="form-control" style="max-width: 200px; flex-shrink: 0;">
-                        <button class="btn btn-primary btn-small" onclick="location.href='/pages/workflows-visual.html'">+ New</button>
+                <div class="section-container" id="classes-section">
+                    <div class="table-header">
+                        <div class="table-title">
+                            <h2>Flow Classes</h2>
+                        </div>
+                        <div class="table-actions">
+                            <button class="btn btn-secondary btn-icon" onclick="loadFlowClasses()" title="Refresh flow classes">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                </svg>
+                            </button>
+                            <button class="btn btn-primary" onclick="location.href='/pages/workflows-visual.html'">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                </svg>
+                                New Class
+                            </button>
+                        </div>
                     </div>
-                    <div class="table-wrapper" style="margin-top:1rem;">
+                    <div class="table-wrapper">
                         <table class="data-table" id="classes-table">
                             <thead><tr>
                                 <th data-sort="name">Name</th>
@@ -462,13 +571,26 @@
                         </table>
                     </div>
                 </div>
-                <div class="section" id="instances-section" style="margin-top:3rem;">
-                    <div class="card-header" style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-                        <h2 style="margin: 0; flex-shrink: 0;">Flow Instances</h2>
-                        <input type="text" id="instance-search" placeholder="Search..." class="form-control" style="max-width: 200px; flex-shrink: 0;">
-                        <button class="btn btn-primary btn-small" onclick="location.href='/pages/workflows-edit.html?type=instance'">+ New</button>
+                <div class="section-container" id="instances-section">
+                    <div class="table-header">
+                        <div class="table-title">
+                            <h2>Flow Instances</h2>
+                        </div>
+                        <div class="table-actions">
+                            <button class="btn btn-secondary btn-icon" onclick="loadFlowInstances()" title="Refresh flow instances">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                </svg>
+                            </button>
+                            <button class="btn btn-primary" onclick="location.href='/pages/workflows-edit.html?type=instance'">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                </svg>
+                                New Instance
+                            </button>
+                        </div>
                     </div>
-                    <div class="table-wrapper" style="margin-top:1rem;">
+                    <div class="table-wrapper">
                         <table class="data-table" id="instances-table">
                             <thead><tr>
                                 <th data-sort="name">Name</th>
