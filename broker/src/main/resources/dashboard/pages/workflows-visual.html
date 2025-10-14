@@ -87,15 +87,17 @@
     /* Side panels */
     .panel {
       background: var(--background-secondary);
-      border-right: 1px solid var(--border-color);
+      border: 1px solid var(--dark-border, var(--border-color));
+      border-radius: 12px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
+      margin: 0.5rem;
     }
 
     .panel.right {
-      border-right: none;
-      border-left: 1px solid var(--border-color);
+      border: 1px solid var(--dark-border, var(--border-color));
+      border-radius: 12px;
     }
 
     .panel-header {
