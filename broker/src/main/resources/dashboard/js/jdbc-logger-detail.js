@@ -4,6 +4,7 @@ class JDBCLoggerDetailManager {
         this.loggerName = null;
         this.originalLogger = null;
         this.clusterNodes = [];
+        this.metricsTimer = null;
 
         this.init();
     }
@@ -21,6 +22,16 @@ class JDBCLoggerDetailManager {
             this.initNewLogger();
         } else {
             this.loadLogger();
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => this.cleanup());
+    }
+
+    cleanup() {
+        if (this.metricsTimer) {
+            clearInterval(this.metricsTimer);
+            this.metricsTimer = null;
         }
     }
 
@@ -113,6 +124,31 @@ class JDBCLoggerDetailManager {
         document.getElementById('logger-reconnect-delay').value = '5000';
         document.getElementById('logger-disk-path').value = './buffer';
 
+        // Set default JSON schema with timestamp format and mapping
+        const defaultSchema = {
+            "type": "object",
+            "properties": {
+                "ts": {
+                    "type": "string",
+                    "format": "timestamp"
+                },
+                "sensor_id": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "number"
+                }
+            },
+            "required": ["value"],
+            "arrayPath": "$.sensors[*]",
+            "mapping": {
+                "ts": "$.timestamp",
+                "sensor_id": "$.id",
+                "value": "$.value"
+            }
+        };
+        document.getElementById('logger-json-schema').value = JSON.stringify(defaultSchema, null, 2);
+
         // Hide timestamps and metrics sections (only for editing)
         document.getElementById('timestamps-section').style.display = 'none';
         document.getElementById('metrics-section').style.display = 'none';
@@ -165,6 +201,11 @@ class JDBCLoggerDetailManager {
 
             this.originalLogger = result.jdbcLoggers[0];
             this.populateForm();
+            this.renderMetrics();
+
+            // Start periodic metrics refresh
+            if (this.metricsTimer) clearInterval(this.metricsTimer);
+            this.metricsTimer = setInterval(() => this.refreshMetrics(), 10000);
 
             document.getElementById('loading-indicator').style.display = 'none';
             document.getElementById('logger-content').style.display = 'block';
@@ -224,16 +265,44 @@ class JDBCLoggerDetailManager {
         document.getElementById('logger-updated-at').textContent =
             logger.updatedAt ? new Date(logger.updatedAt).toLocaleString() : '-';
         document.getElementById('timestamps-section').style.display = 'block';
+    }
 
-        // Metrics
-        if (logger.metrics && logger.metrics.length > 0) {
-            const metrics = logger.metrics[0];
-            document.getElementById('metric-messages-in').textContent = Math.round(metrics.messagesIn || 0);
-            document.getElementById('metric-messages-written').textContent = Math.round(metrics.messagesWritten || 0);
-            document.getElementById('metric-queue-size').textContent = Math.round(metrics.queueSize || 0);
-            document.getElementById('metric-timestamp').textContent =
-                metrics.timestamp ? new Date(metrics.timestamp).toLocaleString() : '-';
-            document.getElementById('metrics-section').style.display = 'block';
+    renderMetrics() {
+        if (!this.originalLogger || !this.originalLogger.metrics) return;
+        const m = this.originalLogger.metrics;
+        if (m.length === 0) return;
+
+        const metrics = m[0];
+        document.getElementById('metric-messages-in').textContent = Math.round(metrics.messagesIn || 0);
+        document.getElementById('metric-messages-written').textContent = Math.round(metrics.messagesWritten || 0);
+        document.getElementById('metric-queue-size').textContent = Math.round(metrics.queueSize || 0);
+        document.getElementById('metric-timestamp').textContent =
+            metrics.timestamp ? new Date(metrics.timestamp).toLocaleString() : '-';
+        document.getElementById('metrics-section').style.display = 'block';
+    }
+
+    async refreshMetrics() {
+        if (!this.loggerName) return;
+        try {
+            const result = await window.graphqlClient.query(`
+                query GetJDBCLoggerMetrics($name: String!) {
+                    jdbcLoggers(name: $name) {
+                        metrics {
+                            messagesIn
+                            messagesWritten
+                            queueSize
+                            timestamp
+                        }
+                    }
+                }
+            `, { name: this.loggerName });
+
+            if (result.jdbcLoggers && result.jdbcLoggers.length > 0) {
+                this.originalLogger.metrics = result.jdbcLoggers[0].metrics;
+                this.renderMetrics();
+            }
+        } catch (error) {
+            console.warn('Metrics refresh failed:', error.message);
         }
     }
 
@@ -490,6 +559,14 @@ function confirmDeleteLogger() {
     window.loggerDetailManager.confirmDeleteLogger();
 }
 
+function showSchemaHelp() {
+    document.getElementById('schema-help-modal').style.display = 'flex';
+}
+
+function hideSchemaHelp() {
+    document.getElementById('schema-help-modal').style.display = 'none';
+}
+
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
     window.loggerDetailManager = new JDBCLoggerDetailManager();
@@ -498,7 +575,12 @@ document.addEventListener('DOMContentLoaded', () => {
 // Handle modal clicks (close when clicking outside)
 window.onclick = (event) => {
     const deleteModal = document.getElementById('delete-logger-modal');
+    const helpModal = document.getElementById('schema-help-modal');
+
     if (event.target === deleteModal) {
         hideDeleteModal();
+    }
+    if (event.target === helpModal) {
+        hideSchemaHelp();
     }
 };

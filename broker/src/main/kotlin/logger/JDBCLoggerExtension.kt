@@ -148,16 +148,16 @@ class JDBCLoggerExtension : AbstractVerticle() {
             val jdbcLogger = when (config.databaseType.uppercase()) {
                 "QUESTDB" -> QuestDBLogger()
                 "POSTGRESQL" -> {
-                    logger.warning("PostgreSQL logger not yet implemented, using QuestDB")
-                    QuestDBLogger()
+                    logger.info("Using PostgreSQL logger for database type: ${config.databaseType}")
+                    PostgreSQLLogger()
                 }
                 "TIMESCALEDB" -> {
-                    logger.warning("TimescaleDB logger not yet implemented, using QuestDB")
-                    QuestDBLogger()
+                    logger.info("Using PostgreSQL logger for TimescaleDB (PostgreSQL compatible)")
+                    PostgreSQLLogger()
                 }
                 else -> {
-                    logger.warning("Unknown database type: ${config.databaseType}, using QuestDB")
-                    QuestDBLogger()
+                    logger.warning("Unknown database type: ${config.databaseType}, using PostgreSQL logger as fallback")
+                    PostgreSQLLogger()
                 }
             }
 

@@ -105,6 +105,9 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                     // Subscribe to MQTT topics
                     subscribeToTopics()
 
+                    // Register EventBus handler for metrics requests
+                    setupEventBusHandlers()
+
                     // Start writer thread
                     startWriterThread()
 
@@ -226,6 +229,27 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
         }
     }
 
+    private fun setupEventBusHandlers() {
+        // Register metrics handler
+        val metricsAddress = at.rocworks.bus.EventBusAddresses.JDBCLoggerBridge.connectorMetrics(device.name)
+        vertx.eventBus().consumer<io.vertx.core.json.JsonObject>(metricsAddress) { message ->
+            try {
+                val metrics = getMetrics()
+                val response = io.vertx.core.json.JsonObject()
+                    .put("messagesIn", metrics["messagesIn"])
+                    .put("messagesWritten", metrics["messagesWritten"])
+                    .put("errors", metrics["writeErrors"])
+                    .put("queueSize", metrics["queueSize"])
+                    .put("connected", true) // Always true if handler is running
+                message.reply(response)
+            } catch (e: Exception) {
+                logger.warning("Error handling metrics request: ${e.message}")
+                message.fail(500, e.message)
+            }
+        }
+        logger.info("EventBus metrics handler registered at: $metricsAddress")
+    }
+
     private fun handleIncomingMessage(message: BrokerMessage) {
         try {
             messagesIn.incrementAndGet()
@@ -249,7 +273,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                 jsonSchemaValidator.validate(payloadJson)
             } catch (e: ValidationException) {
                 validationErrors.incrementAndGet()
-                logger.fine { "Schema validation failed for topic ${message.topicName}: ${e.message}" }
+                logger.warning("Schema validation failed for topic ${message.topicName}: ${e.message}")
                 return
             }
 
@@ -261,20 +285,65 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                 return
             }
 
-            // Extract fields from JSON based on schema
-            val fields = extractFields(payloadJson)
+            // Check if array expansion is configured
+            val arrayPath = cfg.jsonSchema.getString("arrayPath")
 
-            // Check if all required fields are present
-            if (!hasRequiredFields(fields)) {
-                messagesSkipped.incrementAndGet()
-                logger.fine { "Missing required fields in message on topic ${message.topicName}" }
-                return
+            if (arrayPath != null) {
+                // Array expansion mode: extract array and create multiple rows
+                try {
+                    val ctx = com.jayway.jsonpath.JsonPath.parse(payloadJson.toString())
+                    val arrayResult = ctx.read<Any>(arrayPath)
+
+                    if (arrayResult is List<*>) {
+                        logger.finest { "Expanding array with ${arrayResult.size} items from path: $arrayPath" }
+
+                        arrayResult.forEach { arrayItem ->
+                            if (arrayItem != null) {
+                                // Create a combined JSON with root fields + array item fields
+                                val combinedJson = JSONObject(payloadJson.toString())
+
+                                // If array item is an object, merge its fields
+                                if (arrayItem is Map<*, *>) {
+                                    arrayItem.forEach { (key, value) ->
+                                        combinedJson.put(key.toString(), value)
+                                    }
+                                }
+
+                                // Extract fields from combined JSON
+                                val fields = extractFields(combinedJson)
+
+                                // Check if all required fields are present
+                                if (hasRequiredFields(fields)) {
+                                    messagesValidated.incrementAndGet()
+                                    queue.add(message)
+                                } else {
+                                    messagesSkipped.incrementAndGet()
+                                    logger.fine { "Missing required fields in array item from topic ${message.topicName}" }
+                                }
+                            }
+                        }
+                    } else {
+                        logger.warning("arrayPath '$arrayPath' did not return an array")
+                        messagesSkipped.incrementAndGet()
+                    }
+                } catch (e: Exception) {
+                    validationErrors.incrementAndGet()
+                    logger.warning("Error expanding array from path '$arrayPath': ${e.message}")
+                }
+            } else {
+                // Normal mode: single row
+                val fields = extractFields(payloadJson)
+
+                // Check if all required fields are present
+                if (!hasRequiredFields(fields)) {
+                    messagesSkipped.incrementAndGet()
+                    logger.fine { "Missing required fields in message on topic ${message.topicName}" }
+                    return
+                }
+
+                messagesValidated.incrementAndGet()
+                queue.add(message)
             }
-
-            messagesValidated.incrementAndGet()
-
-            // Add to queue
-            queue.add(message)
 
         } catch (e: Exception) {
             validationErrors.incrementAndGet()
@@ -303,22 +372,95 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
     private fun extractFields(payloadJson: JSONObject): Map<String, Any?> {
         val fields = mutableMapOf<String, Any?>()
 
+        // Check if mapping is defined
+        val mapping = cfg.jsonSchema.getJsonObject("mapping")
+
         // Extract only fields defined in JSON Schema properties
         val schemaProperties = cfg.jsonSchema.getJsonObject("properties")
         schemaProperties?.fieldNames()?.forEach { fieldName ->
-            if (payloadJson.has(fieldName)) {
-                // Get value and handle nested objects
-                val value = payloadJson.get(fieldName)
-                fields[fieldName] = when (value) {
-                    JSONObject.NULL -> null
-                    is JSONObject -> value.toString() // Convert nested objects to JSON string
-                    is org.json.JSONArray -> value.toString() // Convert arrays to JSON string
+            val fieldSchema = schemaProperties.getJsonObject(fieldName)
+            val format = fieldSchema?.getString("format")
+
+            // Get the JSONPath for this field, or use the field name directly
+            val jsonPath = mapping?.getString(fieldName)
+
+            val value = if (jsonPath != null) {
+                // Use JSONPath to extract value
+                try {
+                    val ctx = com.jayway.jsonpath.JsonPath.parse(payloadJson.toString())
+                    ctx.read<Any>(jsonPath)
+                } catch (e: Exception) {
+                    logger.fine { "JSONPath '$jsonPath' not found for field '$fieldName': ${e.message}" }
+                    null
+                }
+            } else {
+                // Direct field access (backwards compatibility)
+                if (payloadJson.has(fieldName)) {
+                    payloadJson.get(fieldName)
+                } else {
+                    null
+                }
+            }
+
+            if (value != null) {
+                fields[fieldName] = when {
+                    value == JSONObject.NULL -> null
+                    format == "timestamp" -> parseTimestamp(value)
+                    format == "timestampms" -> parseTimestampMs(value)
+                    value is JSONObject -> value.toString() // Convert nested objects to JSON string
+                    value is org.json.JSONArray -> value.toString() // Convert arrays to JSON string
                     else -> value
                 }
+            } else if (format == "timestamp" || format == "timestampms") {
+                // If timestamp field is missing, use current timestamp
+                fields[fieldName] = java.sql.Timestamp(System.currentTimeMillis())
             }
         }
 
         return fields
+    }
+
+    private fun parseTimestamp(value: Any): java.sql.Timestamp {
+        return when (value) {
+            is String -> {
+                try {
+                    // Try ISO 8601 format
+                    val instant = java.time.Instant.parse(value)
+                    java.sql.Timestamp.from(instant)
+                } catch (e: Exception) {
+                    try {
+                        // Try parsing as epoch milliseconds
+                        java.sql.Timestamp(value.toLong())
+                    } catch (e2: Exception) {
+                        logger.warning("Failed to parse timestamp '$value', using current time")
+                        java.sql.Timestamp(System.currentTimeMillis())
+                    }
+                }
+            }
+            is Number -> java.sql.Timestamp(value.toLong())
+            else -> {
+                logger.warning("Unknown timestamp format for value '$value', using current time")
+                java.sql.Timestamp(System.currentTimeMillis())
+            }
+        }
+    }
+
+    private fun parseTimestampMs(value: Any): java.sql.Timestamp {
+        return when (value) {
+            is Number -> java.sql.Timestamp(value.toLong())
+            is String -> {
+                try {
+                    java.sql.Timestamp(value.toLong())
+                } catch (e: Exception) {
+                    logger.warning("Failed to parse timestampms '$value' as long, using current time")
+                    java.sql.Timestamp(System.currentTimeMillis())
+                }
+            }
+            else -> {
+                logger.warning("Unknown timestampms format for value '$value', using current time")
+                java.sql.Timestamp(System.currentTimeMillis())
+            }
+        }
     }
 
     private fun hasRequiredFields(fields: Map<String, Any?>): Boolean {

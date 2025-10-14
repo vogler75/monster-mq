@@ -12,6 +12,7 @@
     <script src="/js/sidebar.js"></script>
     <style>
         .logger-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
+        .json-schema-section { grid-row: span 2; }
         .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); overflow: hidden; box-shadow: var(--card-shadow); transition: all 0.3s ease; }
         .section-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4); }
         .section-card.full-width { grid-column: 1 / -1; }
@@ -38,6 +39,7 @@
         .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600; font-size: 0.875rem; }
         small.form-hint { color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem; display: block; }
         textarea { resize: vertical; min-height: 120px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+        #logger-json-schema { min-height: 400px; }
         .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 500; transition: all 0.2s ease; border: none; cursor: pointer; text-decoration: none; }
         .btn-primary { background: var(--gradient-primary); color: white; }
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3); }
@@ -59,7 +61,27 @@
         .modal-body { padding: 2rem; }
         .modal-footer { padding: 1.5rem 2rem; border-top: 1px solid var(--dark-border); display: flex; justify-content: flex-end; gap: 1rem; }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-        @media (max-width: 1024px) { .logger-info-grid, .info-grid { grid-template-columns: 1fr; gap: 1.5rem; } }
+        @media (max-width: 1024px) {
+            .logger-info-grid, .info-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+            .json-schema-section { grid-row: auto; }
+        }
+
+        /* Help Button Styles */
+        .label-with-help { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+        .help-btn { background: none; border: none; color: var(--monster-purple); cursor: pointer; padding: 0.25rem; display: flex; align-items: center; transition: all 0.2s ease; }
+        .help-btn:hover { color: var(--monster-teal); transform: scale(1.1); }
+        .help-modal .modal-content { max-width: 900px; }
+        .help-modal .modal-body { padding: 1.5rem 2rem; }
+        .help-section { margin-bottom: 2rem; }
+        .help-section h4 { color: var(--text-primary); margin-bottom: 0.75rem; font-size: 1rem; }
+        .help-section p { color: var(--text-muted); margin-bottom: 1rem; line-height: 1.6; }
+        .help-code { background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 6px; padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--text-primary); overflow-x: auto; margin: 0.75rem 0; }
+        .help-table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+        .help-table th, .help-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--dark-border); }
+        .help-table th { color: var(--text-primary); font-weight: 600; background: var(--dark-bg); }
+        .help-table td { color: var(--text-muted); }
+        .help-example { background: rgba(124, 58, 237, 0.1); border-left: 3px solid var(--monster-purple); padding: 1rem; margin: 0.75rem 0; }
+        .help-example-title { color: var(--monster-purple); font-weight: 600; margin-bottom: 0.5rem; }
     </style>
 </head>
 <body>
@@ -194,7 +216,7 @@
                 </div>
 
                 <!-- MQTT Configuration Section -->
-                <div class="section-card full-width">
+                <div class="section-card">
                     <div class="section-header">
                         <div class="section-title">
                             <div class="section-icon">
@@ -221,8 +243,36 @@
                     </div>
                 </div>
 
+                <!-- JSON Schema Section -->
+                <div class="section-card json-schema-section">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                                </svg>
+                            </div>
+                            <h2>JSON Schema</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="form-group">
+                            <div class="label-with-help">
+                                <label for="logger-json-schema">JSON Schema *</label>
+                                <button type="button" class="help-btn" onclick="showSchemaHelp()" title="Show JSON Schema Help">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <textarea id="logger-json-schema" required placeholder='{"type":"object","properties":{"ts":{"type":"string","format":"timestamp"},"value":{"type":"number"}},"mapping":{"ts":"$.timestamp","value":"$.value"}}'></textarea>
+                            <small class="form-hint">Define schema (properties) for database columns and optional JSONPath mapping. Use "format": "timestamp" (ISO 8601/epoch ms) or "format": "timestampms" (epoch ms only) for timestamp fields. Use "arrayPath" to expand arrays into multiple rows (e.g., "arrayPath": "$.sensors[*]").</small>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Table Configuration Section -->
-                <div class="section-card full-width">
+                <div class="section-card">
                     <div class="section-header">
                         <div class="section-title">
                             <div class="section-icon">
@@ -245,27 +295,6 @@
                                 <input type="text" id="logger-table-jsonpath" placeholder="e.g., $.device_type">
                                 <small class="form-hint">Extract table name from message using JSONPath</small>
                             </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- JSON Schema Section -->
-                <div class="section-card full-width">
-                    <div class="section-header">
-                        <div class="section-title">
-                            <div class="section-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
-                                </svg>
-                            </div>
-                            <h2>JSON Schema</h2>
-                        </div>
-                    </div>
-                    <div class="section-content">
-                        <div class="form-group">
-                            <label for="logger-json-schema">JSON Schema *</label>
-                            <textarea id="logger-json-schema" required placeholder='{"timestamp": "$.ts", "value": "$.value", "sensor_id": "$.sensor"}'></textarea>
-                            <small class="form-hint">Define how to extract and map fields from MQTT messages to database columns using JSONPath</small>
                         </div>
                     </div>
                 </div>
@@ -403,6 +432,209 @@
                 <span class="error-icon">⚠️</span>
                 <span class="error-text"></span>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- JSON Schema Help Modal -->
+<div id="schema-help-modal" class="modal help-modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>JSON Schema Configuration Guide</h3>
+            <button class="modal-close" onclick="hideSchemaHelp()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="help-section">
+                <h4>Overview</h4>
+                <p>The JSON Schema defines how incoming MQTT messages are validated and mapped to database columns. It supports JSON Schema validation, JSONPath field mapping, array expansion, and automatic timestamp handling.</p>
+            </div>
+
+            <div class="help-section">
+                <h4>Schema Structure</h4>
+                <p>The schema consists of four main parts:</p>
+                <table class="help-table">
+                    <thead>
+                        <tr>
+                            <th>Property</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>properties</code></td>
+                            <td>Yes</td>
+                            <td>Defines database columns with their data types</td>
+                        </tr>
+                        <tr>
+                            <td><code>required</code></td>
+                            <td>No</td>
+                            <td>Array of field names that must be present</td>
+                        </tr>
+                        <tr>
+                            <td><code>mapping</code></td>
+                            <td>No</td>
+                            <td>JSONPath expressions to extract values from incoming JSON</td>
+                        </tr>
+                        <tr>
+                            <td><code>arrayPath</code></td>
+                            <td>No</td>
+                            <td>JSONPath to extract array for expanding into multiple rows</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="help-section">
+                <h4>Data Types and Formats</h4>
+                <p>Supported JSON Schema types:</p>
+                <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                    <li><code>string</code> - Text values (VARCHAR)</li>
+                    <li><code>number</code> - Numeric values (INTEGER, FLOAT, DOUBLE)</li>
+                    <li><code>boolean</code> - True/false values</li>
+                    <li><code>string</code> with <code>"format": "timestamp"</code> - Timestamp fields that parse ISO 8601 strings or epoch ms (auto-fills current time if missing)</li>
+                    <li><code>number</code> with <code>"format": "timestampms"</code> - Timestamp fields that interpret the value as milliseconds since epoch (auto-fills current time if missing)</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h4>JSONPath Mapping</h4>
+                <p>Use the <code>mapping</code> object to extract values from nested JSON structures using JSONPath expressions:</p>
+                <div class="help-code">{
+  "properties": {
+    "ts": {"type": "string", "format": "timestamp"},
+    "sensor_id": {"type": "string"},
+    "value": {"type": "number"}
+  },
+  "mapping": {
+    "ts": "$.timestamp",           // Extract from root.timestamp
+    "sensor_id": "$.device.id",    // Extract from nested object
+    "value": "$.readings.temperature"
+  }
+}</div>
+                <p><strong>Common JSONPath expressions:</strong></p>
+                <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                    <li><code>$.field</code> - Root level field</li>
+                    <li><code>$.parent.child</code> - Nested field</li>
+                    <li><code>$.array[0]</code> - First array element</li>
+                    <li><code>$.sensors[*]</code> - All array elements</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h4>Array Expansion</h4>
+                <p>Use <code>arrayPath</code> to expand array items into multiple database rows. Root-level fields are merged with each array item:</p>
+                <div class="help-example">
+                    <div class="help-example-title">Example: Expanding Sensor Array</div>
+                    <strong>Incoming JSON:</strong>
+                    <div class="help-code">{
+  "device_id": "sensor-123",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "sensors": [
+    {"id": "temp-1", "value": 23.5},
+    {"id": "temp-2", "value": 24.1},
+    {"id": "humidity-1", "value": 65.0}
+  ]
+}</div>
+                    <strong>Schema:</strong>
+                    <div class="help-code">{
+  "properties": {
+    "ts": {"type": "string", "format": "timestamp"},
+    "device_id": {"type": "string"},
+    "sensor_id": {"type": "string"},
+    "value": {"type": "number"}
+  },
+  "arrayPath": "$.sensors[*]",
+  "mapping": {
+    "ts": "$.timestamp",
+    "device_id": "$.device_id",
+    "sensor_id": "$.id",
+    "value": "$.value"
+  }
+}</div>
+                    <strong>Result: 3 database rows created</strong>
+                    <div class="help-code">Row 1: {ts: '2024-01-15T10:30:00Z', device_id: 'sensor-123', sensor_id: 'temp-1', value: 23.5}
+Row 2: {ts: '2024-01-15T10:30:00Z', device_id: 'sensor-123', sensor_id: 'temp-2', value: 24.1}
+Row 3: {ts: '2024-01-15T10:30:00Z', device_id: 'sensor-123', sensor_id: 'humidity-1', value: 65.0}</div>
+                </div>
+            </div>
+
+            <div class="help-section">
+                <h4>Timestamp Handling</h4>
+                <p>Two timestamp formats are available:</p>
+                <p><strong><code>"format": "timestamp"</code></strong> - Flexible timestamp parsing:</p>
+                <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                    <li>Automatically parses ISO 8601 format: <code>"2024-01-15T10:30:00Z"</code></li>
+                    <li>Accepts epoch milliseconds as string or number: <code>1705318200000</code></li>
+                    <li>If field is missing, uses current timestamp automatically</li>
+                </ul>
+                <p><strong><code>"format": "timestampms"</code></strong> - Milliseconds since epoch only:</p>
+                <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                    <li>Interprets long/number values as milliseconds since epoch: <code>1705318200000</code></li>
+                    <li>Use this when you have numeric timestamps to avoid parsing overhead</li>
+                    <li>If field is missing, uses current timestamp automatically</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h4>Complete Example</h4>
+                <div class="help-example">
+                    <div class="help-example-title">Full Configuration for IoT Sensor Data</div>
+                    <strong>Schema:</strong>
+                    <div class="help-code">{
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "string",
+      "format": "timestamp"
+    },
+    "device_id": {
+      "type": "string"
+    },
+    "sensor_type": {
+      "type": "string"
+    },
+    "value": {
+      "type": "number"
+    },
+    "unit": {
+      "type": "string"
+    }
+  },
+  "required": ["value"],
+  "arrayPath": "$.sensors[*]",
+  "mapping": {
+    "ts": "$.timestamp",
+    "device_id": "$.device_id",
+    "sensor_type": "$.type",
+    "value": "$.reading",
+    "unit": "$.unit"
+  }
+}</div>
+                    <strong>Database Table (must be created manually):</strong>
+                    <div class="help-code">CREATE TABLE sensor_data (
+    ts TIMESTAMP,
+    device_id VARCHAR,
+    sensor_type VARCHAR,
+    value DOUBLE,
+    unit VARCHAR
+);</div>
+                </div>
+            </div>
+
+            <div class="help-section">
+                <h4>Important Notes</h4>
+                <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                    <li>Database tables must be created manually before starting the logger</li>
+                    <li>Column names in schema must match database column names exactly</li>
+                    <li>If no <code>mapping</code> is provided, field names are used directly</li>
+                    <li>Array expansion creates one row per array item</li>
+                    <li>Fields not in schema are ignored</li>
+                </ul>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" onclick="hideSchemaHelp()">Got it!</button>
         </div>
     </div>
 </div>

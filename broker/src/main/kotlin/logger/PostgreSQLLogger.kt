@@ -7,10 +7,10 @@ import java.sql.DriverManager
 import java.sql.SQLException
 
 /**
- * QuestDB implementation of JDBC Logger
- * Optimized for time-series data with fast ingestion
+ * PostgreSQL implementation of JDBC Logger
+ * Supports PostgreSQL and compatible databases (TimescaleDB, QuestDB via PostgreSQL wire protocol)
  */
-class QuestDBLogger : JDBCLoggerBase() {
+class PostgreSQLLogger : JDBCLoggerBase() {
 
     private var connection: Connection? = null
 
@@ -19,12 +19,12 @@ class QuestDBLogger : JDBCLoggerBase() {
 
         vertx.executeBlocking<Void>({
             try {
-                logger.info("Connecting to QuestDB: ${cfg.jdbcUrl}")
-                logger.info("Using driver: org.questdb.jdbc.Driver")
+                logger.info("Connecting to PostgreSQL: ${cfg.jdbcUrl}")
+                logger.info("Using driver: org.postgresql.Driver")
                 logger.info("Username: ${cfg.username}")
 
-                // Load QuestDB JDBC driver
-                Class.forName("org.questdb.jdbc.Driver")
+                // Load PostgreSQL JDBC driver
+                Class.forName("org.postgresql.Driver")
 
                 // Create connection
                 val properties = java.util.Properties()
@@ -33,10 +33,11 @@ class QuestDBLogger : JDBCLoggerBase() {
 
                 connection = DriverManager.getConnection(cfg.jdbcUrl, properties)
 
-                logger.info("Connected to QuestDB successfully")
+                logger.info("Connected to PostgreSQL successfully")
                 null
             } catch (e: Exception) {
-                logger.severe("Failed to connect to QuestDB: ${e.javaClass.name}: ${e.message}")
+                logger.severe("Failed to connect to PostgreSQL: ${e.javaClass.name}: ${e.message}")
+                logger.severe("Connection details - URL: ${cfg.jdbcUrl}, Username: ${cfg.username}")
                 e.printStackTrace() // Print full stack trace
                 throw e
             }
@@ -57,10 +58,10 @@ class QuestDBLogger : JDBCLoggerBase() {
         try {
             connection?.close()
             connection = null
-            logger.info("Disconnected from QuestDB")
+            logger.info("Disconnected from PostgreSQL")
             promise.complete()
         } catch (e: Exception) {
-            logger.warning("Error disconnecting from QuestDB: ${e.message}")
+            logger.warning("Error disconnecting from PostgreSQL: ${e.message}")
             promise.fail(e)
         }
 
@@ -68,7 +69,7 @@ class QuestDBLogger : JDBCLoggerBase() {
     }
 
     override fun writeBulk(tableName: String, rows: List<BufferedRow>) {
-        val conn = connection ?: throw SQLException("Not connected to QuestDB")
+        val conn = connection ?: throw SQLException("Not connected to PostgreSQL")
 
         if (rows.isEmpty()) {
             return
@@ -107,8 +108,28 @@ class QuestDBLogger : JDBCLoggerBase() {
 
             // Check for table not found errors
             if (e.message?.contains("table", ignoreCase = true) == true ||
-                e.message?.contains("relation", ignoreCase = true) == true) {
-                logger.severe("Table '$tableName' does not exist. You need to create it first based on your JSON schema.")
+                e.message?.contains("relation", ignoreCase = true) == true ||
+                e.sqlState == "42P01") {  // PostgreSQL error code for undefined_table
+                logger.severe("=".repeat(80))
+                logger.severe("ERROR: Table '$tableName' does not exist!")
+                logger.severe("You need to create the table first based on your JSON schema.")
+                logger.severe("Example SQL for your schema:")
+                logger.severe("  CREATE TABLE $tableName (")
+                rows.first().fields.forEach { (name, value) ->
+                    val type = when (value) {
+                        is String -> "TEXT"
+                        is Int -> "INTEGER"
+                        is Long -> "BIGINT"
+                        is Double -> "DOUBLE PRECISION"
+                        is Float -> "REAL"
+                        is Boolean -> "BOOLEAN"
+                        else -> "TEXT"
+                    }
+                    logger.severe("    $name $type,")
+                }
+                logger.severe("    PRIMARY KEY (...)")
+                logger.severe("  );")
+                logger.severe("=".repeat(80))
             }
 
             e.printStackTrace()
