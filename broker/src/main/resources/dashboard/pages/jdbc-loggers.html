@@ -164,6 +164,20 @@
             border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
+        .status-indicator {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        /* Ensure status column has clean alignment */
+        .data-table tbody td:nth-child(5) {
+            text-align: left;
+            white-space: nowrap;
+        }
+
         /* Topic filters display */
         .topic-filters {
             display: flex;

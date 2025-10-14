@@ -154,12 +154,7 @@ class JDBCLoggersManager {
                     ${this.escapeHtml(logger.nodeId)}
                     ${logger.isOnCurrentNode ? '<br><small style="color: var(--monster-green);">● Current</small>' : ''}
                 </td>
-                <td>
-                    <span class="status-badge ${logger.enabled ? 'status-enabled' : 'status-disabled'}">
-                        <span class="status-indicator"></span>
-                        ${logger.enabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                </td>
+                <td><span class="status-badge ${logger.enabled ? 'status-enabled' : 'status-disabled'}"><span class="status-indicator"></span>${logger.enabled ? 'Enabled' : 'Disabled'}</span></td>
                 <td style="color: #9333EA; white-space: nowrap;">
                     ${messagesIn} / ${messagesOut}
                 </td>
