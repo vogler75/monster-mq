@@ -92,6 +92,13 @@ class QuestDBBulkTest(
             val sql = "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders)"
 
             println("Writing bulk of ${rows.size} rows to table $tableName SQL: $sql")
+            
+            // Log the types of the 'value' field in first few rows to detect type mixing
+            println("Value field types in first 5 rows:")
+            rows.take(5).forEachIndexed { idx, row ->
+                val valueType = row.fields["value"]?.javaClass?.simpleName ?: "null"
+                println("  Row $idx: value type = $valueType")
+            }
 
             conn.prepareStatement(sql).use { ps ->
                 rows.forEach { row ->
@@ -230,13 +237,22 @@ class QuestDBBulkTest(
         repeat(count) { i ->
             val ts = Timestamp(baseTime + (i * 1000)) // 1 second intervals
             val info = "test_info_${i}_${Random.nextInt(1000)}"
-            val value = Random.nextDouble(0.0, 100.0)
+            
+            // REPRODUCE TYPE MIXING BUG: Mix Integer and Double for 'value' field
+            // This should trigger the "Can't change resolved type" error
+            val value = if (i % 10 == 0) {
+                // Every 10th row: use Integer instead of Double
+                Random.nextInt(0, 100)  // Integer type (PostgreSQL type 23)
+            } else {
+                // Most rows: use Double
+                Random.nextDouble(0.0, 100.0)  // Double type (PostgreSQL type 701)
+            }
             
             // Create BufferedRow with field map - EXACT same as PostgreSQLLogger.kt uses
             val fields = mapOf(
                 "ts" to ts,
                 "info" to info, 
-                "value" to value
+                "value" to value  // This will be Int or Double depending on row
             )
             
             rows.add(BufferedRow(

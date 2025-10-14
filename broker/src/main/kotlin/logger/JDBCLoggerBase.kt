@@ -427,7 +427,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                     format == "timestampms" -> parseTimestampMs(value)
                     value is JSONObject -> value.toString() // Convert nested objects to JSON string
                     value is org.json.JSONArray -> value.toString() // Convert arrays to JSON string
-                    else -> value
+                    else -> normalizeValueType(value, fieldSchema)
                 }
             } else if (format == "timestamp" || format == "timestampms") {
                 // If timestamp field is missing, use current timestamp
@@ -485,6 +485,45 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
         val required = cfg.jsonSchema.getJsonArray("required") ?: return true
         return required.all { requiredField ->
             fields.containsKey(requiredField.toString()) && fields[requiredField.toString()] != null
+        }
+    }
+
+    /**
+     * Normalizes value types to ensure consistent JDBC parameter types.
+     * This prevents "Can't change resolved type for param" errors in PostgreSQL/QuestDB.
+     */
+    private fun normalizeValueType(value: Any, fieldSchema: io.vertx.core.json.JsonObject?): Any {
+        val schemaType = fieldSchema?.getString("type") ?: "string"
+        
+        return when (schemaType) {
+            "integer" -> {
+                // Always convert to Long for consistency (PostgreSQL BIGINT)
+                when (value) {
+                    is Number -> value.toLong()
+                    is String -> value.toLongOrNull() ?: 0L
+                    else -> 0L
+                }
+            }
+            "number" -> {
+                // Always convert to Double for consistency (PostgreSQL DOUBLE PRECISION)
+                when (value) {
+                    is Number -> value.toDouble()
+                    is String -> value.toDoubleOrNull() ?: 0.0
+                    else -> 0.0
+                }
+            }
+            "boolean" -> {
+                when (value) {
+                    is Boolean -> value
+                    is String -> value.lowercase() in listOf("true", "1", "yes", "on")
+                    is Number -> value.toDouble() != 0.0
+                    else -> false
+                }
+            }
+            else -> {
+                // "string" or unknown types - convert to String
+                value.toString()
+            }
         }
     }
 
