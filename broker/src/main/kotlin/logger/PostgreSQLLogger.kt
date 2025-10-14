@@ -103,8 +103,13 @@ class PostgreSQLLogger : JDBCLoggerBase() {
             }
 
         } catch (e: SQLException) {
-            logger.warning("SQL error writing to table $tableName: ${e.javaClass.name}: ${e.message}")
-            logger.warning("SQL State: ${e.sqlState}, Error Code: ${e.errorCode}")
+            logger.severe("SQL error writing to table $tableName: ${e.javaClass.name}: ${e.message}")
+            logger.severe("SQL State: ${e.sqlState}, Error Code: ${e.errorCode}")
+
+            // Log the full exception with stack trace
+            val sw = java.io.StringWriter()
+            e.printStackTrace(java.io.PrintWriter(sw))
+            logger.severe("Stack trace:\n$sw")
 
             // Check for table not found errors
             if (e.message?.contains("table", ignoreCase = true) == true ||
@@ -132,7 +137,6 @@ class PostgreSQLLogger : JDBCLoggerBase() {
                 logger.severe("=".repeat(80))
             }
 
-            e.printStackTrace()
             throw e
         }
     }

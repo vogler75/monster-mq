@@ -516,38 +516,51 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
         val now = System.currentTimeMillis()
         val timeoutReached = (now - lastBulkWrite) >= cfg.bulkTimeoutMs
 
-        if (rows.isNotEmpty() && (rows.size >= cfg.bulkSize || timeoutReached)) {
-            // Group by table name
-            val byTable = rows.groupBy { it.tableName }
+        if (blockSize > 0) {
+            // We polled some messages from the queue, process them
+            if (rows.isNotEmpty() && (rows.size >= cfg.bulkSize || timeoutReached)) {
+                // We have enough rows or timeout reached, write them
+                val byTable = rows.groupBy { it.tableName }
 
-            var allSuccess = true
+                var allSuccess = true
 
-            // Write each table's bulk
-            byTable.forEach { (tableName, tableRows) ->
-                try {
-                    logger.fine { "Writing bulk of ${tableRows.size} rows to table $tableName" }
-                    writeBulk(tableName, tableRows)
-                    messagesWritten.addAndGet(tableRows.size.toLong())
-                } catch (e: Exception) {
-                    allSuccess = false
-                    writeErrors.incrementAndGet()
-                    logger.warning("Error writing bulk to table $tableName: ${e.message}")
+                // Write each table's bulk
+                byTable.forEach { (tableName, tableRows) ->
+                    try {
+                        logger.fine { "Writing bulk of ${tableRows.size} rows to table $tableName" }
+                        writeBulk(tableName, tableRows)
+                        messagesWritten.addAndGet(tableRows.size.toLong())
+                    } catch (e: Exception) {
+                        writeErrors.incrementAndGet()
 
-                    // Check if it's a connection error
-                    if (isConnectionError(e)) {
-                        logger.warning("Database connection error detected, will retry block")
-                        // Don't commit - block will be retried
-                        return
+                        // Check if it's a connection error (these should retry)
+                        if (isConnectionError(e)) {
+                            logger.warning("Database connection error detected, will retry block: ${e.javaClass.simpleName}: ${e.message}")
+                            // Don't commit - block will be retried
+                            return
+                        }
+
+                        // For non-connection errors (schema/constraint violations), log as severe and skip
+                        logger.severe("Non-recoverable error writing bulk to table $tableName: ${e.javaClass.name}: ${e.message}")
+                        logger.severe("Skipping ${tableRows.size} messages for table $tableName to prevent infinite retry loop")
+                        allSuccess = false
+                        // Continue to next table, but don't retry these messages
                     }
                 }
-            }
 
-            if (allSuccess) {
-                // Commit the block (clears retry buffer)
-                queue.pollCommit()
                 lastBulkWrite = now
+            } else if (rows.isEmpty()) {
+                // All messages failed to parse - commit to prevent infinite retry
+                logger.severe("All ${blockSize} messages in block failed to parse/validate, skipping to prevent infinite retry")
             }
-        } else if (blockSize == 0) {
+            // else: Not enough rows yet and no timeout - keep accumulating (don't commit yet)
+
+            // Always commit the block after processing (unless we're waiting for more rows)
+            // This prevents infinite retry loops for parsing/validation errors
+            if (rows.isNotEmpty() || timeoutReached) {
+                queue.pollCommit()
+            }
+        } else {
             // No messages, sleep briefly
             Thread.sleep(10)
         }
