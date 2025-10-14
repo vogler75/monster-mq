@@ -259,6 +259,7 @@ body {
     right: 0;
     padding: 1rem;
     border-top: 1px solid var(--dark-border);
+    background: var(--dark-surface);
 }
 
 .user-info {
