@@ -18,6 +18,7 @@ class LoggerQueueMemory(
 
     private val queue = ArrayBlockingQueue<BrokerMessage>(queueSize)
     private var queueFull = false
+    private var droppedMessages = 0L
 
     // Block for retry on write failure
     private val outputBlock = arrayListOf<BrokerMessage>()
@@ -33,12 +34,15 @@ class LoggerQueueMemory(
             queue.add(message)
             if (queueFull) {
                 queueFull = false
-                logger.warning("Queue not full anymore. [${getSize()}/${getCapacity()}]")
+                logger.warning("Queue not full anymore. [${getSize()}/${getCapacity()}] - dropped ${droppedMessages} messages total")
             }
         } catch (e: IllegalStateException) {
+            droppedMessages++
             if (!queueFull) {
                 queueFull = true
-                logger.warning("Queue is FULL! [${getSize()}/${getCapacity()}] - dropping message on topic: ${message.topicName}")
+                logger.warning("Queue is FULL! [${getSize()}/${getCapacity()}] - dropping messages starting with topic: ${message.topicName}")
+            } else if (droppedMessages % 1000 == 0L) {
+                logger.warning("Queue still FULL! [${getSize()}/${getCapacity()}] - dropped ${droppedMessages} messages total")
             }
         }
     }

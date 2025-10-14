@@ -254,6 +254,11 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
         try {
             messagesIn.incrementAndGet()
 
+            // Temporary INFO logging to diagnose message flow
+            if (messagesIn.get() % 100 == 0L) {
+                logger.info("Received ${messagesIn.get()} messages, validated: ${messagesValidated.get()}, written: ${messagesWritten.get()}, errors: ${validationErrors.get()}, skipped: ${messagesSkipped.get()}, queue: ${queue.getSize()}/${queue.getCapacity()}")
+            }
+
             logger.finest { "Received message on topic: ${message.topicName}" }
 
             // Parse payload as JSON
@@ -264,7 +269,9 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                 payloadJson = JSONObject(payloadString)
             } catch (e: Exception) {
                 validationErrors.incrementAndGet()
-                logger.fine { "Failed to parse JSON from topic ${message.topicName}: ${e.message}" }
+                if (validationErrors.get() % 100 == 0L) {
+                    logger.warning("Failed to parse JSON (${validationErrors.get()} total): ${e.message}")
+                }
                 return
             }
 
@@ -281,7 +288,9 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             val tableName = extractTableName(payloadJson)
             if (tableName == null) {
                 messagesSkipped.incrementAndGet()
-                logger.fine { "Could not extract table name from message on topic ${message.topicName}" }
+                if (messagesSkipped.get() % 100 == 0L) {
+                    logger.warning("Could not extract table name (${messagesSkipped.get()} total skipped)")
+                }
                 return
             }
 
@@ -490,9 +499,10 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
         }
     }
 
-    private fun writeExecutor() {
-        val rows = mutableListOf<BufferedRow>()
+    // Accumulation buffer for rows (persists across writeExecutor calls)
+    private val accumulatedRows = mutableListOf<BufferedRow>()
 
+    private fun writeExecutor() {
         // Poll block from queue
         val blockSize = queue.pollBlock { message ->
             try {
@@ -504,7 +514,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                 if (tableName != null) {
                     val fields = extractFields(payloadJson)
                     if (hasRequiredFields(fields)) {
-                        rows.add(BufferedRow(tableName, fields, message.time, message.topicName))
+                        accumulatedRows.add(BufferedRow(tableName, fields, message.time, message.topicName))
                     }
                 }
             } catch (e: Exception) {
@@ -512,56 +522,52 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             }
         }
 
-        // Check if we should write based on timeout
+        // Always commit the queue block after processing (prevents retries)
+        // Accumulation happens in accumulatedRows buffer instead
+        if (blockSize > 0) {
+            queue.pollCommit()
+        }
+
+        // Check if we should write based on accumulation or timeout
         val now = System.currentTimeMillis()
         val timeoutReached = (now - lastBulkWrite) >= cfg.bulkTimeoutMs
 
-        if (blockSize > 0) {
-            // We polled some messages from the queue, process them
-            if (rows.isNotEmpty() && (rows.size >= cfg.bulkSize || timeoutReached)) {
-                // We have enough rows or timeout reached, write them
-                val byTable = rows.groupBy { it.tableName }
+        if (accumulatedRows.isNotEmpty() && (accumulatedRows.size >= cfg.bulkSize || timeoutReached)) {
+            // We have enough rows or timeout reached, write them
+            val byTable = accumulatedRows.groupBy { it.tableName }
 
-                var allSuccess = true
+            var allSuccess = true
 
-                // Write each table's bulk
-                byTable.forEach { (tableName, tableRows) ->
-                    try {
-                        logger.fine { "Writing bulk of ${tableRows.size} rows to table $tableName" }
-                        writeBulk(tableName, tableRows)
-                        messagesWritten.addAndGet(tableRows.size.toLong())
-                    } catch (e: Exception) {
-                        writeErrors.incrementAndGet()
+            // Write each table's bulk
+            byTable.forEach { (tableName, tableRows) ->
+                try {
+                    logger.fine { "Writing bulk of ${tableRows.size} rows to table $tableName" }
+                    writeBulk(tableName, tableRows)
+                    messagesWritten.addAndGet(tableRows.size.toLong())
+                } catch (e: Exception) {
+                    writeErrors.incrementAndGet()
 
-                        // Check if it's a connection error (these should retry)
-                        if (isConnectionError(e)) {
-                            logger.warning("Database connection error detected, will retry block: ${e.javaClass.simpleName}: ${e.message}")
-                            // Don't commit - block will be retried
-                            return
-                        }
-
-                        // For non-connection errors (schema/constraint violations), log as severe and skip
-                        logger.severe("Non-recoverable error writing bulk to table $tableName: ${e.javaClass.name}: ${e.message}")
-                        logger.severe("Skipping ${tableRows.size} messages for table $tableName to prevent infinite retry loop")
-                        allSuccess = false
-                        // Continue to next table, but don't retry these messages
+                    // Check if it's a connection error (these should retry)
+                    if (isConnectionError(e)) {
+                        logger.warning("Database connection error detected, will retry accumulated buffer: ${e.javaClass.simpleName}: ${e.message}")
+                        // Sleep and retry next iteration (rows stay in accumulatedRows)
+                        Thread.sleep(1000)
+                        return
                     }
+
+                    // For non-connection errors (schema/constraint violations), log as severe and skip
+                    logger.severe("Non-recoverable error writing bulk to table $tableName: ${e.javaClass.name}: ${e.message}")
+                    logger.severe("Skipping ${tableRows.size} messages for table $tableName to prevent infinite retry loop")
+                    allSuccess = false
+                    // Continue to next table, but don't retry these messages
                 }
-
-                lastBulkWrite = now
-            } else if (rows.isEmpty()) {
-                // All messages failed to parse - commit to prevent infinite retry
-                logger.severe("All ${blockSize} messages in block failed to parse/validate, skipping to prevent infinite retry")
             }
-            // else: Not enough rows yet and no timeout - keep accumulating (don't commit yet)
 
-            // Always commit the block after processing (unless we're waiting for more rows)
-            // This prevents infinite retry loops for parsing/validation errors
-            if (rows.isNotEmpty() || timeoutReached) {
-                queue.pollCommit()
-            }
-        } else {
-            // No messages, sleep briefly
+            // Clear accumulated rows after successful write (or non-recoverable error)
+            accumulatedRows.clear()
+            lastBulkWrite = now
+        } else if (blockSize == 0) {
+            // No messages polled, sleep briefly
             Thread.sleep(10)
         }
     }
