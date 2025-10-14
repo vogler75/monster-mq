@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - JDBC Loggers</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        /* Enhanced JDBC Logger Table Styles */
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            border-radius: 12px 12px 0 0;
+        }
+
+        .table-title h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .btn-icon {
+            padding: 0.6rem;
+            min-width: auto;
+            width: auto;
+        }
+
+        .btn-icon svg {
+            margin: 0;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .btn svg {
+            flex-shrink: 0;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .btn-play {
+            color: var(--monster-green);
+        }
+
+        .btn-play:hover {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: var(--monster-green);
+            color: #22c55e;
+        }
+
+        .btn-pause {
+            color: var(--monster-orange);
+        }
+
+        .btn-pause:hover {
+            background: rgba(249, 115, 22, 0.1);
+            border-color: var(--monster-orange);
+            color: #fb923c;
+        }
+
+        /* Enhanced table styling */
+        .data-table {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            overflow-x: auto;
+            box-shadow: var(--card-shadow);
+        }
+
+        .data-table table {
+            margin: 0;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+        }
+
+        .data-table thead th {
+            background: var(--dark-surface-2);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--dark-border);
+        }
+
+        .data-table tbody td {
+            padding: 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+        }
+
+        .data-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Status badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-enabled {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--monster-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-disabled {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--monster-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* Topic filters display */
+        .topic-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            max-width: 200px;
+        }
+
+        .topic-filter-tag {
+            background: var(--background-secondary);
+            color: var(--text-secondary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .modal-content {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.25rem;
+            line-height: 1;
+            transition: color 0.2s ease;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 2rem;
+        }
+
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .table-header {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: stretch;
+            }
+
+            .table-actions {
+                justify-content: center;
+            }
+
+            .action-buttons {
+                gap: 0.25rem;
+            }
+
+            .btn-icon.small { width:28px; height:28px; }
+
+            .modal {
+                padding: 1rem;
+            }
+
+            .modal-content {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Top Bar -->
+    <div class="top-bar">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <button class="sidebar-toggle" onclick="toggleSidebar()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15,18 9,12 15,6"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">
+                    U
+                </div>
+                <div class="user-details">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-role">Administrator</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">JDBC Logger Management</h1>
+                <p class="page-subtitle">Configure and manage JDBC database loggers</p>
+            </div>
+
+            <div class="metrics-grid" style="margin-bottom: 2rem;">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Loggers</span>
+                        <div class="metric-icon">📊</div>
+                    </div>
+                    <div class="metric-value" id="total-loggers">0</div>
+                    <div class="metric-label">Configured Loggers</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Enabled Loggers</span>
+                        <div class="metric-icon">🟢</div>
+                    </div>
+                    <div class="metric-value" id="enabled-loggers">0</div>
+                    <div class="metric-label">Active Loggers</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">On Current Node</span>
+                        <div class="metric-icon">📍</div>
+                    </div>
+                    <div class="metric-value" id="current-node-loggers">0</div>
+                    <div class="metric-label">Local Loggers</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Messages/s</span>
+                        <div class="metric-icon">⚡</div>
+                    </div>
+                    <div class="metric-value" id="messages-rate">0</div>
+                    <div class="metric-label">Total Throughput</div>
+                </div>
+            </div>
+
+            <div id="loggers-table" class="data-table">
+                <div class="table-header">
+                    <div class="table-title">
+                        <h2>Logger Configuration</h2>
+                    </div>
+                    <div class="table-actions">
+                        <button class="btn btn-secondary btn-icon" onclick="refreshLoggers()" title="Refresh loggers">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                            </svg>
+                        </button>
+                        <button class="btn btn-primary" onclick="showAddLoggerModal()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                            Add Logger
+                        </button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Logger Name</th>
+                            <th>Database Type</th>
+                            <th>Topic Filters</th>
+                            <th>Table Name</th>
+                            <th>Node Assignment</th>
+                            <th>Status</th>
+                            <th>In/Out (msg/s)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="loggers-table-body">
+                        <!-- Logger rows will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading loggers...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="confirm-delete-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideConfirmDeleteModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the logger "<span id="delete-logger-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteLogger()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/jdbc-loggers.js"></script>
+</body>
+</html>
