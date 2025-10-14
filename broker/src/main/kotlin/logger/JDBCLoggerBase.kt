@@ -237,9 +237,14 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                 val metrics = getMetrics()
                 val response = io.vertx.core.json.JsonObject()
                     .put("messagesIn", metrics["messagesIn"])
+                    .put("messagesValidated", metrics["messagesValidated"])
                     .put("messagesWritten", metrics["messagesWritten"])
-                    .put("errors", metrics["writeErrors"])
+                    .put("messagesSkipped", metrics["messagesSkipped"])
+                    .put("validationErrors", metrics["validationErrors"])
+                    .put("writeErrors", metrics["writeErrors"])
                     .put("queueSize", metrics["queueSize"])
+                    .put("queueCapacity", metrics["queueCapacity"])
+                    .put("queueFull", metrics["queueFull"])
                     .put("connected", true) // Always true if handler is running
                 message.reply(response)
             } catch (e: Exception) {
@@ -254,9 +259,9 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
         try {
             messagesIn.incrementAndGet()
 
-            // Temporary INFO logging to diagnose message flow
-            if (messagesIn.get() % 100 == 0L) {
-                logger.info("Received ${messagesIn.get()} messages, validated: ${messagesValidated.get()}, written: ${messagesWritten.get()}, errors: ${validationErrors.get()}, skipped: ${messagesSkipped.get()}, queue: ${queue.getSize()}/${queue.getCapacity()}")
+            // Temporary INFO logging to diagnose message flow (every 1000 messages)
+            if (messagesIn.get() % 1000 == 0L) {
+                logger.info("Received ${messagesIn.get()} messages (validated: ${messagesValidated.get()}, errors: ${validationErrors.get()}, skipped: ${messagesSkipped.get()}, queue: ${queue.getSize()}/${queue.getCapacity()})")
             }
 
             logger.finest { "Received message on topic: ${message.topicName}" }

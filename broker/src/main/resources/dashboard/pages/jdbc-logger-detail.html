@@ -407,18 +407,38 @@
                 <div class="section-content">
                     <div class="info-grid">
                         <div class="info-item">
-                            <div class="info-label">Messages In</div>
+                            <div class="info-label">Messages In (msg/s)</div>
                             <div class="info-value" id="metric-messages-in">0</div>
                         </div>
                         <div class="info-item">
-                            <div class="info-label">Messages Written</div>
+                            <div class="info-label">Messages Validated (msg/s)</div>
+                            <div class="info-value" id="metric-messages-validated">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Messages Written (msg/s)</div>
                             <div class="info-value" id="metric-messages-written">0</div>
                         </div>
                         <div class="info-item">
-                            <div class="info-label">Queue Size</div>
-                            <div class="info-value" id="metric-queue-size">0</div>
+                            <div class="info-label">Messages Skipped (msg/s)</div>
+                            <div class="info-value" id="metric-messages-skipped">0</div>
                         </div>
                         <div class="info-item">
+                            <div class="info-label">Validation Errors (errors/s)</div>
+                            <div class="info-value" id="metric-validation-errors">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Write Errors (errors/s)</div>
+                            <div class="info-value" id="metric-write-errors">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Queue Size / Capacity</div>
+                            <div class="info-value"><span id="metric-queue-size">0</span> / <span id="metric-queue-capacity">0</span></div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Queue Status</div>
+                            <div class="info-value" id="metric-queue-full">Normal</div>
+                        </div>
+                        <div class="info-item" style="grid-column: 1 / -1;">
                             <div class="info-label">Metrics Timestamp</div>
                             <div class="info-value" id="metric-timestamp">-</div>
                         </div>

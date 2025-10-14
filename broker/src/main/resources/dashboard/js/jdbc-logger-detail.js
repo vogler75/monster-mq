@@ -187,8 +187,14 @@ class JDBCLoggerDetailManager {
                         }
                         metrics {
                             messagesIn
+                            messagesValidated
                             messagesWritten
+                            messagesSkipped
+                            validationErrors
+                            writeErrors
                             queueSize
+                            queueCapacity
+                            queueFull
                             timestamp
                         }
                     }
@@ -274,8 +280,14 @@ class JDBCLoggerDetailManager {
 
         const metrics = m[0];
         document.getElementById('metric-messages-in').textContent = Math.round(metrics.messagesIn || 0);
+        document.getElementById('metric-messages-validated').textContent = Math.round(metrics.messagesValidated || 0);
         document.getElementById('metric-messages-written').textContent = Math.round(metrics.messagesWritten || 0);
+        document.getElementById('metric-messages-skipped').textContent = Math.round(metrics.messagesSkipped || 0);
+        document.getElementById('metric-validation-errors').textContent = Math.round(metrics.validationErrors || 0);
+        document.getElementById('metric-write-errors').textContent = Math.round(metrics.writeErrors || 0);
         document.getElementById('metric-queue-size').textContent = Math.round(metrics.queueSize || 0);
+        document.getElementById('metric-queue-capacity').textContent = Math.round(metrics.queueCapacity || 0);
+        document.getElementById('metric-queue-full').textContent = metrics.queueFull ? 'FULL' : 'Normal';
         document.getElementById('metric-timestamp').textContent =
             metrics.timestamp ? new Date(metrics.timestamp).toLocaleString() : '-';
         document.getElementById('metrics-section').style.display = 'block';
@@ -289,8 +301,14 @@ class JDBCLoggerDetailManager {
                     jdbcLoggers(name: $name) {
                         metrics {
                             messagesIn
+                            messagesValidated
                             messagesWritten
+                            messagesSkipped
+                            validationErrors
+                            writeErrors
                             queueSize
+                            queueCapacity
+                            queueFull
                             timestamp
                         }
                     }
