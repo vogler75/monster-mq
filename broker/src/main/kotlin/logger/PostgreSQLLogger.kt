@@ -271,7 +271,8 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
                         message.contains("i/o error") ||
                         message.contains("socket") ||
                         message.contains("broken pipe") ||
-                        message.contains("connection reset")
+                        message.contains("connection reset") ||
+                        message.contains("not connected")
                     ) {
                         return true
                     }

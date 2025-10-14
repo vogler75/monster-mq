@@ -66,6 +66,9 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
 
     // Connection state
     private val isReconnecting = AtomicBoolean(false)
+    private var reconnectionAttempts = 0
+    private var lastReconnectionAttempt = 0L
+    private var lastConnectionErrorLog = 0L
 
     /**
      * Buffered row ready for database write
@@ -551,6 +554,9 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
     private val accumulatedRows = mutableListOf<BufferedRow>()
 
     private fun writeExecutor() {
+        // Process new messages from queue and collect them in a temporary buffer
+        val newMessages = mutableListOf<BufferedRow>()
+        
         // Poll block from queue
         val blockSize = queue.pollBlock { message ->
             try {
@@ -562,7 +568,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                 if (tableName != null) {
                     val fields = extractFields(payloadJson)
                     if (hasRequiredFields(fields)) {
-                        accumulatedRows.add(BufferedRow(tableName, fields, message.time, message.topicName))
+                        newMessages.add(BufferedRow(tableName, fields, message.time, message.topicName))
                     }
                 }
             } catch (e: Exception) {
@@ -570,15 +576,14 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             }
         }
 
-        // Always commit the queue block after processing (prevents retries)
-        // Accumulation happens in accumulatedRows buffer instead
-        if (blockSize > 0) {
-            queue.pollCommit()
-        }
-
         // Check if we should write based on accumulation or timeout
         val now = System.currentTimeMillis()
         val timeoutReached = (now - lastBulkWrite) >= cfg.bulkTimeoutMs
+
+        // Combine accumulated rows with new messages for size calculation
+        val totalMessages = accumulatedRows.size + newMessages.size
+        var shouldCommitQueue = false
+        var hasConnectionError = false
 
         if (accumulatedRows.isNotEmpty() && (accumulatedRows.size >= cfg.bulkSize || timeoutReached)) {
             // We have enough rows or timeout reached, write them
@@ -592,46 +597,17 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                     logger.fine { "Writing bulk of ${tableRows.size} rows to table $tableName" }
                     writeBulk(tableName, tableRows)
                     messagesWrittenCounter.addAndGet(tableRows.size.toLong())
+                    // Reset reconnection attempt counter on successful write
+                    reconnectionAttempts = 0
                 } catch (e: Exception) {
                     writeErrorsCounter.incrementAndGet()
 
                     // Check if it's a connection error (these should reconnect)
                     if (isConnectionError(e)) {
-                        logger.warning("Database connection error detected, will attempt to reconnect: ${e.javaClass.simpleName}: ${e.message}")
-
-                        // Attempt to reconnect (only one thread should try to reconnect)
-                        if (isReconnecting.compareAndSet(false, true)) {
-                            try {
-                                logger.info("Attempting to reconnect to database...")
-
-                                // Disconnect first
-                                try {
-                                    disconnect().toCompletionStage().toCompletableFuture().get(5, java.util.concurrent.TimeUnit.SECONDS)
-                                    logger.info("Disconnected from database")
-                                } catch (de: Exception) {
-                                    logger.warning("Error during disconnect: ${de.message}")
-                                }
-
-                                // Wait before reconnecting
-                                Thread.sleep(cfg.reconnectDelayMs)
-
-                                // Reconnect
-                                connect().toCompletionStage().toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS)
-                                logger.info("Successfully reconnected to database")
-
-                            } catch (re: Exception) {
-                                logger.severe("Failed to reconnect to database: ${re.message}")
-                                // Will retry on next iteration
-                            } finally {
-                                isReconnecting.set(false)
-                            }
-                        } else {
-                            logger.info("Another thread is already reconnecting, waiting...")
-                            Thread.sleep(1000)
-                        }
-
-                        // Retry next iteration (rows stay in accumulatedRows)
-                        return
+                        handleConnectionError(e)
+                        hasConnectionError = true
+                        allSuccess = false
+                        return@forEach // Continue to next table but don't try to write more
                     }
 
                     // For non-connection errors (schema/constraint violations), log as severe and skip
@@ -642,12 +618,42 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                 }
             }
 
-            // Clear accumulated rows after successful write (or non-recoverable error)
-            accumulatedRows.clear()
-            lastBulkWrite = now
-        } else if (blockSize == 0) {
-            // No messages polled, sleep briefly
+            // Only clear accumulated rows if writes succeeded or had non-recoverable errors
+            if (allSuccess || !hasConnectionError) {
+                accumulatedRows.clear()
+                lastBulkWrite = now
+                shouldCommitQueue = true
+            } else {
+                // Connection error occurred, don't clear accumulated rows - they will be retried
+                logger.fine("Keeping ${accumulatedRows.size} messages in buffer due to connection error, will retry")
+                // Don't update lastBulkWrite so we'll retry immediately on next iteration
+            }
+        } else {
+            // No bulk write attempted, safe to commit small batches
+            shouldCommitQueue = true
+        }
+
+        // Only add new messages to accumulated buffer and commit queue if successful
+        if (shouldCommitQueue) {
+            // Add new messages to accumulation buffer
+            accumulatedRows.addAll(newMessages)
+            
+            // Commit queue block
+            if (blockSize > 0) {
+                queue.pollCommit()
+            }
+        } else {
+            // Don't commit queue - messages will be retried
+            // Don't add newMessages to accumulatedRows - they're already in the queue
+            logger.fine("Not committing ${newMessages.size} new messages due to connection error")
+        }
+
+        if (blockSize == 0 && accumulatedRows.isEmpty()) {
+            // No messages polled and no messages to retry, sleep briefly
             Thread.sleep(10)
+        } else if (hasConnectionError) {
+            // We have messages to retry but connection failed, sleep briefly before retrying
+            Thread.sleep(100)
         }
     }
 
@@ -703,5 +709,61 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             "queueCapacity" to queue.getCapacity(),
             "queueFull" to queue.isQueueFull()
         )
+    }
+
+    /**
+     * Handles connection errors with exponential backoff and persistent retries
+     */
+    private fun handleConnectionError(e: Exception) {
+        val now = System.currentTimeMillis()
+
+        // Rate limit connection error logging to avoid spam (max once per 30 seconds)
+        if (now - lastConnectionErrorLog > 30000) {
+            logger.warning("Database connection error detected: ${e.javaClass.simpleName}: ${e.message}")
+            lastConnectionErrorLog = now
+        }
+
+        // Don't attempt reconnection too frequently - use configured delay
+        if (now - lastReconnectionAttempt < cfg.reconnectDelayMs) {
+            return
+        }
+
+        // Only one thread should handle reconnection at a time
+        if (isReconnecting.compareAndSet(false, true)) {
+            try {
+
+                logger.info("Attempting to reconnect to database (attempt ${reconnectionAttempts + 1})...")
+                lastReconnectionAttempt = now
+                reconnectionAttempts++
+
+                // Disconnect first
+                try {
+                    disconnect().toCompletionStage().toCompletableFuture().get(5, java.util.concurrent.TimeUnit.SECONDS)
+                } catch (de: Exception) {
+                    logger.fine("Error during disconnect: ${de.message}")
+                }
+
+                // Wait before reconnecting (use configured delay)
+                Thread.sleep(cfg.reconnectDelayMs)
+
+                // Attempt reconnection
+                connect().toCompletionStage().toCompletableFuture().get(15, java.util.concurrent.TimeUnit.SECONDS)
+                
+                logger.info("Successfully reconnected to database after ${reconnectionAttempts} attempts")
+                reconnectionAttempts = 0
+
+            } catch (re: Exception) {
+                // Rate limit reconnection failure logging
+                if (reconnectionAttempts % 5 == 1 || now - lastConnectionErrorLog > 60000) {
+                    logger.severe("Failed to reconnect to database (attempt ${reconnectionAttempts}): ${re.message}")
+                    logger.info("Next reconnection attempt in ${cfg.reconnectDelayMs / 1000} seconds")
+                }
+            } finally {
+                isReconnecting.set(false)
+            }
+        } else {
+            // Another thread is handling reconnection, wait briefly
+            Thread.sleep(1000)
+        }
     }
 }
