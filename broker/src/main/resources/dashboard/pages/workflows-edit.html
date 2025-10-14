@@ -204,6 +204,8 @@
             top: 0;
             right: -400px;
             width: 380px;
+            min-width: 300px;
+            max-width: 600px;
             height: 100vh;
             background: var(--dark-surface);
             border-left: 1px solid var(--dark-border);
@@ -212,16 +214,113 @@
             display: flex;
             flex-direction: column;
             box-shadow: -4px 0 8px rgba(0, 0, 0, 0.2);
+            resize: horizontal;
+            overflow: hidden;
         }
 
         .topic-browser-side-panel.open {
             right: 0;
         }
 
+        /* Resize handle */
+        .topic-panel-resize-handle {
+            position: absolute;
+            left: -5px;
+            top: 0;
+            width: 10px;
+            height: 100%;
+            cursor: col-resize;
+            background: transparent;
+            z-index: 1001;
+        }
+
+        .topic-panel-resize-handle:hover {
+            background: rgba(124, 58, 237, 0.3);
+        }
+
+        .topic-panel-resize-handle:active {
+            background: rgba(124, 58, 237, 0.5);
+        }
+
         /* Main content adjustment when panel is open */
         body.topic-panel-open .main-content {
-            margin-right: 380px;
             transition: margin-right 0.3s ease;
+        }
+
+        /* Floating toggle button */
+        .topic-browser-floating-toggle {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%) rotate(-90deg);
+            background: var(--monster-purple);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px 8px 0 0;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            z-index: 999;
+            box-shadow: -2px -2px 8px rgba(0, 0, 0, 0.2);
+            transform-origin: center;
+        }
+
+        .topic-browser-floating-toggle:hover {
+            background: var(--monster-dark);
+            right: 15px;
+        }
+
+        .topic-browser-floating-toggle.active {
+            background: var(--monster-dark);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .topic-browser-floating-toggle .toggle-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .topic-browser-floating-toggle.active .toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        /* Responsive design for smaller screens */
+        @media (max-width: 1024px) {
+            .topic-browser-side-panel {
+                width: 320px;
+                min-width: 280px;
+            }
+            
+            .topic-browser-floating-toggle {
+                right: 15px;
+                padding: 0.6rem 1.2rem;
+                font-size: 0.8rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .topic-browser-side-panel {
+                width: 100vw;
+                right: -100vw;
+                min-width: 100vw;
+                max-width: 100vw;
+            }
+            
+            .topic-browser-floating-toggle {
+                right: 10px;
+                padding: 0.5rem 1rem;
+            }
+            
+            body.topic-panel-open .main-content {
+                margin-right: 0;
+                display: none;
+            }
         }
 
         .topic-panel-header {
@@ -518,12 +617,6 @@
                     <p class="page-subtitle" id="page-subtitle"></p>
                 </div>
                 <div class="page-header-actions" id="header-actions" style="display:none;">
-                    <button class="topic-browser-toggle" id="topic-browser-toggle" onclick="TopicBrowserSidePanel.toggle()">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-                        </svg>
-                        Topics
-                    </button>
                     <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'">Back</button>
                     <button class="btn btn-primary btn-small" style="min-width:90px;" onclick="FlowEdit.save()">Save</button>
                     <button class="btn btn-danger btn-small" id="delete-button" style="display:none;" onclick="FlowEdit.deleteItem()">Delete</button>
@@ -612,8 +705,17 @@
     </div>
     </div>
 
+    <!-- Floating Topic Browser Toggle -->
+    <button class="topic-browser-floating-toggle" id="topic-browser-floating-toggle" onclick="TopicBrowserSidePanel.toggle()">
+        <svg class="toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+        </svg>
+        Topics
+    </button>
+
     <!-- Topic Browser Side Panel -->
     <div class="topic-browser-side-panel" id="topic-browser-panel">
+        <div class="topic-panel-resize-handle" id="topic-panel-resize-handle"></div>
         <div class="topic-panel-header">
             <h3 class="topic-panel-title">Topic Browser</h3>
             <button class="topic-panel-close" onclick="TopicBrowserSidePanel.close()">

@@ -5,12 +5,14 @@ class TopicBrowserSidePanel {
         this.dataViewer = document.getElementById('topic-panel-data');
         this.dataContent = document.getElementById('topic-panel-data-content');
         this.archiveGroupSelect = document.getElementById('topic-panel-archive-group');
-        this.toggleButton = document.getElementById('topic-browser-toggle');
+        this.toggleButton = document.getElementById('topic-browser-floating-toggle');
+        this.resizeHandle = document.getElementById('topic-panel-resize-handle');
 
         this.treeNodes = new Map(); // topic path -> TreeNode data
         this.selectedTopic = null;
         this.selectedArchiveGroup = 'Default';
         this.isOpen = false;
+        this.panelWidth = 380;
 
         this.init();
     }
@@ -28,6 +30,9 @@ class TopicBrowserSidePanel {
 
         // Set up drag and drop event listeners for inputs
         this.setupDropZones();
+        
+        // Set up resize functionality
+        this.setupResize();
     }
 
     async loadArchiveGroups() {
@@ -173,15 +178,63 @@ class TopicBrowserSidePanel {
     open() {
         this.panel.classList.add('open');
         this.toggleButton.classList.add('active');
-        document.body.classList.add('topic-panel-open');
+        this.updateMainContentMargin();
         this.isOpen = true;
     }
 
     close() {
         this.panel.classList.remove('open');
         this.toggleButton.classList.remove('active');
-        document.body.classList.remove('topic-panel-open');
+        // Reset main content margin
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) {
+            mainContent.style.marginRight = '0';
+        }
         this.isOpen = false;
+    }
+
+    updateMainContentMargin() {
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) {
+            mainContent.style.marginRight = `${this.panelWidth}px`;
+        }
+    }
+
+    setupResize() {
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        this.resizeHandle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = this.panel.offsetWidth;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+
+            const deltaX = startX - e.clientX; // Reverse direction for right panel
+            const newWidth = Math.max(300, Math.min(600, startWidth + deltaX));
+            
+            this.panelWidth = newWidth;
+            this.panel.style.width = `${newWidth}px`;
+            
+            if (this.isOpen) {
+                this.updateMainContentMargin();
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
     }
 
     browseRoot() {
@@ -388,6 +441,27 @@ class TopicBrowserSidePanel {
                 e.dataTransfer.effectAllowed = 'copy';
                 // Add visual feedback
                 item.style.opacity = '0.6';
+                
+                // Add a drag image for better UX
+                const dragImage = document.createElement('div');
+                dragImage.textContent = fullPath;
+                dragImage.style.cssText = `
+                    position: absolute;
+                    top: -1000px;
+                    background: var(--monster-purple);
+                    color: white;
+                    padding: 0.5rem;
+                    border-radius: 4px;
+                    font-size: 0.875rem;
+                    white-space: nowrap;
+                `;
+                document.body.appendChild(dragImage);
+                e.dataTransfer.setDragImage(dragImage, 10, 10);
+                
+                // Clean up drag image after drag starts
+                setTimeout(() => {
+                    document.body.removeChild(dragImage);
+                }, 0);
             });
             
             item.addEventListener('dragend', (e) => {
