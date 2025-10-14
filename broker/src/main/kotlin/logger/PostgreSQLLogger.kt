@@ -19,9 +19,7 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
 
         vertx.executeBlocking<Void>({
             try {
-                logger.info("Connecting to PostgreSQL: ${cfg.jdbcUrl}")
-                logger.info("Using driver: org.postgresql.Driver")
-                logger.info("Username: ${cfg.username}")
+                logger.info("Connecting to PostgreSQL: ${cfg.jdbcUrl}, Using driver: org.postgresql.Driver, Username: ${cfg.username}")
 
                 // Load PostgreSQL JDBC driver
                 Class.forName("org.postgresql.Driver")
@@ -89,8 +87,7 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
 
             val sql = "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders)"
 
-            logger.fine { "Writing bulk of ${rows.size} rows to table $tableName" }
-            logger.fine { "SQL: $sql" }
+            logger.fine { "Writing bulk of ${rows.size} rows to table $tableName SQL: $sql" }
 
             conn.prepareStatement(sql).use { ps ->
                 rows.forEach { row ->
@@ -98,7 +95,7 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
                     fields.forEachIndexed { index, fieldName ->
                         val value = row.fields[fieldName]
                         val paramIndex = index + 1
-
+                        logger.fine { "Setting parameter $paramIndex to value '$value' (${value?.javaClass?.name ?: "null"})" }
                         when (value) {
                             null -> ps.setNull(paramIndex, java.sql.Types.NULL)
                             is String -> ps.setString(paramIndex, value)
