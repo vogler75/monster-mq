@@ -1,25 +1,94 @@
 # MonsterMQ
 
-A MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data storage through PostgreSQL, CrateDB, MongoDB, or SQLite.
+A high-performance, enterprise-grade MQTT broker with advanced data processing capabilities, built on Vert.x and designed for industrial IoT and real-time messaging scenarios.
 
 ## 🚀 Key Features
 
-- **MQTT 3.1.1 Protocol** - Complete QoS 0,1,2 support with persistent sessions
-- **Multi-Database Support** - PostgreSQL, CrateDB, MongoDB, SQLite backends
-- **Hazelcast Clustering** - Multi-node scalability with automatic failover
-- **Message Archiving** - Persistent storage with configurable retention policies
-- **Workflows (Flow Engine)** - Visual flow-based programming with JavaScript runtime for data processing pipelines
-- **Rate Limiting** - Configurable publish/subscribe rate protection against client overload
-- **OPC UA Server** - Industrial protocol server with MQTT bridge and real-time subscriptions
-- **WinCC OA Client** - High-performance bulk message transfer from Siemens WinCC Open Architecture SCADA systems
-- **WinCC Unified Client** - GraphQL/WebSocket integration for Siemens WinCC Unified tag values and alarms
-- **Neo4j Client** - Graph database integration for topic hierarchy analysis and path-based data modeling
-- **GraphQL API** - Real-time data access and management interface
-- **MCP Server** - AI model integration through Model Context Protocol
-- **User Authentication** - BCrypt-secured user management with ACL rules
-- **SparkplugB Support** - Industrial IoT message expansion
-- **WebSocket Support** - MQTT over WebSockets (WS/WSS)
-- **TLS/SSL Security** - Certificate-based authentication
+### Core MQTT Broker
+- **Full MQTT 3.1.1 & 5.0 Support** - Complete protocol implementation with QoS 0, 1, 2
+- **High Performance** - Built on Vert.x for maximum throughput and low latency  
+- **SSL/TLS Security** - End-to-end encryption with certificate management
+- **WebSocket Support** - MQTT over WebSocket for web applications
+- **Clustering** - Multi-node deployment with Hazelcast clustering and automatic failover
+- **Retained Messages** - Persistent message storage for new subscribers
+
+### Data Integration & Storage
+
+#### Multi-Database Support 📊
+Advanced database integration for real-time data archiving and analytics:
+
+- **PostgreSQL, QuestDB, TimescaleDB** - Time-series and relational databases
+- **SQLite** - Lightweight embedded deployments
+- **CrateDB** - Distributed analytics and large-scale IoT data
+- **MongoDB** - Document-based storage with flexible schema
+- **Custom JDBC** - Support for any JDBC-compatible database
+
+#### Archive Groups 🗄️
+Flexible message storage with configurable retention and archiving:
+
+- **Last Value Store** - Keep latest values for instant access
+- **Message Archive** - Long-term storage with compression
+- **Retention Policies** - Automatic cleanup and data lifecycle management
+- **Performance Monitoring** - Real-time throughput and storage metrics
+- **Smart Data Processing** - JSON Schema validation and transformation
+- **Connection Pooling** - Enterprise-grade database connection management
+
+### Device Integration 🔌
+
+#### OPC UA Integration
+- **Client & Server** - Connect to PLCs and industrial systems
+- **Security** - Certificate management and authentication
+- **Real-time Data** - Subscribe to OPC UA variables with automatic mapping to MQTT
+
+#### MQTT Client Bridge
+- **Remote Broker Connection** - Bridge multiple MQTT brokers
+- **Topic Mapping** - Flexible topic transformation and routing
+- **Failover Support** - Automatic reconnection and buffering
+
+#### PLC4X Integration
+- **Multi-Protocol Support** - Connect to Siemens, Allen-Bradley, Modbus, and more
+- **Direct PLC Access** - Read/write PLC variables without gateways
+- **Industrial Standards** - Support for major industrial protocols
+
+#### WinCC OA & Unified Integration
+- **High-Performance SCADA** - Bulk message transfer from Siemens systems
+- **GraphQL/WebSocket** - Real-time tag values and alarm notifications
+- **Massive Scale** - Subscribe to millions of datapoints efficiently
+
+#### Neo4j Graph Database
+- **Topic Hierarchy Analysis** - MQTT topics as graph relationships
+- **Path-based Queries** - Discover device connections and hierarchies
+- **Graph Analytics** - Powerful relationship analysis for IoT data
+
+### Workflow Engine 🔄
+Visual flow-based data processing inspired by Node-RED:
+
+#### Flow Classes (Templates)
+- **Reusable Templates** - Define processing logic once, deploy everywhere
+- **Node Types** - Function, filter, transform, and custom JavaScript nodes
+- **Visual Design** - Drag-and-drop workflow creation with zoom/pan editor
+
+#### Flow Instances (Deployments)  
+- **Input Mapping** - Connect MQTT topics to workflow inputs
+- **Output Mapping** - Publish results to configured topics
+- **JavaScript Processing** - GraalVM-powered JavaScript execution
+- **Real-time Execution** - Event-driven processing with low latency
+
+#### Workflow Features
+- **Cluster Deployment** - Distribute workflows across nodes
+- **State Management** - Persistent variables and context
+- **Error Handling** - Robust error capture and reporting
+- **Performance Monitoring** - Execution metrics and debugging
+
+### Web Dashboard 🖥️
+Modern, responsive web interface for complete system management:
+
+- **Real-time Monitoring** - Live metrics and system status
+- **Configuration Management** - Visual configuration of all components
+- **User Management** - Role-based access control with ACL
+- **Topic Browser** - Interactive MQTT topic exploration with drag-and-drop
+- **Workflow Editor** - Visual workflow design, debugging, and deployment
+- **Device Management** - Configure and monitor all connected devices
 
 ## 🏃 Quick Start
 
@@ -29,7 +98,7 @@ A MQTT broker built with Kotlin on Vert.X and Hazelcast with persistent data sto
 # Pull from Docker Hub
 docker run -p 1883:1883 -p 4840:4840 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
 
-# Or with PostgreSQL
+# Or with PostgreSQL and full docker-compose
 docker-compose up -d
 ```
 
@@ -37,16 +106,16 @@ docker-compose up -d
 
 ```bash
 cd broker
-mvn clean package
+mvn compile
 
 # Run with SQLite (development)
-java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -config example-config.yaml
+./run.sh
+
+# Run with PostgreSQL (production)  
+./run.sh -config config-postgres.yaml
 
 # Run with clustering
-java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -cluster -config config-hazelcast.yaml
-
-# Or use convenience script
-./run.sh -config config.yaml
+./run.sh -cluster -config config-hazelcast.yaml
 ```
 
 ### Configuration Examples
@@ -91,37 +160,123 @@ MCP:
 
 ## 🔧 Architecture
 
+### System Overview
+
+MonsterMQ follows a modular, event-driven architecture built on Eclipse Vert.x, providing high-performance message routing with enterprise-grade reliability and clustering capabilities.
+
 ```
-┌─────────────────┐    ┌──────────────┐    ┌─────────────────┐
-│   MQTT Clients  │───▶│   MonsterMQ  │───▶│   Databases     │
-│ • TCP/TLS       │    │   Broker     │    │ • PostgreSQL    │
-│ • WebSocket     │    │              │    │ • CrateDB       │
-│ • QoS 0,1,2     │    │ ┌──────────┐ │    │ • MongoDB       │
-└─────────────────┘    │ │Clustering│ │    │ • SQLite        │
-                       │ │Hazelcast │ │    └─────────────────┘
-┌─────────────────┐    │ └──────────┘ │
-│ OPC UA Devices  │◀───┤              │    ┌─────────────────┐
-│ • Certificates  │    │ ┌──────────┐ │───▶│   Kafka         │
-│ • Secure Conn.  │    │ │ Archive  │ │    │   (Optional)    │
-└─────────────────┘    │ │ Manager  │ │    └─────────────────┘
-                       │ └──────────┘ │
-┌─────────────────┐    │              │    ┌─────────────────┐
-│ WinCC OA SCADA  │───▶│ ┌──────────┐ │    │   GraphQL API   │
-│ • SQL Queries   │    │ │ GraphQL  │ │───▶│ • Real-time     │
-│ • Bulk Transfer │    │ │   API    │ │    │ • Management    │
-└─────────────────┘    │ └──────────┘ │    └─────────────────┘
-                       │              │
-┌─────────────────┐    │              │
-│   AI Models     │◀───┤              │
-│ • MCP Server    │    │              │
-│ • Analytics     │    │              │
-└─────────────────┘    │              │    ┌─────────────────┐
-                       │              │───▶│   Neo4j Graph   │
-┌─────────────────┐    │              │    │ • Topic Trees   │
-│ Graph Analytics │◀───┤              │    │ • Relationships │
-│ • Neo4j Client  │    │              │    └─────────────────┘
-└─────────────────┘    └──────────────┘
+                    ┌─────────────────────────────────────────────────────────────┐
+                    │                     MonsterMQ Core                          │
+                    │                   (Eclipse Vert.x)                         │
+                    └─────────────────────────────────────────────────────────────┘
+                                                    │
+                ┌───────────────────────┬───────────┼───────────┬───────────────────────┐
+                │                       │           │           │                       │
+        ┌───────▼────────┐    ┌────────▼────────┐  │  ┌────────▼────────┐    ┌────────▼────────┐
+        │ Protocol Layer │    │  Message Router │  │  │ Workflow Engine │    │ Management APIs │
+        │ • MQTT 3.1.1/5 │    │ • Topic Match   │  │  │ • Visual Flows  │    │ • GraphQL API   │
+        │ • TCP/TLS/WS   │    │ • QoS Handling  │  │  │ • JavaScript    │    │ • Web Dashboard │
+        │ • Auth/ACL     │    │ • Subscriptions │  │  │ • Real-time Exec│    │ • REST Endpoints│
+        └────────────────┘    └─────────────────┘  │  └─────────────────┘    └─────────────────┘
+                                                   │
+                              ┌────────────────────┼────────────────────┐
+                              │                    │                    │
+                    ┌─────────▼─────────┐ ┌───────▼───────┐ ┌─────────▼─────────┐
+                    │  Storage Layer    │ │ Archive Layer │ │ Clustering Layer  │
+                    │ • Session Store   │ │ • Message Log │ │ • Hazelcast Grid  │
+                    │ • Retained Msgs   │ │ • Retention   │ │ • Node Discovery  │
+                    │ • Multi-Database  │ │ • Compression │ │ • State Sync      │
+                    └───────────────────┘ └───────────────┘ └───────────────────┘
 ```
+
+### Data Flow Architecture
+
+```
+┌─────────────────┐    ┌──────────────────────────────────────────────────────────────┐
+│   Data Sources  │    │                     MonsterMQ Broker                        │
+│                 │    │                                                              │
+│ ┌─────────────┐ │    │ ┌──────────────┐  ┌─────────────┐  ┌──────────────────────┐ │    ┌─────────────────┐
+│ │MQTT Clients │─┼────┼▶│ Protocol     │─▶│   Message   │─▶│    Workflow Engine   │ │───▶│   Data Targets  │
+│ │• IoT Devices│ │    │ │ Handlers     │  │   Router    │  │  ┌─────────────────┐ │ │    │                 │
+│ │• Apps/Tools │ │    │ │• MQTT TCP/TLS│  │• Topic Tree │  │  │ Flow Classes    │ │ │    │ ┌─────────────┐ │
+│ └─────────────┘ │    │ │• WebSocket   │  │• Pub/Sub    │  │  │ • Templates     │ │ │    │ │ Databases   │ │
+│                 │    │ │• Auth/ACL    │  │• QoS Logic  │  │  │ • JavaScript    │ │ │    │ │• PostgreSQL │ │
+│ ┌─────────────┐ │    │ └──────────────┘  └─────────────┘  │  └─────────────────┘ │ │    │ │• QuestDB    │ │
+│ │OPC UA Devices│─┼────┼─────────────────────────┬─────────┤  ┌─────────────────┐ │ │    │ │• MongoDB    │ │
+│ │• PLCs       │ │    │                         │         │  │ Flow Instances  │ │ │    │ │• CrateDB    │ │
+│ │• Sensors    │ │    │ ┌─────────────────────┐ │         │  │ • Deployments   │ │ │    │ └─────────────┘ │
+│ └─────────────┘ │    │ │   Archive Manager   │ │         │  │ • Input Mapping │ │ │    │                 │
+│                 │    │ │ ┌─────────────────┐ │ │         │  │ • Output Topics │ │ │    │ ┌─────────────┐ │
+│ ┌─────────────┐ │    │ │ │ Archive Groups  │ │ │         │  └─────────────────┘ │ │    │ │ Message     │ │
+│ │WinCC Systems│─┼────┼▶│ │• Last Values   │ │ │         └──────────────────────┘ │    │ │ Streaming   │ │
+│ │• OA SCADA   │ │    │ │ │• Time Series   │ │ │                                  │    │ │• Kafka      │ │
+│ │• Unified    │ │    │ │ │• JSON Schema   │ │ │         ┌──────────────────────┐ │    │ │• Event Bus  │ │
+│ └─────────────┘ │    │ │ └─────────────────┘ │ │         │   Management APIs    │ │    │ └─────────────┘ │
+│                 │    │ └─────────────────────┘ │         │ ┌──────────────────┐ │ │    │                 │
+│ ┌─────────────┐ │    │                         │         │ │   GraphQL API    │ │ │    │ ┌─────────────┐ │
+│ │PLC4X Clients│─┼────┼─────────────────────────┼─────────┤ │ • Real-time Data │ │ │    │ │ Analytics   │ │
+│ │• Modbus     │ │    │                         │         │ │ • Subscriptions  │ │ │    │ │• Neo4j      │ │
+│ │• Siemens    │ │    │                         │         │ │ • Management     │ │ │    │ │• Graph Viz  │ │
+│ └─────────────┘ │    │                         │         │ └──────────────────┘ │ │    │ └─────────────┘ │
+│                 │    │                         │         │ ┌──────────────────┐ │ │    │                 │
+│ ┌─────────────┐ │    │                         │         │ │  Web Dashboard   │ │ │    │ ┌─────────────┐ │
+│ │AI/Analytics │─┼────┼─────────────────────────┼─────────┤ │ • Config Manager │ │ │    │ │AI/ML Models │ │
+│ │• MCP Server │ │    │                         │         │ │ • Topic Browser  │ │ │    │ │• MCP Server │ │
+│ │• ML Models  │ │    │                         │         │ │ • Flow Editor    │ │ │    │ │• Analytics  │ │
+│ └─────────────┘ │    │                         │         │ └──────────────────┘ │ │    │ └─────────────┘ │
+└─────────────────┘    │                         │         └──────────────────────┘ │    └─────────────────┘
+                       │                         │                                  │
+                       │                         └──────────────────────────────────┼──┐
+                       │                    ┌─────────────────────────────────────────┘  │
+                       │                    │              Clustering                    │
+                       │                    │        ┌─────────────────────┐           │
+                       │                    │        │  Hazelcast Grid     │           │
+                       │                    │        │ ┌─────────────────┐ │           │
+                       │                    │        │ │ Distributed Map │ │           │
+                       │                    │        │ │ Event Sourcing  │ │           │
+                       │                    │        │ │ Node Discovery  │ │           │
+                       │                    │        │ └─────────────────┘ │           │
+                       │                    │        └─────────────────────┘           │
+                       └────────────────────┴─────────────────────────────────────────┘
+```
+
+### Component Layers
+
+#### 1. **Protocol & Transport Layer**
+- **MQTT 3.1.1/5.0** - Full protocol compliance with QoS 0, 1, 2
+- **Multiple Transports** - TCP, TLS, WebSocket, WebSocket Secure
+- **Authentication** - Username/password, certificates, token-based
+- **Access Control** - Topic-based ACL with pattern matching
+
+#### 2. **Message Processing Core**
+- **Topic Router** - High-performance topic matching and subscription management
+- **QoS Manager** - Message persistence, acknowledgments, and retry logic
+- **Session Manager** - Client state, subscriptions, and will messages
+- **Retained Store** - Last message storage with configurable persistence
+
+#### 3. **Workflow Engine**
+- **Visual Editor** - Drag-and-drop flow creation with zoom/pan interface
+- **Flow Classes** - Reusable templates with configurable parameters
+- **Flow Instances** - Deployed workflows with input/output topic mapping
+- **JavaScript Runtime** - GraalVM-powered execution with state management
+
+#### 4. **Archive & Storage**
+- **Archive Groups** - Configurable message persistence with retention policies
+- **Multi-Database** - Support for PostgreSQL, QuestDB, TimescaleDB, MongoDB, CrateDB, SQLite
+- **JSON Schema** - Message validation and transformation
+- **Connection Pooling** - Enterprise-grade database connection management
+
+#### 5. **Integration & APIs**
+- **GraphQL API** - Real-time queries, mutations, and subscriptions
+- **Web Dashboard** - Modern React-based management interface  
+- **OPC UA Server** - Industrial protocol bridge with certificate management
+- **Device Clients** - WinCC OA, PLC4X, Neo4j, Kafka integration
+
+#### 6. **Clustering & High Availability**
+- **Hazelcast Grid** - Distributed state management and coordination
+- **Node Discovery** - Automatic cluster formation and health monitoring
+- **Load Balancing** - Client connection distribution across nodes
+- **Failover** - Automatic client migration and message routing
 
 ## 📚 Documentation
 
