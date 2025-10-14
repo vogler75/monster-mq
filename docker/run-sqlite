@@ -1,0 +1,1 @@
+docker run --rm -v $PWD/log:/app/log -v $PWD/config-sqlite.yaml:/app/config.yaml -v $PWD/db:/db -p 11883:1883 rocworks/monstermq:testing
