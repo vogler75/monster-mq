@@ -59,7 +59,7 @@ function renderClassesTable(){
         <td>${escapeHtml(r.version||'')}</td>
         <td style="text-align:right;">${r.nodes.length}</td>
         <td style="text-align:right;">${r.connections.length}</td>
-        <td>${escapeHtml(r.updatedAt||'')}</td>
+        <td>${formatDateTime(r.updatedAt)}</td>
           <td><div style="display:flex; gap:.4rem;">
               <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=class&name=${encodeURIComponent(r.name)}'">Edit</button>
               <button class="btn-action btn-visual" onclick="location.href='/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Visual</button>
@@ -88,7 +88,7 @@ function renderInstancesTable(){
         <td style="text-align:right;">${r.outputMappings.length}</td>
         <td>${r.enabled?'<span style="color:#2ed573;">Yes</span>':'<span style="color:#ff4757;">No</span>'}</td>
         <td style="text-align:right;">${execs}</td>
-        <td>${escapeHtml(r.updatedAt||'')}</td>
+        <td>${formatDateTime(r.updatedAt)}</td>
     <td><div style="display:flex; gap:.4rem;">
         ${startStopBtn}
         <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=instance&name=${encodeURIComponent(r.name)}'">Edit</button>
@@ -144,6 +144,12 @@ function toggleSort(table,key){ const st=sortState[table]; if(st.key===key){ st.
 
 // ---------------------- Utilities ----------------------
 function escapeHtml(text){ if(text===null||text===undefined) return ''; const div=document.createElement('div'); div.textContent=String(text); return div.innerHTML; }
+
+function formatDateTime(dateStr) {
+    if (!dateStr) return '';
+    // Truncate to minutes (e.g., 2024-01-15T10:30:45.123Z -> 2024-01-15 10:30)
+    return dateStr.replace(/:\d{2}(\.\d{3})?Z?$/, '').replace('T', ' ');
+}
 
 function showNotification(message, type='info') {
     const notification = document.createElement('div');

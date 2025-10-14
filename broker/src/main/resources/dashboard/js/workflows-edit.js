@@ -40,7 +40,7 @@ const FlowEdit = (() => {
       await loadAllForInstance();
       buildInstanceForm();
     }
-    qs('#actions-section').style.display = 'block';
+    qs('#header-actions').style.display = 'flex';
   }
 
   async function graphql(query, variables={}) {
@@ -112,13 +112,19 @@ const FlowEdit = (() => {
     qs('#delete-button').style.display = editing ? 'inline-block' : 'none';
     const root = qs('#form-section');
     root.innerHTML = `
-      <div class="form-grid">
-        <div class="form-group"><label>Name</label><input id="fc-name" class="form-control" value="${escape(state.flowClass.name||'')}"></div>
-        <div class="form-group"><label>Namespace</label><input id="fc-namespace" class="form-control" value="${escape(state.flowClass.namespace||'default')}"></div>
-        <div class="form-group"><label>Version</label><input id="fc-version" class="form-control" value="${escape(state.flowClass.version||'1.0.0')}"></div>
-        <div class="form-group" style="grid-column:1/-1;"><label>Description</label><textarea id="fc-description" class="form-control" rows="2">${escape(state.flowClass.description||'')}</textarea></div>
+      <div class="section-card">
+        <div class="section-header"><h2>Flow Class Details</h2></div>
+        <div class="section-content">
+          <div class="form-grid">
+            <div class="form-group"><label>Name</label><input id="fc-name" class="form-control" value="${escape(state.flowClass.name||'')}"></div>
+            <div class="form-group"><label>Namespace</label><input id="fc-namespace" class="form-control" value="${escape(state.flowClass.namespace||'default')}"></div>
+            <div class="form-group"><label>Version</label><input id="fc-version" class="form-control" value="${escape(state.flowClass.version||'1.0.0')}"></div>
+            <div class="form-group" style="grid-column:1/-1;"><label>Description</label><textarea id="fc-description" class="form-control" rows="2">${escape(state.flowClass.description||'')}</textarea></div>
+          </div>
+        </div>
       </div>`;
     qs('#nodes-section').style.display = 'block';
+    qs('#connections-section').style.display = 'block';
     renderNodesTable();
     renderConnectionsTable();
   }
@@ -131,12 +137,17 @@ const FlowEdit = (() => {
     const root = qs('#form-section');
     const classOptions = state.flowClasses.map(fc => `<option value="${escape(fc.name)}" ${fc.name===state.flowInstance.flowClassId?'selected':''}>${escape(fc.name)}</option>`).join('');
     root.innerHTML = `
-      <div class="form-grid">
-        <div class="form-group"><label>Name</label><input id="fi-name" class="form-control" value="${escape(state.flowInstance.name||'')}"></div>
-        <div class="form-group"><label>Namespace</label><input id="fi-namespace" class="form-control" value="${escape(state.flowInstance.namespace||'default')}"></div>
-        <div class="form-group"><label>Node ID</label><input id="fi-nodeId" class="form-control" value="${escape(state.flowInstance.nodeId||'local')}"></div>
-        <div class="form-group"><label>Flow Class</label><select id="fi-flowClass" class="form-control">${classOptions}</select></div>
-        <div class="form-group"><label>Enabled</label><input type="checkbox" id="fi-enabled" ${state.flowInstance.enabled?'checked':''}></div>
+      <div class="section-card">
+        <div class="section-header"><h2>Flow Instance Details</h2></div>
+        <div class="section-content">
+          <div class="form-grid">
+            <div class="form-group"><label>Name</label><input id="fi-name" class="form-control" value="${escape(state.flowInstance.name||'')}"></div>
+            <div class="form-group"><label>Namespace</label><input id="fi-namespace" class="form-control" value="${escape(state.flowInstance.namespace||'default')}"></div>
+            <div class="form-group"><label>Node ID</label><input id="fi-nodeId" class="form-control" value="${escape(state.flowInstance.nodeId||'local')}"></div>
+            <div class="form-group"><label>Flow Class</label><select id="fi-flowClass" class="form-control">${classOptions}</select></div>
+            <div class="form-group"><label>Enabled</label><input type="checkbox" id="fi-enabled" ${state.flowInstance.enabled?'checked':''}></div>
+          </div>
+        </div>
       </div>`;
     qs('#mappings-section').style.display = 'block';
     computeAvailableIO();
@@ -176,7 +187,18 @@ const FlowEdit = (() => {
       <td>${n.inputs.length}</td>
       <td>${n.outputs.length}</td>
       <td>${escape(n.language||'js')}</td>
-      <td class="table-actions"><button class="btn btn-secondary btn-small" onclick="FlowEdit.editNode('${n.id}')">Edit</button><button class="btn btn-danger btn-small" onclick="FlowEdit.removeNode('${n.id}')">Del</button></td>
+      <td class="action-buttons">
+        <button class="btn-icon btn-view" onclick="FlowEdit.editNode('${n.id}')" title="Edit Node">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+          </svg>
+        </button>
+        <button class="btn-icon btn-delete" onclick="FlowEdit.removeNode('${n.id}')" title="Delete Node">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+        </button>
+      </td>
     </tr>`).join('');
   }
 
@@ -184,7 +206,13 @@ const FlowEdit = (() => {
     const tbody = qs('#connections-table tbody');
     tbody.innerHTML = state.connections.map((c,idx) => `<tr>
       <td>${escape(c.fromNode)}</td><td>${escape(c.fromOutput)}</td><td>${escape(c.toNode)}</td><td>${escape(c.toInput)}</td>
-      <td><button class="btn btn-danger btn-small" onclick="FlowEdit.removeConnection(${idx})">✕</button></td></tr>`).join('');
+      <td>
+        <button class="btn-icon btn-delete" onclick="FlowEdit.removeConnection(${idx})" title="Delete Connection">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+        </button>
+      </td></tr>`).join('');
   }
 
   function addConnectionRow() {
@@ -292,7 +320,13 @@ const FlowEdit = (() => {
         <td><select class="form-control" onchange="FlowEdit.updateInputMapping(${idx},'nodeInput',this.value)">${options}</select></td>
         <td><select class="form-control" onchange="FlowEdit.updateInputMapping(${idx},'type',this.value)"><option value="TOPIC" ${m.type==='TOPIC'?'selected':''}>TOPIC</option><option value="TEXT" ${m.type==='TEXT'?'selected':''}>TEXT</option></select></td>
         <td><input class="form-control" value="${escape(m.value)}" onchange="FlowEdit.updateInputMapping(${idx},'value',this.value)" placeholder="MQTT topic or text"></td>
-        <td><button class="btn btn-danger btn-small" onclick="FlowEdit.removeInputMapping(${idx})">✕</button></td>
+        <td>
+          <button class="btn-icon btn-delete" onclick="FlowEdit.removeInputMapping(${idx})" title="Delete Input Mapping">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          </button>
+        </td>
       </tr>`;
     }).join('');
   }
@@ -307,7 +341,13 @@ const FlowEdit = (() => {
       return `<tr>
         <td><select class="form-control" onchange="FlowEdit.updateOutputMapping(${idx},'nodeOutput',this.value)">${options}</select></td>
         <td><input class="form-control" value="${escape(m.topic)}" onchange="FlowEdit.updateOutputMapping(${idx},'topic',this.value)" placeholder="MQTT topic"></td>
-        <td><button class="btn btn-danger btn-small" onclick="FlowEdit.removeOutputMapping(${idx})">✕</button></td>
+        <td>
+          <button class="btn-icon btn-delete" onclick="FlowEdit.removeOutputMapping(${idx})" title="Delete Output Mapping">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          </button>
+        </td>
       </tr>`;
     }).join('');
   }
@@ -317,7 +357,13 @@ const FlowEdit = (() => {
     tbody.innerHTML = entries.map(([k,v],idx)=> `<tr>
       <td><input class="form-control" value="${escape(k)}" onchange="FlowEdit.updateVariableKey(${idx}, this.value)"></td>
       <td><input class="form-control" value="${escape(v)}" onchange="FlowEdit.updateVariableVal('${escape(k)}', this.value)"></td>
-      <td><button class="btn btn-danger btn-small" onclick="FlowEdit.removeVariable('${escape(k)}')">✕</button></td>
+      <td>
+        <button class="btn-icon btn-delete" onclick="FlowEdit.removeVariable('${escape(k)}')" title="Delete Variable">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+        </button>
+      </td>
     </tr>`).join('');
   }
 
