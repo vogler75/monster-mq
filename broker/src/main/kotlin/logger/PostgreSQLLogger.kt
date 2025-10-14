@@ -10,9 +10,9 @@ import java.sql.SQLException
  * PostgreSQL implementation of JDBC Logger
  * Supports PostgreSQL and compatible databases (TimescaleDB, QuestDB via PostgreSQL wire protocol)
  */
-class PostgreSQLLogger : JDBCLoggerBase() {
+open class PostgreSQLLogger : JDBCLoggerBase() {
 
-    private var connection: Connection? = null
+    protected var connection: Connection? = null
 
     override fun connect(): Future<Void> {
         val promise = Promise.promise<Void>()
@@ -34,6 +34,12 @@ class PostgreSQLLogger : JDBCLoggerBase() {
                 connection = DriverManager.getConnection(cfg.jdbcUrl, properties)
 
                 logger.info("Connected to PostgreSQL successfully")
+
+                // Auto-create table if enabled and table name is fixed (not dynamic)
+                if (cfg.autoCreateTable && cfg.tableName != null) {
+                    createTableIfNotExists(cfg.tableName!!)
+                }
+
                 null
             } catch (e: Exception) {
                 logger.severe("Failed to connect to PostgreSQL: ${e.javaClass.name}: ${e.message}")
@@ -88,10 +94,26 @@ class PostgreSQLLogger : JDBCLoggerBase() {
 
             conn.prepareStatement(sql).use { ps ->
                 rows.forEach { row ->
-                    // Set parameter values
+                    // Set parameter values with type-specific setters for better performance
                     fields.forEachIndexed { index, fieldName ->
                         val value = row.fields[fieldName]
-                        ps.setObject(index + 1, value)
+                        val paramIndex = index + 1
+
+                        when (value) {
+                            null -> ps.setNull(paramIndex, java.sql.Types.NULL)
+                            is String -> ps.setString(paramIndex, value)
+                            is Int -> ps.setInt(paramIndex, value)
+                            is Long -> ps.setLong(paramIndex, value)
+                            is Double -> ps.setDouble(paramIndex, value)
+                            is Float -> ps.setFloat(paramIndex, value)
+                            is Boolean -> ps.setBoolean(paramIndex, value)
+                            is java.sql.Timestamp -> ps.setTimestamp(paramIndex, value)
+                            is java.sql.Date -> ps.setDate(paramIndex, value)
+                            is java.sql.Time -> ps.setTime(paramIndex, value)
+                            is java.math.BigDecimal -> ps.setBigDecimal(paramIndex, value)
+                            is ByteArray -> ps.setBytes(paramIndex, value)
+                            else -> ps.setObject(paramIndex, value)  // Fallback for other types
+                        }
                     }
                     ps.addBatch()
                 }
@@ -141,17 +163,126 @@ class PostgreSQLLogger : JDBCLoggerBase() {
         }
     }
 
+    protected open fun createTableIfNotExists(tableName: String) {
+        val conn = connection ?: throw SQLException("Not connected")
+
+        try {
+            logger.info("Checking if PostgreSQL table '$tableName' exists...")
+
+            // Extract field definitions from JSON schema
+            val schemaProperties = cfg.jsonSchema.getJsonObject("properties")
+            if (schemaProperties == null || schemaProperties.isEmpty) {
+                logger.warning("No properties defined in JSON schema, skipping table creation")
+                return
+            }
+
+            // Find timestamp field (first one with format=timestamp or format=timestampms)
+            var timestampField: String? = null
+            val columns = mutableListOf<String>()
+
+            schemaProperties.fieldNames().forEach { fieldName ->
+                val fieldSchema = schemaProperties.getJsonObject(fieldName)
+                val fieldType = fieldSchema?.getString("type") ?: "string"
+                val format = fieldSchema?.getString("format")
+
+                // Determine PostgreSQL type
+                val sqlType = when {
+                    format == "timestamp" || format == "timestampms" -> {
+                        if (timestampField == null) {
+                            timestampField = fieldName  // Remember first timestamp field
+                        }
+                        "TIMESTAMP"
+                    }
+                    fieldType == "string" -> "TEXT"
+                    fieldType == "number" -> "DOUBLE PRECISION"
+                    fieldType == "integer" -> "BIGINT"
+                    fieldType == "boolean" -> "BOOLEAN"
+                    else -> "TEXT"
+                }
+
+                columns.add("    $fieldName $sqlType")
+            }
+
+            // Build CREATE TABLE statement with SERIAL primary key
+            val columnsSQL = columns.joinToString(",\n")
+            val createTableSQL = """
+                CREATE TABLE IF NOT EXISTS "$tableName" (
+                    id SERIAL PRIMARY KEY,
+                $columnsSQL
+                )
+                """.trimIndent()
+
+            logger.fine("Executing CREATE TABLE:\n$createTableSQL")
+
+            conn.createStatement().use { stmt ->
+                stmt.execute(createTableSQL)
+            }
+
+            // Create index on timestamp field if it exists
+            if (timestampField != null) {
+                val createIndexSQL = """
+                    CREATE INDEX IF NOT EXISTS "${tableName}_${timestampField}_idx"
+                    ON "$tableName" ($timestampField DESC)
+                    """.trimIndent()
+
+                logger.info("Creating index on timestamp field '$timestampField'")
+                conn.createStatement().use { stmt ->
+                    stmt.execute(createIndexSQL)
+                }
+            }
+
+            logger.info("PostgreSQL table '$tableName' is ready")
+
+        } catch (e: SQLException) {
+            logger.warning("Error creating table '$tableName': ${e.message}")
+            // Don't throw - table might already exist, which is fine
+        }
+    }
+
     override fun isConnectionError(e: Exception): Boolean {
         return when (e) {
             is SQLException -> {
-                // Check for connection-related error messages
-                val message = e.message?.lowercase() ?: ""
-                message.contains("connection") ||
+                // Check this exception and all chained exceptions
+                var current: SQLException? = e
+                while (current != null) {
+                    // Check SQL state codes for connection errors
+                    // 08xxx = Connection Exception
+                    // 57P01 = admin_shutdown
+                    // 57P02 = crash_shutdown
+                    // 57P03 = cannot_connect_now
+                    when (current.sqlState) {
+                        "08000", // connection_exception
+                        "08003", // connection_does_not_exist
+                        "08006", // connection_failure
+                        "08001", // sqlclient_unable_to_establish_sqlconnection
+                        "08004", // sqlserver_rejected_establishment_of_sqlconnection
+                        "08007", // transaction_resolution_unknown
+                        "57P01", // admin_shutdown
+                        "57P02", // crash_shutdown
+                        "57P03"  // cannot_connect_now
+                        -> return true
+                    }
+
+                    // Check for connection-related error messages
+                    val message = current.message?.lowercase() ?: ""
+                    if (message.contains("connection") ||
                         message.contains("broken") ||
                         message.contains("closed") ||
                         message.contains("timeout") ||
                         message.contains("unreachable") ||
-                        message.contains("refused")
+                        message.contains("refused") ||
+                        message.contains("i/o error") ||
+                        message.contains("socket") ||
+                        message.contains("broken pipe") ||
+                        message.contains("connection reset")
+                    ) {
+                        return true
+                    }
+
+                    // Move to next exception in chain
+                    current = current.nextException
+                }
+                false
             }
             else -> false
         }

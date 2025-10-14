@@ -35,7 +35,11 @@ data class JDBCLoggerConfig(
     val bulkTimeoutMs: Long = 5000,                 // Max time to collect bulk (trigger write when reached)
 
     // Connection settings
-    val reconnectDelayMs: Long = 5000               // Delay before reconnecting on failure
+    val reconnectDelayMs: Long = 5000,              // Delay before reconnecting on failure
+
+    // Auto table creation
+    val autoCreateTable: Boolean = true,            // Automatically create table if not exists
+    val partitionBy: String = "DAY"                 // QuestDB partition strategy: HOUR, DAY, WEEK, MONTH, YEAR, NONE
 ) {
     companion object {
         fun fromJson(obj: JsonObject): JDBCLoggerConfig {
@@ -57,7 +61,9 @@ data class JDBCLoggerConfig(
                 diskPath = obj.getString("diskPath", "./buffer"),
                 bulkSize = obj.getInteger("bulkSize", 1000),
                 bulkTimeoutMs = obj.getLong("bulkTimeoutMs", 5000),
-                reconnectDelayMs = obj.getLong("reconnectDelayMs", 5000)
+                reconnectDelayMs = obj.getLong("reconnectDelayMs", 5000),
+                autoCreateTable = obj.getBoolean("autoCreateTable", true),
+                partitionBy = obj.getString("partitionBy", "DAY")
             )
         }
     }
@@ -79,6 +85,8 @@ data class JDBCLoggerConfig(
             .put("bulkSize", bulkSize)
             .put("bulkTimeoutMs", bulkTimeoutMs)
             .put("reconnectDelayMs", reconnectDelayMs)
+            .put("autoCreateTable", autoCreateTable)
+            .put("partitionBy", partitionBy)
     }
 
     fun validate(): List<String> {

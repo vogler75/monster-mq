@@ -1,134 +1,87 @@
 package at.rocworks.logger
 
-import io.vertx.core.Future
-import io.vertx.core.Promise
-import java.sql.Connection
-import java.sql.DriverManager
 import java.sql.SQLException
 
 /**
  * QuestDB implementation of JDBC Logger
- * Optimized for time-series data with fast ingestion
+ * Uses PostgreSQL wire protocol but with QuestDB-specific table partitioning
+ * Optimized for time-series data with fast ingestion and out-of-order inserts
  */
-class QuestDBLogger : JDBCLoggerBase() {
+class QuestDBLogger : PostgreSQLLogger() {
 
-    private var connection: Connection? = null
-
-    override fun connect(): Future<Void> {
-        val promise = Promise.promise<Void>()
-
-        vertx.executeBlocking<Void>({
-            try {
-                logger.info("Connecting to QuestDB: ${cfg.jdbcUrl}")
-                logger.info("Using driver: org.questdb.jdbc.Driver")
-                logger.info("Username: ${cfg.username}")
-
-                // Load QuestDB JDBC driver
-                Class.forName("org.questdb.jdbc.Driver")
-
-                // Create connection
-                val properties = java.util.Properties()
-                properties.setProperty("user", cfg.username)
-                properties.setProperty("password", cfg.password)
-
-                connection = DriverManager.getConnection(cfg.jdbcUrl, properties)
-
-                logger.info("Connected to QuestDB successfully")
-                null
-            } catch (e: Exception) {
-                logger.severe("Failed to connect to QuestDB: ${e.javaClass.name}: ${e.message}")
-                e.printStackTrace() // Print full stack trace
-                throw e
-            }
-        }).onComplete { result ->
-            if (result.succeeded()) {
-                promise.complete()
-            } else {
-                promise.fail(result.cause())
-            }
-        }
-
-        return promise.future()
-    }
-
-    override fun disconnect(): Future<Void> {
-        val promise = Promise.promise<Void>()
+    /**
+     * Creates a QuestDB table with proper partitioning for time-series data.
+     * Overrides PostgreSQL implementation to use QuestDB-specific syntax:
+     * - Single quotes for table names (QuestDB convention)
+     * - QuestDB types (STRING, DOUBLE, LONG instead of TEXT, DOUBLE PRECISION, BIGINT)
+     * - timestamp(field) designation for time-series optimization
+     * - PARTITION BY clause for out-of-order insert support
+     * - No SERIAL primary key (QuestDB handles row IDs internally)
+     */
+    override fun createTableIfNotExists(tableName: String) {
+        val conn = connection ?: throw SQLException("Not connected")
 
         try {
-            connection?.close()
-            connection = null
-            logger.info("Disconnected from QuestDB")
-            promise.complete()
-        } catch (e: Exception) {
-            logger.warning("Error disconnecting from QuestDB: ${e.message}")
-            promise.fail(e)
-        }
+            logger.info("Checking if QuestDB table '$tableName' exists...")
 
-        return promise.future()
-    }
+            // Extract field definitions from JSON schema
+            val schemaProperties = cfg.jsonSchema.getJsonObject("properties")
+            if (schemaProperties == null || schemaProperties.isEmpty) {
+                logger.warning("No properties defined in JSON schema, skipping table creation")
+                return
+            }
 
-    override fun writeBulk(tableName: String, rows: List<BufferedRow>) {
-        val conn = connection ?: throw SQLException("Not connected to QuestDB")
+            // Find timestamp field (first one with format=timestamp or format=timestampms)
+            var timestampField: String? = null
+            val columns = mutableListOf<String>()
 
-        if (rows.isEmpty()) {
-            return
-        }
+            schemaProperties.fieldNames().forEach { fieldName ->
+                val fieldSchema = schemaProperties.getJsonObject(fieldName)
+                val fieldType = fieldSchema?.getString("type") ?: "string"
+                val format = fieldSchema?.getString("format")
 
-        try {
-            // Build INSERT statement based on fields in first row
-            val fields = rows.first().fields.keys.toList()
-            val placeholders = fields.joinToString(", ") { "?" }
-            val fieldNames = fields.joinToString(", ")
-
-            val sql = "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders)"
-
-            logger.fine { "Writing bulk of ${rows.size} rows to table $tableName" }
-            logger.fine { "SQL: $sql" }
-
-            conn.prepareStatement(sql).use { ps ->
-                rows.forEach { row ->
-                    // Set parameter values
-                    fields.forEachIndexed { index, fieldName ->
-                        val value = row.fields[fieldName]
-                        ps.setObject(index + 1, value)
+                // Determine QuestDB type
+                val sqlType = when {
+                    format == "timestamp" || format == "timestampms" -> {
+                        if (timestampField == null) {
+                            timestampField = fieldName  // Remember first timestamp field
+                        }
+                        "TIMESTAMP"
                     }
-                    ps.addBatch()
+                    fieldType == "string" -> "STRING"
+                    fieldType == "number" -> "DOUBLE"
+                    fieldType == "integer" -> "LONG"
+                    fieldType == "boolean" -> "BOOLEAN"
+                    else -> "STRING"
                 }
 
-                // Execute batch
-                val results = ps.executeBatch()
-
-                logger.fine { "Successfully wrote ${results.size} rows to table $tableName" }
+                columns.add("    $fieldName $sqlType")
             }
+
+            if (timestampField == null) {
+                logger.warning("No timestamp field found in JSON schema, cannot create QuestDB table (timestamp designation required)")
+                return
+            }
+
+            // Build CREATE TABLE statement with QuestDB partitioning
+            val columnsSQL = columns.joinToString(",\n")
+            val createTableSQL = """
+                CREATE TABLE IF NOT EXISTS '$tableName' (
+                $columnsSQL
+                ) timestamp($timestampField) PARTITION BY ${cfg.partitionBy}                
+                """.trimIndent()
+
+            logger.fine("Executing CREATE TABLE:\n$createTableSQL")
+
+            conn.createStatement().use { stmt ->
+                stmt.execute(createTableSQL)
+            }
+
+            logger.info("QuestDB table '$tableName' is ready with PARTITION BY ${cfg.partitionBy}")
 
         } catch (e: SQLException) {
-            logger.warning("SQL error writing to table $tableName: ${e.javaClass.name}: ${e.message}")
-            logger.warning("SQL State: ${e.sqlState}, Error Code: ${e.errorCode}")
-
-            // Check for table not found errors
-            if (e.message?.contains("table", ignoreCase = true) == true ||
-                e.message?.contains("relation", ignoreCase = true) == true) {
-                logger.severe("Table '$tableName' does not exist. You need to create it first based on your JSON schema.")
-            }
-
-            e.printStackTrace()
-            throw e
-        }
-    }
-
-    override fun isConnectionError(e: Exception): Boolean {
-        return when (e) {
-            is SQLException -> {
-                // Check for connection-related error messages
-                val message = e.message?.lowercase() ?: ""
-                message.contains("connection") ||
-                        message.contains("broken") ||
-                        message.contains("closed") ||
-                        message.contains("timeout") ||
-                        message.contains("unreachable") ||
-                        message.contains("refused")
-            }
-            else -> false
+            logger.warning("Error creating table '$tableName': ${e.message}")
+            // Don't throw - table might already exist, which is fine
         }
     }
 }
