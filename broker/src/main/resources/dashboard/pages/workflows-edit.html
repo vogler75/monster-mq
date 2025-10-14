@@ -198,6 +198,239 @@
             margin-top: 1rem;
         }
 
+        /* Topic Browser Side Panel */
+        .topic-browser-side-panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 380px;
+            height: 100vh;
+            background: var(--dark-surface);
+            border-left: 1px solid var(--dark-border);
+            z-index: 1000;
+            transition: right 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -4px 0 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .topic-browser-side-panel.open {
+            right: 0;
+        }
+
+        /* Main content adjustment when panel is open */
+        body.topic-panel-open .main-content {
+            margin-right: 380px;
+            transition: margin-right 0.3s ease;
+        }
+
+        .topic-panel-header {
+            padding: 1rem;
+            background: var(--dark-surface-2);
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 60px;
+        }
+
+        .topic-panel-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .topic-panel-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .topic-panel-close:hover {
+            background: var(--dark-border);
+            color: var(--text-primary);
+        }
+
+        .topic-panel-archive-select {
+            margin: 0.5rem 1rem;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            font-size: 0.875rem;
+        }
+
+        .topic-panel-archive-select label {
+            color: var(--text-primary);
+            font-weight: 500;
+            min-width: 80px;
+        }
+
+        .topic-panel-archive-select select {
+            flex: 1;
+            padding: 0.5rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .topic-panel-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.5rem;
+        }
+
+        .topic-panel-tree .tree-node {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .topic-panel-tree .tree-item {
+            display: flex;
+            align-items: center;
+            padding: 0.4rem 0.5rem;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            user-select: none;
+            font-size: 0.875rem;
+        }
+
+        .topic-panel-tree .tree-item:hover {
+            background: rgba(124, 58, 237, 0.1);
+        }
+
+        .topic-panel-tree .tree-item.has-data {
+            color: var(--monster-green);
+            font-weight: 500;
+        }
+
+        .topic-panel-tree .tree-item.draggable {
+            cursor: grab;
+        }
+
+        .topic-panel-tree .tree-item.draggable:active {
+            cursor: grabbing;
+        }
+
+        .topic-panel-tree .tree-toggle {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 0.4rem;
+            border: none;
+            background: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 2px;
+            transition: all 0.2s;
+            font-size: 0.75rem;
+        }
+
+        .topic-panel-tree .tree-toggle:hover {
+            background: var(--dark-border);
+            color: var(--text-primary);
+        }
+
+        .topic-panel-tree .tree-toggle.expanded {
+            transform: rotate(90deg);
+        }
+
+        .topic-panel-tree .tree-toggle:empty {
+            visibility: hidden;
+        }
+
+        .topic-panel-tree .tree-children {
+            margin-left: 1rem;
+            border-left: 1px solid var(--dark-border);
+            padding-left: 0.4rem;
+        }
+
+        .topic-panel-tree .tree-children.collapsed {
+            display: none;
+        }
+
+        .topic-panel-tree .tree-icon {
+            margin-right: 0.4rem;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .topic-panel-tree .tree-icon.folder {
+            color: var(--monster-purple);
+        }
+
+        .topic-panel-tree .tree-icon.topic {
+            color: var(--monster-green);
+        }
+
+        .topic-panel-data {
+            max-height: 200px;
+            padding: 0.5rem;
+            background: var(--dark-bg);
+            border-top: 1px solid var(--dark-border);
+            overflow-y: auto;
+        }
+
+        .topic-panel-data.empty {
+            display: none;
+        }
+
+        .topic-panel-data-content {
+            font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .topic-browser-toggle {
+            background: var(--monster-purple);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .topic-browser-toggle:hover {
+            background: var(--monster-dark);
+        }
+
+        .topic-browser-toggle.active {
+            background: var(--monster-dark);
+        }
+
+        /* Drop zone styling for inputs */
+        .drop-zone {
+            border: 2px dashed transparent;
+            transition: border-color 0.2s;
+        }
+
+        .drop-zone.drag-over {
+            border-color: var(--monster-green);
+            background: rgba(34, 197, 94, 0.1);
+        }
+
         /* Badges */
         .badge {
             display: inline-block;
@@ -285,6 +518,12 @@
                     <p class="page-subtitle" id="page-subtitle"></p>
                 </div>
                 <div class="page-header-actions" id="header-actions" style="display:none;">
+                    <button class="topic-browser-toggle" id="topic-browser-toggle" onclick="TopicBrowserSidePanel.toggle()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+                        </svg>
+                        Topics
+                    </button>
                     <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'">Back</button>
                     <button class="btn btn-primary btn-small" style="min-width:90px;" onclick="FlowEdit.save()">Save</button>
                     <button class="btn btn-danger btn-small" id="delete-button" style="display:none;" onclick="FlowEdit.deleteItem()">Delete</button>
@@ -371,8 +610,36 @@
         </div>
 
     </div>
-</div>
+    </div>
 
-<script src="/js/workflows-edit.js"></script>
+    <!-- Topic Browser Side Panel -->
+    <div class="topic-browser-side-panel" id="topic-browser-panel">
+        <div class="topic-panel-header">
+            <h3 class="topic-panel-title">Topic Browser</h3>
+            <button class="topic-panel-close" onclick="TopicBrowserSidePanel.close()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="topic-panel-archive-select">
+            <label for="topic-panel-archive-group">Archive:</label>
+            <select id="topic-panel-archive-group">
+                <option value="">Loading...</option>
+            </select>
+        </div>
+        <div class="topic-panel-tree">
+            <ul id="topic-panel-tree-root" class="tree-node">
+                <!-- Tree will be populated here -->
+            </ul>
+        </div>
+        <div class="topic-panel-data empty" id="topic-panel-data">
+            <div class="topic-panel-data-content" id="topic-panel-data-content"></div>
+        </div>
+    </div>
+
+    <script src="/js/workflows-edit.js"></script>
+    <script src="/js/topic-browser-side-panel.js"></script>
 </body>
 </html>

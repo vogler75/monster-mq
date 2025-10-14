@@ -143,33 +143,19 @@ const FlowEdit = (() => {
     qs('#page-subtitle').textContent = editing? state.name : 'Create a new flow instance';
     qs('#delete-button').style.display = editing ? 'inline-block' : 'none';
     
-    // Add enabled checkbox to header for flow instances
-    const headerActions = qs('#header-actions');
-    // Remove any existing enabled checkbox first
-    const existingCheckbox = headerActions.querySelector('.header-checkbox-wrapper');
-    if (existingCheckbox) {
-      existingCheckbox.remove();
-    }
-    
-    const enabledCheckboxHTML = `
-      <div class="header-checkbox-wrapper">
-        <label class="header-checkbox">
-          <input type="checkbox" id="fi-enabled" ${state.flowInstance.enabled?'checked':''}>
-          <span>Enabled</span>
-        </label>
-      </div>
-    `;
-    // Insert the checkbox before the first button
-    const firstButton = headerActions.querySelector('button');
-    if (firstButton) {
-      firstButton.insertAdjacentHTML('beforebegin', enabledCheckboxHTML);
-    }
-    
     const root = qs('#form-section');
     const classOptions = state.flowClasses.map(fc => `<option value="${escape(fc.name)}" ${fc.name===state.flowInstance.flowClassId?'selected':''}>${escape(fc.name)}</option>`).join('');
     root.innerHTML = `
       <div class="section-card">
-        <div class="section-header"><h2>Flow Instance Details</h2></div>
+        <div class="section-header">
+          <h2>Flow Instance Details</h2>
+          <div class="header-checkbox-wrapper">
+            <label class="header-checkbox">
+              <input type="checkbox" id="fi-enabled" ${state.flowInstance.enabled?'checked':''}>
+              <span>Enabled</span>
+            </label>
+          </div>
+        </div>
         <div class="section-content">
           <div class="form-grid">
             <div class="form-group"><label>Name</label><input id="fi-name" class="form-control" value="${escape(state.flowInstance.name||'')}"></div>
