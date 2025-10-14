@@ -17,43 +17,30 @@
       overflow: hidden;
     }
 
-    /* Top action bar */
-    .editor-top-bar {
-      background: var(--background-secondary);
-      border-bottom: 1px solid var(--border-color);
-      padding: 0.75rem 1.5rem;
+    /* Page Header with Actions */
+    .page-header-content {
       display: flex;
-      align-items: center;
+      justify-content: space-between;
+      align-items: flex-start;
       gap: 1rem;
-      height: 56px;
-      box-sizing: border-box;
+      flex-wrap: wrap;
+      padding-bottom: 1rem;
     }
 
-    .editor-top-bar .title-group {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
+    .page-header-info {
       flex: 1;
+      min-width: 200px;
     }
 
-    .editor-top-bar h1 {
-      margin: 0;
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .editor-top-bar .status {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      padding: 0.25rem 0.75rem;
-      background: var(--background-tertiary);
-      border-radius: 12px;
-    }
-
-    .editor-top-bar .actions {
+    .page-header-actions {
       display: flex;
-      gap: 0.5rem;
+      gap: 0.75rem;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .status {
+      display: none;
     }
 
     /* Main editor layout */
@@ -61,8 +48,40 @@
       display: grid;
       grid-template-columns: 280px 1fr 340px;
       gap: 0;
-      height: calc(100vh - 56px);
+      flex: 1;
       overflow: hidden;
+      width: 100%;
+    }
+
+    /* Ensure container and main-content use full space */
+    .main-content {
+      height: 100vh;
+      overflow: hidden;
+      padding: 0;
+    }
+
+    .container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      max-width: none;
+      margin: 0;
+    }
+
+    .page-header {
+      flex-shrink: 0;
+      padding: 1rem 1.5rem;
+      margin-bottom: 0;
+    }
+
+    .page-header .page-title {
+      margin: 0;
+    }
+
+    .page-header .page-subtitle {
+      margin: 0;
+      display: none;
     }
 
     /* Side panels */
@@ -633,36 +652,67 @@
   </style>
 </head>
 <body>
-  <!-- Top Action Bar -->
-  <div class="editor-top-bar">
-    <div class="title-group">
-      <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'" title="Back to Workflows">Back</button>
-      <div>
-        <h1 id="page-title">Visual Flow Editor</h1>
-        <p id="page-subtitle" style="font-size: 0.75rem; color: var(--text-secondary); margin: 0;"></p>
-      </div>
-      <span class="status" id="status-text">Ready</span>
+  <!-- Mobile Top Bar -->
+  <div class="top-bar">
+    <div class="sidebar-brand">
+      <img src="/assets/logo.png" alt="MonsterMQ Logo">
+      <span class="brand-name">MonsterMQ</span>
     </div>
-    <div class="actions">
-      <button class="btn btn-secondary btn-small" onclick="VisualFlow.cancel && VisualFlow.cancel()">Cancel</button>
-      <button class="btn btn-primary btn-small" onclick="VisualFlow.saveClass()">Save</button>
-      <button class="btn btn-danger btn-small" id="delete-class-btn" style="display:none;" onclick="VisualFlow.deleteClass()">Delete</button>
-    </div>
+    <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
   </div>
 
-  <!-- Sidebar (hidden in editor mode) -->
-  <aside class="sidebar" id="sidebar" style="display: none;">
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-brand">
         <img src="/assets/logo.png" alt="MonsterMQ Logo">
         <span class="brand-name">MonsterMQ</span>
       </div>
+      <button class="sidebar-toggle" onclick="toggleSidebar()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15,18 9,12 15,6"></polyline>
+        </svg>
+      </button>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar" id="user-avatar">U</div>
+        <div class="user-details">
+          <div class="user-name" id="user-name">User</div>
+          <div class="user-role">Administrator</div>
+        </div>
+      </div>
+    </div>
   </aside>
 
-  <!-- Main Editor -->
-  <div class="editor-layout">
+  <!-- Main Content -->
+  <div class="main-content" id="main-content">
+    <div class="container">
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="page-header-content">
+          <div class="page-header-info">
+            <h1 class="page-title" id="page-title">Visual Flow Editor</h1>
+            <p class="page-subtitle" id="page-subtitle"></p>
+            <span class="status" id="status-text">Ready</span>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'">Back</button>
+            <button class="btn btn-primary btn-small" onclick="VisualFlow.saveClass()">Save</button>
+            <button class="btn btn-danger btn-small" id="delete-class-btn" style="display:none;" onclick="VisualFlow.deleteClass()">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Editor -->
+      <div class="editor-layout">
     <!-- Left Panel: Palette & Class Info -->
     <div class="panel">
       <div class="panel-header">
@@ -823,7 +873,9 @@
         </div>
       </div>
     </div>
-  </div>
+    </div> <!-- end editor-layout -->
+    </div> <!-- end container -->
+  </div> <!-- end main-content -->
 
   <script src="/js/workflows-visual.js"></script>
 </body>
