@@ -2,6 +2,7 @@ class JDBCLoggersManager {
     constructor() {
         this.loggers = [];
         this.deleteLoggerName = null;
+        this.clusterNodes = [];
 
         this.init();
     }
@@ -13,6 +14,7 @@ class JDBCLoggersManager {
         }
 
         this.setupEventListeners();
+        this.loadClusterNodes();
         this.loadLoggers();
     }
 
@@ -36,10 +38,59 @@ class JDBCLoggersManager {
         // Modal close on outside click
         window.onclick = (event) => {
             const deleteModal = document.getElementById('confirm-delete-modal');
+            const addModal = document.getElementById('add-logger-modal');
             if (event.target === deleteModal) {
                 this.hideConfirmDeleteModal();
             }
+            if (event.target === addModal) {
+                this.hideAddLoggerModal();
+            }
         };
+    }
+
+    async loadClusterNodes() {
+        try {
+            const result = await window.graphqlClient.query(`
+                query GetClusterNodes {
+                    clusterNodes {
+                        nodeId
+                        isCurrent
+                    }
+                }
+            `);
+
+            this.clusterNodes = result.clusterNodes || [];
+            this.populateNodeSelect();
+        } catch (error) {
+            console.error('Error loading cluster nodes:', error);
+        }
+    }
+
+    populateNodeSelect() {
+        const nodeSelect = document.getElementById('logger-node');
+        if (!nodeSelect) return;
+
+        // Clear existing options except the first one
+        while (nodeSelect.options.length > 1) {
+            nodeSelect.remove(1);
+        }
+
+        // Add "*" option for automatic assignment
+        const autoOption = document.createElement('option');
+        autoOption.value = '*';
+        autoOption.textContent = '* (Automatic Assignment)';
+        nodeSelect.appendChild(autoOption);
+
+        // Add cluster nodes
+        this.clusterNodes.forEach(node => {
+            const option = document.createElement('option');
+            option.value = node.nodeId;
+            option.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
+            nodeSelect.appendChild(option);
+        });
+
+        // Select the automatic assignment by default
+        nodeSelect.value = '*';
     }
 
     async loadLoggers() {
@@ -261,8 +312,159 @@ class JDBCLoggersManager {
     }
 
     showAddLoggerModal() {
-        // TODO: Implement add logger modal
-        alert('Add logger functionality will be implemented in a future update.\n\nFor now, please use the GraphQL API or configuration files to add JDBC loggers.');
+        document.getElementById('add-logger-modal').style.display = 'flex';
+        // Reset form
+        document.getElementById('add-logger-form').reset();
+        // Set defaults
+        document.getElementById('logger-queue-type').value = 'MEMORY';
+        document.getElementById('logger-payload-format').value = 'JSON';
+        document.getElementById('logger-queue-size').value = '10000';
+        document.getElementById('logger-bulk-size').value = '1000';
+        document.getElementById('logger-bulk-timeout').value = '5000';
+        document.getElementById('logger-reconnect-delay').value = '5000';
+        document.getElementById('logger-disk-path').value = './buffer';
+        document.getElementById('logger-enabled').checked = true;
+        // Repopulate nodes
+        this.populateNodeSelect();
+    }
+
+    hideAddLoggerModal() {
+        document.getElementById('add-logger-modal').style.display = 'none';
+        document.getElementById('add-logger-form').reset();
+    }
+
+    async addLogger() {
+        try {
+            // Get form values
+            const name = document.getElementById('logger-name').value.trim();
+            const namespace = document.getElementById('logger-namespace').value.trim();
+            const nodeId = document.getElementById('logger-node').value;
+            const enabled = document.getElementById('logger-enabled').checked;
+
+            // Database configuration
+            const databaseType = document.getElementById('logger-db-type').value;
+            const jdbcUrl = document.getElementById('logger-jdbc-url').value.trim();
+            const username = document.getElementById('logger-username').value.trim();
+            const password = document.getElementById('logger-password').value;
+
+            // Topic and table configuration
+            const topicFiltersText = document.getElementById('logger-topic-filters').value.trim();
+            const topicFilters = topicFiltersText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            const tableName = document.getElementById('logger-table-name').value.trim() || null;
+            const tableNameJsonPath = document.getElementById('logger-table-jsonpath').value.trim() || null;
+            const payloadFormat = document.getElementById('logger-payload-format').value;
+
+            // JSON Schema
+            const jsonSchemaText = document.getElementById('logger-json-schema').value.trim();
+
+            // Queue configuration
+            const queueType = document.getElementById('logger-queue-type').value;
+            const queueSize = parseInt(document.getElementById('logger-queue-size').value);
+            const diskPath = document.getElementById('logger-disk-path').value.trim();
+
+            // Bulk configuration
+            const bulkSize = parseInt(document.getElementById('logger-bulk-size').value);
+            const bulkTimeoutMs = parseInt(document.getElementById('logger-bulk-timeout').value);
+            const reconnectDelayMs = parseInt(document.getElementById('logger-reconnect-delay').value);
+
+            // Validation
+            if (!name || !namespace || !nodeId) {
+                this.showError('Please fill in all required fields');
+                return;
+            }
+
+            if (!databaseType || !jdbcUrl || !username || !password) {
+                this.showError('Please fill in all database configuration fields');
+                return;
+            }
+
+            if (topicFilters.length === 0) {
+                this.showError('At least one topic filter is required');
+                return;
+            }
+
+            if (!tableName && !tableNameJsonPath) {
+                this.showError('Either fixed table name or table name JSONPath is required');
+                return;
+            }
+
+            if (tableName && tableNameJsonPath) {
+                this.showError('Cannot specify both fixed table name and JSONPath');
+                return;
+            }
+
+            if (!jsonSchemaText) {
+                this.showError('JSON Schema is required');
+                return;
+            }
+
+            // Parse and validate JSON Schema
+            let jsonSchema;
+            try {
+                jsonSchema = JSON.parse(jsonSchemaText);
+            } catch (e) {
+                this.showError('Invalid JSON Schema: ' + e.message);
+                return;
+            }
+
+            // Build input object
+            const input = {
+                name,
+                namespace,
+                nodeId,
+                enabled,
+                config: {
+                    databaseType,
+                    jdbcUrl,
+                    username,
+                    password,
+                    topicFilters,
+                    payloadFormat,
+                    jsonSchema,
+                    queueType,
+                    queueSize,
+                    diskPath,
+                    bulkSize,
+                    bulkTimeoutMs,
+                    reconnectDelayMs
+                }
+            };
+
+            // Add optional table name fields
+            if (tableName) {
+                input.config.tableName = tableName;
+            }
+            if (tableNameJsonPath) {
+                input.config.tableNameJsonPath = tableNameJsonPath;
+            }
+
+            console.log('Creating JDBC logger with input:', input);
+
+            const result = await window.graphqlClient.query(`
+                mutation CreateJDBCLogger($input: JDBCLoggerInput!) {
+                    jdbcLogger {
+                        create(input: $input) {
+                            success
+                            logger {
+                                name
+                                enabled
+                            }
+                        }
+                    }
+                }
+            `, { input });
+
+            if (result.jdbcLogger.create.success) {
+                console.log('Logger created successfully');
+                this.hideAddLoggerModal();
+                await this.loadLoggers(); // Reload to show new logger
+            } else {
+                this.showError('Failed to create logger');
+            }
+        } catch (error) {
+            console.error('Error creating logger:', error);
+            this.showError('Failed to create logger: ' + error.message);
+        }
     }
 
     showError(message) {
@@ -290,6 +492,8 @@ class JDBCLoggersManager {
 // Global functions for onclick handlers
 window.refreshLoggers = () => jdbcLoggersManager.loadLoggers();
 window.showAddLoggerModal = () => jdbcLoggersManager.showAddLoggerModal();
+window.hideAddLoggerModal = () => jdbcLoggersManager.hideAddLoggerModal();
+window.addLogger = () => jdbcLoggersManager.addLogger();
 window.hideConfirmDeleteModal = () => jdbcLoggersManager.hideConfirmDeleteModal();
 window.confirmDeleteLogger = () => jdbcLoggersManager.confirmDeleteLogger();
 

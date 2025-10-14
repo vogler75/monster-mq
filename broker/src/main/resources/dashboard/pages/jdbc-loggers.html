@@ -238,6 +238,55 @@
             gap: 1rem;
         }
 
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .form-control, input[type="text"], input[type="password"], input[type="number"], select, textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+        }
+
+        .form-control:focus, input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            accent-color: var(--monster-purple);
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            margin-bottom: 0;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
         /* Responsive design */
         @media (max-width: 768px) {
             .table-header {
@@ -404,6 +453,159 @@
                     <span class="error-icon">⚠️</span>
                     <span class="error-text"></span>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Logger Modal -->
+    <div id="add-logger-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3>Add JDBC Logger</h3>
+                <button class="modal-close" onclick="hideAddLoggerModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-logger-form">
+                    <div class="form-group">
+                        <label for="logger-name">Logger Name *</label>
+                        <input type="text" id="logger-name" required placeholder="e.g., questdb-logger-1">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Unique identifier for this logger</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-namespace">Namespace *</label>
+                        <input type="text" id="logger-namespace" required placeholder="e.g., jdbc/logger1">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">MQTT namespace for internal communication</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-node">Cluster Node *</label>
+                        <select id="logger-node" required>
+                            <option value="">Select Node...</option>
+                        </select>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Node where this logger will run (use "*" for automatic assignment)</small>
+                    </div>
+
+                    <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Database Configuration</h4>
+
+                    <div class="form-group">
+                        <label for="logger-db-type">Database Type *</label>
+                        <select id="logger-db-type" required>
+                            <option value="">Select Database Type...</option>
+                            <option value="QUESTDB">QuestDB (High-performance time-series)</option>
+                            <option value="POSTGRESQL">PostgreSQL</option>
+                            <option value="TIMESCALEDB">TimescaleDB (PostgreSQL extension)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-jdbc-url">JDBC URL *</label>
+                        <input type="text" id="logger-jdbc-url" required placeholder="e.g., jdbc:questdb:http://localhost:9000">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                            Examples: jdbc:questdb:http://host:9000, jdbc:postgresql://host:5432/dbname
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-username">Database Username *</label>
+                        <input type="text" id="logger-username" required placeholder="admin">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-password">Database Password *</label>
+                        <input type="password" id="logger-password" required placeholder="Enter password">
+                    </div>
+
+                    <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">MQTT & Table Configuration</h4>
+
+                    <div class="form-group">
+                        <label for="logger-topic-filters">Topic Filters *</label>
+                        <textarea id="logger-topic-filters" required placeholder="sensor/+/temperature&#10;device/#/data" rows="3" style="width: 100%; padding: 0.75rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; box-sizing: border-box;"></textarea>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">One topic filter per line. Supports MQTT wildcards (+, #)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-table-name">Fixed Table Name</label>
+                        <input type="text" id="logger-table-name" placeholder="e.g., sensor_data">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Leave empty to use JSONPath for dynamic table name</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-table-jsonpath">Table Name JSONPath</label>
+                        <input type="text" id="logger-table-jsonpath" placeholder="e.g., $.metadata.table">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">JSONPath to extract table name from payload (mutually exclusive with fixed table name)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-payload-format">Payload Format</label>
+                        <select id="logger-payload-format">
+                            <option value="JSON" selected>JSON</option>
+                            <option value="XML">XML</option>
+                        </select>
+                    </div>
+
+                    <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">JSON Schema *</h4>
+
+                    <div class="form-group">
+                        <label for="logger-json-schema">JSON Schema for Validation</label>
+                        <textarea id="logger-json-schema" required rows="10" style="width: 100%; padding: 0.75rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; box-sizing: border-box;" placeholder='{&#10;  "type": "object",&#10;  "properties": {&#10;    "timestamp": {"type": "string"},&#10;    "value": {"type": "number"},&#10;    "device_id": {"type": "string"}&#10;  },&#10;  "required": ["timestamp", "value"]&#10;}'></textarea>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">JSON Schema for validating messages and extracting database fields</small>
+                    </div>
+
+                    <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Buffering Configuration</h4>
+
+                    <div class="form-group">
+                        <label for="logger-queue-type">Queue Type</label>
+                        <select id="logger-queue-type">
+                            <option value="MEMORY" selected>Memory (faster, lost on restart)</option>
+                            <option value="DISK">Disk (persistent, survives restart)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-queue-size">Queue Size (messages)</label>
+                        <input type="number" id="logger-queue-size" value="10000" min="100" max="1000000">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Maximum messages to buffer</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-disk-path">Disk Queue Path</label>
+                        <input type="text" id="logger-disk-path" value="./buffer" placeholder="./buffer">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Path for disk-based queue files (only for DISK queue type)</small>
+                    </div>
+
+                    <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Bulk Write Configuration</h4>
+
+                    <div class="form-group">
+                        <label for="logger-bulk-size">Bulk Size (messages)</label>
+                        <input type="number" id="logger-bulk-size" value="1000" min="1" max="10000">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Write to database when this many messages are collected</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-bulk-timeout">Bulk Timeout (milliseconds)</label>
+                        <input type="number" id="logger-bulk-timeout" value="5000" min="100">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Maximum time to wait before writing (even if bulk size not reached)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logger-reconnect-delay">Reconnect Delay (milliseconds)</label>
+                        <input type="number" id="logger-reconnect-delay" value="5000" min="100">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Delay before retrying database connection on failure</small>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="logger-enabled" checked style="accent-color: var(--monster-purple);">
+                            <label for="logger-enabled">Enabled</label>
+                        </div>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Start the logger immediately after creation</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideAddLoggerModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" onclick="addLogger()">Create Logger</button>
             </div>
         </div>
     </div>
