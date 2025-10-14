@@ -590,6 +590,13 @@ document.addEventListener('DOMContentLoaded', () => {
     window.loggerDetailManager = new JDBCLoggerDetailManager();
 });
 
+// Global function for refresh button
+function refreshMetrics() {
+    if (window.loggerDetailManager) {
+        window.loggerDetailManager.refreshMetrics();
+    }
+}
+
 // Handle modal clicks (close when clicking outside)
 window.onclick = (event) => {
     const deleteModal = document.getElementById('delete-logger-modal');
