@@ -1,0 +1,68 @@
+Release v1.6.29
+Built from commit: 06c0678
+Date: 2025-10-14 22:57:59
+
+Changes since v1.6.28:
+---
+06c0678 Updated docker scripts
+51100b5 Revamp README with detailed features and architecture
+1c00cf3 Add refresh button to metrics section
+20480d0 Add user info section to sidebar footer
+c271188 Add resizable topic browser side panel and floating toggle
+8092f1d Add topic browser side panel to workflow editor
+b555a32 Remove TimescaleDB option from database type select
+7dfe89b Improve status badge layout in JDBC loggers dashboard
+ae23378 Update .gitignore
+61b10af Improve database reconnection logic and error handling
+83f0a8a Move enabled checkbox to header in flow instance editor
+cfed244 Remove QuestDB bulk insert test module
+1252679 Normalize JDBC parameter types to prevent type mixing
+c368d64 Add QuestDB bulk insert test program
+aa1a548 Set logger level in JDBCLoggerBase init block
+3f7cc15 Improve logging for PostgreSQLLogger and config
+898c775 Add auto table creation for JDBC loggers
+e4adaa8 Expand JDBCLoggerMetrics and improve metrics tracking
+7e4e0f5 Add detailed metrics to JDBC logger dashboard
+d24ae4f Improve logger diagnostics and queue handling
+4cf5863 Improve error handling in JDBC and PostgreSQL loggers
+f98f17c Add PostgreSQL logger and enhance JSON schema mapping
+42c6e41 Add JDBC logger detail page and refactor loggers UI
+e410a27 Add UI and logic for creating JDBC loggers
+0de9772 Add JDBC loggers management UI
+d88f900 Merge branch 'dev-flowengine' into dev-questdb
+bcaf5ef Redesign workflow tables and headers in dashboard
+0c2bf05 Add JDBC Logger feature with GraphQL integration
+98afaaa Update panel styling in workflows visual page
+e6c8c9f Redesign visual workflow editor layout and header
+8e4248a Update formatDateTime to remove fractional seconds
+6dc4295 Improve workflow help page layout and styling
+1efe64f Add workflow help system and documentation
+212d52b Redesign workflows editor UI and improve tables
+1e5cf9b Fix table action button layout in workflows.js
+24af505 Switch logger.info to logger.fine with lambda
+ef903ec Improve logging levels and messages in flow engine
+96c3550 Add script function caching to FlowScriptEngine
+e306b02 Improve script engine error reporting and payload parsing
+0d9a2a6 Add support for internal node input connections
+6bbd656 Enable node ID editing and validation in visual workflow
+bfe1cf2 Add shared script editor modal to dashboard
+8732ed7 Add script validation and popup editor to workflow UI
+3198cf4 Enhance flow visual editor and instance controls
+83340ff Improve canvas styling and add page subtitle
+3d08ef3 Improve textarea styling in workflows editor
+74f1ebb Enhance visual flow editor UI and sidebar scroll persistence
+b89146d Improve workflow editor UX and visual flow controls
+3ccd2d1 Add dashboardPath option for serving dashboard files
+1a10252 Refactor dashboard action buttons to use btn-icon class
+e36cd72 Refactor delete button styles for consistency
+45d6286 Refactor icon-only button styles for dashboard
+f73e987 Add workflow edit and visual editor pages
+1daef7a Remove broker deployment scripts
+f97be04 Merge GraphQL examples into main documentation
+05da63b Add keyboard shortcuts for mapping table rows
+3a0e036 Refactor mapping UI to table layout with duplicate actions
+c86c61e Enhance workflow node port UI and sidebar navigation
+8c30535 Add visual workflow editor and UI integration
+900b301 Remove flowClass and flowInstance queries from GraphQL
+ccf480c Update GraalVM dependencies and improve script execution
+79c3ae3 Add initial Flow Engine core and dependencies
