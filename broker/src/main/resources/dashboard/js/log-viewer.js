@@ -48,8 +48,10 @@ class LogViewer {
     getWebSocketUrl() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname;
-        const port = window.location.port || '4000';
-    return `${protocol}//${host}:${port}/graphqlws`;
+        const port = window.location.port;
+        // Only include port if explicitly set (not using standard 80/443)
+        const portPart = port ? `:${port}` : '';
+        return `${protocol}//${host}${portPart}/graphqlws`;
     }
     
     /**
