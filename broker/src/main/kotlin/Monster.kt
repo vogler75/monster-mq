@@ -41,6 +41,7 @@ import at.rocworks.devices.plc4x.Plc4xExtension
 import at.rocworks.devices.neo4j.Neo4jExtension
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.flowengine.FlowEngineExtension
+import at.rocworks.logging.MqttLogHandler
 import handlers.MetricsHandler
 import java.io.File
 import java.util.logging.Level
@@ -545,6 +546,32 @@ MORE INFO:
                     instance.archiveHandler = archiveHandler
                     archiveHandler.setMessageHandler(messageHandler)
                     instance.sessionHandler = sessionHandler
+                }
+
+                // Install MQTT Log Handler now that SessionHandler is available
+                val loggingConfig = configJson.getJsonObject("Logging", JsonObject())
+                val mqttLoggingEnabled = loggingConfig.getBoolean("MqttEnabled", false)
+                val mqttLogLevel = loggingConfig.getString("MqttLevel", "INFO")
+                
+                if (mqttLoggingEnabled) {
+                    try {
+                        logger.info("Installing MQTT log handler for system-wide log publishing (level: $mqttLogLevel)...")
+                        val mqttLogHandler = MqttLogHandler.install()
+                        
+                        // Set the log level for the MQTT handler
+                        try {
+                            val level = Level.parse(mqttLogLevel.uppercase())
+                            mqttLogHandler.level = level
+                            logger.info("MQTT log handler installed successfully with level: $level")
+                        } catch (e: IllegalArgumentException) {
+                            logger.warning("Invalid MQTT log level: $mqttLogLevel, using INFO")
+                            mqttLogHandler.level = Level.INFO
+                        }
+                    } catch (e: Exception) {
+                        logger.warning("Failed to install MQTT log handler: ${e.message}")
+                    }
+                } else {
+                    logger.info("MQTT log handler is disabled in configuration")
                 }
 
                 // OPC UA Extension

@@ -817,7 +817,11 @@ open class SessionHandler(
         val localNodeId = Monster.getClusterNodeId(vertx)
 
         val remoteNodes = targetNodes.filter { it != localNodeId }
-        logger.finest { "Publishing message [${message.topicName}] to nodes [${targetNodes.joinToString(",")}]" }
+        
+        // Skip logging for messages marked with noLog flag (prevents infinite recursion)
+        if (!message.noLog) {
+            logger.finest { "Publishing message [${message.topicName}] to nodes [${targetNodes.joinToString(",")}]" }
+        }
 
         // Send to local clients if this node has subscriptions
         if (targetNodes.contains(localNodeId)) {
@@ -836,7 +840,9 @@ open class SessionHandler(
         // Still save to archive and handle Sparkplug expansion
         messageHandler.saveMessage(message)
         sparkplugHandler?.metricExpansion(message) { spbMessage ->
-            logger.finest { "Publishing Sparkplug message [${spbMessage.topicName}] [${Utils.getCurrentFunctionName()}]" }
+            if (!message.noLog) {
+                logger.finest { "Publishing Sparkplug message [${spbMessage.topicName}] [${Utils.getCurrentFunctionName()}]" }
+            }
             publishMessage(spbMessage) // Recursive call for Sparkplug messages
         }
     }

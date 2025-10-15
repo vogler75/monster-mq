@@ -49,12 +49,11 @@ class MetricsHandler(
                 isRetain = true,
                 isDup = false,
                 isQueued = false,
-                clientId = SYSTEM_CLIENT_ID
+                clientId = SYSTEM_CLIENT_ID,
+                noLog = true  // Don't log $SYS metrics to prevent infinite recursion
             )
-            // Publish to cluster bus for distribution to other nodes
-            messageBus.publishMessageToBus(retainedMessage)
-            // Save locally as retained message so subscribers can receive it
-            messageHandler.saveMessage(retainedMessage)
+            // Publish via SessionHandler for proper targeted distribution to subscribers only
+            sessionHandler.publishMessage(retainedMessage)
             logger.finest { "Published metrics to $topic" }
         } catch (e: Exception) {
             logger.warning("Error publishing metrics to $topic: ${e.message}")

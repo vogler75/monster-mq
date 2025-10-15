@@ -11,6 +11,7 @@ A high-performance, enterprise-grade MQTT broker with advanced data processing c
 - **WebSocket Support** - MQTT over WebSocket for web applications
 - **Clustering** - Multi-node deployment with Hazelcast clustering and automatic failover
 - **Retained Messages** - Persistent message storage for new subscribers
+- **MQTT Logging** - Publish all system logs to MQTT topics in real-time ([details](doc/mqtt-logging.md))
 
 ### Data Integration & Storage
 
@@ -133,10 +134,19 @@ TCPS: 8883
 WS: 9000
 WSS: 9001
 DefaultStoreType: POSTGRES
+
+# PostgreSQL configuration
 Postgres:
   Url: jdbc:postgresql://localhost:5432/monster
   User: system
   Pass: manager
+
+# Enable MQTT logging
+Logging:
+  MqttEnabled: true    # Publish logs to MQTT topics
+  MqttLevel: INFO      # Minimum log level to publish
+
+# Service endpoints
 GraphQL:
   Enabled: true
   Port: 4000
@@ -297,6 +307,7 @@ For detailed documentation, see the [`doc/`](doc/) directory:
 - **[MCP Server](doc/mcp.md)** - AI model integration and analytics
 - **[Workflows (Flow Engine)](doc/workflows.md)** - Visual flow-based programming and data processing
 - **[Kafka Integration](doc/kafka.md)** - Stream processing and event sourcing
+- **[MQTT Logging](doc/mqtt-logging.md)** - Real-time system logging via MQTT topics
 - **[Security](doc/security.md)** - TLS, certificates, and best practices
 - **[Development](doc/development.md)** - Building, testing, and contributing
 

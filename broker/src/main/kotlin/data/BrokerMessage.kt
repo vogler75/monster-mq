@@ -26,6 +26,7 @@ class BrokerMessage(
     val clientId: String,
     val time: Instant = Instant.now(),
     val sender: String? = null,  // Optional sender identification for loop prevention
+    val noLog: Boolean = false,  // If true, suppress logging for this message (prevents recursion for $SYS/logs)
     // TODO: Properties for MQTT 5.0
 ): Serializable {
     constructor(clientId: String, message: MqttPublishMessage): this(
@@ -64,8 +65,8 @@ class BrokerMessage(
         clientId
     )
 
-    fun cloneWithNewQoS(qosLevel: Int): BrokerMessage = BrokerMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender)
-    fun cloneWithNewMessageId(messageId: Int): BrokerMessage = BrokerMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender)
+    fun cloneWithNewQoS(qosLevel: Int): BrokerMessage = BrokerMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender, noLog)
+    fun cloneWithNewMessageId(messageId: Int): BrokerMessage = BrokerMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender, noLog)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 

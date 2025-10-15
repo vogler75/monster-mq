@@ -91,6 +91,23 @@
       "default": true,
       "description": "Allow clients to subscribe to '#' (root wildcard). If false, SUBSCRIBE acknowledgements for '#' return failure (0x80) and the client remains connected."
     },
+    "Logging": {
+      "type": "object",
+      "description": "System logging configuration",
+      "properties": {
+        "MqttEnabled": {
+          "type": "boolean",
+          "description": "Enable MQTT log handler to publish all Java logs to $SYS/logs/<node>/<level> topics",
+          "default": false
+        },
+        "MqttLevel": {
+          "type": "string",
+          "description": "Minimum log level for MQTT publishing (ALL, FINEST, FINER, FINE, INFO, WARNING, SEVERE)",
+          "default": "INFO",
+          "enum": ["ALL", "FINEST", "FINER", "FINE", "INFO", "WARNING", "SEVERE"]
+        }
+      }
+    },
     "ConfigStoreType": {
       "type": "string",
       "enum": [

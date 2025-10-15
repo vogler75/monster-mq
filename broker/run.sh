@@ -1,13 +1,35 @@
 #!/bin/bash
 
-# Check for -build option
+# MonsterMQ Run Script
+# Usage: ./run.sh [OPTIONS] [MONSTER_OPTIONS]
+#
+# Script Options:
+#   -build    Build the project with Maven before starting
+#   -dev      Run in development mode (serves dashboard from filesystem)
+#
+# Monster Options:
+#   All remaining arguments are passed to MonsterMQ
+#   See: java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -help
+#
+# Examples:
+#   ./run.sh                           # Start with default config
+#   ./run.sh -build                    # Build first, then start  
+#   ./run.sh -dev                      # Development mode
+#   ./run.sh -dev -config test.yaml    # Development mode with custom config
+#   ./run.sh -build -dev -cluster      # Build, dev mode, cluster enabled
+
+# Check for options
 BUILD_FIRST=false
+DEV_MODE=false
 REMAINING_ARGS=()
 
 for arg in "$@"; do
     case $arg in
         -build)
             BUILD_FIRST=true
+            ;;
+        -dev)
+            DEV_MODE=true
             ;;
         *)
             REMAINING_ARGS+=("$arg")
@@ -73,5 +95,12 @@ else
     JAVA_OPTS=""
 fi
 
+# Prepare development options
+DEV_OPTS=""
+if [ "$DEV_MODE" = true ]; then
+    echo "Running in development mode - serving dashboard from filesystem"
+    DEV_OPTS="-dashboardPath src/main/resources/dashboard"
+fi
+
 # Start MonsterMQ
-java $JAVA_OPTS -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt "${REMAINING_ARGS[@]}"
+java $JAVA_OPTS -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt $DEV_OPTS "${REMAINING_ARGS[@]}"
