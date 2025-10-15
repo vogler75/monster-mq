@@ -19,7 +19,8 @@ class MessageArchiveCrateDB (
     private val name: String,
     private val url: String,
     private val username: String,
-    private val password: String
+    private val password: String,
+    private val payloadFormat: at.rocworks.stores.PayloadFormat = at.rocworks.stores.PayloadFormat.DEFAULT
 ): AbstractVerticle(), IMessageArchiveExtended {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
@@ -81,8 +82,24 @@ class MessageArchiveCrateDB (
                 messages.forEach { message ->
                     preparedStatement.setString(1, message.topicName)
                     preparedStatement.setTimestamp(2, Timestamp.from(message.time))
-                    preparedStatement.setString(3, message.getPayloadAsBase64())
-                    preparedStatement.setString(4, message.getPayloadAsJson())
+
+                    // Only try JSON conversion if payloadFormat is JSON
+                    if (payloadFormat == at.rocworks.stores.PayloadFormat.JSON) {
+                        val payloadJson = message.getPayloadAsJson()
+                        if (payloadJson != null) {
+                            preparedStatement.setNull(3, Types.VARCHAR)
+                            preparedStatement.setString(4, payloadJson)
+                        } else {
+                            // JSON format requested but payload is not valid JSON - store as base64
+                            preparedStatement.setString(3, message.getPayloadAsBase64())
+                            preparedStatement.setNull(4, Types.VARCHAR)
+                        }
+                    } else {
+                        // DEFAULT format - store as base64 only
+                        preparedStatement.setString(3, message.getPayloadAsBase64())
+                        preparedStatement.setNull(4, Types.VARCHAR)
+                    }
+
                     preparedStatement.setInt(5, message.qosLevel)
                     preparedStatement.setBoolean(6, message.isRetain)
                     preparedStatement.setString(7, message.clientId)
@@ -158,11 +175,20 @@ class MessageArchiveCrateDB (
                         val messageObj = JsonObject()
                             .put("topic", resultSet.getString("topic") ?: topic)
                             .put("timestamp", resultSet.getTimestamp("time").toInstant().toEpochMilli())
-                            .put("payload_base64", resultSet.getString("payload_b64") ?: "")
-                            .put("payload_json", resultSet.getString("payload_obj"))
                             .put("qos", resultSet.getInt("qos"))
                             .put("client_id", resultSet.getString("client_id") ?: "")
-                            
+
+                        // Add payload - prefer JSON if available, otherwise use base64
+                        val payloadJson = resultSet.getString("payload_obj")
+                        if (payloadJson != null) {
+                            messageObj.put("payload_json", payloadJson)
+                        } else {
+                            val payloadB64 = resultSet.getString("payload_b64")
+                            if (payloadB64 != null) {
+                                messageObj.put("payload_base64", payloadB64)
+                            }
+                        }
+
                         messages.add(messageObj)
                     }
                     val processingDuration = System.currentTimeMillis() - processingStart

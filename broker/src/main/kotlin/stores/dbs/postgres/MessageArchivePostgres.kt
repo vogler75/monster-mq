@@ -22,7 +22,8 @@ class MessageArchivePostgres (
     private val name: String,
     private val url: String,
     private val username: String,
-    private val password: String
+    private val password: String,
+    private val payloadFormat: at.rocworks.stores.PayloadFormat = at.rocworks.stores.PayloadFormat.DEFAULT
 ): AbstractVerticle(), IMessageArchiveExtended {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
@@ -102,8 +103,24 @@ class MessageArchivePostgres (
                 messages.forEach { message ->
                     preparedStatement.setString(1, message.topicName)
                     preparedStatement.setTimestamp(2, Timestamp.from(message.time))
-                    preparedStatement.setBytes(3, message.payload)
-                    preparedStatement.setString(4, message.getPayloadAsJson())
+
+                    // Only try JSON conversion if payloadFormat is JSON
+                    if (payloadFormat == at.rocworks.stores.PayloadFormat.JSON) {
+                        val payloadJson = message.getPayloadAsJson()
+                        if (payloadJson != null) {
+                            preparedStatement.setNull(3, Types.BINARY)
+                            preparedStatement.setString(4, payloadJson)
+                        } else {
+                            // JSON format requested but payload is not valid JSON - store as binary
+                            preparedStatement.setBytes(3, message.payload)
+                            preparedStatement.setNull(4, Types.VARCHAR)
+                        }
+                    } else {
+                        // DEFAULT format - store as binary only
+                        preparedStatement.setBytes(3, message.payload)
+                        preparedStatement.setNull(4, Types.VARCHAR)
+                    }
+
                     preparedStatement.setInt(5, message.qosLevel)
                     preparedStatement.setBoolean(6, message.isRetain)
                     preparedStatement.setString(7, message.clientId)
@@ -172,10 +189,20 @@ class MessageArchivePostgres (
                         val messageObj = JsonObject()
                             .put("topic", resultSet.getString("topic") ?: topic)
                             .put("timestamp", resultSet.getTimestamp("time").toInstant().toEpochMilli())
-                            .put("payload_base64", java.util.Base64.getEncoder().encodeToString(resultSet.getBytes("payload_blob") ?: ByteArray(0)))
                             .put("qos", resultSet.getInt("qos"))
                             .put("client_id", resultSet.getString("client_id") ?: "")
-                            
+
+                        // Add payload - prefer JSON if available, otherwise use base64 blob
+                        val payloadJson = resultSet.getString("payload_json")
+                        if (payloadJson != null) {
+                            messageObj.put("payload_json", payloadJson)
+                        } else {
+                            val payloadBlob = resultSet.getBytes("payload_blob")
+                            if (payloadBlob != null) {
+                                messageObj.put("payload_base64", java.util.Base64.getEncoder().encodeToString(payloadBlob))
+                            }
+                        }
+
                         messages.add(messageObj)
                     }
                     val processingDuration = System.currentTimeMillis() - processingStart

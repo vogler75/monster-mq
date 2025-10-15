@@ -251,7 +251,8 @@ class ArchiveGroup(
                     archiveName,
                     postgres.getString("Url"),
                     postgres.getString("User"),
-                    postgres.getString("Pass")
+                    postgres.getString("Pass"),
+                    payloadFormat
                 )
                 archiveStore = archive
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
@@ -266,7 +267,8 @@ class ArchiveGroup(
                     archiveName,
                     cratedb.getString("Url"),
                     cratedb.getString("User"),
-                    cratedb.getString("Pass")
+                    cratedb.getString("Pass"),
+                    payloadFormat
                 )
                 archiveStore = archive
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
@@ -306,7 +308,7 @@ class ArchiveGroup(
                 val kafka = databaseConfig.getJsonObject("Kafka")
                 val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
                 val kafkaConfig = kafka?.getJsonObject("Config")
-                val archive = MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig)
+                val archive = MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig, payloadFormat)
                 archiveStore = archive
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(archive, options).onComplete { result ->
@@ -320,7 +322,8 @@ class ArchiveGroup(
                 val dbPath = "${sqlite.getString("Path", ".")}/monstermq-${archiveGroupName}-archive.db"
                 val archive = MessageArchiveSQLite(
                     archiveName,
-                    dbPath
+                    dbPath,
+                    payloadFormat
                 )
                 archiveStore = archive
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
@@ -681,7 +684,8 @@ class ArchiveGroup(
                         archiveName,
                         postgres.getString("Url"),
                         postgres.getString("User"),
-                        postgres.getString("Pass")
+                        postgres.getString("Pass"),
+                        payloadFormat
                     )
                 }
                 MessageArchiveType.CRATEDB -> {
@@ -690,7 +694,8 @@ class ArchiveGroup(
                         archiveName,
                         cratedb.getString("Url"),
                         cratedb.getString("User"),
-                        cratedb.getString("Pass")
+                        cratedb.getString("Pass"),
+                        payloadFormat
                     )
                 }
                 MessageArchiveType.MONGODB -> {
@@ -713,7 +718,8 @@ class ArchiveGroup(
                     val dbPath = "${sqlite.getString("Path", ".")}/monstermq-${archiveGroupName}-archive.db"
                     MessageArchiveSQLite(
                         archiveName,
-                        dbPath
+                        dbPath,
+                        payloadFormat
                     )
                 }
                 else -> {
@@ -767,7 +773,8 @@ class ArchiveGroup(
                         archiveName,
                         postgres.getString("Url"),
                         postgres.getString("User"),
-                        postgres.getString("Pass")
+                        postgres.getString("Pass"),
+                        payloadFormat
                     )
                     archiveStore = archive
                     val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
@@ -797,7 +804,8 @@ class ArchiveGroup(
                         archiveName,
                         cratedb.getString("Url"),
                         cratedb.getString("User"),
-                        cratedb.getString("Pass")
+                        cratedb.getString("Pass"),
+                        payloadFormat
                     )
                     archiveStore = archive
                     val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
@@ -854,7 +862,7 @@ class ArchiveGroup(
                     val kafka = databaseConfig.getJsonObject("Kafka")
                     val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
                     val kafkaConfig = kafka?.getJsonObject("Config")
-                    val archive = MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig)
+                    val archive = MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig, payloadFormat)
                     archiveStore = archive
                     val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                     vertx.deployVerticle(archive, options).onComplete { result ->
@@ -883,7 +891,8 @@ class ArchiveGroup(
                     val dbPath = "${sqlite.getString("Path", ".")}/monstermq-${archiveGroupName}-archive.db"
                     val archive = MessageArchiveSQLite(
                         archiveName,
-                        dbPath
+                        dbPath,
+                        payloadFormat
                     )
                     archiveStore = archive
                     val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)

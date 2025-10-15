@@ -69,7 +69,7 @@ class BrokerMessage(
 
     fun getPayloadAsJson(): String? {
         return try {
-            val jsonString = String(payload)
+            val jsonString = String(payload, Charsets.UTF_8)
             Json.decodeValue(jsonString) // Check if it is a valid JSON
             jsonString
         } catch (e: Exception) {
@@ -79,7 +79,8 @@ class BrokerMessage(
 
     fun getPayloadAsJsonValue(): Any? {
         return try {
-            Json.decodeValue(String(payload))
+            val jsonString = String(payload, Charsets.UTF_8)
+            Json.decodeValue(jsonString)
         } catch (e: Exception) {
             null
         }

@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
  */
 class MessageArchiveSQLite(
     private val name: String,
-    private val dbPath: String
+    private val dbPath: String,
+    private val payloadFormat: at.rocworks.stores.PayloadFormat = at.rocworks.stores.PayloadFormat.DEFAULT
 ): AbstractVerticle(), IMessageArchiveExtended {
     private val logger = Utils.getLogger(this::class.java, name)
     private lateinit var sqlClient: SQLiteClient
@@ -79,9 +80,25 @@ class MessageArchiveSQLite(
             val params = JsonArray()
                 .add(message.topicName)
                 .add(message.time.toString()) // ISO-8601 format
-                .add(message.payload)
-                .add(message.getPayloadAsJson())
-                .add(message.qosLevel)
+
+            // Only try JSON conversion if payloadFormat is JSON
+            if (payloadFormat == at.rocworks.stores.PayloadFormat.JSON) {
+                val payloadJson = message.getPayloadAsJson()
+                if (payloadJson != null) {
+                    params.add(null)  // payload_blob
+                    params.add(payloadJson)  // payload_json
+                } else {
+                    // JSON format requested but payload is not valid JSON - store as binary
+                    params.add(message.payload)  // payload_blob
+                    params.add(null)  // payload_json
+                }
+            } else {
+                // DEFAULT format - store as binary only
+                params.add(message.payload)  // payload_blob
+                params.add(null)  // payload_json
+            }
+
+            params.add(message.qosLevel)
                 .add(message.isRetain)
                 .add(message.clientId)
                 .add(message.messageUuid)
@@ -172,11 +189,20 @@ class MessageArchiveSQLite(
                         val messageObj = JsonObject()
                             .put("topic", resultSet.getString("topic") ?: topic)
                             .put("timestamp", timestamp)
-                            .put("payload_base64", Base64.getEncoder().encodeToString(resultSet.getBytes("payload_blob") ?: ByteArray(0)))
-                            .put("payload_json", resultSet.getString("payload_json"))
                             .put("qos", resultSet.getInt("qos"))
                             .put("client_id", resultSet.getString("client_id") ?: "")
-                            
+
+                        // Add payload - prefer JSON if available, otherwise use base64 blob
+                        val payloadJson = resultSet.getString("payload_json")
+                        if (payloadJson != null) {
+                            messageObj.put("payload_json", payloadJson)
+                        } else {
+                            val payloadBlob = resultSet.getBytes("payload_blob")
+                            if (payloadBlob != null) {
+                                messageObj.put("payload_base64", Base64.getEncoder().encodeToString(payloadBlob))
+                            }
+                        }
+
                         messages.add(messageObj)
                     }
                     val processingDuration = System.currentTimeMillis() - processingStart
