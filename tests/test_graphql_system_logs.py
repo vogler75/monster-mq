@@ -293,8 +293,8 @@ Examples:
     
     parser.add_argument(
         "--url",
-        default="ws://localhost:4000/graphqlws",
-        help="GraphQL WebSocket URL (default: ws://localhost:4000/graphqlws)"
+    default="ws://localhost:4000/graphqlws",
+    help="GraphQL WebSocket URL (default: ws://localhost:4000/graphqlws)"
     )
     parser.add_argument(
         "--node",

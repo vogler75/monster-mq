@@ -158,7 +158,24 @@ class GraphQLServer(
             }
             // Continue with response
         }
-        router.route("${path}ws").handler(wsHandler)
+        // Add a preliminary handler to log incoming WebSocket handshake attempts
+        router.route("${path}ws").handler { ctx ->
+            try {
+                val req = ctx.request()
+                logger.info("WS HANDSHAKE incoming: remote=${req.remoteAddress()} path=${req.path()} headers=${req.headers().entries().joinToString { it.key + '=' + it.value }}")
+            } catch (e: Exception) {
+                logger.severe("WS HANDSHAKE logging failed: ${e.message}")
+            }
+            ctx.next()
+        }.handler(wsHandler).failureHandler { failureCtx ->
+            val t = failureCtx.failure()
+            if (t != null) {
+                logger.severe("WS HANDSHAKE failure: ${t.message}")
+            } else {
+                logger.severe("WS HANDSHAKE failure with status ${failureCtx.statusCode()}")
+            }
+            failureCtx.next()
+        }
 
         // Health check endpoint
         router.get("/health").handler { ctx ->

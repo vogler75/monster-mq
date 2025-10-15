@@ -49,7 +49,7 @@ class LogViewer {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname;
         const port = window.location.port || '4000';
-        return `${protocol}//${host}:${port}/graphqlws`;
+    return `${protocol}//${host}:${port}/graphqlws`;
     }
     
     /**
@@ -690,11 +690,27 @@ class LogViewer {
      * Subscribe to systemLogs
      */
     subscribe() {
-        const filters = this.getCurrentFilters();
+        const uiFilters = this.getCurrentFilters();
         
         const query = `
-            subscription SystemLogs($filters: SystemLogFilters) {
-                systemLogs(filters: $filters) {
+            subscription SystemLogs(
+                $node: String,
+                $level: String,
+                $logger: String,
+                $thread: Long,
+                $sourceClass: String,
+                $sourceMethod: String,
+                $message: String
+            ) {
+                systemLogs(
+                    node: $node,
+                    level: $level,
+                    logger: $logger,
+                    thread: $thread,
+                    sourceClass: $sourceClass,
+                    sourceMethod: $sourceMethod,
+                    message: $message
+                ) {
                     timestamp
                     level
                     logger
@@ -704,28 +720,35 @@ class LogViewer {
                     sourceClass
                     sourceMethod
                     parameters
-                    exception {
-                        class
-                        message
-                        stackTrace
-                    }
+                    exception { class message stackTrace }
                 }
             }
         `;
         
-        // Use 'subscribe' type for graphql-transport-ws protocol
+        const variables = {};
+        if (uiFilters.node) variables.node = uiFilters.node;
+        if (uiFilters.loggerRegex) variables.logger = uiFilters.loggerRegex;
+        if (uiFilters.messageRegex) variables.message = uiFilters.messageRegex;
+        if (uiFilters.sourceClassRegex) variables.sourceClass = uiFilters.sourceClassRegex;
+        if (uiFilters.sourceMethodRegex) variables.sourceMethod = uiFilters.sourceMethodRegex;
+        if (uiFilters.thread) variables.thread = uiFilters.thread; // reserved if added later
+        if (uiFilters.level) {
+            if (Array.isArray(uiFilters.level) && uiFilters.level.length === 1) {
+                variables.level = uiFilters.level[0];
+            } else if (!Array.isArray(uiFilters.level)) {
+                variables.level = uiFilters.level;
+            }
+        }
+        
         this.send({
             id: this.subscriptionId,
             type: 'subscribe',
             payload: {
-                query: query,
-                variables: {
-                    filters: Object.keys(filters).length > 0 ? filters : null
-                }
+                query,
+                variables
             }
         });
-        
-        console.log('Log Viewer: Subscribed with filters:', filters);
+        console.log('Log Viewer: Subscribed with variables:', variables);
     }
     
     /**

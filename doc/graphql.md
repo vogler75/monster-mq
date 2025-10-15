@@ -210,7 +210,7 @@ ws.close();
 Unless overridden in configuration:
 
 - HTTP GraphQL endpoint: `http://localhost:4000/graphql` (example port)
-- WebSocket endpoint (subscriptions): `ws://localhost:4000/graphqlws` (path suffix `ws` is appended internally)
+- WebSocket endpoint (subscriptions): `ws://localhost:4000/graphqlws` (server appends `ws` to GraphQL path)
 - Health endpoint: `http://localhost:4000/health`
 
 Adjust host/port/path according to your `GraphQL` configuration block.
