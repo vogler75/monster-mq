@@ -1,0 +1,8 @@
+Release v1.6.32
+Built from commit: 421b59b
+Date: 2025-10-16 00:31:11
+
+Changes since v1.6.31:
+---
+421b59b Add check for empty table before hypertable conversion
+dcbba22 Add payloadFormat support to message archives
