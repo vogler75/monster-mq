@@ -5,8 +5,6 @@ import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.Future
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.json.Json
-import io.vertx.core.json.JsonArray
-import io.vertx.core.json.JsonObject
 import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.MqttWill
 import io.vertx.mqtt.messages.MqttPublishMessage
@@ -24,9 +22,8 @@ class BrokerMessage(
     val isDup: Boolean,
     val isQueued: Boolean,
     val clientId: String,
-    val time: Instant = Instant.now(),
-    val sender: String? = null,  // Optional sender identification for loop prevention
-    val noLog: Boolean = false,  // If true, suppress logging for this message (prevents recursion for $SYS/logs)
+    val senderId: String? = null,  // Optional sender identification for loop prevention
+    val time: Instant = Instant.now()
     // TODO: Properties for MQTT 5.0
 ): Serializable {
     constructor(clientId: String, message: MqttPublishMessage): this(
@@ -65,8 +62,8 @@ class BrokerMessage(
         clientId
     )
 
-    fun cloneWithNewQoS(qosLevel: Int): BrokerMessage = BrokerMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender, noLog)
-    fun cloneWithNewMessageId(messageId: Int): BrokerMessage = BrokerMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, time, sender, noLog)
+    fun cloneWithNewQoS(qosLevel: Int): BrokerMessage = BrokerMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, senderId, time)
+    fun cloneWithNewMessageId(messageId: Int): BrokerMessage = BrokerMessage(messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, senderId, time)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 

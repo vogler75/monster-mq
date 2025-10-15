@@ -49,8 +49,7 @@ class MetricsHandler(
                 isRetain = false,  // Metrics are not retained
                 isDup = false,
                 isQueued = false,
-                clientId = SYSTEM_CLIENT_ID,
-                noLog = true  // Don't log $SYS metrics to prevent infinite recursion
+                clientId = SYSTEM_CLIENT_ID
             )
             // Publish via SessionHandler for proper targeted distribution to subscribers only
             sessionHandler.publishMessage(message)

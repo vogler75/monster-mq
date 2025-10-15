@@ -81,7 +81,7 @@ class BrokerMessageCodec : MessageCodec<BrokerMessage, BrokerMessage> {
             isDup,
             isQueued,
             clientId,
-            Instant.ofEpochMilli(time)
+            time = Instant.ofEpochMilli(time)
         )
     }
 

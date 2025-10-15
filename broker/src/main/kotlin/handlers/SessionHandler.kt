@@ -284,10 +284,7 @@ open class SessionHandler(
                             .put("inFlightMessagesRcv", stats.getInteger("inFlightMessagesRcv", 0))
                             .put("inFlightMessagesSnd", stats.getInteger("inFlightMessagesSnd", 0))
                     }
-                    sessionMetricsArray.add(clientMetricsJson)
-                    statsPromise.complete()
-                }.onFailure { _ ->
-                    // Client not available or not an MQTT client, add metrics without connection stats
+                    // Add metrics regardless of success or failure
                     sessionMetricsArray.add(clientMetricsJson)
                     statsPromise.complete()
                 }
@@ -818,10 +815,7 @@ open class SessionHandler(
 
         val remoteNodes = targetNodes.filter { it != localNodeId }
         
-        // Skip logging for messages marked with noLog flag (prevents infinite recursion)
-        if (!message.noLog) {
-            logger.finest { "Publishing message [${message.topicName}] to nodes [${targetNodes.joinToString(",")}]" }
-        }
+        logger.finest { "Publishing message [${message.topicName}] to nodes [${targetNodes.joinToString(",")}]" }
 
         // Send to local clients if this node has subscriptions
         if (targetNodes.contains(localNodeId)) {
@@ -840,11 +834,36 @@ open class SessionHandler(
         // Still save to archive and handle Sparkplug expansion
         messageHandler.saveMessage(message)
         sparkplugHandler?.metricExpansion(message) { spbMessage ->
-            if (!message.noLog) {
-                logger.finest { "Publishing Sparkplug message [${spbMessage.topicName}] [${Utils.getCurrentFunctionName()}]" }
-            }
+            logger.finest { "Publishing Sparkplug message [${spbMessage.topicName}] [${Utils.getCurrentFunctionName()}]" }
             publishMessage(spbMessage) // Recursive call for Sparkplug messages
         }
+    }
+
+    /**
+     * Publish a message internally (for OPC UA Server writes back to MQTT)
+     * @param clientId Internal client identifier (for sender tracking)
+     * @param message The MQTT message to publish
+     */
+    fun publishInternal(clientId: String, message: BrokerMessage) {
+        logger.finest("Internal publish: Client '$clientId' publishing to '${message.topicName}'")
+
+        // Create message with sender identification for loop prevention
+        val messageWithSender = BrokerMessage(
+            messageUuid = message.messageUuid,
+            messageId = message.messageId,
+            topicName = message.topicName,
+            payload = message.payload,
+            qosLevel = message.qosLevel,
+            isRetain = message.isRetain,
+            isDup = message.isDup,
+            isQueued = message.isQueued,
+            clientId = clientId,
+            time = message.time,
+            senderId = clientId  // Mark sender for loop prevention
+        )
+
+        // Route through normal message handling
+        publishMessage(messageWithSender)
     }
 
     private fun messageWithQos(message: BrokerMessage, qos: Int): BrokerMessage {
@@ -995,33 +1014,6 @@ open class SessionHandler(
     }
 
     /**
-     * Publish a message internally (for OPC UA Server writes back to MQTT)
-     * @param clientId Internal client identifier (for sender tracking)
-     * @param message The MQTT message to publish
-     */
-    fun publishInternal(clientId: String, message: BrokerMessage) {
-        logger.finest("Internal publish: Client '$clientId' publishing to '${message.topicName}'")
-
-        // Create message with sender identification for loop prevention
-        val messageWithSender = BrokerMessage(
-            messageUuid = message.messageUuid,
-            messageId = message.messageId,
-            topicName = message.topicName,
-            payload = message.payload,
-            qosLevel = message.qosLevel,
-            isRetain = message.isRetain,
-            isDup = message.isDup,
-            isQueued = message.isQueued,
-            clientId = clientId,
-            time = message.time,
-            sender = clientId  // Mark sender for loop prevention
-        )
-
-        // Route through normal message handling
-        publishMessage(messageWithSender)
-    }
-
-    /**
      * Check if message should be delivered to internal clients
      */
     private fun deliverToInternalClients(message: BrokerMessage) {
@@ -1030,7 +1022,7 @@ open class SessionHandler(
                 if (matchesTopicFilter(message.topicName, topicFilter)) {
                     try {
                         // Skip delivery if message came from this internal client (loop prevention)
-                        if (message.sender != clientId) {
+                        if (message.clientId != clientId) {
                             handler(message)
                         }
                     } catch (e: Exception) {

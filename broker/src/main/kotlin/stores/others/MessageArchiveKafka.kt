@@ -5,7 +5,6 @@ import at.rocworks.bus.KafkaConfigBuilder
 import at.rocworks.data.BrokerMessage
 import at.rocworks.data.BrokerMessageCodec
 import at.rocworks.data.PurgeResult
-import at.rocworks.stores.PayloadFormat
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
@@ -103,7 +102,7 @@ class MessageArchiveKafka(
                         .put("isQueued", message.isQueued)
                         .put("clientId", message.clientId)
                         .put("time", message.time.toString())
-                        .put("sender", message.sender)
+                        .put("sender", message.senderId)
 
                     // Handle payload - check if it's valid JSON
                     val payloadJsonValue = message.getPayloadAsJsonValue()

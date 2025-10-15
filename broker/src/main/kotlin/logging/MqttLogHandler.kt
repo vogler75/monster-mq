@@ -145,8 +145,7 @@ class MqttLogHandler : Handler() {
                 isQueued = false,
                 clientId = "mqtt-log-handler-$nodeId",
                 time = record.instant ?: Instant.now(),
-                sender = "mqtt-log-handler-$nodeId", // Identify sender to prevent loops
-                noLog = true // CRITICAL: Prevent logging of log messages (prevents infinite recursion)
+                senderId = "mqtt-log-handler-$nodeId" // Identify sender to prevent loops
             )
 
             // Publish via SessionHandler for proper routing to subscribers

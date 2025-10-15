@@ -14,7 +14,6 @@ import io.vertx.kafka.client.consumer.KafkaConsumer
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.apache.kafka.common.serialization.StringDeserializer
 import java.time.Instant
-import java.util.*
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -204,7 +203,7 @@ class KafkaClientConnector : AbstractVerticle() {
                 isQueued = false,
                 clientId = "kafkaclient-${device.name}",
                 time = Instant.now(),
-                sender = Monster.getClusterNodeId(vertx)
+                senderId = Monster.getClusterNodeId(vertx)
             )
             sessionHandler.publishMessage(msg)
         } catch (e: Exception) {
@@ -233,7 +232,7 @@ class KafkaClientConnector : AbstractVerticle() {
                 isQueued = msg.isQueued,
                 clientId = msg.clientId,
                 time = msg.time,
-                sender = Monster.getClusterNodeId(vertx)
+                senderId = Monster.getClusterNodeId(vertx)
             )
             sessionHandler.publishMessage(republished)
         } catch (e: Exception) {

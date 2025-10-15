@@ -8,17 +8,12 @@ import at.rocworks.data.TopicTree
 import io.vertx.core.Vertx
 import org.eclipse.milo.opcua.sdk.server.OpcUaServer
 import org.eclipse.milo.opcua.sdk.server.api.config.OpcUaServerConfigBuilder
-import org.eclipse.milo.opcua.sdk.server.identity.AnonymousIdentityValidator
-import org.eclipse.milo.opcua.sdk.server.identity.CompositeValidator
 import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy
 import org.eclipse.milo.opcua.stack.core.transport.TransportProfile
-import org.eclipse.milo.opcua.stack.core.types.builtin.DateTime
 import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode
 import org.eclipse.milo.opcua.stack.server.EndpointConfiguration
-import org.eclipse.milo.opcua.stack.server.security.DefaultServerCertificateValidator
 import java.net.InetAddress
-import java.security.KeyPair
 import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -424,7 +419,7 @@ class OpcUaServerInstance(
      */
     private fun handleBrokerMessage(message: BrokerMessage, addressConfig: OpcUaServerAddress? = null) {
         // Skip messages from this OPC UA server to prevent loops
-        if (message.sender == internalClientId) {
+        if (message.senderId == internalClientId) {
             logger.fine { "Skipping message from self: ${message.topicName}" }
             return
         }
@@ -514,7 +509,7 @@ class OpcUaServerInstance(
                     isDup = false,
                     isQueued = false,
                     clientId = internalClientId,
-                    sender = internalClientId // Mark as coming from this OPC UA server
+                    senderId = internalClientId // Mark as coming from this OPC UA server
                 )
 
                 sessionHandler.publishInternal(internalClientId, message)

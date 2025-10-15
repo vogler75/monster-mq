@@ -380,7 +380,7 @@ class MqttClientConnector : AbstractVerticle() {
                 isDup = message.isDuplicate,
                 isQueued = false,
                 clientId = clientId,
-                sender = clientId
+                senderId = clientId
             )
 
             // Publish to local MQTT through SessionHandler to ensure proper archiving

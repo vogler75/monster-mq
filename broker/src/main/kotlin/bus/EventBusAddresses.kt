@@ -191,44 +191,4 @@ object EventBusAddresses {
             }
         }
     }
-
-    // Migration helpers - maps old addresses to new ones
-    object Migration {
-        private val ADDRESS_MAPPING = mapOf(
-            // Client addresses
-            "${Const.GLOBAL_CLIENT_NAMESPACE}/{clientId}/C" to "use Client.commands(clientId)",
-            "${Const.GLOBAL_CLIENT_NAMESPACE}/{clientId}/M" to "use Client.messages(clientId)",
-
-            // Cluster addresses
-            "${Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE}/A" to Cluster.SUBSCRIPTION_ADD,
-            "${Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE}/D" to Cluster.SUBSCRIPTION_DELETE,
-            "${Const.GLOBAL_CLIENT_TABLE_NAMESPACE}/C" to Cluster.CLIENT_STATUS,
-            "${Const.GLOBAL_CLIENT_TABLE_NAMESPACE}/M" to Cluster.CLIENT_NODE_MAPPING,
-            "${Const.GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE}/T" to Cluster.TOPIC_NODE_MAPPING,
-
-            // Node addresses
-            "${Const.GLOBAL_EVENT_NAMESPACE}/node/{nodeId}/messages" to "use Node.messages(nodeId)",
-            "${Const.GLOBAL_EVENT_NAMESPACE}/{deploymentId}/C" to "use Node.commands(deploymentId)",
-            "${Const.GLOBAL_EVENT_NAMESPACE}/{deploymentId}/M" to "use Node.messageBus(deploymentId)",
-            "monstermq.node.metrics.{nodeId}" to "use Node.metrics(nodeId)",
-
-            // Store addresses
-            "{storeName}/A" to "use Store.add(storeName)",
-            "{storeName}/D" to "use Store.delete(storeName)",
-            "sqlite.init" to Store.SQLITE_INIT,
-            "sqlite.update" to Store.SQLITE_UPDATE,
-            "sqlite.query" to Store.SQLITE_QUERY,
-            "sqlite.batch" to Store.SQLITE_BATCH
-        )
-
-        /**
-         * Get new address for old address pattern (for documentation/migration purposes)
-         */
-        fun getNewAddress(oldAddress: String): String? = ADDRESS_MAPPING[oldAddress]
-
-        /**
-         * Get all mappings for documentation
-         */
-        fun getAllMappings(): Map<String, String> = ADDRESS_MAPPING
-    }
 }
