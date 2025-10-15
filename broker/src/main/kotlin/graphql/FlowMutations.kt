@@ -204,6 +204,7 @@ class FlowMutations(
                 val outputMappings = outputMappingsData.map { parseOutputMapping(it) }
 
                 // Parse variables
+                @Suppress("UNCHECKED_CAST")
                 val variablesData = input["variables"] as? Map<String, Any>
                 val variables = variablesData?.let { JsonObject(it) }
 
@@ -276,6 +277,7 @@ class FlowMutations(
                         val inputMappings = inputMappingsData.map { parseInputMapping(it) }
                         val outputMappings = outputMappingsData.map { parseOutputMapping(it) }
 
+                        @Suppress("UNCHECKED_CAST")
                         val variablesData = input["variables"] as? Map<String, Any>
                         val variables = variablesData?.let { JsonObject(it) }
 
@@ -457,6 +459,7 @@ class FlowMutations(
     }
 
     private fun parseFlowNode(data: Map<String, Any>): FlowNode {
+        @Suppress("UNCHECKED_CAST")
         val position = (data["position"] as? Map<String, Any>)?.let {
             FlowPosition(
                 x = (it["x"] as Number).toDouble(),
@@ -464,6 +467,7 @@ class FlowMutations(
             )
         }
 
+        @Suppress("UNCHECKED_CAST")
         return FlowNode(
             id = data["id"] as String,
             type = data["type"] as String,

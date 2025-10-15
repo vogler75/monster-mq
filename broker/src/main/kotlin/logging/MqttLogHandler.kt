@@ -1,5 +1,6 @@
 package at.rocworks.logging
 
+import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
@@ -30,7 +31,7 @@ class MqttLogHandler : Handler() {
     private var initialized = false
 
     companion object {
-        const val LOG_TOPIC_PREFIX = "\$SYS/logs"
+        const val LOG_TOPIC_PREFIX = "${Const.SYS_TOPIC_NAME}/logs"
         private var instance: MqttLogHandler? = null
         
         /**

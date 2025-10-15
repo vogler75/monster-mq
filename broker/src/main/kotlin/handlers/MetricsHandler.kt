@@ -1,5 +1,6 @@
 package handlers
 
+import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
@@ -26,7 +27,7 @@ class MetricsHandler(
 ) : AbstractVerticle() {
     companion object {
         private val logger: Logger = Utils.getLogger(MetricsHandler::class.java)
-        private const val SYSTEM_CLIENT_ID = "\$SYS"
+        private const val SYSTEM_CLIENT_ID = Const.SYS_TOPIC_NAME
         private const val PURGE_INTERVAL_HOURS = 1
     }
 
@@ -34,26 +35,25 @@ class MetricsHandler(
     private val purgeIntervalMs = PURGE_INTERVAL_HOURS * 60 * 60 * 1000L
 
     /**
-     * Publish metrics to a $SYS topic as retained message
+     * Publish metrics to a $SYS topic (non-retained)
      */
     private fun publishMetrics(topic: String, payload: JsonObject) {
         try {
-            // Create BrokerMessage using the simple constructor, then create a retained version
             val baseMessage = BrokerMessage(SYSTEM_CLIENT_ID, topic, payload.encode())
-            val retainedMessage = BrokerMessage(
+            val message = BrokerMessage(
                 messageUuid = baseMessage.messageUuid,
                 messageId = 0,
                 topicName = topic,
                 payload = payload.encode().toByteArray(),
                 qosLevel = 0,
-                isRetain = true,
+                isRetain = false,  // Metrics are not retained
                 isDup = false,
                 isQueued = false,
                 clientId = SYSTEM_CLIENT_ID,
                 noLog = true  // Don't log $SYS metrics to prevent infinite recursion
             )
             // Publish via SessionHandler for proper targeted distribution to subscribers only
-            sessionHandler.publishMessage(retainedMessage)
+            sessionHandler.publishMessage(message)
             logger.finest { "Published metrics to $topic" }
         } catch (e: Exception) {
             logger.warning("Error publishing metrics to $topic: ${e.message}")
@@ -187,7 +187,7 @@ class MetricsHandler(
                             .put("winCCUaClientIn", brokerMetrics.winCCUaClientIn)
                             .put("neo4jClientIn", brokerMetrics.neo4jClientIn)
                             .put("timestamp", brokerMetrics.timestamp)
-                        publishMetrics("\$SYS/brokers/$nodeId/metrics", brokerMetricsJson)
+                        publishMetrics("${Const.SYS_TOPIC_NAME}/brokers/$nodeId/metrics", brokerMetricsJson)
 
                         // Store session metrics from nodeMetrics response
                         nm.getJsonArray("sessionMetrics")?.forEach { sessionMetricObj ->
@@ -226,7 +226,7 @@ class MetricsHandler(
                                 sessionMetricsJson.put("inFlightMessagesSnd", sessionMetric.getInteger("inFlightMessagesSnd", 0))
                             }
 
-                            publishMetrics("\$SYS/sessions/mqtt/${clientId}/metrics", sessionMetricsJson)
+                            publishMetrics("${Const.SYS_TOPIC_NAME}/sessions/mqtt/${clientId}/metrics", sessionMetricsJson)
                         }
                     } catch (e: Exception) {
                         logger.warning("Error assembling aggregated broker metrics: ${e.message}")
@@ -281,7 +281,7 @@ class MetricsHandler(
                                             .put("messagesIn", inRate)
                                             .put("messagesOut", outRate)
                                             .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
-                                        publishMetrics("\$SYS/sessions/mqtt-bridge/${deviceName}/metrics", mqttMetricsJson)
+                                        publishMetrics("${Const.SYS_TOPIC_NAME}/sessions/mqtt-bridge/${deviceName}/metrics", mqttMetricsJson)
                                     } catch (e: Exception) {
                                         logger.warning("Error processing MQTT bridge metrics for $deviceName: ${e.message}")
                                     }
@@ -333,7 +333,7 @@ class MetricsHandler(
                                          metricsStore.storeMetrics(at.rocworks.stores.MetricKind.OPCUADEVICE, timestamp, deviceName, opcUaMetricsJson)
 
                                          // Publish OPC UA session metrics to $SYS topic
-                                         publishMetrics("\$SYS/sessions/opcua/${deviceName}/metrics", opcUaMetricsJson)
+                                         publishMetrics("${Const.SYS_TOPIC_NAME}/sessions/opcua/${deviceName}/metrics", opcUaMetricsJson)
                                      } catch (e: Exception) {
                                          logger.warning("Error processing OPC UA metrics for $deviceName: ${e.message}")
                                      }
@@ -390,7 +390,7 @@ class MetricsHandler(
                                              .put("messagesIn", inRate)
                                              .put("messagesOut", outRate)
                                              .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
-                                         publishMetrics("\$SYS/sessions/kafka/${deviceName}/metrics", kafkaMetricsJson)
+                                         publishMetrics("${Const.SYS_TOPIC_NAME}/sessions/kafka/${deviceName}/metrics", kafkaMetricsJson)
                                     } catch (e: Exception) {
                                         logger.warning("Error processing Kafka client metrics for $deviceName: ${e.message}")
                                     }
@@ -448,7 +448,7 @@ class MetricsHandler(
                                             .put("messagesIn", inRate)
                                             .put("connected", connected)
                                             .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
-                                        publishMetrics("\$SYS/sessions/winccoa/${deviceName}/metrics", winCCOaMetricsJson)
+                                        publishMetrics("${Const.SYS_TOPIC_NAME}/sessions/winccoa/${deviceName}/metrics", winCCOaMetricsJson)
                                     } catch (e: Exception) {
                                         logger.warning("Error processing WinCC OA client metrics for $deviceName: ${e.message}")
                                     }
@@ -507,7 +507,7 @@ class MetricsHandler(
                                             .put("messagesIn", inRate)
                                             .put("connected", connected)
                                             .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
-                                        publishMetrics("\$SYS/sessions/winccua/${deviceName}/metrics", winCCUaMetricsJson)
+                                        publishMetrics("${Const.SYS_TOPIC_NAME}/sessions/winccua/${deviceName}/metrics", winCCUaMetricsJson)
                                     } catch (e: Exception) {
                                         logger.warning("Error processing WinCC Unified client metrics for $deviceName: ${e.message}")
                                     }
@@ -565,7 +565,7 @@ class MetricsHandler(
                                         metricsStore.storeMetrics(at.rocworks.stores.MetricKind.NEO4JCLIENT, timestamp, deviceName, neo4jMetricsJson)
 
                                         // Publish Neo4j session metrics to $SYS topic
-                                        publishMetrics("\$SYS/sessions/neo4j/${deviceName}/metrics", neo4jMetricsJson)
+                                        publishMetrics("${Const.SYS_TOPIC_NAME}/sessions/neo4j/${deviceName}/metrics", neo4jMetricsJson)
                                     } catch (e: Exception) {
                                         logger.warning("Error processing Neo4j client metrics for $deviceName: ${e.message}")
                                     }
@@ -616,7 +616,7 @@ class MetricsHandler(
                                         metricsStore.storeMetrics(at.rocworks.stores.MetricKind.ARCHIVEGROUP, timestamp, groupName, archiveMetricsJson)
 
                                         // Publish archive group metrics to $SYS topic
-                                        publishMetrics("\$SYS/archivegroups/${groupName}/metrics", archiveMetricsJson)
+                                        publishMetrics("${Const.SYS_TOPIC_NAME}/archives/${groupName}/metrics", archiveMetricsJson)
                                     } catch (e: Exception) {
                                         logger.warning("Error processing archive group metrics for $groupName: ${e.message}")
                                     }

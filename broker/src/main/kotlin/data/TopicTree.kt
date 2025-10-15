@@ -24,6 +24,10 @@ class TopicTree<K, V> : ITopicTree<K, V> {
          * MQTT topic filter matcher implementing MQTT 3.1.1 wildcard semantics.
          * Single-level wildcard '+' matches exactly one topic level.
          * Multi-level wildcard '#' matches remaining topic levels and must be the last level.
+         * 
+         * IMPORTANT: According to MQTT 3.1.1 spec, wildcards do NOT match topics starting with '$'
+         * unless the subscription explicitly starts with '$'. This prevents inadvertent 
+         * subscription to $SYS topics.
          */
         fun matches(topicFilter: String, topic: String): Boolean {
             if (topicFilter === topic) return true
@@ -31,6 +35,14 @@ class TopicTree<K, V> : ITopicTree<K, V> {
 
             val filterLevels = topicFilter.split('/')
             val topicLevels = topic.split('/')
+
+            // MQTT 3.1.1 spec: Wildcards don't match topics starting with '$'
+            // unless the filter explicitly starts with '$'
+            if (topicLevels.isNotEmpty() && topicLevels[0].startsWith('$')) {
+                if (filterLevels.isEmpty() || !filterLevels[0].startsWith('$')) {
+                    return false
+                }
+            }
 
             var fi = 0
             var ti = 0

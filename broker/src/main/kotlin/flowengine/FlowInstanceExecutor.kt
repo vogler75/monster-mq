@@ -422,7 +422,10 @@ class FlowInstanceExecutor(
             val payload = when (value) {
                 is String -> value.toByteArray()
                 is JsonObject -> value.encode().toByteArray()
-                is Map<*, *> -> JsonObject(value as Map<String, Any>).encode().toByteArray()
+                is Map<*, *> -> {
+                    @Suppress("UNCHECKED_CAST")
+                    JsonObject(value as Map<String, Any>).encode().toByteArray()
+                }
                 else -> value.toString().toByteArray()
             }
 

@@ -548,32 +548,6 @@ MORE INFO:
                     instance.sessionHandler = sessionHandler
                 }
 
-                // Install MQTT Log Handler now that SessionHandler is available
-                val loggingConfig = configJson.getJsonObject("Logging", JsonObject())
-                val mqttLoggingEnabled = loggingConfig.getBoolean("MqttEnabled", false)
-                val mqttLogLevel = loggingConfig.getString("MqttLevel", "INFO")
-                
-                if (mqttLoggingEnabled) {
-                    try {
-                        logger.info("Installing MQTT log handler for system-wide log publishing (level: $mqttLogLevel)...")
-                        val mqttLogHandler = MqttLogHandler.install()
-                        
-                        // Set the log level for the MQTT handler
-                        try {
-                            val level = Level.parse(mqttLogLevel.uppercase())
-                            mqttLogHandler.level = level
-                            logger.info("MQTT log handler installed successfully with level: $level")
-                        } catch (e: IllegalArgumentException) {
-                            logger.warning("Invalid MQTT log level: $mqttLogLevel, using INFO")
-                            mqttLogHandler.level = Level.INFO
-                        }
-                    } catch (e: Exception) {
-                        logger.warning("Failed to install MQTT log handler: ${e.message}")
-                    }
-                } else {
-                    logger.info("MQTT log handler is disabled in configuration")
-                }
-
                 // OPC UA Extension
                 val opcUaExtension = OpcUaExtension()
 
@@ -704,6 +678,35 @@ MORE INFO:
                 Future.succeededFuture<String>()
                     .compose { vertx.deployVerticle(messageHandler) }
                     .compose { vertx.deployVerticle(sessionHandler) }
+                    .compose {
+                        // Install MQTT Log Handler now that SessionHandler is deployed and initialized
+                        val loggingConfig = configJson.getJsonObject("Logging", JsonObject())
+                        val mqttLoggingEnabled = loggingConfig.getBoolean("MqttEnabled", false)
+                        val mqttLogLevel = loggingConfig.getString("MqttLevel", "INFO")
+                        
+                        if (mqttLoggingEnabled) {
+                            try {
+                                logger.info("Installing MQTT log handler for system-wide log publishing (level: $mqttLogLevel)...")
+                                val mqttLogHandler = MqttLogHandler.install()
+                                
+                                // Set the log level for the MQTT handler
+                                try {
+                                    val level = Level.parse(mqttLogLevel.uppercase())
+                                    mqttLogHandler.level = level
+                                    logger.info("MQTT log handler installed successfully with level: $level")
+                                } catch (e: IllegalArgumentException) {
+                                    logger.warning("Invalid MQTT log level: $mqttLogLevel, using INFO")
+                                    mqttLogHandler.level = Level.INFO
+                                }
+                            } catch (e: Exception) {
+                                logger.warning("Failed to install MQTT log handler: ${e.message}")
+                            }
+                        } else {
+                            logger.info("MQTT log handler is disabled in configuration")
+                        }
+                        
+                        Future.succeededFuture<String>()
+                    }
                     .compose { vertx.deployVerticle(userManager) }
                     .compose { vertx.deployVerticle(healthHandler) }
                     .compose {
