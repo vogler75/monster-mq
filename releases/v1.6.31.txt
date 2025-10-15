@@ -1,0 +1,10 @@
+Release v1.6.31
+Built from commit: 12e11c8
+Date: 2025-10-15 23:03:15
+
+Changes since v1.6.30:
+---
+12e11c8 Add instance name prefix to script console logs
+de32c2d Add WebSocket subprotocol for GraphQL transport
+5fdef7e Improve WebSocket logging and log subscription filters
+b23684e Add real-time log viewer to dashboard and workflows
