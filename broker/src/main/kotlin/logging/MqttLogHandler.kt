@@ -3,6 +3,7 @@ package at.rocworks.logging
 import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Utils
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
 import io.vertx.core.json.JsonObject
 import java.time.Instant
@@ -81,10 +82,10 @@ class MqttLogHandler : Handler() {
                 initializeNodeId()
             }
 
-            // Get the session handler for publishing
-            val sessionHandler = Monster.getSessionHandler()
-            if (sessionHandler == null) {
-                // SessionHandler not available yet, skip silently
+            // Get Vertx instance for event bus publishing
+            val vertx = Monster.getVertx()
+            if (vertx == null) {
+                // Vertx not available yet, skip silently (no error logging to prevent loops)
                 return
             }
 
@@ -148,12 +149,13 @@ class MqttLogHandler : Handler() {
                 senderId = "mqtt-log-handler-$nodeId" // Identify sender to prevent loops
             )
 
-            // Publish via SessionHandler for proper routing to subscribers
-            sessionHandler.publishMessage(message)
+            // Publish to dedicated event bus address (bypass normal publish path to prevent logging loops)
+            // No error handling or logging here - failures are silently ignored to prevent recursion
+            vertx.eventBus().publish(EventBusAddresses.System.LOGS, message)
 
         } catch (e: Exception) {
-            // Avoid logging errors from the log handler itself to prevent loops
-            System.err.println("MqttLogHandler error: ${e.message}")
+            // Silently ignore all errors to prevent logging loops
+            // Do NOT use System.err.println or any logging here
         }
     }
 

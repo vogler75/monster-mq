@@ -396,6 +396,18 @@ open class SessionHandler(
             }
         }
 
+        // Subscribe to system log messages from MqttLogHandler
+        vertx.eventBus().consumer<BrokerMessage>(EventBusAddresses.System.LOGS) { message ->
+            message.body()?.let { payload ->
+                try {
+                    // Process log messages for subscribers - no logging here to prevent loops
+                    processMessageForLocalClients(payload)
+                } catch (e: Exception) {
+                    // Silently ignore errors to prevent logging loops
+                }
+            }
+        }
+
         logger.info("Loading all sessions and their subscriptions [${Utils.getCurrentFunctionName()}]")
         val f1 = sessionStore.iterateAllSessions { clientId, nodeId, connected, cleanSession ->
             val localNodeId = Monster.getClusterNodeId(vertx)

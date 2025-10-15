@@ -36,8 +36,7 @@ class TopicTree<K, V> : ITopicTree<K, V> {
             val filterLevels = topicFilter.split('/')
             val topicLevels = topic.split('/')
 
-            // MQTT 3.1.1 spec: Wildcards don't match topics starting with '$'
-            // unless the filter explicitly starts with '$'
+            // MQTT 3.1.1 spec: Wildcards don't match topics starting with '$' unless the filter explicitly starts with '$'
             if (topicLevels.isNotEmpty() && topicLevels[0].startsWith('$')) {
                 if (filterLevels.isEmpty() || !filterLevels[0].startsWith('$')) {
                     return false

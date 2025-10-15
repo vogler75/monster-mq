@@ -139,6 +139,7 @@ object EventBusAddresses {
         // Can be used for system-wide broadcasts, health checks, etc.
         const val HEALTH_CHECK = "$SYSTEM_NS.health.check"
         const val SHUTDOWN = "$SYSTEM_NS.shutdown"
+        const val LOGS = "$SYSTEM_NS.logs"  // For MQTT log handler messages
     }
 
     // Utility functions for address validation and parsing

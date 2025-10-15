@@ -67,6 +67,7 @@ class Monster(args: Array<String>) {
     private var clusterManager: HazelcastClusterManager? = null
     private var nodeName: String = ""
 
+    private var vertx: Vertx? = null
     private var sessionHandler: SessionHandler? = null
     private var messageBus: IMessageBus? = null
 
@@ -171,6 +172,10 @@ class Monster(args: Array<String>) {
 
         fun getMessageBus(): IMessageBus? {
             return getInstance().messageBus
+        }
+
+        fun getVertx(): Vertx? {
+            return getInstance().vertx
         }
 
         @Volatile
@@ -465,6 +470,7 @@ MORE INFO:
 
     private fun localSetup(builder: VertxBuilder) {
         val vertx = builder.build()
+        this.vertx = vertx
         getConfigAndStart(vertx)
     }
 
@@ -497,6 +503,7 @@ MORE INFO:
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
             if (res.succeeded() && res.result() != null) {
                 val vertx = res.result()!!
+                this.vertx = vertx
                 getConfigAndStart(vertx)
             } else {
                 logger.severe("Vertx building failed: ${res.cause()}")
