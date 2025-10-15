@@ -62,9 +62,17 @@ class MessageArchivePostgres (
                         val hypertableCheck =
                             statement.executeQuery("SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = '$tableName';")
                         if (!hypertableCheck.next()) {
-                            logger.info("Table $tableName convert to hypertable... [${Utils.getCurrentFunctionName()}]")
-                            statement.executeQuery("SELECT create_hypertable('$tableName', 'time');")
-                            logger.info("Table $tableName converted to hypertable [${Utils.getCurrentFunctionName()}]")
+                            // Check if table is empty before converting to hypertable
+                            val countResult = statement.executeQuery("SELECT COUNT(*) as cnt FROM $tableName;")
+                            val isEmpty = countResult.next() && countResult.getInt("cnt") == 0
+
+                            if (isEmpty) {
+                                logger.info("Table $tableName is empty, converting to hypertable... [${Utils.getCurrentFunctionName()}]")
+                                statement.executeQuery("SELECT create_hypertable('$tableName', 'time');")
+                                logger.info("Table $tableName converted to hypertable [${Utils.getCurrentFunctionName()}]")
+                            } else {
+                                logger.warning("Table $tableName is not empty - skipping hypertable conversion. To convert existing data, run: SELECT create_hypertable('$tableName', 'time', migrate_data => true); [${Utils.getCurrentFunctionName()}]")
+                            }
                         } else {
                             logger.info("Table $tableName is already a hypertable [${Utils.getCurrentFunctionName()}]")
                         }
