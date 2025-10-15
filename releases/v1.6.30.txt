@@ -1,0 +1,18 @@
+Release v1.6.30
+Built from commit: 4af19a7
+Date: 2025-10-15 20:30:07
+
+Changes since v1.6.29:
+---
+4af19a7 Validate MQTT log level in broker startup
+25edf85 Remove redundant event bus publish for flow engine
+db3e234 Fix MQTT topic matching and log handler injection
+4393eac Add GraphQL systemLogs subscription with filtering
+22b3b71 Restrict MQTT log levels to INFO, WARNING, SEVERE
+9856e3a Refactor system log broadcast to use cluster address
+03d4ec5 Route MQTT log messages via event bus to prevent loops
+7005cd7 Remove noLog flag from BrokerMessage and related logic
+b043e25 Refactor log publishing to use SessionHandler
+759394d Refactor log publishing to use MessageBus
+415b1e6 Refactor $SYS topic usage and improve MQTT spec compliance
+0cad223 Add MQTT logging feature for system-wide log publishing
