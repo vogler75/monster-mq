@@ -43,6 +43,9 @@ object EventBusAddresses {
         const val CLIENT_NODE_MAPPING = "$CLUSTER_NS.replication.client_node_mapping"
         const val TOPIC_NODE_MAPPING = "$CLUSTER_NS.replication.topic_node_mapping"
 
+        // Broadcast to all nodes in the cluster
+        const val BROADCAST = "$CLUSTER_NS.bc"
+
         // Legacy compatibility (can be removed once HealthHandler is updated)
         const val CLIENT_MAPPING_COMPAT = "$CLUSTER_NS.client.mapping.compat"
     }
@@ -139,7 +142,6 @@ object EventBusAddresses {
         // Can be used for system-wide broadcasts, health checks, etc.
         const val HEALTH_CHECK = "$SYSTEM_NS.health.check"
         const val SHUTDOWN = "$SYSTEM_NS.shutdown"
-        const val LOGS = "$SYSTEM_NS.logs"  // For MQTT log handler messages
     }
 
     // Utility functions for address validation and parsing

@@ -149,9 +149,9 @@ class MqttLogHandler : Handler() {
                 senderId = "mqtt-log-handler-$nodeId" // Identify sender to prevent loops
             )
 
-            // Publish to dedicated event bus address (bypass normal publish path to prevent logging loops)
+            // Publish to broadcast event bus address (all nodes receive this)
             // No error handling or logging here - failures are silently ignored to prevent recursion
-            vertx.eventBus().publish(EventBusAddresses.System.LOGS, message)
+            vertx.eventBus().publish(EventBusAddresses.Cluster.BROADCAST, message)
 
         } catch (e: Exception) {
             // Silently ignore all errors to prevent logging loops

@@ -396,11 +396,11 @@ open class SessionHandler(
             }
         }
 
-        // Subscribe to system log messages from MqttLogHandler
-        vertx.eventBus().consumer<BrokerMessage>(EventBusAddresses.System.LOGS) { message ->
+        // Subscribe to broadcast messages (e.g., system logs, metrics)
+        vertx.eventBus().consumer<BrokerMessage>(EventBusAddresses.Cluster.BROADCAST) { message ->
             message.body()?.let { payload ->
                 try {
-                    // Process log messages for subscribers - no logging here to prevent loops
+                    // Process broadcast messages for local subscribers - no logging here to prevent loops
                     processMessageForLocalClients(payload)
                 } catch (e: Exception) {
                     // Silently ignore errors to prevent logging loops
