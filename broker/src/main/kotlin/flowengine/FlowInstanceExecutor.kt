@@ -345,7 +345,8 @@ class FlowInstanceExecutor(
                 onOutput = { portName, value ->
                     logger.fine { "[${instanceConfig.name}]   Script called outputs.send($portName, $value)" }
                     handleNodeOutput(node.id, portName, value)
-                }
+                },
+                instanceName = instanceConfig.name
             )
         }.onComplete { asyncResult ->
             if (asyncResult.succeeded()) {

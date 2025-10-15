@@ -40,6 +40,7 @@ class FlowScriptEngine {
      * @param state Mutable state object for the node
      * @param flowVariables Flow-wide variables
      * @param onOutput Callback when script calls outputs.send(portName, value)
+     * @param instanceName Optional flow instance name for log prefixing
      * @return ExecutionResult with success status and any errors
      */
     fun execute(
@@ -48,7 +49,8 @@ class FlowScriptEngine {
         inputs: Map<String, InputValue>,
         state: MutableMap<String, Any>,
         flowVariables: Map<String, Any>,
-        onOutput: (portName: String, value: Any?) -> Unit
+        onOutput: (portName: String, value: Any?) -> Unit,
+        instanceName: String? = null
     ): ExecutionResult {
         try {
             val bindings = context.getBindings(normalizeLanguage(language))
@@ -99,7 +101,7 @@ class FlowScriptEngine {
             bindings.putMember("outputs", outputs)
 
             // Console helper
-            val consoleProxy = ConsoleProxy()
+            val consoleProxy = ConsoleProxy(instanceName)
             bindings.putMember("console", consoleProxy)
 
             // Get or compile the script function
@@ -236,26 +238,27 @@ class FlowScriptEngine {
     /**
      * Proxy for console object with log/warn/error methods
      */
-    class ConsoleProxy {
+    class ConsoleProxy(private val instanceName: String? = null) {
         private val logs = mutableListOf<String>()
+        private val prefix = if (instanceName != null) "[$instanceName] " else ""
 
         @Suppress("unused")
         fun log(vararg messages: Any?) {
-            val msg = "[LOG] ${messages.joinToString(" ")}"
+            val msg = "$prefix[LOG] ${messages.joinToString(" ")}"
             logs.add(msg)
             logger.info(msg)
         }
 
         @Suppress("unused")
         fun warn(vararg messages: Any?) {
-            val msg = "[WARN] ${messages.joinToString(" ")}"
+            val msg = "$prefix[WARN] ${messages.joinToString(" ")}"
             logs.add(msg)
             logger.warning(msg)
         }
 
         @Suppress("unused")
         fun error(vararg messages: Any?) {
-            val msg = "[ERROR] ${messages.joinToString(" ")}"
+            val msg = "$prefix[ERROR] ${messages.joinToString(" ")}"
             logs.add(msg)
             logger.severe(msg)
         }
