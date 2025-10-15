@@ -328,3 +328,24 @@ object TimestampConverter {
         return Instant.now().toString()
     }
 }
+
+// System Logs Models
+data class SystemLogEntry(
+    val timestamp: String,
+    val level: String,
+    val logger: String,
+    val message: String,
+    val thread: Long,
+    val node: String,
+    val sourceClass: String?,
+    val sourceMethod: String?,
+    val parameters: List<String>?,
+    val exception: ExceptionInfo?
+)
+
+
+data class ExceptionInfo(
+    val `class`: String,
+    val message: String?,
+    val stackTrace: String
+)

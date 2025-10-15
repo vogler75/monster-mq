@@ -23,6 +23,27 @@ type Subscription {
         # Data format for all streamed message payloads
         format: DataFormat = JSON
     ): TopicUpdate!
+    
+    # Subscribe to real-time system logs with advanced filtering
+    # Streams broker logs published to $SYS/logs/<node>/<level> topics
+    # Server-side filtering reduces bandwidth and improves performance
+    # Supports regex patterns for flexible log filtering
+    systemLogs(
+        # Node filter (default "+" for all nodes)
+        node: String = "+"
+        # Level filter: INFO, WARNING, SEVERE (default "+" for all)
+        level: String = "+"
+        # Logger name filter (supports regex)
+        logger: String
+        # Thread ID filter (exact match)
+        thread: Long
+        # Source class filter (supports regex)
+        sourceClass: String
+        # Source method filter (supports regex)
+        sourceMethod: String
+        # Message content filter (supports regex)
+        message: String
+    ): SystemLogEntry!
 }
 
 type TopicUpdate {
@@ -33,4 +54,23 @@ type TopicUpdate {
     qos: Int!
     retained: Boolean!
     clientId: String
+}
+
+type SystemLogEntry {
+    timestamp: String!
+    level: String!
+    logger: String!
+    message: String!
+    thread: Long!
+    node: String!
+    sourceClass: String
+    sourceMethod: String
+    parameters: [String!]
+    exception: ExceptionInfo
+}
+
+type ExceptionInfo {
+    class: String!
+    message: String
+    stackTrace: String!
 }

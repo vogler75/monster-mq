@@ -698,6 +698,7 @@ class GraphQLServer(
                 builder
                     .dataFetcher("topicUpdates", subscriptionResolver.topicUpdates())
                     .dataFetcher("multiTopicUpdates", subscriptionResolver.multiTopicUpdates())
+                    .dataFetcher("systemLogs", subscriptionResolver.systemLogs())
             }
             // Register field resolvers for types
             .type("Broker") { builder ->

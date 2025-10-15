@@ -116,10 +116,11 @@ All user and archive mutations require an admin-level JWT. Publishing requires p
 
 ## Subscriptions
 
-Two WebSocket subscriptions stream MQTT data via the configured message bus (`broker/src/main/kotlin/extensions/graphql/GraphQLServer.kt:358-365`):
+WebSocket subscriptions stream real-time data via the configured message bus (`broker/src/main/kotlin/extensions/graphql/GraphQLServer.kt:358-365`):
 
-- `topicUpdates(topicFilter: String!)`
-- `multiTopicUpdates(topicFilters: [String!]!)`
+- `topicUpdates(topicFilter: String!)` - Stream updates from a single MQTT topic pattern
+- `multiTopicUpdates(topicFilters: [String!]!)` - Stream updates from multiple MQTT topic patterns
+- `systemLogs(...)` - Stream system logs with advanced filtering (see [GraphQL System Logs](graphql-system-logs.md))
 
 Authentication rules for subscriptions mirror the ones used for queries and mutations.
 
