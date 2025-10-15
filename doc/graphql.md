@@ -124,6 +124,78 @@ WebSocket subscriptions stream real-time data via the configured message bus (`b
 
 Authentication rules for subscriptions mirror the ones used for queries and mutations.
 
+### WebSocket Protocol
+
+MonsterMQ uses the **GraphQL over WebSocket Protocol** (also known as **graphql-transport-ws**) for GraphQL subscriptions, implemented via Vert.x's `GraphQLWSHandler`. This is the newer protocol specified in the [graphql-ws library](https://github.com/enisdenjo/graphql-ws).
+
+**Connection Flow:**
+
+```javascript
+// 1. Connect with subprotocol 'graphql-transport-ws'
+const ws = new WebSocket('ws://localhost:4000/graphqlws', 'graphql-transport-ws');
+
+// 2. Initialize connection
+ws.send(JSON.stringify({
+  type: 'connection_init',
+  payload: {}
+}));
+
+// 3. Server acknowledges
+// <- { type: 'connection_ack' }
+
+// 4. Subscribe to a query
+ws.send(JSON.stringify({
+  id: '1',
+  type: 'subscribe',
+  payload: {
+    query: 'subscription { topicUpdates(topicFilter: "sensor/#") { ... } }',
+    variables: {}
+  }
+}));
+
+// 5. Receive data
+// <- { type: 'next', id: '1', payload: { data: { ... } } }
+
+// 6. Complete subscription
+ws.send(JSON.stringify({
+  id: '1',
+  type: 'complete'
+}));
+
+// 7. Close connection
+ws.close();
+```
+
+**Message Types:**
+- `connection_init` - Initialize WebSocket connection
+- `connection_ack` - Server acknowledges connection
+- `ping` - Ping message (client can send to keep connection alive)
+- `pong` - Pong response to ping
+- `subscribe` - Start a new subscription
+- `next` - Subscription data payload
+- `error` - Subscription error
+- `complete` - Complete/stop a subscription
+
+**Protocol Comparison:**
+
+| graphql-transport-ws (MonsterMQ) | subscriptions-transport-ws (legacy Apollo) |
+|----------------------------------|-------------------------------------------|
+| WebSocket subprotocol: `'graphql-transport-ws'` | WebSocket subprotocol: `'graphql-ws'` |
+| Subscribe: `type: 'subscribe'` | Start: `type: 'start'` |
+| Next: `type: 'next'` | Data: `type: 'data'` |
+| Complete: `type: 'complete'` | Stop: `type: 'stop'` |
+| Ping/Pong: `type: 'ping'/'pong'` | Keep-alive: `type: 'ka'` |
+| No explicit termination | Terminate: `type: 'connection_terminate'` |
+
+| Ping/Pong: `type: 'ping'/'pong'` | Keep-alive: `type: 'ka'` |
+| No explicit termination | Terminate: `type: 'connection_terminate'` |
+
+**Client Libraries:**
+- JavaScript/Browser: Use `graphql-ws` npm package or raw WebSocket implementation as shown above
+- Python: Use `websockets` library with `subprotocols=["graphql-transport-ws"]` (see `tests/test_graphql_system_logs.py`)
+- Apollo Client v3+: Use `graphql-ws` package's `createClient`
+- For legacy clients expecting `subscriptions-transport-ws`: Not compatible - use adapter or upgrade
+
 ## Usage Notes
 
 1. Payloads are returned according to the `DataFormat` argument (`JSON` or `BINARY`). JSON mode automatically parses payloads that contain valid JSON strings.

@@ -69,19 +69,19 @@ class FlowInstanceExecutor(
 
     override fun start(startPromise: Promise<Void>) {
         try {
-            logger.info("Starting flow instance: ${instanceConfig.name}")
-            logger.fine { "  - Topic inputs: ${topicInputMappings.size}" }
-            logger.fine { "  - Text inputs: ${textInputMappings.size}" }
-            logger.fine { "  - Subscribed topics: ${topicToNodeInputs.keys}" }
+            logger.info("[${instanceConfig.name}] Starting flow instance")
+            logger.fine { "[${instanceConfig.name}]   - Topic inputs: ${topicInputMappings.size}" }
+            logger.fine { "[${instanceConfig.name}]   - Text inputs: ${textInputMappings.size}" }
+            logger.fine { "[${instanceConfig.name}]   - Subscribed topics: ${topicToNodeInputs.keys}" }
 
             // Subscribe to MQTT topics
             subscribeToTopics()
 
-            logger.info("Flow instance ${instanceConfig.name} started successfully")
+            logger.info("[${instanceConfig.name}] Flow instance started successfully")
             startPromise.complete()
 
         } catch (e: Exception) {
-            logger.severe("Failed to start flow instance ${instanceConfig.name}: ${e.message}")
+            logger.severe("[${instanceConfig.name}] Failed to start flow instance: ${e.message}")
             e.printStackTrace()
             startPromise.fail(e)
         }
@@ -89,7 +89,7 @@ class FlowInstanceExecutor(
 
     override fun stop(stopPromise: Promise<Void>) {
         try {
-            logger.info("Stopping flow instance: ${instanceConfig.name}")
+            logger.info("[${instanceConfig.name}] Stopping flow instance")
 
             // Unsubscribe from MQTT topics
             unsubscribeFromTopics()
@@ -98,11 +98,11 @@ class FlowInstanceExecutor(
             scriptEngines.values.forEach { it.close() }
             scriptEngines.clear()
 
-            logger.info("Flow instance ${instanceConfig.name} stopped successfully")
+            logger.info("[${instanceConfig.name}] Flow instance stopped successfully")
             stopPromise.complete()
 
         } catch (e: Exception) {
-            logger.severe("Error stopping flow instance ${instanceConfig.name}: ${e.message}")
+            logger.severe("[${instanceConfig.name}] Error stopping flow instance: ${e.message}")
             e.printStackTrace()
             stopPromise.fail(e)
         }
@@ -114,13 +114,13 @@ class FlowInstanceExecutor(
     private fun subscribeToTopics() {
         val sessionHandler = Monster.getSessionHandler()
         if (sessionHandler == null) {
-            logger.warning("SessionHandler not available, cannot subscribe to topics")
+            logger.warning("[${instanceConfig.name}] SessionHandler not available, cannot subscribe to topics")
             return
         }
 
         val topics = topicToNodeInputs.keys
         topics.forEach { topic ->
-            logger.fine { "  Subscribing to MQTT topic: $topic" }
+            logger.fine { "[${instanceConfig.name}]   Subscribing to MQTT topic: $topic" }
             sessionHandler.subscribeInternal(
                 clientId = "flow-${instanceConfig.name}",
                 topicFilter = topic,
@@ -137,13 +137,13 @@ class FlowInstanceExecutor(
     private fun unsubscribeFromTopics() {
         val sessionHandler = Monster.getSessionHandler()
         if (sessionHandler == null) {
-            logger.warning("SessionHandler not available, cannot unsubscribe from topics")
+            logger.warning("[${instanceConfig.name}] SessionHandler not available, cannot unsubscribe from topics")
             return
         }
 
         val topics = topicToNodeInputs.keys
         topics.forEach { topic ->
-            logger.fine { "  Unsubscribing from MQTT topic: $topic" }
+            logger.fine { "[${instanceConfig.name}]   Unsubscribing from MQTT topic: $topic" }
             sessionHandler.unsubscribeInternal(
                 clientId = "flow-${instanceConfig.name}",
                 topicFilter = topic
@@ -173,22 +173,22 @@ class FlowInstanceExecutor(
             )
             topicValues[topic] = topicValue
 
-            logger.fine { "Flow ${instanceConfig.name}: Received message on topic $topic, payload: ${String(message.payload)}" }
-            logger.fine { "  Parsed value: ${topicValue.value}" }
+            logger.fine { "[${instanceConfig.name}] Received message on topic $topic, payload: ${String(message.payload)}" }
+            logger.fine { "[${instanceConfig.name}]   Parsed value: ${topicValue.value}" }
 
             // Find all node inputs mapped to this topic
             val nodeInputs = topicToNodeInputs[topic] ?: emptyList()
-            logger.fine { "  Node inputs to trigger: $nodeInputs (found ${nodeInputs.size} mappings)" }
+            logger.fine { "[${instanceConfig.name}]   Node inputs to trigger: $nodeInputs (found ${nodeInputs.size} mappings)" }
 
             // Trigger execution for each affected node
             nodeInputs.forEach { nodeInput ->
                 val (nodeId, _) = parseNodeInput(nodeInput)
-                logger.fine { "  Executing node: $nodeId for input $nodeInput" }
+                logger.fine { "[${instanceConfig.name}]   Executing node: $nodeId for input $nodeInput" }
                 executeNode(nodeId, topic)
             }
 
         } catch (e: Exception) {
-            logger.severe("Error handling message in flow ${instanceConfig.name}: ${e.message}")
+            logger.severe("[${instanceConfig.name}] Error handling message: ${e.message}")
             e.printStackTrace()
             errorCount++
             lastError = e.message
@@ -203,17 +203,17 @@ class FlowInstanceExecutor(
             // Find the node definition
             val node = flowClass.nodes.find { it.id == nodeId }
             if (node == null) {
-                logger.warning("Node $nodeId not found in flow class ${flowClassConfig.name}")
+                logger.warning("[${instanceConfig.name}] Node $nodeId not found in flow class ${flowClassConfig.name}")
                 return
             }
 
-            logger.fine { "Executing node: $nodeId (${node.type}) in flow ${instanceConfig.name}" }
+            logger.fine { "[${instanceConfig.name}] Executing node: $nodeId (${node.type})" }
 
             // Prepare inputs for this node
             val inputs = prepareNodeInputs(node, triggeringTopic)
-            logger.fine { "  Prepared inputs: ${inputs.keys} (${inputs.size} inputs)" }
+            logger.fine { "[${instanceConfig.name}]   Prepared inputs: ${inputs.keys} (${inputs.size} inputs)" }
             inputs.forEach { (name, value) ->
-                logger.fine { "    $name: ${value.value} (type: ${value.type})" }
+                logger.fine { "[${instanceConfig.name}]     $name: ${value.value} (type: ${value.type})" }
             }
 
             // Get or create node state
@@ -225,11 +225,11 @@ class FlowInstanceExecutor(
             // Execute node based on type
             when (node.type) {
                 "function" -> {
-                    logger.fine { "  Executing function node..." }
+                    logger.fine { "[${instanceConfig.name}]   Executing function node..." }
                     executeFunctionNode(node, inputs, nodeState, flowVars)
                 }
                 else -> {
-                    logger.warning("Unsupported node type: ${node.type}")
+                    logger.warning("[${instanceConfig.name}] Unsupported node type: ${node.type}")
                 }
             }
 
@@ -238,7 +238,7 @@ class FlowInstanceExecutor(
             lastExecution = Instant.now()
 
         } catch (e: Exception) {
-            logger.severe("Error executing node $nodeId in flow ${instanceConfig.name}: ${e.message}")
+            logger.severe("[${instanceConfig.name}] Error executing node $nodeId: ${e.message}")
             e.printStackTrace()
             errorCount++
             lastError = e.message
@@ -315,25 +315,25 @@ class FlowInstanceExecutor(
     ) {
         val script = node.config.getString("script", "")
         if (script.isBlank()) {
-            logger.warning("Function node ${node.id} has no script")
+            logger.warning("[${instanceConfig.name}] Function node ${node.id} has no script")
             return
         }
 
-        logger.fine { "  Script to execute:\n$script" }
-        logger.fine { "  Language: ${node.language}" }
+        logger.fine { "[${instanceConfig.name}]   Script to execute:\n$script" }
+        logger.fine { "[${instanceConfig.name}]   Language: ${node.language}" }
 
         // Execute everything in a blocking context to avoid GraalVM issues
         vertx.executeBlocking<FlowScriptEngine.ExecutionResult> {
             // Get or create script engine for this node
             // GraalVM Context initialization must happen on a worker thread, not event loop
             val scriptEngine = scriptEngines[node.id] ?: run {
-                logger.fine { "  Creating new FlowScriptEngine for node ${node.id} on worker thread..." }
+                logger.fine { "[${instanceConfig.name}]   Creating new FlowScriptEngine for node ${node.id} on worker thread..." }
                 val engine = FlowScriptEngine()
                 scriptEngines[node.id] = engine
                 engine
             }
 
-            logger.fine { "  Calling scriptEngine.execute()..." }
+            logger.fine { "[${instanceConfig.name}]   Calling scriptEngine.execute()..." }
 
             // Execute the script
             scriptEngine.execute(
@@ -343,27 +343,27 @@ class FlowInstanceExecutor(
                 state = nodeState,
                 flowVariables = flowVars,
                 onOutput = { portName, value ->
-                    logger.fine { "  Script called outputs.send($portName, $value)" }
+                    logger.fine { "[${instanceConfig.name}]   Script called outputs.send($portName, $value)" }
                     handleNodeOutput(node.id, portName, value)
                 }
             )
         }.onComplete { asyncResult ->
             if (asyncResult.succeeded()) {
                 val result = asyncResult.result()
-                logger.fine { "  Script execution completed: success=${result.success}, logs=${result.logs.size}, errors=${result.errors.size}" }
+                logger.fine { "[${instanceConfig.name}]   Script execution completed: success=${result.success}, logs=${result.logs.size}, errors=${result.errors.size}" }
 
                 if (!result.success) {
-                    logger.severe("Script execution failed for node ${node.id}: ${result.errors}")
+                    logger.severe("[${instanceConfig.name}] Script execution failed for node ${node.id}: ${result.errors}")
                     errorCount++
                     lastError = result.errors.joinToString(", ")
                 }
 
                 // Log console output
                 result.logs.forEach { log ->
-                    logger.fine { "Node ${node.id}: $log" }
+                    logger.fine { "[${instanceConfig.name}] Node ${node.id}: $log" }
                 }
             } else {
-                logger.severe("Async script execution failed: ${asyncResult.cause()?.message}")
+                logger.severe("[${instanceConfig.name}] Async script execution failed: ${asyncResult.cause()?.message}")
                 asyncResult.cause()?.printStackTrace()
                 errorCount++
                 lastError = asyncResult.cause()?.message
@@ -378,7 +378,7 @@ class FlowInstanceExecutor(
         try {
             val nodeOutput = "$nodeId.$portName"
 
-            logger.fine("Node $nodeId output on port $portName: $value")
+            logger.fine("[${instanceConfig.name}] Node $nodeId output on port $portName: $value")
 
             // Check if this output is mapped to an MQTT topic
             val outputMapping = flowInstance.outputMappings.find { it.nodeOutput == nodeOutput }
@@ -409,7 +409,7 @@ class FlowInstanceExecutor(
             }
 
         } catch (e: Exception) {
-            logger.severe("Error handling node output: ${e.message}")
+            logger.severe("[${instanceConfig.name}] Error handling node output: ${e.message}")
             e.printStackTrace()
         }
     }
@@ -445,13 +445,13 @@ class FlowInstanceExecutor(
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
                 sessionHandler.publishMessage(message)
-                logger.fine { "Published to MQTT topic $topic: $value" }
+                logger.fine { "[${instanceConfig.name}] Published to MQTT topic $topic: $value" }
             } else {
-                logger.severe("SessionHandler not available for publishing")
+                logger.severe("[${instanceConfig.name}] SessionHandler not available for publishing")
             }
 
         } catch (e: Exception) {
-            logger.severe("Error publishing to MQTT: ${e.message}")
+            logger.severe("[${instanceConfig.name}] Error publishing to MQTT: ${e.message}")
             e.printStackTrace()
         }
     }
