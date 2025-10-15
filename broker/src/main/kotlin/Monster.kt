@@ -68,6 +68,7 @@ class Monster(args: Array<String>) {
     private var nodeName: String = ""
 
     private var sessionHandler: SessionHandler? = null
+    private var messageBus: IMessageBus? = null
 
     private val postgresConfig = object {
         var url: String = ""
@@ -166,6 +167,10 @@ class Monster(args: Array<String>) {
 
         fun getSessionHandler(): SessionHandler? {
             return getInstance().sessionHandler
+        }
+
+        fun getMessageBus(): IMessageBus? {
+            return getInstance().messageBus
         }
 
         @Volatile
@@ -541,11 +546,12 @@ MORE INFO:
                 // Session handler
                 val sessionHandler = SessionHandler(sessionStore, messageBus, messageHandler, queuedMessagesEnabled)
 
-                // Store ArchiveHandler and SessionHandler for later access
+                // Store ArchiveHandler, SessionHandler, and MessageBus for later access
                 singleton?.let { instance ->
                     instance.archiveHandler = archiveHandler
                     archiveHandler.setMessageHandler(messageHandler)
                     instance.sessionHandler = sessionHandler
+                    instance.messageBus = messageBus
                 }
 
                 // OPC UA Extension
