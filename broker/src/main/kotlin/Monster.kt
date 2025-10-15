@@ -698,24 +698,30 @@ MORE INFO:
                         val mqttLogLevel = loggingConfig.getString("MqttLevel", "INFO")
                         
                         if (mqttLoggingEnabled) {
+                            // Validate MQTT log level - only INFO, WARNING, SEVERE are allowed
+                            val validLevels = setOf("INFO", "WARNING", "SEVERE")
+                            if (!validLevels.contains(mqttLogLevel.uppercase())) {
+                                val errorMsg = "Invalid MQTT log level: $mqttLogLevel. Only INFO, WARNING, SEVERE are allowed. Broker will not start."
+                                logger.severe(errorMsg)
+                                throw IllegalArgumentException(errorMsg)
+                            }
+                            
                             try {
                                 logger.info("Installing MQTT log handler for system-wide log publishing (level: $mqttLogLevel)...")
                                 val mqttLogHandler = MqttLogHandler.install(messageHandler)
                                 
-                                // Set the log level for the MQTT handler (only INFO, WARNING, SEVERE allowed)
+                                // Set the log level for the MQTT handler
                                 val level = when (mqttLogLevel.uppercase()) {
                                     "INFO" -> Level.INFO
                                     "WARNING" -> Level.WARNING
                                     "SEVERE" -> Level.SEVERE
-                                    else -> {
-                                        logger.warning("Invalid MQTT log level: $mqttLogLevel. Only INFO, WARNING, SEVERE are allowed. Using INFO.")
-                                        Level.INFO
-                                    }
+                                    else -> Level.INFO // This should never happen due to validation above
                                 }
                                 mqttLogHandler.level = level
                                 logger.info("MQTT log handler installed successfully with level: $level")
                             } catch (e: Exception) {
-                                logger.warning("Failed to install MQTT log handler: ${e.message}")
+                                logger.severe("Failed to install MQTT log handler: ${e.message}")
+                                throw e
                             }
                         } else {
                             logger.info("MQTT log handler is disabled in configuration")
