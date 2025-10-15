@@ -81,10 +81,10 @@ class MqttLogHandler : Handler() {
                 initializeNodeId()
             }
 
-            // Get the message bus for publishing (bypass subscription system)
-            val messageBus = Monster.getMessageBus()
-            if (messageBus == null) {
-                // MessageBus not available yet, skip silently
+            // Get the session handler for publishing
+            val sessionHandler = Monster.getSessionHandler()
+            if (sessionHandler == null) {
+                // SessionHandler not available yet, skip silently
                 return
             }
 
@@ -149,9 +149,8 @@ class MqttLogHandler : Handler() {
                 noLog = true // CRITICAL: Prevent logging of log messages (prevents infinite recursion)
             )
 
-            // Publish directly to message bus (broadcast to all cluster nodes, bypass subscription filtering)
-            // This ensures logs are available cluster-wide without requiring explicit subscriptions
-            messageBus.publishMessageToBus(message)
+            // Publish via SessionHandler for proper routing to subscribers
+            sessionHandler.publishMessage(message)
 
         } catch (e: Exception) {
             // Avoid logging errors from the log handler itself to prevent loops
