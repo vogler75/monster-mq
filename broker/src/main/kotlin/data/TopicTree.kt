@@ -114,41 +114,94 @@ class TopicTree<K, V> : ITopicTree<K, V> {
     }
 
     override fun isTopicNameMatching(topicName: String): Boolean {
-        fun find(node: Node<K, V>, current: String, rest: List<String>, level: Int): Boolean {
+        // MQTT 3.1.1 spec: Check if the topic starts with '$'
+        // Wildcards at level 1 should NOT match topics starting with '$'
+        // UNLESS the filter explicitly starts with '$'
+        val topicLevels = Utils.getTopicLevels(topicName)
+        if (topicLevels.isEmpty()) return false
+        
+        val topicStartsWithDollar = topicLevels[0].startsWith('$')
+        
+        fun find(node: Node<K, V>, current: String, rest: List<String>, level: Int, filterStartsWithDollar: Boolean): Boolean {
             return node.children.any { child ->
+                val isFirstLevel = level == 1
+                val childFilterStartsWithDollar = if (isFirstLevel) child.key.startsWith('$') else filterStartsWithDollar
+                
                 when (child.key) {
-                    "#" -> !(level == 1 && current == Const.SYS_TOPIC_NAME)
-                    "+", current -> (rest.isEmpty() && child.value.dataset.isNotEmpty() )
-                            || (rest.isNotEmpty() && find(child.value, rest.first(), rest.drop(1), level + 1))
+                    "#" -> {
+                        // Multi-level wildcard: matches if topic doesn't start with '$' OR filter explicitly starts with '$'
+                        if (isFirstLevel && topicStartsWithDollar && !childFilterStartsWithDollar) {
+                            false
+                        } else {
+                            true
+                        }
+                    }
+                    "+" -> {
+                        // Single-level wildcard: matches if topic doesn't start with '$' OR filter explicitly starts with '$'
+                        if (isFirstLevel && topicStartsWithDollar && !childFilterStartsWithDollar) {
+                            false
+                        } else {
+                            (rest.isEmpty() && child.value.dataset.isNotEmpty())
+                                    || (rest.isNotEmpty() && find(child.value, rest.first(), rest.drop(1), level + 1, childFilterStartsWithDollar))
+                        }
+                    }
+                    current -> {
+                        // Exact match
+                        (rest.isEmpty() && child.value.dataset.isNotEmpty())
+                                || (rest.isNotEmpty() && find(child.value, rest.first(), rest.drop(1), level + 1, childFilterStartsWithDollar))
+                    }
                     else -> false
                 }
             }
         }
-        val xs = Utils.getTopicLevels(topicName)
-        return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1), 1) else false
+        
+        return find(root, topicLevels.first(), topicLevels.drop(1), 1, false)
     }
 
     override fun findDataOfTopicName(topicName: String): List<Pair<K, V>> {
-        fun find(node: Node<K, V>, current: String, rest: List<String>, level: Int): List<Pair<K, V>> {
+        // MQTT 3.1.1 spec: Check if the topic starts with '$'
+        // Wildcards at level 1 should NOT match topics starting with '$'
+        // UNLESS the filter explicitly starts with '$'
+        val topicLevels = Utils.getTopicLevels(topicName)
+        if (topicLevels.isEmpty()) return listOf()
+        
+        val topicStartsWithDollar = topicLevels[0].startsWith('$')
+        
+        fun find(node: Node<K, V>, current: String, rest: List<String>, level: Int, filterStartsWithDollar: Boolean): List<Pair<K, V>> {
             return node.children.flatMap { child ->
+                val isFirstLevel = level == 1
+                val childFilterStartsWithDollar = if (isFirstLevel) child.key.startsWith('$') else filterStartsWithDollar
+                
                 when (child.key) {
-                    "#" -> if (level == 1 && current == Const.SYS_TOPIC_NAME) listOf() else child.value.dataset.toList()
+                    "#" -> {
+                        // Multi-level wildcard: return empty if topic starts with '$' and filter doesn't
+                        if (isFirstLevel && topicStartsWithDollar && !childFilterStartsWithDollar) {
+                            listOf()
+                        } else {
+                            child.value.dataset.toList()
+                        }
+                    }
                     "+" -> {
-                        (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
-                                (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), level+1)
-                                else listOf())
+                        // Single-level wildcard: check $SYS protection at first level
+                        if (isFirstLevel && topicStartsWithDollar && !childFilterStartsWithDollar) {
+                            listOf()
+                        } else {
+                            (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
+                                    (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), level + 1, childFilterStartsWithDollar)
+                                    else listOf())
+                        }
                     }
                     current -> {
                         (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
-                                (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), level+1)
-                                else find(child.value, "", listOf(), level+1))
+                                (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), level + 1, childFilterStartsWithDollar)
+                                else find(child.value, "", listOf(), level + 1, childFilterStartsWithDollar))
                     }
                     else -> listOf()
                 }
             }
         }
-        val xs = Utils.getTopicLevels(topicName)
-        return if (xs.isNotEmpty()) find(root, xs.first(), xs.drop(1), 1) else listOf()
+        
+        return find(root, topicLevels.first(), topicLevels.drop(1), 1, false)
     }
 
     override fun findMatchingTopicNames(topicName: String): List<String> {

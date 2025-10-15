@@ -5,6 +5,7 @@ import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
+import at.rocworks.handlers.MessageHandler
 import io.vertx.core.json.JsonObject
 import java.time.Instant
 import java.util.logging.Handler
@@ -25,7 +26,7 @@ import java.util.logging.Logger
  * - Configurable minimum log level
  * - Automatic node identification
  */
-class MqttLogHandler : Handler() {
+class MqttLogHandler(private val messageHandler: MessageHandler?) : Handler() {
 
     private val logger: Logger = Utils.getLogger(MqttLogHandler::class.java)
     private var nodeId: String = "unknown"
@@ -38,9 +39,9 @@ class MqttLogHandler : Handler() {
         /**
          * Initialize and install the MQTT log handler
          */
-        fun install(): MqttLogHandler {
+        fun install(messageHandler: MessageHandler? = null): MqttLogHandler {
             if (instance == null) {
-                instance = MqttLogHandler()
+                instance = MqttLogHandler(messageHandler)
                 
                 // Add to root logger to capture all logging
                 val rootLogger = Logger.getLogger("")
@@ -154,6 +155,9 @@ class MqttLogHandler : Handler() {
                 time = record.instant ?: Instant.now(),
                 senderId = "mqtt-log-handler-$nodeId" // Identify sender to prevent loops
             )
+
+            // Save to archives BEFORE broadcasting (only this node saves, prevents cluster duplicates)
+            messageHandler?.saveMessage(message)
 
             // Publish to broadcast event bus address (all nodes receive this)
             // No error handling or logging here - failures are silently ignored to prevent recursion

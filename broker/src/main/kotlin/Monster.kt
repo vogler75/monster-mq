@@ -700,7 +700,7 @@ MORE INFO:
                         if (mqttLoggingEnabled) {
                             try {
                                 logger.info("Installing MQTT log handler for system-wide log publishing (level: $mqttLogLevel)...")
-                                val mqttLogHandler = MqttLogHandler.install()
+                                val mqttLogHandler = MqttLogHandler.install(messageHandler)
                                 
                                 // Set the log level for the MQTT handler (only INFO, WARNING, SEVERE allowed)
                                 val level = when (mqttLogLevel.uppercase()) {
