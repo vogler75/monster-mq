@@ -205,8 +205,9 @@ class GraphQLServer(
         val options = HttpServerOptions()
             .setPort(port)
             .setHost("0.0.0.0")
+            .addWebSocketSubProtocol("graphql-transport-ws")  // Required for browser WebSocket clients
 
-        logger.info("Creating HTTP server with options: port=$port, host=0.0.0.0")
+        logger.info("Creating HTTP server with options: port=$port, host=0.0.0.0, WebSocket subprotocol: graphql-transport-ws")
         try {
             vertx.createHttpServer(options)
                 .requestHandler(router)
