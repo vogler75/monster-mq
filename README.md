@@ -144,7 +144,7 @@ Postgres:
 # Enable MQTT logging
 Logging:
   MqttEnabled: true    # Publish logs to MQTT topics
-  MqttLevel: INFO      # Minimum log level to publish
+  MqttLevel: INFO      # Minimum log level: INFO, WARNING, or SEVERE
 
 # Service endpoints
 GraphQL:

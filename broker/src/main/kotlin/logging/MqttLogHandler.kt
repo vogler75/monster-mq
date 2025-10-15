@@ -77,6 +77,12 @@ class MqttLogHandler : Handler() {
                 return
             }
             
+            // Check if this record's level meets the handler's threshold
+            // This is normally done by the framework, but we make it explicit for clarity
+            if (record.level.intValue() < this.level.intValue()) {
+                return
+            }
+            
             // Initialize node ID if not done yet
             if (!initialized) {
                 initializeNodeId()

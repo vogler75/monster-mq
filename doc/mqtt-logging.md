@@ -71,7 +71,7 @@ Add the following section to your `config.yaml`:
 ```yaml
 Logging:
   MqttEnabled: true    # Enable MQTT log publishing
-  MqttLevel: INFO      # Minimum log level to publish
+  MqttLevel: INFO      # Minimum log level to publish: INFO, WARNING, or SEVERE
 ```
 
 ### Configuration Options
@@ -79,7 +79,9 @@ Logging:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `MqttEnabled` | Boolean | `false` | Enable/disable MQTT log handler |
-| `MqttLevel` | String | `INFO` | Minimum log level: ALL, FINEST, FINER, FINE, INFO, WARNING, SEVERE |
+| `MqttLevel` | String | `INFO` | Minimum log level: **INFO**, **WARNING**, or **SEVERE** |
+
+> **Note**: Only INFO, WARNING, and SEVERE levels are supported for MQTT logging. This prevents verbose debug logs (FINE, FINER, FINEST) from overwhelming the MQTT message bus.
 
 ## Usage Examples
 

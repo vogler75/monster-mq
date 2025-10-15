@@ -702,15 +702,18 @@ MORE INFO:
                                 logger.info("Installing MQTT log handler for system-wide log publishing (level: $mqttLogLevel)...")
                                 val mqttLogHandler = MqttLogHandler.install()
                                 
-                                // Set the log level for the MQTT handler
-                                try {
-                                    val level = Level.parse(mqttLogLevel.uppercase())
-                                    mqttLogHandler.level = level
-                                    logger.info("MQTT log handler installed successfully with level: $level")
-                                } catch (e: IllegalArgumentException) {
-                                    logger.warning("Invalid MQTT log level: $mqttLogLevel, using INFO")
-                                    mqttLogHandler.level = Level.INFO
+                                // Set the log level for the MQTT handler (only INFO, WARNING, SEVERE allowed)
+                                val level = when (mqttLogLevel.uppercase()) {
+                                    "INFO" -> Level.INFO
+                                    "WARNING" -> Level.WARNING
+                                    "SEVERE" -> Level.SEVERE
+                                    else -> {
+                                        logger.warning("Invalid MQTT log level: $mqttLogLevel. Only INFO, WARNING, SEVERE are allowed. Using INFO.")
+                                        Level.INFO
+                                    }
                                 }
+                                mqttLogHandler.level = level
+                                logger.info("MQTT log handler installed successfully with level: $level")
                             } catch (e: Exception) {
                                 logger.warning("Failed to install MQTT log handler: ${e.message}")
                             }
