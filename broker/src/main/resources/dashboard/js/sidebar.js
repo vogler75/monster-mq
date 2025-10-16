@@ -294,4 +294,44 @@ window.toggleSidebar = function() {
 // Initialize sidebar when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     new SidebarManager();
+    
+    // Inject global Log Viewer on all authenticated pages (exclude login page)
+    if (!window.location.pathname.endsWith('/pages/login.html')) {
+        // Ensure container exists
+        let lvContainer = document.getElementById('log-viewer-container');
+        if (!lvContainer) {
+            lvContainer = document.createElement('div');
+            lvContainer.id = 'log-viewer-container';
+            document.body.appendChild(lvContainer);
+        }
+        // Avoid duplicate initialization
+        if (!window.__monsterMQLogViewer) {
+            if (typeof LogViewer === 'function') {
+                // Allow per-page default filters via body data attributes
+                // e.g., <body data-log-source-class="at.rocworks.flowengine" data-log-title="Flow Engine Logs">
+                const body = document.body;
+                const filters = {};
+                if (body.dataset.logSourceClass) filters.sourceClassRegex = body.dataset.logSourceClass;
+                if (body.dataset.logMessageRegex) filters.messageRegex = body.dataset.logMessageRegex;
+                if (body.dataset.logLoggerRegex) filters.loggerRegex = body.dataset.logLoggerRegex;
+                const title = body.dataset.logTitle || 'System Logs';
+                const startCollapsed = body.dataset.logCollapsed === 'false' ? false : true;
+                window.__monsterMQLogViewer = new LogViewer('log-viewer-container', {
+                    collapsed: startCollapsed,
+                    maxLines: 1000,
+                    autoScroll: true,
+                    title,
+                    filters
+                });
+                // Expose helper for dynamic filter updates from pages
+                window.updateLogViewerFilters = (newFilters) => {
+                    if (window.__monsterMQLogViewer) {
+                        window.__monsterMQLogViewer.setFilters(newFilters);
+                    }
+                };
+            } else {
+                console.warn('LogViewer class not loaded yet. Ensure /js/log-viewer.js is included globally.');
+            }
+        }
+    }
 });

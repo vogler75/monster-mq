@@ -311,6 +311,8 @@ body {
     padding: 2rem;
     min-height: 100vh;
     transition: margin-left 0.3s ease;
+    box-sizing: border-box;
+    overflow-y: auto;
 }
 
 .main-content.sidebar-collapsed {
@@ -806,4 +808,42 @@ body {
         padding: 2rem;
         margin: 1rem;
     }
+}
+
+/* =============================
+     Global Dark Scrollbar Styling
+     Option A: Apply everywhere
+     ============================= */
+/* WebKit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+::-webkit-scrollbar-track {
+    background: var(--dark-surface);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--dark-surface-2);
+    border-radius: 6px;
+    border: 3px solid var(--dark-surface); /* creates padding */
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--dark-border);
+}
+::-webkit-scrollbar-thumb:active {
+    background: var(--monster-purple);
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin; /* auto | thin | none */
+    scrollbar-color: var(--dark-surface-2) var(--dark-surface); /* thumb track */
+}
+
+/* Optional: overlay scrollbars on macOS can appear translucent; force solid background for consistency */
+body::-webkit-scrollbar-track {
+    background: var(--dark-surface);
+}
+body::-webkit-scrollbar-thumb {
+    background: var(--dark-surface-2);
 }
