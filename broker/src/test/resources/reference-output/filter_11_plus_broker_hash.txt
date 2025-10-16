@@ -1,0 +1,4 @@
+Filter: +/broker/#
+Total topics: 41000
+Matches: 0
+---

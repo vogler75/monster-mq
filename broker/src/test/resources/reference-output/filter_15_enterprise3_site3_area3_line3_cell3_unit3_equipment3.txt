@@ -1,0 +1,5 @@
+Filter: enterprise3/site3/area3/line3/cell3/unit3/equipment3
+Total topics: 41000
+Matches: 1
+---
+enterprise3/site3/area3/line3/cell3/unit3/equipment3

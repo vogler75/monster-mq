@@ -1,0 +1,7 @@
+Filter: enterprise1/site1/area1/line1/cell1/unit1/+
+Total topics: 41000
+Matches: 3
+---
+enterprise1/site1/area1/line1/cell1/unit1/equipment1
+enterprise1/site1/area1/line1/cell1/unit1/equipment2
+enterprise1/site1/area1/line1/cell1/unit1/equipment3

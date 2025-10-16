@@ -1,0 +1,28 @@
+Filter: enterprise1/site1/area1/+/+/unit1/equipment1
+Total topics: 41000
+Matches: 24
+---
+enterprise1/site1/area1/line1/cell1/unit1/equipment1
+enterprise1/site1/area1/line1/cell2/unit1/equipment1
+enterprise1/site1/area1/line1/cell3/unit1/equipment1
+enterprise1/site1/area1/line1/cell4/unit1/equipment1
+enterprise1/site1/area1/line2/cell1/unit1/equipment1
+enterprise1/site1/area1/line2/cell2/unit1/equipment1
+enterprise1/site1/area1/line2/cell3/unit1/equipment1
+enterprise1/site1/area1/line2/cell4/unit1/equipment1
+enterprise1/site1/area1/line3/cell1/unit1/equipment1
+enterprise1/site1/area1/line3/cell2/unit1/equipment1
+enterprise1/site1/area1/line3/cell3/unit1/equipment1
+enterprise1/site1/area1/line3/cell4/unit1/equipment1
+enterprise1/site1/area1/line4/cell1/unit1/equipment1
+enterprise1/site1/area1/line4/cell2/unit1/equipment1
+enterprise1/site1/area1/line4/cell3/unit1/equipment1
+enterprise1/site1/area1/line4/cell4/unit1/equipment1
+enterprise1/site1/area1/line5/cell1/unit1/equipment1
+enterprise1/site1/area1/line5/cell2/unit1/equipment1
+enterprise1/site1/area1/line5/cell3/unit1/equipment1
+enterprise1/site1/area1/line5/cell4/unit1/equipment1
+enterprise1/site1/area1/line6/cell1/unit1/equipment1
+enterprise1/site1/area1/line6/cell2/unit1/equipment1
+enterprise1/site1/area1/line6/cell3/unit1/equipment1
+enterprise1/site1/area1/line6/cell4/unit1/equipment1
