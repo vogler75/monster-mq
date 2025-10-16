@@ -54,7 +54,7 @@ Flow classes define the template/blueprint with nodes that have named inputs and
         "type": "function",
         "name": "Check Alarm Threshold",
         "config": {
-          "script": "if (msg.fahrenheit > 176) { return { alarm: 'Temperature critical!' }; }"
+          "script": "if (msg.fahrenheit > 176) {\n  return { alarm: 'Temperature critical!' };\n}"
         },
         "inputs": ["fahrenheit"],
         "outputs": ["alarm"],
@@ -204,9 +204,8 @@ if (temp > threshold) {
   });
 
   // Update state
-    temperature: temp,
-    building: building
-  });
+  state.count++;
+  state.lastValue = temp;
 }
 ```
 
@@ -1011,7 +1010,10 @@ type FlowTestResult {
           const temp = inputs.temperature.value;
           const threshold = parseInt(inputs.threshold.value);
           if (temp > threshold) {
-            outputs.send('alarm', { temp, message: 'High temperature!' });
+            outputs.send('alarm', { 
+              temp, 
+              message: 'High temperature!' 
+            });
           } else {
             outputs.send('normal', { temp });
           }
@@ -1111,13 +1113,32 @@ type FlowTestResult {
 ```json
 {
   "inputMappings": [
-    { "nodeInput": "aggregate.sensor1", "type": "TOPIC", "value": "factory/hall1/sensor/1" },
-    { "nodeInput": "aggregate.sensor2", "type": "TOPIC", "value": "factory/hall1/sensor/2" },
-    { "nodeInput": "aggregate.sensor3", "type": "TOPIC", "value": "factory/hall1/sensor/3" },
-    { "nodeInput": "aggregate.location", "type": "TEXT", "value": "Factory Hall 1" }
+    { 
+      "nodeInput": "aggregate.sensor1", 
+      "type": "TOPIC", 
+      "value": "factory/hall1/sensor/1" 
+    },
+    { 
+      "nodeInput": "aggregate.sensor2", 
+      "type": "TOPIC", 
+      "value": "factory/hall1/sensor/2" 
+    },
+    { 
+      "nodeInput": "aggregate.sensor3", 
+      "type": "TOPIC", 
+      "value": "factory/hall1/sensor/3" 
+    },
+    { 
+      "nodeInput": "aggregate.location", 
+      "type": "TEXT", 
+      "value": "Factory Hall 1" 
+    }
   ],
   "outputMappings": [
-    { "nodeOutput": "aggregate.average", "topic": "factory/hall1/average" }
+    { 
+      "nodeOutput": "aggregate.average", 
+      "topic": "factory/hall1/average" 
+    }
   ]
 }
 ```

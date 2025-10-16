@@ -179,6 +179,7 @@
             font-size: 0.875rem;
             line-height: 1.6;
             color: var(--text-primary);
+            white-space: pre-wrap;
         }
 
         .code-inline {
@@ -615,7 +616,8 @@ if (inputs.temp.value > threshold) {
         location: location,
         notifyEmail: email
     });
-}</code></div>
+}
+</code></div>
 
                     <div class="info-box">
                         <div class="info-box-title">💡 Variables vs. State</div>
@@ -710,7 +712,8 @@ state.values.push(msg.value);
 // Keep only last 10 values
 if (state.values.length > 10) {
     state.values.shift();
-}</code></div>
+}
+</code></div>
                     </div>
 
                     <div class="api-section">
@@ -719,7 +722,8 @@ if (state.values.length > 10) {
                         <div class="code-block"><code>// Access variables
 let threshold = parseFloat(flow.threshold);
 let apiKey = flow.apiKey;
-let location = flow.location;</code></div>
+let location = flow.location;
+</code></div>
                     </div>
 
                     <div class="api-section">
@@ -763,7 +767,8 @@ if (temperature > threshold) {
         temperature: temperature,
         status: "OK"
     });
-}</code></div>
+}
+</code></div>
 
                     <h3>Example 2: Rolling Average</h3>
                     <div class="code-block"><code>// Initialize state
@@ -788,7 +793,8 @@ let average = sum / state.values.length;
 console.log("Average:", average, "over", state.values.length, "values");
 
 outputs.send("average", average);
-outputs.send("count", state.values.length);</code></div>
+outputs.send("count", state.values.length);
+</code></div>
 
                     <h3>Example 3: Data Validation</h3>
                     <div class="code-block"><code>let data = inputs.data.value;
@@ -818,7 +824,8 @@ if (typeof data === 'object' && data.temp !== undefined) {
         received: data
     });
     console.error("Expected object with 'temp' property");
-}</code></div>
+}
+</code></div>
                 </section>
 
                 <!-- TROUBLESHOOTING -->

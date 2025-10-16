@@ -72,7 +72,7 @@ const HelpModal = (() => {
         right: 0;
         bottom: 0;
         background: rgba(0, 0, 0, 0.75);
-        z-index: 9999;
+        z-index: 10001;
         backdrop-filter: blur(4px);
       }
 
