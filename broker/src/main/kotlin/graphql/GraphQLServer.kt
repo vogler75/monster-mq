@@ -162,7 +162,8 @@ class GraphQLServer(
         router.route("${path}ws").handler { ctx ->
             try {
                 val req = ctx.request()
-                logger.info("WS HANDSHAKE incoming: remote=${req.remoteAddress()} path=${req.path()} headers=${req.headers().entries().joinToString { it.key + '=' + it.value }}")
+                // Downgraded to FINE to reduce noise at INFO level
+                logger.fine("WS HANDSHAKE incoming: remote=${req.remoteAddress()} path=${req.path()} headers=${req.headers().entries().joinToString { it.key + '=' + it.value }}")
             } catch (e: Exception) {
                 logger.severe("WS HANDSHAKE logging failed: ${e.message}")
             }
