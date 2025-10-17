@@ -25,14 +25,14 @@ type Subscription {
     ): TopicUpdate!
     
     # Subscribe to real-time system logs with advanced filtering
-    # Streams broker logs published to $SYS/logs/<node>/<level> topics
+    # Streams broker logs published to $SYS/syslogs/<node>/<level> topics
     # Server-side filtering reduces bandwidth and improves performance
     # Supports regex patterns for flexible log filtering
     systemLogs(
         # Node filter (default "+" for all nodes)
         node: String = "+"
-        # Level filter: INFO, WARNING, SEVERE (default "+" for all)
-        level: String = "+"
+        # Level filter: array of levels (INFO, WARNING, SEVERE) or single level string (default "+" for all)
+        level: [String!]
         # Logger name filter (supports regex)
         logger: String
         # Thread ID filter (exact match)

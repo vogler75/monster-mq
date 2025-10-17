@@ -46,14 +46,21 @@ class SubscriptionResolver(
     fun systemLogs(): DataFetcher<Publisher<SystemLogEntry>> {
         return DataFetcher { env ->
             val node = env.getArgument<String?>("node") ?: "+"
-            val level = env.getArgument<String?>("level") ?: "+"
+            val levelArg = env.getArgument<Any?>("level")
+            val levels = when (levelArg) {
+                is List<*> -> levelArg.filterIsInstance<String>()
+                is String -> listOf(levelArg)
+                null -> listOf("+")
+                else -> listOf("+")
+            }
+            logger.info("SubscriptionResolver.systemLogs - levelArg: $levelArg, levels: $levels")
             val loggerFilter = env.getArgument<String?>("logger")
             val threadFilter = env.getArgument<Long?>("thread")
             val sourceClassFilter = env.getArgument<String?>("sourceClass")
             val sourceMethodFilter = env.getArgument<String?>("sourceMethod")
             val messageFilter = env.getArgument<String?>("message")
             
-            SystemLogsPublisher(vertx, node, level, loggerFilter, threadFilter, 
+            SystemLogsPublisher(vertx, node, levels, loggerFilter, threadFilter, 
                                sourceClassFilter, sourceMethodFilter, messageFilter)
         }
     }
@@ -184,7 +191,7 @@ class SubscriptionResolver(
     private class SystemLogsPublisher(
         private val vertx: Vertx,
         private val nodeFilter: String,
-        private val levelFilter: String,
+        private val levelFilters: List<String>,
         private val loggerFilter: String?,
         private val threadFilter: Long?,
         private val sourceClassFilter: String?,
@@ -198,7 +205,7 @@ class SubscriptionResolver(
             val handler = SystemLogsHandler(
                 vertx,
                 nodeFilter,
-                levelFilter,
+                levelFilters,
                 loggerFilter,
                 threadFilter,
                 sourceClassFilter,
@@ -214,7 +221,7 @@ class SubscriptionResolver(
     private class SystemLogsHandler(
         private val vertx: Vertx,
         private val nodeFilter: String,
-        private val levelFilter: String,
+        private val levelFilters: List<String>,
         private val loggerFilter: String?,
         private val threadFilter: Long?,
         private val sourceClassFilter: String?,
@@ -237,12 +244,12 @@ class SubscriptionResolver(
             // Subscribe to broadcast event bus for system logs
             vertx.eventBus().consumer<BrokerMessage>(EventBusAddresses.Cluster.BROADCAST) { message ->
                 message.body()?.let { brokerMessage ->
-                    if (!cancelled.get() && brokerMessage.topicName.startsWith("${Const.SYS_TOPIC_NAME}/logs/")) {
+                    if (!cancelled.get() && brokerMessage.topicName.startsWith("${Const.SYS_TOPIC_NAME}/${Const.LOG_TOPIC_NAME}/")) {
                         handleLogMessage(brokerMessage)
                     }
                 }
             }
-            logger.fine { "GraphQL system logs subscription created (node: $nodeFilter, level: $levelFilter)" }
+            logger.fine { "GraphQL system logs subscription created (node: $nodeFilter, levels: $levelFilters)" }
         }
 
         private fun handleLogMessage(message: BrokerMessage) {
@@ -260,7 +267,11 @@ class SubscriptionResolver(
                 
                 // Apply topic-level filters (node and level)
                 if (!matchesTopicFilter(node, nodeFilter)) return
-                if (!matchesTopicFilter(level, levelFilter)) return
+                
+                // Check if level matches any of the level filters
+                val levelMatches = levelFilters.contains("+") || levelFilters.any { matchesTopicFilter(level, it) }
+                logger.fine("Subscription: level='$level', levelFilters=$levelFilters, matches=$levelMatches")
+                if (!levelMatches) return
                 
                 // Apply field filters with regex support
                 if (loggerFilter != null) {

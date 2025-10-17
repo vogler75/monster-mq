@@ -77,8 +77,8 @@ type Query {
         lastMinutes: Int
         # Optional node filter (exact match)
         node: String
-        # Optional log level filter (exact match: INFO, WARNING, SEVERE, etc.)
-        level: String
+        # Optional log level filter: array of levels (INFO, WARNING, SEVERE) or single level string
+        level: [String!]
         # Optional logger name regex filter
         logger: String
         # Optional source class regex filter

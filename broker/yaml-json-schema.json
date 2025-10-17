@@ -97,7 +97,7 @@
       "properties": {
         "MqttEnabled": {
           "type": "boolean",
-          "description": "Enable MQTT log handler to publish all Java logs to $SYS/logs/<node>/<level> topics",
+          "description": "Enable MQTT log handler to publish all Java logs to $SYS/syslogs/<node>/<level> topics",
           "default": false
         },
         "MqttLevel": {

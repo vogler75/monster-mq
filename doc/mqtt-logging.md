@@ -18,13 +18,13 @@ MonsterMQ now includes an advanced MQTT logging feature that captures all Java l
 All log messages are published to topics following this pattern:
 
 ```
-$SYS/logs/<node-id>/<level>
+$SYS/syslogs/<node-id>/<level>
 ```
 
 ### Examples
-- `$SYS/logs/node-001/info` - INFO level logs from node-001
-- `$SYS/logs/node-002/error` - ERROR level logs from node-002
-- `$SYS/logs/cluster-main/warning` - WARNING level logs from cluster-main
+- `$SYS/syslogs/node-001/info` - INFO level logs from node-001
+- `$SYS/syslogs/node-002/error` - ERROR level logs from node-002
+- `$SYS/syslogs/cluster-main/warning` - WARNING level logs from cluster-main
 
 ## Message Format
 
@@ -89,25 +89,25 @@ Logging:
 
 Subscribe to all logs from a specific node:
 ```bash
-mosquitto_sub -h localhost -t '$SYS/logs/node-001/+'
+mosquitto_sub -h localhost -t '$SYS/syslogs/node-001/+'
 ```
 
 Subscribe to error logs from all nodes:
 ```bash
-mosquitto_sub -h localhost -t '$SYS/logs/+/severe'
+mosquitto_sub -h localhost -t '$SYS/syslogs/+/severe'
 ```
 
 Subscribe to all system logs:
 ```bash
-mosquitto_sub -h localhost -t '$SYS/logs/+/+'
+mosquitto_sub -h localhost -t '$SYS/syslogs/+/+'
 ```
 
 ### 2. Log Level Filtering
 
 Subscribe only to warnings and errors:
 ```bash
-mosquitto_sub -h localhost -t '$SYS/logs/+/warning' &
-mosquitto_sub -h localhost -t '$SYS/logs/+/severe' &
+mosquitto_sub -h localhost -t '$SYS/syslogs/+/warning' &
+mosquitto_sub -h localhost -t '$SYS/syslogs/+/severe' &
 ```
 
 ### 3. Application Integration
@@ -118,7 +118,7 @@ Use any MQTT client library to subscribe to logs programmatically:
 const mqtt = require('mqtt');
 const client = mqtt.connect('mqtt://localhost:1883');
 
-client.subscribe('$SYS/logs/+/+');
+client.subscribe('$SYS/syslogs/+/+');
 
 client.on('message', (topic, message) => {
   const logEntry = JSON.parse(message.toString());
@@ -152,7 +152,7 @@ def on_message(client, userdata, message):
 client = mqtt.Client()
 client.on_message = on_message
 client.connect("localhost", 1883)
-client.subscribe("$SYS/logs/+/+")
+client.subscribe("$SYS/syslogs/+/+")
 client.loop_forever()
 ```
 

@@ -4,7 +4,7 @@ The MonsterMQ GraphQL API provides a real-time subscription for streaming system
 
 ## Overview
 
-The `systemLogs` subscription allows you to monitor broker logs in real-time via GraphQL WebSocket subscriptions. Logs are published to internal MQTT topics under `$SYS/logs/<node>/<level>` and can be filtered on the server side to reduce network traffic.
+The `systemLogs` subscription allows you to monitor broker logs in real-time via GraphQL WebSocket subscriptions. Logs are published to internal MQTT topics under `$SYS/syslogs/<node>/<level>` and can be filtered on the server side to reduce network traffic.
 
 ## Subscription Query
 

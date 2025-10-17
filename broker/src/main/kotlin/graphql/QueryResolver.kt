@@ -410,7 +410,14 @@ class QueryResolver(
             
             // Get optional filters
             val nodeFilter = env.getArgument<String?>("node")
-            val levelFilter = env.getArgument<String?>("level")
+            val levelArg = env.getArgument<Any?>("level")
+            val levelFilters = when (levelArg) {
+                is List<*> -> levelArg.filterIsInstance<String>()
+                is String -> listOf(levelArg)
+                null -> emptyList()
+                else -> emptyList()
+            }
+            logger.info("QueryResolver.systemLogs - levelArg: $levelArg, levelFilters: $levelFilters")
             val loggerFilter = env.getArgument<String?>("logger")
             val sourceClassFilter = env.getArgument<String?>("sourceClass")
             val sourceMethodFilter = env.getArgument<String?>("sourceMethod")
@@ -478,7 +485,14 @@ class QueryResolver(
                     
                     // Apply filters
                     if (nodeFilter != null && logData.getString("node") != nodeFilter) continue
-                    if (levelFilter != null && logData.getString("level") != levelFilter) continue
+                    
+                    // Apply level filter - check if log level matches any of the requested levels
+                    if (levelFilters.isNotEmpty()) {
+                        val logLevel = logData.getString("level")
+                        logger.fine("Comparing logLevel='$logLevel' against levelFilters=$levelFilters, contains=${levelFilters.contains(logLevel)}")
+                        if (logLevel != null && !levelFilters.contains(logLevel)) continue
+                    }
+                    
                     if (loggerFilter != null && !logData.getString("logger", "").matches(Regex(loggerFilter))) continue
                     if (sourceClassFilter != null && !logData.getString("sourceClass", "").matches(Regex(sourceClassFilter))) continue
                     if (sourceMethodFilter != null && !logData.getString("sourceMethod", "").matches(Regex(sourceMethodFilter))) continue

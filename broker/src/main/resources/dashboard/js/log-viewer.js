@@ -29,6 +29,11 @@ class LogViewer {
     this.maxHeight = 800;
     this.currentHeight = parseInt(localStorage.getItem('monstermq_logviewer_height'), 10) || this.defaultExpandedHeight;
     this.isResizing = false;
+    // History mode
+    this.isHistoryMode = false;
+    this.historyEndTime = null;
+    this.historyStartTime = null;
+    this.historyLimit = 500;
     this.init();
   }
 
@@ -74,6 +79,7 @@ class LogViewer {
         .log-viewer-actions { display:flex; gap:6px; }
         .log-viewer-btn { background:#3e3e3e; border:1px solid #555; color:#d4d4d4; padding:3px 10px; border-radius:3px; cursor:pointer; font-size:11px; }
         .log-viewer-btn:hover { background:#505050; }
+        .log-viewer-btn.active { background:#007acc; border-color:#007acc; color:#fff; font-weight:bold; }
         .log-viewer-resize-handle { height:6px; cursor:ns-resize; background:linear-gradient(90deg,#007acc,#004f80); border-top:1px solid #004f80; }
         .log-viewer-resize-handle:hover { background:linear-gradient(90deg,#0090ff,#006ba8); }
         .log-viewer-filters { padding:6px 10px; background:#252526; border-bottom:1px solid #3e3e3e; display:flex; gap:12px; flex-wrap:wrap; }
@@ -116,11 +122,43 @@ class LogViewer {
             <span class="log-viewer-status-text">Connecting...</span>
           </div>
           <div class="log-viewer-actions">
+            <button class="log-viewer-btn" data-action="toggle-history">📜 History</button>
             <button class="log-viewer-btn" data-action="clear">Clear</button>
             <button class="log-viewer-btn" data-action="export">Export</button>
           </div>
         </div>
         <div class="log-viewer-resize-handle" title="Drag to resize"></div>
+        <div class="log-viewer-history-controls" style="display:none; padding:8px 10px; background:#252526; border-bottom:1px solid #3e3e3e; gap:8px; flex-wrap:wrap; align-items:center;">
+          <div class="log-viewer-filter" style="margin-right:10px;">
+            <label style="font-weight:bold; color:#4fc3f7;">History Mode</label>
+          </div>
+          <div class="log-viewer-filter">
+            <label>Quick:</label>
+            <select data-history="quick" style="background:#3c3c3c; border:1px solid #555; color:#d4d4d4; padding:4px 8px; border-radius:3px; font-size:11px;">
+              <option value="5">Last 5 min</option>
+              <option value="15">Last 15 min</option>
+              <option value="30" selected>Last 30 min</option>
+              <option value="60">Last 1 hour</option>
+              <option value="180">Last 3 hours</option>
+              <option value="360">Last 6 hours</option>
+              <option value="1440">Last 24 hours</option>
+              <option value="custom">Custom Range...</option>
+            </select>
+          </div>
+          <div class="log-viewer-filter log-viewer-custom-range" style="display:none; gap:6px;">
+            <label>From:</label>
+            <input type="datetime-local" data-history="start" style="background:#3c3c3c; border:1px solid #555; color:#d4d4d4; padding:4px 6px; border-radius:3px; font-size:11px;">
+            <label>To:</label>
+            <input type="datetime-local" data-history="end" style="background:#3c3c3c; border:1px solid #555; color:#d4d4d4; padding:4px 6px; border-radius:3px; font-size:11px;">
+          </div>
+          <div class="log-viewer-filter">
+            <label>Limit:</label>
+            <input type="number" data-history="limit" value="500" min="10" max="10000" step="50" style="background:#3c3c3c; border:1px solid #555; color:#d4d4d4; padding:4px 6px; border-radius:3px; font-size:11px; width:80px;" title="Maximum number of log entries to load">
+          </div>
+          <button class="log-viewer-btn" data-action="load-history" style="background:#007acc; border-color:#005a9e;">Load Logs</button>
+          <button class="log-viewer-btn" data-action="load-more" style="display:none;">⬆ Load 5 min Earlier</button>
+          <span class="log-viewer-history-info" style="margin-left:auto; font-size:11px; color:#999;"></span>
+        </div>
         <div class="log-viewer-filters">
           <div class="log-viewer-filter">
             <label>Node:</label>
@@ -149,6 +187,15 @@ class LogViewer {
       resizeHandle: container.querySelector('.log-viewer-resize-handle'),
       content: container.querySelector('.log-viewer-content'),
       logs: container.querySelector('.log-viewer-logs'),
+      historyBtn: container.querySelector('[data-action="toggle-history"]'),
+      historyControls: container.querySelector('.log-viewer-history-controls'),
+      historyQuick: container.querySelector('[data-history="quick"]'),
+      historyStart: container.querySelector('[data-history="start"]'),
+      historyEnd: container.querySelector('[data-history="end"]'),
+      historyLimit: container.querySelector('[data-history="limit"]'),
+      customRange: container.querySelector('.log-viewer-custom-range'),
+      loadMoreBtn: container.querySelector('[data-action="load-more"]'),
+      historyInfo: container.querySelector('.log-viewer-history-info'),
       filters: {
         node: container.querySelector('[data-filter="node"]'),
         loggerRegex: container.querySelector('[data-filter="loggerRegex"]'),
@@ -189,7 +236,25 @@ class LogViewer {
       if (!btn) return;
       if (btn.dataset.action === 'clear') this.clear();
       else if (btn.dataset.action === 'export') this.export();
+      else if (btn.dataset.action === 'toggle-history') this.toggleHistoryMode();
+      else if (btn.dataset.action === 'load-history') this.loadHistory();
+      else if (btn.dataset.action === 'load-more') this.loadMoreHistory();
     });
+    // History quick select
+    if (this.elements.historyQuick) {
+      this.elements.historyQuick.addEventListener('change', e => {
+        if (e.target.value === 'custom') {
+          this.elements.customRange.style.display = 'flex';
+          // Set default times (last hour to now)
+          const now = new Date();
+          const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+          this.elements.historyEnd.value = this.formatDateTimeLocal(now);
+          this.elements.historyStart.value = this.formatDateTimeLocal(oneHourAgo);
+        } else {
+          this.elements.customRange.style.display = 'none';
+        }
+      });
+    }
     // Filters debounce
     let t;
     const inputs = [
@@ -285,6 +350,9 @@ class LogViewer {
   }
 
   reconnectWithFilters() { 
+    // Don't reconnect if we're in history mode
+    if (this.isHistoryMode) return;
+    
     this.disconnect(); 
     // Small delay to ensure disconnect completes before reconnecting
     setTimeout(() => this.connect(), 100); 
@@ -306,7 +374,14 @@ class LogViewer {
   handleMessage(msg) {
     switch (msg.type) {
       case 'connection_ack':
-        this.isConnected = true; this.reconnectAttempts = 0; this.updateStatus('connected', 'Connected'); this.subscribe(); break;
+        this.isConnected = true; 
+        this.reconnectAttempts = 0; 
+        this.updateStatus('connected', 'Connected'); 
+        // Only subscribe if NOT in history mode
+        if (!this.isHistoryMode) {
+          this.subscribe(); 
+        }
+        break;
       case 'next':
         if (msg.payload?.data?.systemLogs) this.addLog(msg.payload.data.systemLogs); break;
       case 'error':
@@ -324,25 +399,35 @@ class LogViewer {
     this.subscriptionId++; // Increment for each new subscription
     this.hasSubscribed = true; // Mark that we've made a subscription
     const f = this.getCurrentFilters();
-    const query = `subscription SystemLogs($node:String,$level:String,$logger:String,$thread:Long,$sourceClass:String,$sourceMethod:String,$message:String){systemLogs(node:$node,level:$level,logger:$logger,thread:$thread,sourceClass:$sourceClass,sourceMethod:$sourceMethod,message:$message){timestamp level logger message thread node sourceClass sourceMethod parameters exception{class message stackTrace}}}`;
+    const query = `subscription SystemLogs($node:String,$level:[String!],$logger:String,$thread:Long,$sourceClass:String,$sourceMethod:String,$message:String){systemLogs(node:$node,level:$level,logger:$logger,thread:$thread,sourceClass:$sourceClass,sourceMethod:$sourceMethod,message:$message){timestamp level logger message thread node sourceClass sourceMethod parameters exception{class message stackTrace}}}`;
     const vars = {};
     if (f.node) vars.node = f.node;
     if (f.loggerRegex) vars.logger = f.loggerRegex;
     if (f.messageRegex) vars.message = f.messageRegex;
     if (f.sourceClassRegex) vars.sourceClass = f.sourceClassRegex;
     if (f.sourceMethodRegex) vars.sourceMethod = f.sourceMethodRegex;
-    if (f.level) { if (Array.isArray(f.level) && f.level.length === 1) vars.level = f.level[0]; }
+    // Pass level as array
+    if (f.level && Array.isArray(f.level) && f.level.length > 0) {
+      vars.level = f.level;
+    }
     this.send({ id: String(this.subscriptionId), type: 'subscribe', payload: { query, variables: vars } });
   }
 
   send(m) { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m)); }
 
   disconnect() {
-    if (this.ws) { this.send({ id: String(this.subscriptionId), type: 'complete' }); this.ws.close(); this.ws = null; }
+    if (this.ws) { 
+      this.send({ id: String(this.subscriptionId), type: 'complete' }); 
+      this.ws.close(); 
+      this.ws = null; 
+    }
     this.isConnected = false;
   }
 
   attemptReconnect() {
+    // Don't reconnect if we're in history mode
+    if (this.isHistoryMode) return;
+    
     if (this.reconnectAttempts >= this.maxReconnectAttempts) { this.updateStatus('disconnected', 'Failed'); return; }
     this.reconnectAttempts++; const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 5);
     this.updateStatus('connecting', `Reconnecting (${this.reconnectAttempts})`);
@@ -382,6 +467,157 @@ class LogViewer {
   clear() { this.logs=[]; this.elements.logs.innerHTML=''; this.newLogsCount=0; this.elements.badge.style.display='none'; }
 
   export() { const data = JSON.stringify(this.logs, null, 2); const blob = new Blob([data], { type:'application/json' }); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`system-logs-${new Date().toISOString()}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }
+
+  toggleHistoryMode() {
+    this.isHistoryMode = !this.isHistoryMode;
+    if (this.isHistoryMode) {
+      // Enter history mode
+      this.disconnect();
+      this.elements.historyBtn.classList.add('active');
+      this.elements.historyControls.style.display = 'flex';
+      this.elements.status.style.display = 'none';
+      this.updateHistoryInfo('Select time range and click "Load Logs"');
+    } else {
+      // Exit history mode - return to live streaming
+      this.elements.historyBtn.classList.remove('active');
+      this.elements.historyControls.style.display = 'none';
+      this.elements.status.style.display = 'flex';
+      this.elements.loadMoreBtn.style.display = 'none';
+      this.clear();
+      this.connect();
+    }
+  }
+
+  formatDateTimeLocal(date) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  async loadHistory(append = false, explicitStartTime = null, explicitEndTime = null) {
+    if (!this.isHistoryMode && !explicitStartTime) return;
+
+    let startTime, endTime;
+
+    // If explicit times provided (e.g., from loadMoreHistory or initial load), use them
+    if (explicitStartTime && explicitEndTime) {
+      startTime = explicitStartTime;
+      endTime = explicitEndTime;
+    } else {
+      const quickValue = this.elements.historyQuick.value;
+
+      if (quickValue === 'custom') {
+        const startInput = this.elements.historyStart.value;
+        const endInput = this.elements.historyEnd.value;
+        if (!startInput || !endInput) {
+          alert('Please select both start and end times');
+          return;
+        }
+        startTime = new Date(startInput).toISOString();
+        endTime = new Date(endInput).toISOString();
+      } else {
+        const minutes = parseInt(quickValue);
+        // Only use stored endTime when appending (load more), otherwise use current time
+        endTime = append ? this.historyEndTime : new Date().toISOString();
+        const endDate = new Date(endTime);
+        startTime = new Date(endDate.getTime() - minutes * 60 * 1000).toISOString();
+      }
+    }
+
+    this.historyStartTime = startTime;
+    this.historyEndTime = endTime;
+
+    try {
+      this.updateHistoryInfo('Loading logs...');
+      
+      // Get limit from input field
+      const limit = parseInt(this.elements.historyLimit.value) || 500;
+      
+      // Build filter variables
+      const filters = this.getCurrentFilters();
+      const variables = {
+        startTime,
+        endTime,
+        limit: limit,
+        orderByTime: 'DESC',
+        archiveGroup: 'Syslogs'
+      };
+      
+      if (filters.node) variables.node = filters.node;
+      if (filters.loggerRegex) variables.logger = filters.loggerRegex;
+      if (filters.sourceClassRegex) variables.sourceClass = filters.sourceClassRegex;
+      if (filters.messageRegex) variables.message = filters.messageRegex;
+      // Pass level as array
+      if (filters.level && Array.isArray(filters.level) && filters.level.length > 0) {
+        variables.level = filters.level;
+      }
+
+      const query = `
+        query GetSystemLogs($startTime:String,$endTime:String,$limit:Int,$orderByTime:OrderDirection,$archiveGroup:String,$node:String,$level:[String!],$logger:String,$sourceClass:String,$message:String) {
+          systemLogs(startTime:$startTime,endTime:$endTime,limit:$limit,orderByTime:$orderByTime,archiveGroup:$archiveGroup,node:$node,level:$level,logger:$logger,sourceClass:$sourceClass,message:$message) {
+            timestamp level logger message thread node sourceClass sourceMethod parameters
+            exception { class message stackTrace }
+          }
+        }`;
+
+      const client = new GraphQLDashboardClient();
+      const data = await client.query(query, variables);
+      
+      if (!append) {
+        this.clear();
+      }
+
+      const logs = data.systemLogs || [];
+      
+      if (logs.length === 0) {
+        this.updateHistoryInfo(`No logs found for selected time range`);
+        this.elements.loadMoreBtn.style.display = 'none';
+        return;
+      }
+
+      // Add logs in reverse order (oldest first) for better UX
+      logs.reverse().forEach(log => this.addLog(log));
+      
+      const count = logs.length;
+      const oldest = logs[0]?.timestamp;
+      const newest = logs[logs.length - 1]?.timestamp;
+      this.updateHistoryInfo(`Loaded ${count} logs (${new Date(oldest).toLocaleString()} - ${new Date(newest).toLocaleString()})`);
+      
+      // Show "Load More" button
+      this.elements.loadMoreBtn.style.display = 'inline-block';
+      
+    } catch (error) {
+      console.error('Failed to load history:', error);
+      this.updateHistoryInfo(`Error: ${error.message}`);
+    }
+  }
+
+  async loadMoreHistory() {
+    if (!this.historyStartTime) return;
+
+    // Load 5 minutes earlier
+    const startDate = new Date(this.historyStartTime);
+    const newStartTime = new Date(startDate.getTime() - 5 * 60 * 1000).toISOString();
+    // End time is the current start time (logs from newStart to currentStart)
+    const newEndTime = this.historyStartTime;
+
+    const oldStartTime = this.historyStartTime;
+    
+    try {
+      await this.loadHistory(true, newStartTime, newEndTime);
+      // Scroll to show the newly loaded logs
+      this.elements.content.scrollTop = 0;
+    } catch (error) {
+      // Restore old times on error
+      this.historyStartTime = oldStartTime;
+      throw error;
+    }
+  }
+
+  updateHistoryInfo(text) {
+    if (this.elements.historyInfo) {
+      this.elements.historyInfo.textContent = text;
+    }
+  }
 
   setFilters(f) { 
     // Track if any filter actually changed
