@@ -17,7 +17,57 @@ class LoginManager {
             return;
         }
 
+        // Check if user management is enabled
+        this.checkUserManagementEnabled();
+
         this.form.addEventListener('submit', (e) => this.handleLogin(e));
+    }
+
+    async checkUserManagementEnabled() {
+        try {
+            const response = await fetch('/graphql', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    query: `
+                        query GetBroker {
+                            broker {
+                                userManagementEnabled
+                            }
+                        }
+                    `
+                })
+            });
+
+            const result = await response.json();
+            const userManagementEnabled = result.data?.broker?.userManagementEnabled ?? false;
+
+            if (!userManagementEnabled) {
+                // User management is disabled, auto-login with empty credentials
+                console.log('User management is disabled, auto-logging in...');
+                this.autoLoginDisabled();
+            }
+        } catch (error) {
+            console.error('Error checking user management status:', error);
+            // Continue with normal login flow if there's an error
+        }
+    }
+
+    autoLoginDisabled() {
+        // Auto-login when user management is disabled
+        localStorage.setItem('monstermq_token', 'null');
+        localStorage.setItem('monstermq_username', 'Anonymous');
+        localStorage.setItem('monstermq_isAdmin', 'false');
+        localStorage.setItem('monstermq_userManagementEnabled', 'false');
+
+        // Show success message and redirect
+        this.showAlert('Authentication disabled - accessing dashboard...', 'success');
+
+        setTimeout(() => {
+            window.location.href = '/pages/dashboard.html';
+        }, 500);
     }
 
     isLoggedIn() {
@@ -123,6 +173,7 @@ class LoginManager {
                 localStorage.setItem('monstermq_token', token);
                 localStorage.setItem('monstermq_username', result.username);
                 localStorage.setItem('monstermq_isAdmin', result.isAdmin);
+                localStorage.setItem('monstermq_userManagementEnabled', 'true');
 
                 if (result.token === null) {
                     this.showAlert('Authentication disabled - accessing dashboard...', 'success');

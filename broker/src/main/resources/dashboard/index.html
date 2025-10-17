@@ -5,11 +5,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ</title>
     <script>
-        // Redirect to login page
-        window.location.href = 'pages/login.html';
+        // Check if user management is enabled
+        async function checkAndRedirect() {
+            try {
+                const response = await fetch('/graphql', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: `
+                            query GetBroker {
+                                broker {
+                                    userManagementEnabled
+                                }
+                            }
+                        `
+                    })
+                });
+
+                const result = await response.json();
+                const userManagementEnabled = result.data?.broker?.userManagementEnabled ?? false;
+
+                if (userManagementEnabled) {
+                    // User management is enabled, show login page
+                    window.location.href = 'pages/login.html';
+                } else {
+                    // User management is disabled, skip login and go directly to dashboard
+                    window.location.href = 'pages/dashboard.html';
+                }
+            } catch (error) {
+                console.error('Error checking user management status:', error);
+                // Default to login page if error
+                window.location.href = 'pages/login.html';
+            }
+        }
+
+        checkAndRedirect();
     </script>
 </head>
 <body>
-    Redirecting to login...
+    Redirecting...
 </body>
 </html>

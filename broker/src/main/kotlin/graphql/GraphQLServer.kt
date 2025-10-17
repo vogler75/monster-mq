@@ -723,6 +723,9 @@ class GraphQLServer(
             // Register field resolvers for types
             .type("Broker") { builder ->
                 builder
+                    .dataFetcher("userManagementEnabled") { env ->
+                        java.util.concurrent.CompletableFuture.completedFuture(userManager.isUserManagementEnabled())
+                    }
                     .dataFetcher("sessions", metricsResolver.brokerSessions())
                     .dataFetcher("metrics", metricsResolver.brokerMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.brokerMetricsHistory())

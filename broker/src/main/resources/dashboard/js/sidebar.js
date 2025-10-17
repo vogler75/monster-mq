@@ -171,17 +171,26 @@ class SidebarManager {
     setupUI() {
         // Check authentication and show/hide admin features
         const isAdmin = localStorage.getItem('monstermq_isAdmin') === 'true';
+        const userManagementEnabled = localStorage.getItem('monstermq_userManagementEnabled') === 'true';
+
         const usersNavLink = document.getElementById('users-nav-link');
-        if (isAdmin && usersNavLink) {
+        if (isAdmin && userManagementEnabled && usersNavLink) {
             usersNavLink.style.display = 'flex';
         }
 
         // Set up logout functionality on user menu item
         const userMenuItem = document.getElementById('user-menu-item');
         if (userMenuItem) {
-            userMenuItem.addEventListener('click', () => {
-                this.logout();
-            });
+            if (userManagementEnabled) {
+                // Show logout only if user management is enabled
+                userMenuItem.style.display = 'flex';
+                userMenuItem.addEventListener('click', () => {
+                    this.logout();
+                });
+            } else {
+                // Hide logout if user management is disabled
+                userMenuItem.style.display = 'none';
+            }
         }
     }
 

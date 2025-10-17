@@ -99,6 +99,7 @@ class GraphQLDashboardClient {
                 brokers {
                     nodeId
                     version
+                    userManagementEnabled
                     metrics {
                         messagesIn
                         messagesOut
@@ -126,6 +127,25 @@ class GraphQLDashboardClient {
 
         const result = await this.query(query);
         return result.brokers;
+    }
+
+    async isUserManagementEnabled() {
+        const query = `
+            query GetBroker {
+                broker {
+                    userManagementEnabled
+                }
+            }
+        `;
+
+        try {
+            const result = await this.query(query);
+            return result.broker?.userManagementEnabled ?? false;
+        } catch (error) {
+            console.warn('Failed to check user management status:', error);
+            // Default to false if we can't reach the broker
+            return false;
+        }
     }
 
     async getBrokersWithHistory(lastMinutes = null, from = null, to = null) {
