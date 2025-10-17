@@ -1,0 +1,8 @@
+Release v1.6.34
+Built from commit: 55b159d
+Date: 2025-10-17 21:06:41
+
+Changes since v1.6.33:
+---
+55b159d Refactor OPC UA server startup to use new executeBlocking syntax
+14bc725 Start OPC UA servers asynchronously to avoid blocking
