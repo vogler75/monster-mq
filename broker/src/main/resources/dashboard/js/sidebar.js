@@ -122,6 +122,9 @@ class SidebarManager {
                         text: 'Users',
                         id: 'users-nav-link',
                         adminOnly: true
+                    },
+                    {
+                        isUserItem: true
                     }
                 ]
             }
@@ -135,16 +138,29 @@ class SidebarManager {
             html += `<div class="nav-section">`;
             html += `<div class="nav-section-title">${section.section}</div>`;
             section.items.forEach(item => {
-                const style = item.adminOnly ? ' style="display: none;"' : '';
-                const id = item.id ? ` id="${item.id}"` : '';
-                html += `
-                    <a href="${item.href}" class="nav-item"${id}${style}>
-                        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            ${item.icon}
-                        </svg>
-                        <span class="nav-text">${item.text}</span>
-                    </a>
-                `;
+                if (item.isUserItem) {
+                    html += `
+                        <div class="nav-item user-menu-item" id="user-menu-item" title="Logout">
+                            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                <polyline points="16 17 21 12 16 7"></polyline>
+                                <line x1="21" y1="12" x2="9" y2="12"></line>
+                            </svg>
+                            <span class="nav-text">Logout</span>
+                        </div>
+                    `;
+                } else {
+                    const style = item.adminOnly ? ' style="display: none;"' : '';
+                    const id = item.id ? ` id="${item.id}"` : '';
+                    html += `
+                        <a href="${item.href}" class="nav-item"${id}${style}>
+                            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                ${item.icon}
+                            </svg>
+                            <span class="nav-text">${item.text}</span>
+                        </a>
+                    `;
+                }
             });
             html += `</div>`;
         });
@@ -160,27 +176,12 @@ class SidebarManager {
             usersNavLink.style.display = 'flex';
         }
 
-        // Set up user display
-        const username = localStorage.getItem('monstermq_username');
-        if (username) {
-            const userNameEl = document.getElementById('user-name');
-            const userAvatarEl = document.getElementById('user-avatar');
-            if (userNameEl) {
-                userNameEl.textContent = username;
-            }
-            if (userAvatarEl) {
-                userAvatarEl.textContent = username.charAt(0).toUpperCase();
-            }
-        }
-
-        // Set up logout functionality in sidebar footer
-        const userInfo = document.querySelector('.user-info');
-        if (userInfo) {
-            userInfo.addEventListener('click', () => {
+        // Set up logout functionality on user menu item
+        const userMenuItem = document.getElementById('user-menu-item');
+        if (userMenuItem) {
+            userMenuItem.addEventListener('click', () => {
                 this.logout();
             });
-            userInfo.style.cursor = 'pointer';
-            userInfo.title = 'Click to logout';
         }
     }
 
@@ -221,8 +222,8 @@ class SidebarManager {
             });
         }
 
-        // Save sidebar scroll position before navigating
-        const navItems = document.querySelectorAll('.nav-item');
+        // Save sidebar scroll position before navigating (exclude user menu item)
+        const navItems = document.querySelectorAll('.nav-item:not(.user-menu-item)');
         navItems.forEach(item => {
             item.addEventListener('click', () => {
                 const sidebarNav = document.getElementById('sidebar-nav');

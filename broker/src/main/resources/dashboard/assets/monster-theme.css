@@ -50,7 +50,6 @@ body {
     border-right: 1px solid var(--dark-border);
     z-index: 1000;
     transition: width 0.3s ease;
-    overflow: hidden;
 }
 
 .sidebar.collapsed {
@@ -58,11 +57,18 @@ body {
 }
 
 .sidebar-header {
-    padding: 1.5rem 1rem;
+    padding: 1rem;
     border-bottom: 1px solid var(--dark-border);
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    min-height: 60px;
+    box-sizing: border-box;
+}
+
+.sidebar.collapsed .sidebar-header {
+    padding: 1rem 0;
+    justify-content: center;
 }
 
 .sidebar-toggle {
@@ -74,6 +80,7 @@ body {
     border-radius: 6px;
     transition: all 0.3s;
     margin-left: auto;
+    flex-shrink: 0;
 }
 
 .sidebar-toggle:hover {
@@ -87,13 +94,12 @@ body {
     gap: 0.75rem;
     font-size: 1.25rem;
     font-weight: 700;
-    white-space: nowrap;
-    overflow: hidden;
+    min-width: 0;
 }
 
 .sidebar-brand img {
-    height: 32px;
-    width: auto;
+    height: 28px;
+    width: 28px;
     flex-shrink: 0;
 }
 
@@ -102,12 +108,32 @@ body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    white-space: nowrap;
+    transition: opacity 0.2s ease;
+}
+
+.sidebar.collapsed .brand-name {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-brand {
+    justify-content: center;
+    cursor: pointer;
+    width: 100%;
+    padding: 0;
 }
 
 .sidebar-nav {
     padding: 1rem 0;
-    height: calc(100% - 140px);
+    height: calc(100% - 60px);
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .nav-section {
@@ -121,35 +147,52 @@ body {
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    white-space: nowrap;
+    transition: opacity 0.2s ease;
+}
+
+.sidebar.collapsed .nav-section-title {
+    opacity: 0;
+    height: 0;
+    padding: 0;
+    margin: 0;
     overflow: hidden;
 }
 
 .nav-item {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
     color: var(--text-secondary);
     text-decoration: none;
     padding: 0.75rem 1rem;
     margin: 0.125rem 0.5rem;
     border-radius: 8px;
     font-weight: 500;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
+    transition: background 0.2s ease, color 0.2s ease;
     position: relative;
+    cursor: pointer;
 }
 
-.nav-item:hover {
+.sidebar:not(.collapsed) .nav-item:hover {
     background: var(--dark-surface-2);
     color: var(--text-primary);
     transform: translateX(4px);
 }
 
+.sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 0.75rem 0;
+    margin: 0.125rem 0;
+}
+
+.sidebar.collapsed .nav-item:hover {
+    background: var(--dark-surface-2);
+    color: var(--text-primary);
+}
+
 .nav-item.active {
     background: rgba(124, 58, 237, 0.15);
     color: var(--monster-light);
-    border-left: 3px solid var(--monster-purple);
 }
 
 .nav-item.active::before {
@@ -172,50 +215,15 @@ body {
 
 .nav-text {
     white-space: nowrap;
-    overflow: hidden;
+    min-width: 0;
+    transition: opacity 0.2s ease;
 }
 
-.sidebar.collapsed .nav-text,
-.sidebar.collapsed .nav-section-title,
-.sidebar.collapsed .brand-name {
+.sidebar.collapsed .nav-text {
     opacity: 0;
     width: 0;
-}
-
-/* Center the logo when sidebar is collapsed */
-.sidebar.collapsed .sidebar-brand {
-    justify-content: center;
-    padding: 1rem 0;
-    width: 100%;
-    padding-left: 8px;
-}
-
-/* Keep the logo visible and centered when collapsed */
-.sidebar.collapsed .sidebar-brand img {
-    display: block;
-    margin: 0 auto;
-}
-
-/* Hide the toggle button completely when collapsed */
-.sidebar.collapsed .sidebar-toggle {
-    display: none;
-}
-
-/* Make the logo clickable when collapsed */
-.sidebar.collapsed .sidebar-brand {
-    cursor: pointer;
-}
-
-/* Center the user info in collapsed sidebar */
-.sidebar.collapsed .user-info {
-    justify-content: center;
-    padding: 0.5rem 0;
-    padding-left: 8px;
-}
-
-/* Hide the user name in collapsed sidebar, keep only avatar */
-.sidebar.collapsed .user-info #user-name {
-    display: none;
+    overflow: hidden;
+    pointer-events: none;
 }
 
 /* Login page navbar styling (since it still uses old navbar structure) */
@@ -252,14 +260,26 @@ body {
     font-weight: 700;
 }
 
-.sidebar-footer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 1rem;
-    border-top: 1px solid var(--dark-border);
+/* Login page navbar styling (since it still uses old navbar structure) */
+.navbar {
     background: var(--dark-surface);
+    border-bottom: 1px solid var(--dark-border);
+    padding: 1rem 0;
+}
+
+.sidebar:not(.collapsed) .user-menu-item:hover {
+    background: var(--dark-surface-2);
+}
+
+.sidebar.collapsed .user-menu-item {
+    justify-content: center;
+}
+
+.sidebar.collapsed .user-menu-item .user-details {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    pointer-events: none;
 }
 
 .user-info {
@@ -268,11 +288,6 @@ body {
     gap: 0.75rem;
     padding: 0.5rem;
     border-radius: 8px;
-    transition: background 0.3s;
-}
-
-.user-info:hover {
-    background: var(--dark-surface-2);
 }
 
 .user-avatar {
@@ -290,7 +305,8 @@ body {
 }
 
 .user-details {
-    overflow: hidden;
+    min-width: 0;
+    transition: opacity 0.2s ease;
 }
 
 .user-name {
