@@ -266,23 +266,20 @@ class OpcUaServerExtension(
         )
 
         // Start server in blocking thread to avoid blocking event loop
-        vertx.executeBlocking<OpcUaServerStatus>({ promise ->
+        vertx.executeBlocking<OpcUaServerStatus> {
             try {
-                val status = instance.start()
-                promise.complete(status)
+                instance.start()
             } catch (e: Exception) {
                 logger.severe("Failed to start OPC UA Server '${config.name}' in blocking thread: ${e.message}")
-                promise.complete(
-                    OpcUaServerStatus(
-                        serverName = config.name,
-                        nodeId = config.nodeId,
-                        status = OpcUaServerStatus.Status.ERROR,
-                        port = config.port,
-                        error = e.message
-                    )
+                OpcUaServerStatus(
+                    serverName = config.name,
+                    nodeId = config.nodeId,
+                    status = OpcUaServerStatus.Status.ERROR,
+                    port = config.port,
+                    error = e.message
                 )
             }
-        }, { asyncResult ->
+        }.onComplete { asyncResult ->
             // Handle completion asynchronously without blocking
             if (asyncResult.succeeded()) {
                 val status = asyncResult.result()
@@ -316,7 +313,7 @@ class OpcUaServerExtension(
                 serverStatuses[config.name] = status
                 publishStatusUpdate(status)
             }
-        })
+        }
     }
 
     /**
