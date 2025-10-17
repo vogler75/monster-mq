@@ -89,7 +89,7 @@ class Neo4jConnector : AbstractVerticle() {
             logger.info("Starting Neo4jConnector for device ${device.name} url=${cfg.url}")
 
             // Initialize queue size from config
-            while (writePathQueue.size > 0) writePathQueue.clear()
+            while (writePathQueue.isNotEmpty()) writePathQueue.clear()
 
             // Connect to Neo4j
             connectToNeo4j()
@@ -153,13 +153,20 @@ class Neo4jConnector : AbstractVerticle() {
             driver = GraphDatabase.driver(cfg.url, AuthTokens.basic(cfg.username, cfg.password))
             session = driver!!.session()
 
-            // Create indexes
-            createSchema()
-
-            // Start path writer thread
-            thread(start = true, block = ::writeMqttNodesThread)
-
-            promise.complete()
+            // Create indexes in blocking thread to avoid blocking event loop
+            vertx.executeBlocking<Void> {
+                createSchema()
+                null
+            }.onComplete { schemaResult ->
+                if (schemaResult.succeeded()) {
+                    // Start path writer thread
+                    thread(start = true, block = ::writeMqttNodesThread)
+                    promise.complete()
+                } else {
+                    logger.severe("Error creating Neo4j schema: ${schemaResult.cause()?.message}")
+                    promise.fail(schemaResult.cause())
+                }
+            }
         } catch (e: Exception) {
             logger.severe("Error connecting to Neo4j: ${e.message}")
             promise.fail(e)
