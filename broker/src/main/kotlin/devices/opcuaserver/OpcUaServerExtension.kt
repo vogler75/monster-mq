@@ -267,7 +267,24 @@ class OpcUaServerExtension(
             userManager
         )
 
-        val status = instance.start()
+        // Start server in blocking thread to avoid blocking event loop
+        val statusFuture = vertx.executeBlocking<OpcUaServerStatus> {
+            instance.start()
+        }
+
+        // Wait for server to start (this is acceptable here as we're in a control flow)
+        val status = try {
+            statusFuture.toCompletionStage().toCompletableFuture().get()
+        } catch (e: Exception) {
+            logger.severe("Failed to start OPC UA Server '${config.name}': ${e.message}")
+            OpcUaServerStatus(
+                serverName = config.name,
+                nodeId = config.nodeId,
+                status = OpcUaServerStatus.Status.ERROR,
+                port = config.port,
+                error = e.message
+            )
+        }
 
         if (status.status == OpcUaServerStatus.Status.RUNNING) {
             runningServers[config.name] = instance
