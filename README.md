@@ -128,15 +128,13 @@ mvn compile
 ```yaml
 # Minimal configuration (config-sqlite.yaml)
 TCP: 1883
-DefaultStoreType: SQLITE
-SQLite:
-  Path: "monstermq.db"
 
 # Production configuration (config.yaml)
 TCP: 1883
 TCPS: 8883
 WS: 9000
 WSS: 9001
+
 DefaultStoreType: POSTGRES
 
 # PostgreSQL configuration
