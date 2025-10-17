@@ -53,7 +53,7 @@ class SubscriptionResolver(
                 null -> listOf("+")
                 else -> listOf("+")
             }
-            logger.info("SubscriptionResolver.systemLogs - levelArg: $levelArg, levels: $levels")
+            logger.fine("SubscriptionResolver.systemLogs - levelArg: $levelArg, levels: $levels")
             val loggerFilter = env.getArgument<String?>("logger")
             val threadFilter = env.getArgument<Long?>("thread")
             val sourceClassFilter = env.getArgument<String?>("sourceClass")

@@ -23,7 +23,7 @@ SparkplugMetricExpansion:
 
 # SQLite configuration
 SQLite:
-  Path: "monstermq.db"
+  Path: "sqlite"
 
 # PostgreSQL configuration
 Postgres:

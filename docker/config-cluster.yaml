@@ -27,7 +27,7 @@ Metrics:
 
 # SQLite configuration
 SQLite:
-  Path: "monstermq.db"
+  Path: "sqlite"
   EnableWAL: false  # Set to true for better performance, false for easier multi-client access
 
 # PostgreSQL configuration

@@ -12,7 +12,7 @@ QueuedMessagesEnabled: true
 
 # SQLite configuration
 SQLite:
-  Path: "monstermq.db"
+  Path: "sqlite"
 
 # MCP Server configuration
 MCP:

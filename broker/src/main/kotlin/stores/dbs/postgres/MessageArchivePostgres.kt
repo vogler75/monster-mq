@@ -150,7 +150,7 @@ class MessageArchivePostgres (
         endTime: Instant?,
         limit: Int
     ): JsonArray {
-        logger.info("PostgreSQL getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
+        logger.fine("PostgreSQL getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
         val sql = StringBuilder("SELECT topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid FROM $tableName WHERE topic LIKE ?")
         val topicPattern = topic.replace("#", "%") // replace "#" wildcard with "%" for SQL LIKE
         val params = mutableListOf<Any>()
@@ -159,18 +159,17 @@ class MessageArchivePostgres (
         startTime?.let {
             sql.append(" AND time >= ?")
             params.add(Timestamp.from(it))
-            logger.info("Added startTime parameter: $it")
+            logger.fine("Added startTime parameter: $it")
         }
         endTime?.let {
             sql.append(" AND time <= ?")
             params.add(Timestamp.from(it))
-            logger.info("Added endTime parameter: $it")
+            logger.fine("Added endTime parameter: $it")
         }
         sql.append(" ORDER BY time DESC LIMIT ?")
         params.add(limit)
         
-        logger.info("Executing PostgreSQL SQL: ${sql.toString()}")
-        logger.info("With parameters: $params")
+        logger.fine("Executing PostgreSQL SQL: ${sql.toString()} with parameters: $params")
 
         val messages = JsonArray()
 
@@ -188,7 +187,7 @@ class MessageArchivePostgres (
                     }
                     val resultSet = preparedStatement.executeQuery()
                     val queryDuration = System.currentTimeMillis() - startTime
-                    logger.info("PostgreSQL query completed in ${queryDuration}ms")
+                    logger.fine("PostgreSQL query completed in ${queryDuration}ms")
                     
                     val processingStart = System.currentTimeMillis()
                     var rowCount = 0
@@ -214,7 +213,7 @@ class MessageArchivePostgres (
                         messages.add(messageObj)
                     }
                     val processingDuration = System.currentTimeMillis() - processingStart
-                    logger.info("PostgreSQL data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages")
+                    logger.fine("PostgreSQL data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages")
                 }
             }
         } catch (e: SQLException) {

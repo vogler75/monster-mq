@@ -266,6 +266,64 @@ class ArchiveHandler(
                 // Create database configuration object first
                 val databaseConfig = createDatabaseConfig()
 
+                // Check if "Default" archive group exists, create if not
+                configStore.getArchiveGroup("Default").onComplete { getDefaultResult ->
+                    if (getDefaultResult.succeeded() && getDefaultResult.result() == null) {
+                        logger.info("Default archive group not found, creating it")
+                        val defaultArchiveGroup = ArchiveGroup(
+                            name = "Default",
+                            topicFilter = listOf("#"),
+                            retainedOnly = false,
+                            lastValType = MessageStoreType.MEMORY,
+                            archiveType = MessageArchiveType.NONE,
+                            payloadFormat = PayloadFormat.DEFAULT,
+                            lastValRetentionMs = 3600000L,
+                            archiveRetentionMs = 3600000L,
+                            purgeIntervalMs = 3600000L,
+                            lastValRetentionStr = "1h",
+                            archiveRetentionStr = "1h",
+                            purgeIntervalStr = "1h",
+                            databaseConfig = databaseConfig
+                        )
+                        configStore.saveArchiveGroup(defaultArchiveGroup, enabled = false).onComplete { saveResult ->
+                            if (saveResult.succeeded() && saveResult.result()) {
+                                logger.info("Default archive group created successfully")
+                            } else {
+                                logger.warning("Failed to create default archive group")
+                            }
+                        }
+                    }
+                }
+
+                // Check if "Syslogs" archive group exists, create if not
+                configStore.getArchiveGroup("Syslogs").onComplete { getSyslogsResult ->
+                    if (getSyslogsResult.succeeded() && getSyslogsResult.result() == null) {
+                        logger.info("Syslogs archive group not found, creating it")
+                        val syslogsArchiveGroup = ArchiveGroup(
+                            name = "Syslogs",
+                            topicFilter = listOf("\$SYS/syslogs/#"),
+                            retainedOnly = false,
+                            lastValType = MessageStoreType.NONE,
+                            archiveType = MessageArchiveType.POSTGRES,
+                            payloadFormat = PayloadFormat.JSON,
+                            lastValRetentionMs = 3600000L,
+                            archiveRetentionMs = 3600000L,
+                            purgeIntervalMs = 3600000L,
+                            lastValRetentionStr = "1h",
+                            archiveRetentionStr = "1h",
+                            purgeIntervalStr = "1h",
+                            databaseConfig = databaseConfig
+                        )
+                        configStore.saveArchiveGroup(syslogsArchiveGroup, enabled = false).onComplete { saveResult ->
+                            if (saveResult.succeeded() && saveResult.result()) {
+                                logger.info("Syslogs archive group created successfully")
+                            } else {
+                                logger.warning("Failed to create Syslogs archive group")
+                            }
+                        }
+                    }
+                }
+
                 // Load archive groups from database
                 configStore.getAllArchiveGroups().onComplete { getAllResult ->
                     if (getAllResult.succeeded()) {
