@@ -268,6 +268,12 @@ class ArchiveConfigStorePostgres(
                 }
             } catch (e: SQLException) {
                 logger.warning("Error saving archive group ${archiveGroup.name}: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                try {
+                    db.connection?.rollback()
+                    logger.info("Transaction rolled back after error [${Utils.getCurrentFunctionName()}]")
+                } catch (rollbackEx: Exception) {
+                    logger.warning("Error rolling back transaction: ${rollbackEx.message} [${Utils.getCurrentFunctionName()}]")
+                }
                 false
             }
         }).onComplete { result ->
@@ -306,6 +312,12 @@ class ArchiveConfigStorePostgres(
                 }
             } catch (e: SQLException) {
                 logger.warning("Error deleting archive group $name: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                try {
+                    db.connection?.rollback()
+                    logger.info("Transaction rolled back after error [${Utils.getCurrentFunctionName()}]")
+                } catch (rollbackEx: Exception) {
+                    logger.warning("Error rolling back transaction: ${rollbackEx.message} [${Utils.getCurrentFunctionName()}]")
+                }
                 false
             }
         }).onComplete { result ->

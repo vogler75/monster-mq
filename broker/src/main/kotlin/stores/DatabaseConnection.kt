@@ -73,6 +73,15 @@ abstract class DatabaseConnection(
                 }
             } catch (e: Exception) {
                 logger.warning("Error checking connection [${e.message}] [${Utils.getCurrentFunctionName()}]")
+                // If the connection has an aborted transaction, try to rollback
+                if (e.message?.contains("aborted") == true || e.message?.contains("transaction") == true) {
+                    try {
+                        connection?.rollback()
+                        logger.info("Rolled back aborted transaction during connection check [${Utils.getCurrentFunctionName()}]")
+                    } catch (rollbackEx: Exception) {
+                        logger.warning("Error rolling back aborted transaction: ${rollbackEx.message} [${Utils.getCurrentFunctionName()}]")
+                    }
+                }
             }
         }
         return false
