@@ -17,7 +17,7 @@ import java.util.logging.Logger
  * MQTT Log Handler - Publishes Java log records to MQTT topics
  *
  * This handler intercepts all Java logging messages and publishes them to MQTT topics
- * in the format: $SYS/logs/<node>/<level>
+ * in the format: syslogs/<node>/<level>
  *
  * Features:
  * - Publishes logs from all loggers in the system
@@ -33,7 +33,7 @@ class MqttLogHandler(private val messageHandler: MessageHandler?) : Handler() {
     private var initialized = false
 
     companion object {
-        const val LOG_TOPIC_PREFIX = "${Const.SYS_TOPIC_NAME}/logs"
+        const val LOG_TOPIC_PREFIX = "${Const.SYS_TOPIC_NAME}/${Const.LOG_TOPIC_NAME}"
         private var instance: MqttLogHandler? = null
         
         /**

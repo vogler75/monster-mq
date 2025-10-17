@@ -22,6 +22,7 @@ object Const {
     const val QOS2_RETRY_COUNT = 6*10 // 10 Minutes
 
     const val SYS_TOPIC_NAME = "\$SYS"
+    const val LOG_TOPIC_NAME = "syslogs"
 
     const val MCP_ARCHIVE_GROUP = "Default"
     const val MCP_CONFIG_TOPIC = "<config>"
