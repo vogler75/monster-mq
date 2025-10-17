@@ -151,10 +151,10 @@ class MessageArchivePostgres (
         limit: Int
     ): JsonArray {
         logger.info("PostgreSQL getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
-        
-        val sql = StringBuilder("SELECT topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?")
+        val sql = StringBuilder("SELECT topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid FROM $tableName WHERE topic LIKE ?")
+        val topicPattern = topic.replace("#", "%") // replace "#" wildcard with "%" for SQL LIKE
         val params = mutableListOf<Any>()
-        params.add(topic)
+        params.add(topicPattern)
 
         startTime?.let {
             sql.append(" AND time >= ?")

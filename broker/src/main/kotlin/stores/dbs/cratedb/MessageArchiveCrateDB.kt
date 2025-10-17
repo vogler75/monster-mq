@@ -130,9 +130,9 @@ class MessageArchiveCrateDB (
         limit: Int
     ): JsonArray {
         logger.fine { "CrateDB getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit" }
-        
-        val sql = StringBuilder("SELECT topic, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?")
-        val params = mutableListOf<Any>(topic)
+        val sql = StringBuilder("SELECT topic, time, payload_b64, payload_obj, qos, retained, client_id, message_uuid FROM $tableName WHERE topic LIKE ?")
+        val topicPattern = topic.replace("#", "%") // replace "#" wildcard with "%" for SQL LIKE
+        val params = mutableListOf<Any>(topicPattern)
 
         startTime?.let {
             sql.append(" AND time >= ?")

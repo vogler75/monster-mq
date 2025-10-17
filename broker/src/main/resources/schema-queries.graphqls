@@ -65,6 +65,36 @@ type Query {
         archiveGroup: String = "Default"
     ): [ArchivedMessage!]!
 
+    # Query historical system logs from the archive
+    # Returns system logs within specified time range
+    # Time can be specified using startTime/endTime or lastMinutes
+    systemLogs(
+        # ISO 8601 start timestamp: "2024-01-15T10:00:00Z" (optional)
+        startTime: String
+        # ISO 8601 end timestamp: "2024-01-15T11:00:00Z" (optional - defaults to now)
+        endTime: String
+        # Alternative to startTime/endTime: get logs from last N minutes
+        lastMinutes: Int
+        # Optional node filter (exact match)
+        node: String
+        # Optional log level filter (exact match: INFO, WARNING, SEVERE, etc.)
+        level: String
+        # Optional logger name regex filter
+        logger: String
+        # Optional source class regex filter
+        sourceClass: String
+        # Optional source method regex filter
+        sourceMethod: String
+        # Optional message regex filter
+        message: String
+        # Maximum number of log entries to return
+        limit: Int = 100
+        # Sort order: ASC (oldest first) or DESC (newest first)
+        orderByTime: OrderDirection = DESC
+        # ArchiveGroup containing the system logs archive
+        archiveGroup: String = "Syslogs"
+    ): [SystemLogEntry!]!
+
     # Search for topics by name pattern using SQL LIKE wildcards
     # Supports '%' (matches any sequence of characters) and '_' (matches single character)
     # Examples:

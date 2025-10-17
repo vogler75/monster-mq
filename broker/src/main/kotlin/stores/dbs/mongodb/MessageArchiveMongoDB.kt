@@ -260,11 +260,9 @@ class MessageArchiveMongoDB(
         val filters = mutableListOf<Bson>()
         
         // Topic filter - support wildcards
-        if (topic.contains("#") || topic.contains("+")) {
-            val regex = topic
-                .replace("+", "[^/]+")
-                .replace("#", ".*")
-            filters.add(Filters.regex("meta.topic", "^$regex$"))
+        if (topic.contains("#")) {
+           val regex = topic.replace("#", ".*")
+           filters.add(Filters.regex("meta.topic", "^$regex$"))
         } else {
             filters.add(Filters.eq("meta.topic", topic))
         }

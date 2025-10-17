@@ -356,6 +356,7 @@ class GraphQLServer(
                     .dataFetcher("retainedMessage", queryResolver.retainedMessage())
                     .dataFetcher("retainedMessages", queryResolver.retainedMessages())
                     .dataFetcher("archivedMessages", queryResolver.archivedMessages())
+                    .dataFetcher("systemLogs", queryResolver.systemLogs())
                     .dataFetcher("searchTopics", queryResolver.searchTopics())
                     .dataFetcher("browseTopics", queryResolver.browseTopics())
                     // Metrics queries

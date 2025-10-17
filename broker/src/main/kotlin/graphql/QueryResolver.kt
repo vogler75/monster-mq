@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.handlers.ArchiveHandler
@@ -366,6 +367,163 @@ class QueryResolver(
                 )
             }
             future.complete(archived)
+
+            future
+        }
+    }
+
+    fun systemLogs(): DataFetcher<CompletableFuture<List<SystemLogEntry>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<SystemLogEntry>>()
+            
+            val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Syslogs"
+            val limit = env.getArgument<Int>("limit") ?: 100
+            val orderByTime = env.getArgument<String>("orderByTime") ?: "DESC"
+            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            
+            // Get time parameters
+            var startTimeStr = env.getArgument<String?>("startTime")
+            var endTimeStr = env.getArgument<String?>("endTime")
+            
+            // Handle lastMinutes option
+            if (lastMinutes != null) {
+                val now = Instant.now()
+                endTimeStr = endTimeStr ?: now.toString()
+                
+                // Calculate startTime based on endTime and lastMinutes
+                val endTime = try {
+                    Instant.parse(endTimeStr)
+                } catch (e: DateTimeParseException) {
+                    logger.warning("Invalid endTime format: $endTimeStr, expected ISO-8601 format")
+                    return@DataFetcher future.apply { 
+                        completeExceptionally(IllegalArgumentException("Invalid endTime format: expected ISO-8601 (e.g., 2024-01-01T00:00:00.000Z)")) 
+                    }
+                }
+                
+                startTimeStr = endTime.minusSeconds(lastMinutes.toLong() * 60).toString()
+            } else {
+                // If no lastMinutes, use endTime or default to now
+                if (endTimeStr == null) {
+                    endTimeStr = Instant.now().toString()
+                }
+            }
+            
+            // Get optional filters
+            val nodeFilter = env.getArgument<String?>("node")
+            val levelFilter = env.getArgument<String?>("level")
+            val loggerFilter = env.getArgument<String?>("logger")
+            val sourceClassFilter = env.getArgument<String?>("sourceClass")
+            val sourceMethodFilter = env.getArgument<String?>("sourceMethod")
+            val messageFilter = env.getArgument<String?>("message")
+
+            // Find the specified archive group with an extended archive store
+            val archiveStore = getCurrentArchiveGroups()[archiveGroupName]?.archiveStore as? IMessageArchiveExtended
+
+            if (archiveStore == null) {
+                logger.warning("No extended archive store configured for archive group '$archiveGroupName'")
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            // Validate ISO datetime strings
+            startTimeStr?.let { 
+                try {
+                    Instant.parse(it)
+                } catch (e: DateTimeParseException) {
+                    logger.warning("Invalid startTime format: $it, expected ISO-8601 format")
+                    return@DataFetcher future.apply { 
+                        completeExceptionally(IllegalArgumentException("Invalid startTime format: expected ISO-8601 (e.g., 2024-01-01T00:00:00.000Z)")) 
+                    }
+                }
+            }
+            endTimeStr?.let { 
+                try {
+                    Instant.parse(it)
+                } catch (e: DateTimeParseException) {
+                    logger.warning("Invalid endTime format: $it, expected ISO-8601 format")
+                    return@DataFetcher future.apply { 
+                        completeExceptionally(IllegalArgumentException("Invalid endTime format: expected ISO-8601 (e.g., 2024-01-01T00:00:00.000Z)")) 
+                    }
+                }
+            }
+            
+            // Query the archive store - use "syslogs/#" as topic filter to get all system logs
+            val jsonArray = archiveStore.getHistory(
+                topic = "${Const.SYS_TOPIC_NAME}/${Const.LOG_TOPIC_NAME}/%",
+                startTime = startTimeStr?.let { Instant.parse(it) },
+                endTime = endTimeStr.let { Instant.parse(it) },
+                limit = limit
+            )
+            
+            val logs = mutableListOf<SystemLogEntry>()
+            for (i in 0 until jsonArray.size()) {
+                val obj = jsonArray.getJsonObject(i)
+                
+                // Parse the JSON payload
+                val payloadJson = when {
+                    obj.containsKey("payload_json") && obj.getString("payload_json") != null -> {
+                        obj.getString("payload_json")
+                    }
+                    obj.containsKey("payload_base64") -> {
+                        val bytes = java.util.Base64.getDecoder().decode(obj.getString("payload_base64"))
+                        String(bytes, Charsets.UTF_8)
+                    }
+                    else -> {
+                        obj.getString("payload", "{}")
+                    }
+                }
+                
+                try {
+                    val logData = io.vertx.core.json.JsonObject(payloadJson)
+                    
+                    // Apply filters
+                    if (nodeFilter != null && logData.getString("node") != nodeFilter) continue
+                    if (levelFilter != null && logData.getString("level") != levelFilter) continue
+                    if (loggerFilter != null && !logData.getString("logger", "").matches(Regex(loggerFilter))) continue
+                    if (sourceClassFilter != null && !logData.getString("sourceClass", "").matches(Regex(sourceClassFilter))) continue
+                    if (sourceMethodFilter != null && !logData.getString("sourceMethod", "").matches(Regex(sourceMethodFilter))) continue
+                    if (messageFilter != null && !logData.getString("message", "").matches(Regex(messageFilter))) continue
+                    
+                    // Parse exception if present
+                    val exception = logData.getJsonObject("exception")?.let { exc ->
+                        ExceptionInfo(
+                            `class` = exc.getString("class") ?: "",
+                            message = exc.getString("message"),
+                            stackTrace = exc.getString("stackTrace") ?: ""
+                        )
+                    }
+                    
+                    // Parse parameters if present
+                    val parameters = logData.getJsonArray("parameters")?.map { it.toString() }
+                    
+                    logs.add(
+                        SystemLogEntry(
+                            timestamp = logData.getString("timestamp") ?: "",
+                            level = logData.getString("level") ?: "",
+                            logger = logData.getString("logger") ?: "",
+                            message = logData.getString("message") ?: "",
+                            thread = logData.getLong("thread") ?: 0L,
+                            node = logData.getString("node") ?: "",
+                            sourceClass = logData.getString("sourceClass"),
+                            sourceMethod = logData.getString("sourceMethod"),
+                            parameters = parameters,
+                            exception = exception
+                        )
+                    )
+                } catch (e: Exception) {
+                    logger.warning("Failed to parse log entry: ${e.message}")
+                    // Skip malformed log entries
+                }
+            }
+            
+            // Sort by time if needed (database might return in different order)
+            val sortedLogs = if (orderByTime == "ASC") {
+                logs.sortedBy { it.timestamp }
+            } else {
+                logs.sortedByDescending { it.timestamp }
+            }
+            
+            future.complete(sortedLogs)
 
             future
         }
