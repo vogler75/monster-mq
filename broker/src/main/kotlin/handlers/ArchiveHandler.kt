@@ -304,7 +304,7 @@ class ArchiveHandler(
                             topicFilter = listOf("\$SYS/syslogs/#"),
                             retainedOnly = false,
                             lastValType = MessageStoreType.NONE,
-                            archiveType = MessageArchiveType.POSTGRES,
+                            archiveType = MessageArchiveType.NONE,
                             payloadFormat = PayloadFormat.JSON,
                             lastValRetentionMs = 3600000L,
                             archiveRetentionMs = 3600000L,
