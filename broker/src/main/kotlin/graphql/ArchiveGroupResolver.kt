@@ -1,5 +1,6 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.*
@@ -868,7 +869,7 @@ class ArchiveGroupResolver(
             MessageStoreType.SQLITE -> {
                 val sqlite = databaseConfig.getJsonObject("SQLite")
                 val archiveName = storeName.removeSuffix("Lastval")
-                val dbPath = "${sqlite.getString("Path", "sqlite")}/monstermq-${archiveName}-lastval.db"
+                val dbPath = "${sqlite.getString("Path", Const.SQLITE_DEFAULT_PATH)}/monstermq-${archiveName}-lastval.db"
                 MessageStoreSQLite(
                     storeName,
                     dbPath
@@ -914,7 +915,7 @@ class ArchiveGroupResolver(
             }
             MessageArchiveType.SQLITE -> {
                 val sqlite = databaseConfig.getJsonObject("SQLite")
-                val dbPath = "${sqlite.getString("Path", "sqlite")}/monstermq-${archiveName}-archive.db"
+                val dbPath = "${sqlite.getString("Path", Const.SQLITE_DEFAULT_PATH)}/monstermq-${archiveName}-archive.db"
                 MessageArchiveSQLite(
                     archiveName,
                     dbPath

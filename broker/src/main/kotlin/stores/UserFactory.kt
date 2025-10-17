@@ -1,5 +1,6 @@
 package at.rocworks.stores
 
+import at.rocworks.Const
 import at.rocworks.stores.cratedb.UserStoreCrateDb
 import at.rocworks.stores.mongodb.UserStoreMongoDB
 import at.rocworks.stores.postgres.UserStorePostgres
@@ -26,7 +27,7 @@ object UserFactory {
             }
             StoreType.SQLITE -> {
                 val sqliteConfig = config.getJsonObject("SQLite")
-                val directory = sqliteConfig.getString("Path", "sqlite")
+                val directory = sqliteConfig.getString("Path", Const.SQLITE_DEFAULT_PATH)
                 val dbPath = "$directory/monstermq.db"
                 UserStoreSqlite(
                     path = dbPath,

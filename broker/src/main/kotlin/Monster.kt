@@ -392,7 +392,7 @@ MORE INFO:
                     mongoDbConfig.database = mongo.getString("Database", "monster")
                 }
                 configJson.getJsonObject("SQLite", JsonObject()).let { sqlite ->
-                    sqliteConfig.path = sqlite.getString("Path", "sqlite")
+                    sqliteConfig.path = sqlite.getString("Path", Const.SQLITE_DEFAULT_PATH)
                     sqliteConfig.enableWAL = sqlite.getBoolean("EnableWAL", true)
                 }
 

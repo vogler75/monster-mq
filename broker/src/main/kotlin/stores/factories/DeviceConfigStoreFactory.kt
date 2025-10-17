@@ -1,5 +1,6 @@
 package at.rocworks.stores
 
+import at.rocworks.Const
 import at.rocworks.stores.IDeviceConfigStore
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
@@ -70,7 +71,7 @@ object DeviceConfigStoreFactory {
                 val sqliteConfig = config.getJsonObject("SQLite")
                 if (sqliteConfig != null) {
                     // Use main database file for device configs
-                    val directory = sqliteConfig.getString("Path", ".")
+                    val directory = sqliteConfig.getString("Path", Const.SQLITE_DEFAULT_PATH)
                     val dbPath = "$directory/monstermq.db"
                     DeviceConfigStoreSQLite(vertx, dbPath)
                 } else {

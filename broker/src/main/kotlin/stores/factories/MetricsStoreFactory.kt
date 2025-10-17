@@ -1,5 +1,6 @@
 package at.rocworks.stores
 
+import at.rocworks.Const
 import at.rocworks.stores.postgres.MetricsStorePostgres
 import at.rocworks.stores.cratedb.MetricsStoreCrateDB
 import at.rocworks.stores.mongodb.MetricsStoreMongoDB
@@ -46,7 +47,7 @@ object MetricsStoreFactory {
             MetricsStoreType.SQLITE -> {
                 val sqliteConfig = config.getJsonObject("SQLite")
                     ?: throw IllegalArgumentException("SQLite configuration not found")
-                val directory = sqliteConfig.getString("Path", "sqlite")
+                val directory = sqliteConfig.getString("Path", Const.SQLITE_DEFAULT_PATH)
                 val dbPath = "$directory/monstermq.db"
                 MetricsStoreSQLite(
                     name = storeName,

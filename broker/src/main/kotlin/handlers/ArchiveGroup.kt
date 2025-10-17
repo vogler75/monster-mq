@@ -1,5 +1,6 @@
 package at.rocworks.handlers
 
+import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.PurgeResult
 import at.rocworks.data.TopicTree
@@ -238,7 +239,7 @@ class ArchiveGroup(
                 MessageStoreType.SQLITE -> {
                     val sqlite = databaseConfig.getJsonObject("SQLite")
                     val archiveGroupName = storeName.removeSuffix("Lastval")
-                    val dbPath = "${sqlite.getString("Path", "sqlite")}/monstermq-${archiveGroupName}-lastval.db"
+                    val dbPath = "${sqlite.getString("Path", Const.SQLITE_DEFAULT_PATH)}/monstermq-${archiveGroupName}-lastval.db"
                     MessageStoreSQLite(
                         storeName,
                         dbPath
@@ -338,7 +339,7 @@ class ArchiveGroup(
                 MessageArchiveType.SQLITE -> {
                     val sqlite = databaseConfig.getJsonObject("SQLite")
                     val archiveGroupName = archiveName.removeSuffix("Archive")
-                    val dbPath = "${sqlite.getString("Path", "sqlite")}/monstermq-${archiveGroupName}-archive.db"
+                    val dbPath = "${sqlite.getString("Path", Const.SQLITE_DEFAULT_PATH)}/monstermq-${archiveGroupName}-archive.db"
                     MessageArchiveSQLite(
                         archiveName,
                         dbPath,

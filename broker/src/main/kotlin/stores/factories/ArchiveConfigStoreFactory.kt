@@ -1,5 +1,6 @@
 package at.rocworks.stores
 
+import at.rocworks.Const
 import at.rocworks.stores.postgres.ArchiveConfigStorePostgres
 import at.rocworks.stores.mongodb.ArchiveConfigStoreMongoDB
 import at.rocworks.stores.cratedb.ArchiveConfigStoreCrateDB
@@ -56,7 +57,7 @@ object ArchiveConfigStoreFactory {
             "SQLITE" -> {
                 val sqliteConfig = config.getJsonObject("SQLite")
                 if (sqliteConfig != null) {
-                    val directory = sqliteConfig.getString("Path", ".")
+                    val directory = sqliteConfig.getString("Path", Const.SQLITE_DEFAULT_PATH)
                     val dbPath = "$directory/monstermq.db"
                     ArchiveConfigStoreSQLite(dbPath)
                 } else {
