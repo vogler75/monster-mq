@@ -90,11 +90,9 @@ class MqttLogHandler(private val messageHandler: MessageHandler?) : Handler() {
             }
 
             // Get Vertx instance for event bus publishing
-            val vertx = Monster.getVertx()
-            if (vertx == null) {
-                // Vertx not available yet, skip silently (no error logging to prevent loops)
+            val vertx =
+                Monster.getVertx() ?: // Vertx not available yet, skip silently (no error logging to prevent loops)
                 return
-            }
 
             // Create MQTT topic based on node and log level
             val levelName = record.level.name.lowercase()
