@@ -625,7 +625,7 @@ MORE INFO:
 
                 // Metrics Collector and Store
                 val metricsConfig = configJson.getJsonObject("Metrics", JsonObject())
-                val metricsEnabled = metricsConfig.getBoolean("Enabled", false)
+                val metricsEnabled = metricsConfig.getBoolean("Enabled", true)
 
                 val (metricsStore, metricsCollector) = if (metricsEnabled) {
                     try {
@@ -638,7 +638,7 @@ MORE INFO:
                         }
 
                         val store = at.rocworks.stores.MetricsStoreFactory.create(storeType, configJson, "metrics")
-                        val collectionInterval = metricsConfig.getInteger("CollectionInterval", 1)
+                        val collectionInterval = metricsConfig.getInteger("CollectionInterval", 10)
                         val retentionHours = metricsConfig.getInteger("RetentionHours", 24)
                         logger.info("Starting Metrics Store: ${store.getName()} (${store.getType()}) with ${collectionInterval}s collection interval, ${retentionHours}h retention")
                         val collector = MetricsHandler(sessionHandler, store, messageBus, messageHandler, collectionInterval, retentionHours)
@@ -694,7 +694,7 @@ MORE INFO:
                     .compose {
                         // Install MQTT Log Handler now that SessionHandler is deployed and initialized
                         val loggingConfig = configJson.getJsonObject("Logging", JsonObject())
-                        val mqttLoggingEnabled = loggingConfig.getBoolean("MqttEnabled", false)
+                        val mqttLoggingEnabled = loggingConfig.getBoolean("MqttEnabled", true)
                         val mqttLogLevel = loggingConfig.getString("MqttLevel", "INFO")
                         
                         if (mqttLoggingEnabled) {
