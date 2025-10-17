@@ -631,13 +631,13 @@ MORE INFO:
                     try {
                         val storeTypeStr = getStoreType(configJson)
                         val storeType = try {
-                            at.rocworks.stores.MetricsStoreType.valueOf(storeTypeStr.uppercase())
+                            MetricsStoreType.valueOf(storeTypeStr.uppercase())
                         } catch (e: IllegalArgumentException) {
                             logger.warning("Invalid metrics store type: $storeTypeStr. Defaulting to POSTGRES")
-                            at.rocworks.stores.MetricsStoreType.POSTGRES
+                            MetricsStoreType.POSTGRES
                         }
 
-                        val store = at.rocworks.stores.MetricsStoreFactory.create(storeType, configJson, "metrics")
+                        val store = MetricsStoreFactory.create(storeType, configJson, "metrics")
                         val collectionInterval = metricsConfig.getInteger("CollectionInterval", 10)
                         val retentionHours = metricsConfig.getInteger("RetentionHours", 24)
                         logger.info("Starting Metrics Store: ${store.getName()} (${store.getType()}) with ${collectionInterval}s collection interval, ${retentionHours}h retention")
