@@ -1,0 +1,31 @@
+Release v1.6.33
+Built from commit: 2537228
+Date: 2025-10-17 20:41:40
+
+Changes since v1.6.32:
+---
+2537228 Add transaction rollback on database errors
+137b861 Refactor user management to allow admin access when disabled
+62b6e99 Add user management enabled flag to broker and dashboard
+2eb0f78 Update sidebar.js
+e7154d0 Refactor sidebar user menu and improve collapsed UI
+6ee3ed6 Update architecture docs and logging level
+5f630f7 Start OPC UA server in blocking thread
+f0c9f09 Run Neo4j schema creation in blocking thread
+0ba6e93 Remove YAML config loading for ArchiveGroups
+3d78f2e Update ArchiveHandler.kt
+a0e9bdd Update Monster.kt
+d7623cc Update default config values for metrics and logging
+744bc13 Move default archive group creation to ArchiveHandler
+d4cf9c5 Centralize SQLite default path constant usage
+ac5a5f2 Refactor SQLite path defaults and simplify ArchiveGroup
+39460fb Support multiple log levels in systemLogs queries
+6518bf7 Update MqttLogHandler.kt
+c0dc48f Add systemLogs GraphQL query and topic wildcard support
+d320d6f Add tests for JCache and user management features
+dcb46cd Remove obsolete test files
+425dfae Update log topic naming convention
+0c5db1f Improve log viewer filter initialization and dynamic updates
+2d39f79 Add resizable log viewer and global dark scrollbars
+aba6eb9 Reduce log level for WebSocket handshake
+f9d8f53 Improve code formatting in help and docs
