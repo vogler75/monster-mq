@@ -126,9 +126,6 @@ mvn compile
 ### Configuration Examples
 
 ```yaml
-# Minimal configuration (config-sqlite.yaml)
-TCP: 1883
-
 # Production configuration (config.yaml)
 TCP: 1883
 TCPS: 8883
