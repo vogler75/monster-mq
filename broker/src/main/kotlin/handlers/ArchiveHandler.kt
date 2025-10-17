@@ -232,16 +232,9 @@ class ArchiveHandler(
     private fun deployArchiveGroups(): Future<List<ArchiveGroup>> {
         val promise = Promise.promise<List<ArchiveGroup>>()
 
-        // Check if ConfigStore is configured
+        // Load from database
         val configStoreType = Monster.getConfigStoreType(configJson)
-
-        if (configStoreType != "NONE") {
-            // Load from database
-            loadArchiveGroupsFromDatabase(configStoreType, promise)
-        } else {
-            // Load from YAML configuration (existing behavior)
-            loadArchiveGroupsFromConfig(promise)
-        }
+        loadArchiveGroupsFromDatabase(configStoreType, promise)
 
         return promise.future()
     }
@@ -391,45 +384,7 @@ ArchiveGroup(
         }
     }
 
-    private fun loadArchiveGroupsFromConfig(promise: Promise<List<ArchiveGroup>>) {
-        val archiveGroupConfigs = configJson.getJsonArray("ArchiveGroups", JsonArray())
-            .filterIsInstance<JsonObject>()
-            .filter { it.getBoolean("Enabled") }
 
-        if (archiveGroupConfigs.isEmpty()) {
-            promise.complete(emptyList())
-            return
-        }
-
-        // Create database configuration object with all database configs
-        val databaseConfig = createDatabaseConfig()
-
-        val deploymentFutures: List<Future<ArchiveGroup>> = archiveGroupConfigs.map { config ->
-            val archiveGroup = ArchiveGroup.fromConfig(config, databaseConfig, isClustered)
-            val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-
-            vertx.deployVerticle(archiveGroup, options).map { deploymentId ->
-                // Track the deployment
-                val archiveInfo = ArchiveGroupInfo(archiveGroup, deploymentId, true)
-                deployedArchiveGroups[archiveGroup.name] = archiveInfo
-
-                logger.info("ArchiveGroup [${archiveGroup.name}] deployed successfully with ID: $deploymentId")
-                archiveGroup
-            }
-        }
-
-        @Suppress("UNCHECKED_CAST")
-        Future.all<Any>(deploymentFutures as List<Future<Any>>).onComplete { result ->
-            if (result.succeeded()) {
-                val archiveGroups = deploymentFutures.mapNotNull {
-                    if (it.succeeded()) it.result() else null
-                }
-                promise.complete(archiveGroups)
-            } else {
-                promise.fail(result.cause())
-            }
-        }
-    }
 
     fun createDatabaseConfig(): JsonObject {
         val databaseConfig = JsonObject()
