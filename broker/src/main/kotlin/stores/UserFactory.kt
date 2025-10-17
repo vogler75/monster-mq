@@ -26,7 +26,7 @@ object UserFactory {
             }
             StoreType.SQLITE -> {
                 val sqliteConfig = config.getJsonObject("SQLite")
-                val directory = sqliteConfig.getString("Path", ".")
+                val directory = sqliteConfig.getString("Path", "sqlite")
                 val dbPath = "$directory/monstermq.db"
                 UserStoreSqlite(
                     path = dbPath,

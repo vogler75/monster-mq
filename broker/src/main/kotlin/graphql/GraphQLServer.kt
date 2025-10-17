@@ -72,7 +72,7 @@ class GraphQLServer(
     }
 
     private val graphQLConfig = config.getJsonObject("GraphQL", JsonObject())
-    private val port = graphQLConfig.getInteger("Port", 8080)
+    private val port = graphQLConfig.getInteger("Port", 4000)
     private val path = graphQLConfig.getString("Path", "/graphql")
     private val authContext = GraphQLAuthContext(userManager)
 

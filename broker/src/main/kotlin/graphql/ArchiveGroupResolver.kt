@@ -868,7 +868,7 @@ class ArchiveGroupResolver(
             MessageStoreType.SQLITE -> {
                 val sqlite = databaseConfig.getJsonObject("SQLite")
                 val archiveName = storeName.removeSuffix("Lastval")
-                val dbPath = "${sqlite.getString("Path", ".")}/monstermq-${archiveName}-lastval.db"
+                val dbPath = "${sqlite.getString("Path", "sqlite")}/monstermq-${archiveName}-lastval.db"
                 MessageStoreSQLite(
                     storeName,
                     dbPath
@@ -914,7 +914,7 @@ class ArchiveGroupResolver(
             }
             MessageArchiveType.SQLITE -> {
                 val sqlite = databaseConfig.getJsonObject("SQLite")
-                val dbPath = "${sqlite.getString("Path", ".")}/monstermq-${archiveName}-archive.db"
+                val dbPath = "${sqlite.getString("Path", "sqlite")}/monstermq-${archiveName}-archive.db"
                 MessageArchiveSQLite(
                     archiveName,
                     dbPath

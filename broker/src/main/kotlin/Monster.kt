@@ -392,7 +392,7 @@ MORE INFO:
                     mongoDbConfig.database = mongo.getString("Database", "monster")
                 }
                 configJson.getJsonObject("SQLite", JsonObject()).let { sqlite ->
-                    sqliteConfig.path = sqlite.getString("Path", ".")
+                    sqliteConfig.path = sqlite.getString("Path", "sqlite")
                     sqliteConfig.enableWAL = sqlite.getBoolean("EnableWAL", true)
                 }
 
@@ -655,7 +655,7 @@ MORE INFO:
 
                 // GraphQL Server
                 val graphQLConfig = configJson.getJsonObject("GraphQL", JsonObject())
-                val graphQLEnabled = graphQLConfig.getBoolean("Enabled", false)
+                val graphQLEnabled = graphQLConfig.getBoolean("Enabled", true)
                 val graphQLServer = if (graphQLEnabled) {
                     val archiveGroupsMap = archiveGroups.associateBy { it.name }
 
