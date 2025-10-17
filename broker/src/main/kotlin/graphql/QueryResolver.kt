@@ -417,7 +417,7 @@ class QueryResolver(
                 null -> emptyList()
                 else -> emptyList()
             }
-            logger.info("QueryResolver.systemLogs - levelArg: $levelArg, levelFilters: $levelFilters")
+            logger.fine("QueryResolver.systemLogs - levelArg: $levelArg, levelFilters: $levelFilters")
             val loggerFilter = env.getArgument<String?>("logger")
             val sourceClassFilter = env.getArgument<String?>("sourceClass")
             val sourceMethodFilter = env.getArgument<String?>("sourceMethod")
