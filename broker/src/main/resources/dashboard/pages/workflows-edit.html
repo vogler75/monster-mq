@@ -756,5 +756,40 @@
     <script src="/js/log-viewer.js"></script>
     <script src="/js/workflows-edit.js"></script>
     <script src="/js/topic-browser-side-panel.js"></script>
+    <script>
+        // Filter log viewer by Flow Instance when editing an instance
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const type = urlParams.get('type');
+            const instanceName = urlParams.get('name');
+            
+            if (type === 'instance' && instanceName) {
+                // Wait for log viewer to be ready
+                window.onLogViewerReady(function(logViewer) {
+                    // Filter by message starting with [instance-name]
+                    const messageRegex = `^\\[${instanceName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`;
+                    const title = `Logs: ${instanceName}`;
+                    
+                    // Update the global log viewer with instance-specific filters
+                    logViewer.setFilters({
+                        messageRegex: messageRegex
+                    });
+                    
+                    // Update title
+                    if (logViewer.elements && logViewer.elements.root) {
+                        const titleEl = logViewer.elements.root.querySelector('.log-viewer-title span:not(.chevron):not(.log-viewer-badge)');
+                        if (titleEl) {
+                            titleEl.textContent = title;
+                        }
+                    }
+                    
+                    // Expand the log viewer for instances
+                    if (logViewer.isCollapsed) {
+                        logViewer.toggleCollapse();
+                    }
+                });
+            }
+        })();
+    </script>
 </body>
 </html>

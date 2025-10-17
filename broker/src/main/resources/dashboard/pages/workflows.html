@@ -614,5 +614,21 @@
 
     <script src="/js/log-viewer.js"></script>
     <script src="/js/workflows.js"></script>
+    <script>
+        // Filter log viewer to show only FlowEngine logs on workflows page
+        window.onLogViewerReady(function(logViewer) {
+            logViewer.setFilters({
+                sourceClassRegex: 'at\\.rocworks\\.flowengine.*'
+            });
+            
+            // Update title
+            if (logViewer.elements && logViewer.elements.root) {
+                const titleEl = logViewer.elements.root.querySelector('.log-viewer-title span:not(.chevron):not(.log-viewer-badge)');
+                if (titleEl) {
+                    titleEl.textContent = 'Flow Engine Logs';
+                }
+            }
+        });
+    </script>
 </body>
 </html>

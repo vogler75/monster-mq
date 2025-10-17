@@ -321,7 +321,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     maxLines: 1000,
                     autoScroll: true,
                     title,
-                    filters
+                    filters,
+                    deferConnection: true // Don't connect yet, let callbacks set filters first
                 });
                 // Expose helper for dynamic filter updates from pages
                 window.updateLogViewerFilters = (newFilters) => {
@@ -329,9 +330,30 @@ document.addEventListener('DOMContentLoaded', () => {
                         window.__monsterMQLogViewer.setFilters(newFilters);
                     }
                 };
+                // Trigger ready callbacks if any
+                if (window.__monsterMQLogViewerReadyCallbacks) {
+                    window.__monsterMQLogViewerReadyCallbacks.forEach(cb => cb(window.__monsterMQLogViewer));
+                    window.__monsterMQLogViewerReadyCallbacks = [];
+                }
+                // Now connect after callbacks have had a chance to set filters
+                if (!window.__monsterMQLogViewer.isConnected && !window.__monsterMQLogViewer.ws) {
+                    window.__monsterMQLogViewer.connect();
+                }
             } else {
                 console.warn('LogViewer class not loaded yet. Ensure /js/log-viewer.js is included globally.');
             }
         }
     }
 });
+
+// Helper to run code when log viewer is ready
+window.onLogViewerReady = function(callback) {
+    if (window.__monsterMQLogViewer) {
+        callback(window.__monsterMQLogViewer);
+    } else {
+        if (!window.__monsterMQLogViewerReadyCallbacks) {
+            window.__monsterMQLogViewerReadyCallbacks = [];
+        }
+        window.__monsterMQLogViewerReadyCallbacks.push(callback);
+    }
+};

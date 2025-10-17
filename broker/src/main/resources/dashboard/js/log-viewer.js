@@ -15,7 +15,8 @@ class LogViewer {
     };
     this.logs = [];
     this.ws = null;
-    this.subscriptionId = '1';
+    this.subscriptionId = 1;
+    this.hasSubscribed = false; // Track if initial subscription was made
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 10;
     this.reconnectDelay = 2000;
@@ -42,7 +43,9 @@ class LogViewer {
   init() {
     this.createUI();
     this.attachEventListeners();
-    this.connect();
+    if (!this.options.deferConnection) {
+      this.connect();
+    }
     this.applyBodyPadding();
   }
 
@@ -281,7 +284,11 @@ class LogViewer {
     return filters;
   }
 
-  reconnectWithFilters() { this.disconnect(); this.connect(); }
+  reconnectWithFilters() { 
+    this.disconnect(); 
+    // Small delay to ensure disconnect completes before reconnecting
+    setTimeout(() => this.connect(), 100); 
+  }
 
   connect() {
     this.updateStatus('connecting', 'Connecting...');
@@ -314,6 +321,8 @@ class LogViewer {
   }
 
   subscribe() {
+    this.subscriptionId++; // Increment for each new subscription
+    this.hasSubscribed = true; // Mark that we've made a subscription
     const f = this.getCurrentFilters();
     const query = `subscription SystemLogs($node:String,$level:String,$logger:String,$thread:Long,$sourceClass:String,$sourceMethod:String,$message:String){systemLogs(node:$node,level:$level,logger:$logger,thread:$thread,sourceClass:$sourceClass,sourceMethod:$sourceMethod,message:$message){timestamp level logger message thread node sourceClass sourceMethod parameters exception{class message stackTrace}}}`;
     const vars = {};
@@ -323,13 +332,13 @@ class LogViewer {
     if (f.sourceClassRegex) vars.sourceClass = f.sourceClassRegex;
     if (f.sourceMethodRegex) vars.sourceMethod = f.sourceMethodRegex;
     if (f.level) { if (Array.isArray(f.level) && f.level.length === 1) vars.level = f.level[0]; }
-    this.send({ id: this.subscriptionId, type: 'subscribe', payload: { query, variables: vars } });
+    this.send({ id: String(this.subscriptionId), type: 'subscribe', payload: { query, variables: vars } });
   }
 
   send(m) { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m)); }
 
   disconnect() {
-    if (this.ws) { this.send({ id: this.subscriptionId, type: 'complete' }); this.ws.close(); this.ws = null; }
+    if (this.ws) { this.send({ id: String(this.subscriptionId), type: 'complete' }); this.ws.close(); this.ws = null; }
     this.isConnected = false;
   }
 
@@ -374,7 +383,46 @@ class LogViewer {
 
   export() { const data = JSON.stringify(this.logs, null, 2); const blob = new Blob([data], { type:'application/json' }); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`system-logs-${new Date().toISOString()}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }
 
-  setFilters(f) { if (f.node!==undefined) this.elements.filters.node.value=f.node||''; if (f.loggerRegex!==undefined) this.elements.filters.loggerRegex.value=f.loggerRegex||''; if (f.sourceClassRegex!==undefined) this.elements.filters.sourceClassRegex.value=f.sourceClassRegex||''; if (f.messageRegex!==undefined) this.elements.filters.messageRegex.value=f.messageRegex||''; if (Array.isArray(f.level)) { Object.values(this.elements.filters.levels).forEach(cb=>cb.checked=false); f.level.forEach(l=>{ if (this.elements.filters.levels[l]) this.elements.filters.levels[l].checked=true; }); } this.reconnectWithFilters(); }
+  setFilters(f) { 
+    // Track if any filter actually changed
+    let changed = false;
+    
+    if (f.node!==undefined && this.elements.filters.node.value !== (f.node||'')) { 
+      this.elements.filters.node.value=f.node||''; 
+      changed = true;
+    } 
+    if (f.loggerRegex!==undefined && this.elements.filters.loggerRegex.value !== (f.loggerRegex||'')) { 
+      this.elements.filters.loggerRegex.value=f.loggerRegex||''; 
+      changed = true;
+    } 
+    if (f.sourceClassRegex!==undefined && this.elements.filters.sourceClassRegex.value !== (f.sourceClassRegex||'')) { 
+      this.elements.filters.sourceClassRegex.value=f.sourceClassRegex||''; 
+      changed = true;
+    } 
+    if (f.messageRegex!==undefined && this.elements.filters.messageRegex.value !== (f.messageRegex||'')) { 
+      this.elements.filters.messageRegex.value=f.messageRegex||''; 
+      changed = true;
+    } 
+    if (Array.isArray(f.level)) { 
+      const currentLevels = Object.entries(this.elements.filters.levels)
+        .filter(([_, cb]) => cb.checked)
+        .map(([lvl]) => lvl)
+        .sort()
+        .join(',');
+      const newLevels = [...f.level].sort().join(',');
+      if (currentLevels !== newLevels) {
+        Object.values(this.elements.filters.levels).forEach(cb=>cb.checked=false); 
+        f.level.forEach(l=>{ if (this.elements.filters.levels[l]) this.elements.filters.levels[l].checked=true; }); 
+        changed = true;
+      }
+    } 
+    
+    // Only reconnect if something actually changed AND we've already subscribed
+    // If we haven't subscribed yet, the filters will be picked up on the first subscription
+    if (changed && this.hasSubscribed) {
+      this.reconnectWithFilters(); 
+    }
+  }
 
   destroy() { this.disconnect(); const c=document.getElementById(this.containerId); if (c) c.innerHTML=''; }
 
