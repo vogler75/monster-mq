@@ -175,6 +175,7 @@ class OpcUaServerExtension(
                             device.type == DeviceConfig.DEVICE_TYPE_OPCUA_SERVER && (device.nodeId == "*" || device.nodeId == currentNodeId)
                         }
 
+                    // Start all enabled servers asynchronously
                     configs.forEach { device ->
                         try {
                             // Parse the configuration - the device.config is already a JsonObject
@@ -213,7 +214,8 @@ class OpcUaServerExtension(
                             }
 
                             if (serverConfig.enabled) {
-                                startServerInternal(serverConfig, skipSave = true) // Don't save back during startup
+                                // Start server asynchronously without blocking
+                                startServerAsync(serverConfig, skipSave = true)
                             }
 
                         } catch (e: Exception) {
@@ -221,7 +223,7 @@ class OpcUaServerExtension(
                         }
                     }
 
-                    logger.info("Loaded ${runningServers.size} OPC UA Server configurations")
+                    logger.info("Starting ${configs.count { it.enabled }} OPC UA Server configurations asynchronously")
 
                 } catch (e: Exception) {
                     logger.severe("Failed to load OPC UA Server configurations: ${e.message}")
@@ -233,33 +235,29 @@ class OpcUaServerExtension(
     }
 
     /**
-     * Start an OPC UA Server
+     * Start an OPC UA Server (async handler for message bus commands)
      */
     private fun startServer(config: OpcUaServerConfig, skipSave: Boolean = false): JsonObject {
-        return try {
-            // Check if server is already running
-            if (runningServers.containsKey(config.name)) {
-                JsonObject()
-                    .put("success", false)
-                    .put("error", "Server '${config.name}' is already running")
-            } else {
-                val status = startServerInternal(config, skipSave)
-                JsonObject()
-                    .put("success", status.status == OpcUaServerStatus.Status.RUNNING)
-                    .put("status", status.toJsonObject())
-            }
-        } catch (e: Exception) {
-            logger.severe("Failed to start OPC UA Server '${config.name}': ${e.message}")
-            JsonObject()
+        // Check if server is already running
+        if (runningServers.containsKey(config.name)) {
+            return JsonObject()
                 .put("success", false)
-                .put("error", e.message)
+                .put("error", "Server '${config.name}' is already running")
         }
+
+        // Start server asynchronously
+        startServerAsync(config, skipSave)
+
+        // Return immediate response indicating startup is in progress
+        return JsonObject()
+            .put("success", true)
+            .put("message", "Server '${config.name}' startup initiated")
     }
 
     /**
-     * Internal method to start a server
+     * Asynchronously start a server without blocking the event loop
      */
-    private fun startServerInternal(config: OpcUaServerConfig, skipSave: Boolean = false): OpcUaServerStatus {
+    private fun startServerAsync(config: OpcUaServerConfig, skipSave: Boolean = false) {
         val instance = OpcUaServerInstance(
             config,
             vertx,
@@ -268,38 +266,57 @@ class OpcUaServerExtension(
         )
 
         // Start server in blocking thread to avoid blocking event loop
-        val statusFuture = vertx.executeBlocking<OpcUaServerStatus> {
-            instance.start()
-        }
-
-        // Wait for server to start (this is acceptable here as we're in a control flow)
-        val status = try {
-            statusFuture.toCompletionStage().toCompletableFuture().get()
-        } catch (e: Exception) {
-            logger.severe("Failed to start OPC UA Server '${config.name}': ${e.message}")
-            OpcUaServerStatus(
-                serverName = config.name,
-                nodeId = config.nodeId,
-                status = OpcUaServerStatus.Status.ERROR,
-                port = config.port,
-                error = e.message
-            )
-        }
-
-        if (status.status == OpcUaServerStatus.Status.RUNNING) {
-            runningServers[config.name] = instance
-            serverStatuses[config.name] = status
-
-            // Publish status update
-            publishStatusUpdate(status)
-
-            // Save to device store if available (unless explicitly skipped)
-            if (!skipSave) {
-                saveServerConfig(config)
+        vertx.executeBlocking<OpcUaServerStatus>({ promise ->
+            try {
+                val status = instance.start()
+                promise.complete(status)
+            } catch (e: Exception) {
+                logger.severe("Failed to start OPC UA Server '${config.name}' in blocking thread: ${e.message}")
+                promise.complete(
+                    OpcUaServerStatus(
+                        serverName = config.name,
+                        nodeId = config.nodeId,
+                        status = OpcUaServerStatus.Status.ERROR,
+                        port = config.port,
+                        error = e.message
+                    )
+                )
             }
-        }
+        }, { asyncResult ->
+            // Handle completion asynchronously without blocking
+            if (asyncResult.succeeded()) {
+                val status = asyncResult.result()
+                logger.info("OPC UA Server '${config.name}' startup completed with status: ${status.status}")
 
-        return status
+                if (status.status == OpcUaServerStatus.Status.RUNNING) {
+                    runningServers[config.name] = instance
+                    serverStatuses[config.name] = status
+
+                    // Publish status update
+                    publishStatusUpdate(status)
+
+                    // Save to device store if available (unless explicitly skipped)
+                    if (!skipSave) {
+                        saveServerConfig(config)
+                    }
+                } else {
+                    logger.warning("OPC UA Server '${config.name}' failed to start: ${status.error}")
+                    serverStatuses[config.name] = status
+                    publishStatusUpdate(status)
+                }
+            } else {
+                logger.severe("OPC UA Server '${config.name}' startup failed: ${asyncResult.cause()?.message}")
+                val status = OpcUaServerStatus(
+                    serverName = config.name,
+                    nodeId = config.nodeId,
+                    status = OpcUaServerStatus.Status.ERROR,
+                    port = config.port,
+                    error = asyncResult.cause()?.message
+                )
+                serverStatuses[config.name] = status
+                publishStatusUpdate(status)
+            }
+        })
     }
 
     /**
@@ -349,8 +366,11 @@ class OpcUaServerExtension(
                     .put("success", true)
                     .put("message", "Configuration updated dynamically")
             } else if (newConfig.enabled) {
-                // Server not running but should be enabled - start it
-                startServer(newConfig, skipSave = true)
+                // Server not running but should be enabled - start it asynchronously
+                startServerAsync(newConfig, skipSave = true)
+                JsonObject()
+                    .put("success", true)
+                    .put("message", "Server startup initiated")
             } else {
                 JsonObject()
                     .put("success", true)
