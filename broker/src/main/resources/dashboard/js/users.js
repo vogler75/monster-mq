@@ -18,6 +18,14 @@ class UserManager {
             return;
         }
 
+        // Check if user management is enabled and show warning if disabled
+        const userManagementEnabled = localStorage.getItem('monstermq_userManagementEnabled') === 'true';
+        const disabledAlert = document.getElementById('user-mgmt-disabled-alert');
+
+        if (!userManagementEnabled && disabledAlert) {
+            disabledAlert.style.display = 'block';
+        }
+
         this.setupUI();
         this.loadUsers();
     }

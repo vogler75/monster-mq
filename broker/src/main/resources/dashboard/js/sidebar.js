@@ -173,8 +173,9 @@ class SidebarManager {
         const isAdmin = localStorage.getItem('monstermq_isAdmin') === 'true';
         const userManagementEnabled = localStorage.getItem('monstermq_userManagementEnabled') === 'true';
 
+        // Show Users menu for admins (regardless of user management enabled status)
         const usersNavLink = document.getElementById('users-nav-link');
-        if (isAdmin && userManagementEnabled && usersNavLink) {
+        if (isAdmin && usersNavLink) {
             usersNavLink.style.display = 'flex';
         }
 

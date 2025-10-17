@@ -197,6 +197,17 @@
                 <p class="page-subtitle">Manage MQTT users and their access control rules</p>
             </div>
 
+            <!-- User Management Disabled Alert -->
+            <div id="user-mgmt-disabled-alert" style="display: none; margin-bottom: 2rem; padding: 1rem; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; color: #F59E0B;">
+                <div style="display: flex; align-items: flex-start; gap: 1rem;">
+                    <div style="font-size: 1.5rem; margin-top: 0.2rem;">⚠️</div>
+                    <div>
+                        <strong>User Management is disabled!</strong>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem;">User management is currently disabled in your broker configuration. Enable it in your config.yaml to use user authentication and ACL features.</p>
+                    </div>
+                </div>
+            </div>
+
             <div class="metrics-grid" style="margin-bottom: 2rem;">
                 <div class="metric-card">
                     <div class="metric-header">
