@@ -693,54 +693,48 @@ MORE INFO:
                     .compose { vertx.deployVerticle(messageHandler) }
                     .compose { vertx.deployVerticle(sessionHandler) }
                     .compose {
-                        // Install MQTT Log Handler and deploy SyslogVerticle
+                        // Configure logging (MQTT and Memory are independent)
                         val loggingConfig = configJson.getJsonObject("Logging", JsonObject())
-                        val mqttLoggingEnabled = loggingConfig.getBoolean("MqttEnabled", true)
-                        val mqttLogLevel = loggingConfig.getString("MqttLevel", "INFO")
 
-                        if (mqttLoggingEnabled) {
-                            // Validate MQTT log level - only INFO, WARNING, SEVERE are allowed
-                            val validLevels = setOf("INFO", "WARNING", "SEVERE")
-                            if (!validLevels.contains(mqttLogLevel.uppercase())) {
-                                val errorMsg = "Invalid MQTT log level: $mqttLogLevel. Only INFO, WARNING, SEVERE are allowed. Broker will not start."
-                                logger.severe(errorMsg)
-                                throw IllegalArgumentException(errorMsg)
-                            }
+                        // Check if either MQTT or Memory logging is enabled
+                        val mqttConfig = loggingConfig.getJsonObject("Mqtt", JsonObject())
+                        val mqttLoggingEnabled = mqttConfig.getBoolean("Enabled", false)
+                        val memoryConfig = loggingConfig.getJsonObject("Memory", JsonObject())
+                        val memoryLoggingEnabled = memoryConfig.getBoolean("Enabled", false)
 
+                        // Install MqttLogHandler if EITHER MQTT or Memory logging is enabled
+                        // (Memory logging depends on MqttLogHandler to capture logs)
+                        if (mqttLoggingEnabled || memoryLoggingEnabled) {
                             try {
-                                logger.info("Installing MQTT log handler for system-wide log publishing (level: $mqttLogLevel)...")
+                                logger.info("Installing log handler for system-wide log capture (fixed at INFO level)...")
                                 val mqttLogHandler = MqttLogHandler.install()
 
-                                // Set the log level for the MQTT handler
-                                val level = when (mqttLogLevel.uppercase()) {
-                                    "INFO" -> Level.INFO
-                                    "WARNING" -> Level.WARNING
-                                    "SEVERE" -> Level.SEVERE
-                                    else -> Level.INFO // This should never happen due to validation above
-                                }
-                                mqttLogHandler.level = level
-                                logger.info("MQTT log handler installed successfully with level: $level")
+                                // Set the log level to INFO (fixed)
+                                mqttLogHandler.level = Level.INFO
+                                logger.info("Log handler installed successfully at INFO level (MQTT: $mqttLoggingEnabled, Memory: $memoryLoggingEnabled)")
                             } catch (e: Exception) {
-                                logger.severe("Failed to install MQTT log handler: ${e.message}")
+                                logger.severe("Failed to install log handler: ${e.message}")
                                 throw e
                             }
-
-                            // Deploy SyslogVerticle
-                            val syslogConfig = loggingConfig.getJsonObject("Syslog", JsonObject())
-                            val syslogEnabled = syslogConfig.getBoolean("Enabled", false)
-                            val maxEntries = syslogConfig.getInteger("MaxEntries", 1000)
-
-                            if (syslogEnabled) {
-                                logger.info("Deploying SyslogVerticle with maxEntries=$maxEntries")
-                                val syslogVerticle = SyslogVerticle(true, maxEntries, messageHandler)
-                                vertx.deployVerticle(syslogVerticle)
-                            } else {
-                                logger.info("SyslogVerticle is disabled, deploying in passthrough mode")
-                                val syslogVerticle = SyslogVerticle(false, 0, messageHandler)
-                                vertx.deployVerticle(syslogVerticle)
-                            }
                         } else {
-                            logger.info("MQTT log handler is disabled in configuration")
+                            logger.info("Both MQTT and Memory logging are disabled")
+                        }
+
+                        Future.succeededFuture<String>()
+                    }
+                    .compose {
+                        // Deploy SyslogVerticle (independent of MQTT setting)
+                        val loggingConfig = configJson.getJsonObject("Logging", JsonObject())
+                        val memoryConfig = loggingConfig.getJsonObject("Memory", JsonObject())
+                        val memoryEnabled = memoryConfig.getBoolean("Enabled", false)
+                        val memoryEntries = memoryConfig.getInteger("Entries", 1000)
+
+                        if (memoryEnabled) {
+                            logger.info("Deploying SyslogVerticle with memoryEntries=$memoryEntries")
+                            val syslogVerticle = SyslogVerticle(true, memoryEntries, messageHandler)
+                            vertx.deployVerticle(syslogVerticle)
+                        } else {
+                            logger.info("In-memory syslog storage is disabled")
                             Future.succeededFuture<String>()
                         }
                     }

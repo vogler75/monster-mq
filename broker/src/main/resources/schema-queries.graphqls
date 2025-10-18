@@ -65,8 +65,8 @@ type Query {
         archiveGroup: String = "Default"
     ): [ArchivedMessage!]!
 
-    # Query historical system logs from the archive
-    # Returns system logs within specified time range
+    # Query recent system logs from the in-memory store
+    # Returns system logs from the circular buffer with optional filtering
     # Time can be specified using startTime/endTime or lastMinutes
     systemLogs(
         # ISO 8601 start timestamp: "2024-01-15T10:00:00Z" (optional)
@@ -87,12 +87,10 @@ type Query {
         sourceMethod: String
         # Optional message regex filter
         message: String
-        # Maximum number of log entries to return
+        # Maximum number of log entries to return (limited by in-memory buffer size)
         limit: Int = 100
         # Sort order: ASC (oldest first) or DESC (newest first)
         orderByTime: OrderDirection = DESC
-        # ArchiveGroup containing the system logs archive
-        archiveGroup: String = "Syslogs"
     ): [SystemLogEntry!]!
 
     # Search for topics by name pattern using SQL LIKE wildcards

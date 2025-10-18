@@ -148,6 +148,7 @@ object EventBusAddresses {
     object Syslog {
         private const val SYSLOG_NS = "$BASE.syslog"
         const val LOGS = "$SYSLOG_NS.logs"
+        fun logsForNode(nodeId: String) = "$SYSLOG_NS.logs.$nodeId"
     }
 
     // Utility functions for address validation and parsing

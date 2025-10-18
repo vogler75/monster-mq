@@ -137,9 +137,10 @@ class MqttLogHandler : Handler() {
                 }
             }
 
-            // Publish log entry to the syslog event bus
+            // Publish log entry to the node-specific syslog event bus
             // SyslogVerticle will handle MQTT publishing and in-memory storage
-            vertx.eventBus().publish(EventBusAddresses.Syslog.LOGS, logData)
+            val nodeSpecificAddress = EventBusAddresses.Syslog.logsForNode(nodeId)
+            vertx.eventBus().publish(nodeSpecificAddress, logData)
 
         } catch (e: Exception) {
             // Silently ignore all errors to prevent logging loops

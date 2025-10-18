@@ -538,10 +538,9 @@ class LogViewer {
         startTime,
         endTime,
         limit: limit,
-        orderByTime: 'DESC',
-        archiveGroup: 'Syslogs'
+        orderByTime: 'DESC'
       };
-      
+
       if (filters.node) variables.node = filters.node;
       if (filters.loggerRegex) variables.logger = filters.loggerRegex;
       if (filters.sourceClassRegex) variables.sourceClass = filters.sourceClassRegex;
@@ -552,8 +551,8 @@ class LogViewer {
       }
 
       const query = `
-        query GetSystemLogs($startTime:String,$endTime:String,$limit:Int,$orderByTime:OrderDirection,$archiveGroup:String,$node:String,$level:[String!],$logger:String,$sourceClass:String,$message:String) {
-          systemLogs(startTime:$startTime,endTime:$endTime,limit:$limit,orderByTime:$orderByTime,archiveGroup:$archiveGroup,node:$node,level:$level,logger:$logger,sourceClass:$sourceClass,message:$message) {
+        query GetSystemLogs($startTime:String,$endTime:String,$limit:Int,$orderByTime:OrderDirection,$node:String,$level:[String!],$logger:String,$sourceClass:String,$message:String) {
+          systemLogs(startTime:$startTime,endTime:$endTime,limit:$limit,orderByTime:$orderByTime,node:$node,level:$level,logger:$logger,sourceClass:$sourceClass,message:$message) {
             timestamp level logger message thread node sourceClass sourceMethod parameters
             exception { class message stackTrace }
           }

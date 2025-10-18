@@ -375,31 +375,30 @@ class QueryResolver(
     fun systemLogs(): DataFetcher<CompletableFuture<List<SystemLogEntry>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<SystemLogEntry>>()
-            
-            val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Syslogs"
+
             val limit = env.getArgument<Int>("limit") ?: 100
             val orderByTime = env.getArgument<String>("orderByTime") ?: "DESC"
             val lastMinutes = env.getArgument<Int?>("lastMinutes")
-            
+
             // Get time parameters
             var startTimeStr = env.getArgument<String?>("startTime")
             var endTimeStr = env.getArgument<String?>("endTime")
-            
+
             // Handle lastMinutes option
             if (lastMinutes != null) {
                 val now = Instant.now()
                 endTimeStr = endTimeStr ?: now.toString()
-                
+
                 // Calculate startTime based on endTime and lastMinutes
                 val endTime = try {
                     Instant.parse(endTimeStr)
                 } catch (e: DateTimeParseException) {
                     logger.warning("Invalid endTime format: $endTimeStr, expected ISO-8601 format")
-                    return@DataFetcher future.apply { 
-                        completeExceptionally(IllegalArgumentException("Invalid endTime format: expected ISO-8601 (e.g., 2024-01-01T00:00:00.000Z)")) 
+                    return@DataFetcher future.apply {
+                        completeExceptionally(IllegalArgumentException("Invalid endTime format: expected ISO-8601 (e.g., 2024-01-01T00:00:00.000Z)"))
                     }
                 }
-                
+
                 startTimeStr = endTime.minusSeconds(lastMinutes.toLong() * 60).toString()
             } else {
                 // If no lastMinutes, use endTime or default to now
@@ -407,7 +406,7 @@ class QueryResolver(
                     endTimeStr = Instant.now().toString()
                 }
             }
-            
+
             // Get optional filters
             val nodeFilter = env.getArgument<String?>("node")
             val levelArg = env.getArgument<Any?>("level")
@@ -423,81 +422,62 @@ class QueryResolver(
             val sourceMethodFilter = env.getArgument<String?>("sourceMethod")
             val messageFilter = env.getArgument<String?>("message")
 
-            // Find the specified archive group with an extended archive store
-            val archiveStore = getCurrentArchiveGroups()[archiveGroupName]?.archiveStore as? IMessageArchiveExtended
-
-            if (archiveStore == null) {
-                logger.warning("No extended archive store configured for archive group '$archiveGroupName'")
-                future.complete(emptyList())
-                return@DataFetcher future
-            }
-
             // Validate ISO datetime strings
-            startTimeStr?.let { 
+            val startTime = startTimeStr?.let {
                 try {
                     Instant.parse(it)
                 } catch (e: DateTimeParseException) {
                     logger.warning("Invalid startTime format: $it, expected ISO-8601 format")
-                    return@DataFetcher future.apply { 
-                        completeExceptionally(IllegalArgumentException("Invalid startTime format: expected ISO-8601 (e.g., 2024-01-01T00:00:00.000Z)")) 
+                    return@DataFetcher future.apply {
+                        completeExceptionally(IllegalArgumentException("Invalid startTime format: expected ISO-8601 (e.g., 2024-01-01T00:00:00.000Z)"))
                     }
                 }
             }
-            endTimeStr?.let { 
+
+            val endTime = endTimeStr?.let {
                 try {
                     Instant.parse(it)
                 } catch (e: DateTimeParseException) {
                     logger.warning("Invalid endTime format: $it, expected ISO-8601 format")
-                    return@DataFetcher future.apply { 
-                        completeExceptionally(IllegalArgumentException("Invalid endTime format: expected ISO-8601 (e.g., 2024-01-01T00:00:00.000Z)")) 
+                    return@DataFetcher future.apply {
+                        completeExceptionally(IllegalArgumentException("Invalid endTime format: expected ISO-8601 (e.g., 2024-01-01T00:00:00.000Z)"))
                     }
                 }
             }
-            
-            // Query the archive store - use "syslogs/#" as topic filter to get all system logs
-            val jsonArray = archiveStore.getHistory(
-                topic = "${Const.SYS_TOPIC_NAME}/${Const.LOG_TOPIC_NAME}/%",
-                startTime = startTimeStr?.let { Instant.parse(it) },
-                endTime = endTimeStr.let { Instant.parse(it) },
-                limit = limit
-            )
-            
+
+            // Fetch logs from in-memory store
+            val allLogs = at.rocworks.logging.InMemorySyslogStore.getAllLogs()
+
             val logs = mutableListOf<SystemLogEntry>()
-            for (i in 0 until jsonArray.size()) {
-                val obj = jsonArray.getJsonObject(i)
-                
-                // Parse the JSON payload
-                val payloadJson = when {
-                    obj.containsKey("payload_json") && obj.getString("payload_json") != null -> {
-                        obj.getString("payload_json")
-                    }
-                    obj.containsKey("payload_base64") -> {
-                        val bytes = java.util.Base64.getDecoder().decode(obj.getString("payload_base64"))
-                        String(bytes, Charsets.UTF_8)
-                    }
-                    else -> {
-                        obj.getString("payload", "{}")
-                    }
-                }
-                
+            for (logData in allLogs) {
                 try {
-                    val logData = io.vertx.core.json.JsonObject(payloadJson)
-                    
+                    // Apply time filters if specified
+                    if (startTime != null || endTime != null) {
+                        val logTimestamp = try {
+                            Instant.parse(logData.getString("timestamp"))
+                        } catch (e: Exception) {
+                            continue
+                        }
+
+                        if (startTime != null && logTimestamp < startTime) continue
+                        if (endTime != null && logTimestamp > endTime) continue
+                    }
+
                     // Apply filters
                     if (nodeFilter != null && logData.getString("node") != nodeFilter) continue
-                    
+
                     // Apply level filter - check if log level matches any of the requested levels
                     if (levelFilters.isNotEmpty()) {
                         val logLevel = logData.getString("level")
                         logger.fine("Comparing logLevel='$logLevel' against levelFilters=$levelFilters, contains=${levelFilters.contains(logLevel)}")
                         if (logLevel != null && !levelFilters.contains(logLevel)) continue
                     }
-                    
+
                     if (loggerFilter != null && !logData.getString("logger", "").matches(Regex(loggerFilter))) continue
                     if (sourceClassFilter != null && !logData.getString("sourceClass", "").matches(Regex(sourceClassFilter))) continue
                     if (sourceMethodFilter != null && !logData.getString("sourceMethod", "").matches(Regex(sourceMethodFilter))) continue
                     if (messageFilter != null && !logData.getString("message", "").matches(Regex(messageFilter))) continue
-                    
+
                     // Parse exception if present
                     val exception = logData.getJsonObject("exception")?.let { exc ->
                         ExceptionInfo(
@@ -506,10 +486,10 @@ class QueryResolver(
                             stackTrace = exc.getString("stackTrace") ?: ""
                         )
                     }
-                    
+
                     // Parse parameters if present
                     val parameters = logData.getJsonArray("parameters")?.map { it.toString() }
-                    
+
                     logs.add(
                         SystemLogEntry(
                             timestamp = logData.getString("timestamp") ?: "",
@@ -529,14 +509,14 @@ class QueryResolver(
                     // Skip malformed log entries
                 }
             }
-            
-            // Sort by time if needed (database might return in different order)
+
+            // Sort by time and apply limit
             val sortedLogs = if (orderByTime == "ASC") {
-                logs.sortedBy { it.timestamp }
+                logs.sortedBy { it.timestamp }.take(limit)
             } else {
-                logs.sortedByDescending { it.timestamp }
+                logs.sortedByDescending { it.timestamp }.take(limit)
             }
-            
+
             future.complete(sortedLogs)
 
             future

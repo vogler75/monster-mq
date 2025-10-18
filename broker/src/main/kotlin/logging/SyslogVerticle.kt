@@ -53,10 +53,12 @@ class SyslogVerticle(
                 logger.info("SyslogVerticle started with in-memory store disabled")
             }
 
-            // Set up event bus consumer for incoming log entries
-            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Syslog.LOGS) { message ->
+            // Set up event bus consumer for incoming log entries on node-specific address
+            val nodeSpecificAddress = EventBusAddresses.Syslog.logsForNode(nodeId)
+            vertx.eventBus().consumer<JsonObject>(nodeSpecificAddress) { message ->
                 handleLogEntry(message.body())
             }
+            logger.info("SyslogVerticle listening on address: $nodeSpecificAddress")
 
             logger.info("SyslogVerticle initialized successfully")
             startPromise.complete()

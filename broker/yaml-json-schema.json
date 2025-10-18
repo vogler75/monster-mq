@@ -95,27 +95,27 @@
       "type": "object",
       "description": "System logging configuration",
       "properties": {
-        "MqttEnabled": {
-          "type": "boolean",
-          "description": "Enable MQTT log handler to publish all Java logs to $SYS/syslogs/<node>/<level> topics",
-          "default": false
-        },
-        "MqttLevel": {
-          "type": "string",
-          "description": "Minimum log level for MQTT publishing (ALL, FINEST, FINER, FINE, INFO, WARNING, SEVERE)",
-          "default": "INFO",
-          "enum": ["ALL", "FINEST", "FINER", "FINE", "INFO", "WARNING", "SEVERE"]
-        },
-        "Syslog": {
+        "Mqtt": {
           "type": "object",
-          "description": "In-memory syslog store configuration",
+          "description": "MQTT log handler configuration",
+          "properties": {
+            "Enabled": {
+              "type": "boolean",
+              "description": "Enable MQTT log handler to publish all Java logs to $SYS/syslogs/<node>/<level> topics (fixed at INFO level)",
+              "default": false
+            }
+          }
+        },
+        "Memory": {
+          "type": "object",
+          "description": "In-memory log storage configuration",
           "properties": {
             "Enabled": {
               "type": "boolean",
               "description": "Enable in-memory storage of system logs",
               "default": false
             },
-            "MaxEntries": {
+            "Entries": {
               "type": "integer",
               "description": "Maximum number of log entries to store in memory (circular buffer)",
               "default": 1000,

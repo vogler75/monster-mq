@@ -6,6 +6,13 @@ QueuedMessagesEnabled: true
 
 DefaultStoreType: POSTGRES
 
+Logging:
+  Mqtt:
+    Enabled: false
+  Memory:
+    Enabled: true
+    Entries: 2000
+
 Postgres:
   Url: jdbc:postgresql://192.168.1.35:5432/monster-cluster
   User: system
