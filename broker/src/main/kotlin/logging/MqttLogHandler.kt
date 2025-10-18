@@ -4,20 +4,17 @@ import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
-import at.rocworks.data.BrokerMessage
-import at.rocworks.handlers.MessageHandler
 import io.vertx.core.json.JsonObject
-import java.time.Instant
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
 import java.util.logging.Logger
 
 /**
- * MQTT Log Handler - Publishes Java log records to MQTT topics
+ * MQTT Log Handler - Publishes Java log records to the event bus
  *
- * This handler intercepts all Java logging messages and publishes them to MQTT topics
- * in the format: syslogs/<node>/<level>
+ * This handler intercepts all Java logging messages and publishes them to the event bus
+ * where the SyslogVerticle processes them for MQTT publishing and in-memory storage.
  *
  * Features:
  * - Publishes logs from all loggers in the system
@@ -26,7 +23,7 @@ import java.util.logging.Logger
  * - Configurable minimum log level
  * - Automatic node identification
  */
-class MqttLogHandler(private val messageHandler: MessageHandler?) : Handler() {
+class MqttLogHandler : Handler() {
 
     private val logger: Logger = Utils.getLogger(MqttLogHandler::class.java)
     private var nodeId: String = "unknown"
@@ -35,24 +32,24 @@ class MqttLogHandler(private val messageHandler: MessageHandler?) : Handler() {
     companion object {
         const val LOG_TOPIC_PREFIX = "${Const.SYS_TOPIC_NAME}/${Const.LOG_TOPIC_NAME}"
         private var instance: MqttLogHandler? = null
-        
+
         /**
          * Initialize and install the MQTT log handler
          */
-        fun install(messageHandler: MessageHandler? = null): MqttLogHandler {
+        fun install(): MqttLogHandler {
             if (instance == null) {
-                instance = MqttLogHandler(messageHandler)
-                
+                instance = MqttLogHandler()
+
                 // Add to root logger to capture all logging
                 val rootLogger = Logger.getLogger("")
                 rootLogger.addHandler(instance!!)
-                
+
                 // Set level to capture all logs (individual loggers control their own levels)
                 instance!!.level = Level.ALL
             }
             return instance!!
         }
-        
+
         /**
          * Remove the MQTT log handler
          */
@@ -140,26 +137,9 @@ class MqttLogHandler(private val messageHandler: MessageHandler?) : Handler() {
                 }
             }
 
-            // Create MQTT message
-            val message = BrokerMessage(
-                messageId = 0,
-                topicName = topic,
-                payload = logData.encode().toByteArray(),
-                qosLevel = 0, // Use QoS 0 for logs to avoid overwhelming the system
-                isRetain = false, // Don't retain log messages
-                isDup = false,
-                isQueued = false,
-                clientId = "mqtt-log-handler-$nodeId",
-                time = record.instant ?: Instant.now(),
-                senderId = "mqtt-log-handler-$nodeId" // Identify sender to prevent loops
-            )
-
-            // Save to archives BEFORE broadcasting (only this node saves, prevents cluster duplicates)
-            messageHandler?.saveMessage(message)
-
-            // Publish to broadcast event bus address (all nodes receive this)
-            // No error handling or logging here - failures are silently ignored to prevent recursion
-            vertx.eventBus().publish(EventBusAddresses.Cluster.BROADCAST, message)
+            // Publish log entry to the syslog event bus
+            // SyslogVerticle will handle MQTT publishing and in-memory storage
+            vertx.eventBus().publish(EventBusAddresses.Syslog.LOGS, logData)
 
         } catch (e: Exception) {
             // Silently ignore all errors to prevent logging loops

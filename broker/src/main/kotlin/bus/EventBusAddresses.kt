@@ -144,6 +144,12 @@ object EventBusAddresses {
         const val SHUTDOWN = "$SYSTEM_NS.shutdown"
     }
 
+    // Syslog Operations
+    object Syslog {
+        private const val SYSLOG_NS = "$BASE.syslog"
+        const val LOGS = "$SYSLOG_NS.logs"
+    }
+
     // Utility functions for address validation and parsing
     object Utils {
         /**

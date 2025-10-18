@@ -42,6 +42,7 @@ import at.rocworks.devices.neo4j.Neo4jExtension
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.flowengine.FlowEngineExtension
 import at.rocworks.logging.MqttLogHandler
+import at.rocworks.logging.SyslogVerticle
 import handlers.MetricsHandler
 import java.io.File
 import java.util.logging.Level
@@ -692,11 +693,11 @@ MORE INFO:
                     .compose { vertx.deployVerticle(messageHandler) }
                     .compose { vertx.deployVerticle(sessionHandler) }
                     .compose {
-                        // Install MQTT Log Handler now that SessionHandler is deployed and initialized
+                        // Install MQTT Log Handler and deploy SyslogVerticle
                         val loggingConfig = configJson.getJsonObject("Logging", JsonObject())
                         val mqttLoggingEnabled = loggingConfig.getBoolean("MqttEnabled", true)
                         val mqttLogLevel = loggingConfig.getString("MqttLevel", "INFO")
-                        
+
                         if (mqttLoggingEnabled) {
                             // Validate MQTT log level - only INFO, WARNING, SEVERE are allowed
                             val validLevels = setOf("INFO", "WARNING", "SEVERE")
@@ -705,11 +706,11 @@ MORE INFO:
                                 logger.severe(errorMsg)
                                 throw IllegalArgumentException(errorMsg)
                             }
-                            
+
                             try {
                                 logger.info("Installing MQTT log handler for system-wide log publishing (level: $mqttLogLevel)...")
-                                val mqttLogHandler = MqttLogHandler.install(messageHandler)
-                                
+                                val mqttLogHandler = MqttLogHandler.install()
+
                                 // Set the log level for the MQTT handler
                                 val level = when (mqttLogLevel.uppercase()) {
                                     "INFO" -> Level.INFO
@@ -723,11 +724,25 @@ MORE INFO:
                                 logger.severe("Failed to install MQTT log handler: ${e.message}")
                                 throw e
                             }
+
+                            // Deploy SyslogVerticle
+                            val syslogConfig = loggingConfig.getJsonObject("Syslog", JsonObject())
+                            val syslogEnabled = syslogConfig.getBoolean("Enabled", false)
+                            val maxEntries = syslogConfig.getInteger("MaxEntries", 1000)
+
+                            if (syslogEnabled) {
+                                logger.info("Deploying SyslogVerticle with maxEntries=$maxEntries")
+                                val syslogVerticle = SyslogVerticle(true, maxEntries, messageHandler)
+                                vertx.deployVerticle(syslogVerticle)
+                            } else {
+                                logger.info("SyslogVerticle is disabled, deploying in passthrough mode")
+                                val syslogVerticle = SyslogVerticle(false, 0, messageHandler)
+                                vertx.deployVerticle(syslogVerticle)
+                            }
                         } else {
                             logger.info("MQTT log handler is disabled in configuration")
+                            Future.succeededFuture<String>()
                         }
-                        
-                        Future.succeededFuture<String>()
                     }
                     .compose { vertx.deployVerticle(userManager) }
                     .compose { vertx.deployVerticle(healthHandler) }

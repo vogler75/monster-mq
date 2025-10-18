@@ -105,6 +105,24 @@
           "description": "Minimum log level for MQTT publishing (ALL, FINEST, FINER, FINE, INFO, WARNING, SEVERE)",
           "default": "INFO",
           "enum": ["ALL", "FINEST", "FINER", "FINE", "INFO", "WARNING", "SEVERE"]
+        },
+        "Syslog": {
+          "type": "object",
+          "description": "In-memory syslog store configuration",
+          "properties": {
+            "Enabled": {
+              "type": "boolean",
+              "description": "Enable in-memory storage of system logs",
+              "default": false
+            },
+            "MaxEntries": {
+              "type": "integer",
+              "description": "Maximum number of log entries to store in memory (circular buffer)",
+              "default": 1000,
+              "minimum": 1,
+              "maximum": 1000000
+            }
+          }
         }
       }
     },
