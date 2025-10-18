@@ -275,8 +275,7 @@ class MqttClientExtension : AbstractVerticle() {
             }
 
             // Provide list of active connector device names - node-specific address
-            val connectorListAddr = at.rocworks.bus.EventBusAddresses.MqttBridge.connectorsList(currentNodeId)
-            vertx.eventBus().consumer<JsonObject>(connectorListAddr) { msg ->
+            vertx.eventBus().consumer<JsonObject>(at.rocworks.bus.EventBusAddresses.MqttBridge.connectorsList(currentNodeId)) { msg ->
                 try {
                     val list = activeDevices.keys.toList()
                     msg.reply(JsonObject().put("devices", list))

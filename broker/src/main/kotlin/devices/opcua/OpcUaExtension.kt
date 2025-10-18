@@ -180,8 +180,7 @@ class OpcUaExtension : AbstractVerticle() {
                                 if (completedCount == devices.size) {
                                     logger.info("OPC UA device deployment completed: $successCount/$completedCount devices deployed successfully")
             // Provide list of active connector device names (OPC UA clients) - node-specific address
-            val connectorListAddr = EventBusAddresses.OpcUaBridge.connectorsList(currentNodeId)
-            vertx.eventBus().consumer<JsonObject>(connectorListAddr) { msg ->
+            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.OpcUaBridge.connectorsList(currentNodeId)) { msg ->
                 try {
                     val list = activeDevices.keys.toList()
                     msg.reply(JsonObject().put("devices", list))

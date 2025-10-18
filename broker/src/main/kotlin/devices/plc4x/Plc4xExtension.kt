@@ -276,8 +276,7 @@ class Plc4xExtension : AbstractVerticle() {
             }
 
             // Provide list of active connector device names (PLC4X clients) - node-specific address
-            val connectorListAddr = EventBusAddresses.Plc4xBridge.connectorsList(currentNodeId)
-            vertx.eventBus().consumer<JsonObject>(connectorListAddr) { msg ->
+            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Plc4xBridge.connectorsList(currentNodeId)) { msg ->
                 try {
                     val list = activeDevices.keys.toList()
                     msg.reply(JsonObject().put("devices", list))

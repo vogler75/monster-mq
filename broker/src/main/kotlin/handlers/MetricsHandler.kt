@@ -245,7 +245,7 @@ class MetricsHandler(
                 tryAssembleAndStore()
             }
 
-            // MQTT bridge metrics aggregation - query only local node's connectors
+            // MQTT bridge metrics aggregation - only query this node's devices
             val listAddress = EventBusAddresses.MqttBridge.connectorsList(nodeId)
             vertx.eventBus().request<JsonObject>(listAddress, JsonObject()).onComplete { listReply ->
                 if (listReply.succeeded()) {
@@ -302,7 +302,7 @@ class MetricsHandler(
                  }
              }
 
-             // OPC UA bridge metrics aggregation - query only local node's connectors
+             // OPC UA bridge metrics aggregation - only query this node's devices
              val opcuaListAddress = EventBusAddresses.OpcUaBridge.connectorsList(nodeId)
              vertx.eventBus().request<JsonObject>(opcuaListAddress, JsonObject()).onComplete { listReply ->
                  if (listReply.succeeded()) {
@@ -354,7 +354,7 @@ class MetricsHandler(
                  }
              }
 
-            // Kafka bridge metrics aggregation - query only local node's connectors
+            // Kafka bridge metrics aggregation - only query this node's devices
             val kafkaListAddress = EventBusAddresses.KafkaBridge.connectorsList(nodeId)
             vertx.eventBus().request<JsonObject>(kafkaListAddress, JsonObject()).onComplete { listReply ->
                 if (listReply.succeeded()) {
@@ -411,7 +411,7 @@ class MetricsHandler(
                 }
             }
 
-            // WinCC OA Client metrics aggregation - query only local node's connectors
+            // WinCC OA Client metrics aggregation - only query this node's devices
             val winCCOaListAddress = EventBusAddresses.WinCCOaBridge.connectorsList(nodeId)
             vertx.eventBus().request<JsonObject>(winCCOaListAddress, JsonObject()).onComplete { listReply ->
                 if (listReply.succeeded()) {
@@ -470,7 +470,7 @@ class MetricsHandler(
                 }
             }
 
-            // WinCC Unified (UA) Client metrics aggregation - query only local node's connectors
+            // WinCC Unified (UA) Client metrics aggregation - only query this node's devices
             val winCCUaListAddress = EventBusAddresses.WinCCUaBridge.connectorsList(nodeId)
             vertx.eventBus().request<JsonObject>(winCCUaListAddress, JsonObject()).onComplete { listReply ->
                 if (listReply.succeeded()) {
@@ -529,7 +529,7 @@ class MetricsHandler(
                 }
             }
 
-            // Neo4j Client metrics aggregation - query only local node's connectors
+            // Neo4j Client metrics aggregation - only query this node's devices
             val neo4jListAddress = EventBusAddresses.Neo4jBridge.connectorsList(nodeId)
             vertx.eventBus().request<JsonObject>(neo4jListAddress, JsonObject()).onComplete { listReply ->
                 if (listReply.succeeded()) {
