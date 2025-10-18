@@ -13,6 +13,7 @@ import at.rocworks.stores.MessageArchiveType
 import at.rocworks.stores.MessageStoreMemory
 import at.rocworks.stores.MessageStoreNone
 import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.MessageStoreHazelcast
 import at.rocworks.stores.PayloadFormat
 import at.rocworks.stores.cratedb.MessageArchiveCrateDB
 import at.rocworks.stores.cratedb.MessageStoreCrateDB
@@ -230,25 +231,97 @@ class ArchiveGroup(
                 }
             }
             MessageStoreType.HAZELCAST -> {
-                logger.warning("Hazelcast store type requested for [$storeName] but clustering is not enabled. Falling back to MEMORY store. Use -cluster flag to enable Hazelcast.")
-                val store = MessageStoreMemory(storeName)
-                lastValStore = store
-                val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onComplete { result ->
-                    if (result.succeeded()) {
-                        if (!isStopping) {
-                            childDeployments.add(result.result())
-                            logger.info("Memory MessageStore [$storeName] deployed as fallback for Hazelcast")
-                            callback(true)
+                if (!Monster.isClustered()) {
+                    logger.warning("Hazelcast store type requested for [$storeName] but clustering is not enabled. Falling back to MEMORY store. Use -cluster flag to enable Hazelcast.")
+                    val store = MessageStoreMemory(storeName)
+                    lastValStore = store
+                    val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                    vertx.deployVerticle(store, options).onComplete { result ->
+                        if (result.succeeded()) {
+                            if (!isStopping) {
+                                childDeployments.add(result.result())
+                                logger.info("Memory MessageStore [$storeName] deployed as fallback for Hazelcast")
+                                callback(true)
+                            } else {
+                                vertx.undeploy(result.result())
+                                logger.info("Memory MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                                callback(false)
+                            }
                         } else {
-                            vertx.undeploy(result.result())
-                            logger.info("Memory MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                            logger.warning("Failed to deploy Memory MessageStore [$storeName]: ${result.cause()?.message}")
+                            lastValStore = null
                             callback(false)
                         }
-                    } else {
-                        logger.warning("Failed to deploy Memory MessageStore [$storeName]: ${result.cause()?.message}")
-                        lastValStore = null
-                        callback(false)
+                    }
+                } else {
+                    try {
+                        val clusterManager = Monster.getClusterManager()
+                        if (clusterManager != null) {
+                            val store = MessageStoreHazelcast(storeName, clusterManager.hazelcastInstance)
+                            lastValStore = store
+                            val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                            vertx.deployVerticle(store, options).onComplete { result ->
+                                if (result.succeeded()) {
+                                    if (!isStopping) {
+                                        childDeployments.add(result.result())
+                                        logger.info("Hazelcast MessageStore [$storeName] deployed successfully")
+                                        callback(true)
+                                    } else {
+                                        vertx.undeploy(result.result())
+                                        logger.info("Hazelcast MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                                        callback(false)
+                                    }
+                                } else {
+                                    logger.warning("Failed to deploy Hazelcast MessageStore [$storeName]: ${result.cause()?.message}")
+                                    lastValStore = null
+                                    callback(false)
+                                }
+                            }
+                        } else {
+                            logger.warning("Hazelcast store type requested for [$storeName] but cluster manager is not available. Falling back to MEMORY store.")
+                            val store = MessageStoreMemory(storeName)
+                            lastValStore = store
+                            val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                            vertx.deployVerticle(store, options).onComplete { result ->
+                                if (result.succeeded()) {
+                                    if (!isStopping) {
+                                        childDeployments.add(result.result())
+                                        logger.info("Memory MessageStore [$storeName] deployed as fallback for Hazelcast")
+                                        callback(true)
+                                    } else {
+                                        vertx.undeploy(result.result())
+                                        logger.info("Memory MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                                        callback(false)
+                                    }
+                                } else {
+                                    logger.warning("Failed to deploy Memory MessageStore [$storeName]: ${result.cause()?.message}")
+                                    lastValStore = null
+                                    callback(false)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logger.warning("Error creating Hazelcast MessageStore [$storeName]: ${e.message}. Falling back to MEMORY store.")
+                        val store = MessageStoreMemory(storeName)
+                        lastValStore = store
+                        val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                        vertx.deployVerticle(store, options).onComplete { result ->
+                            if (result.succeeded()) {
+                                if (!isStopping) {
+                                    childDeployments.add(result.result())
+                                    logger.info("Memory MessageStore [$storeName] deployed as fallback for Hazelcast")
+                                    callback(true)
+                                } else {
+                                    vertx.undeploy(result.result())
+                                    logger.info("Memory MessageStore [$storeName] deployed but immediately undeployed due to stop")
+                                    callback(false)
+                                }
+                            } else {
+                                logger.warning("Failed to deploy Memory MessageStore [$storeName]: ${result.cause()?.message}")
+                                lastValStore = null
+                                callback(false)
+                            }
+                        }
                     }
                 }
             }
