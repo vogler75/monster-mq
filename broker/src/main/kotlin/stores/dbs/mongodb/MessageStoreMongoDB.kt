@@ -653,4 +653,44 @@ class MessageStoreMongoDB(
         mongoClient?.close()
         logger.info("MongoDB connection closed.")
     }
+
+    override suspend fun tableExists(): Boolean {
+        return try {
+            if (!isConnected || database == null) {
+                logger.warning("MongoDB not connected, cannot check collection existence for [$collectionName]")
+                return false
+            }
+            val collections = database!!.listCollectionNames().into(mutableListOf())
+            collections.contains(collectionName)
+        } catch (e: Exception) {
+            logger.warning("Error checking if collection [$collectionName] exists: ${e.message}")
+            false
+        }
+    }
+
+    override suspend fun createTable(): Boolean {
+        return try {
+            if (!isConnected || database == null) {
+                logger.warning("MongoDB not connected, cannot create collection for [$collectionName]")
+                return false
+            }
+
+            // Create collection if not exists
+            if (!database!!.listCollectionNames().into(mutableListOf()).contains(collectionName)) {
+                database!!.createCollection(collectionName)
+                logger.info("Created collection: $collectionName")
+            }
+
+            val newCollection = database!!.getCollection(collectionName)
+
+            // Create optimized indexes for queries
+            createOptimizedIndexes(newCollection)
+
+            logger.info("Table (collection) created for message store [$name]")
+            true
+        } catch (e: Exception) {
+            logger.warning("Error creating table: ${e.message}")
+            false
+        }
+    }
 }

@@ -448,4 +448,52 @@ class MessageArchiveMongoDB(
         mongoClient?.close()
         logger.info("MongoDB connection closed.")
     }
+
+    override suspend fun tableExists(): Boolean {
+        return try {
+            if (!isConnected || database == null) {
+                logger.warning("MongoDB not connected, cannot check collection existence for [$collectionName]")
+                return false
+            }
+            val collections = database!!.listCollectionNames().into(mutableListOf())
+            collections.contains(collectionName)
+        } catch (e: Exception) {
+            logger.warning("Error checking if collection [$collectionName] exists: ${e.message}")
+            false
+        }
+    }
+
+    override suspend fun createTable(): Boolean {
+        return try {
+            if (!isConnected || database == null) {
+                logger.warning("MongoDB not connected, cannot create collection for [$collectionName]")
+                return false
+            }
+
+            // Create time-series collection if not exists
+            if (!database!!.listCollectionNames().into(mutableListOf()).contains(collectionName)) {
+                val timeSeriesOptions = TimeSeriesOptions("time")
+                    .metaField("meta")
+                    .granularity(TimeSeriesGranularity.SECONDS) // Better for MQTT
+
+                val createCollectionOptions = CreateCollectionOptions()
+                    .timeSeriesOptions(timeSeriesOptions)
+                    .expireAfter(365, TimeUnit.DAYS) // Optional: auto-expire old data
+
+                database!!.createCollection(collectionName, createCollectionOptions)
+                logger.info("Created time-series collection: $collectionName")
+            }
+
+            val newCollection = database!!.getCollection(collectionName)
+
+            // Create optimized indexes for queries
+            createIndexes(newCollection)
+
+            logger.info("Table (collection) created for message archive [$name]")
+            true
+        } catch (e: Exception) {
+            logger.warning("Error creating table: ${e.message}")
+            false
+        }
+    }
 }

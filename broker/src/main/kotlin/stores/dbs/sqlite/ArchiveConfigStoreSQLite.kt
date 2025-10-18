@@ -312,4 +312,20 @@ class ArchiveConfigStoreSQLite(
     }
 
     override fun getType(): String = "ConfigStoreSQLite"
+
+    override suspend fun tableExists(): Boolean {
+        return try {
+            db.connection?.let { connection ->
+                val sql = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?"
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, configTableName)
+                    val resultSet = preparedStatement.executeQuery()
+                    resultSet.next()
+                }
+            } ?: false
+        } catch (e: SQLException) {
+            logger.warning("Error checking if table [$configTableName] exists: ${e.message}")
+            false
+        }
+    }
 }

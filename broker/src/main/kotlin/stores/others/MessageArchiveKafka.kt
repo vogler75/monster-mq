@@ -140,4 +140,15 @@ class MessageArchiveKafka(
             false
         }
     }
+
+    override suspend fun tableExists(): Boolean {
+        // Kafka topics are managed externally - always return true
+        return true
+    }
+
+    override suspend fun createTable(): Boolean {
+        // Kafka topics are managed externally - topics should be created separately
+        // Always return true as the topic creation is not our responsibility
+        return true
+    }
 }

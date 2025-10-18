@@ -34,28 +34,16 @@ class MessageArchiveCrateDB (
         override fun init(connection: Connection): Future<Void> {
             val promise = Promise.promise<Void>()
             try {
+                // Just verify connection works - table creation is deferred to createTable()
                 connection.autoCommit = false
                 connection.createStatement().use { statement ->
-                    statement.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS $tableName (
-                        topic VARCHAR,
-                        time TIMESTAMPTZ,                    
-                        payload_b64 VARCHAR INDEX OFF,
-                        payload_obj OBJECT,
-                        qos INT,
-                        retained BOOLEAN,
-                        client_id VARCHAR(65535), 
-                        message_uuid VARCHAR(36),
-                        PRIMARY KEY (topic, time)
-                    )
-                    """.trimIndent()
-                    )
+                    statement.executeQuery("SELECT 1")
                 }
                 logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
             } catch (e: Exception) {
-                logger.severe("Error in creating table [$name]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                logger.severe("Error initializing connection for [$name]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                promise.fail(e)
             }
             return promise.future()
         }
@@ -280,6 +268,52 @@ class MessageArchiveCrateDB (
             } ?: false
         } catch (e: SQLException) {
             logger.severe("Error dropping table [$tableName] for message archive [$name]: ${e.message}")
+            false
+        }
+    }
+
+    override suspend fun tableExists(): Boolean {
+        return try {
+            db.connection?.let { connection ->
+                val sql = "SELECT 1 FROM information_schema.tables WHERE table_name = ?"
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, tableName)
+                    val resultSet = preparedStatement.executeQuery()
+                    resultSet.next()
+                }
+            } ?: false
+        } catch (e: SQLException) {
+            logger.warning("Error checking if table [$tableName] exists: ${e.message}")
+            false
+        }
+    }
+
+    override suspend fun createTable(): Boolean {
+        return try {
+            db.connection?.let { connection ->
+                connection.autoCommit = false
+                connection.createStatement().use { statement ->
+                    statement.executeUpdate(
+                    """
+                    CREATE TABLE IF NOT EXISTS $tableName (
+                        topic VARCHAR,
+                        time TIMESTAMPTZ,
+                        payload_b64 VARCHAR INDEX OFF,
+                        payload_obj OBJECT,
+                        qos INT,
+                        retained BOOLEAN,
+                        client_id VARCHAR(65535),
+                        message_uuid VARCHAR(36),
+                        PRIMARY KEY (topic, time)
+                    )
+                    """.trimIndent()
+                    )
+                }
+                logger.info("Table created for message archive [$name] [${Utils.getCurrentFunctionName()}]")
+                true
+            } ?: false
+        } catch (e: Exception) {
+            logger.warning("Error creating table: ${e.message}")
             false
         }
     }

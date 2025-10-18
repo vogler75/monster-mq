@@ -36,55 +36,17 @@ class MessageArchivePostgres (
         override fun init(connection: Connection): Future<Void> {
             val promise = Promise.promise<Void>()
             try {
+                // Just verify connection works - table creation is deferred to createTable()
                 connection.autoCommit = false
                 connection.createStatement().use { statement ->
-                    statement.executeUpdate(
-                        """
-                    CREATE TABLE IF NOT EXISTS $tableName (
-                        topic text,
-                        time TIMESTAMPTZ,                    
-                        payload_blob BYTEA,
-                        payload_json JSONB,
-                        qos INT,
-                        retained BOOLEAN,
-                        client_id VARCHAR(65535), 
-                        message_uuid VARCHAR(36),
-                        PRIMARY KEY (topic, time)
-                    )
-                    """.trimIndent()
-                    )
-                    statement.executeUpdate("CREATE INDEX IF NOT EXISTS ${tableName}_time_idx ON $tableName (time);")
-
-                    // Check if TimescaleDB extension is available
-                    val resultSet = statement.executeQuery("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb';")
-                    if (resultSet.next()) {
-                        logger.info("TimescaleDB extension is available [${Utils.getCurrentFunctionName()}]")
-                        val hypertableCheck =
-                            statement.executeQuery("SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = '$tableName';")
-                        if (!hypertableCheck.next()) {
-                            // Check if table is empty before converting to hypertable
-                            val countResult = statement.executeQuery("SELECT COUNT(*) as cnt FROM $tableName;")
-                            val isEmpty = countResult.next() && countResult.getInt("cnt") == 0
-
-                            if (isEmpty) {
-                                logger.info("Table $tableName is empty, converting to hypertable... [${Utils.getCurrentFunctionName()}]")
-                                statement.executeQuery("SELECT create_hypertable('$tableName', 'time');")
-                                logger.info("Table $tableName converted to hypertable [${Utils.getCurrentFunctionName()}]")
-                            } else {
-                                logger.warning("Table $tableName is not empty - skipping hypertable conversion. To convert existing data, run: SELECT create_hypertable('$tableName', 'time', migrate_data => true); [${Utils.getCurrentFunctionName()}]")
-                            }
-                        } else {
-                            logger.info("Table $tableName is already a hypertable [${Utils.getCurrentFunctionName()}]")
-                        }
-                    } else {
-                        logger.warning("TimescaleDB extension is not available [${Utils.getCurrentFunctionName()}]")
-                    }
+                    statement.executeQuery("SELECT 1")
                 }
                 connection.commit()
                 logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
             } catch (e: Exception) {
-                logger.severe("Error in creating table [$name]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                logger.severe("Error initializing connection for [$name]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                promise.fail(e)
             }
             return promise.future()
         }
@@ -302,6 +264,79 @@ class MessageArchivePostgres (
             } ?: false
         } catch (e: SQLException) {
             logger.severe("Error dropping table [$tableName] for message archive [$name]: ${e.message}")
+            false
+        }
+    }
+
+    override suspend fun tableExists(): Boolean {
+        return try {
+            db.connection?.let { connection ->
+                val sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?"
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, tableName)
+                    val resultSet = preparedStatement.executeQuery()
+                    resultSet.next()
+                }
+            } ?: false
+        } catch (e: SQLException) {
+            logger.warning("Error checking if table [$tableName] exists: ${e.message}")
+            false
+        }
+    }
+
+    override suspend fun createTable(): Boolean {
+        return try {
+            db.connection?.let { connection ->
+                connection.autoCommit = false
+                connection.createStatement().use { statement ->
+                    statement.executeUpdate(
+                        """
+                    CREATE TABLE IF NOT EXISTS $tableName (
+                        topic text,
+                        time TIMESTAMPTZ,
+                        payload_blob BYTEA,
+                        payload_json JSONB,
+                        qos INT,
+                        retained BOOLEAN,
+                        client_id VARCHAR(65535),
+                        message_uuid VARCHAR(36),
+                        PRIMARY KEY (topic, time)
+                    )
+                    """.trimIndent()
+                    )
+                    statement.executeUpdate("CREATE INDEX IF NOT EXISTS ${tableName}_time_idx ON $tableName (time);")
+
+                    // Check if TimescaleDB extension is available
+                    val resultSet = statement.executeQuery("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb';")
+                    if (resultSet.next()) {
+                        logger.info("TimescaleDB extension is available [${Utils.getCurrentFunctionName()}]")
+                        val hypertableCheck =
+                            statement.executeQuery("SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = '$tableName';")
+                        if (!hypertableCheck.next()) {
+                            // Check if table is empty before converting to hypertable
+                            val countResult = statement.executeQuery("SELECT COUNT(*) as cnt FROM $tableName;")
+                            val isEmpty = countResult.next() && countResult.getInt("cnt") == 0
+
+                            if (isEmpty) {
+                                logger.info("Table $tableName is empty, converting to hypertable... [${Utils.getCurrentFunctionName()}]")
+                                statement.executeQuery("SELECT create_hypertable('$tableName', 'time');")
+                                logger.info("Table $tableName converted to hypertable [${Utils.getCurrentFunctionName()}]")
+                            } else {
+                                logger.warning("Table $tableName is not empty - skipping hypertable conversion. To convert existing data, run: SELECT create_hypertable('$tableName', 'time', migrate_data => true); [${Utils.getCurrentFunctionName()}]")
+                            }
+                        } else {
+                            logger.info("Table $tableName is already a hypertable [${Utils.getCurrentFunctionName()}]")
+                        }
+                    } else {
+                        logger.warning("TimescaleDB extension is not available [${Utils.getCurrentFunctionName()}]")
+                    }
+                }
+                connection.commit()
+                logger.info("Table created for message archive [$name] [${Utils.getCurrentFunctionName()}]")
+                true
+            } ?: false
+        } catch (e: Exception) {
+            logger.warning("Error creating table: ${e.message}")
             false
         }
     }

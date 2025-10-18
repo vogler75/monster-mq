@@ -277,4 +277,18 @@ class ArchiveConfigStoreMongoDB(
     }
 
     override fun getType(): String = "ConfigStoreMongoDB"
+
+    override suspend fun tableExists(): Boolean {
+        return try {
+            if (!::database.isInitialized) {
+                logger.warning("MongoDB not initialized, cannot check collection existence for [$collectionName]")
+                return false
+            }
+            val collections = database.listCollectionNames().into(mutableListOf())
+            collections.contains(collectionName)
+        } catch (e: Exception) {
+            logger.warning("Error checking if collection [$collectionName] exists: ${e.message}")
+            false
+        }
+    }
 }

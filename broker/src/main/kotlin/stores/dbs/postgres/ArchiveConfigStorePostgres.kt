@@ -331,4 +331,20 @@ class ArchiveConfigStorePostgres(
 
         return promise.future()
     }
+
+    override suspend fun tableExists(): Boolean {
+        return try {
+            db.connection?.let { connection ->
+                val sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?"
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, configTableName)
+                    val resultSet = preparedStatement.executeQuery()
+                    resultSet.next()
+                }
+            } ?: false
+        } catch (e: SQLException) {
+            logger.warning("Error checking if table [$configTableName] exists: ${e.message}")
+            false
+        }
+    }
 }

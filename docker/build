@@ -9,11 +9,15 @@ NC='\033[0m' # No Color
 # Parse command line arguments
 TESTING=false
 PUBLISH_MODE="ask"  # can be "ask", "yes", or "no"
+DOCKER_ONLY=false   # skip Maven build if true
 
 for arg in "$@"; do
     case $arg in
         --testing|-t)
             TESTING=true
+            ;;
+        -d)
+            DOCKER_ONLY=true
             ;;
         -n)
             PUBLISH_MODE="no"
@@ -23,8 +27,9 @@ for arg in "$@"; do
             ;;
         *)
             echo "Unknown argument: $arg"
-            echo "Usage: $0 [--testing|-t] [-n] [-y]"
+            echo "Usage: $0 [--testing|-t] [-d] [-n] [-y]"
             echo "  --testing, -t  Build testing image"
+            echo "  -d             Docker only (skip Maven build)"
             echo "  -n             Do not publish to Docker Hub"
             echo "  -y             Publish to Docker Hub without asking"
             exit 1
@@ -40,15 +45,19 @@ else
     echo -e "${YELLOW}Building Docker image for MonsterMQ v${version}...${NC}"
 fi
 
-# Build the broker with Maven
-echo -e "${YELLOW}Running mvn clean package in broker directory...${NC}"
-cd ../broker
-mvn clean package
-if [ $? -ne 0 ]; then
-    echo -e "${RED}✗ Maven build failed${NC}"
-    exit 1
+# Build the broker with Maven (unless -d flag is set)
+if [ "$DOCKER_ONLY" = false ]; then
+    echo -e "${YELLOW}Running mvn package in broker directory...${NC}"
+    cd ../broker
+    mvn package
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}✗ Maven build failed${NC}"
+        exit 1
+    fi
+    cd ../docker
+else
+    echo -e "${YELLOW}Skipping Maven build (-d flag set)${NC}"
 fi
-cd ../docker
 
 # Copy files from broker/target to docker/target for Docker build
 echo -e "${YELLOW}Copying JAR and dependencies from broker/target...${NC}"

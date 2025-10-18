@@ -8,6 +8,7 @@ import com.hazelcast.cluster.MembershipListener
 import com.hazelcast.map.IMap
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
+import io.vertx.core.Vertx
 // VertxInternal removed in Vert.x 5 - using alternative approaches
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import java.util.concurrent.Callable
@@ -28,6 +29,48 @@ class HealthHandler(
         const val CLUSTER_MAP = "cluster-config"
         const val LEADER_KEY = "cluster-leader"
         const val BIRTH_KEY = "cluster-init"
+
+        /**
+         * Gets the nodeId of the cluster leader.
+         * In a single-node setup (non-clustered), returns the local node ID.
+         * In a clustered setup, returns the leader nodeId from the cluster-config map.
+         * Returns null if no leader is found or error occurs.
+         */
+        fun getLeaderNodeId(vertx: Vertx): String? {
+            return try {
+                if (!Monster.isClustered()) {
+                    // Single node - local node is the leader
+                    Monster.getClusterNodeId(vertx)
+                } else {
+                    val clusterManager = Monster.getClusterManager()
+                    if (clusterManager != null) {
+                        val map = clusterManager.hazelcastInstance.getMap<String, String>(CLUSTER_MAP)
+                        val leader = map[LEADER_KEY]
+                        if (leader == null) {
+                            Utils.getLogger(HealthHandler::class.java).warning("No leader set in cluster-config map")
+                        }
+                        leader
+                    } else {
+                        null
+                    }
+                }
+            } catch (e: Exception) {
+                Utils.getLogger(HealthHandler::class.java).severe("Error getting leader nodeId: ${e.message}")
+                null
+            }
+        }
+
+        /**
+         * Checks if the current node is the cluster leader.
+         * Convenience function that compares the current node ID with the leader nodeId.
+         */
+        fun isLeader(vertx: Vertx): Boolean {
+            val leaderNodeId = getLeaderNodeId(vertx)
+            val currentNodeId = Monster.getClusterNodeId(vertx)
+            val result = leaderNodeId == currentNodeId
+            Utils.getLogger(HealthHandler::class.java).fine("isLeader check - currentNodeId: $currentNodeId, leaderNodeId: $leaderNodeId, result: $result")
+            return result
+        }
     }
 
     override fun start(startPromise: Promise<Void>) {
@@ -106,9 +149,16 @@ class HealthHandler(
 
     private fun tryToBecomeLeader(map: IMap<String, String>) {
         val nodeId = Monster.getClusterNodeId(vertx) // clusterManager!!.hazelcastInstance.cluster.localMember.uuid.toString()
+        logger.info("Attempting to become leader. Current nodeId: $nodeId")
         val birth = map.putIfAbsent(BIRTH_KEY, System.currentTimeMillis().toString())
         val leader = map.putIfAbsent(LEADER_KEY, nodeId)
-        if (leader == null) weBecameTheLeader(birth==null)
+        logger.info("Leader election result - Previous leader value: $leader, Current nodeId: $nodeId, Map value after putIfAbsent: ${map.get(LEADER_KEY)}")
+        if (leader == null) {
+            logger.info("Successfully became leader!")
+            weBecameTheLeader(birth==null)
+        } else {
+            logger.info("Another node is already the leader: $leader")
+        }
     }
 
     private fun weBecameTheLeader(first: Boolean) {

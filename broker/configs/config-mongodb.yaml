@@ -66,3 +66,9 @@ MCP:
 # MongoDB:
 #   Url: mongodb://user:pass@localhost:27017/monster?authSource=admin
 #   Database: monster
+Logging:
+  Mqtt:
+    Enabled: true
+  Memory:
+    Enabled: false
+    Entries: 1000

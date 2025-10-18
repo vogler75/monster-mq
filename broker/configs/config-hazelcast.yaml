@@ -43,3 +43,9 @@ MCP:
 # - All nodes must connect to the same PostgreSQL database
 # - Hazelcast data survives individual node failures (replicated)
 # - Good for high-availability production deployments
+Logging:
+  Mqtt:
+    Enabled: true
+  Memory:
+    Enabled: false
+    Entries: 1000

@@ -16,4 +16,10 @@ interface IArchiveConfigStore {
     fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean>
     fun deleteArchiveGroup(name: String): Future<Boolean>
     fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean>
+
+    /**
+     * Check if the underlying storage table/collection exists.
+     * Used in cluster scenarios to verify table creation by leader.
+     */
+    suspend fun tableExists(): Boolean
 }

@@ -1,6 +1,7 @@
 package at.rocworks.extensions.graphql
 
 import at.rocworks.Const
+import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.*
@@ -15,6 +16,7 @@ import at.rocworks.handlers.ArchiveGroup
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import io.vertx.core.json.JsonArray
+import kotlinx.coroutines.runBlocking
 import java.util.concurrent.CompletableFuture
 
 class ArchiveGroupResolver(

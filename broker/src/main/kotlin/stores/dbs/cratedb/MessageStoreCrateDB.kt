@@ -496,4 +496,50 @@ class MessageStoreCrateDB(
         logger.fine { "findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]" }
         return resultTopics
     }
+
+    override suspend fun tableExists(): Boolean {
+        return try {
+            db.connection?.let { connection ->
+                val sql = "SELECT 1 FROM information_schema.tables WHERE table_name = ?"
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, tableName)
+                    val resultSet = preparedStatement.executeQuery()
+                    resultSet.next()
+                }
+            } ?: false
+        } catch (e: SQLException) {
+            logger.warning("Error checking if table [$tableName] exists: ${e.message}")
+            false
+        }
+    }
+
+    override suspend fun createTable(): Boolean {
+        return try {
+            db.connection?.let { connection ->
+                connection.createStatement().use { statement ->
+                    val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it VARCHAR" }
+                    statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS $tableName (
+                        topic VARCHAR PRIMARY KEY,
+                        $fixedTopicColumns,
+                        topic_r VARCHAR[],
+                        topic_l VARCHAR,
+                        time TIMESTAMPTZ,
+                        payload_b64 VARCHAR INDEX OFF,
+                        payload_obj OBJECT,
+                        qos INT,
+                        retained BOOLEAN,
+                        client_id VARCHAR(65535),
+                        message_uuid VARCHAR(36)
+                    )
+                    """.trimIndent())
+                    logger.info("Table created for message store [$name] [${Utils.getCurrentFunctionName()}]")
+                }
+                true
+            } ?: false
+        } catch (e: Exception) {
+            logger.warning("Error creating table: ${e.message}")
+            false
+        }
+    }
 }

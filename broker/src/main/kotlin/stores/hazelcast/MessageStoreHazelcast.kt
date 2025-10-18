@@ -131,4 +131,14 @@ class MessageStoreHazelcast(
             false
         }
     }
+
+    override suspend fun tableExists(): Boolean {
+        // Hazelcast stores are always "ready" - no table creation needed
+        return true
+    }
+
+    override suspend fun createTable(): Boolean {
+        // Hazelcast stores don't require table creation
+        return true
+    }
 }

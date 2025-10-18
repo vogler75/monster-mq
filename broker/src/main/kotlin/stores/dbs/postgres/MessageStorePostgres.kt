@@ -494,4 +494,57 @@ class MessageStorePostgres(
             false
         }
     }
+
+    override suspend fun tableExists(): Boolean {
+        return try {
+            db.connection?.let { connection ->
+                val sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?"
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, tableName)
+                    val resultSet = preparedStatement.executeQuery()
+                    resultSet.next()
+                }
+            } ?: false
+        } catch (e: SQLException) {
+            logger.warning("Error checking if table [$tableName] exists: ${e.message}")
+            false
+        }
+    }
+
+    override suspend fun createTable(): Boolean {
+        return try {
+            db.connection?.let { connection ->
+                connection.autoCommit = false
+                connection.createStatement().use { statement ->
+                    val pkColumnsString = ALL_PK_COLUMNS.joinToString(", ")
+                    val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it text NOT NULL" }
+                    statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS $tableName (
+                        topic text, -- full topic for
+                        ${fixedTopicColumns}, -- topic levels for wildcard matching
+                        topic_r text[] NOT NULL, -- remaining topic levels
+                        topic_l text NOT NULL, -- last level of the topic
+                        time TIMESTAMPTZ,
+                        payload_blob BYTEA,
+                        payload_json JSONB,
+                        qos INT,
+                        retained BOOLEAN,
+                        client_id VARCHAR(65535),
+                        message_uuid VARCHAR(36),
+                        PRIMARY KEY (topic)
+                    )
+                    """.trimIndent())
+                    statement.executeUpdate("""
+                    CREATE INDEX IF NOT EXISTS ${tableName}_topic ON $tableName ($pkColumnsString)
+                    """.trimIndent())
+                    connection.commit()
+                    logger.info("Table created for message store [$name] [${Utils.getCurrentFunctionName()}]")
+                }
+                true
+            } ?: false
+        } catch (e: Exception) {
+            logger.warning("Error creating table: ${e.message}")
+            false
+        }
+    }
 }

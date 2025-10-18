@@ -44,6 +44,19 @@ interface IMessageStore {
     fun dropStorage(): Boolean
 
     fun getConnectionStatus(): Boolean
+
+    /**
+     * Check if the underlying storage table/collection exists.
+     * Used in cluster scenarios to verify table creation.
+     */
+    suspend fun tableExists(): Boolean
+
+    /**
+     * Explicitly create the underlying storage table/collection.
+     * Used in create/update operations to ensure table exists.
+     * Returns true if table was created or already existed, false on error.
+     */
+    suspend fun createTable(): Boolean
 }
 
 interface IMessageStoreExtended : IMessageStore {

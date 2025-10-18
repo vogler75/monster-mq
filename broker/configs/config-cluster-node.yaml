@@ -11,3 +11,10 @@ Postgres:
   Url: jdbc:postgresql://linux5:5432/monster
   User: system
   Pass: manager
+
+Logging:
+  Mqtt:
+    Enabled: true
+  Memory:
+    Enabled: false
+    Entries: 1000

@@ -107,6 +107,13 @@ type Broker {
     version: String!
     # Whether user management is enabled for this broker
     userManagementEnabled: Boolean!
+    # Whether this broker node is the cluster leader
+    # In single-node setups, always returns true
+    # In clustered setups, returns true only for the designated leader node
+    isLeader: Boolean!
+    # Whether this broker node is the current node handling the request
+    # True if this is the local/current node, false if it's a remote cluster node
+    isCurrent: Boolean!
     # Current performance metrics for this broker node (latest snapshot)
     # Returns array with single most recent metrics entry for consistency with metricsHistory
     metrics: [BrokerMetrics!]!

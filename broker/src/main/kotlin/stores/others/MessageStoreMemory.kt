@@ -119,4 +119,11 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
     }
 
     override fun getConnectionStatus(): Boolean = true // Memory store is always connected
+
+    override suspend fun tableExists(): Boolean = true // Memory store has no table requirements
+
+    override suspend fun createTable(): Boolean {
+        // Memory stores don't require table creation
+        return true
+    }
 }

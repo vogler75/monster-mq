@@ -304,4 +304,44 @@ class MessageArchiveSQLite(
             false
         }
     }
+
+    override suspend fun tableExists(): Boolean {
+        return try {
+            val sql = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?"
+            val params = JsonArray().add(tableName)
+            val results = sqlClient.executeQuerySync(sql, params)
+            results.size() > 0
+        } catch (e: Exception) {
+            logger.warning("Error checking if table [$tableName] exists: ${e.message}")
+            false
+        }
+    }
+
+    override suspend fun createTable(): Boolean {
+        return try {
+            val createTableSQL = JsonArray()
+                .add("""
+                CREATE TABLE IF NOT EXISTS $tableName (
+                    topic TEXT NOT NULL,
+                    time TEXT NOT NULL,  -- ISO-8601 timestamp as text
+                    payload_blob BLOB,
+                    payload_json TEXT,
+                    qos INTEGER,
+                    retained BOOLEAN,
+                    client_id TEXT,
+                    message_uuid TEXT,
+                    PRIMARY KEY (topic, time)
+                )
+                """.trimIndent())
+                .add("CREATE INDEX IF NOT EXISTS ${tableName}_time_idx ON $tableName (time);")
+                .add("CREATE INDEX IF NOT EXISTS ${tableName}_topic_time_idx ON $tableName (topic, time);")
+
+            val result = sqlClient.initDatabase(createTableSQL).toCompletionStage().toCompletableFuture().get(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
+            logger.info("Table created for message archive [$name]")
+            true
+        } catch (e: Exception) {
+            logger.warning("Error creating table: ${e.message}")
+            false
+        }
+    }
 }

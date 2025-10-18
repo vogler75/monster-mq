@@ -4,6 +4,7 @@ import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 import at.rocworks.bus.IMessageBus
 import at.rocworks.handlers.ArchiveHandler
+import at.rocworks.handlers.HealthHandler
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.handlers.SessionHandler
 import at.rocworks.handlers.ArchiveGroup
@@ -217,7 +218,7 @@ class GraphQLServer(
                     logger.info("GraphQL server started successfully on port $port")
                     logger.info("GraphQL endpoint: http://localhost:$port$path")
                     logger.info("GraphQL WebSocket endpoint: ws://localhost:$port${path}ws")
-                    logger.info("Dashboard available at: http://localhost:$port/dashboard")
+                    logger.info("Dashboard available at: http://localhost:$port")
                 }
                 .onFailure { err ->
                     logger.severe("Failed to start GraphQL server: ${err.message}")
@@ -725,6 +726,30 @@ class GraphQLServer(
                 builder
                     .dataFetcher("userManagementEnabled") { env ->
                         java.util.concurrent.CompletableFuture.completedFuture(userManager.isUserManagementEnabled())
+                    }
+                    .dataFetcher("isLeader") { env ->
+                        val future = java.util.concurrent.CompletableFuture<Boolean>()
+                        try {
+                            val broker = env.getSource<at.rocworks.extensions.graphql.Broker?>()
+                            val leaderNodeId = HealthHandler.getLeaderNodeId(vertx)
+                            future.complete(broker?.nodeId == leaderNodeId)
+                        } catch (e: Exception) {
+                            logger.warning("Error checking if broker is leader: ${e.message}")
+                            future.complete(false)
+                        }
+                        future
+                    }
+                    .dataFetcher("isCurrent") { env ->
+                        val future = java.util.concurrent.CompletableFuture<Boolean>()
+                        try {
+                            val broker = env.getSource<at.rocworks.extensions.graphql.Broker?>()
+                            val currentNodeId = Monster.getClusterNodeId(vertx)
+                            future.complete(broker?.nodeId == currentNodeId)
+                        } catch (e: Exception) {
+                            logger.warning("Error checking if broker is current: ${e.message}")
+                            future.complete(false)
+                        }
+                        future
                     }
                     .dataFetcher("sessions", metricsResolver.brokerSessions())
                     .dataFetcher("metrics", metricsResolver.brokerMetrics())

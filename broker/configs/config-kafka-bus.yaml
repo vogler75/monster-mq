@@ -89,3 +89,9 @@ MCP:
 # - Increase replication factor for durability
 # - Tune producer config based on latency/throughput needs
 # - Consider partitioning strategy for scaling
+Logging:
+  Mqtt:
+    Enabled: true
+  Memory:
+    Enabled: false
+    Entries: 1000

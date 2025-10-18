@@ -98,3 +98,9 @@ MCP:
 # - Elasticsearch: Index all messages via Kafka Connect
 # - Data Lake: Store raw messages in S3/HDFS via Kafka Connect
 # - Microservices: React to MQTT events via Kafka consumers
+Logging:
+  Mqtt:
+    Enabled: true
+  Memory:
+    Enabled: false
+    Entries: 1000

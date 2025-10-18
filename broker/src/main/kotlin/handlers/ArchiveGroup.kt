@@ -1,6 +1,7 @@
 package at.rocworks.handlers
 
 import at.rocworks.Const
+import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.data.PurgeResult
 import at.rocworks.data.TopicTree
@@ -28,6 +29,7 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.ThreadingModel
 import io.vertx.core.json.JsonObject
+import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.util.concurrent.Callable
 
@@ -63,6 +65,57 @@ class ArchiveGroup(
 
     init {
         topicFilter.forEach { filterTree.add(it, key=true, value=true) }
+    }
+
+    private fun waitForTableReady(
+        storeOrArchive: Any,
+        name: String,
+        maxWaitSeconds: Int = 300,
+        pollIntervalMs: Long = 1000
+    ): Boolean {
+        val startTime = System.currentTimeMillis()
+        val deadline = startTime + (maxWaitSeconds * 1000)
+        var lastLogTime = startTime
+
+        while (System.currentTimeMillis() < deadline) {
+            // Check if archive group is being stopped
+            if (isStopping) {
+                logger.info("Archive group is being stopped, stopping wait for table [$name]")
+                return false
+            }
+
+            try {
+                // Check if table exists using runBlocking to bridge suspend and blocking contexts
+                val exists = runBlocking {
+                    when (storeOrArchive) {
+                        is IMessageStore -> storeOrArchive.tableExists()
+                        is IMessageArchive -> storeOrArchive.tableExists()
+                        else -> false
+                    }
+                }
+
+                if (exists) {
+                    logger.info("Table for [$name] is ready")
+                    return true
+                }
+            } catch (e: Exception) {
+                logger.fine { "Error checking if table [$name] exists: ${e.message}" }
+            }
+
+            // Log progress every 30 seconds
+            val now = System.currentTimeMillis()
+            if (now - lastLogTime > 30_000) {
+                val elapsed = (now - startTime) / 1000
+                logger.info("Still waiting for table [$name] to exist... (${elapsed}s elapsed)")
+                lastLogTime = now
+            }
+
+            // Sleep for poll interval
+            Thread.sleep(pollIntervalMs)
+        }
+
+        logger.warning("Timeout waiting for table [$name] to exist after ${maxWaitSeconds}s")
+        return false
     }
 
     override fun start(startPromise: Promise<Void>) {
@@ -257,7 +310,42 @@ class ArchiveGroup(
                     if (!isStopping) {
                         childDeployments.add(result.result())
                         logger.info("${storeType.name} MessageStore [$storeName] deployed successfully")
-                        callback(true)
+
+                        // Leader creates table, non-leader waits for it
+                        val leaderNodeId = HealthHandler.getLeaderNodeId(vertx)
+                        val currentNodeId = Monster.getClusterNodeId(vertx)
+                        val isLeader = leaderNodeId == currentNodeId
+                        logger.info("[$name] Table creation check - currentNodeId: $currentNodeId, leaderNodeId: $leaderNodeId, isLeader: $isLeader")
+
+                        if (isLeader) {
+                            logger.info("[$name] is leader ($currentNodeId), creating table for [$storeName]")
+                            vertx.executeBlocking(Callable {
+                                runBlocking {
+                                    store.createTable()
+                                }
+                            }).onComplete { createResult ->
+                                if (createResult.succeeded() && createResult.result()) {
+                                    logger.info("Table created for [$storeName]")
+                                    callback(true)
+                                } else {
+                                    logger.warning("Failed to create table for [$storeName]")
+                                    callback(false)
+                                }
+                            }
+                        } else {
+                            logger.info("[$name] is not leader (currentNodeId: $currentNodeId, leaderNodeId: $leaderNodeId), waiting for table [$storeName] to be created")
+                            vertx.executeBlocking(Callable {
+                                waitForTableReady(store, storeName, maxWaitSeconds = 300, pollIntervalMs = 1000)
+                            }).onComplete { waitResult ->
+                                if (waitResult.succeeded() && waitResult.result()) {
+                                    logger.info("Table is ready for [$storeName]")
+                                    callback(true)
+                                } else {
+                                    logger.warning("Timeout or error waiting for table [$storeName]")
+                                    callback(false)
+                                }
+                            }
+                        }
                     } else {
                         vertx.undeploy(result.result())
                         logger.info("${storeType.name} MessageStore [$storeName] deployed but immediately undeployed due to stop")
@@ -358,7 +446,42 @@ class ArchiveGroup(
                     if (!isStopping) {
                         childDeployments.add(result.result())
                         logger.info("${archiveType.name} MessageArchive [$archiveName] deployed successfully")
-                        callback(true)
+
+                        // Leader creates table, non-leader waits for it
+                        val leaderNodeId = HealthHandler.getLeaderNodeId(vertx)
+                        val currentNodeId = Monster.getClusterNodeId(vertx)
+                        val isLeader = leaderNodeId == currentNodeId
+                        logger.info("[$name] Archive table creation check - currentNodeId: $currentNodeId, leaderNodeId: $leaderNodeId, isLeader: $isLeader")
+
+                        if (isLeader) {
+                            logger.info("[$name] is leader ($currentNodeId), creating table for [$archiveName]")
+                            vertx.executeBlocking(Callable {
+                                runBlocking {
+                                    archive.createTable()
+                                }
+                            }).onComplete { createResult ->
+                                if (createResult.succeeded() && createResult.result()) {
+                                    logger.info("Table created for [$archiveName]")
+                                    callback(true)
+                                } else {
+                                    logger.warning("Failed to create table for [$archiveName]")
+                                    callback(false)
+                                }
+                            }
+                        } else {
+                            logger.info("[$name] is not leader (currentNodeId: $currentNodeId, leaderNodeId: $leaderNodeId), waiting for table [$archiveName] to be created")
+                            vertx.executeBlocking(Callable {
+                                waitForTableReady(archive, archiveName, maxWaitSeconds = 300, pollIntervalMs = 1000)
+                            }).onComplete { waitResult ->
+                                if (waitResult.succeeded() && waitResult.result()) {
+                                    logger.info("Table is ready for [$archiveName]")
+                                    callback(true)
+                                } else {
+                                    logger.warning("Timeout or error waiting for table [$archiveName]")
+                                    callback(false)
+                                }
+                            }
+                        }
                     } else {
                         vertx.undeploy(result.result())
                         logger.info("${archiveType.name} MessageArchive [$archiveName] deployed but immediately undeployed due to stop")

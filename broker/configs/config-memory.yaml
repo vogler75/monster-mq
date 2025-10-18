@@ -39,3 +39,9 @@ MCP:
 # - Fast performance (no disk I/O)
 # - Suitable for testing and development
 # - Not recommended for production use
+Logging:
+  Mqtt:
+    Enabled: true
+  Memory:
+    Enabled: false
+    Entries: 1000

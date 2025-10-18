@@ -532,4 +532,48 @@ class MessageStoreSQLite(
             false
         }
     }
+
+    override suspend fun tableExists(): Boolean {
+        return try {
+            val sql = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?"
+            val params = JsonArray().add(tableName)
+            val results = sqlClient.executeQuerySync(sql, params)
+            results.size() > 0
+        } catch (e: Exception) {
+            logger.warning("Error checking if table [$tableName] exists: ${e.message}")
+            false
+        }
+    }
+
+    override suspend fun createTable(): Boolean {
+        return try {
+            val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it TEXT NOT NULL DEFAULT ''" }
+            val createTableSQL = JsonArray()
+                .add("""
+                CREATE TABLE IF NOT EXISTS $tableName (
+                    topic TEXT PRIMARY KEY, -- full topic
+                    ${fixedTopicColumns}, -- topic levels for wildcard matching
+                    topic_r TEXT, -- remaining topic levels as JSON
+                    topic_l TEXT NOT NULL, -- last level of the topic
+                    time TEXT,
+                    payload_blob BLOB,
+                    payload_json TEXT,
+                    qos INTEGER,
+                    retained BOOLEAN,
+                    client_id TEXT,
+                    message_uuid TEXT
+                )
+                """.trimIndent())
+                .add("""
+                CREATE INDEX IF NOT EXISTS ${tableName}_topic ON $tableName (${(FIXED_TOPIC_COLUMN_NAMES + "topic_r").joinToString(", ")})
+                """.trimIndent())
+
+            val result = sqlClient.initDatabase(createTableSQL).toCompletionStage().toCompletableFuture().get(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
+            logger.info("Table created for message store [$name]")
+            true
+        } catch (e: Exception) {
+            logger.warning("Error creating table: ${e.message}")
+            false
+        }
+    }
 }
