@@ -569,7 +569,7 @@ class MessageStoreSQLite(
                 """.trimIndent())
 
             val result = sqlClient.initDatabase(createTableSQL).toCompletionStage().toCompletableFuture().get(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
-            logger.info("Table created for message store [$name]")
+            logger.info("Message store table [$name] initialized (created or already exists)")
             true
         } catch (e: Exception) {
             logger.warning("Error creating table: ${e.message}")

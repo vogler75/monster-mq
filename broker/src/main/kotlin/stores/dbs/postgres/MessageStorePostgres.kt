@@ -538,7 +538,7 @@ class MessageStorePostgres(
                     CREATE INDEX IF NOT EXISTS ${tableName}_topic ON $tableName ($pkColumnsString)
                     """.trimIndent())
                     connection.commit()
-                    logger.info("Table created for message store [$name] [${Utils.getCurrentFunctionName()}]")
+                    logger.info("Message store table [$name] initialized (created or already exists) [${Utils.getCurrentFunctionName()}]")
                 }
                 true
             } ?: false

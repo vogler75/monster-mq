@@ -309,7 +309,7 @@ class MessageArchiveCrateDB (
                     """.trimIndent()
                     )
                 }
-                logger.info("Table created for message archive [$name] [${Utils.getCurrentFunctionName()}]")
+                logger.info("Message archive table [$name] initialized (created or already exists) [${Utils.getCurrentFunctionName()}]")
                 true
             } ?: false
         } catch (e: Exception) {

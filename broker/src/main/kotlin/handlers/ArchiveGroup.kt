@@ -315,25 +315,24 @@ class ArchiveGroup(
                         val leaderNodeId = HealthHandler.getLeaderNodeId(vertx)
                         val currentNodeId = Monster.getClusterNodeId(vertx)
                         val isLeader = leaderNodeId == currentNodeId
-                        logger.info("[$name] Table creation check - currentNodeId: $currentNodeId, leaderNodeId: $leaderNodeId, isLeader: $isLeader")
 
                         if (isLeader) {
-                            logger.info("[$name] is leader ($currentNodeId), creating table for [$storeName]")
+                            logger.info("Leader node, initializing table for store [$storeName]")
                             vertx.executeBlocking(Callable {
                                 runBlocking {
                                     store.createTable()
                                 }
                             }).onComplete { createResult ->
                                 if (createResult.succeeded() && createResult.result()) {
-                                    logger.info("Table created for [$storeName]")
+                                    logger.info("Table initialization completed for store [$storeName]")
                                     callback(true)
                                 } else {
-                                    logger.warning("Failed to create table for [$storeName]")
+                                    logger.warning("Failed to initialize table for store [$storeName]")
                                     callback(false)
                                 }
                             }
                         } else {
-                            logger.info("[$name] is not leader (currentNodeId: $currentNodeId, leaderNodeId: $leaderNodeId), waiting for table [$storeName] to be created")
+                            logger.info("Non-leader node, waiting for store table [$storeName] to be initialized by leader")
                             vertx.executeBlocking(Callable {
                                 waitForTableReady(store, storeName, maxWaitSeconds = 300, pollIntervalMs = 1000)
                             }).onComplete { waitResult ->
@@ -451,33 +450,32 @@ class ArchiveGroup(
                         val leaderNodeId = HealthHandler.getLeaderNodeId(vertx)
                         val currentNodeId = Monster.getClusterNodeId(vertx)
                         val isLeader = leaderNodeId == currentNodeId
-                        logger.info("[$name] Archive table creation check - currentNodeId: $currentNodeId, leaderNodeId: $leaderNodeId, isLeader: $isLeader")
 
                         if (isLeader) {
-                            logger.info("[$name] is leader ($currentNodeId), creating table for [$archiveName]")
+                            logger.info("Leader node, initializing table for archive [$archiveName]")
                             vertx.executeBlocking(Callable {
                                 runBlocking {
                                     archive.createTable()
                                 }
                             }).onComplete { createResult ->
                                 if (createResult.succeeded() && createResult.result()) {
-                                    logger.info("Table created for [$archiveName]")
+                                    logger.info("Table initialization completed for archive [$archiveName]")
                                     callback(true)
                                 } else {
-                                    logger.warning("Failed to create table for [$archiveName]")
+                                    logger.warning("Failed to initialize table for archive [$archiveName]")
                                     callback(false)
                                 }
                             }
                         } else {
-                            logger.info("[$name] is not leader (currentNodeId: $currentNodeId, leaderNodeId: $leaderNodeId), waiting for table [$archiveName] to be created")
+                            logger.info("Non-leader node, waiting for archive table [$archiveName] to be initialized by leader")
                             vertx.executeBlocking(Callable {
                                 waitForTableReady(archive, archiveName, maxWaitSeconds = 300, pollIntervalMs = 1000)
                             }).onComplete { waitResult ->
                                 if (waitResult.succeeded() && waitResult.result()) {
-                                    logger.info("Table is ready for [$archiveName]")
+                                    logger.info("Archive table [$archiveName] ready")
                                     callback(true)
                                 } else {
-                                    logger.warning("Timeout or error waiting for table [$archiveName]")
+                                    logger.warning("Timeout or error waiting for archive table [$archiveName]")
                                     callback(false)
                                 }
                             }

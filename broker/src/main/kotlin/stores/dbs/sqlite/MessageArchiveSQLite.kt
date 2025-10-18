@@ -337,7 +337,7 @@ class MessageArchiveSQLite(
                 .add("CREATE INDEX IF NOT EXISTS ${tableName}_topic_time_idx ON $tableName (topic, time);")
 
             val result = sqlClient.initDatabase(createTableSQL).toCompletionStage().toCompletableFuture().get(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
-            logger.info("Table created for message archive [$name]")
+            logger.info("Message archive table [$name] initialized (created or already exists)")
             true
         } catch (e: Exception) {
             logger.warning("Error creating table: ${e.message}")

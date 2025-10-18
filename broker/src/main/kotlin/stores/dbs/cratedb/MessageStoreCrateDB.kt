@@ -533,7 +533,7 @@ class MessageStoreCrateDB(
                         message_uuid VARCHAR(36)
                     )
                     """.trimIndent())
-                    logger.info("Table created for message store [$name] [${Utils.getCurrentFunctionName()}]")
+                    logger.info("Message store table [$name] initialized (created or already exists) [${Utils.getCurrentFunctionName()}]")
                 }
                 true
             } ?: false
