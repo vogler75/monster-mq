@@ -47,6 +47,7 @@ class ArchiveHandler(
         const val ARCHIVE_STATUS = "mq.cluster.archive.status"
         const val ARCHIVE_LIST = "mq.cluster.archive.list"
         const val ARCHIVE_CONNECTION_STATUS = "mq.cluster.archive.connection.status"
+        const val ARCHIVE_EVENTS = "mq.cluster.archive.events"
     }
 
     fun initialize(): Future<List<ArchiveGroup>> {
@@ -97,6 +98,11 @@ class ArchiveHandler(
         // Handle archive connection status requests
         eventBus.consumer<JsonObject>(ARCHIVE_CONNECTION_STATUS) { message ->
             handleArchiveConnectionStatus(message)
+        }
+
+        // Handle archive events from cluster nodes (start/stop broadcasts)
+        eventBus.consumer<JsonObject>(ARCHIVE_EVENTS) { message ->
+            handleArchiveEvent(message)
         }
 
         logger.info("ArchiveHandler event handlers registered")
@@ -459,7 +465,7 @@ ArchiveGroup(
 
     // Runtime ArchiveGroup Management Methods
 
-    fun startArchiveGroup(name: String): Future<Boolean> {
+    fun startArchiveGroup(name: String, shouldBroadcast: Boolean = true): Future<Boolean> {
         val promise = Promise.promise<Boolean>()
 
         // Check if already deployed
@@ -479,8 +485,10 @@ ArchiveGroup(
                         if (deployResult.succeeded()) {
                             logger.info("ArchiveGroup [$name] deployed successfully - database connections will be established in background")
                             promise.complete(true)
-                            // Broadcast to cluster
-                            broadcastArchiveGroupEvent("STARTED", name)
+                            // Broadcast to cluster (unless this is a cluster event replication)
+                            if (shouldBroadcast) {
+                                broadcastArchiveGroupEvent("STARTED", name)
+                            }
                         } else {
                             logger.severe("Failed to deploy ArchiveGroup [$name]: ${deployResult.cause()?.message}")
                             promise.complete(false) // Don't fail the future, just return false
@@ -499,8 +507,10 @@ ArchiveGroup(
                         if (deployResult.succeeded()) {
                             logger.info("ArchiveGroup [$name] deployed successfully - database connections will be established in background")
                             promise.complete(true)
-                            // Broadcast to cluster
-                            broadcastArchiveGroupEvent("STARTED", name)
+                            // Broadcast to cluster (unless this is a cluster event replication)
+                            if (shouldBroadcast) {
+                                broadcastArchiveGroupEvent("STARTED", name)
+                            }
                         } else {
                             logger.severe("Failed to deploy ArchiveGroup [$name]: ${deployResult.cause()?.message}")
                             promise.complete(false) // Don't fail the future, just return false
@@ -516,7 +526,7 @@ ArchiveGroup(
         return promise.future()
     }
 
-    fun stopArchiveGroup(name: String): Future<Boolean> {
+    fun stopArchiveGroup(name: String, shouldBroadcast: Boolean = true): Future<Boolean> {
         val promise = Promise.promise<Boolean>()
 
         val archiveInfo = deployedArchiveGroups[name]
@@ -562,8 +572,10 @@ ArchiveGroup(
             messageHandler?.unregisterArchiveGroup(name)
 
             promise.complete(true)
-            // Broadcast to cluster
-            broadcastArchiveGroupEvent("STOPPED", name)
+            // Broadcast to cluster (unless this is a cluster event replication)
+            if (shouldBroadcast) {
+                broadcastArchiveGroupEvent("STOPPED", name)
+            }
         }
 
         return promise.future()
@@ -625,6 +637,38 @@ ArchiveGroup(
     }
 
     // Event Handler Methods
+
+    private fun handleArchiveEvent(message: Message<JsonObject>) {
+        val event = message.body().getString("event")
+        val archiveGroupName = message.body().getString("archiveGroup")
+
+        if (event == null || archiveGroupName == null) {
+            logger.warning("Invalid archive event: event=$event, archiveGroup=$archiveGroupName")
+            return
+        }
+
+        when (event) {
+            "STARTED" -> {
+                logger.info("Received cluster event to start ArchiveGroup [$archiveGroupName]")
+                startArchiveGroup(archiveGroupName, shouldBroadcast = false).onComplete { result ->
+                    if (!result.succeeded()) {
+                        logger.warning("Failed to start ArchiveGroup [$archiveGroupName] from cluster event: ${result.cause()?.message}")
+                    }
+                }
+            }
+            "STOPPED" -> {
+                logger.info("Received cluster event to stop ArchiveGroup [$archiveGroupName]")
+                stopArchiveGroup(archiveGroupName, shouldBroadcast = false).onComplete { result ->
+                    if (!result.succeeded()) {
+                        logger.warning("Failed to stop ArchiveGroup [$archiveGroupName] from cluster event: ${result.cause()?.message}")
+                    }
+                }
+            }
+            else -> {
+                logger.warning("Unknown archive event type: $event")
+            }
+        }
+    }
 
     private fun handleArchiveStart(message: Message<JsonObject>) {
         val name = message.body().getString("name")
