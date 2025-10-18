@@ -441,7 +441,7 @@ ArchiveGroup(
 
         // Check if already deployed
         if (deployedArchiveGroups.containsKey(name)) {
-            logger.warning("ArchiveGroup [$name] is already deployed")
+            logger.fine("ArchiveGroup [$name] is already deployed")
             promise.complete(true) // Return true since it's already deployed
             return promise.future()
         }
@@ -502,7 +502,7 @@ ArchiveGroup(
 
         val archiveInfo = deployedArchiveGroups[name]
         if (archiveInfo == null) {
-            logger.warning("ArchiveGroup [$name] is not deployed")
+            logger.fine("ArchiveGroup [$name] is not deployed")
             promise.complete(true) // Return true since it's already stopped
             return promise.future()
         }
@@ -612,9 +612,16 @@ ArchiveGroup(
     private fun handleArchiveEvent(message: Message<JsonObject>) {
         val event = message.body().getString("event")
         val archiveGroupName = message.body().getString("archiveGroup")
+        val sourceNodeId = message.body().getString("nodeId", "")
 
         if (event == null || archiveGroupName == null) {
             logger.warning("Invalid archive event: event=$event, archiveGroup=$archiveGroupName")
+            return
+        }
+
+        // Skip events from the same node to avoid duplicate processing
+        if (sourceNodeId == "local") {
+            logger.fine("Skipping archive event from same node: event=$event, archiveGroup=$archiveGroupName")
             return
         }
 
@@ -623,7 +630,7 @@ ArchiveGroup(
                 logger.info("Received cluster event to start ArchiveGroup [$archiveGroupName]")
                 startArchiveGroup(archiveGroupName, shouldBroadcast = false).onComplete { result ->
                     if (!result.succeeded()) {
-                        logger.warning("Failed to start ArchiveGroup [$archiveGroupName] from cluster event: ${result.cause()?.message}")
+                        logger.fine("ArchiveGroup [$archiveGroupName] already started or start failed: ${result.cause()?.message}")
                     }
                 }
             }
@@ -631,7 +638,7 @@ ArchiveGroup(
                 logger.info("Received cluster event to stop ArchiveGroup [$archiveGroupName]")
                 stopArchiveGroup(archiveGroupName, shouldBroadcast = false).onComplete { result ->
                     if (!result.succeeded()) {
-                        logger.warning("Failed to stop ArchiveGroup [$archiveGroupName] from cluster event: ${result.cause()?.message}")
+                        logger.fine("ArchiveGroup [$archiveGroupName] already stopped or stop failed: ${result.cause()?.message}")
                     }
                 }
             }
