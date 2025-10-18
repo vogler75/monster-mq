@@ -1,0 +1,11 @@
+Release v1.6.36
+Built from commit: bb2dc42
+Date: 2025-10-18 18:50:33
+
+Changes since v1.6.35:
+---
+bb2dc42 Merge branch 'dev-cluster'
+f3a85b5 Remove namespace conflict checks from device mutations
+1cbfe32 Inline connector list address in device extensions
+0b68f4f Use node-specific connector list addresses for bridges
+e21c1d7 Refactor OPC UA value publishing to use SessionHandler
