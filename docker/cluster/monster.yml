@@ -1,0 +1,12 @@
+TCP: 1883
+WS: 1884
+
+MaxMessageSizeKb: 64
+QueuedMessagesEnabled: true
+
+DefaultStoreType: POSTGRES
+
+Postgres:
+  Url: jdbc:postgresql://192.168.1.35:5432/monster-cluster
+  User: system
+  Pass: manager

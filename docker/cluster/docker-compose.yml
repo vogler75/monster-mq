@@ -1,0 +1,48 @@
+services:
+  monster1:
+    hostname: monster1
+    image: rocworks/monstermq:testing
+    restart: always
+    ports:
+      - "10010:1883"
+      - "10020:4000"
+      - "10030:4840"
+    environment:
+      - HAZELCAST_CONFIG=hazelcast.xml
+    command: ["-cluster"]
+    volumes:
+      - ./log1:/app/log
+      - ./security:/app/security
+      - ./monster.yml:/app/config.yaml
+
+  monster2:
+    hostname: monster2
+    image: rocworks/monstermq:testing
+    restart: always
+    ports:
+      - "10011:1883"
+      - "10021:4000"
+      - "10031:4840"
+    environment:
+      - HAZELCAST_CONFIG=hazelcast.xml
+    command: ["-cluster"]
+    volumes:
+      - ./log2:/app/log
+      - ./security:/app/security
+      - ./monster.yml:/app/config.yaml
+
+  monster3:
+    hostname: monster3
+    image: rocworks/monstermq:testing
+    restart: always
+    ports:
+      - "10012:1883"
+      - "10022:4000"
+      - "10032:4840"
+    environment:
+      - HAZELCAST_CONFIG=hazelcast.xml
+    command: ["-cluster"]
+    volumes:
+      - ./log3:/app/log
+      - ./security:/app/security
+      - ./monster.yml:/app/config.yaml

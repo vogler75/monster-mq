@@ -6,11 +6,31 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Check for testing flag
+# Parse command line arguments
 TESTING=false
-if [[ "$1" == "--testing" ]] || [[ "$1" == "-t" ]]; then
-    TESTING=true
-fi
+PUBLISH_MODE="ask"  # can be "ask", "yes", or "no"
+
+for arg in "$@"; do
+    case $arg in
+        --testing|-t)
+            TESTING=true
+            ;;
+        -n)
+            PUBLISH_MODE="no"
+            ;;
+        -y)
+            PUBLISH_MODE="yes"
+            ;;
+        *)
+            echo "Unknown argument: $arg"
+            echo "Usage: $0 [--testing|-t] [-n] [-y]"
+            echo "  --testing, -t  Build testing image"
+            echo "  -n             Do not publish to Docker Hub"
+            echo "  -y             Publish to Docker Hub without asking"
+            exit 1
+            ;;
+    esac
+done
 
 if [ "$TESTING" = true ]; then
     echo -e "${YELLOW}Building Docker image for MonsterMQ (testing)...${NC}"
@@ -53,11 +73,21 @@ if [ $? -eq 0 ]; then
         echo -e "${GREEN}  - rocworks/monstermq:latest${NC}"
     fi
 
-    # Ask if user wants to push the image
-    echo ""
-    read -p "Do you want to push the Docker image to Docker Hub? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Handle publishing based on mode
+    SHOULD_PUSH=false
+
+    if [ "$PUBLISH_MODE" = "yes" ]; then
+        SHOULD_PUSH=true
+    elif [ "$PUBLISH_MODE" = "ask" ]; then
+        echo ""
+        read -p "Do you want to push the Docker image to Docker Hub? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            SHOULD_PUSH=true
+        fi
+    fi
+
+    if [ "$SHOULD_PUSH" = true ]; then
         echo -e "${YELLOW}Pushing Docker image to Docker Hub...${NC}"
         if [ "$TESTING" = true ]; then
             docker push rocworks/monstermq:testing
