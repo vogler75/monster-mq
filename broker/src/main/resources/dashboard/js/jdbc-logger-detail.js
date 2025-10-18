@@ -70,15 +70,15 @@ class JDBCLoggerDetailManager {
     async loadClusterNodes() {
         try {
             const result = await window.graphqlClient.query(`
-                query GetClusterNodes {
-                    clusterNodes {
+                query GetBrokers {
+                    brokers {
                         nodeId
                         isCurrent
                     }
                 }
             `);
 
-            this.clusterNodes = result.clusterNodes || [];
+            this.clusterNodes = result.brokers || [];
             this.populateNodeSelect();
         } catch (error) {
             console.error('Error loading cluster nodes:', error);

@@ -21,8 +21,8 @@ class WinCCUaClientManager {
     async loadClusterNodes() {
         try {
             const query = `
-                query GetClusterNodes {
-                    clusterNodes {
+                query GetBrokers {
+                    brokers {
                         nodeId
                         isCurrent
                     }
@@ -30,7 +30,7 @@ class WinCCUaClientManager {
             `;
 
             const result = await this.client.query(query);
-            this.clusterNodes = result.clusterNodes || [];
+            this.clusterNodes = result.brokers || [];
 
         } catch (error) {
             console.error('Error loading cluster nodes:', error);

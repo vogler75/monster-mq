@@ -33,9 +33,9 @@ class KafkaClientDetailManager {
 
     async loadClusterNodes() {
         try {
-            const query = `query GetClusterNodes { clusterNodes { nodeId isCurrent } }`;
+            const query = `query GetBrokers { brokers { nodeId isCurrent } }`;
             const result = await this.client.query(query);
-            this.clusterNodes = result.clusterNodes || [];
+            this.clusterNodes = result.brokers || [];
             const nodeSelect = document.getElementById('client-node');
             if (nodeSelect) {
                 nodeSelect.innerHTML = '<option value="">Select Node...</option>';

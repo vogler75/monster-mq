@@ -19,10 +19,10 @@ class KafkaClientManager {
     async loadClusterNodes() {
         try {
             const query = `
-                query GetClusterNodes { clusterNodes { nodeId isCurrent } }
+                query GetBrokers { brokers { nodeId isCurrent } }
             `;
             const result = await this.client.query(query);
-            this.clusterNodes = result.clusterNodes || [];
+            this.clusterNodes = result.brokers || [];
             const nodeSelect = document.getElementById('kafka-client-node');
             if (nodeSelect) {
                 nodeSelect.innerHTML = '<option value="">Select Node...</option>';

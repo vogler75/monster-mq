@@ -26,8 +26,8 @@ class Plc4xClientManager {
     async loadClusterNodes() {
         try {
             const query = `
-                query GetClusterNodes {
-                    clusterNodes {
+                query GetBrokers {
+                    brokers {
                         nodeId
                         isCurrent
                     }
@@ -35,7 +35,7 @@ class Plc4xClientManager {
             `;
 
             const result = await this.client.query(query);
-            this.clusterNodes = result.clusterNodes || [];
+            this.clusterNodes = result.brokers || [];
 
             // Populate node selector in the add client form
             const nodeSelect = document.getElementById('client-node');

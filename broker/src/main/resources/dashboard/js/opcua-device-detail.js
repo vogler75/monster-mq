@@ -47,8 +47,8 @@ class OpcUaDeviceDetailManager {
     async loadClusterNodes() {
         try {
             const query = `
-                query GetClusterNodes {
-                    clusterNodes {
+                query GetBrokers {
+                    brokers {
                         nodeId
                         isCurrent
                     }
@@ -56,7 +56,7 @@ class OpcUaDeviceDetailManager {
             `;
 
             const result = await this.client.query(query);
-            this.clusterNodes = result.clusterNodes || [];
+            this.clusterNodes = result.brokers || [];
 
             // Populate node selector in form
             const nodeSelect = document.getElementById('device-node');

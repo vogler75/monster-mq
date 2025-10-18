@@ -64,8 +64,8 @@ class WinCCUaClientDetailManager {
     async loadClusterNodes() {
         try {
             const query = `
-                query GetClusterNodes {
-                    clusterNodes {
+                query GetBrokers {
+                    brokers {
                         nodeId
                         isCurrent
                     }
@@ -73,7 +73,7 @@ class WinCCUaClientDetailManager {
             `;
 
             const result = await this.client.query(query);
-            this.clusterNodes = result.clusterNodes || [];
+            this.clusterNodes = result.brokers || [];
 
             // Populate node selector
             const nodeSelect = document.getElementById('client-node');
