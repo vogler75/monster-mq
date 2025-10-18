@@ -1165,18 +1165,18 @@ class MetricsResolver(
                 future.complete(emptyList())
                 return@DataFetcher future
             }
-            if (metricsStore == null) {
-future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
-                return@DataFetcher future
-            }
-            // Get most recent metrics (limit 1 by using lastMinutes=1 or store-specific latest fetch)
-            metricsStore.getOpcUaDeviceMetrics(deviceName, null, null, 1).onComplete { result ->
-                if (result.succeeded()) {
-                    val m = result.result()
-                    future.complete(listOf(OpcUaDeviceMetrics(m.messagesIn, m.messagesOut, m.timestamp)))
+
+            // Fetch live metrics from connector via EventBus (only responds if connector is running on this node)
+            val addr = EventBusAddresses.OpcUaBridge.connectorMetrics(deviceName)
+            vertx.eventBus().request<JsonObject>(addr, JsonObject()).onComplete { reply ->
+                if (reply.succeeded()) {
+                    val body = reply.result().body()
+                    val messagesIn = body.getDouble("messagesInRate", 0.0)
+                    val messagesOut = body.getDouble("messagesOutRate", 0.0)
+                    future.complete(listOf(OpcUaDeviceMetrics(round2(messagesIn), round2(messagesOut), TimestampConverter.currentTimeIsoString())))
                 } else {
-                    logger.warning("Failed to get OPC UA device metrics for $deviceName: ${result.cause()?.message}")
-                future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
+                    // No response - device not running on this node or not available
+                    future.complete(listOf(OpcUaDeviceMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
                 }
             }
             future

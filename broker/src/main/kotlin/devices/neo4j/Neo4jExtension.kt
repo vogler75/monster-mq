@@ -136,8 +136,8 @@ class Neo4jExtension : AbstractVerticle() {
             // Config change operations
             vertx.eventBus().consumer<JsonObject>(ADDRESS_DEVICE_CONFIG_CHANGED) { msg -> handleConfigChange(msg) }
 
-            // List connectors
-            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Neo4jBridge.CONNECTORS_LIST) { msg ->
+            // List connectors - node-specific address
+            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Neo4jBridge.connectorsList(currentNodeId)) { msg ->
                 try {
                     msg.reply(JsonObject().put("devices", activeDevices.keys.toList()))
                 } catch (e: Exception) {

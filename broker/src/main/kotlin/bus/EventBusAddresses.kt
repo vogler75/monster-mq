@@ -77,6 +77,7 @@ object EventBusAddresses {
     object MqttBridge {
         private const val BRIDGE_NS = "$BASE.bridge.mqtt"
         const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
@@ -84,6 +85,7 @@ object EventBusAddresses {
     object OpcUaBridge {
         private const val BRIDGE_NS = "$BASE.bridge.opcua"
         const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
@@ -91,6 +93,7 @@ object EventBusAddresses {
     object KafkaBridge {
         private const val BRIDGE_NS = "$BASE.bridge.kafka"
         const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
@@ -98,6 +101,7 @@ object EventBusAddresses {
     object WinCCOaBridge {
         private const val BRIDGE_NS = "$BASE.bridge.winccoa"
         const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
@@ -105,6 +109,7 @@ object EventBusAddresses {
     object WinCCUaBridge {
         private const val BRIDGE_NS = "$BASE.bridge.winccua"
         const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
@@ -112,6 +117,7 @@ object EventBusAddresses {
     object Plc4xBridge {
         private const val BRIDGE_NS = "$BASE.bridge.plc4x"
         const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
@@ -119,6 +125,7 @@ object EventBusAddresses {
     object Neo4jBridge {
         private const val BRIDGE_NS = "$BASE.bridge.neo4j"
         const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
@@ -126,6 +133,7 @@ object EventBusAddresses {
     object JDBCLoggerBridge {
         private const val BRIDGE_NS = "$BASE.bridge.jdbclogger"
         const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 

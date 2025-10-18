@@ -70,52 +70,29 @@ class MqttClientConfigMutations(
                         return@onComplete
                     }
 
-                    // Check if namespace is already in use
-                    deviceStore.isNamespaceInUse(request.namespace).onComplete { namespaceResult ->
-                        if (namespaceResult.failed()) {
+                    // Save device
+                    val device = request.toDeviceConfig()
+                    deviceStore.saveDevice(device).onComplete { saveResult ->
+                        if (saveResult.succeeded()) {
+                            val savedDevice = saveResult.result()
+
+                            // Notify extension about the change
+                            notifyDeviceConfigChange("add", savedDevice)
+
+                            future.complete(
+                                mapOf(
+                                    "success" to true,
+                                    "client" to deviceToMap(savedDevice),
+                                    "errors" to emptyList<String>()
+                                )
+                            )
+                        } else {
                             future.complete(
                                 mapOf(
                                     "success" to false,
-                                    "errors" to listOf("Database error: ${namespaceResult.cause()?.message}")
+                                    "errors" to listOf("Failed to save device: ${saveResult.cause()?.message}")
                                 )
                             )
-                            return@onComplete
-                        }
-
-                        if (namespaceResult.result()) {
-                            future.complete(
-                                mapOf(
-                                    "success" to false,
-                                    "errors" to listOf("Namespace '${request.namespace}' is already in use")
-                                )
-                            )
-                            return@onComplete
-                        }
-
-                        // Save device
-                        val device = request.toDeviceConfig()
-                        deviceStore.saveDevice(device).onComplete { saveResult ->
-                            if (saveResult.succeeded()) {
-                                val savedDevice = saveResult.result()
-
-                                // Notify extension about the change
-                                notifyDeviceConfigChange("add", savedDevice)
-
-                                future.complete(
-                                    mapOf(
-                                        "success" to true,
-                                        "client" to deviceToMap(savedDevice),
-                                        "errors" to emptyList<String>()
-                                    )
-                                )
-                            } else {
-                                future.complete(
-                                    mapOf(
-                                        "success" to false,
-                                        "errors" to listOf("Failed to save device: ${saveResult.cause()?.message}")
-                                    )
-                                )
-                            }
                         }
                     }
                 }
@@ -189,64 +166,41 @@ class MqttClientConfigMutations(
                         return@onComplete
                     }
 
-                    // Check namespace conflict (exclude current device)
-                    deviceStore.isNamespaceInUse(request.namespace, name).onComplete { namespaceResult ->
-                        if (namespaceResult.failed()) {
+                    // Parse existing config from JsonObject
+                    val existingConfig = MqttClientConnectionConfig.fromJsonObject(existingDevice.config)
+                    val requestConfig = MqttClientConnectionConfig.fromJsonObject(request.config)
+
+                    // Update device (preserve creation time, existing addresses, and passwords if not provided)
+                    val newConfig = requestConfig.copy(
+                        addresses = existingConfig.addresses,
+                        // Preserve existing password if not provided in update
+                        password = requestConfig.password ?: existingConfig.password
+                    )
+                    val updatedDevice = request.toDeviceConfig().copy(
+                        createdAt = existingDevice.createdAt,
+                        config = newConfig.toJsonObject()
+                    )
+                    deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
+                        if (saveResult.succeeded()) {
+                            val savedDevice = saveResult.result()
+
+                            // Notify extension about the change
+                            notifyDeviceConfigChange("update", savedDevice)
+
+                            future.complete(
+                                mapOf(
+                                    "success" to true,
+                                    "client" to deviceToMap(savedDevice),
+                                    "errors" to emptyList<String>()
+                                )
+                            )
+                        } else {
                             future.complete(
                                 mapOf(
                                     "success" to false,
-                                    "errors" to listOf("Database error: ${namespaceResult.cause()?.message}")
+                                    "errors" to listOf("Failed to update device: ${saveResult.cause()?.message}")
                                 )
                             )
-                            return@onComplete
-                        }
-
-                        if (namespaceResult.result()) {
-                            future.complete(
-                                mapOf(
-                                    "success" to false,
-                                    "errors" to listOf("Namespace '${request.namespace}' is already in use by another device")
-                                )
-                            )
-                            return@onComplete
-                        }
-
-                        // Parse existing config from JsonObject
-                        val existingConfig = MqttClientConnectionConfig.fromJsonObject(existingDevice.config)
-                        val requestConfig = MqttClientConnectionConfig.fromJsonObject(request.config)
-
-                        // Update device (preserve creation time, existing addresses, and passwords if not provided)
-                        val newConfig = requestConfig.copy(
-                            addresses = existingConfig.addresses,
-                            // Preserve existing password if not provided in update
-                            password = requestConfig.password ?: existingConfig.password
-                        )
-                        val updatedDevice = request.toDeviceConfig().copy(
-                            createdAt = existingDevice.createdAt,
-                            config = newConfig.toJsonObject()
-                        )
-                        deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
-                            if (saveResult.succeeded()) {
-                                val savedDevice = saveResult.result()
-
-                                // Notify extension about the change
-                                notifyDeviceConfigChange("update", savedDevice)
-
-                                future.complete(
-                                    mapOf(
-                                        "success" to true,
-                                        "client" to deviceToMap(savedDevice),
-                                        "errors" to emptyList<String>()
-                                    )
-                                )
-                            } else {
-                                future.complete(
-                                    mapOf(
-                                        "success" to false,
-                                        "errors" to listOf("Failed to update device: ${saveResult.cause()?.message}")
-                                    )
-                                )
-                            }
                         }
                     }
                 }
