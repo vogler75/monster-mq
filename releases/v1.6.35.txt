@@ -1,0 +1,21 @@
+Release v1.6.35
+Built from commit: 1e49d80
+Date: 2025-10-18 15:46:01
+
+Changes since v1.6.34:
+---
+1e49d80 Add Hazelcast MessageStore deployment support
+7ac3629 Remove clusterNodes query and related code
+49cfae8 Update GraphQL queries to use 'brokers' instead of 'clusterNodes'
+b2cf5b5 Use actual node ID for archive event handling
+eb1113c Improve logging for table initialization
+ac256cf Lower log level for expected ArchiveGroup events
+4425cd5 Add cluster table creation coordination and logging config
+b3a55d1 Refactor logging configuration: add independent Memory and Mqtt logging with node-specific syslog collection
+457637c Implement in-memory syslog store and SyslogVerticle for centralized log handling
+a06fa52 Cluster scripts
+c71d02c Remove automatic creation of Syslogs archive group
+d9ca41f Cluster setup
+3f95739 Update ArchiveHandler.kt
+58fb77d Update README.md
+1b40acd Update README.md
