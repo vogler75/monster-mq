@@ -1,5 +1,6 @@
 package at.rocworks.devices.opcua
 
+import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
 import at.rocworks.bus.EventBusAddresses
@@ -914,14 +915,23 @@ class OpcUaConnector : AbstractVerticle() {
                 isRetain = false,
                 isDup = false,
                 isQueued = false,
-                clientId = "opcua-connector-${deviceConfig.name}"
+                clientId = "opcua-connector-${deviceConfig.name}",
+                senderId = deviceConfig.name  // For loop prevention
             )
 
-            // Send to OPC UA extension for proper message bus publishing
-            vertx.eventBus().publish(OpcUaExtension.Companion.ADDRESS_OPCUA_VALUE_PUBLISH, mqttMessage)
-
-            messagesInCounter.incrementAndGet()
-            logger.fine { "Published OPC UA value change: $mqttTopic = $value (from ${address.address})" }
+            // Publish directly to the MQTT message handler (like MQTT client does)
+            try {
+                val sessionHandler = Monster.getSessionHandler()
+                if (sessionHandler != null) {
+                    sessionHandler.publishMessage(mqttMessage)
+                    messagesInCounter.incrementAndGet()
+                    logger.fine { "Published OPC UA value change: $mqttTopic = $value (from ${address.address})" }
+                } else {
+                    logger.warning("SessionHandler not available for publishing OPC UA value to $mqttTopic")
+                }
+            } catch (e: Exception) {
+                logger.severe("Error publishing OPC UA value to MQTT: ${e.message}")
+            }
 
         } catch (e: Exception) {
             logger.severe("Error handling OPC UA value change for address ${address.address}: ${e.message}")

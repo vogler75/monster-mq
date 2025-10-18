@@ -48,7 +48,6 @@ class OpcUaExtension : AbstractVerticle() {
     companion object {
         // EventBus addresses
         const val ADDRESS_DEVICE_CONFIG_CHANGED = "opcua.device.config.changed"
-        const val ADDRESS_OPCUA_VALUE_PUBLISH = "opcua.value.publish"
     }
 
     override fun start(startPromise: Promise<Void>) {
@@ -280,11 +279,6 @@ class OpcUaExtension : AbstractVerticle() {
                 handleDeviceConfigChange(message)
             }
 
-            // Handle OPC UA value publishing to MQTT bus
-            vertx.eventBus().consumer<BrokerMessage>(ADDRESS_OPCUA_VALUE_PUBLISH) { message ->
-                handleOpcUaValuePublish(message)
-            }
-
             promise.complete()
 
         } catch (e: Exception) {
@@ -292,25 +286,6 @@ class OpcUaExtension : AbstractVerticle() {
         }
 
         return promise.future()
-    }
-
-    private fun handleOpcUaValuePublish(message: Message<BrokerMessage>) {
-        try {
-            val mqttMessage = message.body()
-            logger.fine { "Forwarding OPC UA value to MQTT bus: ${mqttMessage.topicName} = ${String(mqttMessage.payload)}" }
-
-            // Use the shared SessionHandler to ensure proper archiving and distribution
-            // This follows the same pattern as regular MQTT client publishing
-            val sessionHandler = Monster.getSessionHandler()
-            if (sessionHandler != null) {
-                sessionHandler.publishMessage(mqttMessage)
-            } else {
-                logger.severe("SessionHandler not available for OPC UA message publishing")
-            }
-
-        } catch (e: Exception) {
-            logger.severe("Error forwarding OPC UA value to MQTT bus: ${e.message}")
-        }
     }
 
     private fun handleDeviceConfigChange(message: Message<JsonObject>) {
