@@ -177,6 +177,7 @@ class OpcUaConnector : AbstractVerticle() {
 
     private fun setupMetricsEndpoint() {
         val addr = EventBusAddresses.OpcUaBridge.connectorMetrics(deviceConfig.name)
+        // Use regular consumer (cluster-wide) so GraphQL on any node can query metrics
         vertx.eventBus().consumer<JsonObject>(addr) { msg ->
             try {
                 val now = System.currentTimeMillis()

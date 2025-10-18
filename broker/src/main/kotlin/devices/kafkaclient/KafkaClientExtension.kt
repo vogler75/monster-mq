@@ -127,8 +127,9 @@ class KafkaClientExtension : AbstractVerticle() {
             // Config change operations
             vertx.eventBus().consumer<JsonObject>(ADDRESS_DEVICE_CONFIG_CHANGED) { msg -> handleConfigChange(msg) }
 
-            // List connectors
-            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.KafkaBridge.CONNECTORS_LIST) { msg ->
+            // List connectors - node-specific address
+            val connectorListAddr = EventBusAddresses.KafkaBridge.connectorsList(currentNodeId)
+            vertx.eventBus().consumer<JsonObject>(connectorListAddr) { msg ->
                 try { msg.reply(JsonObject().put("devices", activeDevices.keys.toList())) } catch (e: Exception) { msg.fail(500, e.message) }
             }
             p.complete()

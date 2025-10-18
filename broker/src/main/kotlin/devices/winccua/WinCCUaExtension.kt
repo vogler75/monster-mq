@@ -274,8 +274,9 @@ class WinCCUaExtension : AbstractVerticle() {
                 handleWinCCUaValuePublish(message)
             }
 
-            // Provide list of active connector device names
-            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.WinCCUaBridge.CONNECTORS_LIST) { msg ->
+            // Provide list of active connector device names - node-specific address
+            val connectorListAddr = EventBusAddresses.WinCCUaBridge.connectorsList(currentNodeId)
+            vertx.eventBus().consumer<JsonObject>(connectorListAddr) { msg ->
                 try {
                     val list = activeDevices.keys.toList()
                     msg.reply(JsonObject().put("devices", list))
