@@ -613,15 +613,16 @@ ArchiveGroup(
         val event = message.body().getString("event")
         val archiveGroupName = message.body().getString("archiveGroup")
         val sourceNodeId = message.body().getString("nodeId", "")
+        val currentNodeId = Monster.getClusterNodeId(vertx)
 
         if (event == null || archiveGroupName == null) {
             logger.warning("Invalid archive event: event=$event, archiveGroup=$archiveGroupName")
             return
         }
 
-        // Skip events from the same node to avoid duplicate processing
-        if (sourceNodeId == "local") {
-            logger.fine("Skipping archive event from same node: event=$event, archiveGroup=$archiveGroupName")
+        // Skip events from the same node to avoid duplicate processing (only in local event bus)
+        if (!Monster.isClustered() && sourceNodeId == currentNodeId) {
+            logger.fine("Skipping archive event from same node in non-clustered mode: event=$event, archiveGroup=$archiveGroupName")
             return
         }
 
@@ -856,15 +857,16 @@ val archiveGroup = ArchiveGroup(
     }
 
     private fun broadcastArchiveGroupEvent(event: String, archiveGroupName: String) {
+        val currentNodeId = Monster.getClusterNodeId(vertx)
         val eventData = JsonObject().apply {
             put("event", event)
             put("archiveGroup", archiveGroupName)
             put("timestamp", System.currentTimeMillis())
-            put("nodeId", "local") // TODO: Get actual node ID
+            put("nodeId", currentNodeId)
         }
 
         vertx.eventBus().publish("mq.cluster.archive.events", eventData)
-        logger.info("Broadcasted archive event: $event for ArchiveGroup [$archiveGroupName]")
+        logger.fine("Broadcasted archive event: $event for ArchiveGroup [$archiveGroupName] from node $currentNodeId")
     }
 
     fun getDeployedArchiveGroups(): Map<String, ArchiveGroup> {
