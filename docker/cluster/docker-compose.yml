@@ -11,7 +11,6 @@ services:
       - HAZELCAST_CONFIG=hazelcast.xml
     command: ["-cluster"]
     volumes:
-      - ./log1:/app/log
       - ./security:/app/security
       - ./monster.yml:/app/config.yaml
 
@@ -27,7 +26,6 @@ services:
       - HAZELCAST_CONFIG=hazelcast.xml
     command: ["-cluster"]
     volumes:
-      - ./log2:/app/log
       - ./security:/app/security
       - ./monster.yml:/app/config.yaml
 
@@ -43,6 +41,5 @@ services:
       - HAZELCAST_CONFIG=hazelcast.xml
     command: ["-cluster"]
     volumes:
-      - ./log3:/app/log
       - ./security:/app/security
       - ./monster.yml:/app/config.yaml
