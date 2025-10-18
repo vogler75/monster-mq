@@ -378,7 +378,6 @@ class GraphQLServer(
                     .apply {
                         opcUaQueries?.let { resolver ->
                             dataFetcher("opcUaDevices", resolver.opcUaDevices())
-                            dataFetcher("clusterNodes", resolver.clusterNodes())
                         }
                     }
                     // OPC UA Server queries

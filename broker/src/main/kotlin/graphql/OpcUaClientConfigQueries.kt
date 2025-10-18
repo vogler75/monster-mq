@@ -96,31 +96,6 @@ class OpcUaClientConfigQueries(
         }
     }
 
-    fun clusterNodes(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
-        return DataFetcher { _ ->
-            val future = CompletableFuture<List<Map<String, Any>>>()
-
-            try {
-                val nodes = Monster.Companion.getClusterNodeIds(vertx)
-                val currentNodeId = Monster.Companion.getClusterNodeId(vertx) ?: "local"
-
-                val nodeMaps = nodes.map { nodeId ->
-                    mapOf(
-                        "nodeId" to nodeId,
-                        "isCurrent" to (nodeId == currentNodeId)
-                    )
-                }
-
-                future.complete(nodeMaps)
-            } catch (e: Exception) {
-                logger.severe("Error fetching cluster nodes: ${e.message}")
-                future.complete(emptyList())
-            }
-
-            future
-        }
-    }
-
     private fun deviceToMap(device: DeviceConfig): Map<String, Any> {
         val currentNodeId = Monster.Companion.getClusterNodeId(vertx) ?: "local"
 

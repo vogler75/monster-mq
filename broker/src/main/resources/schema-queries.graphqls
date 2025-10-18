@@ -400,11 +400,6 @@ type OpcUaDevice {
     ): [OpcUaDeviceMetrics!]!
 }
 
-type ClusterNode {
-    nodeId: String!
-    isCurrent: Boolean!
-}
-
 # OPC UA Server configuration that exposes MQTT topics as hierarchical OPC UA nodes
 type OpcUaServer {
     # Unique server name across the cluster
@@ -564,10 +559,6 @@ extend type Query {
         # Filter by cluster node ID (optional)
         node: String
     ): [OpcUaDevice!]!
-
-    # Get list of all available cluster nodes for device assignment
-    # Shows which nodes are available for deploying OPC UA device connectors
-    clusterNodes: [ClusterNode!]!
 
     # Get OPC UA server configurations across the entire cluster
     # Returns servers from all cluster nodes, showing their assignment and status
