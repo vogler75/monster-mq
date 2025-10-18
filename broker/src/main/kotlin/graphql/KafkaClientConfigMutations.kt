@@ -49,29 +49,18 @@ class KafkaClientConfigMutations(
                         return@onComplete
                     }
 
-                    deviceStore.isNamespaceInUse(request.namespace).onComplete { nsResult ->
-                        if (nsResult.failed()) {
-                            future.complete(mapOf("success" to false, "errors" to listOf("Database error: ${nsResult.cause()?.message}")))
-                            return@onComplete
-                        }
-                        if (nsResult.result()) {
-                            future.complete(mapOf("success" to false, "errors" to listOf("Namespace '${request.namespace}' is already in use")))
-                            return@onComplete
-                        }
-
-                        val device = request.toDeviceConfig()
-                        deviceStore.saveDevice(device).onComplete { saveResult ->
-                            if (saveResult.succeeded()) {
-                                val savedDevice = saveResult.result()
-                                notifyDeviceConfigChange("add", savedDevice)
-                                future.complete(mapOf(
-                                    "success" to true,
-                                    "client" to deviceToMap(savedDevice),
-                                    "errors" to emptyList<String>()
-                                ))
-                            } else {
-                                future.complete(mapOf("success" to false, "errors" to listOf("Failed to save device: ${saveResult.cause()?.message}")))
-                            }
+                    val device = request.toDeviceConfig()
+                    deviceStore.saveDevice(device).onComplete { saveResult ->
+                        if (saveResult.succeeded()) {
+                            val savedDevice = saveResult.result()
+                            notifyDeviceConfigChange("add", savedDevice)
+                            future.complete(mapOf(
+                                "success" to true,
+                                "client" to deviceToMap(savedDevice),
+                                "errors" to emptyList<String>()
+                            ))
+                        } else {
+                            future.complete(mapOf("success" to false, "errors" to listOf("Failed to save device: ${saveResult.cause()?.message}")))
                         }
                     }
                 }
@@ -112,36 +101,25 @@ class KafkaClientConfigMutations(
                         return@onComplete
                     }
 
-                    deviceStore.isNamespaceInUse(request.namespace, name).onComplete { nsResult ->
-                        if (nsResult.failed()) {
-                            future.complete(mapOf("success" to false, "errors" to listOf("Database error: ${nsResult.cause()?.message}")))
-                            return@onComplete
-                        }
-                        if (nsResult.result()) {
-                            future.complete(mapOf("success" to false, "errors" to listOf("Namespace '${request.namespace}' is already in use by another device")))
-                            return@onComplete
-                        }
-
-                        val existingConfig = KafkaClientConfig.fromJson(existingDevice.config)
-                        val requestConfig = KafkaClientConfig.fromJson(request.config)
-                        val newConfig = requestConfig
-                        val updatedDevice = request.toDeviceConfig().copy(
-                            createdAt = existingDevice.createdAt,
-                            config = JsonObject.mapFrom(newConfig),
-                            updatedAt = Instant.now()
-                        )
-                        deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
-                            if (saveResult.succeeded()) {
-                                val savedDevice = saveResult.result()
-                                notifyDeviceConfigChange("update", savedDevice)
-                                future.complete(mapOf(
-                                    "success" to true,
-                                    "client" to deviceToMap(savedDevice),
-                                    "errors" to emptyList<String>()
-                                ))
-                            } else {
-                                future.complete(mapOf("success" to false, "errors" to listOf("Failed to update device: ${saveResult.cause()?.message}")))
-                            }
+                    val existingConfig = KafkaClientConfig.fromJson(existingDevice.config)
+                    val requestConfig = KafkaClientConfig.fromJson(request.config)
+                    val newConfig = requestConfig
+                    val updatedDevice = request.toDeviceConfig().copy(
+                        createdAt = existingDevice.createdAt,
+                        config = JsonObject.mapFrom(newConfig),
+                        updatedAt = Instant.now()
+                    )
+                    deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
+                        if (saveResult.succeeded()) {
+                            val savedDevice = saveResult.result()
+                            notifyDeviceConfigChange("update", savedDevice)
+                            future.complete(mapOf(
+                                "success" to true,
+                                "client" to deviceToMap(savedDevice),
+                                "errors" to emptyList<String>()
+                            ))
+                        } else {
+                            future.complete(mapOf("success" to false, "errors" to listOf("Failed to update device: ${saveResult.cause()?.message}")))
                         }
                     }
                 }

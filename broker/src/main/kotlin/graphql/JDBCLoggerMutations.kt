@@ -48,29 +48,18 @@ class JDBCLoggerMutations(
                         return@onComplete
                     }
 
-                    deviceStore.isNamespaceInUse(request.namespace).onComplete { nsResult ->
-                        if (nsResult.failed()) {
-                            future.complete(mapOf("success" to false, "errors" to listOf("Database error: ${nsResult.cause()?.message}")))
-                            return@onComplete
-                        }
-                        if (nsResult.result()) {
-                            future.complete(mapOf("success" to false, "errors" to listOf("Namespace '${request.namespace}' is already in use")))
-                            return@onComplete
-                        }
-
-                        val device = request.toDeviceConfig()
-                        deviceStore.saveDevice(device).onComplete { saveResult ->
-                            if (saveResult.succeeded()) {
-                                val savedDevice = saveResult.result()
-                                notifyDeviceConfigChange("add", savedDevice)
-                                future.complete(mapOf(
-                                    "success" to true,
-                                    "logger" to deviceToMap(savedDevice),
-                                    "errors" to emptyList<String>()
-                                ))
-                            } else {
-                                future.complete(mapOf("success" to false, "errors" to listOf("Failed to save device: ${saveResult.cause()?.message}")))
-                            }
+                    val device = request.toDeviceConfig()
+                    deviceStore.saveDevice(device).onComplete { saveResult ->
+                        if (saveResult.succeeded()) {
+                            val savedDevice = saveResult.result()
+                            notifyDeviceConfigChange("add", savedDevice)
+                            future.complete(mapOf(
+                                "success" to true,
+                                "logger" to deviceToMap(savedDevice),
+                                "errors" to emptyList<String>()
+                            ))
+                        } else {
+                            future.complete(mapOf("success" to false, "errors" to listOf("Failed to save device: ${saveResult.cause()?.message}")))
                         }
                     }
                 }
@@ -122,38 +111,27 @@ class JDBCLoggerMutations(
                         return@onComplete
                     }
 
-                    deviceStore.isNamespaceInUse(request.namespace, name).onComplete { nsResult ->
-                        if (nsResult.failed()) {
-                            future.complete(mapOf("success" to false, "errors" to listOf("Database error: ${nsResult.cause()?.message}")))
-                            return@onComplete
-                        }
-                        if (nsResult.result()) {
-                            future.complete(mapOf("success" to false, "errors" to listOf("Namespace '${request.namespace}' is already in use by another device")))
-                            return@onComplete
-                        }
-
-                        val updatedDevice = DeviceConfig(
-                            name = request.name,
-                            namespace = request.namespace,
-                            nodeId = request.nodeId,
-                            enabled = request.enabled,
-                            type = request.type,
-                            config = mergedConfig.toJson(),
-                            createdAt = existingDevice.createdAt,
-                            updatedAt = Instant.now()
-                        )
-                        deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
-                            if (saveResult.succeeded()) {
-                                val savedDevice = saveResult.result()
-                                notifyDeviceConfigChange("update", savedDevice)
-                                future.complete(mapOf(
-                                    "success" to true,
-                                    "logger" to deviceToMap(savedDevice),
-                                    "errors" to emptyList<String>()
-                                ))
-                            } else {
-                                future.complete(mapOf("success" to false, "errors" to listOf("Failed to update device: ${saveResult.cause()?.message}")))
-                            }
+                    val updatedDevice = DeviceConfig(
+                        name = request.name,
+                        namespace = request.namespace,
+                        nodeId = request.nodeId,
+                        enabled = request.enabled,
+                        type = request.type,
+                        config = mergedConfig.toJson(),
+                        createdAt = existingDevice.createdAt,
+                        updatedAt = Instant.now()
+                    )
+                    deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
+                        if (saveResult.succeeded()) {
+                            val savedDevice = saveResult.result()
+                            notifyDeviceConfigChange("update", savedDevice)
+                            future.complete(mapOf(
+                                "success" to true,
+                                "logger" to deviceToMap(savedDevice),
+                                "errors" to emptyList<String>()
+                            ))
+                        } else {
+                            future.complete(mapOf("success" to false, "errors" to listOf("Failed to update device: ${saveResult.cause()?.message}")))
                         }
                     }
                 }
