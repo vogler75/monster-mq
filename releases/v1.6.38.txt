@@ -1,0 +1,10 @@
+Release v1.6.38
+Built from commit: 6a45a92
+Date: 2025-10-19 18:18:29
+
+Changes since v1.6.37:
+---
+6a45a92 Update monster.yml
+b1fc61c Merge pull request #23 from vogler75/fix/spurious-zeros-chart-#17
+232b76f Fix spurious zero points in historical chart by synchronizing metric timestamps (Issue #17)
+8d6416f Fix spurious zero points in historical chart (Issue #17)
