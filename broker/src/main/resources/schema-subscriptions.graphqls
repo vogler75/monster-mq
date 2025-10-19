@@ -14,19 +14,6 @@ type Subscription {
         format: DataFormat = JSON
     ): TopicUpdate!
 
-    # Subscribe to real-time updates from multiple topic filters simultaneously (backward compatible)
-    # Alias for topicUpdates for backward compatibility
-    # Efficient way to monitor different topic categories in a single subscription
-    # All matching messages from any of the specified filters will be streamed
-    # Useful for comprehensive dashboard monitoring across topic hierarchies
-    multiTopicUpdates(
-        # Array of MQTT topic filters to monitor simultaneously
-        # Each filter supports MQTT wildcards independently
-        topicFilters: [String!]!,
-        # Data format for all streamed message payloads
-        format: DataFormat = JSON
-    ): TopicUpdate!
-
     # Subscribe to bulk collections of MQTT message updates with configurable batching
     # Collects multiple messages and emits them as a batch
     # Reduces network overhead for high-frequency message streams

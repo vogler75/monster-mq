@@ -43,15 +43,6 @@ class SubscriptionResolver(
         }
     }
 
-    fun multiTopicUpdates(): DataFetcher<Publisher<TopicUpdate>> {
-        return DataFetcher { env ->
-            val topicFilters = env.getArgument<List<String>>("topicFilters") ?: emptyList()
-            val format = env.getArgument<DataFormat?>("format") ?: DataFormat.JSON
-
-            TopicUpdatePublisher(vertx, topicFilters, format)
-        }
-    }
-
     fun topicUpdatesBulk(): DataFetcher<Publisher<TopicUpdateBulk>> {
         return DataFetcher { env ->
             val topicFilters = env.getArgument<List<String>>("topicFilters") ?: emptyList()

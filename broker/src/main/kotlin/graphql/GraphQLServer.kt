@@ -717,7 +717,6 @@ class GraphQLServer(
             .type("Subscription") { builder ->
                 builder
                     .dataFetcher("topicUpdates", subscriptionResolver.topicUpdates())
-                    .dataFetcher("multiTopicUpdates", subscriptionResolver.multiTopicUpdates())
                     .dataFetcher("topicUpdatesBulk", subscriptionResolver.topicUpdatesBulk())
                     .dataFetcher("systemLogs", subscriptionResolver.systemLogs())
             }
