@@ -1,0 +1,14 @@
+Release v1.6.37
+Built from commit: f377bcb
+Date: 2025-10-19 15:29:06
+
+Changes since v1.6.36:
+---
+f377bcb Add PostgreSQL schema configuration support (Issue #15) (#22)
+8cd0513 Implement device configuration export/import feature (Issue #16) (#21)
+dd92ab4 Remove deprecated multiTopicUpdates subscription (Issue #20)
+fd0b713 Add end-to-end test script for GraphQL bulk subscriptions (Issue #20)
+3b6fca4 Implement GraphQL bulk topic subscriptions with configurable batching (Issue #20)
+a298946 Squashed commit of the following:
+d2655cd Merge branch 'dev-cluster'
+7a5e496 Add GraphQL MQTT test scripts and dependencies
