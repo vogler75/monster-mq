@@ -35,6 +35,18 @@ class MetricsHandler(
     private val purgeIntervalMs = PURGE_INTERVAL_HOURS * 60 * 60 * 1000L
 
     /**
+     * Synchronize timestamp to the nearest collection interval boundary.
+     * This ensures all nodes write metrics at aligned times (e.g., :00, :05, :10, :15 for 5-second intervals).
+     * Example: If collectionIntervalSeconds=5 and now is 15:09:47, returns 15:09:45
+     * This prevents spurious zero points in charts caused by data from different nodes having different timestamps.
+     */
+    private fun getSynchronizedTimestamp(): Instant {
+        val nowSeconds = System.currentTimeMillis() / 1000
+        val bucketedSeconds = (nowSeconds / collectionIntervalSeconds) * collectionIntervalSeconds
+        return Instant.ofEpochSecond(bucketedSeconds)
+    }
+
+    /**
      * Publish metrics to a $SYS topic (non-retained)
      */
     private fun publishMetrics(topic: String, payload: JsonObject) {
@@ -105,7 +117,7 @@ class MetricsHandler(
 
     private fun collectAndStoreMetrics() {
         try {
-            val timestamp = Instant.now()
+            val timestamp = getSynchronizedTimestamp()
             val nodeId = Monster.Companion.getClusterNodeId(vertx)
             logger.fine { "Collecting metrics at $timestamp for nodeId: $nodeId (concurrent aggregation)" }
 
