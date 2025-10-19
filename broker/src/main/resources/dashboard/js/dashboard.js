@@ -402,8 +402,8 @@ class DashboardManager {
             this.trafficChart.data.datasets[4].data.push(data.kafkaClientIn);
             this.trafficChart.data.datasets[5].data.push(data.opcUaClientIn);
             this.trafficChart.data.datasets[6].data.push(data.opcUaClientOut);
-            this.trafficChart.data.datasets[7].data.push(data.winCCOaClientIn || 0);
-            this.trafficChart.data.datasets[8].data.push(data.winCCUaClientIn || 0);
+            this.trafficChart.data.datasets[7].data.push(data.winCCOaClientIn ?? null);
+            this.trafficChart.data.datasets[8].data.push(data.winCCUaClientIn ?? null);
         });
 
         console.debug('Traffic history loaded', {
@@ -464,8 +464,8 @@ class DashboardManager {
         // Removed kafkaClientOut dataset push
         this.trafficChart.data.datasets[5].data.push(clusterTotals.opcUaClientIn);
         this.trafficChart.data.datasets[6].data.push(clusterTotals.opcUaClientOut);
-        this.trafficChart.data.datasets[7].data.push(clusterTotals.winCCOaClientIn || 0);
-        this.trafficChart.data.datasets[8].data.push(clusterTotals.winCCUaClientIn || 0);
+        this.trafficChart.data.datasets[7].data.push(clusterTotals.winCCOaClientIn ?? null);
+        this.trafficChart.data.datasets[8].data.push(clusterTotals.winCCUaClientIn ?? null);
         this.trafficChart.update('none');
 
         this.messageBusChart.data.labels = brokers.map(b => b.nodeId);
