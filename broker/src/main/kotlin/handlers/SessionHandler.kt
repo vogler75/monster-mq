@@ -75,6 +75,10 @@ open class SessionHandler(
 
     private val inFlightMessages = HashMap<String, ArrayBlockingQueue<BrokerMessage>>()
 
+    // Message listeners for external subscribers (e.g., GraphQL subscriptions)
+    // Map: listenerId -> (topic filters, callback function)
+    private val messageListeners = ConcurrentHashMap<String, Pair<List<String>, (BrokerMessage) -> Unit>>()
+
     private fun commandAddress() = EventBusAddresses.Node.commands(deploymentID())
     private fun metricsAddress() = EventBusAddresses.Node.metrics(Monster.getClusterNodeId(vertx))
     // REMOVED: messageAddress() - no longer using broadcast message bus
@@ -585,6 +589,33 @@ open class SessionHandler(
 
     fun getMessageBusInCount(): Long = messageBusIn.get()
 
+    /**
+     * Register a message listener for external subscribers (e.g., GraphQL subscriptions).
+     * The listener will receive all messages matching the specified topic filters.
+     *
+     * @param listenerId Unique identifier for this listener
+     * @param topicFilters List of MQTT topic filters (supports + and # wildcards)
+     * @param callback Function called for each matching message
+     */
+    fun registerMessageListener(
+        listenerId: String,
+        topicFilters: List<String>,
+        callback: (BrokerMessage) -> Unit
+    ) {
+        messageListeners[listenerId] = Pair(topicFilters, callback)
+        logger.fine { "Registered message listener [$listenerId] for topic filters: $topicFilters" }
+    }
+
+    /**
+     * Unregister a previously registered message listener.
+     *
+     * @param listenerId The listener to remove
+     */
+    fun unregisterMessageListener(listenerId: String) {
+        messageListeners.remove(listenerId)
+        logger.fine { "Unregistered message listener [$listenerId]" }
+    }
+
     fun setClient(clientId: String, cleanSession: Boolean, information: JsonObject): Future<Void> {
         logger.fine { "Set client [$clientId] clean session [$cleanSession] information [$information]" }
 
@@ -892,6 +923,17 @@ open class SessionHandler(
     // Process messages for local clients only (used for both external and targeted internal messages)
     private fun processMessageForLocalClients(message: BrokerMessage) {
         val localNodeId = Monster.getClusterNodeId(vertx)
+
+        // Invoke external message listeners (e.g., GraphQL subscriptions)
+        messageListeners.values.forEach { (topicFilters, callback) ->
+            if (topicFilters.any { filter -> matchesTopicFilter(message.topicName, filter) }) {
+                try {
+                    callback(message)
+                } catch (e: Exception) {
+                    logger.warning("Error invoking message listener: ${e.message}")
+                }
+            }
+        }
 
         findClients(message.topicName).groupBy { (clientId, subscriptionQos) ->
             if (subscriptionQos < message.qosLevel) subscriptionQos else message.qosLevel // Potentially downgrade QoS
