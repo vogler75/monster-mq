@@ -29,6 +29,10 @@ Usage:
 
     # Custom URL and format
     python test_graphql_topic_subscriptions.py --url "ws://broker.example.com:4000/graphqlws" --format BINARY --filters "camera/snapshot"
+
+Commands during subscription:
+    - Press 'q', 'quit', 'exit', 'u' or 'unsubscribe' and Enter to gracefully unsubscribe
+    - Press Ctrl+C to force stop
 """
 
 import asyncio
@@ -37,6 +41,7 @@ import sys
 import argparse
 import websockets
 import base64
+import threading
 from datetime import datetime
 from typing import Optional, List
 
@@ -49,6 +54,8 @@ class GraphQLTopicSubscriptionClient:
         self.websocket = None
         self.subscription_id = "1"
         self.message_count = 0
+        self.unsubscribe_event = asyncio.Event()  # Signal to unsubscribe
+        self.input_thread = None
 
     async def connect(self):
         """Establish WebSocket connection"""
@@ -131,27 +138,69 @@ class GraphQLTopicSubscriptionClient:
         for i, tf in enumerate(topic_filters, 1):
             print(f"  {i}. {tf}")
         print("="*90 + "\n")
-        print("Waiting for messages... (Press Ctrl+C to stop)\n")
+        print("Waiting for messages...\n")
+        print("  To unsubscribe: Type 'q', 'quit', 'exit', 'u', or 'unsubscribe' and press Enter")
+        print("  To force stop:  Press Ctrl+C\n")
+
+    def _input_listener(self, loop):
+        """Background thread that listens for user input"""
+        try:
+            while True:
+                user_input = input()
+                if user_input.lower() in ['q', 'quit', 'exit', 'u', 'unsubscribe']:
+                    print("\n⏹ User requested unsubscribe")
+                    # Signal the async unsubscribe
+                    asyncio.run_coroutine_threadsafe(
+                        self._trigger_unsubscribe(),
+                        loop
+                    )
+                    break
+        except EOFError:
+            pass
+        except Exception:
+            pass
+
+    async def _trigger_unsubscribe(self):
+        """Trigger unsubscribe from another thread"""
+        self.unsubscribe_event.set()
 
     async def listen(self):
         """Listen for incoming topic update messages"""
+        # Start background thread for keyboard input
+        loop = asyncio.get_event_loop()
+        self.input_thread = threading.Thread(target=self._input_listener, args=(loop,), daemon=True)
+        self.input_thread.start()
+
         try:
-            async for message in self.websocket:
-                msg = json.loads(message)
-
-                if msg.get("type") == "next":
-                    # Extract topic update from the message
-                    topic_update = msg.get("payload", {}).get("data", {}).get("multiTopicUpdates")
-                    if topic_update:
-                        self.message_count += 1
-                        self.print_topic_update(topic_update)
-
-                elif msg.get("type") == "error":
-                    print(f"\n❌ Error: {msg.get('payload')}\n")
-
-                elif msg.get("type") == "complete":
-                    print(f"\n✓ Subscription completed (received {self.message_count} messages)\n")
+            while True:
+                # Check if unsubscribe was requested
+                if self.unsubscribe_event.is_set():
+                    print(f"\n✓ Unsubscribing (received {self.message_count} messages)\n")
+                    await self.unsubscribe()
                     break
+
+                try:
+                    # Wait for message with timeout to allow checking unsubscribe_event
+                    message = await asyncio.wait_for(self.websocket.recv(), timeout=0.5)
+                    msg = json.loads(message)
+
+                    if msg.get("type") == "next":
+                        # Extract topic update from the message
+                        topic_update = msg.get("payload", {}).get("data", {}).get("multiTopicUpdates")
+                        if topic_update:
+                            self.message_count += 1
+                            self.print_topic_update(topic_update)
+
+                    elif msg.get("type") == "error":
+                        print(f"\n❌ Error: {msg.get('payload')}\n")
+
+                    elif msg.get("type") == "complete":
+                        print(f"\n✓ Subscription completed (received {self.message_count} messages)\n")
+                        break
+
+                except asyncio.TimeoutError:
+                    # Timeout is expected, just continue checking for unsubscribe
+                    continue
 
         except websockets.exceptions.ConnectionClosed:
             print(f"\n⚠ Connection closed by server (received {self.message_count} messages)\n")
