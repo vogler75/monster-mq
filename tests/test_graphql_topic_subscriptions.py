@@ -55,6 +55,7 @@ class GraphQLTopicSubscriptionClient:
         self.subscription_id = "1"
         self.message_count = 0
         self.unsubscribe_event = asyncio.Event()  # Signal to unsubscribe
+        self.exit_event = asyncio.Event()  # Signal to exit completely
         self.input_thread = None
         self.is_unsubscribed = False  # Track if we've already unsubscribed
 
@@ -140,22 +141,38 @@ class GraphQLTopicSubscriptionClient:
             print(f"  {i}. {tf}")
         print("="*90 + "\n")
         print("Waiting for messages...\n")
-        print("  To unsubscribe: Type 'q', 'quit', 'exit', 'u', or 'unsubscribe' and press Enter")
-        print("  To force stop:  Press Ctrl+C\n")
+        print("  To unsubscribe:  Type 'q', 'quit', 'exit', 'u', or 'unsubscribe' and press Enter")
+        print("  Then press 'q' again to exit the program")
+        print("  To force stop:   Press Ctrl+C\n")
 
     def _input_listener(self, loop):
         """Background thread that listens for user input"""
         try:
             while True:
                 user_input = input()
-                if user_input.lower() in ['q', 'quit', 'exit', 'u', 'unsubscribe']:
-                    print("\n⏹ User requested unsubscribe")
-                    # Signal the async unsubscribe
-                    asyncio.run_coroutine_threadsafe(
-                        self._trigger_unsubscribe(),
-                        loop
-                    )
-                    break
+                if user_input.lower() in ['q', 'quit', 'exit']:
+                    if self.is_unsubscribed:
+                        # Already unsubscribed, now exit
+                        print("\n⏹ User requested exit")
+                        asyncio.run_coroutine_threadsafe(
+                            self._trigger_exit(),
+                            loop
+                        )
+                        break
+                    else:
+                        # First time, unsubscribe
+                        print("\n⏹ User requested unsubscribe")
+                        asyncio.run_coroutine_threadsafe(
+                            self._trigger_unsubscribe(),
+                            loop
+                        )
+                elif user_input.lower() in ['u', 'unsubscribe']:
+                    if not self.is_unsubscribed:
+                        print("\n⏹ User requested unsubscribe")
+                        asyncio.run_coroutine_threadsafe(
+                            self._trigger_unsubscribe(),
+                            loop
+                        )
         except EOFError:
             pass
         except Exception:
@@ -165,6 +182,10 @@ class GraphQLTopicSubscriptionClient:
         """Trigger unsubscribe from another thread"""
         self.unsubscribe_event.set()
 
+    async def _trigger_exit(self):
+        """Trigger exit from another thread"""
+        self.exit_event.set()
+
     async def listen(self):
         """Listen for incoming topic update messages"""
         # Start background thread for keyboard input
@@ -173,7 +194,15 @@ class GraphQLTopicSubscriptionClient:
         self.input_thread.start()
 
         try:
+            verification_start_time = None
+            verification_shown = False
+
             while True:
+                # Check if exit was requested
+                if self.exit_event.is_set():
+                    print(f"\n✓ Exiting... (received {self.message_count} messages total)\n")
+                    break
+
                 # Check if unsubscribe was requested
                 if self.unsubscribe_event.is_set() and not self.is_unsubscribed:
                     self.is_unsubscribed = True
@@ -181,29 +210,23 @@ class GraphQLTopicSubscriptionClient:
                     print("Listening for incoming messages on WebSocket (should be none)...")
                     print("Waiting 30 seconds to verify no messages arrive...\n")
                     await self.unsubscribe()
-                    # Continue listening for 30 seconds to verify nothing comes through
-                    start_time = asyncio.get_event_loop().time()
-                    while asyncio.get_event_loop().time() - start_time < 30:
-                        try:
-                            message = await asyncio.wait_for(self.websocket.recv(), timeout=0.5)
-                            msg = json.loads(message)
-                            print(f"⚠️  WARNING: Received message after unsubscribe!\n{msg}\n")
-                        except asyncio.TimeoutError:
-                            continue
-                    print("\n✓ Verification complete - no messages received after unsubscribe!\n")
-                    break
+                    verification_start_time = asyncio.get_event_loop().time()
+                    continue
 
                 try:
-                    # Wait for message with timeout to allow checking unsubscribe_event
+                    # Wait for message with timeout to allow checking exit/unsubscribe events
                     message = await asyncio.wait_for(self.websocket.recv(), timeout=0.5)
                     msg = json.loads(message)
 
                     if msg.get("type") == "next":
                         # Extract topic update from the message
                         topic_update = msg.get("payload", {}).get("data", {}).get("multiTopicUpdates")
-                        if topic_update and not self.is_unsubscribed:
-                            self.message_count += 1
-                            self.print_topic_update(topic_update)
+                        if topic_update:
+                            if self.is_unsubscribed:
+                                print(f"⚠️  WARNING: Received message after unsubscribe!\n{msg}\n")
+                            else:
+                                self.message_count += 1
+                                self.print_topic_update(topic_update)
 
                     elif msg.get("type") == "error":
                         print(f"\n❌ Error: {msg.get('payload')}\n")
@@ -213,7 +236,13 @@ class GraphQLTopicSubscriptionClient:
                         break
 
                 except asyncio.TimeoutError:
-                    # Timeout is expected, just continue checking for unsubscribe
+                    # Check if verification period is complete
+                    if (self.is_unsubscribed and verification_start_time is not None and
+                        not verification_shown and
+                        asyncio.get_event_loop().time() - verification_start_time >= 30):
+                        print("\n✓ Verification complete - no messages received after unsubscribe!")
+                        print("Continuing to listen... (Press 'q' again to exit)\n")
+                        verification_shown = True
                     continue
 
         except websockets.exceptions.ConnectionClosed:
