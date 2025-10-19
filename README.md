@@ -139,6 +139,7 @@ Postgres:
   Url: jdbc:postgresql://localhost:5432/monster
   User: system
   Pass: manager
+  # Schema: mqtt_broker    # Optional: custom PostgreSQL schema (defaults to 'public')
 
 # Enable MQTT logging
 Logging:
@@ -153,6 +154,21 @@ MCP:
   Enabled: true
   Port: 3000
 ```
+
+#### PostgreSQL Multi-Schema Setup
+
+For multi-tenant or multi-environment deployments, use different PostgreSQL schemas:
+
+```yaml
+# Environment-specific configuration
+Postgres:
+  Url: jdbc:postgresql://db.example.com:5432/monstermq
+  User: system
+  Pass: manager
+  Schema: prod_mqtt_broker    # Production environment
+```
+
+See [Database Configuration](doc/databases.md#postgresql-schema-support-optional) for detailed documentation on schema support.
 
 ## 🗄️ Database Support
 
