@@ -17,4 +17,4 @@ Postgres:
   Url: jdbc:postgresql://192.168.1.35:5432/monster-cluster
   User: system
   Pass: manager
-  Schema: monster
+  Schema: public
