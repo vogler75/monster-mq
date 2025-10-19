@@ -18,7 +18,8 @@ class MessageStorePostgres(
     private val name: String,
     private val url: String,
     private val username: String,
-    private val password: String
+    private val password: String,
+    private val schema: String? = null
 ): AbstractVerticle(), IMessageStoreExtended {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
@@ -46,6 +47,14 @@ class MessageStorePostgres(
             val promise = Promise.promise<Void>()
             try {
                 connection.autoCommit = false
+
+                // Set PostgreSQL schema if specified
+                if (!schema.isNullOrBlank()) {
+                    connection.createStatement().use { stmt ->
+                        stmt.execute("SET search_path TO \"$schema\", public")
+                    }
+                }
+
                 connection.createStatement().use { statement ->
                     val pkColumnsString = ALL_PK_COLUMNS.joinToString(", ")
                     val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it text NOT NULL" }

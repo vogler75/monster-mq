@@ -147,6 +147,12 @@
         },
         "Pass": {
           "type": "string"
+        },
+        "Schema": {
+          "type": "string",
+          "description": "PostgreSQL schema name (optional, defaults to 'public' if not specified)",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "default": "public"
         }
       },
       "required": [

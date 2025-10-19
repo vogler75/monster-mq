@@ -17,7 +17,8 @@ import java.sql.*
 class SessionStorePostgres(
     private val url: String,
     private val username: String,
-    private val password: String
+    private val password: String,
+    private val schema: String? = null
 ): AbstractVerticle(), ISessionStoreSync {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -39,6 +40,13 @@ class SessionStorePostgres(
             val promise = Promise.promise<Void>()
             try {
                 connection.autoCommit = false
+
+                // Set PostgreSQL schema if specified
+                if (!schema.isNullOrBlank()) {
+                    connection.createStatement().use { stmt ->
+                        stmt.execute("SET search_path TO \"$schema\", public")
+                    }
+                }
 
                 val createTableSQL = listOf("""
                 CREATE TABLE IF NOT EXISTS $sessionsTableName (

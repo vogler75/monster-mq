@@ -23,7 +23,8 @@ class MetricsStorePostgres(
     private val name: String,
     private val url: String,
     private val username: String,
-    private val password: String
+    private val password: String,
+    private val schema: String? = null
 ) : IMetricsStoreAsync {
 
     private val logger = Utils.getLogger(this::class.java, name)
@@ -34,6 +35,13 @@ class MetricsStorePostgres(
             val promise = Promise.promise<Void>()
             try {
                 connection.autoCommit = false
+
+                // Set PostgreSQL schema if specified
+                if (!schema.isNullOrBlank()) {
+                    connection.createStatement().use { stmt ->
+                        stmt.execute("SET search_path TO \"$schema\", public")
+                    }
+                }
 
                 // Create metrics table if it doesn't exist
                 connection.createStatement().use { statement ->

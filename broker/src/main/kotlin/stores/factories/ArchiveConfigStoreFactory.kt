@@ -16,8 +16,9 @@ object ArchiveConfigStoreFactory {
                     val url = postgresConfig.getString("Url")
                     val user = postgresConfig.getString("User")
                     val pass = postgresConfig.getString("Pass")
+                    val schema = postgresConfig.getString("Schema")
                     if (url != null && user != null && pass != null) {
-                        ArchiveConfigStorePostgres(url, user, pass)
+                        ArchiveConfigStorePostgres(url, user, pass, schema)
                     } else {
                         null
                     }

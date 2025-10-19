@@ -22,7 +22,8 @@ object MetricsStoreFactory {
                     name = storeName,
                     url = postgresConfig.getString("Url"),
                     username = postgresConfig.getString("User"),
-                    password = postgresConfig.getString("Pass")
+                    password = postgresConfig.getString("Pass"),
+                    schema = postgresConfig.getString("Schema")
                 )
             }
             MetricsStoreType.CRATEDB -> {
