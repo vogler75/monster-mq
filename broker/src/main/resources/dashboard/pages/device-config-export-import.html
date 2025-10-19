@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Device Configuration Import/Export</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        /* Main Container */
+        .export-import-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .section-card {
+            background: var(--dark-surface);
+            border: 1px solid var(--dark-border);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+        }
+
+        .section-header {
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .section-header h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .section-header-icon {
+            font-size: 1.5rem;
+        }
+
+        .section-body {
+            padding: 2rem;
+        }
+
+        /* Device List */
+        .device-list {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            background: var(--dark-bg);
+        }
+
+        .device-item {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: background 0.2s ease;
+        }
+
+        .device-item:hover {
+            background: rgba(124, 58, 237, 0.05);
+        }
+
+        .device-item:last-child {
+            border-bottom: none;
+        }
+
+        .device-item input[type="checkbox"] {
+            accent-color: var(--monster-purple);
+            transform: scale(1.2);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .device-item label {
+            flex: 1;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            margin: 0;
+        }
+
+        .device-item-name {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .device-item-info {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .device-type-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            background: rgba(124, 58, 237, 0.2);
+            color: var(--monster-purple);
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Selection Controls */
+        .selection-controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .selection-controls .btn {
+            flex: 1;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+
+        .selection-info {
+            text-align: center;
+            padding: 0.75rem;
+            background: rgba(124, 58, 237, 0.1);
+            border-radius: 8px;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
+
+        .selection-info-count {
+            color: var(--monster-purple);
+            font-weight: 600;
+        }
+
+        /* File Upload */
+        .file-upload-area {
+            border: 2px dashed var(--dark-border);
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            background: rgba(124, 58, 237, 0.05);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .file-upload-area:hover {
+            border-color: var(--monster-purple);
+            background: rgba(124, 58, 237, 0.1);
+        }
+
+        .file-upload-area.dragover {
+            border-color: var(--monster-purple);
+            background: rgba(124, 58, 237, 0.15);
+        }
+
+        .file-upload-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-upload-text {
+            color: var(--text-primary);
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+
+        .file-upload-subtext {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .file-info {
+            padding: 1rem;
+            background: var(--dark-bg);
+            border-radius: 8px;
+            border: 1px solid var(--dark-border);
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .file-info-name {
+            color: var(--text-primary);
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-info-count {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        /* Import Progress */
+        .import-progress {
+            width: 100%;
+            background: var(--dark-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .import-progress.show {
+            display: block;
+        }
+
+        .import-progress-bar {
+            height: 8px;
+            background: linear-gradient(90deg, var(--monster-purple), var(--monster-teal));
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .import-results {
+            background: var(--dark-bg);
+            border-radius: 8px;
+            padding: 1rem;
+            border: 1px solid var(--dark-border);
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .import-results.show {
+            display: block;
+        }
+
+        .import-result-item {
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .import-result-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .import-result-success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--monster-green);
+        }
+
+        .import-result-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--monster-red);
+        }
+
+        .import-result-icon {
+            flex-shrink: 0;
+            font-weight: bold;
+        }
+
+        .import-result-text {
+            flex: 1;
+            font-size: 0.875rem;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+        }
+
+        .action-buttons .btn {
+            flex: 1;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .export-import-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .section-body {
+                padding: 1.5rem;
+            }
+
+            .device-list {
+                max-height: 300px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Top Bar -->
+    <div class="top-bar">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <button class="sidebar-toggle" onclick="toggleSidebar()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15,18 9,12 15,6"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">U</div>
+                <div class="user-details">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-role">Administrator</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">Device Configuration Management</h1>
+                <p class="page-subtitle">Export and import device configurations for backup, migration, or sharing</p>
+            </div>
+
+            <div class="export-import-container">
+                <!-- Export Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-header-icon">📥</div>
+                        <h2>Export Configurations</h2>
+                    </div>
+                    <div class="section-body">
+                        <p style="color: var(--text-muted); margin-bottom: 1rem;">Select devices to export and download as a JSON file</p>
+
+                        <div class="selection-controls">
+                            <button class="btn btn-secondary" onclick="selectAllDevices()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Select All</button>
+                            <button class="btn btn-secondary" onclick="deselectAllDevices()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Deselect All</button>
+                        </div>
+
+                        <div id="export-selection-info" class="selection-info" style="display: none;">
+                            <span id="export-selected-count">0</span> device(s) selected
+                        </div>
+
+                        <div class="device-list" id="export-device-list">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📦</div>
+                                <div>Loading devices...</div>
+                            </div>
+                        </div>
+
+                        <div class="action-buttons">
+                            <button class="btn btn-secondary" onclick="loadExportDevices()" style="flex: 0.5;">Refresh</button>
+                            <button class="btn btn-primary" onclick="exportSelectedDevices()">Export as JSON</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Import Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-header-icon">📤</div>
+                        <h2>Import Configurations</h2>
+                    </div>
+                    <div class="section-body">
+                        <p style="color: var(--text-muted); margin-bottom: 1rem;">Upload a JSON file containing device configurations to import</p>
+
+                        <input type="file" id="file-input" accept=".json" onchange="handleFileSelect(event)">
+                        <div class="file-upload-area" onclick="document.getElementById('file-input').click()" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                            <div class="file-upload-icon">📤</div>
+                            <div class="file-upload-text">Click to upload or drag and drop</div>
+                            <div class="file-upload-subtext">JSON file with device configurations</div>
+                        </div>
+
+                        <div id="file-info" class="file-info">
+                            <div class="file-info-name">📄 <span id="file-name"></span></div>
+                            <div class="file-info-count">Ready to import <span id="file-device-count">0</span> device(s)</div>
+                        </div>
+
+                        <div id="import-progress" class="import-progress">
+                            <div class="import-progress-bar" id="import-progress-bar"></div>
+                        </div>
+
+                        <div id="import-results" class="import-results">
+                            <div id="import-results-content"></div>
+                        </div>
+
+                        <div class="action-buttons">
+                            <button class="btn btn-secondary" onclick="resetImportForm()">Clear File</button>
+                            <button class="btn btn-primary" id="import-button" onclick="importDevices()" disabled>Import Configurations</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/device-config-export-import.js"></script>
+</body>
+</html>

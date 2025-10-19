@@ -4,6 +4,7 @@ import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.ISessionStoreAsync
+import at.rocworks.stores.IDeviceConfigStore
 import graphql.schema.DataFetcher
 import graphql.GraphQLException
 import io.vertx.core.Vertx
@@ -16,7 +17,8 @@ class MutationResolver(
     private val messageHandler: at.rocworks.handlers.MessageHandler,
     private val sessionStore: ISessionStoreAsync,
     private val sessionHandler: at.rocworks.handlers.SessionHandler,
-    private val authContext: GraphQLAuthContext
+    private val authContext: GraphQLAuthContext,
+    private val deviceStore: IDeviceConfigStore?
 ) {
     companion object {
         private val logger: Logger = Utils.getLogger(MutationResolver::class.java)
@@ -276,6 +278,42 @@ class MutationResolver(
                         deletedCount = 0L
                     )
                 )
+            }
+
+            future
+        }
+    }
+
+    fun importDevices(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any?>>()
+
+            if (deviceStore == null) {
+                future.completeExceptionally(GraphQLException("Device store is not available"))
+                return@DataFetcher future
+            }
+
+            val configs = env.getArgument<List<Map<String, Any?>>?>("configs")
+            if (configs.isNullOrEmpty()) {
+                future.completeExceptionally(GraphQLException("Configs list is required and cannot be empty"))
+                return@DataFetcher future
+            }
+
+            deviceStore.importConfigs(configs).onComplete { result ->
+                if (result.succeeded()) {
+                    val importResult = result.result()
+                    val resultMap = mapOf(
+                        "success" to (importResult.imported > 0),
+                        "imported" to importResult.imported,
+                        "failed" to importResult.failed,
+                        "total" to configs.size,
+                        "errors" to importResult.errors
+                    )
+                    future.complete(resultMap)
+                } else {
+                    logger.severe("Failed to import devices: ${result.cause()?.message}")
+                    future.completeExceptionally(GraphQLException("Failed to import devices: ${result.cause()?.message}"))
+                }
             }
 
             future

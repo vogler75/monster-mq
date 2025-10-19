@@ -1319,6 +1319,31 @@ extend type Mutation {
     jdbcLogger: JDBCLoggerMutations!
 }
 
+# Extend Mutations for Device Management
+extend type Mutation {
+    # Import devices from a JSON array
+    # Supports bulk import of device configurations for backup restoration or migration
+    # Returns import result with statistics and any errors
+    importDevices(
+        # Array of device configurations to import
+        configs: [JSON!]!
+    ): ImportDeviceConfigResult!
+}
+
+# Result type for Device Configuration Import
+type ImportDeviceConfigResult {
+    # Whether the import operation succeeded (at least one config imported)
+    success: Boolean!
+    # Number of successfully imported configurations
+    imported: Int!
+    # Number of configurations that failed to import
+    failed: Int!
+    # Total number of configurations in the import request
+    total: Int!
+    # Array of error messages for failed imports
+    errors: [String!]!
+}
+
 # Result type for JDBC Logger operations
 type JDBCLoggerResult {
     # Whether the operation succeeded
