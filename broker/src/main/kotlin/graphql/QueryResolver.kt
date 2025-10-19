@@ -6,8 +6,10 @@ import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.IMessageStore
+import at.rocworks.stores.IDeviceConfigStore
 import graphql.schema.DataFetcher
 import graphql.GraphQLException
+import io.vertx.core.json.JsonObject
 import io.vertx.core.Vertx
 import java.time.Instant
 import java.time.format.DateTimeParseException
@@ -25,7 +27,8 @@ class QueryResolver(
     private val vertx: Vertx,
     private val retainedStore: IMessageStore?,
     private val archiveHandler: ArchiveHandler?,
-    private val authContext: GraphQLAuthContext
+    private val authContext: GraphQLAuthContext,
+    private val deviceStore: IDeviceConfigStore?
 ) {
     companion object {
         private val logger: Logger = Utils.getLogger(QueryResolver::class.java)
@@ -729,6 +732,30 @@ class QueryResolver(
                     )
                 } else {
                     future.complete(null)
+                }
+            }
+
+            future
+        }
+    }
+
+    fun getDevices(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Map<String, Any?>>>()
+
+            if (deviceStore == null) {
+                future.completeExceptionally(GraphQLException("Device store is not available"))
+                return@DataFetcher future
+            }
+
+            val names = env.getArgument<List<String>?>("names")
+
+            deviceStore.exportConfigs(names).onComplete { result ->
+                if (result.succeeded()) {
+                    future.complete(result.result())
+                } else {
+                    logger.severe("Failed to get devices: ${result.cause()?.message}")
+                    future.completeExceptionally(GraphQLException("Failed to get devices: ${result.cause()?.message}"))
                 }
             }
 

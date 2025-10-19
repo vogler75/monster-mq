@@ -180,6 +180,34 @@ type Query {
         # Name of the ArchiveGroup to retrieve
         name: String!
     ): ArchiveGroupInfo
+
+    # Get devices with optional filtering
+    # Returns all devices or specific devices by name
+    # Use to list devices or export configurations
+    getDevices(
+        # Optional list of device names to retrieve. If null, returns all devices
+        names: [String!]
+    ): [Device!]!
+}
+
+# Device Type - represents a device configuration
+type Device {
+    # Unique device name
+    name: String!
+    # Device namespace for MQTT topics
+    namespace: String!
+    # Cluster node assignment
+    nodeId: String!
+    # Device-specific configuration as JSON (optional - only loaded when requested)
+    config: JSON
+    # Whether the device is enabled
+    enabled: Boolean!
+    # Device type (OPCUA_CLIENT, MQTT_CLIENT, MQTT_SERVER, KAFKA_CLIENT, etc)
+    type: String!
+    # When the device was created
+    createdAt: String
+    # When the device was last updated
+    updatedAt: String
 }
 
 type TopicValue {

@@ -4,11 +4,13 @@ import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigException
 import at.rocworks.stores.IDeviceConfigStore
+import at.rocworks.stores.ImportDeviceConfigResult
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.MongoDatabase
 import com.mongodb.client.model.Filters.*
+import com.mongodb.client.model.ReplaceOptions
 import com.mongodb.client.model.UpdateOptions
 import com.mongodb.client.model.Updates
 import io.vertx.core.Future
@@ -343,5 +345,118 @@ class DeviceConfigStoreMongoDB(
             createdAt = document.getDate("created_at")?.toInstant() ?: Instant.now(),
             updatedAt = document.getDate("updated_at")?.toInstant() ?: Instant.now()
         )
+    }
+
+    override fun exportConfigs(names: List<String>?): Future<List<Map<String, Any?>>> {
+        val promise = Promise.promise<List<Map<String, Any?>>>()
+
+        try {
+            val filter = if (names.isNullOrEmpty()) {
+                Document()
+            } else {
+                Document("\$in", names)
+            }
+
+            val documents = if (names.isNullOrEmpty()) {
+                deviceConfigsCollection.find().sort(Document("_id", 1)).toList()
+            } else {
+                deviceConfigsCollection.find(eq("_id", Document("\$in", names))).sort(Document("_id", 1)).toList()
+            }
+
+            val configs = documents.map { doc ->
+                val configObj = doc.get("config")
+                val configMap = when (configObj) {
+                    is Document -> configObj.toMap()
+                    is Map<*, *> -> @Suppress("UNCHECKED_CAST") (configObj as Map<String, Any?>)
+                    else -> emptyMap<String, Any?>()
+                }
+
+                mapOf(
+                    "name" to doc.getString("_id"),
+                    "namespace" to doc.getString("namespace"),
+                    "nodeId" to doc.getString("node_id"),
+                    "config" to configMap,
+                    "enabled" to doc.getBoolean("enabled", true),
+                    "type" to (doc.getString("type") ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT),
+                    "createdAt" to (doc.getDate("created_at")?.toInstant()?.toString() ?: ""),
+                    "updatedAt" to (doc.getDate("updated_at")?.toInstant()?.toString() ?: "")
+                )
+            }
+
+            promise.complete(configs)
+        } catch (e: Exception) {
+            logger.severe("Failed to export device configs: ${e.message}")
+            promise.fail(e)
+        }
+
+        return promise.future()
+    }
+
+    override fun importConfigs(configs: List<Map<String, Any?>>): Future<ImportDeviceConfigResult> {
+        val promise = Promise.promise<ImportDeviceConfigResult>()
+
+        try {
+            var imported = 0
+            val errors = mutableListOf<String>()
+
+            for ((index, configMap) in configs.withIndex()) {
+                try {
+                    val name = (configMap["name"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: throw IllegalArgumentException("Device name is required at index $index")
+                    val namespace = (configMap["namespace"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: throw IllegalArgumentException("Namespace is required for device $name")
+                    val nodeId = (configMap["nodeId"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: throw IllegalArgumentException("NodeId is required for device $name")
+                    val type = (configMap["type"] as? String) ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT
+                    val enabled = (configMap["enabled"] as? Boolean) ?: true
+
+                    @Suppress("UNCHECKED_CAST")
+                    val configObj = when (val cfg = configMap["config"]) {
+                        is Map<*, *> -> cfg as Map<String, Any?>
+                        else -> throw IllegalArgumentException("Config must be a JSON object for device $name")
+                    }
+
+                    val document = Document()
+                        .append("_id", name)
+                        .append("namespace", namespace)
+                        .append("node_id", nodeId)
+                        .append("config", configObj)
+                        .append("enabled", enabled)
+                        .append("type", type)
+                        .append("created_at", Date())
+                        .append("updated_at", Date())
+
+                    // Upsert
+                    val filterDoc = Document().append("_id", name)
+                    deviceConfigsCollection.replaceOne(
+                        filterDoc,
+                        document,
+                        ReplaceOptions().upsert(true)
+                    )
+
+                    imported++
+                } catch (e: Exception) {
+                    val errorMsg = "Failed to import config at index $index: ${e.message}"
+                    logger.warning(errorMsg)
+                    errors.add(errorMsg)
+                }
+            }
+
+            val failed = configs.size - imported
+            val result = if (errors.isEmpty()) {
+                ImportDeviceConfigResult.success(imported)
+            } else if (imported > 0) {
+                ImportDeviceConfigResult.partial(imported, failed, errors)
+            } else {
+                ImportDeviceConfigResult.failure(errors)
+            }
+
+            promise.complete(result)
+        } catch (e: Exception) {
+            logger.severe("Failed to import device configs: ${e.message}")
+            promise.fail(e)
+        }
+
+        return promise.future()
     }
 }

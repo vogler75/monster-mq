@@ -60,6 +60,20 @@ interface IDeviceConfigStore {
      * Close the store and cleanup resources
      */
     fun close(): Future<Void>
+
+    /**
+     * Export device configurations
+     * @param names Optional list of device names to export. If null/empty, export all devices.
+     * @return List of device configurations as maps
+     */
+    fun exportConfigs(names: List<String>? = null): Future<List<Map<String, Any?>>>
+
+    /**
+     * Import device configurations
+     * @param configs List of device configuration maps to import
+     * @return ImportResult containing success status, counts, and error messages
+     */
+    fun importConfigs(configs: List<Map<String, Any?>>): Future<ImportDeviceConfigResult>
 }
 
 /**
@@ -86,6 +100,34 @@ data class DeviceConfigResult(
 
         fun failure(error: String): DeviceConfigResult {
             return DeviceConfigResult(false, null, listOf(error))
+        }
+    }
+}
+
+/**
+ * Result wrapper for device configuration import operations
+ */
+data class ImportDeviceConfigResult(
+    val success: Boolean,
+    val imported: Int = 0,
+    val failed: Int = 0,
+    val errors: List<String> = emptyList()
+) {
+    companion object {
+        fun success(imported: Int): ImportDeviceConfigResult {
+            return ImportDeviceConfigResult(true, imported, 0)
+        }
+
+        fun partial(imported: Int, failed: Int, errors: List<String>): ImportDeviceConfigResult {
+            return ImportDeviceConfigResult(false, imported, failed, errors)
+        }
+
+        fun failure(errors: List<String>): ImportDeviceConfigResult {
+            return ImportDeviceConfigResult(false, 0, 0, errors)
+        }
+
+        fun failure(error: String): ImportDeviceConfigResult {
+            return ImportDeviceConfigResult(false, 0, 0, listOf(error))
         }
     }
 }

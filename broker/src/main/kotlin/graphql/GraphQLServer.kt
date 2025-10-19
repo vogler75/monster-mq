@@ -258,16 +258,7 @@ class GraphQLServer(
 
 
     private fun buildRuntimeWiring(): RuntimeWiring {
-        val queryResolver = QueryResolver(vertx, retainedStore, archiveHandler, authContext)
-        val metricsResolver = MetricsResolver(vertx, sessionStore, sessionHandler, metricsStore)
-        val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, sessionStore, sessionHandler, authContext)
-        val subscriptionResolver = SubscriptionResolver(vertx)
-        val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
-        val authenticationResolver = AuthenticationResolver(vertx, userManager)
-        val archiveGroupResolver = archiveHandler?.let { ArchiveGroupResolver(vertx, it, authContext) }
-        val sessionResolver = SessionResolver(vertx, sessionStore, sessionHandler, authContext)
-
-        // Initialize OPC UA resolvers
+        // Initialize device store first (needed by query and mutation resolvers)
         val configStoreType = Monster.getConfigStoreType(config)
 
         val deviceStore = try {
@@ -292,6 +283,16 @@ class GraphQLServer(
             logger.warning("Failed to create OPC UA device store: ${e.message}")
             null
         }
+
+        // Initialize resolvers after device store is ready
+        val queryResolver = QueryResolver(vertx, retainedStore, archiveHandler, authContext, deviceStore)
+        val metricsResolver = MetricsResolver(vertx, sessionStore, sessionHandler, metricsStore)
+        val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, sessionStore, sessionHandler, authContext, deviceStore)
+        val subscriptionResolver = SubscriptionResolver(vertx)
+        val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
+        val authenticationResolver = AuthenticationResolver(vertx, userManager)
+        val archiveGroupResolver = archiveHandler?.let { ArchiveGroupResolver(vertx, it, authContext) }
+        val sessionResolver = SessionResolver(vertx, sessionStore, sessionHandler, authContext)
 
         val opcUaQueries = deviceStore?.let { OpcUaClientConfigQueries(vertx, it) }
         val opcUaMutations = deviceStore?.let { OpcUaClientConfigMutations(vertx, it) }
@@ -360,6 +361,8 @@ class GraphQLServer(
                     .dataFetcher("systemLogs", queryResolver.systemLogs())
                     .dataFetcher("searchTopics", queryResolver.searchTopics())
                     .dataFetcher("browseTopics", queryResolver.browseTopics())
+                    // Device config queries
+                    .dataFetcher("getDevices", queryResolver.getDevices())
                     // Metrics queries
                     .dataFetcher("broker", metricsResolver.broker())
                     .dataFetcher("brokers", metricsResolver.brokers())
@@ -450,6 +453,8 @@ class GraphQLServer(
                     .dataFetcher("user") { _ -> emptyMap<String, Any>() }
                     // Queued messages management (requires admin token)
                     .dataFetcher("purgeQueuedMessages", mutationResolver.purgeQueuedMessages())
+                    // Device mutations
+                    .dataFetcher("importDevices", mutationResolver.importDevices())
                     // Session management mutations - grouped under session
                     .dataFetcher("session") { _ -> emptyMap<String, Any>() }
                     // Archive Group mutations - grouped under archiveGroup

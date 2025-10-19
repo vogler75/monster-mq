@@ -4,6 +4,7 @@ import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigException
 import at.rocworks.stores.IDeviceConfigStore
+import at.rocworks.stores.ImportDeviceConfigResult
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
@@ -477,5 +478,134 @@ class DeviceConfigStorePostgres(
             createdAt = createdAt!!.toInstant(),
             updatedAt = updatedAt!!.toInstant()
         )
+    }
+
+    override fun exportConfigs(names: List<String>?): Future<List<Map<String, Any?>>> {
+        val promise = Promise.promise<List<Map<String, Any?>>>()
+
+        try {
+            val conn = connection ?: throw DeviceConfigException("Database connection not available")
+
+            val query = if (names.isNullOrEmpty()) {
+                "SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at FROM $TABLE_NAME ORDER BY name"
+            } else {
+                val placeholders = names.joinToString(",") { "?" }
+                "SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at FROM $TABLE_NAME WHERE name IN ($placeholders) ORDER BY name"
+            }
+
+            val stmt = conn.prepareStatement(query)
+            names?.forEachIndexed { index, name ->
+                stmt.setString(index + 1, name)
+            }
+
+            val rs = stmt.executeQuery()
+            val configs = mutableListOf<Map<String, Any?>>()
+
+            while (rs.next()) {
+                val configMap = mapOf(
+                    "name" to rs.getString("name"),
+                    "namespace" to rs.getString("namespace"),
+                    "nodeId" to rs.getString("node_id"),
+                    "config" to JsonObject(rs.getString("config")).map,
+                    "enabled" to rs.getBoolean("enabled"),
+                    "type" to rs.getString("type"),
+                    "createdAt" to rs.getTimestamp("created_at").toInstant().toString(),
+                    "updatedAt" to rs.getTimestamp("updated_at").toInstant().toString()
+                )
+                configs.add(configMap)
+            }
+
+            rs.close()
+            stmt.close()
+
+            promise.complete(configs)
+        } catch (e: Exception) {
+            logger.severe("Failed to export device configs: ${e.message}")
+            promise.fail(e)
+        }
+
+        return promise.future()
+    }
+
+    override fun importConfigs(configs: List<Map<String, Any?>>): Future<ImportDeviceConfigResult> {
+        val promise = Promise.promise<ImportDeviceConfigResult>()
+
+        try {
+            val conn = connection ?: throw DeviceConfigException("Database connection not available")
+            var imported = 0
+            val errors = mutableListOf<String>()
+
+            for ((index, configMap) in configs.withIndex()) {
+                try {
+                    val name = (configMap["name"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: throw IllegalArgumentException("Device name is required at index $index")
+                    val namespace = (configMap["namespace"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: throw IllegalArgumentException("Namespace is required for device $name")
+                    val nodeId = (configMap["nodeId"] as? String)?.takeIf { it.isNotBlank() }
+                        ?: throw IllegalArgumentException("NodeId is required for device $name")
+                    val type = (configMap["type"] as? String) ?: DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT
+                    val enabled = (configMap["enabled"] as? Boolean) ?: true
+
+                    @Suppress("UNCHECKED_CAST")
+                    val configObj = when (val cfg = configMap["config"]) {
+                        is JsonObject -> cfg
+                        is Map<*, *> -> JsonObject(cfg as Map<String, Any?>)
+                        else -> throw IllegalArgumentException("Config must be a JSON object for device $name")
+                    }
+
+                    // Try to insert, update if exists
+                    val stmt = conn.prepareStatement(
+                        """INSERT INTO $TABLE_NAME (name, namespace, node_id, config, enabled, type, created_at, updated_at)
+                           VALUES (?, ?, ?, ?::jsonb, ?, ?, ?, ?)
+                           ON CONFLICT (name) DO UPDATE SET
+                           namespace = ?, node_id = ?, config = ?::jsonb, enabled = ?, type = ?, updated_at = ?"""
+                    )
+
+                    val now = Timestamp.from(Instant.now())
+
+                    stmt.setString(1, name)
+                    stmt.setString(2, namespace)
+                    stmt.setString(3, nodeId)
+                    stmt.setString(4, configObj.encode())
+                    stmt.setBoolean(5, enabled)
+                    stmt.setString(6, type)
+                    stmt.setTimestamp(7, now)
+                    stmt.setTimestamp(8, now)
+
+                    // Conflict update values
+                    stmt.setString(9, namespace)
+                    stmt.setString(10, nodeId)
+                    stmt.setString(11, configObj.encode())
+                    stmt.setBoolean(12, enabled)
+                    stmt.setString(13, type)
+                    stmt.setTimestamp(14, now)
+
+                    stmt.executeUpdate()
+                    stmt.close()
+
+                    imported++
+                } catch (e: Exception) {
+                    val errorMsg = "Failed to import config at index $index: ${e.message}"
+                    logger.warning(errorMsg)
+                    errors.add(errorMsg)
+                }
+            }
+
+            val failed = configs.size - imported
+            val result = if (errors.isEmpty()) {
+                ImportDeviceConfigResult.success(imported)
+            } else if (imported > 0) {
+                ImportDeviceConfigResult.partial(imported, failed, errors)
+            } else {
+                ImportDeviceConfigResult.failure(errors)
+            }
+
+            promise.complete(result)
+        } catch (e: Exception) {
+            logger.severe("Failed to import device configs: ${e.message}")
+            promise.fail(e)
+        }
+
+        return promise.future()
     }
 }
