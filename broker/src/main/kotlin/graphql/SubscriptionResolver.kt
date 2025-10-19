@@ -26,10 +26,20 @@ class SubscriptionResolver(
 
     fun topicUpdates(): DataFetcher<Publisher<TopicUpdate>> {
         return DataFetcher { env ->
-            val topicFilter = env.getArgument<String>("topicFilter")
+            // Support both old single topicFilter (backward compatibility) and new topicFilters array
+            val topicFilters = when {
+                env.containsArgument("topicFilters") -> {
+                    env.getArgument<List<String>>("topicFilters") ?: emptyList()
+                }
+                env.containsArgument("topicFilter") -> {
+                    val filter = env.getArgument<String>("topicFilter")
+                    listOf(filter ?: "#")
+                }
+                else -> listOf("#")
+            }
             val format = env.getArgument<DataFormat?>("format") ?: DataFormat.JSON
 
-            TopicUpdatePublisher(vertx, listOf(topicFilter ?: "#"), format)
+            TopicUpdatePublisher(vertx, topicFilters, format)
         }
     }
 
@@ -39,6 +49,20 @@ class SubscriptionResolver(
             val format = env.getArgument<DataFormat?>("format") ?: DataFormat.JSON
 
             TopicUpdatePublisher(vertx, topicFilters, format)
+        }
+    }
+
+    fun topicUpdatesBulk(): DataFetcher<Publisher<TopicUpdateBulk>> {
+        return DataFetcher { env ->
+            val topicFilters = env.getArgument<List<String>>("topicFilters") ?: emptyList()
+            val format = env.getArgument<DataFormat?>("format") ?: DataFormat.JSON
+            val timeoutMs = env.getArgument<Int?>("timeoutMs") ?: 1000
+            val maxSize = env.getArgument<Int?>("maxSize") ?: 100
+
+            if (timeoutMs <= 0) throw IllegalArgumentException("timeoutMs must be > 0")
+            if (maxSize <= 0) throw IllegalArgumentException("maxSize must be > 0")
+
+            BulkTopicUpdatePublisher(vertx, topicFilters, format, timeoutMs.toLong(), maxSize)
         }
     }
 
@@ -159,6 +183,164 @@ class SubscriptionResolver(
                 Monster.getSessionHandler()?.unregisterMessageListener(subscriptionId)
                 pendingMessages.clear()
                 logger.fine { "GraphQL subscription cancelled (id: $subscriptionId)" }
+            }
+        }
+    }
+
+    private class BulkTopicUpdatePublisher(
+        private val vertx: Vertx,
+        private val topicFilters: List<String>,
+        private val format: DataFormat,
+        private val timeoutMs: Long,
+        private val maxSize: Int
+    ) : Publisher<TopicUpdateBulk> {
+
+        private val subscribers = ConcurrentHashMap<Subscriber<in TopicUpdateBulk>, BulkSubscriptionHandler>()
+
+        override fun subscribe(subscriber: Subscriber<in TopicUpdateBulk>) {
+            val handler = BulkSubscriptionHandler(vertx, topicFilters, format, timeoutMs, maxSize, subscriber)
+            subscribers[subscriber] = handler
+            subscriber.onSubscribe(handler)
+        }
+    }
+
+    private class BulkSubscriptionHandler(
+        private val vertx: Vertx,
+        private val topicFilters: List<String>,
+        private val format: DataFormat,
+        private val timeoutMs: Long,
+        private val maxSize: Int,
+        private val subscriber: Subscriber<in TopicUpdateBulk>
+    ) : Subscription {
+
+        private val cancelled = AtomicBoolean(false)
+        private val requested = AtomicLong(0L)
+        private val pendingBulks = mutableListOf<TopicUpdateBulk>()
+        private val messageBuffer = mutableListOf<TopicUpdate>()
+        private val subscriptionId = "$GRAPHQL_CLIENT_ID-bulk-${System.currentTimeMillis()}"
+        private var timeoutTimerId: Long? = null
+        private var bufferStartTime: Long = 0
+
+        init {
+            // Register with SessionHandler to receive MQTT messages
+            val sessionHandler = Monster.getSessionHandler()
+            if (sessionHandler != null) {
+                sessionHandler.registerMessageListener(subscriptionId, topicFilters) { message ->
+                    if (!cancelled.get()) {
+                        handleMessage(message)
+                    }
+                }
+                logger.fine { "GraphQL bulk subscription created for topic filters: $topicFilters (id: $subscriptionId)" }
+            } else {
+                logger.severe("SessionHandler not available for GraphQL bulk subscription")
+                subscriber.onError(RuntimeException("SessionHandler not available"))
+            }
+        }
+
+        private fun handleMessage(message: BrokerMessage) {
+            vertx.runOnContext {
+                if (cancelled.get()) return@runOnContext
+
+                val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
+                    message.payload,
+                    format
+                )
+
+                val update = TopicUpdate(
+                    topic = message.topicName,
+                    payload = payload,
+                    format = actualFormat,
+                    timestamp = message.time.toEpochMilli(),
+                    qos = message.qosLevel,
+                    retained = message.isRetain,
+                    clientId = message.clientId
+                )
+
+                synchronized(this) {
+                    // Initialize buffer start time if this is the first message
+                    if (messageBuffer.isEmpty()) {
+                        bufferStartTime = System.currentTimeMillis()
+                        // Schedule timeout flush
+                        scheduleTimeoutFlush()
+                    }
+
+                    messageBuffer.add(update)
+
+                    // Check if we hit max size
+                    if (messageBuffer.size >= maxSize) {
+                        flushBuffer()
+                    }
+                }
+            }
+        }
+
+        private fun scheduleTimeoutFlush() {
+            // Cancel any existing timer
+            timeoutTimerId?.let { vertx.cancelTimer(it) }
+
+            // Schedule new timer
+            timeoutTimerId = vertx.setTimer(timeoutMs) {
+                synchronized(this) {
+                    if (!cancelled.get() && messageBuffer.isNotEmpty()) {
+                        flushBuffer()
+                    }
+                }
+            }
+        }
+
+        private fun flushBuffer() {
+            if (messageBuffer.isEmpty()) return
+
+            val bulk = TopicUpdateBulk(
+                updates = messageBuffer.toList(),
+                count = messageBuffer.size,
+                timestamp = System.currentTimeMillis()
+            )
+
+            messageBuffer.clear()
+            timeoutTimerId?.let { vertx.cancelTimer(it) }
+            timeoutTimerId = null
+
+            val currentRequested = requested.get()
+            if (currentRequested > 0) {
+                subscriber.onNext(bulk)
+                requested.decrementAndGet()
+            } else {
+                pendingBulks.add(bulk)
+            }
+        }
+
+        override fun request(n: Long) {
+            if (cancelled.get()) return
+
+            synchronized(this) {
+                requested.addAndGet(n)
+
+                // Send pending bulks
+                while (requested.get() > 0 && pendingBulks.isNotEmpty()) {
+                    val bulk = pendingBulks.removeAt(0)
+                    subscriber.onNext(bulk)
+                    requested.decrementAndGet()
+                }
+            }
+        }
+
+        override fun cancel() {
+            if (cancelled.compareAndSet(false, true)) {
+                // Cancel timeout timer
+                timeoutTimerId?.let { vertx.cancelTimer(it) }
+
+                // Flush remaining buffer
+                synchronized(this) {
+                    if (messageBuffer.isNotEmpty()) {
+                        flushBuffer()
+                    }
+                }
+
+                // Unregister from SessionHandler
+                Monster.getSessionHandler()?.unregisterMessageListener(subscriptionId)
+                pendingBulks.clear()
+                logger.fine { "GraphQL bulk subscription cancelled (id: $subscriptionId)" }
             }
         }
     }

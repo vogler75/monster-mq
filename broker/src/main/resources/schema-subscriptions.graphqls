@@ -1,18 +1,21 @@
 
 type Subscription {
-    # Subscribe to real-time MQTT message updates for topics matching a filter
+    # Subscribe to real-time MQTT message updates for topics matching one or more filters
     # Creates a persistent GraphQL subscription that streams live data as messages are published
+    # Every message is delivered immediately as a separate update (change of value)
     # Uses WebSocket connection to deliver low-latency updates to dashboards and monitoring tools
     # Subscription will remain active until client disconnects or unsubscribes
     topicUpdates(
-        # MQTT topic filter with wildcards: "sensor/+/temperature", "device/#", etc.
+        # Array of MQTT topic filters to monitor
+        # Each filter supports MQTT wildcards: "sensor/+/temperature", "device/#", etc.
         # Supports both single-level (+) and multi-level (#) MQTT wildcards
-        topicFilter: String!,
+        topicFilters: [String!]!,
         # Data format for streamed message payloads
         format: DataFormat = JSON
     ): TopicUpdate!
 
-    # Subscribe to real-time updates from multiple topic filters simultaneously
+    # Subscribe to real-time updates from multiple topic filters simultaneously (backward compatible)
+    # Alias for topicUpdates for backward compatibility
     # Efficient way to monitor different topic categories in a single subscription
     # All matching messages from any of the specified filters will be streamed
     # Useful for comprehensive dashboard monitoring across topic hierarchies
@@ -23,6 +26,24 @@ type Subscription {
         # Data format for all streamed message payloads
         format: DataFormat = JSON
     ): TopicUpdate!
+
+    # Subscribe to bulk collections of MQTT message updates with configurable batching
+    # Collects multiple messages and emits them as a batch
+    # Reduces network overhead for high-frequency message streams
+    # Batch is emitted when either timeout expires or maxSize is reached (whichever comes first)
+    topicUpdatesBulk(
+        # Array of MQTT topic filters to monitor
+        # Each filter supports MQTT wildcards independently
+        topicFilters: [String!]!,
+        # Data format for all message payloads in the batch
+        format: DataFormat = JSON,
+        # Maximum time in milliseconds to wait before flushing the batch
+        # Even if maxSize is not reached, batch will be sent after this duration
+        timeoutMs: Int! = 1000,
+        # Maximum number of messages to collect before flushing the batch
+        # Batch will be sent immediately when this size is reached
+        maxSize: Int! = 100
+    ): TopicUpdateBulk!
     
     # Subscribe to real-time system logs with advanced filtering
     # Streams broker logs published to $SYS/syslogs/<node>/<level> topics
@@ -54,6 +75,15 @@ type TopicUpdate {
     qos: Int!
     retained: Boolean!
     clientId: String
+}
+
+type TopicUpdateBulk {
+    # Array of collected TopicUpdate messages
+    updates: [TopicUpdate!]!
+    # Number of messages in this batch
+    count: Int!
+    # Timestamp when the batch was emitted (milliseconds since epoch)
+    timestamp: Long!
 }
 
 type SystemLogEntry {

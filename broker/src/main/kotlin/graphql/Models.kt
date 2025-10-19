@@ -43,6 +43,12 @@ data class TopicUpdate(
     val clientId: String?
 )
 
+data class TopicUpdateBulk(
+    val updates: List<TopicUpdate>,
+    val count: Int,
+    val timestamp: Long
+)
+
 data class PublishInput(
     val topic: String,
     val payload: String,
