@@ -79,6 +79,9 @@ open class SessionHandler(
     // Map: listenerId -> (topic filters, callback function)
     private val messageListeners = ConcurrentHashMap<String, Pair<List<String>, (BrokerMessage) -> Unit>>()
 
+    // Track subscription cleanup for GraphQL listeners (listenerId -> topic filters)
+    private val graphqlListenerTopics = ConcurrentHashMap<String, List<String>>()
+
     private fun commandAddress() = EventBusAddresses.Node.commands(deploymentID())
     private fun metricsAddress() = EventBusAddresses.Node.metrics(Monster.getClusterNodeId(vertx))
     // REMOVED: messageAddress() - no longer using broadcast message bus
@@ -591,6 +594,7 @@ open class SessionHandler(
 
     /**
      * Register a message listener for external subscribers (e.g., GraphQL subscriptions).
+     * Creates virtual MQTT subscriptions so messages are routed correctly in clustered environments.
      * The listener will receive all messages matching the specified topic filters.
      *
      * @param listenerId Unique identifier for this listener
@@ -603,16 +607,49 @@ open class SessionHandler(
         callback: (BrokerMessage) -> Unit
     ) {
         messageListeners[listenerId] = Pair(topicFilters, callback)
+        graphqlListenerTopics[listenerId] = topicFilters
+
+        // Create virtual MQTT subscriptions for cluster-aware routing
+        // This ensures that in clustered environments, messages published on other nodes
+        // are routed to this node where the GraphQL subscriber is listening
+        val virtualClientId = "graphql-$listenerId"
+        topicFilters.forEach { topicFilter ->
+            val subscription = MqttSubscription(
+                clientId = virtualClientId,
+                topicName = topicFilter,
+                qos = io.netty.handler.codec.mqtt.MqttQoS.AT_LEAST_ONCE
+            )
+            // This publishes to subscriptionAddAddress which is consumed by all nodes,
+            // updating their topicNodeMapping so they know where to route messages
+            addSubscription(subscription)
+        }
+
         logger.fine { "Registered message listener [$listenerId] for topic filters: $topicFilters" }
     }
 
     /**
-     * Unregister a previously registered message listener.
+     * Unregister a previously registered message listener and clean up virtual subscriptions.
      *
      * @param listenerId The listener to remove
      */
     fun unregisterMessageListener(listenerId: String) {
         messageListeners.remove(listenerId)
+
+        // Remove virtual MQTT subscriptions
+        val topicFilters = graphqlListenerTopics.remove(listenerId) ?: return
+        val virtualClientId = "graphql-$listenerId"
+
+        topicFilters.forEach { topicName ->
+            val subscription = MqttSubscription(
+                clientId = virtualClientId,
+                topicName = topicName,
+                qos = io.netty.handler.codec.mqtt.MqttQoS.AT_LEAST_ONCE
+            )
+            // This publishes to subscriptionDelAddress which is consumed by all nodes,
+            // cleaning up their topicNodeMapping
+            delSubscription(subscription)
+        }
+
         logger.fine { "Unregistered message listener [$listenerId]" }
     }
 
