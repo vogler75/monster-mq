@@ -56,6 +56,7 @@ class GraphQLTopicSubscriptionClient:
         self.message_count = 0
         self.unsubscribe_event = asyncio.Event()  # Signal to unsubscribe
         self.input_thread = None
+        self.is_unsubscribed = False  # Track if we've already unsubscribed
 
     async def connect(self):
         """Establish WebSocket connection"""
@@ -174,9 +175,22 @@ class GraphQLTopicSubscriptionClient:
         try:
             while True:
                 # Check if unsubscribe was requested
-                if self.unsubscribe_event.is_set():
-                    print(f"\n✓ Unsubscribing (received {self.message_count} messages)\n")
+                if self.unsubscribe_event.is_set() and not self.is_unsubscribed:
+                    self.is_unsubscribed = True
+                    print(f"\n✓ Unsubscribed! (received {self.message_count} messages)\n")
+                    print("Listening for incoming messages on WebSocket (should be none)...")
+                    print("Waiting 30 seconds to verify no messages arrive...\n")
                     await self.unsubscribe()
+                    # Continue listening for 30 seconds to verify nothing comes through
+                    start_time = asyncio.get_event_loop().time()
+                    while asyncio.get_event_loop().time() - start_time < 30:
+                        try:
+                            message = await asyncio.wait_for(self.websocket.recv(), timeout=0.5)
+                            msg = json.loads(message)
+                            print(f"⚠️  WARNING: Received message after unsubscribe!\n{msg}\n")
+                        except asyncio.TimeoutError:
+                            continue
+                    print("\n✓ Verification complete - no messages received after unsubscribe!\n")
                     break
 
                 try:
@@ -187,7 +201,7 @@ class GraphQLTopicSubscriptionClient:
                     if msg.get("type") == "next":
                         # Extract topic update from the message
                         topic_update = msg.get("payload", {}).get("data", {}).get("multiTopicUpdates")
-                        if topic_update:
+                        if topic_update and not self.is_unsubscribed:
                             self.message_count += 1
                             self.print_topic_update(topic_update)
 
