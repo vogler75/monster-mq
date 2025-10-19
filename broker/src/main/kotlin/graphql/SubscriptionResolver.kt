@@ -1,9 +1,9 @@
 package at.rocworks.extensions.graphql
 
 import at.rocworks.Const
+import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
-import at.rocworks.bus.IMessageBus
 import at.rocworks.data.BrokerMessage
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
@@ -17,8 +17,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
 
 class SubscriptionResolver(
-    private val vertx: Vertx,
-    private val messageBus: IMessageBus
+    private val vertx: Vertx
 ) {
     companion object {
         private val logger: Logger = Utils.getLogger(SubscriptionResolver::class.java)
@@ -30,7 +29,7 @@ class SubscriptionResolver(
             val topicFilter = env.getArgument<String>("topicFilter")
             val format = env.getArgument<DataFormat?>("format") ?: DataFormat.JSON
 
-            TopicUpdatePublisher(vertx, messageBus, listOf(topicFilter ?: "#"), format)
+            TopicUpdatePublisher(vertx, listOf(topicFilter ?: "#"), format)
         }
     }
 
@@ -39,7 +38,7 @@ class SubscriptionResolver(
             val topicFilters = env.getArgument<List<String>>("topicFilters") ?: emptyList()
             val format = env.getArgument<DataFormat?>("format") ?: DataFormat.JSON
 
-            TopicUpdatePublisher(vertx, messageBus, topicFilters, format)
+            TopicUpdatePublisher(vertx, topicFilters, format)
         }
     }
 
@@ -67,15 +66,14 @@ class SubscriptionResolver(
 
     private class TopicUpdatePublisher(
         private val vertx: Vertx,
-        private val messageBus: IMessageBus,
         private val topicFilters: List<String>,
         private val format: DataFormat
     ) : Publisher<TopicUpdate> {
-        
+
         private val subscribers = ConcurrentHashMap<Subscriber<in TopicUpdate>, SubscriptionHandler>()
 
         override fun subscribe(subscriber: Subscriber<in TopicUpdate>) {
-            val handler = SubscriptionHandler(vertx, messageBus, topicFilters, format, subscriber)
+            val handler = SubscriptionHandler(vertx, topicFilters, format, subscriber)
             subscribers[subscriber] = handler
             subscriber.onSubscribe(handler)
         }
@@ -83,52 +81,29 @@ class SubscriptionResolver(
 
     private class SubscriptionHandler(
         private val vertx: Vertx,
-        private val messageBus: IMessageBus,
         private val topicFilters: List<String>,
         private val format: DataFormat,
         private val subscriber: Subscriber<in TopicUpdate>
     ) : Subscription {
-        
+
         private val cancelled = AtomicBoolean(false)
-        private val consumerIds = mutableListOf<String>()
         private val requested = AtomicLong(0L)
         private val pendingMessages = mutableListOf<TopicUpdate>()
         private val subscriptionId = "$GRAPHQL_CLIENT_ID-${System.currentTimeMillis()}"
 
         init {
-            // Subscribe to the message bus for all messages
-            messageBus.subscribeToMessageBus { message ->
-                if (!cancelled.get()) {
-                    // Check if message matches any of our topic filters
-                    if (topicFilters.any { filter -> matchesTopicFilter(message.topicName, filter) }) {
+            // Register with SessionHandler to receive MQTT messages
+            val sessionHandler = Monster.getSessionHandler()
+            if (sessionHandler != null) {
+                sessionHandler.registerMessageListener(subscriptionId, topicFilters) { message ->
+                    if (!cancelled.get()) {
                         handleMessage(message)
                     }
                 }
-            }.onSuccess {
-                logger.fine { "GraphQL subscription created for topic filters: $topicFilters" }
-            }.onFailure { err ->
-                logger.severe("Failed to create GraphQL subscription: ${err.message}")
-                subscriber.onError(err)
-            }
-        }
-
-        private fun matchesTopicFilter(topic: String, filter: String): Boolean {
-            val topicParts = topic.split("/")
-            val filterParts = filter.split("/")
-            
-            if (filterParts.last() == "#") {
-                // Multi-level wildcard at the end
-                val filterPrefix = filterParts.dropLast(1)
-                return topicParts.size >= filterPrefix.size && 
-                       topicParts.take(filterPrefix.size) == filterPrefix
-            }
-            
-            if (topicParts.size != filterParts.size) {
-                return false
-            }
-            
-            return topicParts.zip(filterParts).all { (topicPart, filterPart) ->
-                filterPart == "+" || topicPart == filterPart
+                logger.fine { "GraphQL subscription created for topic filters: $topicFilters (id: $subscriptionId)" }
+            } else {
+                logger.severe("SessionHandler not available for GraphQL subscription")
+                subscriber.onError(RuntimeException("SessionHandler not available"))
             }
         }
 
@@ -140,7 +115,7 @@ class SubscriptionResolver(
                     message.payload,
                     format
                 )
-                
+
                 val update = TopicUpdate(
                     topic = message.topicName,
                     payload = payload,
@@ -165,10 +140,10 @@ class SubscriptionResolver(
 
         override fun request(n: Long) {
             if (cancelled.get()) return
-            
+
             synchronized(this) {
                 requested.addAndGet(n)
-                
+
                 // Send pending messages
                 while (requested.get() > 0 && pendingMessages.isNotEmpty()) {
                     val update = pendingMessages.removeAt(0)
@@ -180,10 +155,10 @@ class SubscriptionResolver(
 
         override fun cancel() {
             if (cancelled.compareAndSet(false, true)) {
-                // Clear pending messages
-                consumerIds.clear()
+                // Unregister from SessionHandler
+                Monster.getSessionHandler()?.unregisterMessageListener(subscriptionId)
                 pendingMessages.clear()
-                logger.fine { "GraphQL subscription cancelled" }
+                logger.fine { "GraphQL subscription cancelled (id: $subscriptionId)" }
             }
         }
     }

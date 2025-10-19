@@ -261,7 +261,7 @@ class GraphQLServer(
         val queryResolver = QueryResolver(vertx, retainedStore, archiveHandler, authContext)
         val metricsResolver = MetricsResolver(vertx, sessionStore, sessionHandler, metricsStore)
         val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, sessionStore, sessionHandler, authContext)
-        val subscriptionResolver = SubscriptionResolver(vertx, messageBus)
+        val subscriptionResolver = SubscriptionResolver(vertx)
         val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
         val authenticationResolver = AuthenticationResolver(vertx, userManager)
         val archiveGroupResolver = archiveHandler?.let { ArchiveGroupResolver(vertx, it, authContext) }

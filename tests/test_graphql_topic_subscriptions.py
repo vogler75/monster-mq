@@ -29,6 +29,13 @@ Usage:
 
     # Custom URL and format
     python test_graphql_topic_subscriptions.py --url "ws://broker.example.com:4000/graphqlws" --format BINARY --filters "camera/snapshot"
+
+Keyboard commands (no Enter needed):
+    - 's' - Subscribe to topics (re-subscribe if previously unsubscribed)
+    - 'u' - Unsubscribe (keep connection open, can re-subscribe with 's')
+    - 'q' - Quit program
+
+Note: WebSocket connection remains open after unsubscribe, allowing re-subscription.
 """
 
 import asyncio
@@ -37,6 +44,11 @@ import sys
 import argparse
 import websockets
 import base64
+import threading
+import select
+import os
+import tty
+import termios
 from datetime import datetime
 from typing import Optional, List
 
@@ -49,6 +61,14 @@ class GraphQLTopicSubscriptionClient:
         self.websocket = None
         self.subscription_id = "1"
         self.message_count = 0
+        self.unsubscribe_event = asyncio.Event()  # Signal to unsubscribe
+        self.subscribe_event = asyncio.Event()  # Signal to subscribe again
+        self.exit_event = asyncio.Event()  # Signal to exit
+        self.input_thread = None
+        self.is_subscribed = False  # Track subscription state
+        self.topic_filters = []  # Store topic filters for re-subscription
+        self.data_format = "JSON"  # Store format for re-subscription
+        self.original_settings = None  # Store original terminal settings
 
     async def connect(self):
         """Establish WebSocket connection"""
@@ -131,33 +151,162 @@ class GraphQLTopicSubscriptionClient:
         for i, tf in enumerate(topic_filters, 1):
             print(f"  {i}. {tf}")
         print("="*90 + "\n")
-        print("Waiting for messages... (Press Ctrl+C to stop)\n")
+        print("Waiting for messages...\n")
+        print("  's' - Subscribe to topics")
+        print("  'u' - Unsubscribe (keep connection open)")
+        print("  'q' - Quit program\n")
+
+    def _set_raw_mode(self):
+        """Set terminal to cbreak mode for keystroke input (keeps line handling intact)"""
+        if sys.platform == 'win32':
+            return
+        try:
+            fd = sys.stdin.fileno()
+            self.original_settings = termios.tcgetattr(fd)
+            # Use cbreak mode: single char input without Enter, but keeps line discipline
+            new_settings = list(self.original_settings)
+            new_settings[3] &= ~(termios.ICANON | termios.ECHO)  # Disable canonical mode and echo
+            new_settings[6][termios.VMIN] = 0   # Non-blocking
+            new_settings[6][termios.VTIME] = 0  # No timeout
+            termios.tcsetattr(fd, termios.TCSADRAIN, new_settings)
+        except:
+            pass
+
+    def _restore_terminal(self):
+        """Restore terminal to original settings"""
+        if sys.platform == 'win32' or self.original_settings is None:
+            return
+        try:
+            fd = sys.stdin.fileno()
+            termios.tcsetattr(fd, termios.TCSADRAIN, self.original_settings)
+        except:
+            pass
+
+    def _input_listener(self, loop):
+        """Background thread that listens for keyboard input"""
+        if sys.platform == 'win32':
+            import msvcrt
+            try:
+                while True:
+                    if msvcrt.kbhit():
+                        key = msvcrt.getch().decode().lower()
+                        self._handle_key(key, loop)
+                    threading.Event().wait(0.05)
+            except:
+                pass
+        else:
+            # Unix/Linux/Mac - use tty raw mode for non-blocking input
+            self._set_raw_mode()
+            try:
+                while True:
+                    # Check if stdin has data available (non-blocking)
+                    ready, _, _ = select.select([sys.stdin], [], [], 0.1)
+                    if ready:
+                        key = sys.stdin.read(1).lower()
+                        if key:
+                            self._handle_key(key, loop)
+            except:
+                pass
+            finally:
+                self._restore_terminal()
+
+    def _handle_key(self, key, loop):
+        """Handle keyboard input"""
+        if key == 's':
+            if not self.is_subscribed:
+                print("📡 Subscribing...", flush=True)
+                asyncio.run_coroutine_threadsafe(
+                    self._trigger_subscribe(),
+                    loop
+                )
+        elif key == 'u':
+            if self.is_subscribed:
+                print("⏹ Unsubscribing...", flush=True)
+                asyncio.run_coroutine_threadsafe(
+                    self._trigger_unsubscribe(),
+                    loop
+                )
+        elif key == 'q':
+            print("⏹ Exiting...", flush=True)
+            asyncio.run_coroutine_threadsafe(
+                self._trigger_exit(),
+                loop
+            )
+
+    async def _trigger_subscribe(self):
+        """Trigger subscribe from another thread"""
+        self.subscribe_event.set()
+
+    async def _trigger_unsubscribe(self):
+        """Trigger unsubscribe from another thread"""
+        self.unsubscribe_event.set()
+
+    async def _trigger_exit(self):
+        """Trigger exit from another thread"""
+        self.exit_event.set()
 
     async def listen(self):
         """Listen for incoming topic update messages"""
+        # Store topic filters for re-subscription
+        self.topic_filters = self.topic_filters if self.topic_filters else ["#"]
+
+        # Start background thread for keyboard input
+        loop = asyncio.get_event_loop()
+        self.input_thread = threading.Thread(target=self._input_listener, args=(loop,), daemon=True)
+        self.input_thread.start()
+
         try:
-            async for message in self.websocket:
-                msg = json.loads(message)
-
-                if msg.get("type") == "next":
-                    # Extract topic update from the message
-                    topic_update = msg.get("payload", {}).get("data", {}).get("multiTopicUpdates")
-                    if topic_update:
-                        self.message_count += 1
-                        self.print_topic_update(topic_update)
-
-                elif msg.get("type") == "error":
-                    print(f"\n❌ Error: {msg.get('payload')}\n")
-
-                elif msg.get("type") == "complete":
-                    print(f"\n✓ Subscription completed (received {self.message_count} messages)\n")
+            while True:
+                # Check if exit was requested
+                if self.exit_event.is_set():
+                    print(f"\n✓ Exiting... (received {self.message_count} messages total)\n", flush=True)
                     break
 
+                # Check if unsubscribe was requested
+                if self.unsubscribe_event.is_set() and self.is_subscribed:
+                    self.unsubscribe_event.clear()
+                    self.is_subscribed = False
+                    print(f"\n✓ Unsubscribed!\n", flush=True)
+                    await self.unsubscribe()
+                    continue
+
+                # Check if subscribe was requested
+                if self.subscribe_event.is_set() and not self.is_subscribed:
+                    self.subscribe_event.clear()
+                    self.is_subscribed = True
+                    print(f"\n✓ Subscribed!\n", flush=True)
+                    await self.subscribe(self.topic_filters, self.data_format)
+                    continue
+
+                try:
+                    # Wait for message with timeout
+                    message = await asyncio.wait_for(self.websocket.recv(), timeout=0.5)
+                    msg = json.loads(message)
+
+                    if msg.get("type") == "next":
+                        # Extract topic update from the message
+                        topic_update = msg.get("payload", {}).get("data", {}).get("multiTopicUpdates")
+                        if topic_update and self.is_subscribed:
+                            self.message_count += 1
+                            self.print_topic_update(topic_update)
+
+                    elif msg.get("type") == "error":
+                        print(f"\n❌ Error: {msg.get('payload')}\n", flush=True)
+
+                    elif msg.get("type") == "complete":
+                        if self.is_subscribed:
+                            self.is_subscribed = False
+                            print(f"\n✓ Subscription ended\n", flush=True)
+
+                except asyncio.TimeoutError:
+                    continue
+
         except websockets.exceptions.ConnectionClosed:
-            print(f"\n⚠ Connection closed by server (received {self.message_count} messages)\n")
+            print(f"\n⚠ Connection closed by server (received {self.message_count} messages)\n", flush=True)
         except KeyboardInterrupt:
-            print(f"\n\n⏹ Stopping subscription... (received {self.message_count} messages)\n")
-            await self.unsubscribe()
+            print(f"\n⏹ Stopping... (received {self.message_count} messages)\n", flush=True)
+            if self.is_subscribed:
+                await self.unsubscribe()
 
     def print_topic_update(self, update: dict):
         """Pretty print a topic update message"""
@@ -197,16 +346,16 @@ class GraphQLTopicSubscriptionClient:
         payload_display = self.format_payload(payload, data_format)
 
         # Build main message line
-        print(f"{color}[{time_str}]{reset} {topic} (QoS:{qos}, Fmt:{data_format}) {flags_str}")
+        print(f"{color}[{time_str}]{reset} {topic} (QoS:{qos}, Fmt:{data_format}) {flags_str}", flush=True)
 
         # Print payload
-        print(f"  └─ Payload: {payload_display}")
+        print(f"  └─ Payload: {payload_display}", flush=True)
 
         # Print client ID if available
         if client_id:
-            print(f"  └─ Client: {client_id}")
+            print(f"  └─ Client: {client_id}", flush=True)
 
-        print()  # Empty line between messages
+        print(flush=True)  # Empty line between messages
 
     def format_payload(self, payload: str, data_format: str) -> str:
         """Format payload based on data type"""
@@ -245,15 +394,14 @@ class GraphQLTopicSubscriptionClient:
             return payload[:100] + "..." if len(payload) > 100 else payload
 
     async def unsubscribe(self):
-        """Unsubscribe from topic updates"""
+        """Unsubscribe from topic updates (keeps connection open)"""
         if self.websocket:
             complete_message = {
                 "id": self.subscription_id,
                 "type": "complete"
             }
             await self.websocket.send(json.dumps(complete_message))
-            await self.websocket.close()
-            print(f"✓ Disconnected (received {self.message_count} messages)\n")
+            # DO NOT CLOSE - keep connection open for re-subscription
 
 
 async def main():
@@ -315,10 +463,14 @@ Examples:
     print("="*90 + "\n")
 
     client = GraphQLTopicSubscriptionClient(args.url)
+    # Store filters and format for potential re-subscription
+    client.topic_filters = args.filters
+    client.data_format = args.format
 
     try:
         await client.connect()
         await client.initialize()
+        client.is_subscribed = True
         await client.subscribe(
             topic_filters=args.filters,
             data_format=args.format
@@ -342,10 +494,22 @@ Examples:
         traceback.print_exc()
         sys.exit(1)
 
+    finally:
+        # Ensure terminal is restored
+        if 'client' in locals():
+            client._restore_terminal()
+
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n\n⏹ Stopped by user\n")
-        sys.exit(0)
+    finally:
+        # Restore terminal to cooked mode on any exit
+        if sys.platform != 'win32':
+            try:
+                import subprocess
+                subprocess.run(['stty', 'sane'], check=False)
+            except:
+                pass
