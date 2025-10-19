@@ -20,7 +20,8 @@ import java.util.concurrent.Callable
 class ArchiveConfigStorePostgres(
     private val url: String,
     private val username: String,
-    private val password: String
+    private val password: String,
+    private val schema: String? = null
 ): AbstractVerticle(), IArchiveConfigStore {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -37,6 +38,16 @@ class ArchiveConfigStorePostgres(
             val promise = Promise.promise<Void>()
             try {
                 connection.autoCommit = false
+
+                // Create and set PostgreSQL schema if specified
+                if (!schema.isNullOrBlank()) {
+                    connection.createStatement().use { stmt ->
+                        // Create schema if it doesn't exist
+                        stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
+                        // Set search_path to the specified schema
+                        stmt.execute("SET search_path TO \"$schema\", public")
+                    }
+                }
 
                 val createTableSQL = """
                 CREATE TABLE IF NOT EXISTS $configTableName (

@@ -21,7 +21,8 @@ import java.util.logging.Logger
 class DeviceConfigStorePostgres(
     private val url: String,
     private val user: String,
-    private val password: String
+    private val password: String,
+    private val schema: String? = null
 ) : IDeviceConfigStore {
 
     private val logger: Logger = Utils.getLogger(DeviceConfigStorePostgres::class.java)
@@ -135,6 +136,16 @@ class DeviceConfigStorePostgres(
         try {
             connection = DriverManager.getConnection(url, user, password)
             connection!!.use { conn ->
+                // Create and set PostgreSQL schema if specified
+                if (!schema.isNullOrBlank()) {
+                    conn.createStatement().use { stmt ->
+                        // Create schema if it doesn't exist
+                        stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
+                        // Set search_path to the specified schema
+                        stmt.execute("SET search_path TO \"$schema\", public")
+                    }
+                }
+
                 conn.createStatement().use { stmt ->
                     stmt.execute(CREATE_TABLE)
                     stmt.execute(MIGRATE_SCHEMA)
@@ -143,6 +154,13 @@ class DeviceConfigStorePostgres(
             }
             // Reconnect for ongoing operations
             connection = DriverManager.getConnection(url, user, password)
+            // Create and set schema again for new connection
+            if (!schema.isNullOrBlank()) {
+                connection!!.createStatement().use { stmt ->
+                    stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
+                    stmt.execute("SET search_path TO \"$schema\", public")
+                }
+            }
             logger.info("DeviceConfigStorePostgres initialized successfully")
             promise.complete()
         } catch (e: Exception) {

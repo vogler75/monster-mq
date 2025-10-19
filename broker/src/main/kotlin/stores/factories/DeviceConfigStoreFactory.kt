@@ -26,8 +26,9 @@ object DeviceConfigStoreFactory {
                     val url = postgresConfig.getString("Url")
                     val user = postgresConfig.getString("User")
                     val pass = postgresConfig.getString("Pass")
+                    val schema = postgresConfig.getString("Schema")
                     if (url != null && user != null && pass != null) {
-                        DeviceConfigStorePostgres(url, user, pass)
+                        DeviceConfigStorePostgres(url, user, pass, schema)
                     } else {
                         null
                     }

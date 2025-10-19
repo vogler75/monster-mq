@@ -22,7 +22,8 @@ object UserFactory {
                     url = postgresConfig.getString("Url"),
                     username = postgresConfig.getString("User"),
                     password = postgresConfig.getString("Pass"),
-                    vertx = vertx
+                    vertx = vertx,
+                    schema = postgresConfig.getString("Schema")
                 )
             }
             StoreType.SQLITE -> {

@@ -23,7 +23,8 @@ class MetricsStorePostgres(
     private val name: String,
     private val url: String,
     private val username: String,
-    private val password: String
+    private val password: String,
+    private val schema: String? = null
 ) : IMetricsStoreAsync {
 
     private val logger = Utils.getLogger(this::class.java, name)
@@ -35,10 +36,18 @@ class MetricsStorePostgres(
             try {
                 connection.autoCommit = false
 
+                // Create and set PostgreSQL schema if specified
+                if (!schema.isNullOrBlank()) {
+                    connection.createStatement().use { stmt ->
+                        stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
+                        stmt.execute("SET search_path TO \"$schema\", public")
+                    }
+                }
+
                 // Create metrics table if it doesn't exist
                 connection.createStatement().use { statement ->
                     val createTableSQL = """
-                        CREATE TABLE IF NOT EXISTS public.metrics (
+                        CREATE TABLE IF NOT EXISTS metrics (
                             "timestamp" timestamptz NOT NULL,
                             metric_type varchar(30) NOT NULL,
                             identifier varchar(255) NOT NULL,
@@ -52,12 +61,12 @@ class MetricsStorePostgres(
                     // Create indexes if they don't exist
                     val createTimestampIndex = """
                         CREATE INDEX IF NOT EXISTS metrics_timestamp_idx
-                        ON public.metrics USING btree ("timestamp")
+                        ON metrics USING btree ("timestamp")
                     """.trimIndent()
 
                     val createTypeIdentifierIndex = """
                         CREATE INDEX IF NOT EXISTS metrics_type_identifier_idx
-                        ON public.metrics USING btree (metric_type, identifier, "timestamp")
+                        ON metrics USING btree (metric_type, identifier, "timestamp")
                     """.trimIndent()
 
                     statement.execute(createTimestampIndex)
@@ -185,7 +194,7 @@ class MetricsStorePostgres(
                 val connection = db.connection ?: throw IllegalStateException("Database connection not available")
 
                 val deleteSQL = """
-                    DELETE FROM public.metrics
+                    DELETE FROM metrics
                     WHERE "timestamp" < ?
                 """.trimIndent()
 
@@ -213,7 +222,7 @@ class MetricsStorePostgres(
             try {
                 val connection = db.connection ?: throw IllegalStateException("Database connection not available")
                 val insertSQL = """
-                    INSERT INTO public.metrics ("timestamp", metric_type, identifier, metrics)
+                    INSERT INTO metrics ("timestamp", metric_type, identifier, metrics)
                     VALUES (?, ?, ?, ?::jsonb)
                     ON CONFLICT ("timestamp", metric_type, identifier) DO UPDATE SET metrics = EXCLUDED.metrics
                 """.trimIndent()
@@ -242,7 +251,7 @@ class MetricsStorePostgres(
             val sql = if (toTs != null) {
                 """
                     SELECT metrics
-                    FROM public.metrics
+                    FROM metrics
                     WHERE metric_type = ? AND identifier = ? AND "timestamp" BETWEEN ? AND ?
                     ORDER BY "timestamp" DESC
                     LIMIT 1
@@ -250,7 +259,7 @@ class MetricsStorePostgres(
             } else {
                 """
                     SELECT metrics
-                    FROM public.metrics
+                    FROM metrics
                     WHERE metric_type = ? AND identifier = ? AND "timestamp" >= ?
                     ORDER BY "timestamp" DESC
                     LIMIT 1
@@ -275,7 +284,7 @@ class MetricsStorePostgres(
             val sql = if (toTs != null) {
                 """
                     SELECT "timestamp", metrics
-                    FROM public.metrics
+                    FROM metrics
                     WHERE metric_type = ? AND identifier = ? AND "timestamp" BETWEEN ? AND ?
                     ORDER BY "timestamp" DESC
                     LIMIT ?
@@ -283,7 +292,7 @@ class MetricsStorePostgres(
             } else {
                 """
                     SELECT "timestamp", metrics
-                    FROM public.metrics
+                    FROM metrics
                     WHERE metric_type = ? AND identifier = ? AND "timestamp" >= ?
                     ORDER BY "timestamp" DESC
                     LIMIT ?

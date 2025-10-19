@@ -17,7 +17,8 @@ class UserStorePostgres(
     private val url: String,
     private val username: String,
     private val password: String,
-    private val vertx: Vertx
+    private val vertx: Vertx,
+    private val schema: String? = null
 ): IUserStore {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -42,6 +43,14 @@ class UserStorePostgres(
 
     private fun createTablesSync(connection: java.sql.Connection): Boolean {
         return try {
+            // Create and set PostgreSQL schema if specified
+            if (!schema.isNullOrBlank()) {
+                connection.createStatement().use { stmt ->
+                    stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
+                    stmt.execute("SET search_path TO \"$schema\", public")
+                }
+            }
+
             val createTableSQL = listOf("""
                 CREATE TABLE IF NOT EXISTS $usersTableName (
                     username VARCHAR(255) PRIMARY KEY,

@@ -76,6 +76,7 @@ class Monster(args: Array<String>) {
         var url: String = ""
         var user: String = ""
         var pass: String = ""
+        var schema: String? = null
     }
 
     private val crateDbConfig = object {
@@ -382,6 +383,7 @@ MORE INFO:
                     postgresConfig.url = pg.getString("Url", "jdbc:postgresql://localhost:5432/postgres")
                     postgresConfig.user = pg.getString("User", "system")
                     postgresConfig.pass = pg.getString("Pass", "manager")
+                    postgresConfig.schema = pg.getString("Schema")
                 }
                 configJson.getJsonObject("CrateDB", JsonObject()).let { crate ->
                     crateDbConfig.url = crate.getString("Url", "jdbc:postgresql://localhost:5432/doc")
@@ -874,7 +876,7 @@ MORE INFO:
         sqliteReady.compose { _ ->
             val store = when (sessionStoreType) {
                 SessionStoreType.POSTGRES -> {
-                    SessionStorePostgres(postgresConfig.url, postgresConfig.user, postgresConfig.pass)
+                    SessionStorePostgres(postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema)
                 }
                 SessionStoreType.CRATEDB -> {
                     SessionStoreCrateDB(crateDbConfig.url, crateDbConfig.user, crateDbConfig.pass)
@@ -918,7 +920,7 @@ MORE INFO:
                 store
             }
             MessageStoreType.POSTGRES -> {
-                val store = MessageStorePostgres(name, postgresConfig.url, postgresConfig.user, postgresConfig.pass)
+                val store = MessageStorePostgres(name, postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 store

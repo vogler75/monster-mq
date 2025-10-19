@@ -29,6 +29,39 @@ Postgres:
   Url: jdbc:postgresql://db-host:5432/monstermq
   User: system
   Pass: manager
+  Schema: mqtt_broker    # Optional: defaults to 'public' if not specified
+```
+
+#### PostgreSQL Schema Support (Optional)
+
+By default, all PostgreSQL objects are created in the `public` schema. You can optionally specify a custom schema using the `Schema` parameter to:
+
+- **Multi-tenant deployments** - Use different schemas for different tenants in the same database
+- **Organization standards** - Follow your organization's database naming and schema conventions
+- **Environment isolation** - Separate dev/staging/prod data within the same database instance
+
+**Features:**
+- The specified schema is **automatically created** if it doesn't exist
+- Schema is applied to all PostgreSQL stores (sessions, messages, archives, metrics, users)
+- Uses PostgreSQL's native `SET search_path` for clean, efficient schema switching
+- **100% backward compatible** - Existing configs without `Schema` parameter work unchanged
+
+**Example - Multi-environment setup:**
+
+```yaml
+# Production environment
+Postgres:
+  Url: jdbc:postgresql://db.example.com:5432/monstermq
+  User: system
+  Pass: manager
+  Schema: prod_mqtt_broker
+
+# Staging environment (same database, different schema)
+Postgres:
+  Url: jdbc:postgresql://db.example.com:5432/monstermq
+  User: system
+  Pass: manager
+  Schema: staging_mqtt_broker
 ```
 
 The JDBC URL is passed straight to the Vert.x SQL client. All message/metrics/user stores create their tables automatically (`broker/src/main/kotlin/stores/dbs/postgres/MessageStorePostgres.kt:16-88`).

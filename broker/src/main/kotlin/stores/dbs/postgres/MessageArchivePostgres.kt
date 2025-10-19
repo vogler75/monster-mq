@@ -23,7 +23,8 @@ class MessageArchivePostgres (
     private val url: String,
     private val username: String,
     private val password: String,
-    private val payloadFormat: at.rocworks.stores.PayloadFormat = at.rocworks.stores.PayloadFormat.DEFAULT
+    private val payloadFormat: at.rocworks.stores.PayloadFormat = at.rocworks.stores.PayloadFormat.DEFAULT,
+    private val schema: String? = null
 ): AbstractVerticle(), IMessageArchiveExtended {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
@@ -38,6 +39,17 @@ class MessageArchivePostgres (
             try {
                 // Just verify connection works - table creation is deferred to createTable()
                 connection.autoCommit = false
+
+                // Create and set PostgreSQL schema if specified
+                if (!schema.isNullOrBlank()) {
+                    connection.createStatement().use { stmt ->
+                        // Create schema if it doesn't exist
+                        stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
+                        // Set search_path to the specified schema
+                        stmt.execute("SET search_path TO \"$schema\", public")
+                    }
+                }
+
                 connection.createStatement().use { statement ->
                     statement.executeQuery("SELECT 1")
                 }

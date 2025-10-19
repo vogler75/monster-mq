@@ -138,15 +138,27 @@
     },
     "Postgres": {
       "type": "object",
+      "description": "PostgreSQL database configuration. Supports all store types (sessions, retained messages, archives, metrics, users).",
       "properties": {
         "Url": {
-          "type": "string"
+          "type": "string",
+          "description": "JDBC connection URL (e.g., jdbc:postgresql://localhost:5432/monstermq)",
+          "examples": ["jdbc:postgresql://localhost:5432/monstermq", "jdbc:postgresql://db.example.com:5432/monster"]
         },
         "User": {
-          "type": "string"
+          "type": "string",
+          "description": "Database username for authentication"
         },
         "Pass": {
-          "type": "string"
+          "type": "string",
+          "description": "Database password for authentication"
+        },
+        "Schema": {
+          "type": "string",
+          "description": "PostgreSQL schema name for storing all MonsterMQ objects. Optional - automatically created if not exists, defaults to 'public' if not specified. Useful for multi-tenant deployments and environment isolation.",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "default": "public",
+          "examples": ["mqtt_broker", "prod_mq", "staging_mq"]
         }
       },
       "required": [
