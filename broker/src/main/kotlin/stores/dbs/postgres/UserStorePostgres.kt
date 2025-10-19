@@ -43,9 +43,10 @@ class UserStorePostgres(
 
     private fun createTablesSync(connection: java.sql.Connection): Boolean {
         return try {
-            // Set PostgreSQL schema if specified
+            // Create and set PostgreSQL schema if specified
             if (!schema.isNullOrBlank()) {
                 connection.createStatement().use { stmt ->
+                    stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
                     stmt.execute("SET search_path TO \"$schema\", public")
                 }
             }

@@ -136,9 +136,12 @@ class DeviceConfigStorePostgres(
         try {
             connection = DriverManager.getConnection(url, user, password)
             connection!!.use { conn ->
-                // Set PostgreSQL schema if specified
+                // Create and set PostgreSQL schema if specified
                 if (!schema.isNullOrBlank()) {
                     conn.createStatement().use { stmt ->
+                        // Create schema if it doesn't exist
+                        stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
+                        // Set search_path to the specified schema
                         stmt.execute("SET search_path TO \"$schema\", public")
                     }
                 }
@@ -151,9 +154,10 @@ class DeviceConfigStorePostgres(
             }
             // Reconnect for ongoing operations
             connection = DriverManager.getConnection(url, user, password)
-            // Set schema again for new connection
+            // Create and set schema again for new connection
             if (!schema.isNullOrBlank()) {
                 connection!!.createStatement().use { stmt ->
+                    stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
                     stmt.execute("SET search_path TO \"$schema\", public")
                 }
             }

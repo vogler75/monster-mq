@@ -48,9 +48,12 @@ class MessageStorePostgres(
             try {
                 connection.autoCommit = false
 
-                // Set PostgreSQL schema if specified
+                // Create and set PostgreSQL schema if specified
                 if (!schema.isNullOrBlank()) {
                     connection.createStatement().use { stmt ->
+                        // Create schema if it doesn't exist
+                        stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
+                        // Set search_path to the specified schema
                         stmt.execute("SET search_path TO \"$schema\", public")
                     }
                 }
