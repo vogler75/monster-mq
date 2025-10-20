@@ -54,6 +54,38 @@ class ApiService(
         val createdAt: Long = System.currentTimeMillis()
     )
 
+    companion object {
+        private val apiRequestPattern = """^\${'$'}API/([^/]+)/([^/]+)/([^/]+)/request/([^/]+)$""".toRegex()
+
+        data class ApiRequestDetails(
+            val targetNodeId: String,
+            val service: String,
+            val realm: String,
+            val requestId: String
+        )
+
+        /**
+         * Check if topic is an API request topic.
+         * Quick prefix check before regex matching for performance.
+         * This fast path avoids expensive regex matching for 99% of MQTT messages.
+         */
+        fun isApiRequestTopic(topic: String): Boolean {
+            return topic.startsWith("\$API/")
+        }
+
+        /**
+         * Extract API request details from topic.
+         * Only call this after confirming isApiRequestTopic() returns true.
+         *
+         * Topic format: $API/<node>/<service>/<realm>/request/<request-id>
+         */
+        fun extractApiRequestDetails(topic: String): ApiRequestDetails? {
+            val match = apiRequestPattern.find(topic) ?: return null
+            val (nodeId, service, realm, requestId) = match.destructured
+            return ApiRequestDetails(nodeId, service, realm, requestId)
+        }
+    }
+
     override fun start(startPromise: Promise<Void>) {
         try {
             // Initialize node-specific properties now that vertx is available

@@ -8,6 +8,7 @@ import at.rocworks.Monster
 import at.rocworks.MqttClient
 import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
+import at.rocworks.extensions.ApiService
 import at.rocworks.cluster.DataReplicator
 import at.rocworks.cluster.SetMapReplicator
 import at.rocworks.data.*
@@ -890,15 +891,14 @@ open class SessionHandler(
 
     fun publishMessage(message: BrokerMessage) {
         // Special handling for API request topics - route to ApiService on the target node
-        // Topic format: $API/<node>/<service>/<something>/request/<request-id>
-        val apiRequestPattern = """^\${'$'}API/([^/]+)/([^/]+)/([^/]+)/request/([^/]+)$""".toRegex()
-        val match = apiRequestPattern.find(message.topicName)
-
-        if (match != null) {
-            val (targetNodeId, service, something, requestId) = match.destructured
-            val eventBusAddress = "api.service.requests.$targetNodeId"
-            vertx.eventBus().send(eventBusAddress, message)
-            logger.fine { "Routed API request message [${message.topicName}] to node [$targetNodeId]" }
+        // Fast path: quick prefix check before regex matching
+        if (ApiService.isApiRequestTopic(message.topicName)) {
+            val details = ApiService.extractApiRequestDetails(message.topicName)
+            if (details != null) {
+                val eventBusAddress = "api.service.requests.${details.targetNodeId}"
+                vertx.eventBus().send(eventBusAddress, message)
+                logger.fine { "Routed API request message [${message.topicName}] to node [${details.targetNodeId}]" }
+            }
             // Still allow distribution to normal subscribers
         }
 
