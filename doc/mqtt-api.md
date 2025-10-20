@@ -7,13 +7,12 @@ Execute GraphQL queries and mutations directly over MQTT using JSON-RPC 2.0 prot
 The API Service is enabled by default when GraphQL is enabled. Configure it in your `config.yaml`:
 
 ```yaml
-API:
-  Enabled: true          # Enable/disable MQTT API service
-
 GraphQL:
   Enabled: true
-  Port: 4000            # GraphQL endpoint (auto-detected)
-  Path: /graphql        # GraphQL path (auto-detected)
+  Port: 4000            # GraphQL endpoint
+  Path: /graphql        # GraphQL path
+  JsonRpcApi:
+    Enabled: true       # Enable/disable MQTT JSON-RPC 2.0 API service
 ```
 
 ## Topic Structure
