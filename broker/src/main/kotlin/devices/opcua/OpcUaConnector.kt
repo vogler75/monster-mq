@@ -77,6 +77,7 @@ class OpcUaConnector : AbstractVerticle() {
     private var isConnected = false
     private var isReconnecting = false
     private var reconnectTimerId: Long? = null
+    private var healthCheckTimerId: Long? = null
 
     // Static address subscriptions
     private val addressSubscriptions = ConcurrentHashMap<String, AddressSubscription>() // address -> subscription
@@ -371,6 +372,9 @@ class OpcUaConnector : AbstractVerticle() {
                         isReconnecting = false
                         logger.info("Connected to OPC UA server: ${opcUaConfig.endpointUrl}")
 
+                        // Start periodic health check to detect disconnection
+                        startHealthCheck()
+
                         // Create subscription
                         createOpcUaSubscription()
                             .onComplete { subResult ->
@@ -378,7 +382,9 @@ class OpcUaConnector : AbstractVerticle() {
                                     promise.complete()
                                 } else {
                                     logger.warning("Failed to create OPC UA subscription: ${subResult.cause()?.message}")
-                                    promise.complete() // Continue anyway
+                                    isConnected = false
+                                    scheduleReconnection()
+                                    promise.fail(subResult.cause())
                                 }
                             }
                     } else {
@@ -427,11 +433,12 @@ class OpcUaConnector : AbstractVerticle() {
     private fun disconnectFromOpcUaServer(): Future<Void> {
         val promise = Promise.promise<Void>()
 
-        // Cancel any pending reconnection timer
+        // Cancel any pending timers
         reconnectTimerId?.let { timerId ->
             vertx.cancelTimer(timerId)
             reconnectTimerId = null
         }
+        stopHealthCheck()
 
         if (client != null && isConnected) {
             client!!.disconnect().whenComplete { _, _ ->
@@ -456,6 +463,61 @@ class OpcUaConnector : AbstractVerticle() {
         return promise.future()
     }
 
+    private fun startHealthCheck() {
+        // Cancel any existing health check timer
+        healthCheckTimerId?.let { timerId ->
+            vertx.cancelTimer(timerId)
+        }
+
+        // Schedule periodic health checks to detect disconnection
+        // Using reconnectDelay as the health check interval (typically 5 seconds)
+        healthCheckTimerId = vertx.setPeriodic(opcUaConfig.reconnectDelay) {
+            if (isConnected && !isReconnecting && client != null && subscription != null) {
+                // Perform a simple read on the Servers node to verify connection is still alive
+                try {
+                    thread {
+                        try {
+                            val readFuture = client!!.read(
+                                0.0,
+                                org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn.Neither,
+                                listOf(
+                                    org.eclipse.milo.opcua.stack.core.types.structured.ReadValueId(
+                                        Identifiers.Server,
+                                        org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.Unsigned.uint(1),
+                                        null,
+                                        org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName.NULL_VALUE
+                                    )
+                                )
+                            )
+
+                            readFuture.get(opcUaConfig.requestTimeout, java.util.concurrent.TimeUnit.MILLISECONDS)
+                            // If we get here, the read succeeded, connection is still alive
+                            logger.fine { "OPC UA health check passed for device ${deviceConfig.name}" }
+
+                        } catch (e: Exception) {
+                            logger.warning("OPC UA health check failed for device ${deviceConfig.name}: ${e.message}")
+                            if (isConnected) {
+                                isConnected = false
+                                scheduleReconnection()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.warning("Error during OPC UA health check: ${e.message}")
+                }
+            }
+        }
+        logger.info("Started health check for device ${deviceConfig.name} with interval ${opcUaConfig.reconnectDelay}ms")
+    }
+
+    private fun stopHealthCheck() {
+        healthCheckTimerId?.let { timerId ->
+            vertx.cancelTimer(timerId)
+            healthCheckTimerId = null
+            logger.fine { "Cancelled health check for device ${deviceConfig.name}" }
+        }
+    }
+
     private fun scheduleReconnection() {
         if (!isReconnecting) {
             // Cancel any existing reconnection timer
@@ -473,6 +535,9 @@ class OpcUaConnector : AbstractVerticle() {
                         .onComplete { result ->
                             if (result.failed()) {
                                 logger.warning("Reconnection failed for device ${deviceConfig.name}: ${result.cause()?.message}")
+                                scheduleReconnection()
+                            } else {
+                                logger.info("Reconnection successful for device ${deviceConfig.name}")
                             }
                         }
                 }
