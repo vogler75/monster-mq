@@ -16,6 +16,13 @@ UserManagement:
   CacheRefreshInterval: 60  # seconds
   DisconnectOnUnauthorized: true
 
+Logging:
+  Mqtt:
+    Enabled: true          # Enable MQTT log publishing to $SYS/syslogs/<node>/<level> topics
+  Memory:
+    Enabled: true         # Enable in-memory log storage (circular buffer)
+    Entries: 1000          # Maximum number of log entries to store in memory
+
 SparkplugMetricExpansion:
   Enabled: true
 
