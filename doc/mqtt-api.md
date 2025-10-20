@@ -11,8 +11,7 @@ GraphQL:
   Enabled: true
   Port: 4000            # GraphQL endpoint
   Path: /graphql        # GraphQL path
-  JsonRpcApi:
-    Enabled: true       # Enable/disable MQTT JSON-RPC 2.0 API service
+  MqttApi: true         # Enable/disable MQTT API service (JSON-RPC 2.0)
 ```
 
 ## Topic Structure

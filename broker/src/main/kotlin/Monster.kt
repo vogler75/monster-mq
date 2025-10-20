@@ -683,8 +683,7 @@ MORE INFO:
                 }
 
                 // API Service (JSON-RPC 2.0 over MQTT)
-                val jsonRpcApiConfig = graphQLConfig.getJsonObject("JsonRpcApi", JsonObject())
-                val apiEnabled = jsonRpcApiConfig.getBoolean("Enabled", true)
+                val apiEnabled = graphQLConfig.getBoolean("MqttApi", true)
                 val apiService = if (apiEnabled && graphQLServer != null) {
                     val graphQLPort = graphQLConfig.getInteger("Port", 4000)
                     val graphQLPath = graphQLConfig.getString("Path", "/graphql")
