@@ -312,6 +312,7 @@ For detailed documentation, see the [`doc/`](doc/) directory:
 - **[WinCC Unified Integration](doc/winccua.md)** - Siemens WinCC Unified GraphQL/WebSocket integration
 - **[Neo4j Integration](doc/neo4j.md)** - Graph database for MQTT topic hierarchies
 - **[GraphQL API](doc/graphql.md)** - Real-time data access and management
+- **[MQTT JSON-RPC 2.0 API](doc/mqtt-api.md)** - Execute GraphQL queries/mutations over MQTT
 - **[MCP Server](doc/mcp.md)** - AI model integration and analytics
 - **[Workflows (Flow Engine)](doc/workflows.md)** - Visual flow-based programming and data processing
 - **[Kafka Integration](doc/kafka.md)** - Stream processing and event sourcing

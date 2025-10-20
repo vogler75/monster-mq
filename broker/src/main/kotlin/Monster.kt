@@ -688,7 +688,7 @@ MORE INFO:
                 val apiService = if (apiEnabled && graphQLServer != null) {
                     val graphQLPort = graphQLConfig.getInteger("Port", 4000)
                     val graphQLPath = graphQLConfig.getString("Path", "/graphql")
-                    ApiService(sessionHandler, graphQLPort, graphQLPath)
+                    ApiService(sessionHandler, "graphql", graphQLPort, graphQLPath)
                 } else {
                     if (!apiEnabled) {
                         logger.info("API Service is disabled in configuration")

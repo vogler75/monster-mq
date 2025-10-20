@@ -889,12 +889,25 @@ open class SessionHandler(
     //----------------------------------------------------------------------------------------------------
 
     fun publishMessage(message: BrokerMessage) {
+        // Special handling for API request topics - route to ApiService on the target node
+        // Topic format: $API/<node>/<service>/<something>/request/<request-id>
+        val apiRequestPattern = """^\${'$'}API/([^/]+)/([^/]+)/([^/]+)/request/([^/]+)$""".toRegex()
+        val match = apiRequestPattern.find(message.topicName)
+
+        if (match != null) {
+            val (targetNodeId, service, something, requestId) = match.destructured
+            val eventBusAddress = "api.service.requests.$targetNodeId"
+            vertx.eventBus().send(eventBusAddress, message)
+            logger.fine { "Routed API request message [${message.topicName}] to node [$targetNodeId]" }
+            // Still allow distribution to normal subscribers
+        }
+
         // Determine which nodes need this message based on topic subscriptions
         val targetNodes = getTargetNodesForTopic(message.topicName)
         val localNodeId = Monster.getClusterNodeId(vertx)
 
         val remoteNodes = targetNodes.filter { it != localNodeId }
-        
+
         logger.finest { "Publishing message [${message.topicName}] to nodes [${targetNodes.joinToString(",")}]" }
 
         // Send to local clients if this node has subscriptions

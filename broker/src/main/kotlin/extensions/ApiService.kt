@@ -17,19 +17,25 @@ import java.util.logging.Logger
  * API Service for handling JSON-RPC 2.0 requests over MQTT topics.
  *
  * Topic structure:
- * - Request: $API/<node-id>/<request-id>/request
- * - Response: $API/<node-id>/<request-id>/response
+ * - Request: $API/<node-id>/<service>/<realm>/request/<request-id>
+ * - Response: $API/<node-id>/<service>/<realm>/response/<request-id>
+ * - Listen on: $API/<node-id>/<service>/+/request/+
+ *
+ * Where <realm> enables ACL-based access control (e.g., "tenant-a", "v1", "team-b")
+ *
+ * Example:
+ * - Request: $API/node-1/graphql/tenant-a/request/req-123
+ * - Response: $API/node-1/graphql/tenant-a/response/req-123
  *
  * Routes requests to the local GraphQL endpoint via HTTP.
  */
 class ApiService(
     private val sessionHandler: SessionHandler,
+    private val serviceName: String = "graphql",
     private val graphQLPort: Int = 4000,
     private val graphQLPath: String = "/graphql"
 ) : AbstractVerticle() {
     private val logger: Logger = Utils.getLogger(this::class.java)
-    private val nodeId = Monster.getClusterNodeId(vertx)
-    private val apiTopicPrefix = "\$API/$nodeId"
 
     // Track pending requests for timeout handling
     private val pendingRequests = ConcurrentHashMap<String, PendingRequest>()
@@ -39,6 +45,8 @@ class ApiService(
     private val maxConcurrentRequests = 100
 
     private lateinit var httpClient: HttpClient
+    private lateinit var nodeId: String
+    private lateinit var apiTopicPrefix: String
 
     data class PendingRequest(
         val requestId: String,
@@ -48,7 +56,11 @@ class ApiService(
 
     override fun start(startPromise: Promise<Void>) {
         try {
-            logger.info("Starting API Service on node $nodeId with topic prefix: $apiTopicPrefix")
+            // Initialize node-specific properties now that vertx is available
+            nodeId = Monster.getClusterNodeId(vertx)
+            apiTopicPrefix = "\$API/$nodeId/$serviceName"
+
+            logger.info("Starting API Service '$serviceName' on node $nodeId with topic prefix: $apiTopicPrefix")
 
             // Create HTTP client for GraphQL communication
             val options = HttpClientOptions()
@@ -99,33 +111,46 @@ class ApiService(
      * Register handler for API topic messages via the event bus
      */
     private fun registerApiTopicHandler() {
-        // Subscribe to messages via SessionHandler's internal message distribution
-        // This uses the event bus address for node messages
-        val nodeMessageAddress = "node.${nodeId}.messages"
-
-        vertx.eventBus().consumer<BrokerMessage>(nodeMessageAddress) { message ->
+        // Subscribe to messages routed by SessionHandler for API topics
+        // Listen on node-specific address: api.service.requests.<node-id>
+        val eventBusAddress = "api.service.requests.$nodeId"
+        val consumer = vertx.eventBus().consumer<BrokerMessage>(eventBusAddress) { message ->
             val brokerMessage = message.body()
+            logger.fine("ApiService received message on topic: ${brokerMessage.topicName}")
             if (shouldHandleMessage(brokerMessage.topicName)) {
+                logger.fine("Processing API request from topic: ${brokerMessage.topicName}")
                 handleApiRequest(brokerMessage)
+            } else {
+                logger.fine("Message does not match API request pattern: ${brokerMessage.topicName}")
             }
         }
 
-        logger.info("Registered API topic handler for: ${'$'}API/$nodeId/+/request")
+        logger.info("Registered API topic handler for: ${'$'}API/$nodeId/$serviceName/+/request/+ (listening on event bus: $eventBusAddress)")
     }
 
     /**
      * Check if this message should be handled as an API request
      */
     private fun shouldHandleMessage(topic: String): Boolean {
-        return topic.startsWith("$apiTopicPrefix/") && topic.endsWith("/request")
+        // Topic format: $API/<node>/<service>/<realm>/request/<request-id>
+        return topic.contains("$serviceName/") && topic.contains("/request/")
     }
 
     /**
      * Extract request ID from topic path
-     * Topic format: $API/<node-id>/<request-id>/request
+     * Topic format: $API/<node>/<service>/<realm>/request/<request-id>
      */
     private fun extractRequestId(topic: String): String? {
-        val pattern = """^\${'$'}API/[^/]+/([^/]+)/request$""".toRegex()
+        val pattern = """^\${'$'}API/[^/]+/$serviceName/[^/]+/request/([^/]+)$""".toRegex()
+        return pattern.find(topic)?.groupValues?.get(1)
+    }
+
+    /**
+     * Extract the realm from topic path (e.g., "tenant-a", "v1", "team-b", etc.)
+     * Topic format: $API/<node>/<service>/<realm>/request/<request-id>
+     */
+    private fun extractRealm(topic: String): String? {
+        val pattern = """^\${'$'}API/[^/]+/$serviceName/([^/]+)/request/[^/]+$""".toRegex()
         return pattern.find(topic)?.groupValues?.get(1)
     }
 
@@ -133,56 +158,70 @@ class ApiService(
      * Handle incoming API request
      */
     private fun handleApiRequest(message: BrokerMessage) {
+        logger.fine("handleApiRequest called for topic: ${message.topicName}")
+
         val requestId = extractRequestId(message.topicName) ?: run {
             logger.warning("Invalid API topic format: ${message.topicName}")
             return
         }
 
+        val realm = extractRealm(message.topicName) ?: run {
+            logger.warning("Could not extract realm from topic: ${message.topicName}")
+            return
+        }
+
+        logger.fine("Extracted requestId: $requestId, realm: $realm")
+
         // Check concurrent request limit
         if (pendingRequests.size >= maxConcurrentRequests) {
-            sendErrorResponse(requestId, -32603, "Server busy: max concurrent requests reached")
+            logger.warning("Too many concurrent requests: ${pendingRequests.size}")
+            sendErrorResponse(requestId, -32603, "Server busy: max concurrent requests reached", realm)
             return
         }
 
         // Parse JSON-RPC request
         val payload = message.payload.toString(Charsets.UTF_8)
+        logger.fine("API Request payload: $payload")
+
         val requestJson = try {
             JsonObject(payload)
         } catch (e: Exception) {
             logger.warning("Invalid JSON in API request: ${e.message}")
-            sendErrorResponse(requestId, -32700, "Parse error")
+            sendErrorResponse(requestId, -32700, "Parse error", realm)
             return
         }
 
         val jsonRpcRequest = JsonRpcRequest.fromJsonObject(requestJson) ?: run {
-            logger.warning("Invalid JSON-RPC request format")
-            sendErrorResponse(requestId, -32600, "Invalid Request")
+            logger.warning("Invalid JSON-RPC request format: $requestJson")
+            sendErrorResponse(requestId, -32600, "Invalid Request", realm)
             return
         }
+
+        logger.fine("Valid JSON-RPC request: method=${jsonRpcRequest.method}, id=${jsonRpcRequest.id}")
 
         // Create timeout timer
         val timerId = vertx.setTimer(requestTimeoutMs) {
             logger.warning("Request $requestId timed out after ${requestTimeoutMs}ms")
-            sendErrorResponse(requestId, -32603, "Request timeout")
+            sendErrorResponse(requestId, -32603, "Request timeout", realm)
             pendingRequests.remove(jsonRpcRequest.id)
         }
 
         pendingRequests[jsonRpcRequest.id] = PendingRequest(jsonRpcRequest.id, timerId)
 
         // Process the request asynchronously
-        processJsonRpcRequest(jsonRpcRequest, requestId)
+        processJsonRpcRequest(jsonRpcRequest, requestId, realm)
     }
 
     /**
      * Process JSON-RPC 2.0 request by forwarding to GraphQL HTTP endpoint
      */
-    private fun processJsonRpcRequest(jsonRpcRequest: JsonRpcRequest, requestId: String) {
+    private fun processJsonRpcRequest(jsonRpcRequest: JsonRpcRequest, requestId: String, realm: String) {
         try {
             // Build GraphQL query from JSON-RPC method and params
             val (query, variables) = buildGraphQLQuery(jsonRpcRequest.method, jsonRpcRequest.params ?: emptyMap())
 
             if (query.isEmpty()) {
-                sendErrorResponse(requestId, -32601, "Method not found: ${jsonRpcRequest.method}")
+                sendErrorResponse(requestId, -32601, "Method not found: ${jsonRpcRequest.method}", realm)
                 pendingRequests.remove(jsonRpcRequest.id)?.let { vertx.cancelTimer(it.timerId) }
                 return
             }
@@ -214,154 +253,95 @@ class ApiService(
                                             val errorsArray = graphQLResponse.getJsonArray("errors")
                                             if (errorsArray.size() > 0) {
                                                 val error = errorsArray.getJsonObject(0)
-                                                sendErrorResponse(requestId, -32603, "GraphQL error: ${error.getString("message")}")
+                                                sendErrorResponse(requestId, -32603, "GraphQL error: ${error.getString("message")}", realm)
                                             } else {
-                                                sendSuccessResponse(requestId, result, jsonRpcRequest.id)
+                                                sendSuccessResponse(requestId, result, jsonRpcRequest.id, realm)
                                             }
                                         } else {
-                                            sendSuccessResponse(requestId, result, jsonRpcRequest.id)
+                                            sendSuccessResponse(requestId, result, jsonRpcRequest.id, realm)
                                         }
                                     } catch (e: Exception) {
                                         logger.warning("Failed to parse GraphQL response: ${e.message}")
-                                        sendErrorResponse(requestId, -32603, "Failed to parse GraphQL response")
+                                        sendErrorResponse(requestId, -32603, "Failed to parse GraphQL response", realm)
                                     }
                                     pendingRequests.remove(jsonRpcRequest.id)?.let { vertx.cancelTimer(it.timerId) }
                                 }
                                 .onFailure { error ->
                                     logger.warning("Failed to read GraphQL response body: ${error.message}")
-                                    sendErrorResponse(requestId, -32603, "Failed to read GraphQL response")
+                                    sendErrorResponse(requestId, -32603, "Failed to read GraphQL response", realm)
                                     pendingRequests.remove(jsonRpcRequest.id)?.let { vertx.cancelTimer(it.timerId) }
                                 }
                         }
                         .onFailure { error ->
                             logger.warning("GraphQL HTTP response failed: ${error.message}")
-                            sendErrorResponse(requestId, -32603, "GraphQL HTTP response failed: ${error.message}")
+                            sendErrorResponse(requestId, -32603, "GraphQL HTTP response failed: ${error.message}", realm)
                             pendingRequests.remove(jsonRpcRequest.id)?.let { vertx.cancelTimer(it.timerId) }
                         }
                     httpRequest.end(graphQLRequest.encode())
                 }
                 .onFailure { error ->
                     logger.warning("GraphQL HTTP request failed: ${error.message}")
-                    sendErrorResponse(requestId, -32603, "GraphQL HTTP request failed: ${error.message}")
+                    sendErrorResponse(requestId, -32603, "GraphQL HTTP request failed: ${error.message}", realm)
                     pendingRequests.remove(jsonRpcRequest.id)?.let { vertx.cancelTimer(it.timerId) }
                 }
 
         } catch (e: Exception) {
             logger.warning("Error processing JSON-RPC request: ${e.message}")
-            sendErrorResponse(requestId, -32603, "Internal error: ${e.message}")
+            sendErrorResponse(requestId, -32603, "Internal error: ${e.message}", realm)
             pendingRequests.remove(jsonRpcRequest.id)?.let { vertx.cancelTimer(it.timerId) }
         }
     }
 
     /**
-     * Build GraphQL query from JSON-RPC method and params
+     * The `method` field should contain the full GraphQL query or mutation string.
+     * Return it as-is along with the params as variables.
+     *
+     * Examples:
+     * - Query: "query { brokers { nodeId version uptime } }"
+     * - Mutation: "mutation { publish(topic: \"test/topic\", payload: \"hello\") { success } }"
+     * - With variables: "query($topicName: String) { currentValue(topic: $topicName) { payload } }"
      */
     private fun buildGraphQLQuery(method: String, params: Map<String, Any>): Pair<String, Map<String, Any>> {
-        return when {
-            method.startsWith("query.") -> {
-                // Query method: method.fieldName -> query { fieldName(...params) { ... } }
-                val fieldName = method.substring(6)
-                val graphqlQuery = buildQueryString(fieldName, params)
-                graphqlQuery to params
-            }
-            method.startsWith("mutation.") -> {
-                // Mutation method: method.fieldName -> mutation { fieldName(...params) { ... } }
-                val fieldName = method.substring(9)
-                val graphqlMutation = buildMutationString(fieldName, params)
-                graphqlMutation to params
-            }
-            else -> {
-                // Default to query if not specified
-                val graphqlQuery = buildQueryString(method, params)
-                graphqlQuery to params
-            }
-        }
-    }
-
-    /**
-     * Build a GraphQL query string from field name and params
-     */
-    private fun buildQueryString(fieldName: String, params: Map<String, Any>): String {
-        val argsStr = params.entries.joinToString(",") { (key, value) ->
-            "\$$key: String"
-        }
-
-        val paramStr = params.keys.joinToString(",") { key ->
-            "$key: \$$key"
-        }
-
-        return if (paramStr.isNotEmpty()) {
-            """
-            query($argsStr) {
-                $fieldName($paramStr)
-            }
-            """.trimIndent()
-        } else {
-            """
-            query {
-                $fieldName
-            }
-            """.trimIndent()
-        }
-    }
-
-    /**
-     * Build a GraphQL mutation string from field name and params
-     */
-    private fun buildMutationString(fieldName: String, params: Map<String, Any>): String {
-        val argsStr = params.entries.joinToString(",") { (key, value) ->
-            "\$$key: String"
-        }
-
-        val paramStr = params.keys.joinToString(",") { key ->
-            "$key: \$$key"
-        }
-
-        return if (paramStr.isNotEmpty()) {
-            """
-            mutation($argsStr) {
-                $fieldName($paramStr)
-            }
-            """.trimIndent()
-        } else {
-            """
-            mutation {
-                $fieldName
-            }
-            """.trimIndent()
-        }
+        // Method field contains the full GraphQL query/mutation string
+        return method to params
     }
 
     /**
      * Send successful JSON-RPC response
      */
-    private fun sendSuccessResponse(requestId: String, data: Any?, jsonRpcId: String) {
+    private fun sendSuccessResponse(requestId: String, data: Any?, jsonRpcId: String, realm: String) {
         try {
+            logger.fine("Sending success response for requestId=$requestId, id=$jsonRpcId, realm=$realm")
             val response = JsonRpcResponse.success(jsonRpcId, data)
-            publishResponse(requestId, response.toJsonObject())
+            publishResponse(requestId, response.toJsonObject(), realm)
         } catch (e: Exception) {
             logger.warning("Failed to send success response: ${e.message}")
+            e.printStackTrace()
         }
     }
 
     /**
      * Send error JSON-RPC response
      */
-    private fun sendErrorResponse(requestId: String, code: Int, message: String) {
+    private fun sendErrorResponse(requestId: String, code: Int, message: String, realm: String) {
         try {
+            logger.fine("Sending error response for requestId=$requestId, code=$code, message=$message, realm=$realm")
             val response = JsonRpcResponse.error(requestId, code, message)
-            publishResponse(requestId, response.toJsonObject())
+            publishResponse(requestId, response.toJsonObject(), realm)
         } catch (e: Exception) {
             logger.warning("Failed to send error response: ${e.message}")
+            e.printStackTrace()
         }
     }
 
     /**
      * Publish JSON-RPC response to response topic
      */
-    private fun publishResponse(requestId: String, response: JsonObject) {
+    private fun publishResponse(requestId: String, response: JsonObject, realm: String) {
         try {
-            val responseTopic = "$apiTopicPrefix/$requestId/response"
+            val responseTopic = "$apiTopicPrefix/$realm/response/$requestId"
+            logger.fine("Publishing response to topic: $responseTopic, payload: ${response.encode()}")
+
             val responseMessage = BrokerMessage(
                 messageUuid = java.util.UUID.randomUUID().toString(),
                 messageId = 0,
@@ -377,9 +357,10 @@ class ApiService(
             // Publish using SessionHandler's internal publish
             sessionHandler.publishInternal("API_SERVICE", responseMessage)
 
-            logger.fine("Published API response to $responseTopic")
+            logger.fine("API response published to $responseTopic")
         } catch (e: Exception) {
             logger.warning("Failed to publish response: ${e.message}")
+            e.printStackTrace()
         }
     }
 
