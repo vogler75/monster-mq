@@ -1,0 +1,9 @@
+Release v1.6.40
+Built from commit: b44f4ba
+Date: 2025-10-20 22:51:28
+
+Changes since v1.6.39:
+---
+b44f4ba Optimize API request routing with fast path prefix check
+fba6af8 Implement MQTT JSON-RPC 2.0 API interface (Issue #10)
+caa08a7 Add MQTT API interface using JSON-RPC 2.0 (Issue #10)
