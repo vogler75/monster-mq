@@ -1,0 +1,8 @@
+Release v1.6.41
+Built from commit: 9f1904c
+Date: 2025-10-20 23:03:17
+
+Changes since v1.6.40:
+---
+9f1904c Simplify API configuration to MqttApi boolean
+f9abdd4 Move API configuration under GraphQL section
