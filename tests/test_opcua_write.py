@@ -9,14 +9,18 @@ import asyncio
 from asyncua import Client, ua
 import logging
 import time
+import os
 
 # Enable detailed logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Configuration from environment variables with defaults
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
+
 async def test_opcua_write():
     """Test writing values to OPC UA nodes"""
-    url = "opc.tcp://localhost:4840/server"
+    url = OPCUA_URL
 
     print(f"🔗 Connecting to OPC UA server at: {url}")
 

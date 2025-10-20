@@ -21,6 +21,7 @@ Notes:
 
 import sys
 import time
+import os
 from typing import Optional
 
 try:
@@ -29,17 +30,18 @@ except ImportError:
     print("paho-mqtt not installed. Install with: pip install paho-mqtt")
     sys.exit(1)
 
-BROKER_HOST = "localhost"
-BROKER_PORT = 1883
+# Configuration from environment variables with defaults
+BROKER_HOST = os.getenv("MQTT_BROKER", "localhost")
+BROKER_PORT = int(os.getenv("MQTT_PORT", "1883"))
 KEEPALIVE = 30
 
 # Adjust these to a known allowed / forbidden pair under your ACL policy
 ALLOWED_TOPIC = "test/allowed/publish"
 FORBIDDEN_TOPIC = "secret/publish"  # Ensure ACL denies this; otherwise it will be accepted
 
-# Credentials fixed for test user
-USERNAME: Optional[str] = "Test"
-PASSWORD: Optional[str] = "Test"
+# Credentials from environment variables (defaults to Test/Test for backward compatibility)
+USERNAME: Optional[str] = os.getenv("MQTT_USERNAME", "Test")
+PASSWORD: Optional[str] = os.getenv("MQTT_PASSWORD", "Test")
 
 # Timeouts (seconds)
 PUBACK_TIMEOUT = 3.0   # Wait this long for PUBACK for QoS1 allowed publish

@@ -34,14 +34,20 @@ import argparse
 import websockets
 import requests
 import time
+import os
 from datetime import datetime
 
+# Configuration from environment variables with defaults
+GRAPHQL_WS_URL = os.getenv("GRAPHQL_WS_URL", "ws://localhost:4000/graphqlws")
+GRAPHQL_URL = os.getenv("GRAPHQL_URL", "http://localhost:4000/graphql")
 
 class BulkSubscriptionTester:
     """Test bulk subscriptions with simultaneous message publishing"""
 
-    def __init__(self, url="ws://localhost:4000/graphqlws", http_url="http://localhost:4000/graphql",
+    def __init__(self, url=None, http_url=None,
                  timeout_ms=1000, max_size=100):
+        url = url or GRAPHQL_WS_URL
+        http_url = http_url or GRAPHQL_URL
         self.ws_url = url
         self.http_url = http_url
         self.timeout_ms = timeout_ms
@@ -298,14 +304,14 @@ Examples:
     parser.add_argument(
         "--ws",
         dest="ws_url",
-        default="ws://localhost:4000/graphqlws",
-        help="GraphQL WebSocket URL (default: ws://localhost:4000/graphqlws)"
+        default=GRAPHQL_WS_URL,
+        help=f"GraphQL WebSocket URL (default: {GRAPHQL_WS_URL})"
     )
     parser.add_argument(
         "--http",
         dest="http_url",
-        default="http://localhost:4000/graphql",
-        help="GraphQL HTTP URL (default: http://localhost:4000/graphql)"
+        default=GRAPHQL_URL,
+        help=f"GraphQL HTTP URL (default: {GRAPHQL_URL})"
     )
     parser.add_argument(
         "--timeout",

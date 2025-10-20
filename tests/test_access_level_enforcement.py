@@ -12,14 +12,22 @@ from asyncua import Client, ua
 import paho.mqtt.client as mqtt
 import time
 import logging
+import os
 
 # Enable detailed logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Configuration from environment variables with defaults
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
+MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
+
 async def test_access_level_enforcement():
     """Test that access level enforcement works correctly"""
-    url = "opc.tcp://localhost:4840/server"
+    url = OPCUA_URL
 
     print("🧪 OPC UA Access Level Enforcement Test")
     print("=" * 60)
@@ -33,7 +41,9 @@ async def test_access_level_enforcement():
             # First, publish an MQTT message to create write/oee node
             # This should create a READ_WRITE node based on the configuration
             mqtt_client = mqtt.Client()
-            mqtt_client.connect("localhost", 1883, 60)
+            if MQTT_USERNAME:
+                mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD or "")
+            mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
             mqtt_client.loop_start()
             time.sleep(1)  # Wait for connection
 
@@ -76,7 +86,9 @@ async def test_access_level_enforcement():
 
             # First create the test/oee node by publishing MQTT
             mqtt_client = mqtt.Client()
-            mqtt_client.connect("localhost", 1883, 60)
+            if MQTT_USERNAME:
+                mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD or "")
+            mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
             mqtt_client.loop_start()
             time.sleep(1)
 

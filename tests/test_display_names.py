@@ -3,12 +3,16 @@
 import asyncio
 from asyncua import Client
 import logging
+import os
 
 # Enable detailed logging
 logging.basicConfig(level=logging.INFO)
 
+# Configuration from environment variables with defaults
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
+
 async def test_display_names():
-    url = "opc.tcp://localhost:4840/server"
+    url = OPCUA_URL
 
     async with Client(url=url) as client:
         print("Connected to OPC UA server")

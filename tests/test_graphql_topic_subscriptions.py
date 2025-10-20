@@ -52,11 +52,14 @@ import termios
 from datetime import datetime
 from typing import Optional, List
 
+# Configuration from environment variables with defaults
+GRAPHQL_WS_URL = os.getenv("GRAPHQL_WS_URL", "ws://localhost:4000/graphqlws")
 
 class GraphQLTopicSubscriptionClient:
     """Client for subscribing to MonsterMQ MQTT topic updates via GraphQL WebSocket"""
 
-    def __init__(self, url="ws://localhost:4000/graphqlws"):
+    def __init__(self, url=None):
+        url = url or GRAPHQL_WS_URL
         self.url = url
         self.websocket = None
         self.subscription_id = "1"
@@ -436,8 +439,8 @@ Examples:
 
     parser.add_argument(
         "--url",
-        default="ws://localhost:4000/graphqlws",
-        help="GraphQL WebSocket URL (default: ws://localhost:4000/graphqlws)"
+        default=GRAPHQL_WS_URL,
+        help=f"GraphQL WebSocket URL (default: {GRAPHQL_WS_URL})"
     )
     parser.add_argument(
         "--filters",

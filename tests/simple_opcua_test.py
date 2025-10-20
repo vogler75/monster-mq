@@ -6,12 +6,16 @@ Simple OPC UA test to check MonsterMQ namespaces and nodes
 import asyncio
 from asyncua import Client, ua
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING)  # Reduce log noise
 
+# Configuration from environment variables with defaults
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
+
 async def simple_test():
-    url = "opc.tcp://localhost:4840/server"
+    url = OPCUA_URL
     print(f"Connecting to: {url}")
 
     try:

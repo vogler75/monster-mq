@@ -7,14 +7,18 @@ This script directly writes to the write/oee variable node.
 import asyncio
 from asyncua import Client, ua
 import logging
+import os
 
 # Enable detailed logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Configuration from environment variables with defaults
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
+
 async def test_simple_write():
     """Test writing to the write/oee variable node directly"""
-    url = "opc.tcp://localhost:4840/server"
+    url = OPCUA_URL
 
     print(f"🔗 Connecting to OPC UA server at: {url}")
 

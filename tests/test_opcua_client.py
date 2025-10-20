@@ -9,10 +9,14 @@ import asyncio
 from asyncua import Client, ua
 import logging
 import sys
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Configuration from environment variables with defaults
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
 
 async def browse_node(client, node, indent=0):
     """Recursively browse a node and its children"""
@@ -56,7 +60,7 @@ async def browse_node(client, node, indent=0):
 async def test_opcua_server():
     """Main test function"""
     # Connect to the MonsterMQ OPC UA server
-    url = "opc.tcp://localhost:4840/server"
+    url = OPCUA_URL
 
     print(f"Connecting to OPC UA server at: {url}")
 

@@ -13,10 +13,18 @@ import paho.mqtt.client as mqtt
 import threading
 import time
 import logging
+import os
 
 # Enable detailed logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Configuration from environment variables with defaults
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
+MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 
 class MQTTSubscriber:
     def __init__(self):
@@ -39,7 +47,9 @@ class MQTTSubscriber:
         })
 
     def start(self):
-        self.client.connect("localhost", 1883, 60)
+        if MQTT_USERNAME:
+            self.client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD or "")
+        self.client.connect(MQTT_BROKER, MQTT_PORT, 60)
         self.client.loop_start()
 
     def stop(self):
@@ -60,7 +70,7 @@ class OPCUASubscriber:
 
 async def test_opcua_subscription_notifications():
     """Test that OPC UA subscriptions work when writing to nodes"""
-    url = "opc.tcp://localhost:4840/server"
+    url = OPCUA_URL
 
     print("🧪 OPC UA Subscription Notification Test")
     print("=" * 60)

@@ -6,12 +6,16 @@ Debug direct node access to MonsterMQ node
 import asyncio
 from asyncua import Client, ua
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING)
 
+# Configuration from environment variables with defaults
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
+
 async def debug_test():
-    url = "opc.tcp://localhost:4840/server"
+    url = OPCUA_URL
     print(f"Connecting to: {url}")
 
     try:

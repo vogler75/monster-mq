@@ -4,9 +4,13 @@ import asyncio
 from asyncua import Client
 import logging
 import time
+import os
 
 # Enable detailed logging
 logging.basicConfig(level=logging.INFO)
+
+# Configuration from environment variables with defaults
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
 
 class SubscriptionTest:
     def __init__(self):
@@ -19,7 +23,7 @@ class SubscriptionTest:
         print(f"🔔 Data change notification #{self.updates_received}: Value = {val}, Node = {node}")
 
 async def test_live_subscription():
-    url = "opc.tcp://localhost:4840/server"
+    url = OPCUA_URL
     test = SubscriptionTest()
 
     async with Client(url=url) as client:

@@ -29,14 +29,18 @@ import requests
 import json
 import time
 import sys
+import os
 import argparse
 from datetime import datetime
 
+# Configuration from environment variables with defaults
+GRAPHQL_URL = os.getenv("GRAPHQL_URL", "http://localhost:4000/graphql")
 
 class GraphQLPublisher:
     """Client for publishing messages to MonsterMQ via GraphQL"""
 
-    def __init__(self, url="http://localhost:4000/graphql"):
+    def __init__(self, url=None):
+        url = url or GRAPHQL_URL
         self.url = url
         self.headers = {
             "Content-Type": "application/json"

@@ -24,6 +24,7 @@ Interpretation of results:
 
 import sys
 import time
+import os
 from typing import List
 
 try:
@@ -32,9 +33,12 @@ except ImportError:
     print("paho-mqtt not installed. Install with: pip install paho-mqtt")
     sys.exit(1)
 
-BROKER_HOST = "localhost"
-BROKER_PORT = 1883
+# Configuration from environment variables with defaults
+BROKER_HOST = os.getenv("MQTT_BROKER", "localhost")
+BROKER_PORT = int(os.getenv("MQTT_PORT", "1883"))
 KEEPALIVE = 30
+BROKER_USERNAME = os.getenv("MQTT_USERNAME")
+BROKER_PASSWORD = os.getenv("MQTT_PASSWORD")
 
 # Topics under test
 ALLOWED_TOPIC = "test/allowed"
@@ -67,12 +71,14 @@ def on_disconnect(client, userdata, rc):
 
 def main():
     client = mqtt.Client()
-    client.username_pw_set("Test", "Test")
+    if BROKER_USERNAME:
+        client.username_pw_set(BROKER_USERNAME, BROKER_PASSWORD or "")
     client.on_connect = on_connect
     client.on_subscribe = on_subscribe
     client.on_disconnect = on_disconnect
 
-    print("Connecting to broker as user 'Test'...")
+    user_info = f"as user '{BROKER_USERNAME}'" if BROKER_USERNAME else "without credentials"
+    print(f"Connecting to broker {user_info}...")
     client.connect(BROKER_HOST, BROKER_PORT, KEEPALIVE)
     client.loop_start()
 
