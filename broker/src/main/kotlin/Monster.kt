@@ -10,6 +10,7 @@ import at.rocworks.data.MqttSubscriptionCodec
 import at.rocworks.extensions.graphql.GraphQLServer
 import at.rocworks.extensions.McpServer
 import at.rocworks.extensions.SparkplugExtension
+import at.rocworks.extensions.ApiService
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.handlers.ArchiveHandler
@@ -681,6 +682,22 @@ MORE INFO:
                     null
                 }
 
+                // API Service (JSON-RPC 2.0 over MQTT)
+                val apiConfig = configJson.getJsonObject("API", JsonObject())
+                val apiEnabled = apiConfig.getBoolean("Enabled", true)
+                val apiService = if (apiEnabled && graphQLServer != null) {
+                    val graphQLPort = graphQLConfig.getInteger("Port", 4000)
+                    val graphQLPath = graphQLConfig.getString("Path", "/graphql")
+                    ApiService(sessionHandler, graphQLPort, graphQLPath)
+                } else {
+                    if (!apiEnabled) {
+                        logger.info("API Service is disabled in configuration")
+                    } else if (graphQLServer == null) {
+                        logger.info("GraphQL server is disabled, API Service will not start")
+                    }
+                    null
+                }
+
                 // MQTT Servers
                 val servers = listOfNotNull(
                     if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, sessionHandler, userManager) else null,
@@ -807,6 +824,15 @@ MORE INFO:
                         }
                     }
                     .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) } as List<Future<String>>) }
+                    .compose {
+                        // Deploy API Service after other components are ready
+                        if (apiService != null) {
+                            logger.info("Deploying API Service...")
+                            vertx.deployVerticle(apiService)
+                        } else {
+                            Future.succeededFuture<String>()
+                        }
+                    }
                     .compose {
                         // Start GraphQL server after all other components are ready
                         if (graphQLServer != null) {
