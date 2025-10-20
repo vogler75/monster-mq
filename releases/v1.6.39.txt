@@ -1,0 +1,10 @@
+Release v1.6.39
+Built from commit: f32d789
+Date: 2025-10-20 21:10:16
+
+Changes since v1.6.38:
+---
+f32d789 Merge pull request #27 from vogler75/fix/opcua-reconnection-listener
+bfc1ccb Fix OPC UA client reconnection issue after server disconnect
+de96711 Make test configuration use environment variables
+07544c7 Add logging configuration options to example config
