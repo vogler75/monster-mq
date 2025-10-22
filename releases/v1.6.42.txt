@@ -1,0 +1,17 @@
+Release v1.6.42
+Built from commit: 4e2393b
+Date: 2025-10-22 21:30:22
+
+Changes since v1.6.41:
+---
+4e2393b Refactor MQTT TCP server config and remove legacy code
+5f77719 Disable waitForFlush mechanism for testing
+3e89c9b Update SessionHandler.kt
+759f56d Revert "Disable retained message lookup in subscription flow"
+5656edd Disable retained message lookup in subscription flow
+3e88c6e Remove idleTimeout setting from server socket
+4b68eaf Improve TCP handling and message payload processing
+368aa61 Use getBytes() for payload in BrokerMessage
+72d99c0 Implement dual-index subscription management
+c327b98 Add -workerPoolSize argument for Vert.x worker threads
+3c6412b Make queue sizes configurable via config file
