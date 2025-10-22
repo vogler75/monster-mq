@@ -197,6 +197,11 @@ class Monster(args: Array<String>) {
         fun getMaxSubscribeRate(): Int = maxSubscribeRate
 
         @Volatile
+        private var workerPoolSize: Int? = null
+        @JvmStatic
+        fun getWorkerPoolSize(): Int? = workerPoolSize
+
+        @Volatile
         private var subscriptionQueueSize: Int = 50_000
         @JvmStatic
         fun getSubscriptionQueueSize(): Int = subscriptionQueueSize
@@ -241,7 +246,7 @@ class Monster(args: Array<String>) {
         }
 
         // Validate command-line arguments
-        val validArguments = setOf("-cluster", "-config", "-archiveConfig", "-log", "-dashboardPath", "-help", "--help", "-h")
+        val validArguments = setOf("-cluster", "-config", "-archiveConfig", "-log", "-dashboardPath", "-workerPoolSize", "-help", "--help", "-h")
         var i = 0
         while (i < args.size) {
             val arg = args[i]
@@ -252,7 +257,7 @@ class Monster(args: Array<String>) {
                     exitProcess(1)
                 }
                 // Check if argument expects a value
-                if (arg in setOf("-config", "-archiveConfig", "-log", "-dashboardPath")) {
+                if (arg in setOf("-config", "-archiveConfig", "-log", "-dashboardPath", "-workerPoolSize")) {
                     if (i + 1 >= args.size || args[i + 1].startsWith("-")) {
                         println("ERROR: Argument $arg requires a value")
                         exitProcess(1)
@@ -304,9 +309,30 @@ class Monster(args: Array<String>) {
             }
         }
 
+        // Worker pool size (optional)
+        args.indexOf("-workerPoolSize").let {
+            if (it != -1 && it + 1 < args.size) {
+                try {
+                    workerPoolSize = args[it + 1].toInt()
+                    println("Worker Pool Size [$workerPoolSize]")
+                } catch (e: NumberFormatException) {
+                    println("ERROR: -workerPoolSize argument must be an integer")
+                    exitProcess(1)
+                }
+            }
+        }
+
         logger.info("Cluster: ${isClustered()}")
 
         val builder = Vertx.builder()
+        // Apply worker pool size if specified via command line
+        getWorkerPoolSize()?.let { poolSize ->
+            val vertxOptions = VertxOptions()
+                .setWorkerPoolSize(poolSize)
+            builder.with(vertxOptions)
+            logger.info("Vertx worker thread pool size set to $poolSize (via -workerPoolSize argument)")
+        }
+
         if (isClustered())
             clusterSetup(builder)
         else
@@ -334,6 +360,10 @@ OPTIONS:
                         Levels: ALL, FINEST, FINER, FINE, INFO, WARNING, SEVERE
                         Default: INFO
 
+  -workerPoolSize <num> Vert.x worker thread pool size
+                        Default: 2×CPU count (e.g., 16 on 8-core machine)
+                        Increase for high-concurrency scenarios
+
   -dashboardPath <path> Serve dashboard files from filesystem path (development only)
                         Example: broker/src/main/resources/dashboard
                         Default: serve from classpath resources
@@ -341,15 +371,18 @@ OPTIONS:
 EXAMPLES:
   # Start with default configuration
   java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt
-  
+
   # Start with custom config file
   java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -config myconfig.yaml
-  
+
   # Start in cluster mode with debug logging
   java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -cluster -log FINE
-  
-  # Start with SQLite configuration and detailed logging  
-  java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -config config-sqlite.yaml -log FINEST
+
+  # Start with custom worker thread pool size for high load
+  java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -workerPoolSize 64
+
+  # Start with SQLite configuration and detailed logging
+  java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -config config-sqlite.yaml -log FINEST -workerPoolSize 128
 
 FEATURES:
   • MQTT 3.1.1 Protocol Support with QoS 0, 1, 2
