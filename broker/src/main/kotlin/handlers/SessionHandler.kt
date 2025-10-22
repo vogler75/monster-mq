@@ -35,7 +35,9 @@ open class SessionHandler(
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
-    private val topicIndex = TopicTree<String, Int>() // Topic index with client and QoS
+    // Dual-index subscription manager: exact (O(1)) + wildcard (O(depth))
+    // This replaces the single TopicTree for better performance with large subscription counts
+    private val subscriptionManager = SubscriptionManager()
     private val clientStatus = ConcurrentHashMap<String, ClientStatus>() // ClientId + Status
 
     // Distributed client-to-node mapping using ClusterDataReplicator
@@ -127,9 +129,10 @@ open class SessionHandler(
 
         vertx.eventBus().consumer<MqttSubscription>(subscriptionAddAddress) { message ->
             val subscription = message.body()
-            topicIndex.add(subscription.topicName, subscription.clientId, subscription.qos.value())
+            // Add to subscription manager (routes to exact or wildcard index)
+            subscriptionManager.subscribe(subscription.clientId, subscription.topicName, subscription.qos.value())
 
-            // Track topic subscriptions by node for targeted publishing
+            // Track topic subscriptions by node for targeted publishing (cluster replication)
             val nodeId = clientNodeMapping.get(subscription.clientId) ?: Monster.getClusterNodeId(vertx)
             topicNodeMapping.addToSet(subscription.topicName, nodeId)
             logger.finest { "Added topic subscription [${subscription.topicName}] for node [${nodeId}]" }
@@ -137,11 +140,12 @@ open class SessionHandler(
 
         vertx.eventBus().consumer<MqttSubscription>(subscriptionDelAddress) { message ->
             val subscription = message.body()
-            topicIndex.del(subscription.topicName, subscription.clientId)
+            // Remove from subscription manager
+            subscriptionManager.unsubscribe(subscription.clientId, subscription.topicName)
 
             // Clean up topic-node mapping if no more clients on this node for this topic
             val nodeId = clientNodeMapping.get(subscription.clientId) ?: Monster.getClusterNodeId(vertx)
-            val remainingClientsOnNode = topicIndex.findDataOfTopicName(subscription.topicName)
+            val remainingClientsOnNode = subscriptionManager.findAllSubscribers(subscription.topicName)
                 .any { (clientId, _) -> clientNodeMapping.get(clientId) == nodeId }
 
             if (!remainingClientsOnNode) {
@@ -226,12 +230,16 @@ open class SessionHandler(
                 totalMessagesOut += sessionMetrics.messagesOut.get()
             }
 
+            val subStats = subscriptionManager.getStats()
             metrics.put("messagesIn", totalMessagesIn)
                    .put("messagesOut", totalMessagesOut)
                    .put("nodeSessionCount", clientMetrics.size)
                    .put("messageBusIn", messageBusIn.get())
                    .put("messageBusOut", messageBusOut.get())
-                   .put("topicIndexSize", topicIndex.size())
+                   .put("topicIndexSize", subStats.totalExactSubscriptions + subStats.totalWildcardSubscriptions)
+                   .put("exactTopics", subStats.totalExactTopics)
+                   .put("exactSubscriptions", subStats.totalExactSubscriptions)
+                   .put("wildcardPatterns", subStats.totalWildcardPatterns)
                    .put("clientNodeMappingSize", clientNodeMapping.size())
                    .put("topicNodeMappingSize", topicNodeMapping.size())
 
@@ -310,6 +318,7 @@ open class SessionHandler(
                 val messageBusInRate = if (busDuration > 0) kotlin.math.round(messageBusInCount / busDuration) else 0.0
                 val messageBusOutRate = if (busDuration > 0) kotlin.math.round(messageBusOutCount / busDuration) else 0.0
 
+                val subStats = subscriptionManager.getStats()
                 metrics.put("messagesIn", totalMessagesIn)
                        .put("messagesOut", totalMessagesOut)
                        .put("messagesInRate", totalMessagesInRate)
@@ -319,7 +328,10 @@ open class SessionHandler(
                        .put("messageBusOut", messageBusOutCount)
                        .put("messageBusInRate", messageBusInRate)
                        .put("messageBusOutRate", messageBusOutRate)
-                       .put("topicIndexSize", topicIndex.size())
+                       .put("topicIndexSize", subStats.totalExactSubscriptions + subStats.totalWildcardSubscriptions)
+                       .put("exactTopics", subStats.totalExactTopics)
+                       .put("exactSubscriptions", subStats.totalExactSubscriptions)
+                       .put("wildcardPatterns", subStats.totalWildcardPatterns)
                        .put("clientNodeMappingSize", clientNodeMapping.size())
                        .put("topicNodeMappingSize", topicNodeMapping.size())
                        .put("sessionMetrics", sessionMetricsArray)
@@ -444,10 +456,10 @@ open class SessionHandler(
 
         logger.info("Loading all subscriptions [${Utils.getCurrentFunctionName()}]")
         val f2 = sessionStore.iterateSubscriptions { topicName, clientId, qos ->
-            // Add to topic index
-            topicIndex.add(topicName, clientId, qos)
+            // Add to subscription manager (routes to exact or wildcard index)
+            subscriptionManager.subscribe(clientId, topicName, qos)
 
-            // Build topic-to-node mapping based on where client is located
+            // Build topic-to-node mapping based on where client is located (cluster replication)
             val nodeId = clientNodeMapping.get(clientId) ?: Monster.getClusterNodeId(vertx)
             topicNodeMapping.addToSet(topicName, nodeId)
             logger.finest { "Loaded subscription [${topicName}] for client [${clientId}] on node [${nodeId}]" }
@@ -583,7 +595,10 @@ open class SessionHandler(
 
     fun getSessionCount(): Int = clientMetrics.size
 
-    fun getTopicIndexSize(): Int = topicIndex.size()
+    fun getTopicIndexSize(): Int {
+        val stats = subscriptionManager.getStats()
+        return stats.totalExactSubscriptions + stats.totalWildcardSubscriptions
+    }
 
     fun getClientNodeMappingSize(): Int = clientNodeMapping.size()
 
@@ -777,7 +792,8 @@ open class SessionHandler(
     }
 
     private fun findClients(topicName: String): Set<Pair<String, Int>> {
-        val result = topicIndex.findDataOfTopicName(topicName).toSet()
+        // Uses dual-index: O(1) for exact + O(depth) for wildcards
+        val result = subscriptionManager.findAllSubscribers(topicName).toSet()
         logger.finest { "Found [${result.size}] clients [${result.joinToString(",")}] [${Utils.getCurrentFunctionName()}]" }
         return result
     }
@@ -1009,22 +1025,28 @@ open class SessionHandler(
             logger.finest { "Processing [${localClients.size}] local clients out of [${clients.size}] total clients [${Utils.getCurrentFunctionName()}]" }
 
             when (qos) {
-                0 -> localClients.forEach { (clientId, _) ->
-                    sendMessageToClient(clientId, m)
+                0 -> {
+                    // QoS 0: Batch deliver with event loop yields to prevent blocking
+                    processClientBatchAsync(localClients, m) { clientId, msg ->
+                        sendMessageToClient(clientId, msg)
+                    }
                 }
                 1, 2 -> {
                     val (online, others) = localClients.partition { (clientId, _) ->
                         clientStatus[clientId] == ClientStatus.ONLINE
                     }
                     logger.finest { "Online [${online.size}] Other [${others.size}] [${Utils.getCurrentFunctionName()}]" }
-                    online.forEach { (clientId, _) ->
-                        sendMessageToClient(clientId, m).onComplete {
+
+                    // Online clients: batch async delivery with event loop yields
+                    processClientBatchAsync(online, m) { clientId, msg ->
+                        sendMessageToClient(clientId, msg).onComplete {
                             if (it.failed() || !it.result()) {
                                 logger.warning("Message sent to online client failed [${clientId}]")
-                                enqueueMessage(m, listOf(clientId))
+                                enqueueMessage(msg, listOf(clientId))
                             }
                         }
                     }
+
                     if (others.isNotEmpty()) {
                         val (created, offline) = others.partition { (clientId, _) ->
                             clientStatus[clientId] == ClientStatus.CREATED
@@ -1043,6 +1065,52 @@ open class SessionHandler(
 
         // Also deliver to internal clients (OPC UA Server, etc.)
         deliverToInternalClients(message)
+    }
+
+    /**
+     * Process client batch delivery asynchronously.
+     * Batches clients into chunks and yields control to event loop between batches
+     * to prevent blocking when delivering to many clients (1000+).
+     *
+     * @param clients List of (clientId, subscriptionQos) pairs
+     * @param message The message to send
+     * @param sendFn Function to send message to client: (clientId, message) -> Unit
+     */
+    private fun processClientBatchAsync(
+        clients: List<Pair<String, Int>>,
+        message: BrokerMessage,
+        sendFn: (String, BrokerMessage) -> Unit
+    ) {
+        val BATCH_SIZE = 100  // Process 100 clients per event loop tick
+
+        if (clients.size <= BATCH_SIZE) {
+            // Small number of clients: process synchronously
+            clients.forEach { (clientId, _) ->
+                sendFn(clientId, message)
+            }
+            return
+        }
+
+        // Large number of clients: batch with event loop yields
+        val batches = clients.chunked(BATCH_SIZE)
+        var batchIndex = 0
+
+        fun processBatch() {
+            if (batchIndex >= batches.size) return
+
+            val currentBatch = batches[batchIndex]
+            currentBatch.forEach { (clientId, _) ->
+                sendFn(clientId, message)
+            }
+
+            batchIndex++
+            if (batchIndex < batches.size) {
+                // Yield to event loop to allow other messages to be processed
+                vertx.runOnContext { processBatch() }
+            }
+        }
+
+        processBatch()
     }
 
     // Helper function to determine target nodes for a topic
@@ -1090,8 +1158,8 @@ open class SessionHandler(
         // Add to internal subscriptions
         internalSubscriptions.getOrPut(clientId) { ConcurrentHashMap() }[topicFilter] = messageHandler
 
-        // Add to topic index for message routing
-        topicIndex.add(topicFilter, clientId, qos)
+        // Add to subscription manager (routes to exact or wildcard index)
+        subscriptionManager.subscribe(clientId, topicFilter, qos)
 
         // Update topic-node mapping for cluster awareness
         val localNodeId = Monster.getClusterNodeId(vertx)
@@ -1114,12 +1182,12 @@ open class SessionHandler(
             internalSubscriptions.remove(clientId)
         }
 
-        // Remove from topic index
-        topicIndex.del(topicFilter, clientId)
+        // Remove from subscription manager
+        subscriptionManager.unsubscribe(clientId, topicFilter)
 
         // Update topic-node mapping
         val localNodeId = Monster.getClusterNodeId(vertx)
-        val hasOtherSubscriptions = topicIndex.findDataOfTopicName(topicFilter).isNotEmpty()
+        val hasOtherSubscriptions = subscriptionManager.findAllSubscribers(topicFilter).isNotEmpty()
         if (!hasOtherSubscriptions) {
             topicNodeMapping.removeFromSet(topicFilter, localNodeId)
         }
