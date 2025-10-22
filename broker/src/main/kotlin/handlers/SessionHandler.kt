@@ -882,20 +882,15 @@ open class SessionHandler(
             return
         }
 
-        // TEMPORARY: Disabled retained message lookup to test for race conditions with simultaneous connections
-        // messageHandler.findRetainedMessages(topicName, 0) { message -> // TODO: max must be configurable
-        //     logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-        //     val effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
-        //     sendMessageToClient(clientId, effectiveMessage)
-        // }.onComplete {
-        //     logger.finest { "Retained messages published [${it.result()}] [${Utils.getCurrentFunctionName()}]" }
-        //     addSubscription(MqttSubscription(clientId, topicName, qos))
-        //     command.reply(true)
-        // }
-
-        // For now, just add subscription immediately without retained message lookup
-        addSubscription(MqttSubscription(clientId, topicName, qos))
-        command.reply(true)
+        messageHandler.findRetainedMessages(topicName, 0) { message -> // TODO: max must be configurable
+            logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
+            val effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
+            sendMessageToClient(clientId, effectiveMessage)
+        }.onComplete {
+            logger.finest { "Retained messages published [${it.result()}] [${Utils.getCurrentFunctionName()}]" }
+            addSubscription(MqttSubscription(clientId, topicName, qos))
+            command.reply(true)
+        }
     }
 
     //----------------------------------------------------------------------------------------------------
