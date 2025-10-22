@@ -30,7 +30,7 @@ class BrokerMessage(
         Utils.getUuid(),
         if (message.messageId()<0) 0 else message.messageId(),
         message.topicName(),
-        message.payload().getBytes(),  // ← CRITICAL: getBytes() makes a copy, .bytes doesn't
+        message.payload().bytes, 
         message.qosLevel().value(),
         message.isRetain,
         message.isDup,

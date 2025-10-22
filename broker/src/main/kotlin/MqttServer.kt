@@ -26,6 +26,16 @@ class MqttServer(
             .setPassword("password")
         it.isUseWebSocket = this.useWebSocket
         it.maxMessageSize = this.maxMessageSize
+
+        // CRITICAL FIX: Prevent TCP packet coalescing under high load
+        // This fixes "Illegal QOS Level" and "invalid topic name" errors
+        it.isTcpNoDelay = true  // Disable Nagle's algorithm - send packets immediately, don't coalesce
+        it.receiveBufferSize = 512 * 1024  // 512KB receive buffer for burst traffic
+        it.sendBufferSize = 512 * 1024     // 512KB send buffer
+
+        // Set reasonable idle timeout
+        it.idleTimeout = 60  // seconds
+
         it
     }
 
