@@ -15,7 +15,6 @@ TCP: 1883      # MQTT TCP listener (set 0 to disable)
 TCPS: 8883     # MQTT TLS listener
 WS: 9000       # MQTT WebSocket listener
 WSS: 9001      # MQTT Secure WebSocket listener
-MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true  # When false, SUBSCRIBE to '#' yields failure (0x80) per-topic
 NodeName: node-a        # Optional, used in cluster mode
@@ -24,6 +23,52 @@ NodeName: node-a        # Optional, used in cluster mode
 All ports default to `0` (disabled) except `TCP`, which defaults to 1883 if omitted (`broker/src/main/kotlin/Monster.kt:447-472`). `NodeName` is only used when the broker runs with `-cluster`.
 
 If `AllowRootWildcardSubscription` is set to `false`, any client requesting a subscription to the root wildcard topic filter `#` receives a SUBACK failure (0x80) for that specific topic while the connection stays open. Internal components (e.g. OPC UA extensions) are unaffected.
+
+## MQTT TCP Server Configuration
+
+```yaml
+MqttTcpServer:
+  MaxMessageSizeKb: 512          # Maximum MQTT message size (default: 512KB)
+  NoDelay: true                  # TCP_NODELAY - disable Nagle's algorithm for immediate packet transmission
+  ReceiveBufferSizeKb: 512       # Socket receive buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+  SendBufferSizeKb: 512          # Socket send buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+```
+
+The `MqttTcpServer` section controls low-level TCP socket behavior for MQTT connections:
+
+- **MaxMessageSizeKb**: Maximum size of any single MQTT message. Messages exceeding this limit are rejected. Default is 512 KB.
+- **NoDelay**: When `true`, disables TCP's Nagle algorithm (`TCP_NODELAY`), ensuring packets are sent immediately without waiting for coalescing. This is essential for low-latency MQTT and prevents packet corruption under high message rates. Default is `true`.
+- **ReceiveBufferSizeKb**: Kernel-level socket receive buffer size. Larger buffers handle burst traffic better. For low-load deployments, 64 KB is sufficient; for high-load scenarios (1000+ msg/sec), increase to 1-2 MB. Default is 512 KB.
+- **SendBufferSizeKb**: Kernel-level socket send buffer size. Should match receive buffer size. Default is 512 KB.
+
+### Tuning for Different Load Profiles
+
+**Low-load deployments (< 100 msg/sec):**
+```yaml
+MqttTcpServer:
+  MaxMessageSizeKb: 512
+  NoDelay: true
+  ReceiveBufferSizeKb: 64
+  SendBufferSizeKb: 64
+```
+
+**High-load production (1000+ msg/sec):**
+```yaml
+MqttTcpServer:
+  MaxMessageSizeKb: 512
+  NoDelay: true
+  ReceiveBufferSizeKb: 1024
+  SendBufferSizeKb: 1024
+```
+
+**Extreme load (10,000+ msg/sec):**
+```yaml
+MqttTcpServer:
+  MaxMessageSizeKb: 512
+  NoDelay: true
+  ReceiveBufferSizeKb: 2048
+  SendBufferSizeKb: 2048
+```
 
 ## Rate Limiting
 

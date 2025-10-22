@@ -3,7 +3,6 @@ TPCS: 8883
 WS: 9000
 WSS: 9001
 
-MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
 

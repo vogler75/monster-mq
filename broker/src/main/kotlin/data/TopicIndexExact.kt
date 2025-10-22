@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Thread-safe via ConcurrentHashMap.
  */
-class ExactTopicIndex {
+class TopicIndexExact {
     private val logger = Utils.getLogger(this::class.java)
 
     // topic → Set<(ClientId, QoS)>
@@ -121,24 +121,6 @@ class ExactTopicIndex {
         }
 
         return affectedTopics
-    }
-
-    /**
-     * Get all subscriptions for a client (useful for cluster replication).
-     *
-     * @param clientId Client identifier
-     * @return Map of topic → QoS for this client
-     */
-    fun getClientSubscriptions(clientId: String): Map<String, Int> {
-        val result = mutableMapOf<String, Int>()
-
-        index.forEach { (topic, subscribers) ->
-            subscribers.find { it.first == clientId }?.let { (_, qos) ->
-                result[topic] = qos
-            }
-        }
-
-        return result
     }
 
     /**

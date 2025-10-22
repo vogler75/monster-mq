@@ -581,9 +581,16 @@ MORE INFO:
         val useTcpSsl = configJson.getInteger("TCPS", 0)
         val useWsSsl = configJson.getInteger("WSS", 0)
 
-        val maxMessageSize = configJson.getInteger("MaxMessageSizeKb", 8) * 1024
+        // Load TCP server configuration
+        val tcpServerConfig = configJson.getJsonObject("MqttTcpServer", JsonObject())
+        val maxMessageSize = tcpServerConfig.getInteger("MaxMessageSizeKb", 512) * 1024
+        val tcpNoDelay = tcpServerConfig.getBoolean("NoDelay", true)
+        val receiveBufferSize = tcpServerConfig.getInteger("ReceiveBufferSizeKb", 512) * 1024
+        val sendBufferSize = tcpServerConfig.getInteger("SendBufferSizeKb", 512) * 1024
+
         val queuedMessagesEnabled = configJson.getBoolean("QueuedMessagesEnabled", true)
         logger.info("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] QME [$queuedMessagesEnabled]")
+        logger.info("TCP Server Config: MaxMessageSize [${maxMessageSize / 1024}KB] NoDelay [$tcpNoDelay] ReceiveBufferSize [${receiveBufferSize / 1024}KB] SendBufferSize [${sendBufferSize / 1024}KB]")
 
         val retainedStoreType = MessageStoreType.valueOf(Monster.getRetainedStoreType(configJson))
         logger.info("RetainedMessageStoreType [${retainedStoreType}]")
@@ -758,10 +765,10 @@ MORE INFO:
 
                 // MQTT Servers
                 val servers = listOfNotNull(
-                    if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, sessionHandler, userManager) else null,
-                    if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, sessionHandler, userManager) else null,
-                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, sessionHandler, userManager) else null,
-                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, sessionHandler, userManager) else null,
+                    if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
+                    if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
+                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
+                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
                     mcpServer
                 )
 

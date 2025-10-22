@@ -59,7 +59,6 @@ TCP: 1883
 TCPS: 8883
 WS: 9000
 WSS: 9001
-MaxMessageSizeKb: 512
 
 SessionStoreType: POSTGRES
 RetainedStoreType: POSTGRES
@@ -134,7 +133,6 @@ Perfect for development and testing:
 # config-sqlite.yaml
 TCP: 1883
 WS: 8080
-MaxMessageSizeKb: 8
 
 SessionStoreType: SQLITE
 RetainedStoreType: SQLITE
@@ -163,7 +161,6 @@ TCP: 1883
 TCPS: 8883
 WS: 9000
 WSS: 9001
-MaxMessageSizeKb: 512
 
 SessionStoreType: POSTGRES
 RetainedStoreType: POSTGRES
@@ -199,7 +196,6 @@ Multi-node clustering setup:
 # config-hazelcast.yaml
 TCP: 1883
 WS: 9000
-MaxMessageSizeKb: 512
 
 # Clustering requires central database
 SessionStoreType: POSTGRES

@@ -63,8 +63,6 @@ open class SessionHandler(
 
     private val msgAddQueue: ArrayBlockingQueue<Pair<BrokerMessage, List<String>>> = ArrayBlockingQueue(Monster.getMessageQueueSize())
     private val msgDelQueue: ArrayBlockingQueue<Pair<String, String>> = ArrayBlockingQueue(Monster.getMessageQueueSize())
-    // DISABLED FOR TESTING: Removed waitForFlush mechanism to test for race conditions
-    // private var waitForFlush: Promise<Void>? = null
 
     // Use unified EventBus addresses
     private val subscriptionAddAddress = EventBusAddresses.Cluster.SUBSCRIPTION_ADD
@@ -168,17 +166,9 @@ open class SessionHandler(
             val status = ClientStatus.valueOf(message.body().getString("Status", ""))
             val deliveryOptions = DeliveryOptions(JsonObject().put("NodeId", Monster.getClusterNodeId(vertx)))
 
-            // DISABLED FOR TESTING: Removed flushFinished function (no longer needed)
-            // fun flushFinished() {
-            //     logger.fine { "Flushed messages finished" }
-            //     message.reply(true, deliveryOptions)
-            // }
-
             when (status) {
                 ClientStatus.CREATED -> {
                     clientStatus[clientId] = ClientStatus.CREATED
-                    // DISABLED FOR TESTING: Removed waitForFlush logic
-                    // Just reply immediately without waiting for queue flush
                     message.reply(true, deliveryOptions)
                 }
                 ClientStatus.ONLINE -> {
@@ -483,14 +473,6 @@ open class SessionHandler(
         val block = arrayListOf<T>()
         var lastCheckTime = System.currentTimeMillis()
 
-        fun flushed() {
-            // DISABLED FOR TESTING: Removed waitForFlush completion logic
-            // if (name == "MsgAddQueue" && waitForFlush != null) {
-            //     waitForFlush?.complete()
-            //     waitForFlush = null
-            // }
-        }
-
         fun loop() {
             vertx.executeBlocking(Callable {
                 queue.poll(100, TimeUnit.MILLISECONDS)?.let { item ->
@@ -503,11 +485,9 @@ open class SessionHandler(
                 if (block.isNotEmpty()) {
                     execute(block).onComplete {
                         block.clear()
-                        flushed()
                         vertx.runOnContext { loop() }
                     }
                 } else {
-                    flushed()
                     vertx.runOnContext { loop() }
                 }
 

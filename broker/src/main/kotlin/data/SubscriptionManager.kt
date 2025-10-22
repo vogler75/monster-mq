@@ -27,10 +27,10 @@ class SubscriptionManager {
     private val logger = Utils.getLogger(this::class.java)
 
     // Exact subscriptions: O(1) lookup
-    private val exactIndex = ExactTopicIndex()
+    private val exactIndex = TopicIndexExact()
 
     // Wildcard subscriptions: O(depth) lookup
-    private val wildcardIndex = WildcardSubscriptionIndex()
+    private val wildcardIndex = TopicIndexWildcard()
 
     /**
      * Add a subscription.
@@ -163,20 +163,6 @@ class SubscriptionManager {
         logger.fine { "SubscriptionManager.disconnectClient: removed subscriptions from ${affectedTopics.size} topics/patterns" }
 
         return affectedTopics
-    }
-
-    /**
-     * Get all subscriptions for a client.
-     * Used during cluster failover to redistribute subscriptions.
-     *
-     * @param clientId Client identifier
-     * @return Map of (topic/pattern → QoS)
-     */
-    fun getClientSubscriptions(clientId: String): Map<String, Int> {
-        val result = mutableMapOf<String, Int>()
-        result.putAll(exactIndex.getClientSubscriptions(clientId))
-        result.putAll(wildcardIndex.getClientSubscriptions(clientId))
-        return result
     }
 
     /**

@@ -14,6 +14,9 @@ class MqttServer(
     private val ssl: Boolean,
     private val useWebSocket: Boolean,
     private val maxMessageSize: Int,
+    private val tcpNoDelay: Boolean = true,
+    private val receiveBufferSize: Int = 512 * 1024,
+    private val sendBufferSize: Int = 512 * 1024,
     private val sessionHandler: SessionHandler,
     private val userManager: UserManager
 ) : AbstractVerticle() {
@@ -26,12 +29,9 @@ class MqttServer(
             .setPassword("password")
         it.isUseWebSocket = this.useWebSocket
         it.maxMessageSize = this.maxMessageSize
-
-        // CRITICAL FIX: Prevent TCP packet coalescing under high load
-        // This fixes "Illegal QOS Level" and "invalid topic name" errors
-        it.isTcpNoDelay = true  // Disable Nagle's algorithm - send packets immediately, don't coalesce
-        it.receiveBufferSize = 512 * 1024  // 512KB receive buffer for burst traffic
-        it.sendBufferSize = 512 * 1024     // 512KB send buffer
+        it.isTcpNoDelay = this.tcpNoDelay      // Disable Nagle's algorithm - send packets immediately, don't coalesce
+        it.receiveBufferSize = this.receiveBufferSize  // Receive buffer for burst traffic
+        it.sendBufferSize = this.sendBufferSize         // Send buffer for burst traffic
 
         it
     }

@@ -3,11 +3,17 @@ TPCS: 8883
 WS: 9000
 WSS: 9001
 
-MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
 
 DefaultStoreType: POSTGRES
+
+# MQTT TCP Server configuration (socket-level settings)
+MqttTcpServer:
+  NoDelay: true                  # TCP_NODELAY - disable Nagle's algorithm for immediate packet transmission
+  ReceiveBufferSizeKb: 512       # Socket receive buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+  SendBufferSizeKb: 512          # Socket send buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+  MaxMessageSizeKb: 512
 
 # User Management configuration
 UserManagement:

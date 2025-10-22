@@ -1,7 +1,6 @@
 TCP: 1883
 WS: 1884
 
-MaxMessageSizeKb: 64
 QueuedMessagesEnabled: true
 
 DefaultStoreType: POSTGRES

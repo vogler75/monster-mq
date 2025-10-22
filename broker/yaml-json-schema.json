@@ -25,10 +25,6 @@
       "type": "string",
       "description": "Custom node name for cluster identification (defaults to hostname if not set)"
     },
-    "MaxMessageSizeKb": {
-      "type": "integer",
-      "default": 8
-    },
     "MaxPublishRate": {
       "type": "integer",
       "default": 0,
@@ -90,6 +86,36 @@
       "type": "boolean",
       "default": true,
       "description": "Allow clients to subscribe to '#' (root wildcard). If false, SUBSCRIBE acknowledgements for '#' return failure (0x80) and the client remains connected."
+    },
+    "MqttTcpServer": {
+      "type": "object",
+      "description": "MQTT TCP server socket configuration for performance tuning",
+      "properties": {
+        "MaxMessageSizeKb": {
+          "type": "integer",
+          "default": 512,
+          "description": "Maximum MQTT message size in kilobytes. Messages exceeding this limit are rejected."
+        },
+        "NoDelay": {
+          "type": "boolean",
+          "default": true,
+          "description": "TCP_NODELAY - disable Nagle's algorithm for immediate packet transmission. Essential for low-latency MQTT and preventing packet corruption under high message rates."
+        },
+        "ReceiveBufferSizeKb": {
+          "type": "integer",
+          "default": 512,
+          "description": "Socket receive buffer size in kilobytes. Larger buffers handle burst traffic better. Recommended: 512KB for normal load, 1-2MB for high-load scenarios (1000+ msg/sec).",
+          "minimum": 8,
+          "maximum": 65536
+        },
+        "SendBufferSizeKb": {
+          "type": "integer",
+          "default": 512,
+          "description": "Socket send buffer size in kilobytes. Should match receive buffer size. Recommended: 512KB for normal load, 1-2MB for high-load scenarios.",
+          "minimum": 8,
+          "maximum": 65536
+        }
+      }
     },
     "Logging": {
       "type": "object",

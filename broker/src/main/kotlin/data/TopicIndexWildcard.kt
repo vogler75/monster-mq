@@ -11,7 +11,7 @@ import at.rocworks.Utils
  * Uses TopicTree internally for efficient pattern matching.
  * Typically much smaller than total subscriptions (most are exact).
  */
-class WildcardSubscriptionIndex {
+class TopicIndexWildcard {
     private val logger = Utils.getLogger(this::class.java)
 
     // TopicTree storing wildcard patterns
@@ -120,27 +120,6 @@ class WildcardSubscriptionIndex {
         }
 
         return affectedPatterns
-    }
-
-    /**
-     * Get all subscriptions for a client matching a pattern.
-     * Used for cluster replication.
-     *
-     * @param clientId Client identifier
-     * @return Map of pattern → QoS for this client's wildcard subscriptions
-     */
-    fun getClientSubscriptions(clientId: String): Map<String, Int> {
-        val result = mutableMapOf<String, Int>()
-
-        tree.findMatchingTopicNames("#") { pattern ->
-            val subscribers = tree.findDataOfTopicName(pattern)
-            subscribers.find { it.first == clientId }?.let { (_, qos) ->
-                result[pattern] = qos
-            }
-            true  // continue iteration
-        }
-
-        return result
     }
 
     /**

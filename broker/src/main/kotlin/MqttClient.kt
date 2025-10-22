@@ -311,7 +311,7 @@ class MqttClient(
 
     private fun exceptionHandler(throwable: Throwable) {
         logger.severe("Client [$clientId] Exception: ${throwable.message} [${Utils.getCurrentFunctionName()}]")
-        //closeConnection()
+        closeConnection()
     }
 
     private fun pingHandler() {
