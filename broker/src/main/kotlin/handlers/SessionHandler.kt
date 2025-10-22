@@ -942,8 +942,10 @@ open class SessionHandler(
         }
 
         // Send to remote nodes that have subscriptions (excluding local node)
+        // Use publish() instead of send() for fire-and-forget delivery (non-blocking)
+        // This prevents backpressure on the publisher when EventBus queues build up
         remoteNodes.forEach { nodeId ->
-            vertx.eventBus().send(nodeMessageAddress(nodeId), message)
+            vertx.eventBus().publish(nodeMessageAddress(nodeId), message)
             messageBusOut.incrementAndGet()
         }
 
