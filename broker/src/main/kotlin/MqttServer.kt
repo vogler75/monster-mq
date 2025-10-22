@@ -33,9 +33,6 @@ class MqttServer(
         it.receiveBufferSize = 512 * 1024  // 512KB receive buffer for burst traffic
         it.sendBufferSize = 512 * 1024     // 512KB send buffer
 
-        // Set reasonable idle timeout
-        it.idleTimeout = 60  // seconds
-
         it
     }
 
