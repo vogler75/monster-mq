@@ -195,7 +195,17 @@ class Monster(args: Array<String>) {
         private var maxSubscribeRate: Int = 0
         @JvmStatic
         fun getMaxSubscribeRate(): Int = maxSubscribeRate
-        
+
+        @Volatile
+        private var subscriptionQueueSize: Int = 50_000
+        @JvmStatic
+        fun getSubscriptionQueueSize(): Int = subscriptionQueueSize
+
+        @Volatile
+        private var messageQueueSize: Int = 50_000
+        @JvmStatic
+        fun getMessageQueueSize(): Int = messageQueueSize
+
         private fun ensureSQLiteVerticleDeployed(vertx: Vertx): Future<String> {
             return if (sqliteVerticleDeploymentId == null) {
                 val promise = Promise.promise<String>()
@@ -379,7 +389,6 @@ MORE INFO:
             if (it.succeeded()) {
                 this.configJson = it.result()
 
-
                 configJson.getJsonObject("Postgres", JsonObject()).let { pg ->
                     postgresConfig.url = pg.getString("Url", "jdbc:postgresql://localhost:5432/postgres")
                     postgresConfig.user = pg.getString("User", "system")
@@ -428,6 +437,23 @@ MORE INFO:
                     0
                 }
                 logger.info("Config: MaxSubscribeRate=$maxSubscribeRate msg/s" + if (maxSubscribeRate == 0) " (unlimited)" else "")
+
+                // Read queue size configuration (defaults: 50,000 for each queue type)
+                configJson.getJsonObject("Queues", JsonObject()).let { queuesConfig ->
+                    subscriptionQueueSize = try {
+                        queuesConfig.getInteger("SubscriptionQueueSize", 50_000)
+                    } catch (e: Exception) {
+                        logger.warning("Config: Queues.SubscriptionQueueSize read failed: ${e.message}")
+                        50_000
+                    }
+                    messageQueueSize = try {
+                        queuesConfig.getInteger("MessageQueueSize", 50_000)
+                    } catch (e: Exception) {
+                        logger.warning("Config: Queues.MessageQueueSize read failed: ${e.message}")
+                        50_000
+                    }
+                }
+                logger.info("Config: Queue sizes - Subscription=$subscriptionQueueSize, Message=$messageQueueSize")
 
                 startMonster(vertx)
             } else {

@@ -56,11 +56,11 @@ open class SessionHandler(
     private var lastMetricsResetTime = System.currentTimeMillis()
     private val messageBusLastResetTime = AtomicLong(System.currentTimeMillis())
 
-    private val subAddQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
-    private val subDelQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(10_000) // TODO: configurable
+    private val subAddQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(Monster.getSubscriptionQueueSize())
+    private val subDelQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(Monster.getSubscriptionQueueSize())
 
-    private val msgAddQueue: ArrayBlockingQueue<Pair<BrokerMessage, List<String>>> = ArrayBlockingQueue(10_000) // TODO: configurable
-    private val msgDelQueue: ArrayBlockingQueue<Pair<String, String>> = ArrayBlockingQueue(10_000) // TODO: configurable
+    private val msgAddQueue: ArrayBlockingQueue<Pair<BrokerMessage, List<String>>> = ArrayBlockingQueue(Monster.getMessageQueueSize())
+    private val msgDelQueue: ArrayBlockingQueue<Pair<String, String>> = ArrayBlockingQueue(Monster.getMessageQueueSize())
     private var waitForFlush: Promise<Void>? = null
 
     // Use unified EventBus addresses
@@ -739,13 +739,23 @@ open class SessionHandler(
     fun isPresent(clientId: String): Future<Boolean> = sessionStore.isPresent(clientId)
 
     private fun enqueueMessage(message: BrokerMessage, clientIds: List<String>) {
-        if (enqueueMessages) msgAddQueue.add(Pair(message, clientIds))
+        if (enqueueMessages) {
+            try {
+                msgAddQueue.add(Pair(message, clientIds))
+            } catch (e: IllegalStateException) {
+                logger.severe("CRITICAL: Message queue overflow! Queue is full (${msgAddQueue.size}/${msgAddQueue.remainingCapacity() + msgAddQueue.size}). Message [${message.topicName}] to ${clientIds.size} clients will be LOST. Increase 'Queues.MessageQueueSize' in config.yaml")
+            }
+        }
     }
 
     fun dequeueMessages(clientId: String, callback: (BrokerMessage)->Boolean) = sessionStore.dequeueMessages(clientId, callback)
 
     fun removeMessage(clientId: String, messageUuid: String) {
-        msgDelQueue.add(Pair(clientId, messageUuid))
+        try {
+            msgDelQueue.add(Pair(clientId, messageUuid))
+        } catch (e: IllegalStateException) {
+            logger.severe("CRITICAL: Message delete queue overflow! Queue is full (${msgDelQueue.size}/${msgDelQueue.remainingCapacity() + msgDelQueue.size}). Message removal for client [${clientId}] msg [${messageUuid}] will be LOST. Increase 'Queues.MessageQueueSize' in config.yaml")
+        }
     }
 
     private fun addSubscription(subscription: MqttSubscription) {
@@ -753,7 +763,7 @@ open class SessionHandler(
         try {
             subAddQueue.add(subscription)
         } catch (e: IllegalStateException) {
-            // TODO: Alert
+            logger.severe("CRITICAL: Subscription queue overflow! Queue is full (${subAddQueue.size}/${subAddQueue.remainingCapacity() + subAddQueue.size}). Client [${subscription.clientId}] subscription to [${subscription.topicName}] will be LOST. Increase 'Queues.SubscriptionQueueSize' in config.yaml")
         }
     }
 
@@ -762,7 +772,7 @@ open class SessionHandler(
         try {
             subDelQueue.add(subscription)
         } catch (e: IllegalStateException) {
-            // TODO: Alert
+            logger.severe("CRITICAL: Subscription delete queue overflow! Queue is full (${subDelQueue.size}/${subDelQueue.remainingCapacity() + subDelQueue.size}). Client [${subscription.clientId}] unsubscription from [${subscription.topicName}] will be LOST. Increase 'Queues.SubscriptionQueueSize' in config.yaml")
         }
     }
 
