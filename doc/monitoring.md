@@ -4,7 +4,7 @@ MonsterMQ publishes real-time metrics to MQTT $SYS topics that show the performa
 
 ## Bulk Messaging Metrics
 
-**Topic:** `$SYS/brokers/<node>/bulk/messaging`
+**Topic:** `$SYS/brokers/<node>/messaging`
 
 Metrics show the batching and delivery of messages to clients and remote nodes.
 
@@ -58,7 +58,7 @@ Metrics show the batching and delivery of messages to clients and remote nodes.
 
 ## Bulk Processing Metrics
 
-**Topic:** `$SYS/brokers/<node>/bulk/processing`
+**Topic:** `$SYS/brokers/<node>/processing`
 
 Metrics show the batching and parallel processing of published messages.
 
@@ -191,10 +191,10 @@ Subscribe to the $SYS topics to consume metrics:
 
 ```bash
 # Bulk messaging metrics
-mosquitto_sub -h localhost -t '$SYS/brokers/+/bulk/messaging'
+mosquitto_sub -h localhost -t '$SYS/brokers/+/messaging'
 
 # Bulk processing metrics
-mosquitto_sub -h localhost -t '$SYS/brokers/+/bulk/processing'
+mosquitto_sub -h localhost -t '$SYS/brokers/+/processing'
 ```
 
 Or use any MQTT client/library to subscribe and forward to your monitoring system (Prometheus, InfluxDB, Grafana, etc.)

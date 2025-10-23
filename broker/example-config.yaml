@@ -35,18 +35,7 @@ Logging:
     Enabled: true         # Enable in-memory log storage (circular buffer)
     Entries: 1000          # Maximum number of log entries to store in memory
 
-# Bulk Processing configuration (Topic grouping + Worker threads)
-BulkProcessing:
-  Enabled: true              # Enable/disable publish bulk processing
-  TimeoutMS: 50              # Flush inbound batch after this many milliseconds (50ms recommended)
-  BulkSize: 1000            # Flush when batch reaches this many messages (1000 recommended)
-  WorkerThreads: 4           # Number of parallel worker threads (recommended: 2-8)
 
-# Batches messages for delivery to clients to reduce eventBus overhead
-BulkMessaging:
-  Enabled: true              # Enable/disable bulk message batching
-  TimeoutMS: 100             # Flush batches after this many milliseconds (100ms recommended)
-  BulkSize: 1000             # Flush when batch reaches this many messages (1000 recommended)
 
 # Sparkplug B support configuration
 SparkplugMetricExpansion:

@@ -193,7 +193,7 @@ This feature is independent and can be enabled/disabled separately from BulkProc
 BulkProcessing:
   Enabled: true              # Enable/disable publish bulk processing and worker threads
   TimeoutMS: 50              # Flush inbound batch after this many milliseconds (50ms recommended)
-  BulkSize: 10000            # Flush when batch reaches this many messages (10000 recommended)
+  BulkSize: 1000             # Flush when batch reaches this many messages (1000 recommended)
   WorkerThreads: 4           # Number of parallel worker threads (2-8 recommended)
 ```
 
@@ -229,7 +229,7 @@ BulkProcessing:
 BulkProcessing:
   Enabled: true
   TimeoutMS: 50
-  BulkSize: 10000
+  BulkSize: 1000
   WorkerThreads: 4
 ```
 

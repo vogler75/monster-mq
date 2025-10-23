@@ -1724,7 +1724,7 @@ open class SessionHandler(
         }
 
         try {
-            val message = BrokerMessage("", "\$SYS/brokers/$nodeName/bulk/messaging", metricsJson)
+            val message = BrokerMessage("", "\$SYS/brokers/$nodeName/messaging", metricsJson)
             publishMessage(message)
         } catch (e: Exception) {
             logger.fine("Error publishing bulk messaging metrics: ${e.message}")

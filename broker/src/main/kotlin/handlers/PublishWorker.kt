@@ -350,7 +350,7 @@ class PublishWorkerPool(
             append("}")
         }
 
-        val message = BrokerMessage("", "\$SYS/brokers/$nodeName/bulk/processing", metricsJson)
+        val message = BrokerMessage("", "\$SYS/brokers/$nodeName/processing", metricsJson)
 
         sessionHandler.publishMessage(message)
     }

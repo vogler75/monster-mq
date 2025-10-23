@@ -216,7 +216,7 @@ class Monster(args: Array<String>) {
         fun getMessageQueueSize(): Int = messageQueueSize
 
         @Volatile
-        private var bulkMessagingEnabled: Boolean = false
+        private var bulkMessagingEnabled: Boolean = true
         @JvmStatic
         fun isBulkMessagingEnabled(): Boolean = bulkMessagingEnabled
 
@@ -231,7 +231,7 @@ class Monster(args: Array<String>) {
         fun getBulkMessagingBulkSize(): Int = bulkMessagingBulkSize
 
         @Volatile
-        private var publishBulkProcessingEnabled: Boolean = false
+        private var publishBulkProcessingEnabled: Boolean = true
         @JvmStatic
         fun isPublishBulkProcessingEnabled(): Boolean = publishBulkProcessingEnabled
 
@@ -241,7 +241,7 @@ class Monster(args: Array<String>) {
         fun getPublishBulkTimeoutMs(): Long = publishBulkTimeoutMs
 
         @Volatile
-        private var publishBulkSize: Int = 10000
+        private var publishBulkSize: Int = 1000
         @JvmStatic
         fun getPublishBulkSize(): Int = publishBulkSize
 
