@@ -943,7 +943,7 @@ open class SessionHandler(
                     }
                 }
             } catch (e: IllegalStateException) {
-                logger.warning("Bulk buffer overflow for client [$clientId], sending immediately")
+                logger.warning("Bulk buffer overflow for client [$clientId], sending immediately: ${e.message}")
                 vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), message)
             }
 

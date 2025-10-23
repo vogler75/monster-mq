@@ -633,10 +633,9 @@ class MqttClient(
         if (!endpoint.isConnected) {
             logger.finest("Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]")
         } else {
-            // Increment messages sent to client
-            sessionHandler.incrementMessagesOut(clientId)
-
+            // Increment messages sent to client ONLY when actually publishing to endpoint
             if (message.qosLevel == 0) {
+                sessionHandler.incrementMessagesOut(clientId)
                 message.publishToEndpoint(endpoint)
             } else {
                 if (inFlightMessagesSnd.size > MAX_IN_FLIGHT_MESSAGES) {
@@ -645,6 +644,7 @@ class MqttClient(
                 } else {
                     inFlightMessagesSnd.addLast(InFlightMessage(message))
                     if (inFlightMessagesSnd.size == 1) {
+                        sessionHandler.incrementMessagesOut(clientId)
                         message.publishToEndpoint(endpoint)
                         logger.finest { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] delivered [${Utils.getCurrentFunctionName()}]" }
                     } else {
@@ -657,8 +657,10 @@ class MqttClient(
 
     private fun publishMessageCheckNext() {
         if (inFlightMessagesSnd.isNotEmpty()) {
-            inFlightMessagesSnd.first().message.publishToEndpoint(endpoint)
-            logger.finest { "Client [$clientId] Subscribe: next message [${inFlightMessagesSnd.first().message.messageId}] from queue delivered [${Utils.getCurrentFunctionName()}]" }
+            val msg = inFlightMessagesSnd.first().message
+            sessionHandler.incrementMessagesOut(clientId)
+            msg.publishToEndpoint(endpoint)
+            logger.finest { "Client [$clientId] Subscribe: next message [${msg.messageId}] from queue delivered [${Utils.getCurrentFunctionName()}]" }
         }
     }
 
