@@ -230,6 +230,26 @@ class Monster(args: Array<String>) {
         @JvmStatic
         fun getBulkMessagingBulkSize(): Int = bulkMessagingBulkSize
 
+        @Volatile
+        private var publishBulkProcessingEnabled: Boolean = false
+        @JvmStatic
+        fun isPublishBulkProcessingEnabled(): Boolean = publishBulkProcessingEnabled
+
+        @Volatile
+        private var publishBulkTimeoutMs: Long = 50L
+        @JvmStatic
+        fun getPublishBulkTimeoutMs(): Long = publishBulkTimeoutMs
+
+        @Volatile
+        private var publishBulkSize: Int = 10000
+        @JvmStatic
+        fun getPublishBulkSize(): Int = publishBulkSize
+
+        @Volatile
+        private var publishWorkerThreads: Int = 4
+        @JvmStatic
+        fun getPublishWorkerThreads(): Int = publishWorkerThreads
+
         private fun ensureSQLiteVerticleDeployed(vertx: Vertx): Future<String> {
             return if (sqliteVerticleDeploymentId == null) {
                 val promise = Promise.promise<String>()
@@ -532,6 +552,39 @@ MORE INFO:
                     logger.info("Config: BulkMessaging enabled - TimeoutMS=$bulkMessagingTimeoutMs, BulkSize=$bulkMessagingBulkSize")
                 } else {
                     logger.info("Config: BulkMessaging disabled")
+                }
+
+                // Read publish bulk processing configuration
+                configJson.getJsonObject("BulkProcessing", JsonObject()).let { bulkProcConfig ->
+                    publishBulkProcessingEnabled = try {
+                        bulkProcConfig.getBoolean("Enabled", false)
+                    } catch (e: Exception) {
+                        logger.warning("Config: BulkProcessing.Enabled read failed: ${e.message}")
+                        false
+                    }
+                    publishBulkTimeoutMs = try {
+                        bulkProcConfig.getLong("TimeoutMS", 50L)
+                    } catch (e: Exception) {
+                        logger.warning("Config: BulkProcessing.TimeoutMS read failed: ${e.message}")
+                        50L
+                    }
+                    publishBulkSize = try {
+                        bulkProcConfig.getInteger("BulkSize", 10000)
+                    } catch (e: Exception) {
+                        logger.warning("Config: BulkProcessing.BulkSize read failed: ${e.message}")
+                        10000
+                    }
+                    publishWorkerThreads = try {
+                        bulkProcConfig.getInteger("WorkerThreads", 4)
+                    } catch (e: Exception) {
+                        logger.warning("Config: BulkProcessing.WorkerThreads read failed: ${e.message}")
+                        4
+                    }
+                }
+                if (publishBulkProcessingEnabled) {
+                    logger.info("Config: BulkProcessing enabled - TimeoutMS=$publishBulkTimeoutMs, BulkSize=$publishBulkSize, Workers=$publishWorkerThreads")
+                } else {
+                    logger.info("Config: BulkProcessing disabled")
                 }
 
                 startMonster(vertx)

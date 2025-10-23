@@ -92,6 +92,31 @@ open class SessionHandler(
     private val clientBulkBuffer = ConcurrentHashMap<String, BulkMessageBuffer>()
     private val nodeBulkBuffer = ConcurrentHashMap<String, BulkMessageBuffer>()
     private var bulkFlushTimerId: Long = -1
+    private var bulkMessagingMetricsTimerId: Long = -1
+
+    // For bulk messaging per-second rate calculations
+    private var lastBulkMessagingMetricsTime = System.currentTimeMillis()
+    private val bulkMessagingClientsFlushed = AtomicLong(0)
+    private val bulkMessagingNodesFlushed = AtomicLong(0)
+    private var lastBulkMessagingClientsFlushed = 0L
+    private var lastBulkMessagingNodesFlushed = 0L
+
+    // Publish bulk processing (topic grouping + worker threads)
+    private data class PublishBulkBuffer(
+        val messages: ArrayBlockingQueue<BrokerMessage>,
+        var lastFlushTime: Long = System.currentTimeMillis(),
+        val lock: ReentrantLock = ReentrantLock()
+    )
+
+    private val publishBulkProcessingEnabled = Monster.isPublishBulkProcessingEnabled()
+    private val publishBulkTimeoutMs = Monster.getPublishBulkTimeoutMs()
+    private val publishBulkSize = Monster.getPublishBulkSize()
+    private val publishWorkerThreads = Monster.getPublishWorkerThreads()
+
+    private val publishBulkBuffer = PublishBulkBuffer(ArrayBlockingQueue(publishBulkSize * 2))
+    private var publishBatchFlushTimerId: Long = -1
+    private var publishWorkerPool: PublishWorkerPool? = null
+    private var publishWorkerLogTimerId: Long = -1
 
     // Message listeners for external subscribers (e.g., GraphQL subscriptions)
     // Map: listenerId -> (topic filters, callback function)
@@ -449,6 +474,43 @@ open class SessionHandler(
             logger.info("Starting bulk message flusher with timeout=${bulkMessagingTimeoutMs}ms, bulkSize=$bulkMessagingBulkSize")
             bulkFlushTimerId = vertx.setPeriodic(bulkMessagingTimeoutMs) {
                 flushBulkBuffers()
+            }
+
+            // Start periodic bulk messaging metrics publishing (every 1 second)
+            bulkMessagingMetricsTimerId = vertx.setPeriodic(1_000) {
+                publishBulkMessagingMetrics()
+            }
+        }
+
+        // Start publish bulk processing if enabled
+        if (publishBulkProcessingEnabled) {
+            logger.info("Starting publish bulk processor with timeout=${publishBulkTimeoutMs}ms, bulkSize=$publishBulkSize, workers=$publishWorkerThreads")
+
+            // Initialize and start worker pool
+            publishWorkerPool = PublishWorkerPool(vertx, this, publishWorkerThreads)
+            publishWorkerPool!!.start()
+
+            // Register shutdown hook for graceful worker shutdown
+            Runtime.getRuntime().addShutdownHook(Thread({
+                logger.info("Shutdown hook: initiated, closing worker pool")
+                try {
+                    publishWorkerPool?.shutdown()
+                    logger.info("Shutdown hook: worker pool closed successfully")
+                } catch (e: Exception) {
+                    logger.severe("Shutdown hook: error closing worker pool: ${e.message}")
+                }
+            }, "SessionHandler-ShutdownHook"))
+
+            // Start periodic batch flusher
+            publishBatchFlushTimerId = vertx.setPeriodic(publishBulkTimeoutMs) {
+                flushPublishBatch()
+            }
+
+            // Start periodic worker load logging and metrics publishing (every 1 second)
+            publishWorkerLogTimerId = vertx.setPeriodic(1_000) {
+                publishWorkerPool?.logWorkerLoad()
+                val nodeName = Monster.getClusterNodeId(vertx)
+                publishWorkerPool?.publishMetrics(nodeName)
             }
         }
 
@@ -854,24 +916,30 @@ open class SessionHandler(
                 BulkMessageBuffer(ArrayBlockingQueue(bulkMessagingBulkSize * 2))
             }
 
-            buffer.lock.lock()
             try {
+                // ArrayBlockingQueue.add() is thread-safe, no lock needed
                 buffer.messages.add(message)
 
-                // Immediate flush if buffer is full
+                // Only lock when checking if we need to flush (to protect lastFlushTime and prevent double-flush)
                 if (buffer.messages.size >= bulkMessagingBulkSize) {
-                    val bulkMessage = BulkClientMessage(buffer.messages.toList())
-                    buffer.messages.clear()
-                    buffer.lastFlushTime = System.currentTimeMillis()
-                    vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
-                    clientMetrics[clientId]?.messagesOut?.addAndGet(bulkMessage.messages.size.toLong())
-                    logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (size threshold)" }
+                    buffer.lock.lock()
+                    try {
+                        // Double-check after acquiring lock
+                        if (buffer.messages.size >= bulkMessagingBulkSize) {
+                            val bulkMessage = BulkClientMessage(buffer.messages.toList())
+                            buffer.messages.clear()
+                            buffer.lastFlushTime = System.currentTimeMillis()
+                            vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
+                            clientMetrics[clientId]?.messagesOut?.addAndGet(bulkMessage.messages.size.toLong())
+                            logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (size threshold)" }
+                        }
+                    } finally {
+                        buffer.lock.unlock()
+                    }
                 }
             } catch (e: IllegalStateException) {
                 logger.warning("Bulk buffer overflow for client [$clientId], sending immediately")
                 vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), message)
-            } finally {
-                buffer.lock.unlock()
             }
 
             return Future.succeededFuture(true)
@@ -901,6 +969,7 @@ open class SessionHandler(
 
                     vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
                     clientMetrics[clientId]?.messagesOut?.addAndGet(bulkMessage.messages.size.toLong())
+                    bulkMessagingClientsFlushed.addAndGet(bulkMessage.messages.size.toLong())
                     logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (timeout)" }
                 }
 
@@ -930,6 +999,7 @@ open class SessionHandler(
 
                     vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
                     messageBusOut.incrementAndGet()
+                    bulkMessagingNodesFlushed.addAndGet(bulkMessage.messages.size.toLong())
                     logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages (timeout)" }
                 }
 
@@ -1039,6 +1109,46 @@ open class SessionHandler(
             // Still allow distribution to normal subscribers
         }
 
+        // NEW: If publish bulk processing is enabled, buffer the message instead of processing immediately
+        if (publishBulkProcessingEnabled) {
+            try {
+                // ArrayBlockingQueue.add() is thread-safe, no lock needed
+                publishBulkBuffer.messages.add(message)
+
+                // Only lock when checking if we need to flush (to protect lastFlushTime and prevent double-flush)
+                if (publishBulkBuffer.messages.size >= publishBulkSize) {
+                    publishBulkBuffer.lock.lock()
+                    try {
+                        // Double-check after acquiring lock (prevent concurrent flushes)
+                        if (publishBulkBuffer.messages.size >= publishBulkSize) {
+                            flushPublishBatch()
+                        }
+                    } finally {
+                        publishBulkBuffer.lock.unlock()
+                    }
+                }
+            } catch (e: IllegalStateException) {
+                logger.warning("Publish bulk buffer overflow, processing message immediately")
+                processMessageImmediately(message)
+            }
+        } else {
+            // Original single-message processing path
+            processMessageImmediately(message)
+        }
+
+        // Still save to archive and handle Sparkplug expansion (happens for both paths)
+        messageHandler.saveMessage(message)
+        sparkplugHandler?.metricExpansion(message) { spbMessage ->
+            logger.finest { "Publishing Sparkplug message [${spbMessage.topicName}] [${Utils.getCurrentFunctionName()}]" }
+            publishMessage(spbMessage) // Recursive call for Sparkplug messages
+        }
+    }
+
+    /**
+     * Process a single message immediately (original publishMessage logic).
+     * Used when bulk processing is disabled or as fallback.
+     */
+    private fun processMessageImmediately(message: BrokerMessage) {
         // Determine which nodes need this message based on topic subscriptions
         val targetNodes = getTargetNodesForTopic(message.topicName)
         val localNodeId = Monster.getClusterNodeId(vertx)
@@ -1067,37 +1177,228 @@ open class SessionHandler(
                     BulkMessageBuffer(ArrayBlockingQueue(bulkMessagingBulkSize * 2))
                 }
 
-                buffer.lock.lock()
                 try {
+                    // ArrayBlockingQueue.add() is thread-safe, no lock needed
                     buffer.messages.add(message)
 
-                    // Immediate flush if buffer is full
+                    // Only lock when checking if we need to flush
                     if (buffer.messages.size >= bulkMessagingBulkSize) {
-                        val bulkMessage = BulkNodeMessage(buffer.messages.toList())
-                        buffer.messages.clear()
-                        buffer.lastFlushTime = System.currentTimeMillis()
-                        vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
-                        messageBusOut.incrementAndGet()
-                        logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages (size threshold)" }
+                        buffer.lock.lock()
+                        try {
+                            // Double-check after acquiring lock
+                            if (buffer.messages.size >= bulkMessagingBulkSize) {
+                                val bulkMessage = BulkNodeMessage(buffer.messages.toList())
+                                buffer.messages.clear()
+                                buffer.lastFlushTime = System.currentTimeMillis()
+                                vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
+                                messageBusOut.incrementAndGet()
+                                logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages (size threshold)" }
+                            }
+                        } finally {
+                            buffer.lock.unlock()
+                        }
                     }
                 } catch (e: IllegalStateException) {
                     logger.warning("Bulk buffer overflow for node [$nodeId], sending immediately")
                     vertx.eventBus().publish(nodeMessageAddress(nodeId), message)
                     messageBusOut.incrementAndGet()
-                } finally {
-                    buffer.lock.unlock()
                 }
             }
         }
+    }
 
-        // Note: Offline persistent client queuing is now handled automatically by
-        // node failure detection in HealthHandler when nodes die
+    /**
+     * Flush the publish bulk batch to worker processing.
+     * Sends batch to worker pool for parallel processing.
+     *
+     * NOTE: Locking is only used to protect the lastFlushTime field and prevent
+     * concurrent flushes. The ArrayBlockingQueue itself is thread-safe.
+     */
+    private fun flushPublishBatch() {
+        // Quick check without lock (acceptable if we miss a flush, timer will catch it)
+        if (publishBulkBuffer.messages.isEmpty()) return
 
-        // Still save to archive and handle Sparkplug expansion
-        messageHandler.saveMessage(message)
-        sparkplugHandler?.metricExpansion(message) { spbMessage ->
-            logger.finest { "Publishing Sparkplug message [${spbMessage.topicName}] [${Utils.getCurrentFunctionName()}]" }
-            publishMessage(spbMessage) // Recursive call for Sparkplug messages
+        publishBulkBuffer.lock.lock()
+        try {
+            // Re-check after acquiring lock to ensure we still have messages
+            if (publishBulkBuffer.messages.isEmpty()) return
+
+            val batch = PublishBatch(publishBulkBuffer.messages.toList())
+            publishBulkBuffer.messages.clear()
+            publishBulkBuffer.lastFlushTime = System.currentTimeMillis()
+
+            logger.finest { "Flushed publish batch: ${batch.messages.size} messages" }
+
+            // Send to worker pool for parallel processing (outside lock to avoid contention)
+            if (publishWorkerPool != null) {
+                publishWorkerPool!!.sendBatch(batch)
+            } else {
+                // Fallback: process directly if pool not initialized
+                logger.warning("Worker pool not initialized, processing batch directly")
+                processBatchDirectly(batch)
+            }
+        } finally {
+            publishBulkBuffer.lock.unlock()
+        }
+    }
+
+    /**
+     * Process a batch of messages directly (for Phase 1).
+     * Phase 2 will move this logic to worker threads.
+     * This function groups messages by topic to minimize subscription lookups.
+     */
+    private fun processBatchDirectly(batch: PublishBatch) {
+        val startTime = System.currentTimeMillis()
+
+        // Step 1: Group messages by topic
+        val messagesByTopic = batch.messages.groupBy { it.topicName }
+        logger.finest { "Processing batch: ${batch.messages.size} messages, ${messagesByTopic.size} unique topics" }
+
+        // Step 2: For each topic, process all messages together
+        messagesByTopic.forEach { (topicName, messages) ->
+            processTopic(topicName, messages)
+        }
+
+        val duration = System.currentTimeMillis() - startTime
+        logger.finest { "Batch processed in ${duration}ms (${batch.messages.size} messages)" }
+    }
+
+    /**
+     * Process all messages for a single topic.
+     * Performs subscription lookup once per topic instead of per message.
+     * Made internal so PublishWorker can call it.
+     */
+    internal fun processTopic(topicName: String, messages: List<BrokerMessage>) {
+        // Single subscription lookup for the entire topic - THE KEY OPTIMIZATION
+        val subscribers = findClients(topicName)
+
+        if (subscribers.isEmpty()) {
+            logger.finest { "No subscribers for topic [$topicName]" }
+            return
+        }
+
+        logger.finest { "Found ${subscribers.size} subscribers for topic [$topicName]" }
+
+        // Group by QoS and process
+        messages.groupBy { it.qosLevel }.forEach { (msgQos, msgsWithQos) ->
+            val (onlineClients, otherClients) = subscribers.partition { (clientId, _) ->
+                clientStatus[clientId] == ClientStatus.ONLINE
+            }
+
+            // Send to online clients
+            forwardBulkToOnlineClients(msgsWithQos, onlineClients, msgQos)
+
+            // Handle created and offline clients
+            handleCreatedAndOfflineClients(msgsWithQos, otherClients, msgQos)
+        }
+
+        // Handle remote nodes
+        if (Monster.isClustered()) {
+            val targetNodes = getTargetNodesForTopic(topicName)
+            val localNodeId = Monster.getClusterNodeId(vertx)
+            val remoteNodes = targetNodes.filter { it != localNodeId }
+
+            remoteNodes.forEach { nodeId ->
+                forwardToRemoteNode(messages, nodeId)
+            }
+        }
+    }
+
+    /**
+     * Forward bulk of messages to online clients using existing bulk messaging system.
+     */
+    private fun forwardBulkToOnlineClients(
+        messages: List<BrokerMessage>,
+        clients: List<Pair<String, Int>>,
+        qos: Int
+    ) {
+        clients.forEach { (clientId, subscriptionQos) ->
+            messages.forEach { msg ->
+                val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
+                val messageToSend = if (effectiveQos < msg.qosLevel) {
+                    msg.cloneWithNewQoS(effectiveQos)
+                } else {
+                    msg
+                }
+                // Use existing bulk messaging system
+                sendMessageToClient(clientId, messageToSend)
+            }
+        }
+    }
+
+    /**
+     * Handle messages for created and offline clients.
+     */
+    private fun handleCreatedAndOfflineClients(
+        messages: List<BrokerMessage>,
+        clients: List<Pair<String, Int>>,
+        qos: Int
+    ) {
+        val (createdClients, offlineClients) = clients.partition { (clientId, _) ->
+            clientStatus[clientId] == ClientStatus.CREATED
+        }
+
+        // Created clients: queue in-flight
+        createdClients.forEach { (clientId, _) ->
+            messages.forEach { msg ->
+                addInFlightMessage(clientId, msg)
+            }
+        }
+
+        // Offline clients: queue for persistence
+        if (offlineClients.isNotEmpty()) {
+            messages.forEach { msg ->
+                enqueueMessage(msg, offlineClients.map { it.first })
+            }
+        }
+    }
+
+    /**
+     * Forward messages to remote node.
+     */
+    private fun forwardToRemoteNode(messages: List<BrokerMessage>, nodeId: String) {
+        if (!bulkMessagingEnabled) {
+            messages.forEach { msg ->
+                vertx.eventBus().publish(nodeMessageAddress(nodeId), msg)
+                messageBusOut.incrementAndGet()
+            }
+        } else {
+            // Use bulk messaging for remote nodes
+            // Get or create buffer once, then add all messages
+            val buffer = nodeBulkBuffer.getOrPut(nodeId) {
+                BulkMessageBuffer(ArrayBlockingQueue(bulkMessagingBulkSize * 2))
+            }
+
+            try {
+                // Add all messages to buffer (ArrayBlockingQueue.add() is thread-safe)
+                messages.forEach { msg ->
+                    buffer.messages.add(msg)
+                }
+
+                // Only lock when checking if we need to flush
+                if (buffer.messages.size >= bulkMessagingBulkSize) {
+                    buffer.lock.lock()
+                    try {
+                        // Double-check after acquiring lock
+                        if (buffer.messages.size >= bulkMessagingBulkSize) {
+                            val bulkMessage = BulkNodeMessage(buffer.messages.toList())
+                            buffer.messages.clear()
+                            buffer.lastFlushTime = System.currentTimeMillis()
+                            vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
+                            messageBusOut.incrementAndGet()
+                            logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages" }
+                        }
+                    } finally {
+                        buffer.lock.unlock()
+                    }
+                }
+            } catch (e: IllegalStateException) {
+                logger.warning("Bulk buffer overflow for node [$nodeId], sending messages individually")
+                messages.forEach { msg ->
+                    vertx.eventBus().publish(nodeMessageAddress(nodeId), msg)
+                    messageBusOut.incrementAndGet()
+                }
+            }
         }
     }
 
@@ -1355,6 +1656,107 @@ open class SessionHandler(
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Publish bulk messaging metrics to MQTT $SYS topic.
+     * Shows per-second rates for messages flushed to clients and nodes.
+     */
+    private fun publishBulkMessagingMetrics() {
+        val nodeName = Monster.getClusterNodeId(vertx)
+        val currentTime = System.currentTimeMillis()
+        val timeDeltaMs = currentTime - lastBulkMessagingMetricsTime
+        val timeDeltaSec = if (timeDeltaMs > 0) timeDeltaMs / 1000.0 else 1.0
+
+        val currentClientsFlushed = bulkMessagingClientsFlushed.get()
+        val currentNodesFlushed = bulkMessagingNodesFlushed.get()
+
+        val clientsDelta = currentClientsFlushed - lastBulkMessagingClientsFlushed
+        val nodesDelta = currentNodesFlushed - lastBulkMessagingNodesFlushed
+
+        val clientsPerSec = (clientsDelta / timeDeltaSec).toLong()
+        val nodesPerSec = (nodesDelta / timeDeltaSec).toLong()
+
+        lastBulkMessagingMetricsTime = currentTime
+        lastBulkMessagingClientsFlushed = currentClientsFlushed
+        lastBulkMessagingNodesFlushed = currentNodesFlushed
+
+        val clientBuffersCount = clientBulkBuffer.size
+        val nodeBuffersCount = nodeBulkBuffer.size
+        var totalClientMessages = 0L
+        var totalNodeMessages = 0L
+
+        clientBulkBuffer.values.forEach { buffer ->
+            totalClientMessages += buffer.messages.size
+        }
+        nodeBulkBuffer.values.forEach { buffer ->
+            totalNodeMessages += buffer.messages.size
+        }
+
+        val metricsJson = buildString {
+            append("{")
+            append("\"clientMessagesPerSec\":$clientsPerSec,")
+            append("\"nodeMessagesPerSec\":$nodesPerSec,")
+            append("\"clientBuffers\":$clientBuffersCount,")
+            append("\"nodeBuffers\":$nodeBuffersCount,")
+            append("\"bufferedClientMessages\":$totalClientMessages,")
+            append("\"bufferedNodeMessages\":$totalNodeMessages")
+            append("}")
+        }
+
+        try {
+            val message = BrokerMessage("", "\$SYS/brokers/$nodeName/bulk/messaging", metricsJson)
+            publishMessage(message)
+        } catch (e: Exception) {
+            logger.fine("Error publishing bulk messaging metrics: ${e.message}")
+        }
+    }
+
+    /**
+     * Shutdown the session handler and worker pool.
+     * Called when the verticle stops.
+     */
+    fun shutdown() {
+        logger.info("Shutting down SessionHandler...")
+        val startTime = System.currentTimeMillis()
+
+        try {
+            // Cancel periodic timers
+            if (bulkFlushTimerId >= 0) {
+                vertx.cancelTimer(bulkFlushTimerId)
+                logger.fine("Cancelled bulk flush timer")
+            }
+            if (bulkMessagingMetricsTimerId >= 0) {
+                vertx.cancelTimer(bulkMessagingMetricsTimerId)
+                logger.fine("Cancelled bulk messaging metrics timer")
+            }
+            if (publishBatchFlushTimerId >= 0) {
+                vertx.cancelTimer(publishBatchFlushTimerId)
+                logger.fine("Cancelled publish batch flush timer")
+            }
+            if (publishWorkerLogTimerId >= 0) {
+                vertx.cancelTimer(publishWorkerLogTimerId)
+                logger.fine("Cancelled worker log timer")
+            }
+
+            // Final worker load log before shutdown
+            if (publishWorkerPool != null) {
+                logger.info("Final worker load before shutdown:")
+                publishWorkerPool?.logWorkerLoad()
+            }
+
+            // Shutdown worker pool
+            if (publishWorkerPool != null) {
+                logger.info("Shutting down worker pool...")
+                publishWorkerPool?.shutdown()
+            }
+
+            val duration = System.currentTimeMillis() - startTime
+            logger.info("SessionHandler shutdown complete (${duration}ms)")
+        } catch (e: Exception) {
+            logger.severe("Error during SessionHandler shutdown: ${e.message}")
+            e.printStackTrace()
         }
     }
 }

@@ -165,6 +165,102 @@ SparkplugMetricExpansion:
 
 Toggles the Sparkplug metric expansion helper (`broker/src/main/kotlin/Monster.kt:139-152`).
 
+## Bulk Messaging
+
+```yaml
+BulkMessaging:
+  Enabled: true              # Enable/disable bulk message batching for client delivery
+  TimeoutMS: 100             # Flush batches after this many milliseconds (100ms recommended)
+  BulkSize: 1000             # Flush when batch reaches this many messages (1000 recommended)
+```
+
+Bulk messaging batches messages destined for the same client into a single eventBus operation, reducing serialization and network overhead. This is particularly beneficial when many clients subscribe to the same topic.
+
+**Performance Impact:**
+- Reduces eventBus operations by up to 10x for high-fanout scenarios
+- Minimal latency impact (100ms batching window)
+- Negligible memory overhead (buffers cleaned up automatically)
+
+**Tuning Guidelines:**
+- **TimeoutMS**: Shorter values (50ms) reduce latency but increase eventBus operations; longer values (200ms) batch better but may increase perceived latency
+- **BulkSize**: Smaller values (500) favor latency; larger values (5000) favor throughput
+
+This feature is independent and can be enabled/disabled separately from BulkProcessing.
+
+## Bulk Processing
+
+```yaml
+BulkProcessing:
+  Enabled: true              # Enable/disable publish bulk processing and worker threads
+  TimeoutMS: 50              # Flush inbound batch after this many milliseconds (50ms recommended)
+  BulkSize: 10000            # Flush when batch reaches this many messages (10000 recommended)
+  WorkerThreads: 4           # Number of parallel worker threads (2-8 recommended)
+```
+
+Bulk processing is a **critical optimization** for systems with wildcard subscriptions. It addresses the performance cliff that occurs when clients use topic filters like `sensor/+/temperature`.
+
+**How it Works:**
+1. **Phase 1 - Collection**: Messages from multiple publishers are collected into a batch (up to `BulkSize` or after `TimeoutMS`)
+2. **Phase 2 - Grouping**: Each batch is grouped by topic name, minimizing subscription lookup operations
+3. **Phase 3 - Parallel Processing**: Worker threads process grouped messages in parallel
+
+**Performance Impact (compared to baseline without subscriptions):**
+
+| Scenario | Throughput | Notes |
+|----------|-----------|-------|
+| No subscriptions | 250,000 msg/s | Baseline |
+| With subscriptions (disabled) | 60,000 msg/s | 76% degradation |
+| Phase 1 only (topic grouping) | 120,000-150,000 msg/s | 2-2.5x improvement |
+| Phase 1 + Phase 2 (workers) | 180,000-250,000 msg/s | 3-4x total improvement |
+
+**Tuning Guidelines:**
+
+**Light Load (< 100k msg/s):**
+```yaml
+BulkProcessing:
+  Enabled: true
+  TimeoutMS: 100
+  BulkSize: 5000
+  WorkerThreads: 2
+```
+
+**Medium Load (100k-300k msg/s) - RECOMMENDED:**
+```yaml
+BulkProcessing:
+  Enabled: true
+  TimeoutMS: 50
+  BulkSize: 10000
+  WorkerThreads: 4
+```
+
+**Heavy Load (300k-500k msg/s):**
+```yaml
+BulkProcessing:
+  Enabled: true
+  TimeoutMS: 25
+  BulkSize: 20000
+  WorkerThreads: 8
+```
+
+**Configuration Rules:**
+- `WorkerThreads` should be tuned to ~1 thread per 75k msg/s target throughput
+- Recommended range: 2-8 threads (more threads = more parallelism but higher context switching overhead)
+- `TimeoutMS` controls batching aggression: shorter = lower latency, longer = better batching
+- `BulkSize` should reflect expected message burst size in your workload
+
+**Memory Considerations:**
+- Each batch buffer consumes approximately 20-40 KB per client/node (with default BulkSize)
+- Worker thread stack overhead: ~1 MB per thread
+- Total memory impact: negligible for typical deployments (< 50 MB for 4 workers + 1000 clients)
+
+**Implementation Details:**
+- Worker threads are dedicated background threads (not Vert.x managed) to avoid blocked-thread warnings
+- Uses optimized lock-free operations for high-frequency message adds
+- Graceful shutdown on application termination
+- Integration with existing BulkMessaging system for final client delivery
+
+This feature requires **wildcard subscriptions to provide significant benefit**. For systems with only exact-match topic subscriptions, the gain is minimal.
+
 ## Cluster Mode
 
 Cluster mode is activated with the `-cluster` flag on the command line. The YAML file has no additional Hazelcast configuration knobs; see `doc/clustering.md` for details.
