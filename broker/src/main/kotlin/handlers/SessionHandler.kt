@@ -935,7 +935,6 @@ open class SessionHandler(
                             buffer.messages.clear()
                             buffer.lastFlushTime = System.currentTimeMillis()
                             vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
-                            clientMetrics[clientId]?.messagesOut?.addAndGet(bulkMessage.messages.size.toLong())
                             bulkMessagingClientsFlushed.addAndGet(bulkMessage.messages.size.toLong())
                             logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (size threshold)" }
                         }
@@ -974,7 +973,6 @@ open class SessionHandler(
                     buffer.lastFlushTime = currentTime
 
                     vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
-                    clientMetrics[clientId]?.messagesOut?.addAndGet(bulkMessage.messages.size.toLong())
                     bulkMessagingClientsFlushed.addAndGet(bulkMessage.messages.size.toLong())
                     logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (timeout)" }
                 }
