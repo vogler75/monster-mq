@@ -1,0 +1,12 @@
+Release v1.6.43
+Built from commit: 1ccfa36
+Date: 2025-10-23 20:24:58
+
+Changes since v1.6.42:
+---
+1ccfa36 Update bulk processing and messaging config and topics
+01c4e37 Add monitoring documentation and update bulk size
+82f6942 Reorder BulkMessaging section in config file
+8381727 Improve bulk messaging metrics and config structure
+3beabbe Add publish bulk processing with worker threads
+b98ab09 Add bulk messaging support for client and node delivery
