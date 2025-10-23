@@ -13,6 +13,7 @@ import at.rocworks.cluster.DataReplicator
 import at.rocworks.cluster.SetMapReplicator
 import at.rocworks.data.*
 import at.rocworks.stores.ISessionStoreAsync
+import java.util.concurrent.locks.ReentrantLock
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -76,6 +77,21 @@ open class SessionHandler(
     private val sparkplugHandler = Monster.getSparkplugExtension()
 
     private val inFlightMessages = HashMap<String, ArrayBlockingQueue<BrokerMessage>>()
+
+    // Bulk messaging buffers
+    private data class BulkMessageBuffer(
+        val messages: ArrayBlockingQueue<BrokerMessage>,
+        var lastFlushTime: Long = System.currentTimeMillis(),
+        val lock: ReentrantLock = ReentrantLock()
+    )
+
+    private val bulkMessagingEnabled = Monster.isBulkMessagingEnabled()
+    private val bulkMessagingTimeoutMs = Monster.getBulkMessagingTimeoutMs()
+    private val bulkMessagingBulkSize = Monster.getBulkMessagingBulkSize()
+
+    private val clientBulkBuffer = ConcurrentHashMap<String, BulkMessageBuffer>()
+    private val nodeBulkBuffer = ConcurrentHashMap<String, BulkMessageBuffer>()
+    private var bulkFlushTimerId: Long = -1
 
     // Message listeners for external subscribers (e.g., GraphQL subscriptions)
     // Map: listenerId -> (topic filters, callback function)
@@ -395,11 +411,24 @@ open class SessionHandler(
         }
 
         // Subscribe to node-specific message address for targeted messages
-        vertx.eventBus().consumer<BrokerMessage>(localNodeMessageAddress()) { message ->
-            message.body()?.let { payload ->
-                messageBusIn.incrementAndGet()
-                logger.finest { "Received targeted message [${payload.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                processMessageForLocalClients(payload)
+        // Handles both individual BrokerMessage and bulk BulkNodeMessage
+        vertx.eventBus().consumer<Any>(localNodeMessageAddress()) { message ->
+            when (val payload = message.body()) {
+                is BrokerMessage -> {
+                    messageBusIn.incrementAndGet()
+                    logger.finest { "Received targeted message [${payload.topicName}] [${Utils.getCurrentFunctionName()}]" }
+                    processMessageForLocalClients(payload)
+                }
+                is BulkNodeMessage -> {
+                    messageBusIn.addAndGet(payload.messages.size.toLong())
+                    logger.finest { "Received bulk message with [${payload.messages.size}] messages [${Utils.getCurrentFunctionName()}]" }
+                    payload.messages.forEach { brokerMessage ->
+                        processMessageForLocalClients(brokerMessage)
+                    }
+                }
+                else -> {
+                    logger.warning("Unknown message type in node consumer: ${payload?.javaClass?.simpleName} [${Utils.getCurrentFunctionName()}]")
+                }
             }
         }
 
@@ -412,6 +441,14 @@ open class SessionHandler(
                 } catch (e: Exception) {
                     // Silently ignore errors to prevent logging loops
                 }
+            }
+        }
+
+        // Start bulk message flusher if enabled
+        if (bulkMessagingEnabled) {
+            logger.info("Starting bulk message flusher with timeout=${bulkMessagingTimeoutMs}ms, bulkSize=$bulkMessagingBulkSize")
+            bulkFlushTimerId = vertx.setPeriodic(bulkMessagingTimeoutMs) {
+                flushBulkBuffers()
             }
         }
 
@@ -798,17 +835,113 @@ open class SessionHandler(
 
 
     private fun sendMessageToClient(clientId: String, message: BrokerMessage): Future<Boolean> {
-        if (message.qosLevel == 0) {
-            vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), message)
-            return Future.succeededFuture(true)
+        if (!bulkMessagingEnabled) {
+            // Original non-bulk behavior
+            if (message.qosLevel == 0) {
+                vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), message)
+                return Future.succeededFuture(true)
+            } else {
+                val promise = Promise.promise<Boolean>()
+                vertx.eventBus().request<Boolean>(MqttClient.getMessagesAddress(clientId), message)
+                    .onComplete { ar ->
+                        promise.complete(!ar.failed() && ar.result().body())
+                    }
+                return promise.future()
+            }
         } else {
-            val promise = Promise.promise<Boolean>()
-            vertx.eventBus().request<Boolean>(MqttClient.getMessagesAddress(clientId), message)
-                .onComplete { ar ->
-                    promise.complete(!ar.failed() && ar.result().body())
+            // Bulk messaging: buffer the message
+            val buffer = clientBulkBuffer.getOrPut(clientId) {
+                BulkMessageBuffer(ArrayBlockingQueue(bulkMessagingBulkSize * 2))
+            }
+
+            buffer.lock.lock()
+            try {
+                buffer.messages.add(message)
+
+                // Immediate flush if buffer is full
+                if (buffer.messages.size >= bulkMessagingBulkSize) {
+                    val bulkMessage = BulkClientMessage(buffer.messages.toList())
+                    buffer.messages.clear()
+                    buffer.lastFlushTime = System.currentTimeMillis()
+                    vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
+                    clientMetrics[clientId]?.messagesOut?.addAndGet(bulkMessage.messages.size.toLong())
+                    logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (size threshold)" }
                 }
-            return promise.future()
+            } catch (e: IllegalStateException) {
+                logger.warning("Bulk buffer overflow for client [$clientId], sending immediately")
+                vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), message)
+            } finally {
+                buffer.lock.unlock()
+            }
+
+            return Future.succeededFuture(true)
         }
+    }
+
+    /**
+     * Flush bulk message buffers for both local clients and remote nodes.
+     * Called periodically by the bulk flusher timer or when buffers reach the bulk size limit.
+     */
+    private fun flushBulkBuffers() {
+        val currentTime = System.currentTimeMillis()
+
+        // Flush local client buffers
+        val clientsToRemove = mutableListOf<String>()
+        clientBulkBuffer.forEach { (clientId, buffer) ->
+            buffer.lock.lock()
+            try {
+                val timeSinceFlush = currentTime - buffer.lastFlushTime
+                val shouldFlush = buffer.messages.size > 0 &&
+                                timeSinceFlush >= bulkMessagingTimeoutMs
+
+                if (shouldFlush) {
+                    val bulkMessage = BulkClientMessage(buffer.messages.toList())
+                    buffer.messages.clear()
+                    buffer.lastFlushTime = currentTime
+
+                    vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
+                    clientMetrics[clientId]?.messagesOut?.addAndGet(bulkMessage.messages.size.toLong())
+                    logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (timeout)" }
+                }
+
+                // Mark for removal if empty and stale
+                if (buffer.messages.isEmpty() && (currentTime - buffer.lastFlushTime > 5000)) {
+                    clientsToRemove.add(clientId)
+                }
+            } finally {
+                buffer.lock.unlock()
+            }
+        }
+        clientsToRemove.forEach { clientBulkBuffer.remove(it) }
+
+        // Flush remote node buffers
+        val nodesToRemove = mutableListOf<String>()
+        nodeBulkBuffer.forEach { (nodeId, buffer) ->
+            buffer.lock.lock()
+            try {
+                val timeSinceFlush = currentTime - buffer.lastFlushTime
+                val shouldFlush = buffer.messages.size > 0 &&
+                                timeSinceFlush >= bulkMessagingTimeoutMs
+
+                if (shouldFlush) {
+                    val bulkMessage = BulkNodeMessage(buffer.messages.toList())
+                    buffer.messages.clear()
+                    buffer.lastFlushTime = currentTime
+
+                    vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
+                    messageBusOut.incrementAndGet()
+                    logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages (timeout)" }
+                }
+
+                // Mark for removal if empty and stale
+                if (buffer.messages.isEmpty() && (currentTime - buffer.lastFlushTime > 5000)) {
+                    nodesToRemove.add(nodeId)
+                }
+            } finally {
+                buffer.lock.unlock()
+            }
+        }
+        nodesToRemove.forEach { nodeBulkBuffer.remove(it) }
     }
 
     private fun addInFlightMessage(clientId: String, message: BrokerMessage) {
@@ -922,9 +1055,39 @@ open class SessionHandler(
         // Send to remote nodes that have subscriptions (excluding local node)
         // Use publish() instead of send() for fire-and-forget delivery (non-blocking)
         // This prevents backpressure on the publisher when EventBus queues build up
-        remoteNodes.forEach { nodeId ->
-            vertx.eventBus().publish(nodeMessageAddress(nodeId), message)
-            messageBusOut.incrementAndGet()
+        if (!bulkMessagingEnabled) {
+            remoteNodes.forEach { nodeId ->
+                vertx.eventBus().publish(nodeMessageAddress(nodeId), message)
+                messageBusOut.incrementAndGet()
+            }
+        } else {
+            // Bulk messaging: buffer messages for remote nodes
+            remoteNodes.forEach { nodeId ->
+                val buffer = nodeBulkBuffer.getOrPut(nodeId) {
+                    BulkMessageBuffer(ArrayBlockingQueue(bulkMessagingBulkSize * 2))
+                }
+
+                buffer.lock.lock()
+                try {
+                    buffer.messages.add(message)
+
+                    // Immediate flush if buffer is full
+                    if (buffer.messages.size >= bulkMessagingBulkSize) {
+                        val bulkMessage = BulkNodeMessage(buffer.messages.toList())
+                        buffer.messages.clear()
+                        buffer.lastFlushTime = System.currentTimeMillis()
+                        vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
+                        messageBusOut.incrementAndGet()
+                        logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages (size threshold)" }
+                    }
+                } catch (e: IllegalStateException) {
+                    logger.warning("Bulk buffer overflow for node [$nodeId], sending immediately")
+                    vertx.eventBus().publish(nodeMessageAddress(nodeId), message)
+                    messageBusOut.incrementAndGet()
+                } finally {
+                    buffer.lock.unlock()
+                }
+            }
         }
 
         // Note: Offline persistent client queuing is now handled automatically by

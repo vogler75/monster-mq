@@ -3,6 +3,7 @@ package at.rocworks
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.auth.UserManager
 import at.rocworks.data.BrokerMessage
+import at.rocworks.data.BulkClientMessage
 import at.rocworks.handlers.SessionHandler
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
 import io.netty.handler.codec.mqtt.MqttQoS
@@ -136,7 +137,10 @@ class MqttClient(
             if (!deployed) {
                 deployed = true
                 busConsumers.add(vertx.eventBus().consumer(getCommandAddress(clientId), ::consumeCommand))
-                busConsumers.add(vertx.eventBus().consumer(getMessagesAddress(clientId), ::consumeMessage))
+                // Register with Any type to handle both BrokerMessage and BulkClientMessage
+                busConsumers.add(vertx.eventBus().consumer<Any>(getMessagesAddress(clientId)) { busMessage ->
+                    handleBusMessage(busMessage)
+                })
             } else {
                 logger.severe("Client [$clientId] Already deployed [${Utils.getCurrentFunctionName()}]")
             }
@@ -533,6 +537,73 @@ class MqttClient(
     // -----------------------------------------------------------------------------------------------------------------
     // Sending messages to client (subscribe)
     // -----------------------------------------------------------------------------------------------------------------
+
+    /**
+     * Route incoming bus message to appropriate handler based on type.
+     * Handles both individual BrokerMessage and bulk BulkClientMessage.
+     */
+    private fun handleBusMessage(busMessage: io.vertx.core.eventbus.Message<Any>) {
+        when (val body = busMessage.body()) {
+            is BrokerMessage -> {
+                // Create a properly typed message wrapper
+                @Suppress("UNCHECKED_CAST")
+                val brokerMessage = busMessage as io.vertx.core.eventbus.Message<BrokerMessage>
+                consumeMessage(brokerMessage)
+            }
+            is BulkClientMessage -> {
+                logger.finest { "Client [$clientId] Received bulk message with [${body.messages.size}] messages [${Utils.getCurrentFunctionName()}]" }
+                body.messages.forEach { message ->
+                    // Process each message as if it came individually
+                    processBulkMessageItem(message)
+                }
+            }
+            else -> {
+                logger.warning { "Client [$clientId] Received unknown message type: ${body?.javaClass?.simpleName} [${Utils.getCurrentFunctionName()}]" }
+            }
+        }
+    }
+
+    /**
+     * Process a single message from a bulk message batch.
+     * Mirrors the logic from consumeMessage but without the bus message reply.
+     */
+    private fun processBulkMessageItem(message: BrokerMessage) {
+        if (!ready) {
+            return
+        }
+        when (message.qosLevel) {
+            0 -> {
+                val msg = message.cloneWithNewMessageId(0)
+                if (endpoint.isConnected) {
+                    publishMessage(msg)
+                    logger.finest { "Client [$clientId] QoS [0] message [${msg.messageId}] for topic [${msg.topicName}] delivered [${Utils.getCurrentFunctionName()}]" }
+                } else {
+                    logger.finest { "Client [$clientId] QoS [0] message [${msg.messageId}] for topic [${msg.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]" }
+                }
+            }
+            1 -> {
+                val msg = message.cloneWithNewMessageId(getNextMessageId())
+                if (endpoint.isConnected) {
+                    publishMessage(msg)
+                    logger.finest { "Client [$clientId] QoS [1] message [${msg.messageId}] for topic [${msg.topicName}] delivered [${Utils.getCurrentFunctionName()}]" }
+                } else {
+                    logger.finest { "Client [$clientId] QoS [1] message [${msg.messageId}] for topic [${msg.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]" }
+                }
+            }
+            2 -> {
+                val msg = message.cloneWithNewMessageId(getNextMessageId())
+                if (endpoint.isConnected) {
+                    publishMessage(msg)
+                    logger.finest { "Client [$clientId] QoS [2] message [${msg.messageId}] for topic [${msg.topicName}] delivered [${Utils.getCurrentFunctionName()}]" }
+                } else {
+                    logger.finest { "Client [$clientId] QoS [2] message [${msg.messageId}] for topic [${msg.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]" }
+                }
+            }
+            else -> {
+                logger.warning { "Client [$clientId] Subscribe: unknown QoS level [${message.qosLevel}] [${Utils.getCurrentFunctionName()}]" }
+            }
+        }
+    }
 
     private fun consumeMessage(busMessage: Message<BrokerMessage>) {
         if (!ready) {

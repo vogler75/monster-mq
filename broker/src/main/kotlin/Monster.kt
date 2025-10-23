@@ -5,6 +5,10 @@ import at.rocworks.bus.MessageBusKafka
 import at.rocworks.bus.MessageBusVertx
 import at.rocworks.data.BrokerMessage
 import at.rocworks.data.BrokerMessageCodec
+import at.rocworks.data.BulkClientMessage
+import at.rocworks.data.BulkClientMessageCodec
+import at.rocworks.data.BulkNodeMessage
+import at.rocworks.data.BulkNodeMessageCodec
 import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
 import at.rocworks.extensions.graphql.GraphQLServer
@@ -210,6 +214,21 @@ class Monster(args: Array<String>) {
         private var messageQueueSize: Int = 50_000
         @JvmStatic
         fun getMessageQueueSize(): Int = messageQueueSize
+
+        @Volatile
+        private var bulkMessagingEnabled: Boolean = false
+        @JvmStatic
+        fun isBulkMessagingEnabled(): Boolean = bulkMessagingEnabled
+
+        @Volatile
+        private var bulkMessagingTimeoutMs: Long = 100L
+        @JvmStatic
+        fun getBulkMessagingTimeoutMs(): Long = bulkMessagingTimeoutMs
+
+        @Volatile
+        private var bulkMessagingBulkSize: Int = 1000
+        @JvmStatic
+        fun getBulkMessagingBulkSize(): Int = bulkMessagingBulkSize
 
         private fun ensureSQLiteVerticleDeployed(vertx: Vertx): Future<String> {
             return if (sqliteVerticleDeploymentId == null) {
@@ -488,6 +507,33 @@ MORE INFO:
                 }
                 logger.info("Config: Queue sizes - Subscription=$subscriptionQueueSize, Message=$messageQueueSize")
 
+                // Read bulk messaging configuration
+                configJson.getJsonObject("BulkMessaging", JsonObject()).let { bulkConfig ->
+                    bulkMessagingEnabled = try {
+                        bulkConfig.getBoolean("Enabled", false)
+                    } catch (e: Exception) {
+                        logger.warning("Config: BulkMessaging.Enabled read failed: ${e.message}")
+                        false
+                    }
+                    bulkMessagingTimeoutMs = try {
+                        bulkConfig.getLong("TimeoutMS", 100L)
+                    } catch (e: Exception) {
+                        logger.warning("Config: BulkMessaging.TimeoutMS read failed: ${e.message}")
+                        100L
+                    }
+                    bulkMessagingBulkSize = try {
+                        bulkConfig.getInteger("BulkSize", 1000)
+                    } catch (e: Exception) {
+                        logger.warning("Config: BulkMessaging.BulkSize read failed: ${e.message}")
+                        1000
+                    }
+                }
+                if (bulkMessagingEnabled) {
+                    logger.info("Config: BulkMessaging enabled - TimeoutMS=$bulkMessagingTimeoutMs, BulkSize=$bulkMessagingBulkSize")
+                } else {
+                    logger.info("Config: BulkMessaging disabled")
+                }
+
                 startMonster(vertx)
             } else {
                 logger.severe("Config loading failed: ${it.cause()}")
@@ -597,6 +643,8 @@ MORE INFO:
 
         vertx.eventBus().registerDefaultCodec(BrokerMessage::class.java, BrokerMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
+        vertx.eventBus().registerDefaultCodec(BulkClientMessage::class.java, BulkClientMessageCodec())
+        vertx.eventBus().registerDefaultCodec(BulkNodeMessage::class.java, BulkNodeMessageCodec())
 
         getSessionStore(vertx).onSuccess { sessionStore ->
             // Message bus
