@@ -530,10 +530,10 @@ MORE INFO:
                 // Read bulk messaging configuration
                 configJson.getJsonObject("BulkMessaging", JsonObject()).let { bulkConfig ->
                     bulkMessagingEnabled = try {
-                        bulkConfig.getBoolean("Enabled", false)
+                        bulkConfig.getBoolean("Enabled", true)
                     } catch (e: Exception) {
                         logger.warning("Config: BulkMessaging.Enabled read failed: ${e.message}")
-                        false
+                        true
                     }
                     bulkMessagingTimeoutMs = try {
                         bulkConfig.getLong("TimeoutMS", 100L)
@@ -557,10 +557,10 @@ MORE INFO:
                 // Read publish bulk processing configuration
                 configJson.getJsonObject("BulkProcessing", JsonObject()).let { bulkProcConfig ->
                     publishBulkProcessingEnabled = try {
-                        bulkProcConfig.getBoolean("Enabled", false)
+                        bulkProcConfig.getBoolean("Enabled", true)
                     } catch (e: Exception) {
                         logger.warning("Config: BulkProcessing.Enabled read failed: ${e.message}")
-                        false
+                        true
                     }
                     publishBulkTimeoutMs = try {
                         bulkProcConfig.getLong("TimeoutMS", 50L)
@@ -569,10 +569,10 @@ MORE INFO:
                         50L
                     }
                     publishBulkSize = try {
-                        bulkProcConfig.getInteger("BulkSize", 10000)
+                        bulkProcConfig.getInteger("BulkSize", 1000)
                     } catch (e: Exception) {
                         logger.warning("Config: BulkProcessing.BulkSize read failed: ${e.message}")
-                        10000
+                        1000
                     }
                     publishWorkerThreads = try {
                         bulkProcConfig.getInteger("WorkerThreads", 4)
