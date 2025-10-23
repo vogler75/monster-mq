@@ -8,6 +8,13 @@ AllowRootWildcardSubscription: true
 
 DefaultStoreType: POSTGRES
 
+# User Management configuration
+UserManagement:
+  Enabled: false  # Set to true to enable user authentication and ACL
+  PasswordAlgorithm: bcrypt
+  CacheRefreshInterval: 60  # seconds
+  DisconnectOnUnauthorized: true
+
 # MQTT TCP Server configuration (socket-level settings)
 MqttTcpServer:
   NoDelay: true                  # TCP_NODELAY - disable Nagle's algorithm for immediate packet transmission
@@ -15,12 +22,10 @@ MqttTcpServer:
   SendBufferSizeKb: 512          # Socket send buffer size (default: 512KB, recommended: 512KB-2MB for high load)
   MaxMessageSizeKb: 512
 
-# User Management configuration
-UserManagement:
-  Enabled: false  # Set to true to enable user authentication and ACL
-  PasswordAlgorithm: bcrypt
-  CacheRefreshInterval: 60  # seconds
-  DisconnectOnUnauthorized: true
+# Queue size configuration for high-load scenarios
+Queues:
+  SubscriptionQueueSize: 50000  # Queue size for subscription add/delete operations (default: 10,000)
+  MessageQueueSize: 50000       # Queue size for message add/delete operations (default: 10,000)
 
 # Metrics configuration
 Logging:
@@ -29,10 +34,6 @@ Logging:
   Memory:
     Enabled: true         # Enable in-memory log storage (circular buffer)
     Entries: 1000          # Maximum number of log entries to store in memory
-
-# Sparkplug B support configuration
-SparkplugMetricExpansion:
-  Enabled: true
 
 # Batches messages for delivery to clients to reduce eventBus overhead
 BulkMessaging:
@@ -46,6 +47,10 @@ BulkProcessing:
   TimeoutMS: 50              # Flush inbound batch after this many milliseconds (50ms recommended)
   BulkSize: 10000            # Flush when batch reaches this many messages (10000 recommended)
   WorkerThreads: 4           # Number of parallel worker threads (recommended: 2-8)
+
+# Sparkplug B support configuration
+SparkplugMetricExpansion:
+  Enabled: true
 
 # SQLite configuration
 SQLite:

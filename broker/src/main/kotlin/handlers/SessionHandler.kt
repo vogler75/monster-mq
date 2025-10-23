@@ -96,9 +96,13 @@ open class SessionHandler(
 
     // For bulk messaging per-second rate calculations
     private var lastBulkMessagingMetricsTime = System.currentTimeMillis()
-    private val bulkMessagingClientsFlushed = AtomicLong(0)
-    private val bulkMessagingNodesFlushed = AtomicLong(0)
+    private val bulkMessagingClientsAdded = AtomicLong(0)      // Messages added to client buffers
+    private val bulkMessagingClientsFlushed = AtomicLong(0)    // Messages flushed from client buffers
+    private val bulkMessagingNodesAdded = AtomicLong(0)        // Messages added to node buffers
+    private val bulkMessagingNodesFlushed = AtomicLong(0)      // Messages flushed from node buffers
+    private var lastBulkMessagingClientsAdded = 0L
     private var lastBulkMessagingClientsFlushed = 0L
+    private var lastBulkMessagingNodesAdded = 0L
     private var lastBulkMessagingNodesFlushed = 0L
 
     // Publish bulk processing (topic grouping + worker threads)
@@ -919,6 +923,7 @@ open class SessionHandler(
             try {
                 // ArrayBlockingQueue.add() is thread-safe, no lock needed
                 buffer.messages.add(message)
+                bulkMessagingClientsAdded.incrementAndGet()
 
                 // Only lock when checking if we need to flush (to protect lastFlushTime and prevent double-flush)
                 if (buffer.messages.size >= bulkMessagingBulkSize) {
@@ -931,6 +936,7 @@ open class SessionHandler(
                             buffer.lastFlushTime = System.currentTimeMillis()
                             vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
                             clientMetrics[clientId]?.messagesOut?.addAndGet(bulkMessage.messages.size.toLong())
+                            bulkMessagingClientsFlushed.addAndGet(bulkMessage.messages.size.toLong())
                             logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (size threshold)" }
                         }
                     } finally {
@@ -1373,6 +1379,7 @@ open class SessionHandler(
                 // Add all messages to buffer (ArrayBlockingQueue.add() is thread-safe)
                 messages.forEach { msg ->
                     buffer.messages.add(msg)
+                    bulkMessagingNodesAdded.incrementAndGet()
                 }
 
                 // Only lock when checking if we need to flush
@@ -1386,6 +1393,7 @@ open class SessionHandler(
                             buffer.lastFlushTime = System.currentTimeMillis()
                             vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
                             messageBusOut.incrementAndGet()
+                            bulkMessagingNodesFlushed.addAndGet(bulkMessage.messages.size.toLong())
                             logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages" }
                         }
                     } finally {
@@ -1669,17 +1677,25 @@ open class SessionHandler(
         val timeDeltaMs = currentTime - lastBulkMessagingMetricsTime
         val timeDeltaSec = if (timeDeltaMs > 0) timeDeltaMs / 1000.0 else 1.0
 
+        val currentClientsAdded = bulkMessagingClientsAdded.get()
         val currentClientsFlushed = bulkMessagingClientsFlushed.get()
+        val currentNodesAdded = bulkMessagingNodesAdded.get()
         val currentNodesFlushed = bulkMessagingNodesFlushed.get()
 
-        val clientsDelta = currentClientsFlushed - lastBulkMessagingClientsFlushed
-        val nodesDelta = currentNodesFlushed - lastBulkMessagingNodesFlushed
+        val clientsAddedDelta = currentClientsAdded - lastBulkMessagingClientsAdded
+        val clientsFlushedDelta = currentClientsFlushed - lastBulkMessagingClientsFlushed
+        val nodesAddedDelta = currentNodesAdded - lastBulkMessagingNodesAdded
+        val nodesFlushedDelta = currentNodesFlushed - lastBulkMessagingNodesFlushed
 
-        val clientsPerSec = (clientsDelta / timeDeltaSec).toLong()
-        val nodesPerSec = (nodesDelta / timeDeltaSec).toLong()
+        val clientsAddedPerSec = (clientsAddedDelta / timeDeltaSec).toLong()
+        val clientsFlushedPerSec = (clientsFlushedDelta / timeDeltaSec).toLong()
+        val nodesAddedPerSec = (nodesAddedDelta / timeDeltaSec).toLong()
+        val nodesFlushedPerSec = (nodesFlushedDelta / timeDeltaSec).toLong()
 
         lastBulkMessagingMetricsTime = currentTime
+        lastBulkMessagingClientsAdded = currentClientsAdded
         lastBulkMessagingClientsFlushed = currentClientsFlushed
+        lastBulkMessagingNodesAdded = currentNodesAdded
         lastBulkMessagingNodesFlushed = currentNodesFlushed
 
         val clientBuffersCount = clientBulkBuffer.size
@@ -1696,8 +1712,10 @@ open class SessionHandler(
 
         val metricsJson = buildString {
             append("{")
-            append("\"clientMessagesPerSec\":$clientsPerSec,")
-            append("\"nodeMessagesPerSec\":$nodesPerSec,")
+            append("\"clientAddedPerSec\":$clientsAddedPerSec,")
+            append("\"clientFlushedPerSec\":$clientsFlushedPerSec,")
+            append("\"nodeAddedPerSec\":$nodesAddedPerSec,")
+            append("\"nodeFlushedPerSec\":$nodesFlushedPerSec,")
             append("\"clientBuffers\":$clientBuffersCount,")
             append("\"nodeBuffers\":$nodeBuffersCount,")
             append("\"bufferedClientMessages\":$totalClientMessages,")
