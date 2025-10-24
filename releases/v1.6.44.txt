@@ -1,0 +1,8 @@
+Release v1.6.44
+Built from commit: 0561bf8
+Date: 2025-10-24 23:41:13
+
+Changes since v1.6.43:
+---
+0561bf8 Refactor internal client subscription to use eventBus
+08bdad8 Queue messages only for persistent client sessions
