@@ -2,8 +2,9 @@ package at.rocworks.devices.plc4x
 
 import at.rocworks.Monster
 import at.rocworks.Utils
-import at.rocworks.data.BrokerMessage
 import at.rocworks.bus.EventBusAddresses
+import at.rocworks.data.BrokerMessage
+import at.rocworks.data.TopicTree
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.Plc4xConnectionConfig
 import at.rocworks.stores.devices.Plc4xAddress
@@ -138,13 +139,17 @@ class Plc4xConnector : AbstractVerticle() {
         // Unsubscribe from all MQTT topics
         val sessionHandler = Monster.getSessionHandler()
         if (sessionHandler != null) {
+            val clientId = "plc4x-connector-${deviceConfig.name}"
             subscribedTopics.forEach { (topic, address) ->
-                val clientId = "plc4x-connector-${deviceConfig.name}"
-                sessionHandler.unsubscribeInternal(clientId, topic)
+                sessionHandler.unsubscribeInternalClient(clientId, topic)
                 logger.info("Unsubscribed from MQTT topic '$topic' for address ${address.name}")
             }
+            subscribedTopics.clear()
+            // Unregister the client
+            sessionHandler.unregisterInternalClient(clientId)
+        } else {
+            subscribedTopics.clear()
         }
-        subscribedTopics.clear()
 
         disconnectFromPlc()
             .onComplete { result ->
@@ -489,6 +494,34 @@ class Plc4xConnector : AbstractVerticle() {
         // Subscribe to MQTT topics using SessionHandler
         val sessionHandler = Monster.getSessionHandler()
         if (sessionHandler != null) {
+            val clientId = "plc4x-connector-${deviceConfig.name}"
+
+            // Register eventBus consumer for this PLC4X connector (handles both individual and bulk messages)
+            vertx.eventBus().consumer<Any>(at.rocworks.bus.EventBusAddresses.Client.messages(clientId)) { busMessage ->
+                try {
+                    val messages = when (val body = busMessage.body()) {
+                        is BrokerMessage -> listOf(body)
+                        is at.rocworks.data.BulkClientMessage -> body.messages
+                        else -> {
+                            logger.warning("Unknown message type: ${body?.javaClass?.simpleName}")
+                            emptyList()
+                        }
+                    }
+                    messages.forEach { message ->
+                        // Find the address config for this topic
+                        val address = subscribedTopics.values.find { addr ->
+                            val topic = if (addr.topic.isNotBlank()) addr.topic else "${deviceConfig.namespace}/${addr.name}"
+                            TopicTree.matches(topic, message.topicName)
+                        }
+                        if (address != null) {
+                            handleMqttMessage(address, message)
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.warning("Error processing MQTT message: ${e.message}")
+                }
+            }
+
             writeAddresses.forEach { address ->
                 // Generate MQTT topic - use configured topic or default namespace/address pattern
                 val mqttTopic = if (address.topic.isNotBlank()) {
@@ -497,14 +530,11 @@ class Plc4xConnector : AbstractVerticle() {
                     "${deviceConfig.namespace}/${address.name}"
                 }
 
-                val clientId = "plc4x-connector-${deviceConfig.name}"
                 val qos = address.qos
 
                 logger.info("Internal subscription for PLC4X client '$clientId' to MQTT topic '$mqttTopic' with QoS $qos (mode: ${address.mode})")
 
-                sessionHandler.subscribeInternal(clientId, mqttTopic, qos) { message ->
-                    handleMqttMessage(address, message)
-                }
+                sessionHandler.subscribeInternalClient(clientId, mqttTopic, qos)
 
                 subscribedTopics[mqttTopic] = address
             }

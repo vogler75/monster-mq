@@ -357,7 +357,7 @@ class OpcUaServerInstance(
         // Unsubscribe from removed topics
         topicsToRemove.forEach { topic ->
             try {
-                sessionHandler.unsubscribeInternal(internalClientId, topic)
+                sessionHandler.unsubscribeInternalClient(internalClientId, topic)
                 subscribedTopics.remove(topic)
                 logger.fine { "Unsubscribed OPC UA server '${config.name}' from topic: $topic" }
             } catch (e: Exception) {
@@ -368,9 +368,7 @@ class OpcUaServerInstance(
         // Subscribe to new topics
         topicsToAdd.forEach { topic ->
             try {
-                sessionHandler.subscribeInternal(internalClientId, topic, 0) { message ->
-                    handleBrokerMessage(message, newConfig.addresses.find { it.mqttTopic == topic })
-                }
+                sessionHandler.subscribeInternalClient(internalClientId, topic, 0)
                 subscribedTopics[topic] = internalClientId
                 logger.fine { "Subscribed OPC UA server '${config.name}' to new topic: $topic" }
             } catch (e: Exception) {
@@ -386,11 +384,22 @@ class OpcUaServerInstance(
      * Subscribe to MQTT topics for this OPC UA server
      */
     private fun subscribeToMqttTopics() {
+        // Register eventBus consumer once for all MQTT messages to this OPC UA server (handles both individual and bulk)
+        vertx.eventBus().consumer<Any>(at.rocworks.bus.EventBusAddresses.Client.messages(internalClientId)) { busMessage ->
+            try {
+                when (val body = busMessage.body()) {
+                    is BrokerMessage -> handleBrokerMessage(body)
+                    is at.rocworks.data.BulkClientMessage -> body.messages.forEach { handleBrokerMessage(it) }
+                    else -> logger.warning("Unknown message type: ${body?.javaClass?.simpleName}")
+                }
+            } catch (e: Exception) {
+                logger.warning("Error processing MQTT message: ${e.message}")
+            }
+        }
+
         config.addresses.forEach { address ->
             try {
-                sessionHandler.subscribeInternal(internalClientId, address.mqttTopic, 0) { message ->
-                    handleBrokerMessage(message, address)
-                }
+                sessionHandler.subscribeInternalClient(internalClientId, address.mqttTopic, 0)
                 subscribedTopics[address.mqttTopic] = internalClientId
                 logger.fine { "Subscribed OPC UA server '${config.name}' to MQTT topic: ${address.mqttTopic}" }
             } catch (e: Exception) {
@@ -405,13 +414,15 @@ class OpcUaServerInstance(
     private fun unsubscribeFromMqttTopics() {
         subscribedTopics.forEach { (topic, clientId) ->
             try {
-                sessionHandler.unsubscribeInternal(clientId, topic)
+                sessionHandler.unsubscribeInternalClient(clientId, topic)
                 logger.fine { "Unsubscribed from MQTT topic: $topic" }
             } catch (e: Exception) {
                 logger.warning("Failed to unsubscribe from MQTT topic $topic: ${e.message}")
             }
         }
         subscribedTopics.clear()
+        // Unregister the client
+        sessionHandler.unregisterInternalClient(internalClientId)
     }
 
     /**

@@ -117,12 +117,14 @@ class MqttClientConnector : AbstractVerticle() {
         // Unsubscribe from internal topics
         val sessionHandler = Monster.getSessionHandler()
         if (sessionHandler != null) {
+            val clientId = "mqttclient-${deviceConfig.name}"
             publishAddresses.values.forEach { address ->
-                val clientId = "mqttclient-${deviceConfig.name}"
                 val topicFilter = address.localTopic
                 logger.info("Unsubscribing internal client '$clientId' from local topic '$topicFilter'")
-                sessionHandler.unsubscribeInternal(clientId, topicFilter)
+                sessionHandler.unsubscribeInternalClient(clientId, topicFilter)
             }
+            // Unregister the client
+            sessionHandler.unregisterInternalClient(clientId)
         }
 
         // Disconnect from remote broker
@@ -333,18 +335,29 @@ class MqttClientConnector : AbstractVerticle() {
             publishAddresses[address.localTopic] = address
         }
 
+        // Register eventBus consumer for this MQTT client (handles both individual and bulk messages)
+        val clientId = "mqttclient-${deviceConfig.name}"
+        vertx.eventBus().consumer<Any>(EventBusAddresses.Client.messages(clientId)) { busMessage ->
+            try {
+                when (val body = busMessage.body()) {
+                    is BrokerMessage -> handleLocalMqttMessage(body)
+                    is at.rocworks.data.BulkClientMessage -> body.messages.forEach { handleLocalMqttMessage(it) }
+                    else -> logger.warning("Unknown message type: ${body?.javaClass?.simpleName}")
+                }
+            } catch (e: Exception) {
+                logger.warning("Error processing local MQTT message: ${e.message}")
+            }
+        }
+
         // Subscribe to local topics using internal subscription mechanism
         val sessionHandler = Monster.getSessionHandler()
         if (sessionHandler != null) {
             publishAddrs.forEach { address ->
-                val clientId = "mqttclient-${deviceConfig.name}"
                 val topicFilter = address.localTopic
                 val qos = address.qos
                 logger.info("Internal subscription for MQTT client '$clientId' to local topic '$topicFilter' with QoS $qos")
 
-                sessionHandler.subscribeInternal(clientId, topicFilter, qos) { message ->
-                    handleLocalMqttMessage(message)
-                }
+                sessionHandler.subscribeInternalClient(clientId, topicFilter, qos)
             }
         } else {
             logger.severe("SessionHandler not available for internal subscriptions")

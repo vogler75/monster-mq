@@ -3,6 +3,7 @@ package at.rocworks.logger
 import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Utils
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
 import at.rocworks.logger.queue.ILoggerQueue
 import at.rocworks.logger.queue.LoggerQueueDisk
@@ -217,15 +218,29 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             return
         }
 
+        val clientId = "jdbc-logger-${device.name}"
+
+        // Register eventBus consumer for this JDBC logger (handles both individual and bulk messages)
+        vertx.eventBus().consumer<Any>(EventBusAddresses.Client.messages(clientId)) { busMessage ->
+            try {
+                when (val body = busMessage.body()) {
+                    is BrokerMessage -> handleIncomingMessage(body)
+                    is at.rocworks.data.BulkClientMessage -> body.messages.forEach { handleIncomingMessage(it) }
+                    else -> logger.warning("Unknown message type: ${body?.javaClass?.simpleName}")
+                }
+            } catch (e: Exception) {
+                logger.warning("Error processing message: ${e.message}")
+            }
+        }
+
+        // Subscribe to topics via SessionHandler
         cfg.topicFilters.forEach { topicFilter ->
             logger.info("Subscribing to MQTT topic filter: $topicFilter")
-            sessionHandler.subscribeInternal(
-                clientId = "jdbc-logger-${device.name}",
+            sessionHandler.subscribeInternalClient(
+                clientId = clientId,
                 topicFilter = topicFilter,
                 qos = 0
-            ) { message ->
-                handleIncomingMessage(message)
-            }
+            )
         }
     }
 
@@ -235,10 +250,14 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             return
         }
 
+        val clientId = "jdbc-logger-${device.name}"
         cfg.topicFilters.forEach { topicFilter ->
             logger.info("Unsubscribing from MQTT topic filter: $topicFilter")
-            sessionHandler.unsubscribeInternal("jdbc-logger-${device.name}", topicFilter)
+            sessionHandler.unsubscribeInternalClient(clientId, topicFilter)
         }
+
+        // Unregister the client
+        sessionHandler.unregisterInternalClient(clientId)
     }
 
     private fun setupEventBusHandlers() {

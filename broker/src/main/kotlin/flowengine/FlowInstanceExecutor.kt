@@ -2,6 +2,7 @@ package at.rocworks.flowengine
 
 import at.rocworks.Monster
 import at.rocworks.Utils
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.*
@@ -118,16 +119,30 @@ class FlowInstanceExecutor(
             return
         }
 
+        val clientId = "flow-${instanceConfig.name}"
+
+        // Register eventBus consumer for this flow instance to receive MQTT messages (individual or bulk)
+        vertx.eventBus().consumer<Any>(EventBusAddresses.Client.messages(clientId)) { busMessage ->
+            try {
+                when (val body = busMessage.body()) {
+                    is BrokerMessage -> handleMessage(body)
+                    is at.rocworks.data.BulkClientMessage -> body.messages.forEach { handleMessage(it) }
+                    else -> logger.warning("[${instanceConfig.name}] Unknown message type: ${body?.javaClass?.simpleName}")
+                }
+            } catch (e: Exception) {
+                logger.warning("[${instanceConfig.name}] Error processing message: ${e.message}")
+            }
+        }
+
+        // Subscribe to all topics via SessionHandler
         val topics = topicToNodeInputs.keys
         topics.forEach { topic ->
             logger.fine { "[${instanceConfig.name}]   Subscribing to MQTT topic: $topic" }
-            sessionHandler.subscribeInternal(
-                clientId = "flow-${instanceConfig.name}",
+            sessionHandler.subscribeInternalClient(
+                clientId = clientId,
                 topicFilter = topic,
                 qos = 0
-            ) { message ->
-                handleMessage(message)
-            }
+            )
         }
     }
 
@@ -141,14 +156,18 @@ class FlowInstanceExecutor(
             return
         }
 
+        val clientId = "flow-${instanceConfig.name}"
         val topics = topicToNodeInputs.keys
         topics.forEach { topic ->
             logger.fine { "[${instanceConfig.name}]   Unsubscribing from MQTT topic: $topic" }
-            sessionHandler.unsubscribeInternal(
-                clientId = "flow-${instanceConfig.name}",
+            sessionHandler.unsubscribeInternalClient(
+                clientId = clientId,
                 topicFilter = topic
             )
         }
+
+        // Unregister the client when fully done
+        sessionHandler.unregisterInternalClient(clientId)
     }
 
     /**

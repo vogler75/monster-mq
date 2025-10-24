@@ -4,6 +4,7 @@ import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
+import at.rocworks.data.BulkClientMessage
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.Neo4jClientConfig
 import io.vertx.core.AbstractVerticle
@@ -247,15 +248,29 @@ class Neo4jConnector : AbstractVerticle() {
             return
         }
 
+        val clientId = "neo4j-${device.name}"
+
+        // Register eventBus consumer for this Neo4j connector (handles both individual and bulk messages)
+        vertx.eventBus().consumer<Any>(EventBusAddresses.Client.messages(clientId)) { busMessage ->
+            try {
+                when (val body = busMessage.body()) {
+                    is BrokerMessage -> handleIncomingMessage(body)
+                    is BulkClientMessage -> body.messages.forEach { handleIncomingMessage(it) }
+                    else -> logger.warning("Unknown message type: ${body?.javaClass?.simpleName}")
+                }
+            } catch (e: Exception) {
+                logger.warning("Error processing message: ${e.message}")
+            }
+        }
+
+        // Subscribe to topics via SessionHandler
         cfg.topicFilters.forEach { topicFilter ->
             logger.info("Subscribing to MQTT topic filter: $topicFilter")
-            sessionHandler.subscribeInternal(
-                clientId = "neo4j-${device.name}",
+            sessionHandler.subscribeInternalClient(
+                clientId = clientId,
                 topicFilter = topicFilter,
                 qos = 0
-            ) { message ->
-                handleIncomingMessage(message)
-            }
+            )
         }
     }
 
@@ -265,10 +280,14 @@ class Neo4jConnector : AbstractVerticle() {
             return
         }
 
+        val clientId = "neo4j-${device.name}"
         cfg.topicFilters.forEach { topicFilter ->
             logger.info("Unsubscribing from MQTT topic filter: $topicFilter")
-            sessionHandler.unsubscribeInternal("neo4j-${device.name}", topicFilter)
+            sessionHandler.unsubscribeInternalClient(clientId, topicFilter)
         }
+
+        // Unregister the client
+        sessionHandler.unregisterInternalClient(clientId)
     }
 
     private fun handleIncomingMessage(message: BrokerMessage) {
