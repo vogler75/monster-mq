@@ -674,6 +674,17 @@ open class SessionHandler(
 
     fun getClientDetails(clientId: String): ClientDetails? = clientDetails[clientId]
 
+    /**
+     * Check if a client should have persistent message storage.
+     * Only clients with non-clean sessions should have messages queued.
+     * Clean sessions should not persist any messages.
+     */
+    private fun shouldPersistMessagesForClient(clientId: String): Boolean {
+        val details = clientDetails[clientId]
+        // Only persist if cleanSession is false (i.e., persistent session)
+        return details != null && !details.cleanSession
+    }
+
     fun getSessionCount(): Int = clientMetrics.size
 
     fun getTopicIndexSize(): Int {
@@ -1036,7 +1047,10 @@ open class SessionHandler(
 
     private fun flushInFlightToQueue(clientId: String) {
         inFlightMessages[clientId]?.let { queue ->
-            queue.forEach { enqueueMessage(it, listOf(clientId)) }
+            // Only queue messages for clients with persistent sessions
+            if (shouldPersistMessagesForClient(clientId)) {
+                queue.forEach { enqueueMessage(it, listOf(clientId)) }
+            }
             queue.clear()
         }
     }
@@ -1349,10 +1363,15 @@ open class SessionHandler(
             }
         }
 
-        // Offline clients: queue for persistence
+        // Offline clients: queue for persistence (only for clients with persistent sessions)
         if (offlineClients.isNotEmpty()) {
-            messages.forEach { msg ->
-                enqueueMessage(msg, offlineClients.map { it.first })
+            val persistentClients = offlineClients.filter { (clientId, _) ->
+                shouldPersistMessagesForClient(clientId)
+            }
+            if (persistentClients.isNotEmpty()) {
+                messages.forEach { msg ->
+                    enqueueMessage(msg, persistentClients.map { it.first })
+                }
             }
         }
     }
@@ -1492,7 +1511,10 @@ open class SessionHandler(
                         sendMessageToClient(clientId, msg).onComplete {
                             if (it.failed() || !it.result()) {
                                 logger.warning("Message sent to online client failed [${clientId}]")
-                                enqueueMessage(msg, listOf(clientId))
+                                // Only queue messages for clients with persistent sessions
+                                if (shouldPersistMessagesForClient(clientId)) {
+                                    enqueueMessage(msg, listOf(clientId))
+                                }
                             }
                         }
                     }
@@ -1506,7 +1528,13 @@ open class SessionHandler(
                             addInFlightMessage(clientId, m)
                         }
                         if (offline.isNotEmpty()) {
-                            enqueueMessage(m, offline.map { it.first })
+                            // Only queue messages for clients with persistent sessions
+                            val persistentClients = offline.filter { (clientId, _) ->
+                                shouldPersistMessagesForClient(clientId)
+                            }
+                            if (persistentClients.isNotEmpty()) {
+                                enqueueMessage(m, persistentClients.map { it.first })
+                            }
                         }
                     }
                 }
