@@ -14,11 +14,29 @@ import at.rocworks.stores.mongodb.DeviceConfigStoreMongoDB
  */
 object DeviceConfigStoreFactory {
 
+    // Shared instance to avoid multiple instances being created by different extensions
+    private var sharedInstance: IDeviceConfigStore? = null
+
+    /**
+     * Set the shared instance (called by Monster.kt)
+     */
+    fun setSharedInstance(store: IDeviceConfigStore?) {
+        sharedInstance = store
+    }
+
+    /**
+     * Get the shared instance if it exists
+     */
+    fun getSharedInstance(): IDeviceConfigStore? = sharedInstance
+
     /**
      * Create a DeviceConfigStore based on the config store type
      * (reuse the same database configuration as the config store)
+     * If a shared instance already exists, returns that instead of creating a new one
      */
     fun create(storeType: String?, config: JsonObject, vertx: Vertx): IDeviceConfigStore? {
+        // Return shared instance if available
+        sharedInstance?.let { return it }
         return when (storeType?.uppercase()) {
             "POSTGRES" -> {
                 val postgresConfig = config.getJsonObject("Postgres")

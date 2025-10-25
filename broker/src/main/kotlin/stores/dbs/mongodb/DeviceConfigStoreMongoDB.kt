@@ -15,10 +15,12 @@ import com.mongodb.client.model.UpdateOptions
 import com.mongodb.client.model.Updates
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import org.bson.Document
 import java.time.Instant
 import java.util.*
+import java.util.concurrent.Callable
 import java.util.logging.Logger
 
 /**
@@ -33,6 +35,10 @@ class DeviceConfigStoreMongoDB(
     private lateinit var mongoClient: MongoClient
     private lateinit var database: MongoDatabase
     private lateinit var deviceConfigsCollection: MongoCollection<Document>
+    private var vertx: Vertx? = null
+    private var reconnectOngoing = false
+    private val defaultRetryWaitTime = 3000L
+    private var healthCheckTimer: Long? = null
 
     companion object {
         private const val COLLECTION_NAME = "deviceconfigs"
@@ -296,6 +302,68 @@ class DeviceConfigStoreMongoDB(
         }
 
         return promise.future()
+    }
+
+    fun startHealthChecks(vertxInstance: Vertx) {
+        if (vertx != null) return // Already started
+        this.vertx = vertxInstance
+        healthCheckTimer = vertxInstance.setPeriodic(5000) { // Check every 5 seconds
+            vertxInstance.executeBlocking<Boolean>(Callable {
+                checkConnection()
+            }).onSuccess { isHealthy ->
+                if (!isHealthy && !reconnectOngoing) {
+                    logger.warning("Connection health check failed, attempting reconnection...")
+                    reconnect()
+                }
+            }.onFailure { error ->
+                logger.warning("Health check error: ${error.message}")
+                if (!reconnectOngoing) {
+                    reconnect()
+                }
+            }
+        }
+        logger.info("DeviceConfigStore health checks started (5 second interval)")
+    }
+
+    private fun checkConnection(): Boolean {
+        return try {
+            // Use admin database to send a ping command
+            val adminDb = mongoClient.getDatabase("admin")
+            adminDb.runCommand(Document("ping", 1))
+            true // Connection is good
+        } catch (e: Exception) {
+            logger.fine("Connection check failed: ${e.message}")
+            false
+        }
+    }
+
+    private fun reconnect() {
+        if (!reconnectOngoing && vertx != null) {
+            reconnectOngoing = true
+            vertx!!.executeBlocking(Callable {
+                try {
+                    logger.info("Attempting to reconnect to MongoDB...")
+                    // Close old client
+                    try {
+                        mongoClient.close()
+                    } catch (e: Exception) {
+                        logger.fine("Error closing old MongoDB connection: ${e.message}")
+                    }
+                    // Create new client
+                    mongoClient = MongoClients.create(connectionString)
+                    database = mongoClient.getDatabase(databaseName)
+                    deviceConfigsCollection = database.getCollection(COLLECTION_NAME)
+                    logger.info("Successfully reconnected to MongoDB")
+                    reconnectOngoing = false
+                } catch (e: Exception) {
+                    logger.warning("Reconnection failed: ${e.message}. Will retry in ${defaultRetryWaitTime}ms")
+                    reconnectOngoing = false
+                    vertx!!.setTimer(defaultRetryWaitTime) {
+                        reconnect()
+                    }
+                }
+            })
+        }
     }
 
     private fun mapDeviceToDocument(device: DeviceConfig): Document {

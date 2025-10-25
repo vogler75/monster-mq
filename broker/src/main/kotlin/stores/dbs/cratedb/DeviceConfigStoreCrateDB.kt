@@ -1,31 +1,31 @@
 package at.rocworks.stores.cratedb
 
 import at.rocworks.Utils
+import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigException
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.ImportDeviceConfigResult
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import java.sql.Connection
-import java.sql.DriverManager
 import java.sql.ResultSet
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.logging.Logger
 
 /**
- * CrateDB implementation of DeviceConfigStore
+ * CrateDB implementation of DeviceConfigStore with automatic reconnection on connection loss
  */
 class DeviceConfigStoreCrateDB(
     private val url: String,
     private val user: String,
     private val password: String
-) : IDeviceConfigStore {
+) : DatabaseConnection(Utils.getLogger(DeviceConfigStoreCrateDB::class.java), url, user, password), IDeviceConfigStore {
 
     private val logger: Logger = Utils.getLogger(DeviceConfigStoreCrateDB::class.java)
-    private var connection: Connection? = null
 
     companion object {
         private const val TABLE_NAME = "deviceconfigs"
@@ -107,24 +107,23 @@ class DeviceConfigStoreCrateDB(
 
     override fun initialize(): Future<Void> {
         val promise = Promise.promise<Void>()
+        start(Vertx.currentContext().owner(), promise)
+        return promise.future()
+    }
 
+    override fun init(connection: Connection): Future<Void> {
+        val promise = Promise.promise<Void>()
         try {
-            connection = DriverManager.getConnection(url, user, password)
-            connection!!.use { conn ->
-                conn.createStatement().use { stmt ->
-                    stmt.execute(CREATE_TABLE)
-                    stmt.execute(CREATE_INDEXES)
-                }
+            connection.createStatement().use { stmt ->
+                stmt.execute(CREATE_TABLE)
+                stmt.execute(CREATE_INDEXES)
             }
-            // Reconnect for ongoing operations
-            connection = DriverManager.getConnection(url, user, password)
             logger.info("DeviceConfigStoreCrateDB initialized successfully")
             promise.complete()
         } catch (e: Exception) {
             logger.severe("Failed to initialize DeviceConfigStoreCrateDB: ${e.message}")
             promise.fail(DeviceConfigException("Failed to initialize database", e))
         }
-
         return promise.future()
     }
 

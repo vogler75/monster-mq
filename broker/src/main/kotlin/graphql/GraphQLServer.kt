@@ -66,7 +66,8 @@ class GraphQLServer(
     private val sessionHandler: SessionHandler,
     private val metricsStore: IMetricsStore?,
     private val archiveHandler: ArchiveHandler?,
-    private val dashboardPath: String? = null
+    private val dashboardPath: String? = null,
+    private val sharedDeviceConfigStore: IDeviceConfigStore? = null
 ) {
     companion object {
         private val logger: Logger = Utils.getLogger(GraphQLServer::class.java)
@@ -258,30 +259,43 @@ class GraphQLServer(
 
 
     private fun buildRuntimeWiring(): RuntimeWiring {
-        // Initialize device store first (needed by query and mutation resolvers)
-        val configStoreType = Monster.getConfigStoreType(config)
+        // Use shared device store if provided, otherwise create a new one
+        val deviceStore = if (sharedDeviceConfigStore != null) {
+            logger.fine("Using shared device config store")
+            sharedDeviceConfigStore
+        } else {
+            // Initialize device store first (needed by query and mutation resolvers)
+            val configStoreType = Monster.getConfigStoreType(config)
 
-        val deviceStore = try {
-            val store = if (configStoreType != "NONE") {
-                DeviceConfigStoreFactory.create(configStoreType, config, vertx)
-            } else {
+            try {
+                val store = if (configStoreType != "NONE") {
+                    DeviceConfigStoreFactory.create(configStoreType, config, vertx)
+                } else {
+                    null
+                }
+                // Initialize device store asynchronously but don't block on it
+                store?.initialize()?.onComplete { result ->
+                    if (result.failed()) {
+                        logger.warning("Failed to initialize OPC UA device store: ${result.cause()?.message}")
+                    } else {
+                        logger.info("OPC UA device store initialized successfully")
+                        // Try to start health checks if available (for MongoDB and SQLite)
+                        try {
+                            val method = store?.javaClass?.getMethod("startHealthChecks", Vertx::class.java)
+                            method?.invoke(store, vertx)
+                        } catch (e: Exception) {
+                            logger.fine("Health checks not available or already started for device store: ${e.message}")
+                        }
+                    }
+                }
+                store
+            } catch (e: NotImplementedError) {
+                logger.warning("OPC UA device store not implemented for $configStoreType, OPC UA features will be disabled")
+                null
+            } catch (e: Exception) {
+                logger.warning("Failed to create OPC UA device store: ${e.message}")
                 null
             }
-            // Initialize device store asynchronously but don't block on it
-            store?.initialize()?.onComplete { result ->
-                if (result.failed()) {
-                    logger.warning("Failed to initialize OPC UA device store: ${result.cause()?.message}")
-                } else {
-                    logger.info("OPC UA device store initialized successfully")
-                }
-            }
-            store
-        } catch (e: NotImplementedError) {
-            logger.warning("OPC UA device store not implemented for $configStoreType, OPC UA features will be disabled")
-            null
-        } catch (e: Exception) {
-            logger.warning("Failed to create OPC UA device store: ${e.message}")
-            null
         }
 
         // Initialize resolvers after device store is ready
