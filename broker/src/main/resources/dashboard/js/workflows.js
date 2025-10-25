@@ -109,7 +109,7 @@ function renderInstancesTable(){
         return `<tr>
         <td>${escapeHtml(r.name)}</td>
         <td>${escapeHtml(r.namespace||'')}</td>
-        <td class="flow-type-cell" data-type="${escapeHtml(r.flowClassId)}"><a href="/pages/workflows-edit.html?type=class&name=${encodeURIComponent(r.flowClassId)}">${escapeHtml(r.flowClassId)}</a></td>
+        <td>${escapeHtml(r.flowClassId)}</td>
         <td>${escapeHtml(r.nodeId||'')}</td>
         <td style="text-align:right;">${r.inputMappings.length}</td>
         <td style="text-align:right;">${r.outputMappings.length}</td>
@@ -121,30 +121,6 @@ function renderInstancesTable(){
         <button class="btn-action btn-delete" onclick="listPageDeleteFlowInstance('${escapeHtml(r.name)}')">Delete</button>
     </div></td>
     </tr>`; }).join('');
-
-    // Add click handler to flow type cells using event delegation
-    setTimeout(() => {
-        tbody.querySelectorAll('.flow-type-cell').forEach(cell => {
-            cell.style.cursor = 'pointer';
-            cell.style.borderRadius = '4px';
-            cell.style.transition = 'background-color 0.2s';
-            cell.addEventListener('click', (e) => {
-                // Only trigger filter if clicking on the cell itself, not the link
-                if(e.target.tagName !== 'A'){
-                    e.preventDefault();
-                    const type = cell.getAttribute('data-type');
-                    filterInstancesByType(type);
-                    document.getElementById('instance-type-filter').value = type;
-                }
-            });
-            cell.addEventListener('mouseenter', () => {
-                cell.style.backgroundColor = 'rgba(0, 122, 204, 0.1)';
-            });
-            cell.addEventListener('mouseleave', () => {
-                cell.style.backgroundColor = '';
-            });
-        });
-    }, 0);
 }
 
 // ---------------------- Actions ----------------------
@@ -1113,10 +1089,9 @@ function renderInputMappings() {
                 <td><input type="text" value="${escapeHtml(mapping.nodeInput)}" placeholder="nodeId.input" onchange="updateInputMapping(${idx}, 'nodeInput', this.value)"></td>
                 <td><select onchange="updateInputMapping(${idx}, 'type', this.value)">
                         <option value="TOPIC" ${mapping.type === 'TOPIC' ? 'selected' : ''}>TOPIC</option>
-                        <option value="TEXT" ${mapping.type === 'TEXT' ? 'selected' : ''}>TEXT</option>
                     </select></td>
-                <td><input type="text" value="${escapeHtml(mapping.value)}" placeholder="${mapping.type === 'TOPIC' ? 'sensor/#' : 'Constant value'}" onchange="updateInputMapping(${idx}, 'value', this.value)">
-                    ${mapping.type === 'TOPIC' ? '<div style="font-size:0.6rem; color:#17a2b8; margin-top:2px;">Wildcards: # multi, + single</div>' : ''}
+                <td><input type="text" value="${escapeHtml(mapping.value)}" placeholder="sensor/#" onchange="updateInputMapping(${idx}, 'value', this.value)">
+                    <div style="font-size:0.6rem; color:#17a2b8; margin-top:2px;">Wildcards: # multi, + single</div>
                 </td>
                 <td><div class="table-actions"><button class="btn-icon-small" title="Duplicate" onclick="duplicateInputMapping(${idx})">⧉</button><button class="btn-icon-small" title="Remove" onclick="removeInputMapping(${idx})">✕</button></div></td>
             </tr>`;

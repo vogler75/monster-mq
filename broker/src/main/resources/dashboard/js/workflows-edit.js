@@ -146,12 +146,32 @@ const FlowEdit = (() => {
     qs('#page-title').textContent = editing? 'Edit Flow Class' : 'New Flow Class';
     qs('#page-subtitle').textContent = editing? state.name : 'Create a new flow class';
     qs('#delete-button').style.display = editing ? 'inline-block' : 'none';
-    
+
     // Remove enabled checkbox if it exists (when switching from instance to class)
     const headerActions = qs('#header-actions');
     const existingCheckbox = headerActions.querySelector('.header-checkbox-wrapper');
     if (existingCheckbox) {
       existingCheckbox.remove();
+    }
+
+    // Add restart button for existing flow classes
+    const existingRestartBtn = headerActions.querySelector('.restart-instances-btn');
+    if (existingRestartBtn) {
+      existingRestartBtn.remove();
+    }
+    if (editing) {
+      const restartBtn = document.createElement('button');
+      restartBtn.className = 'btn btn-secondary btn-small restart-instances-btn';
+      restartBtn.textContent = 'Restart All Instances';
+      restartBtn.style.whiteSpace = 'nowrap';
+      restartBtn.onclick = () => FlowEdit.restartAllInstances();
+      // Insert right after save button (before delete button if it exists)
+      const deleteBtn = qs('#delete-button');
+      if (deleteBtn) {
+        deleteBtn.parentNode.insertBefore(restartBtn, deleteBtn);
+      } else {
+        headerActions.appendChild(restartBtn);
+      }
     }
     
     const root = qs('#form-section');
@@ -171,6 +191,11 @@ const FlowEdit = (() => {
     qs('#connections-section').style.display = 'block';
     renderNodesTable();
     renderConnectionsTable();
+
+    // Auto-open editor for single node flows
+    if (state.nodes.length === 1) {
+      editNode(state.nodes[0].id);
+    }
   }
 
   function buildInstanceForm() {
@@ -377,8 +402,8 @@ const FlowEdit = (() => {
       }).join('');
       return `<tr>
         <td><select class="form-control" onchange="FlowEdit.updateInputMapping(${idx},'nodeInput',this.value)">${options}</select></td>
-        <td><select class="form-control" onchange="FlowEdit.updateInputMapping(${idx},'type',this.value)"><option value="TOPIC" ${m.type==='TOPIC'?'selected':''}>TOPIC</option><option value="TEXT" ${m.type==='TEXT'?'selected':''}>TEXT</option></select></td>
-        <td><input class="form-control" value="${escape(m.value)}" onchange="FlowEdit.updateInputMapping(${idx},'value',this.value)" placeholder="MQTT topic or text"></td>
+        <td><select class="form-control" onchange="FlowEdit.updateInputMapping(${idx},'type',this.value)"><option value="TOPIC" ${m.type==='TOPIC'?'selected':''}>TOPIC</option></select></td>
+        <td><input class="form-control" value="${escape(m.value)}" onchange="FlowEdit.updateInputMapping(${idx},'value',this.value)" placeholder="MQTT topic"></td>
         <td>
           <button class="btn-icon btn-delete" onclick="FlowEdit.removeInputMapping(${idx})" title="Delete Input Mapping">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -458,7 +483,7 @@ const FlowEdit = (() => {
     const vars = isUpdate? { name, input } : { input };
     await graphql(mutation, vars);
     notify('Saved flow class','success');
-    location.href = '/pages/workflows.html';
+    // Stay on the page instead of navigating away
   }
 
   async function saveInstance() {
@@ -493,6 +518,35 @@ const FlowEdit = (() => {
     location.href = '/pages/workflows.html';
   }
 
+  async function restartAllInstances() {
+    if(!state.flowClass || !state.flowClass.name) {
+      notify('No flow class loaded','error');
+      return;
+    }
+    const flowClassName = state.flowClass.name;
+    try {
+      // Query all instances and filter by this flow class
+      const instQuery = `query { flowInstances { name namespace flowClassId } }`;
+      const instData = await graphql(instQuery);
+      const instances = (instData.flowInstances || []).filter(fi => fi.flowClassId === flowClassName);
+
+      if(instances.length === 0) {
+        notify('No instances found for this flow class','info');
+        return;
+      }
+
+      // Restart each instance (disable then enable)
+      for(const inst of instances) {
+        await graphql(`mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`, { name: inst.name });
+        await graphql(`mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`, { name: inst.name });
+      }
+      notify(`Restarted ${instances.length} instance${instances.length===1?'':'s'}`, 'success');
+    } catch(e) {
+      console.error('Failed to restart instances:', e);
+      notify('Failed to restart instances','error');
+    }
+  }
+
   function cancel(){
     // Cancel should not ask for confirmation per new UX requirement.
     state.dirty = false; // prevent any beforeunload handler (if added later) from prompting
@@ -511,7 +565,7 @@ const FlowEdit = (() => {
   return {
     init, addNode, editNode, saveNode, openScriptEditor, cancelNodeEdit, removeNode, addConnectionRow, removeConnection,
     addInputMapping, updateInputMapping, removeInputMapping, addOutputMapping, updateOutputMapping, removeOutputMapping,
-    addVariable, updateVariableKey, updateVariableVal, removeVariable, save, deleteItem, cancel, addOutputMappingRow: addOutputMapping
+    addVariable, updateVariableKey, updateVariableVal, removeVariable, save, deleteItem, cancel, restartAllInstances, addOutputMappingRow: addOutputMapping
   };
 })();
 

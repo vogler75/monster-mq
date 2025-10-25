@@ -87,15 +87,10 @@ Connections link nodes together:
 
 Define how external data enters your flow:
 
-**TOPIC Inputs** (Dynamic):
+**TOPIC Inputs**:
 - Subscribe to MQTT topics
 - Trigger flow execution when messages arrive
 - Provide fresh data on each execution
-
-**TEXT Inputs** (Static):
-- Constant values
-- Configuration strings
-- Don't trigger execution (provide context only)
 
 ### Output Mappings
 
@@ -179,15 +174,14 @@ Nodes execute JavaScript using GraalVM. The following globals are available in y
 Access input values:
 ```javascript
 // inputs.<portName>.value - The actual data value
-// inputs.<portName>.type - "topic" or "text"
+// inputs.<portName>.type - "topic"
 // inputs.<portName>.timestamp - When the data was received
-// inputs.<portName>.topic - Source topic (for topic inputs)
+// inputs.<portName>.topic - Source topic
 
 let temp = inputs.temperature.value;
-let threshold = inputs.threshold.value;
 
 console.log("Temperature:", temp, "from", inputs.temperature.topic);
-console.log("Threshold:", threshold);
+console.log("Threshold:", flow.threshold);
 ```
 
 ### Message Object (msg)
@@ -299,10 +293,10 @@ if (temperature > threshold) {
 **Flow Instance: "warehouse-temp-alert"**
 - Input Mappings:
   - `check_threshold.temp` → TOPIC: `sensors/warehouse/temperature`
-  - `check_threshold.threshold` → TEXT: `25`
 - Output Mappings:
   - `check_threshold.alert` → `alerts/warehouse/temperature`
 - Variables:
+  - `threshold`: "25"
   - `location`: "Warehouse A"
   - `alertEmail`: "ops@example.com"
 

@@ -41,15 +41,13 @@ class FlowInstanceExecutor(
     private var lastExecution: Instant? = null
     private var lastError: String? = null
 
-    // Input mappings organized by type
+    // Input mappings organized by topic
     private val topicInputMappings: Map<String, String> // "nodeId.inputName" -> "mqtt/topic"
-    private val textInputMappings: Map<String, String>  // "nodeId.inputName" -> "constant value"
     private val topicToNodeInputs: Map<String, List<String>> // "mqtt/topic" -> ["nodeId.inputName", ...]
 
     init {
-        // Organize input mappings by type
+        // Organize input mappings by topic
         val topicMap = mutableMapOf<String, String>()
-        val textMap = mutableMapOf<String, String>()
         val topicToInputs = mutableMapOf<String, MutableList<String>>()
 
         flowInstance.inputMappings.forEach { mapping ->
@@ -58,14 +56,10 @@ class FlowInstanceExecutor(
                     topicMap[mapping.nodeInput] = mapping.value
                     topicToInputs.getOrPut(mapping.value) { mutableListOf() }.add(mapping.nodeInput)
                 }
-                FlowInputType.TEXT -> {
-                    textMap[mapping.nodeInput] = mapping.value
-                }
             }
         }
 
         topicInputMappings = topicMap
-        textInputMappings = textMap
         topicToNodeInputs = topicToInputs
     }
 
@@ -73,7 +67,6 @@ class FlowInstanceExecutor(
         try {
             logger.info("[${instanceConfig.name}] Starting flow instance")
             logger.fine { "[${instanceConfig.name}]   - Topic inputs: ${topicInputMappings.size}" }
-            logger.fine { "[${instanceConfig.name}]   - Text inputs: ${textInputMappings.size}" }
             logger.fine { "[${instanceConfig.name}]   - Subscribed topics: ${topicToNodeInputs.keys}" }
 
             // Subscribe to MQTT topics
@@ -299,15 +292,6 @@ class FlowInstanceExecutor(
                         topic = topicToLookup
                     )
                 }
-            }
-
-            // Check if this is a text input (constant)
-            val textMapping = textInputMappings[nodeInput]
-            if (textMapping != null) {
-                inputs[inputName] = FlowScriptEngine.InputValue(
-                    value = textMapping,
-                    type = FlowScriptEngine.InputType.TEXT
-                )
             }
 
             // Check if this is an internal connection (from another node)

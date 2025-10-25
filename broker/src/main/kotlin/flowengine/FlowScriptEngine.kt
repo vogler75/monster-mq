@@ -233,8 +233,7 @@ class FlowScriptEngine {
     )
 
     enum class InputType {
-        TOPIC,
-        TEXT
+        TOPIC
     }
 
     /**
