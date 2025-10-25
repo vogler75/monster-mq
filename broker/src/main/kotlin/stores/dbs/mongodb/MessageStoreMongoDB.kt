@@ -494,9 +494,10 @@ class MessageStoreMongoDB(
             }
         }
 
-        // If pattern doesn't end with #, ensure exact depth match
+        // If pattern doesn't end with #, ensure depth >= pattern levels
+        // (allows matching topics deeper than the pattern)
         if (!topicPattern.endsWith("#")) {
-            filters.add(Filters.eq("topic_levels.depth", levels.size))
+            filters.add(Filters.gte("topic_levels.depth", levels.size))
         }
 
         return if (filters.isEmpty()) {
@@ -670,8 +671,20 @@ class MessageStoreMongoDB(
 
     override suspend fun createTable(): Boolean {
         return try {
+            // Wait for connection with timeout (max 30 seconds)
+            val startTime = System.currentTimeMillis()
+            val timeoutMs = 30_000L
+
+            while (!isConnected && (System.currentTimeMillis() - startTime) < timeoutMs) {
+                if (database != null) {
+                    // Connection appears ready, break out of wait loop
+                    break
+                }
+                Thread.sleep(100) // Check every 100ms
+            }
+
             if (!isConnected || database == null) {
-                logger.warning("MongoDB not connected, cannot create collection for [$collectionName]")
+                logger.warning("MongoDB not connected after ${System.currentTimeMillis() - startTime}ms, cannot create collection for [$collectionName]")
                 return false
             }
 
