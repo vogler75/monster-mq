@@ -464,14 +464,9 @@ class MessageStoreMongoDB(
                             extractedTopics.add(browseResult)
                             count++
                             val continueProcessing = callback(browseResult)
-                            logger.fine { "Document #$docCount: topic='$topic' -> browse='$browseResult', continue=$continueProcessing" }
                             if (!continueProcessing) {
                                 break
                             }
-                        } else if (browseResult != null) {
-                            logger.finer { "Document #$docCount: topic='$topic' -> browse='$browseResult' (already extracted)" }
-                        } else {
-                            logger.finer { "Document #$docCount: topic='$topic' -> no match for pattern [$topicPattern]" }
                         }
                     }
                 }
