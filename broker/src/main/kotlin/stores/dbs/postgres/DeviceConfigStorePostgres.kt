@@ -1,32 +1,32 @@
 package at.rocworks.stores.postgres
 
 import at.rocworks.Utils
+import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigException
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.ImportDeviceConfigResult
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import java.sql.Connection
-import java.sql.DriverManager
 import java.sql.ResultSet
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.logging.Logger
 
 /**
- * PostgreSQL implementation of DeviceConfigStore
+ * PostgreSQL implementation of DeviceConfigStore with automatic reconnection on connection loss
  */
 class DeviceConfigStorePostgres(
     private val url: String,
     private val user: String,
     private val password: String,
     private val schema: String? = null
-) : IDeviceConfigStore {
+) : DatabaseConnection(Utils.getLogger(DeviceConfigStorePostgres::class.java), url, user, password), IDeviceConfigStore {
 
     private val logger: Logger = Utils.getLogger(DeviceConfigStorePostgres::class.java)
-    private var connection: Connection? = null
 
     companion object {
         private const val TABLE_NAME = "deviceconfigs"
@@ -132,34 +132,27 @@ class DeviceConfigStorePostgres(
 
     override fun initialize(): Future<Void> {
         val promise = Promise.promise<Void>()
+        start(Vertx.currentContext().owner(), promise)
+        return promise.future()
+    }
 
+    override fun init(connection: Connection): Future<Void> {
+        val promise = Promise.promise<Void>()
         try {
-            connection = DriverManager.getConnection(url, user, password)
-            connection!!.use { conn ->
-                // Create and set PostgreSQL schema if specified
-                if (!schema.isNullOrBlank()) {
-                    conn.createStatement().use { stmt ->
-                        // Create schema if it doesn't exist
-                        stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
-                        // Set search_path to the specified schema
-                        stmt.execute("SET search_path TO \"$schema\", public")
-                    }
-                }
-
-                conn.createStatement().use { stmt ->
-                    stmt.execute(CREATE_TABLE)
-                    stmt.execute(MIGRATE_SCHEMA)
-                    stmt.execute(CREATE_INDEXES)
-                }
-            }
-            // Reconnect for ongoing operations
-            connection = DriverManager.getConnection(url, user, password)
-            // Create and set schema again for new connection
+            // Create and set PostgreSQL schema if specified
             if (!schema.isNullOrBlank()) {
-                connection!!.createStatement().use { stmt ->
+                connection.createStatement().use { stmt ->
+                    // Create schema if it doesn't exist
                     stmt.execute("CREATE SCHEMA IF NOT EXISTS \"$schema\"")
+                    // Set search_path to the specified schema
                     stmt.execute("SET search_path TO \"$schema\", public")
                 }
+            }
+
+            connection.createStatement().use { stmt ->
+                stmt.execute(CREATE_TABLE)
+                stmt.execute(MIGRATE_SCHEMA)
+                stmt.execute(CREATE_INDEXES)
             }
             logger.info("DeviceConfigStorePostgres initialized successfully")
             promise.complete()
@@ -167,7 +160,6 @@ class DeviceConfigStorePostgres(
             logger.severe("Failed to initialize DeviceConfigStorePostgres: ${e.message}")
             promise.fail(DeviceConfigException("Failed to initialize database", e))
         }
-
         return promise.future()
     }
 

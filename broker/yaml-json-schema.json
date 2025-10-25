@@ -139,7 +139,7 @@
             "Enabled": {
               "type": "boolean",
               "description": "Enable in-memory storage of system logs",
-              "default": false
+              "default": true
             },
             "Entries": {
               "type": "integer",

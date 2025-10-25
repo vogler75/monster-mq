@@ -332,7 +332,7 @@ class FlowEngineExtension : AbstractVerticle() {
             val deviceName = changeData.getString("deviceName")
             val deviceType = changeData.getString("deviceType")
 
-            logger.info("Handling flow config change: $operation for $deviceType $deviceName")
+            logger.fine("Handling flow config change: $operation for $deviceType $deviceName")
 
             when (deviceType) {
                 DeviceConfig.DEVICE_TYPE_FLOW_CLASS -> {
@@ -340,7 +340,7 @@ class FlowEngineExtension : AbstractVerticle() {
                     deviceStore.getDevice(deviceName).onComplete { result ->
                         if (result.succeeded() && result.result() != null) {
                             flowClasses[deviceName] = result.result()!!
-                            logger.info("Reloaded flow class: $deviceName")
+                            logger.fine("Reloaded flow class: $deviceName")
                             message.reply(JsonObject().put("success", true))
                         } else {
                             message.fail(500, "Failed to reload flow class")

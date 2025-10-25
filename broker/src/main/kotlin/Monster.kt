@@ -746,6 +746,8 @@ MORE INFO:
                 val deviceConfigStore = if (configStoreType != "NONE") {
                     try {
                         val store = at.rocworks.stores.DeviceConfigStoreFactory.create(configStoreType, configJson, vertx)
+                        // Register as shared instance so other extensions use the same one
+                        at.rocworks.stores.DeviceConfigStoreFactory.setSharedInstance(store)
                         // Initialize device store asynchronously
                         store?.initialize()?.onComplete { result ->
                             if (result.failed()) {
@@ -842,7 +844,8 @@ MORE INFO:
                         sessionHandler,
                         metricsStore,
                         this.archiveHandler,
-                        dashboardPath
+                        dashboardPath,
+                        deviceConfigStore
                     )
                 } else {
                     logger.info("GraphQL server is disabled in configuration")
@@ -911,7 +914,7 @@ MORE INFO:
                         // Deploy SyslogVerticle (independent of MQTT setting)
                         val loggingConfig = configJson.getJsonObject("Logging", JsonObject())
                         val memoryConfig = loggingConfig.getJsonObject("Memory", JsonObject())
-                        val memoryEnabled = memoryConfig.getBoolean("Enabled", false)
+                        val memoryEnabled = memoryConfig.getBoolean("Enabled", true)
                         val memoryEntries = memoryConfig.getInteger("Entries", 1000)
 
                         if (memoryEnabled) {

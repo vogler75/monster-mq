@@ -498,7 +498,7 @@
 
                     <h3>Input Types</h3>
 
-                    <h4>TOPIC Inputs (Dynamic)</h4>
+                    <h4>TOPIC Inputs</h4>
                     <p>
                         Subscribe to MQTT topics and trigger flow execution when messages arrive. Each message on the topic
                         causes the node to execute with fresh data.
@@ -509,22 +509,18 @@
                         <li><strong>Example:</strong> <code class="code-inline">sensors/warehouse/temperature</code></li>
                     </ul>
 
-                    <h4>TEXT Inputs (Static)</h4>
-                    <p>
-                        Provide constant values or configuration strings. These don't trigger execution but are available
-                        when the node runs (triggered by another input or connection).
-                    </p>
-                    <ul>
-                        <li><strong>Does not trigger</strong> - Only provides context</li>
-                        <li><strong>Constant value</strong> - Same value every execution</li>
-                        <li><strong>Example:</strong> <code class="code-inline">25</code> (threshold value)</li>
-                    </ul>
+                    <div class="info-box">
+                        <div class="info-box-title">💡 Static Configuration Values</div>
+                        <p>
+                            To provide static configuration values or constants to nodes, use <strong>Variables</strong> instead of input mappings.
+                            Variables are set at the instance level and are available to all nodes via the <code class="code-inline">flow</code> object.
+                        </p>
+                    </div>
 
                     <h3>Configuring Input Mappings</h3>
                     <ol>
                         <li>Select which node input to map (format: <code class="code-inline">nodeId.inputName</code>)</li>
-                        <li>Choose type: TOPIC or TEXT</li>
-                        <li>Enter the MQTT topic or constant value</li>
+                        <li>Enter the MQTT topic (supports wildcards: # for multi-level, + for single-level)</li>
                         <li>Add more mappings as needed</li>
                     </ol>
 
@@ -533,8 +529,8 @@
                         <p><strong>node1.temperature</strong> → TOPIC: <code class="code-inline">sensors/room1/temp</code><br>
                         <em>Triggers execution with each temperature reading</em></p>
 
-                        <p><strong>node1.threshold</strong> → TEXT: <code class="code-inline">25</code><br>
-                        <em>Provides threshold value for comparison</em></p>
+                        <p><strong>Threshold configuration:</strong> Set as a Variable named <code class="code-inline">threshold</code> with value <code class="code-inline">25</code><br>
+                        <em>Access in script via <code class="code-inline">flow.threshold</code></em></p>
                     </div>
                 </section>
 
@@ -654,7 +650,7 @@ if (inputs.temp.value > threshold) {
                             </li>
                             <li>
                                 <div class="property-name">inputs.&lt;portName&gt;.type</div>
-                                <div class="property-desc">"topic" or "text"</div>
+                                <div class="property-desc">"topic"</div>
                             </li>
                             <li>
                                 <div class="property-name">inputs.&lt;portName&gt;.timestamp</div>

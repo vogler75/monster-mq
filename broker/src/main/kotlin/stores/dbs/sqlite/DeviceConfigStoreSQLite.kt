@@ -14,6 +14,7 @@ import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.time.Instant
+import java.util.concurrent.Callable
 import java.util.logging.Logger
 
 /**
@@ -26,6 +27,9 @@ class DeviceConfigStoreSQLite(
 
     private val logger: Logger = Utils.getLogger(DeviceConfigStoreSQLite::class.java)
     private lateinit var sqliteClient: SQLiteClient
+    private var reconnectOngoing = false
+    private val defaultRetryWaitTime = 3000L
+    private var healthCheckTimer: Long? = null
 
     companion object {
         private const val TABLE_NAME = "deviceconfigs"
@@ -485,6 +489,58 @@ class DeviceConfigStoreSQLite(
         logger.info("DeviceConfigStoreSQLite closed")
         promise.complete()
         return promise.future()
+    }
+
+    fun startHealthChecks(vertxInstance: Vertx = this.vertx) {
+        if (healthCheckTimer != null) return // Already started
+        healthCheckTimer = vertxInstance.setPeriodic(5000) { // Check every 5 seconds
+            vertxInstance.executeBlocking<Boolean>(Callable {
+                checkConnection()
+            }).onSuccess { isHealthy ->
+                if (!isHealthy && !reconnectOngoing) {
+                    logger.warning("Connection health check failed, attempting reconnection...")
+                    reconnect()
+                }
+            }.onFailure { error ->
+                logger.warning("Health check error: ${error.message}")
+                if (!reconnectOngoing) {
+                    reconnect()
+                }
+            }
+        }
+        logger.info("DeviceConfigStore health checks started (5 second interval)")
+    }
+
+    private fun checkConnection(): Boolean {
+        return try {
+            // Test connection with a simple query
+            sqliteClient.executeQuery("SELECT 1", JsonArray()).result()
+            true // Connection is good
+        } catch (e: Exception) {
+            logger.fine("Connection check failed: ${e.message}")
+            false
+        }
+    }
+
+    private fun reconnect() {
+        if (!reconnectOngoing) {
+            reconnectOngoing = true
+            vertx.executeBlocking(Callable {
+                try {
+                    logger.info("Attempting to reconnect to SQLite...")
+                    // Recreate the SQLiteClient
+                    sqliteClient = SQLiteClient(vertx, dbPath)
+                    logger.info("Successfully reconnected to SQLite")
+                    reconnectOngoing = false
+                } catch (e: Exception) {
+                    logger.warning("Reconnection failed: ${e.message}. Will retry in ${defaultRetryWaitTime}ms")
+                    reconnectOngoing = false
+                    vertx.setTimer(defaultRetryWaitTime) {
+                        reconnect()
+                    }
+                }
+            })
+        }
     }
 
     private fun mapJsonToDeviceConfig(row: JsonObject): DeviceConfig {

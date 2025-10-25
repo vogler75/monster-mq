@@ -294,10 +294,53 @@ const VisualFlow = (() => {
   }
 
   // ------------- Save/Delete Class -------------
-  async function saveClass(){ const name=qs('#fc-name').value.trim(); const namespace=qs('#fc-namespace').value.trim(); const version=qs('#fc-version').value.trim()||'1.0.0'; if(!name||!namespace){ notify('Name & namespace required','error'); return; } const input={ name, namespace, version, description: qs('#fc-description').value.trim()||null, nodes: state.nodes.map(n=>({ id:n.id, type:n.type, name:n.name, config:{ script:n.config.script||'' }, inputs:n.inputs, outputs:n.outputs, language:n.language||'javascript', position: n.position? { x:n.position.x, y:n.position.y }: null })), connections: state.connections.map(c=>({ fromNode:c.fromNode, fromOutput:c.fromOutput, toNode:c.toNode, toInput:c.toInput })) }; const isUpdate = !!state.flowClass && state.flowClass.name === name; const mutation=isUpdate?`mutation($name:String!,$input:FlowClassInput!){ flow { updateClass(name:$name,input:$input){ name } } }`:`mutation($input:FlowClassInput!){ flow { createClass(input:$input){ name } } }`; try { await gql(mutation, isUpdate? { name, input } : { input }); notify('Class saved','success'); state.dirty=false; updateTitleDirty(); if(!isUpdate){ // redirect with name param
-        location.href='/pages/workflows-visual.html?name='+encodeURIComponent(name); }
-    state.flowClass={ name, namespace, version }; }
-    catch(e){ console.error(e); notify('Save failed: '+e.message,'error'); }
+  async function saveClass(){
+    // If a node is being edited, save it first
+    if(state.selectedNodeId) {
+      saveNode();
+    }
+
+    const name=qs('#fc-name').value.trim();
+    const namespace=qs('#fc-namespace').value.trim();
+    const version=qs('#fc-version').value.trim()||'1.0.0';
+    if(!name||!namespace){
+      notify('Name & namespace required','error');
+      return;
+    }
+    const input={
+      name, namespace, version,
+      description: qs('#fc-description').value.trim()||null,
+      nodes: state.nodes.map(n=>({
+        id:n.id, type:n.type, name:n.name,
+        config:{ script:n.config.script||'' },
+        inputs:n.inputs, outputs:n.outputs,
+        language:n.language||'javascript',
+        position: n.position? { x:n.position.x, y:n.position.y }: null
+      })),
+      connections: state.connections.map(c=>({
+        fromNode:c.fromNode, fromOutput:c.fromOutput,
+        toNode:c.toNode, toInput:c.toInput
+      }))
+    };
+    const isUpdate = !!state.flowClass && state.flowClass.name === name;
+    const mutation=isUpdate?
+      `mutation($name:String!,$input:FlowClassInput!){ flow { updateClass(name:$name,input:$input){ name } } }`:
+      `mutation($input:FlowClassInput!){ flow { createClass(input:$input){ name } } }`;
+    try {
+      await gql(mutation, isUpdate? { name, input } : { input });
+      notify('Class saved','success');
+      state.dirty=false;
+      updateTitleDirty();
+      if(!isUpdate){
+        // redirect with name param
+        location.href='/pages/workflows-visual.html?name='+encodeURIComponent(name);
+      }
+      state.flowClass={ name, namespace, version };
+    }
+    catch(e){
+      console.error(e);
+      notify('Save failed: '+e.message,'error');
+    }
   }
   async function deleteClass(){ if(!state.flowClass){ notify('Nothing to delete','error'); return; } if(!confirm('Delete this flow class?')) return; try { await gql(`mutation($name:String!){ flow { deleteClass(name:$name) } }`, { name: state.flowClass.name }); notify('Deleted','success'); location.href='/pages/workflows.html'; } catch(e){ console.error(e); notify('Delete failed: '+e.message,'error'); } }
 

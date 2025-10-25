@@ -45,7 +45,8 @@ Flow classes define the template/blueprint with nodes that have named inputs and
         - Per-instance Vert.x verticle execution (`FlowInstanceExecutor`).
         - Cluster-aware deployment via `FlowEngineExtension` (only flows assigned to the current node are deployed).
         - JavaScript execution using GraalVM (per node function scripts).
-        - TOPIC and TEXT input mapping types (TOPIC triggers execution; TEXT provides constants).
+        - TOPIC input mapping type (triggers execution when MQTT messages arrive).
+        - Variables for instance-specific configuration values.
         - Named input/output ports with explicit connections.
         - Output mapping publishes MQTT messages through internal `SessionHandler`.
         - Internal node-to-node value propagation using a synthetic internal topic namespace.
@@ -94,13 +95,10 @@ Flow instances map the template's inputs to concrete values (topics or constants
       "convert-1.celsius": {
         "type": "topic",
         "value": "building/1/sensors/temperature"
-      },
-      "convert-1.comment": {
-        "type": "text",
-        "value": "Building 1 main sensor"
       }
     },
     "variables": {
+      "comment": "Building 1 main sensor",
       "threshold": 80,
       "building": "Building 1"
     }
@@ -115,10 +113,11 @@ Flow instances map the template's inputs to concrete values (topics or constants
    - Flow executes when message arrives
    - Value comes from MQTT payload
 
-2. **`type: "text"`** - Fixed constant value
-   - Value is provided as string
-   - Available to all node executions
-   - Does not trigger flow execution
+**Variables:**
+- Instance-specific configuration values
+- Set as key-value pairs in the instance configuration
+- Available to all nodes via the `flow` object in scripts
+- Does not trigger flow execution
 
 **Output Mapping:**
 - Maps node output port to MQTT topic
@@ -131,7 +130,6 @@ class FlowInstanceRuntime(
     val instance: DeviceConfig,           // Flow instance config
     val flowClass: DeviceConfig,          // Flow class template
     val topicInputs: Map<String, String>, // "nodeId.inputName" -> "mqtt/topic"
-    val textInputs: Map<String, String>,  // "nodeId.inputName" -> "constant value"
     val topicValues: MutableMap<String, TopicValue>, // Latest value per subscribed topic
     val nodeStates: MutableMap<String, Any>,         // Persistent node state
     val scriptEngine: ScriptEngine
@@ -160,10 +158,9 @@ msg: {
   qos: 1
 }
 
-// inputs - All input port values (both topic and text inputs)
+// inputs - All input port values from MQTT topics
 inputs: {
-  'celsius': { value: 85, timestamp: 1234567890, type: 'topic' },
-  'comment': { value: 'Building 1 main sensor', type: 'text' }
+  'celsius': { value: 85, timestamp: 1234567890, type: 'topic' }
 }
 
 // state - Node-local persistent state
@@ -192,8 +189,8 @@ console: {
 
 // Example function node script:
 const temp = inputs['celsius'].value;
-const threshold = flow.threshold || 80;
-const building = inputs['comment'].value;
+const threshold = parseFloat(flow.threshold) || 80;
+const building = flow.building || 'Unknown';
 
 if (temp > threshold) {
   outputs.send('alarm', {
@@ -402,7 +399,6 @@ type FlowInputMapping {
 
 enum FlowInputType {
   TOPIC   # MQTT topic subscription (triggers flow)
-  TEXT    # Fixed text constant
 }
 
 type FlowOutputMapping {
@@ -680,7 +676,7 @@ type FlowTestResult {
 - [ ] Add GraalVM JavaScript dependency to pom.xml
 - [ ] Create `FlowConfig.kt` data classes
   - [ ] `FlowClass` with named inputs/outputs per node
-  - [ ] `FlowInstance` with input type enumeration (TOPIC/TEXT)
+  - [ ] `FlowInstance` with TOPIC input mapping and variables
   - [ ] `FlowConnection` with from/to node and port names
 - [ ] Add device type constants:
   - [ ] `DEVICE_TYPE_FLOW_CLASS = "Flow-Class"`
@@ -713,7 +709,7 @@ type FlowTestResult {
 
 **Tasks:**
 - [ ] Create `schema-flows.graphqls` with updated schema
-  - [ ] `FlowInputType` enum (TOPIC, TEXT)
+  - [ ] `FlowInputType` enum (TOPIC only)
   - [ ] `FlowInputMapping` type
   - [ ] Named input/output connections
 - [ ] Implement `FlowQueries.kt`
@@ -933,7 +929,7 @@ type FlowTestResult {
 |--------|----------|-----------|
 | **Storage** | DeviceConfig table | Reuses existing infrastructure |
 | **Connection Model** | Named input/output ports | Flexible, explicit, supports multiple connections |
-| **Input Types** | TOPIC (trigger) / TEXT (constant) | Supports both dynamic and static data |
+| **Input Types** | TOPIC (triggers) + Variables (config) | Supports both dynamic data and instance-specific configuration |
 | **Scripting** | GraalVM JavaScript | Industry standard, Node-RED compatible |
 | **Visual Editor** | ReactFlow | Modern, lightweight, excellent support |
 | **Node Definition** | JSON in config field | Flexible, easy to extend |
@@ -1041,18 +1037,12 @@ type FlowTestResult {
       "nodeInput": "convert.celsius",
       "type": "TOPIC",
       "value": "building/1/sensors/temperature"
-    },
-    {
-      "nodeInput": "convert.unit",
-      "type": "TEXT",
-      "value": "F"
-    },
-    {
-      "nodeInput": "alarm.threshold",
-      "type": "TEXT",
-      "value": "176"
     }
   ],
+  "variables": {
+    "unit": "F",
+    "threshold": "176"
+  },
   "outputMappings": [
     {
       "nodeOutput": "alarm.alarm",
@@ -1067,12 +1057,12 @@ type FlowTestResult {
 2. Flow instance triggered (because `convert.celsius` is a TOPIC input)
 3. Node "convert" executes:
    - `inputs.celsius = { value: 80, type: 'topic', timestamp: ... }`
-   - `inputs.unit = { value: 'F', type: 'text' }`
+   - `flow.unit = 'F'` (from variables)
    - Outputs: `{ converted: 176 }`
 4. Connection routes to node "alarm"
 5. Node "alarm" executes:
    - `inputs.temperature = { value: 176, type: 'topic' }`
-   - `inputs.threshold = { value: '176', type: 'text' }`
+   - `flow.threshold = '176'` (from variables)
    - Compares: 176 > 176? No
    - Outputs to 'normal' port: `{ temp: 176 }`
 6. No output mapping for "alarm.normal", so no MQTT publish
@@ -1113,31 +1103,29 @@ type FlowTestResult {
 ```json
 {
   "inputMappings": [
-    { 
-      "nodeInput": "aggregate.sensor1", 
-      "type": "TOPIC", 
-      "value": "factory/hall1/sensor/1" 
+    {
+      "nodeInput": "aggregate.sensor1",
+      "type": "TOPIC",
+      "value": "factory/hall1/sensor/1"
     },
-    { 
-      "nodeInput": "aggregate.sensor2", 
-      "type": "TOPIC", 
-      "value": "factory/hall1/sensor/2" 
+    {
+      "nodeInput": "aggregate.sensor2",
+      "type": "TOPIC",
+      "value": "factory/hall1/sensor/2"
     },
-    { 
-      "nodeInput": "aggregate.sensor3", 
-      "type": "TOPIC", 
-      "value": "factory/hall1/sensor/3" 
-    },
-    { 
-      "nodeInput": "aggregate.location", 
-      "type": "TEXT", 
-      "value": "Factory Hall 1" 
+    {
+      "nodeInput": "aggregate.sensor3",
+      "type": "TOPIC",
+      "value": "factory/hall1/sensor/3"
     }
   ],
+  "variables": {
+    "location": "Factory Hall 1"
+  },
   "outputMappings": [
-    { 
-      "nodeOutput": "aggregate.average", 
-      "topic": "factory/hall1/average" 
+    {
+      "nodeOutput": "aggregate.average",
+      "topic": "factory/hall1/average"
     }
   ]
 }
@@ -1146,7 +1134,7 @@ type FlowTestResult {
 **Execution:**
 - Any of the three sensor topics triggers the flow
 - All three topic values must be available (stored in topicValues)
-- Text input "location" is always available
+- Variable "location" is available to all nodes via `flow.location`
 - Output publishes average to MQTT
 
 ---

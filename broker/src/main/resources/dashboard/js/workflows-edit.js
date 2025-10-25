@@ -8,6 +8,7 @@ const FlowEdit = (() => {
     flowClass: null,
     flowInstance: null,
     flowClasses: [],
+    clusterNodes: [],
     // For class editing
     nodes: [],
     connections: [],
@@ -15,7 +16,9 @@ const FlowEdit = (() => {
     inputMappings: [],
     outputMappings: [],
     variables: {},
-    dirty: false
+    dirty: false,
+    // Track currently editing node
+    editingNodeId: null
   };
 
   function qs(sel){ return document.querySelector(sel); }
@@ -46,6 +49,38 @@ const FlowEdit = (() => {
   async function graphql(query, variables={}) {
     try { return await window.graphqlClient.query(query, variables); }
     catch(e){ notify('GraphQL error: '+e.message,'error'); throw e; }
+  }
+
+  async function loadClusterNodes() {
+    try {
+      const result = await graphql(`query GetBrokers { brokers { nodeId isCurrent } }`);
+      state.clusterNodes = result.brokers || [];
+    } catch(e) {
+      console.error('Failed to load cluster nodes:', e);
+      state.clusterNodes = [];
+    }
+  }
+
+  function populateNodeSelect() {
+    const nodeSelect = qs('#fi-nodeId');
+    if(!nodeSelect || nodeSelect.tagName !== 'SELECT') return;
+
+    // Clear existing options except the first one
+    while(nodeSelect.options.length > 1) nodeSelect.remove(1);
+
+    // Add "*" option for automatic assignment
+    const autoOption = document.createElement('option');
+    autoOption.value = '*';
+    autoOption.textContent = '* (Automatic Assignment)';
+    nodeSelect.appendChild(autoOption);
+
+    // Add cluster nodes
+    state.clusterNodes.forEach(node => {
+      const option = document.createElement('option');
+      option.value = node.nodeId;
+      option.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
+      nodeSelect.appendChild(option);
+    });
   }
 
   async function loadAllForClass() {
@@ -81,6 +116,9 @@ const FlowEdit = (() => {
   }
 
   async function loadAllForInstance() {
+    // Load cluster nodes for Node ID dropdown
+    await loadClusterNodes();
+
     // Need flow classes for dropdown
   const classesQuery = `query { flowClasses { name namespace version nodes { id inputs outputs } connections { fromNode fromOutput toNode toInput } } }`;
     const classData = await graphql(classesQuery);
@@ -110,12 +148,32 @@ const FlowEdit = (() => {
     qs('#page-title').textContent = editing? 'Edit Flow Class' : 'New Flow Class';
     qs('#page-subtitle').textContent = editing? state.name : 'Create a new flow class';
     qs('#delete-button').style.display = editing ? 'inline-block' : 'none';
-    
+
     // Remove enabled checkbox if it exists (when switching from instance to class)
     const headerActions = qs('#header-actions');
     const existingCheckbox = headerActions.querySelector('.header-checkbox-wrapper');
     if (existingCheckbox) {
       existingCheckbox.remove();
+    }
+
+    // Add restart button for existing flow classes
+    const existingRestartBtn = headerActions.querySelector('.restart-instances-btn');
+    if (existingRestartBtn) {
+      existingRestartBtn.remove();
+    }
+    if (editing) {
+      const restartBtn = document.createElement('button');
+      restartBtn.className = 'btn btn-secondary btn-small restart-instances-btn';
+      restartBtn.textContent = 'Restart All Instances';
+      restartBtn.style.whiteSpace = 'nowrap';
+      restartBtn.onclick = () => FlowEdit.restartAllInstances();
+      // Insert right after save button (before delete button if it exists)
+      const deleteBtn = qs('#delete-button');
+      if (deleteBtn) {
+        deleteBtn.parentNode.insertBefore(restartBtn, deleteBtn);
+      } else {
+        headerActions.appendChild(restartBtn);
+      }
     }
     
     const root = qs('#form-section');
@@ -135,6 +193,11 @@ const FlowEdit = (() => {
     qs('#connections-section').style.display = 'block';
     renderNodesTable();
     renderConnectionsTable();
+
+    // Auto-open editor for single node flows
+    if (state.nodes.length === 1) {
+      editNode(state.nodes[0].id);
+    }
   }
 
   function buildInstanceForm() {
@@ -160,7 +223,7 @@ const FlowEdit = (() => {
           <div class="form-grid">
             <div class="form-group"><label>Name</label><input id="fi-name" class="form-control" value="${escape(state.flowInstance.name||'')}"></div>
             <div class="form-group"><label>Namespace</label><input id="fi-namespace" class="form-control" value="${escape(state.flowInstance.namespace||'default')}"></div>
-            <div class="form-group"><label>Node ID</label><input id="fi-nodeId" class="form-control" value="${escape(state.flowInstance.nodeId||'local')}"></div>
+            <div class="form-group"><label>Node ID</label><select id="fi-nodeId" class="form-control"><option value="">Select Node...</option></select></div>
             <div class="form-group"><label>Flow Class</label><select id="fi-flowClass" class="form-control">${classOptions}</select></div>
           </div>
         </div>
@@ -180,6 +243,13 @@ const FlowEdit = (() => {
       renderInputMappings();
       renderOutputMappings();
     });
+
+    // Populate Node ID dropdown and set current value
+    populateNodeSelect();
+    const nodeIdSelect = qs('#fi-nodeId');
+    if(nodeIdSelect) {
+      nodeIdSelect.value = state.flowInstance.nodeId || '*';
+    }
   }
 
   let availableInputs = [];
@@ -252,6 +322,7 @@ const FlowEdit = (() => {
 
   function editNode(id) {
     const node = state.nodes.find(n=>n.id===id); if(!node) return;
+    state.editingNodeId = id;
     const box = qs('#node-inline-editor');
     box.style.display='block';
     box.innerHTML = `
@@ -295,6 +366,8 @@ const FlowEdit = (() => {
     node.inputs = qs('#n-inputs').value.split(',').map(s=>s.trim()).filter(Boolean);
     node.outputs = qs('#n-outputs').value.split(',').map(s=>s.trim()).filter(Boolean);
     node.config.script = qs('#n-script').value;
+    state.editingNodeId = null;
+    qs('#node-inline-editor').style.display='none';
     renderNodesTable();
     notify('Node saved','success');
   }
@@ -320,7 +393,10 @@ const FlowEdit = (() => {
     });
   }
 
-  function cancelNodeEdit(){ qs('#node-inline-editor').style.display='none'; }
+  function cancelNodeEdit(){
+    state.editingNodeId = null;
+    qs('#node-inline-editor').style.display='none';
+  }
   function removeNode(id){ state.nodes = state.nodes.filter(n=>n.id!==id); renderNodesTable(); cancelNodeEdit(); }
   function removeConnection(idx){ state.connections.splice(idx,1); renderConnectionsTable(); }
 
@@ -334,8 +410,8 @@ const FlowEdit = (() => {
       }).join('');
       return `<tr>
         <td><select class="form-control" onchange="FlowEdit.updateInputMapping(${idx},'nodeInput',this.value)">${options}</select></td>
-        <td><select class="form-control" onchange="FlowEdit.updateInputMapping(${idx},'type',this.value)"><option value="TOPIC" ${m.type==='TOPIC'?'selected':''}>TOPIC</option><option value="TEXT" ${m.type==='TEXT'?'selected':''}>TEXT</option></select></td>
-        <td><input class="form-control" value="${escape(m.value)}" onchange="FlowEdit.updateInputMapping(${idx},'value',this.value)" placeholder="MQTT topic or text"></td>
+        <td><select class="form-control" onchange="FlowEdit.updateInputMapping(${idx},'type',this.value)"><option value="TOPIC" ${m.type==='TOPIC'?'selected':''}>TOPIC</option></select></td>
+        <td><input class="form-control" value="${escape(m.value)}" onchange="FlowEdit.updateInputMapping(${idx},'value',this.value)" placeholder="MQTT topic"></td>
         <td>
           <button class="btn-icon btn-delete" onclick="FlowEdit.removeInputMapping(${idx})" title="Delete Input Mapping">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -395,6 +471,10 @@ const FlowEdit = (() => {
   function removeVariable(key){ delete state.variables[key]; renderVariables(); }
 
   function save() {
+    // If a node is being edited, save it first
+    if(state.editingNodeId) {
+      saveNode(state.editingNodeId);
+    }
     if(state.type==='class') return saveClass();
     return saveInstance();
   }
@@ -415,7 +495,7 @@ const FlowEdit = (() => {
     const vars = isUpdate? { name, input } : { input };
     await graphql(mutation, vars);
     notify('Saved flow class','success');
-    location.href = '/pages/workflows.html';
+    // Stay on the page instead of navigating away
   }
 
   async function saveInstance() {
@@ -450,6 +530,35 @@ const FlowEdit = (() => {
     location.href = '/pages/workflows.html';
   }
 
+  async function restartAllInstances() {
+    if(!state.flowClass || !state.flowClass.name) {
+      notify('No flow class loaded','error');
+      return;
+    }
+    const flowClassName = state.flowClass.name;
+    try {
+      // Query all instances and filter by this flow class
+      const instQuery = `query { flowInstances { name namespace flowClassId } }`;
+      const instData = await graphql(instQuery);
+      const instances = (instData.flowInstances || []).filter(fi => fi.flowClassId === flowClassName);
+
+      if(instances.length === 0) {
+        notify('No instances found for this flow class','info');
+        return;
+      }
+
+      // Restart each instance (disable then enable)
+      for(const inst of instances) {
+        await graphql(`mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`, { name: inst.name });
+        await graphql(`mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`, { name: inst.name });
+      }
+      notify(`Restarted ${instances.length} instance${instances.length===1?'':'s'}`, 'success');
+    } catch(e) {
+      console.error('Failed to restart instances:', e);
+      notify('Failed to restart instances','error');
+    }
+  }
+
   function cancel(){
     // Cancel should not ask for confirmation per new UX requirement.
     state.dirty = false; // prevent any beforeunload handler (if added later) from prompting
@@ -468,7 +577,7 @@ const FlowEdit = (() => {
   return {
     init, addNode, editNode, saveNode, openScriptEditor, cancelNodeEdit, removeNode, addConnectionRow, removeConnection,
     addInputMapping, updateInputMapping, removeInputMapping, addOutputMapping, updateOutputMapping, removeOutputMapping,
-    addVariable, updateVariableKey, updateVariableVal, removeVariable, save, deleteItem, cancel, addOutputMappingRow: addOutputMapping
+    addVariable, updateVariableKey, updateVariableVal, removeVariable, save, deleteItem, cancel, restartAllInstances, addOutputMappingRow: addOutputMapping
   };
 })();
 
