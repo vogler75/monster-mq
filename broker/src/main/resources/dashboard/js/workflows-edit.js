@@ -16,7 +16,9 @@ const FlowEdit = (() => {
     inputMappings: [],
     outputMappings: [],
     variables: {},
-    dirty: false
+    dirty: false,
+    // Track currently editing node
+    editingNodeId: null
   };
 
   function qs(sel){ return document.querySelector(sel); }
@@ -320,6 +322,7 @@ const FlowEdit = (() => {
 
   function editNode(id) {
     const node = state.nodes.find(n=>n.id===id); if(!node) return;
+    state.editingNodeId = id;
     const box = qs('#node-inline-editor');
     box.style.display='block';
     box.innerHTML = `
@@ -363,6 +366,8 @@ const FlowEdit = (() => {
     node.inputs = qs('#n-inputs').value.split(',').map(s=>s.trim()).filter(Boolean);
     node.outputs = qs('#n-outputs').value.split(',').map(s=>s.trim()).filter(Boolean);
     node.config.script = qs('#n-script').value;
+    state.editingNodeId = null;
+    qs('#node-inline-editor').style.display='none';
     renderNodesTable();
     notify('Node saved','success');
   }
@@ -388,7 +393,10 @@ const FlowEdit = (() => {
     });
   }
 
-  function cancelNodeEdit(){ qs('#node-inline-editor').style.display='none'; }
+  function cancelNodeEdit(){
+    state.editingNodeId = null;
+    qs('#node-inline-editor').style.display='none';
+  }
   function removeNode(id){ state.nodes = state.nodes.filter(n=>n.id!==id); renderNodesTable(); cancelNodeEdit(); }
   function removeConnection(idx){ state.connections.splice(idx,1); renderConnectionsTable(); }
 
@@ -463,6 +471,10 @@ const FlowEdit = (() => {
   function removeVariable(key){ delete state.variables[key]; renderVariables(); }
 
   function save() {
+    // If a node is being edited, save it first
+    if(state.editingNodeId) {
+      saveNode(state.editingNodeId);
+    }
     if(state.type==='class') return saveClass();
     return saveInstance();
   }
