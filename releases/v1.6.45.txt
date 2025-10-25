@@ -1,0 +1,15 @@
+Release v1.6.45
+Built from commit: 164c122
+Date: 2025-10-25 11:41:38
+
+Changes since v1.6.44:
+---
+164c122 Merge branch 'dev-fixes-4'
+00bfb39 Change flow config logging level to FINE
+8d70124 Ensure node edits are saved before workflow save
+17428a5 Remove TEXT input type from flow engine
+a97b5af Add flow type filtering and restart-all to workflows UI
+46ccf9f Sync JavaScript state back to Kotlin after execution
+568a92f Support wildcard topic subscriptions in node input mapping
+fffb14d Add shared device config store with health checks
+8d4b063 Improve logging and enable in-memory log storage by default
