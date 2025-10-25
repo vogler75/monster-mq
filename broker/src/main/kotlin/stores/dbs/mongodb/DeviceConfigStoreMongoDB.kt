@@ -486,6 +486,7 @@ class DeviceConfigStoreMongoDB(
 
                     val document = Document()
                         .append("_id", name)
+                        .append("name", name)
                         .append("namespace", namespace)
                         .append("node_id", nodeId)
                         .append("config", configObj)
