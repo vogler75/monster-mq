@@ -9,19 +9,19 @@ class JDBCLoggerDetailManager {
         this.init();
     }
 
-    init() {
+    async init() {
         if (!this.isLoggedIn()) {
             window.location.href = '/pages/login.html';
             return;
         }
 
         this.parseUrlParams();
-        this.loadClusterNodes();
+        await this.loadClusterNodes();
 
         if (this.isNewLogger) {
             this.initNewLogger();
         } else {
-            this.loadLogger();
+            await this.loadLogger();
         }
 
         // Cleanup on page unload

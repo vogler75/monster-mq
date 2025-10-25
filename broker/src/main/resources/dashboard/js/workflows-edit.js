@@ -8,6 +8,7 @@ const FlowEdit = (() => {
     flowClass: null,
     flowInstance: null,
     flowClasses: [],
+    clusterNodes: [],
     // For class editing
     nodes: [],
     connections: [],
@@ -48,6 +49,38 @@ const FlowEdit = (() => {
     catch(e){ notify('GraphQL error: '+e.message,'error'); throw e; }
   }
 
+  async function loadClusterNodes() {
+    try {
+      const result = await graphql(`query GetBrokers { brokers { nodeId isCurrent } }`);
+      state.clusterNodes = result.brokers || [];
+    } catch(e) {
+      console.error('Failed to load cluster nodes:', e);
+      state.clusterNodes = [];
+    }
+  }
+
+  function populateNodeSelect() {
+    const nodeSelect = qs('#fi-nodeId');
+    if(!nodeSelect || nodeSelect.tagName !== 'SELECT') return;
+
+    // Clear existing options except the first one
+    while(nodeSelect.options.length > 1) nodeSelect.remove(1);
+
+    // Add "*" option for automatic assignment
+    const autoOption = document.createElement('option');
+    autoOption.value = '*';
+    autoOption.textContent = '* (Automatic Assignment)';
+    nodeSelect.appendChild(autoOption);
+
+    // Add cluster nodes
+    state.clusterNodes.forEach(node => {
+      const option = document.createElement('option');
+      option.value = node.nodeId;
+      option.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
+      nodeSelect.appendChild(option);
+    });
+  }
+
   async function loadAllForClass() {
     if(state.name) {
       // Removed unused required variable from original query which caused runtime error.
@@ -81,6 +114,9 @@ const FlowEdit = (() => {
   }
 
   async function loadAllForInstance() {
+    // Load cluster nodes for Node ID dropdown
+    await loadClusterNodes();
+
     // Need flow classes for dropdown
   const classesQuery = `query { flowClasses { name namespace version nodes { id inputs outputs } connections { fromNode fromOutput toNode toInput } } }`;
     const classData = await graphql(classesQuery);
@@ -160,7 +196,7 @@ const FlowEdit = (() => {
           <div class="form-grid">
             <div class="form-group"><label>Name</label><input id="fi-name" class="form-control" value="${escape(state.flowInstance.name||'')}"></div>
             <div class="form-group"><label>Namespace</label><input id="fi-namespace" class="form-control" value="${escape(state.flowInstance.namespace||'default')}"></div>
-            <div class="form-group"><label>Node ID</label><input id="fi-nodeId" class="form-control" value="${escape(state.flowInstance.nodeId||'local')}"></div>
+            <div class="form-group"><label>Node ID</label><select id="fi-nodeId" class="form-control"><option value="">Select Node...</option></select></div>
             <div class="form-group"><label>Flow Class</label><select id="fi-flowClass" class="form-control">${classOptions}</select></div>
           </div>
         </div>
@@ -180,6 +216,13 @@ const FlowEdit = (() => {
       renderInputMappings();
       renderOutputMappings();
     });
+
+    // Populate Node ID dropdown and set current value
+    populateNodeSelect();
+    const nodeIdSelect = qs('#fi-nodeId');
+    if(nodeIdSelect) {
+      nodeIdSelect.value = state.flowInstance.nodeId || '*';
+    }
   }
 
   let availableInputs = [];

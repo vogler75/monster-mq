@@ -23,6 +23,7 @@ class LogViewer {
     this.isConnected = false;
     this.isCollapsed = this.options.collapsed;
     this.newLogsCount = 0;
+    this.isPaused = false; // Track pause state
     // Resize related
     this.defaultExpandedHeight = 400;
     this.minHeight = 160;
@@ -122,6 +123,7 @@ class LogViewer {
             <span class="log-viewer-status-text">Connecting...</span>
           </div>
           <div class="log-viewer-actions">
+            <button class="log-viewer-btn" data-action="toggle-pause" title="Pause/Resume live logging">⏸ Pause</button>
             <button class="log-viewer-btn" data-action="toggle-history">📜 History</button>
             <button class="log-viewer-btn" data-action="clear">Clear</button>
             <button class="log-viewer-btn" data-action="export">Export</button>
@@ -187,6 +189,7 @@ class LogViewer {
       resizeHandle: container.querySelector('.log-viewer-resize-handle'),
       content: container.querySelector('.log-viewer-content'),
       logs: container.querySelector('.log-viewer-logs'),
+      pauseBtn: container.querySelector('[data-action="toggle-pause"]'),
       historyBtn: container.querySelector('[data-action="toggle-history"]'),
       historyControls: container.querySelector('.log-viewer-history-controls'),
       historyQuick: container.querySelector('[data-history="quick"]'),
@@ -234,7 +237,8 @@ class LogViewer {
     this.elements.root.addEventListener('click', e => {
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
-      if (btn.dataset.action === 'clear') this.clear();
+      if (btn.dataset.action === 'toggle-pause') this.togglePause();
+      else if (btn.dataset.action === 'clear') this.clear();
       else if (btn.dataset.action === 'export') this.export();
       else if (btn.dataset.action === 'toggle-history') this.toggleHistoryMode();
       else if (btn.dataset.action === 'load-history') this.loadHistory();
@@ -317,6 +321,23 @@ class LogViewer {
       this.applyBodyPadding();
       if (this.options.autoScroll) this.elements.content.scrollTop = this.elements.content.scrollHeight;
       this.newLogsCount = 0; this.elements.badge.style.display = 'none';
+    }
+  }
+
+  togglePause() {
+    this.isPaused = !this.isPaused;
+    if (this.isPaused) {
+      // Entering pause state
+      this.elements.pauseBtn.textContent = '▶ Resume';
+      this.elements.pauseBtn.classList.add('active');
+      this.updateStatus('connecting', 'Paused');
+    } else {
+      // Exiting pause state - resume live logging
+      this.elements.pauseBtn.textContent = '⏸ Pause';
+      this.elements.pauseBtn.classList.remove('active');
+      if (this.isConnected) {
+        this.updateStatus('connected', 'Connected');
+      }
     }
   }
 
@@ -435,6 +456,13 @@ class LogViewer {
   }
 
   addLog(entry) {
+    // If paused, don't display the log but still store it for when user resumes
+    if (this.isPaused) {
+      this.logs.push(entry);
+      if (this.logs.length > this.options.maxLines) this.logs.shift();
+      return;
+    }
+
     this.logs.push(entry); if (this.logs.length > this.options.maxLines) this.logs.shift();
     const el = this.createLogElement(entry); this.elements.logs.appendChild(el);
     while (this.elements.logs.children.length > this.options.maxLines) this.elements.logs.removeChild(this.elements.logs.firstChild);
