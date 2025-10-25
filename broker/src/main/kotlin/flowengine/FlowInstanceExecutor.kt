@@ -4,6 +4,7 @@ import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
+import at.rocworks.data.TopicTree
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.*
 import io.vertx.core.AbstractVerticle
@@ -195,8 +196,10 @@ class FlowInstanceExecutor(
             logger.fine { "[${instanceConfig.name}] Received message on topic $topic, payload: ${String(message.payload)}" }
             logger.fine { "[${instanceConfig.name}]   Parsed value: ${topicValue.value}" }
 
-            // Find all node inputs mapped to this topic
-            val nodeInputs = topicToNodeInputs[topic] ?: emptyList()
+            // Find all node inputs mapped to this topic (supports wildcard subscriptions!)
+            val nodeInputs = topicToNodeInputs.filter { (topicFilter, _) ->
+                TopicTree.matches(topicFilter, topic)
+            }.values.flatten()
             logger.fine { "[${instanceConfig.name}]   Node inputs to trigger: $nodeInputs (found ${nodeInputs.size} mappings)" }
 
             // Trigger execution for each affected node
@@ -277,13 +280,23 @@ class FlowInstanceExecutor(
             // Check if this is a topic input (from MQTT)
             val topicMapping = topicInputMappings[nodeInput]
             if (topicMapping != null) {
-                val topicValue = topicValues[topicMapping]
+                // For wildcard subscriptions, use the actual triggering topic
+                // For exact subscriptions, use the mapped topic directly
+                val topicToLookup = if ((topicMapping.contains('+') || topicMapping.contains('#')) && triggeringTopic != null) {
+                    // Wildcard subscription: use the actual topic that triggered this execution
+                    triggeringTopic
+                } else {
+                    // Exact subscription: use the mapped topic directly
+                    topicMapping
+                }
+
+                val topicValue = topicValues[topicToLookup]
                 if (topicValue != null) {
                     inputs[inputName] = FlowScriptEngine.InputValue(
                         value = topicValue.value,
                         type = FlowScriptEngine.InputType.TOPIC,
                         timestamp = topicValue.timestamp,
-                        topic = topicMapping
+                        topic = topicToLookup
                     )
                 }
             }
