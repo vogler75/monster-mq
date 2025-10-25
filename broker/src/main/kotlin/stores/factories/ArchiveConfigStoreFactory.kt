@@ -8,6 +8,7 @@ import at.rocworks.stores.sqlite.ArchiveConfigStoreSQLite
 import io.vertx.core.json.JsonObject
 
 object ArchiveConfigStoreFactory {
+
     fun createConfigStore(config: JsonObject, storeType: String?): IArchiveConfigStore? {
         return when (storeType?.uppercase()) {
             "POSTGRES" -> {
@@ -29,15 +30,14 @@ object ArchiveConfigStoreFactory {
             "MONGODB" -> {
                 val mongoConfig = config.getJsonObject("MongoDB")
                 if (mongoConfig != null) {
-                    val connectionString = mongoConfig.getString("ConnectionString")
+                    val url = mongoConfig.getString("Url")
                     val databaseName = mongoConfig.getString("Database")
-                    if (connectionString != null && databaseName != null) {
-                        ArchiveConfigStoreMongoDB(connectionString, databaseName)
+                    if (url != null && databaseName != null) {
+                        ArchiveConfigStoreMongoDB(url, databaseName)
                     } else {
                         null
                     }
                 } else {
-                    // MongoDB config section not found - this is likely the cause of the issue
                     null
                 }
             }

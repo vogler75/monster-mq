@@ -74,10 +74,10 @@ object DeviceConfigStoreFactory {
             "MONGODB" -> {
                 val mongoConfig = config.getJsonObject("MongoDB")
                 if (mongoConfig != null) {
-                    val connectionString = mongoConfig.getString("ConnectionString")
+                    val url = mongoConfig.getString("Url")
                     val database = mongoConfig.getString("Database")
-                    if (connectionString != null && database != null) {
-                        DeviceConfigStoreMongoDB(connectionString, database)
+                    if (url != null && database != null) {
+                        DeviceConfigStoreMongoDB(url, database)
                     } else {
                         null
                     }

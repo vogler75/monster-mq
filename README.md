@@ -5,7 +5,7 @@ A high-performance, enterprise-grade MQTT broker with advanced data processing c
 ## 🚀 Key Features
 
 ### Core MQTT Broker
-- **Full MQTT 3.1.1 & 5.0 Support** - Complete protocol implementation with QoS 0, 1, 2
+- **Full MQTT 3.1.1 Support** - Complete protocol implementation with QoS 0, 1, 2
 - **High Performance** - Built on Vert.x for maximum throughput and low latency  
 - **SSL/TLS Security** - End-to-end encryption with certificate management
 - **WebSocket Support** - MQTT over WebSocket for web applications
@@ -261,7 +261,7 @@ MonsterMQ follows a modular, event-driven architecture built on Eclipse Vert.x, 
 ### Component Layers
 
 #### 1. **Protocol & Transport Layer**
-- **MQTT 3.1.1/5.0** - Full protocol compliance with QoS 0, 1, 2
+- **MQTT 3.1.1** - Full protocol compliance with QoS 0, 1, 2
 - **Multiple Transports** - TCP, TLS, WebSocket, WebSocket Secure
 - **Authentication** - Username/password, certificates, token-based
 - **Access Control** - Topic-based ACL with pattern matching
