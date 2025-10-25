@@ -43,12 +43,6 @@ class DeviceConfigStoreCrateDB(
             )
         """.trimIndent()
 
-        private const val CREATE_INDEXES = """
-            CREATE INDEX IF NOT EXISTS idx_deviceconfigs_node_id ON $TABLE_NAME (node_id);
-            CREATE INDEX IF NOT EXISTS idx_deviceconfigs_enabled ON $TABLE_NAME (enabled);
-            CREATE INDEX IF NOT EXISTS idx_deviceconfigs_namespace ON $TABLE_NAME (namespace);
-        """
-
         private const val SELECT_ALL = """
             SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
@@ -116,7 +110,6 @@ class DeviceConfigStoreCrateDB(
         try {
             connection.createStatement().use { stmt ->
                 stmt.execute(CREATE_TABLE)
-                stmt.execute(CREATE_INDEXES)
             }
             logger.info("DeviceConfigStoreCrateDB initialized successfully")
             promise.complete()

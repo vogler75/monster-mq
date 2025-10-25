@@ -285,7 +285,7 @@ class MessageStorePostgres(
                     when {
                         hasSingleLevel && !hasMultiLevel -> {
                             // Handle single-level wildcard (+)
-                            // Find topics at the specific level depth only
+                            // Return all topics matching the prefix, let extraction logic handle grouping
                             val whereClause = levels.mapIndexed { index, level ->
                                 when (level) {
                                     "+" -> null  // Skip wildcard levels
@@ -299,14 +299,7 @@ class MessageStorePostgres(
                                 }
                             }.filterNotNull().joinToString(" AND ")
 
-                            // Ensure we get only topics at the exact level (not deeper)
-                            val levelConstraint = if (patternLevels <= MAX_FIXED_TOPIC_LEVELS) {
-                                " AND ${FIXED_TOPIC_COLUMN_NAMES.getOrNull(patternLevels) ?: "topic_r"} = ''"
-                            } else {
-                                " AND COALESCE(ARRAY_LENGTH(topic_r, 1),0) = ${patternLevels - MAX_FIXED_TOPIC_LEVELS}"
-                            }
-
-                            "SELECT DISTINCT topic FROM $tableName WHERE ${whereClause.ifEmpty { "1=1" }}$levelConstraint"
+                            "SELECT DISTINCT topic FROM $tableName WHERE ${whereClause.ifEmpty { "1=1" }}"
                         }
                         else -> {
                             // Fallback for complex patterns: select all topics and filter in application

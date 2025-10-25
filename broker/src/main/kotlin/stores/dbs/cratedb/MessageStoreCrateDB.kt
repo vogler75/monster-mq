@@ -314,15 +314,7 @@ class MessageStoreCrateDB(
             }
         }.filterNotNull()
 
-        val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" } +
-                (if (topicPattern.endsWith("#")) ""
-                else {
-                    if (levels.size < MAX_FIXED_TOPIC_LEVELS) {
-                        " AND " + FIXED_TOPIC_COLUMN_NAMES[levels.size] + " = ''"
-                    } else {
-                        " AND COALESCE(ARRAY_LENGTH(topic_r, 1),0) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
-                    }
-                })
+        val where = filter.joinToString(" AND ") { it.first }.ifEmpty { "1=1" }
 
         // Handle pattern like 'a/+' - find topics like 'a/b' even if only 'a/b/c' exists
         val extractDepth = if (topicPattern.endsWith("#")) {

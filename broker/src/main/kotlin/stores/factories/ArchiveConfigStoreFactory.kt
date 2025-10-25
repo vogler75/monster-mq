@@ -45,10 +45,10 @@ object ArchiveConfigStoreFactory {
                 val crateConfig = config.getJsonObject("CrateDB")
                 if (crateConfig != null) {
                     val url = crateConfig.getString("Url")
-                    val username = crateConfig.getString("Username")
-                    val password = crateConfig.getString("Password")
-                    if (url != null && username != null && password != null) {
-                        ArchiveConfigStoreCrateDB(url, username, password)
+                    val user = crateConfig.getString("User")
+                    val pass = crateConfig.getString("Pass")
+                    if (url != null && user != null && pass != null) {
+                        ArchiveConfigStoreCrateDB(url, user, pass)
                     } else {
                         null
                     }
