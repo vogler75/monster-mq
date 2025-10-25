@@ -911,7 +911,7 @@ MORE INFO:
                         // Deploy SyslogVerticle (independent of MQTT setting)
                         val loggingConfig = configJson.getJsonObject("Logging", JsonObject())
                         val memoryConfig = loggingConfig.getJsonObject("Memory", JsonObject())
-                        val memoryEnabled = memoryConfig.getBoolean("Enabled", false)
+                        val memoryEnabled = memoryConfig.getBoolean("Enabled", true)
                         val memoryEntries = memoryConfig.getInteger("Entries", 1000)
 
                         if (memoryEnabled) {

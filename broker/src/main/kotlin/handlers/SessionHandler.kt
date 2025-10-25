@@ -886,7 +886,11 @@ open class SessionHandler(
     private fun findClients(topicName: String): Set<Pair<String, Int>> {
         // Uses dual-index: O(1) for exact + O(depth) for wildcards
         val result = subscriptionManager.findAllSubscribers(topicName).toSet()
-        logger.finest { "Found [${result.size}] clients [${result.joinToString(",")}] [${Utils.getCurrentFunctionName()}]" }
+        if (result.isNotEmpty()) {
+            logger.fine("Found [${result.size}] clients for topic '$topicName': ${result.map { it.first }}")
+        } else {
+            logger.finest { "Found [${result.size}] clients for topic '$topicName'" }
+        }
         return result
     }
 
@@ -913,6 +917,7 @@ open class SessionHandler(
 
     private fun sendMessageToClient(clientId: String, message: BrokerMessage): Future<Boolean> {
         // All clients (internal and external) use eventBus with optional bulk messaging
+        logger.finest { "Sending message to client '$clientId' on topic '${message.topicName}'" }
         if (!bulkMessagingEnabled) {
             // Original non-bulk behavior
             if (message.qosLevel == 0) {
@@ -1292,11 +1297,11 @@ open class SessionHandler(
         val subscribers = findClients(topicName)
 
         if (subscribers.isEmpty()) {
-            logger.finest { "No subscribers for topic [$topicName]" }
+            logger.fine { "No subscribers for topic [$topicName] (${messages.size} messages)" }
             return
         }
 
-        logger.finest { "Found ${subscribers.size} subscribers for topic [$topicName]" }
+        logger.fine { "Found ${subscribers.size} subscribers for topic [$topicName]: ${subscribers.map { it.first }}" }
 
         // Group by QoS and process all subscribers
         messages.groupBy { it.qosLevel }.forEach { (msgQos, msgsWithQos) ->
@@ -1629,10 +1634,11 @@ open class SessionHandler(
         topicFilter: String,
         qos: Int
     ) {
-        logger.info("Internal client '$clientId' subscribing to '$topicFilter' with QoS $qos")
+        logger.info("Internal client '$clientId' subscribing to topicFilter='$topicFilter' with QoS $qos")
 
         // Subscribe using normal subscription mechanism
         subscriptionManager.subscribe(clientId, topicFilter, qos)
+        logger.fine("Subscription registered: client='$clientId' topicFilter='$topicFilter'")
 
         // Update topic-node mapping for cluster awareness
         val localNodeId = Monster.getClusterNodeId(vertx)
