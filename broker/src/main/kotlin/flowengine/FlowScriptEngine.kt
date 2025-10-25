@@ -119,6 +119,18 @@ class FlowScriptEngine {
             // Execute the compiled function
             scriptFunction.execute()
 
+            // Read back the modified state from JavaScript and update the Kotlin state map
+            val stateObj = bindings.getMember("state")
+            if (stateObj != null) {
+                // Convert state back to JSON, then parse into Kotlin map to preserve values across executions
+                val stateJsonString = context.eval("js", "JSON.stringify(state)").asString()
+                val updatedStateJson = JsonObject(stateJsonString)
+                state.clear()
+                updatedStateJson.map.forEach { (key, value) ->
+                    state[key] = value
+                }
+            }
+
             return ExecutionResult(
                 success = true,
                 logs = consoleProxy.getLogs(),
