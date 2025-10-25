@@ -37,6 +37,7 @@ object ArchiveConfigStoreFactory {
                         null
                     }
                 } else {
+                    // MongoDB config section not found - this is likely the cause of the issue
                     null
                 }
             }

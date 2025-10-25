@@ -169,8 +169,25 @@ class ArchiveHandler(
         val configStore = ArchiveConfigStoreFactory.createConfigStore(configJson, configStoreType)
 
         if (configStore == null) {
-            logger.severe("Failed to create ConfigStore of type $configStoreType for import")
-            promise.fail("Failed to create ConfigStore of type $configStoreType for import")
+            val errorMsg = when {
+                configStoreType.uppercase() == "MONGODB" && configJson.getJsonObject("MongoDB") == null ->
+                    "Failed to create ConfigStore of type MONGODB: MongoDB configuration section not found in config.yaml. " +
+                    "Please add MongoDB connection configuration under the MongoDB section."
+                configStoreType.uppercase() == "MONGODB" && configJson.getJsonObject("MongoDB") != null -> {
+                    val mongoConfig = configJson.getJsonObject("MongoDB")!!
+                    when {
+                        mongoConfig.getString("ConnectionString") == null ->
+                            "Failed to create ConfigStore of type MONGODB: ConnectionString is missing in MongoDB configuration"
+                        mongoConfig.getString("Database") == null ->
+                            "Failed to create ConfigStore of type MONGODB: Database name is missing in MongoDB configuration"
+                        else ->
+                            "Failed to create ConfigStore of type MONGODB: Invalid configuration"
+                    }
+                }
+                else -> "Failed to create ConfigStore of type $configStoreType for import"
+            }
+            logger.severe(errorMsg)
+            promise.fail(errorMsg)
             return promise.future()
         }
 
@@ -249,8 +266,25 @@ class ArchiveHandler(
         val configStore = ArchiveConfigStoreFactory.createConfigStore(configJson, configStoreType)
 
         if (configStore == null) {
-            logger.severe("Failed to create ConfigStore of type $configStoreType")
-            promise.fail("Failed to create ConfigStore of type $configStoreType")
+            val errorMsg = when {
+                configStoreType.uppercase() == "MONGODB" && configJson.getJsonObject("MongoDB") == null ->
+                    "Failed to create ConfigStore of type MONGODB: MongoDB configuration section not found in config.yaml. " +
+                    "Please add MongoDB connection configuration under the MongoDB section."
+                configStoreType.uppercase() == "MONGODB" && configJson.getJsonObject("MongoDB") != null -> {
+                    val mongoConfig = configJson.getJsonObject("MongoDB")!!
+                    when {
+                        mongoConfig.getString("ConnectionString") == null ->
+                            "Failed to create ConfigStore of type MONGODB: ConnectionString is missing in MongoDB configuration"
+                        mongoConfig.getString("Database") == null ->
+                            "Failed to create ConfigStore of type MONGODB: Database name is missing in MongoDB configuration"
+                        else ->
+                            "Failed to create ConfigStore of type MONGODB: Invalid configuration"
+                    }
+                }
+                else -> "Failed to create ConfigStore of type $configStoreType"
+            }
+            logger.severe(errorMsg)
+            promise.fail(errorMsg)
             return
         }
 
