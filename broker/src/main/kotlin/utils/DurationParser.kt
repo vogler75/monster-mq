@@ -6,7 +6,7 @@ object DurationParser {
     fun parse(duration: String?): Long? {
         if (duration == null || duration.isEmpty()) return null
 
-        val regex = """(\d+)([smhdwMyK])""".toRegex()
+        val regex = """(\d+)([smhdwMyk])""".toRegex()
         val match = regex.matchEntire(duration.trim()) ?: throw IllegalArgumentException("Invalid duration format: $duration")
 
         val value = match.groupValues[1].toLong()
@@ -20,7 +20,7 @@ object DurationParser {
             "w" -> Duration.ofDays(value * 7).toMillis()
             "M" -> Duration.ofDays(value * 30).toMillis()  // Approximate month as 30 days
             "y" -> Duration.ofDays(value * 365).toMillis()  // Approximate year as 365 days
-            "k" -> value * 1000  // Size-based (k=thousand), return count directly (e.g., "50k" → 50000)
+            "k" -> value * 1000  // Size-based (k=thousand), return count directly (e.g., "50k" → 50000, "100k" → 100000)
             else -> throw IllegalArgumentException("Unknown duration unit: $unit")
         }
     }
