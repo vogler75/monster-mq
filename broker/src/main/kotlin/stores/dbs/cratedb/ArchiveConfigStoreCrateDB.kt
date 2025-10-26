@@ -128,7 +128,6 @@ class ArchiveConfigStoreCrateDB(
                             }
                         }
 
-                        logger.info("Retrieved ${results.size} archive groups from CrateDB")
                         results
                     }
                 } ?: run {
