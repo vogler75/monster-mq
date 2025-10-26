@@ -48,6 +48,7 @@ class MessageStoreCrateDB(
         override fun init(connection: Connection): Future<Void> {
             val promise = Promise.promise<Void>()
             try {
+                connection.autoCommit = false
                 connection.createStatement().use { statement ->
                     val fixedTopicColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "$it VARCHAR" }
                     statement.executeUpdate("""
@@ -65,6 +66,7 @@ class MessageStoreCrateDB(
                         message_uuid VARCHAR(36)
                     )
                     """.trimIndent())
+                    connection.commit()
                     logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
                     promise.complete()
                 }
@@ -174,6 +176,7 @@ class MessageStoreCrateDB(
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
+                    connection.commit()
                     if (lastAddAllError != 0) {
                         logger.info("Batch insert successful after error [${Utils.getCurrentFunctionName()}]")
                         lastAddAllError = 0
@@ -199,6 +202,7 @@ class MessageStoreCrateDB(
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
+                    connection.commit()
                     if (lastAddAllError != 0) {
                         logger.info("Batch delete successful after error [${Utils.getCurrentFunctionName()}]")
                         lastAddAllError = 0
