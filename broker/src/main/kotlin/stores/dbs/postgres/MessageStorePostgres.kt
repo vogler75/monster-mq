@@ -6,6 +6,7 @@ import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.PayloadFormat
 import at.rocworks.data.PurgeResult
 import at.rocworks.stores.cratedb.MessageStoreCrateDB
 import io.vertx.core.AbstractVerticle
@@ -19,7 +20,8 @@ class MessageStorePostgres(
     private val url: String,
     private val username: String,
     private val password: String,
-    private val schema: String? = null
+    private val schema: String? = null,
+    private val payloadFormat: PayloadFormat = PayloadFormat.DEFAULT
 ): AbstractVerticle(), IMessageStoreExtended {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
@@ -174,8 +176,25 @@ class MessageStorePostgres(
                         preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 2, connection.createArrayOf("text", rest.toTypedArray()))
                         preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 3, last)
                         preparedStatement.setTimestamp(MAX_FIXED_TOPIC_LEVELS + 4, Timestamp.from(message.time))
-                        preparedStatement.setBytes(MAX_FIXED_TOPIC_LEVELS + 5, message.payload)
-                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 6, message.getPayloadAsJson())
+
+                        // Handle payload based on configured format
+                        if (payloadFormat == PayloadFormat.JSON) {
+                            val payloadJson = message.getPayloadAsJson()
+                            if (payloadJson != null) {
+                                // JSON format configured and payload is valid JSON
+                                preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 5, Types.BINARY) // payload_blob = NULL
+                                preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 6, payloadJson) // payload_json = JSON
+                            } else {
+                                // JSON format configured but payload is not valid JSON - store as binary
+                                preparedStatement.setBytes(MAX_FIXED_TOPIC_LEVELS + 5, message.payload)
+                                preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 6, Types.VARCHAR) // payload_json = NULL
+                            }
+                        } else {
+                            // DEFAULT format - store only as binary
+                            preparedStatement.setBytes(MAX_FIXED_TOPIC_LEVELS + 5, message.payload)
+                            preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 6, Types.VARCHAR) // payload_json = NULL
+                        }
+
                         preparedStatement.setInt(MAX_FIXED_TOPIC_LEVELS + 7, message.qosLevel)
                         preparedStatement.setBoolean(MAX_FIXED_TOPIC_LEVELS + 8, message.isRetain)
                         preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 9, message.clientId)

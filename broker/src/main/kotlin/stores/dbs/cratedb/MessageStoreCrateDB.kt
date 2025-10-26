@@ -6,6 +6,7 @@ import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
+import at.rocworks.stores.PayloadFormat
 import at.rocworks.data.PurgeResult
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -17,7 +18,8 @@ class MessageStoreCrateDB(
     private val name: String,
     private val url: String,
     private val username: String,
-    private val password: String
+    private val password: String,
+    private val payloadFormat: PayloadFormat = PayloadFormat.DEFAULT
 ): AbstractVerticle(), IMessageStoreExtended {
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
@@ -179,8 +181,25 @@ class MessageStoreCrateDB(
 
                             preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 3, last)
                             preparedStatement.setTimestamp(MAX_FIXED_TOPIC_LEVELS + 4, Timestamp.from(message.time))
-                            preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 5, message.getPayloadAsBase64())
-                            preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 6, message.getPayloadAsJson())
+
+                            // Handle payload based on configured format
+                            if (payloadFormat == PayloadFormat.JSON) {
+                                val payloadJson = message.getPayloadAsJson()
+                                if (payloadJson != null) {
+                                    // JSON format configured and payload is valid JSON
+                                    preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 5, Types.VARCHAR) // payload_b64 = NULL
+                                    preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 6, payloadJson)  // payload_obj = JSON
+                                } else {
+                                    // JSON format configured but payload is not valid JSON - store as base64
+                                    preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 5, message.getPayloadAsBase64())
+                                    preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 6, Types.VARCHAR) // payload_obj = NULL
+                                }
+                            } else {
+                                // DEFAULT format - store only as base64
+                                preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 5, message.getPayloadAsBase64())
+                                preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 6, Types.VARCHAR) // payload_obj = NULL
+                            }
+
                             preparedStatement.setInt(MAX_FIXED_TOPIC_LEVELS + 7, message.qosLevel)
                             preparedStatement.setBoolean(MAX_FIXED_TOPIC_LEVELS + 8, message.isRetain)
                             preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 9, message.clientId)
@@ -566,7 +585,7 @@ class MessageStoreCrateDB(
                         topic_l VARCHAR,
                         time TIMESTAMPTZ,
                         payload_b64 VARCHAR INDEX OFF,
-                        payload_obj OBJECT,
+                        payload_obj OBJECT(DYNAMIC),
                         qos INT,
                         retained BOOLEAN,
                         client_id VARCHAR(65535),

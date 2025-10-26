@@ -68,7 +68,7 @@ class SessionStoreCrateDB(
                     clean_session BOOLEAN,
                     connected BOOLEAN,
                     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    information OBJECT,
+                    information OBJECT(DYNAMIC),
                     last_will_topic VARCHAR,
                     last_will_message VARCHAR,
                     last_will_qos INT,

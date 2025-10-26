@@ -342,7 +342,9 @@ class ArchiveGroup(
                         storeName,
                         postgres.getString("Url"),
                         postgres.getString("User"),
-                        postgres.getString("Pass")
+                        postgres.getString("Pass"),
+                        null,
+                        payloadFormat
                     )
                 }
                 MessageStoreType.CRATEDB -> {
@@ -351,7 +353,8 @@ class ArchiveGroup(
                         storeName,
                         cratedb.getString("Url"),
                         cratedb.getString("User"),
-                        cratedb.getString("Pass")
+                        cratedb.getString("Pass"),
+                        payloadFormat
                     )
                 }
                 MessageStoreType.MONGODB -> {
