@@ -106,7 +106,7 @@ class GraphQLDashboardClient {
                         nodeSessionCount
                         clusterSessionCount
                         queuedMessagesCount
-                        topicIndexSize
+                        subscriptionCount
                         clientNodeMappingSize
                         topicNodeMappingSize
                         messageBusIn
@@ -160,7 +160,7 @@ class GraphQLDashboardClient {
                         nodeSessionCount
                         clusterSessionCount
                         queuedMessagesCount
-                        topicIndexSize
+                        subscriptionCount
                         clientNodeMappingSize
                         topicNodeMappingSize
                         messageBusIn
@@ -181,7 +181,7 @@ class GraphQLDashboardClient {
                         nodeSessionCount
                         clusterSessionCount
                         queuedMessagesCount
-                        topicIndexSize
+                        subscriptionCount
                         clientNodeMappingSize
                         topicNodeMappingSize
                         messageBusIn

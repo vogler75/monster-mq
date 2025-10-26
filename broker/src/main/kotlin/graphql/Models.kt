@@ -154,7 +154,7 @@ data class BrokerMetrics(
     val nodeSessionCount: Int,
     val clusterSessionCount: Int,
     val queuedMessagesCount: Long,
-    val topicIndexSize: Int,
+    val subscriptionCount: Int,
     val clientNodeMappingSize: Int,
     val topicNodeMappingSize: Int,
     val messageBusIn: Double,

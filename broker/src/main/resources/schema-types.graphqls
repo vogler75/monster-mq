@@ -58,8 +58,8 @@ type BrokerMetrics {
     clusterSessionCount: Int!
     # Total number of queued messages in the cluster
     queuedMessagesCount: Long!
-    # Size of the topic index (TopicTree)
-    topicIndexSize: Int!
+    # Total number of active subscriptions on this node (exact + wildcard)
+    subscriptionCount: Int!
     # Size of the client-to-node mapping
     clientNodeMappingSize: Int!
     # Total size of topic-to-node mapping sets

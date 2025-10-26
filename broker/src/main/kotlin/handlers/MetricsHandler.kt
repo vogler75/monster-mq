@@ -151,7 +151,7 @@ class MetricsHandler(
                             nodeSessionCount = nm.getInteger("nodeSessionCount", 0),
                             clusterSessionCount = sessionHandler.getSessionCount(),
                             queuedMessagesCount = 0L, // TODO: integrate queued messages if needed
-                            topicIndexSize = nm.getInteger("topicIndexSize", 0),
+                            subscriptionCount = nm.getInteger("subscriptionCount", 0),
                             clientNodeMappingSize = nm.getInteger("clientNodeMappingSize", 0),
                             topicNodeMappingSize = nm.getInteger("topicNodeMappingSize", 0),
                             messageBusIn = nm.getDouble("messageBusInRate", 0.0),
@@ -183,7 +183,7 @@ class MetricsHandler(
                             .put("nodeSessionCount", brokerMetrics.nodeSessionCount)
                             .put("clusterSessionCount", brokerMetrics.clusterSessionCount)
                             .put("queuedMessagesCount", brokerMetrics.queuedMessagesCount)
-                            .put("topicIndexSize", brokerMetrics.topicIndexSize)
+                            .put("subscriptionCount", brokerMetrics.subscriptionCount)
                             .put("clientNodeMappingSize", brokerMetrics.clientNodeMappingSize)
                             .put("topicNodeMappingSize", brokerMetrics.topicNodeMappingSize)
                             .put("messageBusIn", brokerMetrics.messageBusIn)
@@ -671,7 +671,7 @@ class MetricsHandler(
                             nodeSessionCount = nodeMetrics.getInteger("nodeSessionCount", 0),
                             clusterSessionCount = sessionHandler.getSessionCount(),
                             queuedMessagesCount = 0L, // TODO: Get from session store if needed
-                            topicIndexSize = nodeMetrics.getInteger("topicIndexSize", 0),
+                            subscriptionCount = nodeMetrics.getInteger("subscriptionCount", 0),
                             clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
                             topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
                             messageBusIn = nodeMetrics.getDouble("messageBusInRate", 0.0),

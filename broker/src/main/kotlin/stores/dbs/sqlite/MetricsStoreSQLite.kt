@@ -345,7 +345,7 @@ class MetricsStoreSQLite(
         .put("nodeSessionCount", m.nodeSessionCount)
         .put("clusterSessionCount", m.clusterSessionCount)
         .put("queuedMessagesCount", m.queuedMessagesCount)
-        .put("topicIndexSize", m.topicIndexSize)
+        .put("subscriptionCount", m.subscriptionCount)
         .put("clientNodeMappingSize", m.clientNodeMappingSize)
         .put("topicNodeMappingSize", m.topicNodeMappingSize)
         .put("messageBusIn", m.messageBusIn)
@@ -396,7 +396,7 @@ class MetricsStoreSQLite(
         nodeSessionCount = 0,
         clusterSessionCount = 0,
         queuedMessagesCount = 0,
-        topicIndexSize = 0,
+        subscriptionCount = 0,
         clientNodeMappingSize = 0,
         topicNodeMappingSize = 0,
         messageBusIn = 0.0,
@@ -416,7 +416,7 @@ class MetricsStoreSQLite(
         nodeSessionCount = j.getInteger("nodeSessionCount", 0),
         clusterSessionCount = j.getInteger("clusterSessionCount", 0),
         queuedMessagesCount = j.getLong("queuedMessagesCount", 0),
-        topicIndexSize = j.getInteger("topicIndexSize", 0),
+        subscriptionCount = j.getInteger("subscriptionCount", 0),
         clientNodeMappingSize = j.getInteger("clientNodeMappingSize", 0),
         topicNodeMappingSize = j.getInteger("topicNodeMappingSize", 0),
         messageBusIn = j.getDouble("messageBusIn", 0.0),
