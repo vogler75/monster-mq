@@ -215,16 +215,10 @@ class GraphQLDashboardClient {
                         messagesOut
                         timestamp
                     }
-                    subscriptions {
-                        topicFilter
-                        qos
-                    }
                     cleanSession
-                    sessionExpiryInterval
                     clientAddress
                     connected
                     queuedMessageCount
-                    information
                 }
             }
         `;

@@ -245,25 +245,15 @@ class SessionManager {
 
     async updateNodeFilter() {
         const nodeFilter = document.getElementById('node-filter');
-        
-        try {
-            // Get all sessions to populate node filter options
-            const allSessions = await window.graphqlClient.getSessions();
-            const nodes = [...new Set(allSessions.map(s => s.nodeId))].sort();
 
-            nodeFilter.innerHTML = '<option value="">All Nodes</option>' +
-                nodes.map(node => `<option value="${node}">${node}</option>`).join('');
-                
-            // Restore the current filter value
-            if (this.currentNodeFilter) {
-                nodeFilter.value = this.currentNodeFilter;
-            }
-        } catch (error) {
-            console.error('Error updating node filter:', error);
-            // Fallback to using current session data if available
-            const nodes = [...new Set(this.sessions.map(s => s.nodeId))].sort();
-            nodeFilter.innerHTML = '<option value="">All Nodes</option>' +
-                nodes.map(node => `<option value="${node}">${node}</option>`).join('');
+        // Use already-loaded session data instead of making another query
+        const nodes = [...new Set(this.sessions.map(s => s.nodeId))].sort();
+        nodeFilter.innerHTML = '<option value="">All Nodes</option>' +
+            nodes.map(node => `<option value="${node}">${node}</option>`).join('');
+
+        // Restore the current filter value
+        if (this.currentNodeFilter) {
+            nodeFilter.value = this.currentNodeFilter;
         }
     }
 
