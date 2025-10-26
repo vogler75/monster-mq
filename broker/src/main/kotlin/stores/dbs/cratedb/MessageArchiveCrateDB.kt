@@ -299,7 +299,7 @@ class MessageArchiveCrateDB (
                         topic VARCHAR,
                         time TIMESTAMPTZ,
                         payload_b64 VARCHAR INDEX OFF,
-                        payload_obj OBJECT,
+                        payload_obj OBJECT(DYNAMIC),
                         qos INT,
                         retained BOOLEAN,
                         client_id VARCHAR(65535),

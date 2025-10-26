@@ -59,7 +59,7 @@ class MessageStoreCrateDB(
                         topic_l VARCHAR,
                         time TIMESTAMPTZ,
                         payload_b64 VARCHAR INDEX OFF,
-                        payload_obj OBJECT,
+                        payload_obj OBJECT(DYNAMIC),
                         qos INT,
                         retained BOOLEAN,
                         client_id VARCHAR(65535),
@@ -160,26 +160,71 @@ class MessageStoreCrateDB(
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
-                    messages.forEach { message ->
-                        val (first, rest, last) = splitTopic(message.topicName)
-                        preparedStatement.setString(1, message.topicName)
-                        repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 2, first.getOrNull(it) ?: "") }
-                        preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 2, connection.createArrayOf("varchar", rest.toTypedArray()))
-                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 3, last)
-                        preparedStatement.setTimestamp(MAX_FIXED_TOPIC_LEVELS + 4, Timestamp.from(message.time))
-                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 5, message.getPayloadAsBase64())
-                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 6, message.getPayloadAsJson())
-                        preparedStatement.setInt(MAX_FIXED_TOPIC_LEVELS + 7, message.qosLevel)
-                        preparedStatement.setBoolean(MAX_FIXED_TOPIC_LEVELS + 8, message.isRetain)
-                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 9, message.clientId)
-                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 10, message.messageUuid)
-                        preparedStatement.addBatch()
+                    val failedIndexes = mutableListOf<Int>()
+                    var successCount = 0
+
+                    messages.forEachIndexed { index, message ->
+                        try {
+                            val (first, rest, last) = splitTopic(message.topicName)
+                            preparedStatement.setString(1, message.topicName)
+                            repeat(MAX_FIXED_TOPIC_LEVELS) { preparedStatement.setString(it + 2, first.getOrNull(it) ?: "") }
+
+                            // Handle array - CrateDB may have issues with createArrayOf
+                            try {
+                                preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 2, connection.createArrayOf("varchar", rest.toTypedArray()))
+                            } catch (e: Exception) {
+                                logger.finer("Array creation failed for topic [${message.topicName}], using null: ${e.message}")
+                                preparedStatement.setArray(MAX_FIXED_TOPIC_LEVELS + 2, null)
+                            }
+
+                            preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 3, last)
+                            preparedStatement.setTimestamp(MAX_FIXED_TOPIC_LEVELS + 4, Timestamp.from(message.time))
+                            preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 5, message.getPayloadAsBase64())
+                            preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 6, message.getPayloadAsJson())
+                            preparedStatement.setInt(MAX_FIXED_TOPIC_LEVELS + 7, message.qosLevel)
+                            preparedStatement.setBoolean(MAX_FIXED_TOPIC_LEVELS + 8, message.isRetain)
+                            preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 9, message.clientId)
+                            preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 10, message.messageUuid)
+                            preparedStatement.addBatch()
+                        } catch (e: Exception) {
+                            logger.fine("Error preparing batch statement for message at index $index [${e.message}]")
+                            failedIndexes.add(index)
+                        }
                     }
-                    preparedStatement.executeBatch()
+
+                    // Execute batch and check results
+                    try {
+                        val updateCounts = preparedStatement.executeBatch()
+                        updateCounts.forEachIndexed { index, count ->
+                            if (count == Statement.EXECUTE_FAILED) {
+                                failedIndexes.add(index)
+                                logger.fine("Batch statement at index $index failed to execute")
+                            } else {
+                                successCount++
+                            }
+                        }
+                    } catch (e: BatchUpdateException) {
+                        val updateCounts = e.updateCounts
+                        updateCounts.forEachIndexed { index, count ->
+                            if (count == Statement.EXECUTE_FAILED) {
+                                failedIndexes.add(index)
+                            } else {
+                                successCount++
+                            }
+                        }
+                        logger.warning("Batch update exception with ${failedIndexes.size} failed statements: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                    }
+
                     connection.commit()
-                    if (lastAddAllError != 0) {
-                        logger.info("Batch insert successful after error [${Utils.getCurrentFunctionName()}]")
-                        lastAddAllError = 0
+
+                    if (failedIndexes.isNotEmpty()) {
+                        logger.warning("Batch insert: ${messages.size} total, $successCount succeeded, ${failedIndexes.size} failed [${Utils.getCurrentFunctionName()}]")
+                        lastAddAllError = 1 // Mark that we had an error
+                    } else {
+                        if (lastAddAllError != 0) {
+                            logger.info("Batch insert successful after error [${Utils.getCurrentFunctionName()}]")
+                            lastAddAllError = 0
+                        }
                     }
                 }
             }
@@ -348,8 +393,7 @@ class MessageStoreCrateDB(
                 append("array_to_string(array_cat($fixedArray, $arraySlice), '/')")
             }
 
-            append(" AS extracted_topic FROM $tableName WHERE $where")
-            append(" AND extracted_topic IS NOT NULL AND extracted_topic != ''")
+            append(" FROM $tableName WHERE $where")
         }
 
         logger.fine { "SQL for findMatchingTopics: $sql" }
