@@ -53,13 +53,13 @@ class MetricsStoreCrateDB(
     }
 
     private fun createTableIfNotExists(connection: Connection) {
-        // CrateDB: OBJECT(DYNAMIC) for JSON-like structure
+        // CrateDB: TEXT for JSON string storage
         val createTableSql = """
             CREATE TABLE IF NOT EXISTS $tableName (
                 "timestamp" TIMESTAMP WITH TIME ZONE NOT NULL,
                 metric_type STRING NOT NULL,
                 identifier STRING NOT NULL,
-                metrics OBJECT(DYNAMIC) NOT NULL,
+                metrics TEXT NOT NULL,
                 PRIMARY KEY ("timestamp", metric_type, identifier)
             )
         """.trimIndent()
@@ -200,7 +200,7 @@ class MetricsStoreCrateDB(
             val kindStr = kind.toDbString()
             var updatedRows = 0
             connection.prepareStatement(updateSql).use { st ->
-                st.setObject(1, metricsJson.map) // OBJECT(DYNAMIC) accepts map
+                st.setString(1, metricsJson.encode()) // Store as JSON string for OBJECT(DYNAMIC)
                 st.setTimestamp(2, Timestamp.from(timestamp))
                 st.setString(3, kindStr)
                 st.setString(4, identifier)
@@ -212,7 +212,7 @@ class MetricsStoreCrateDB(
                     st.setTimestamp(1, Timestamp.from(timestamp))
                     st.setString(2, kindStr)
                     st.setString(3, identifier)
-                    st.setObject(4, metricsJson.map)
+                    st.setString(4, metricsJson.encode())
                     st.executeUpdate()
                 }
             }
@@ -250,8 +250,8 @@ class MetricsStoreCrateDB(
                 if (toTs != null) st.setTimestamp(4, Timestamp.from(toTs))
                 val rs = st.executeQuery()
                 return@use if (rs.next()) {
-                    @Suppress("UNCHECKED_CAST")
-                    JsonObject(rs.getObject("metrics") as Map<String, Any?>)
+                    val metricsStr = rs.getString("metrics")
+                    if (metricsStr != null) JsonObject(metricsStr) else JsonObject()
                 } else JsonObject()
             }
         })
@@ -294,8 +294,8 @@ class MetricsStoreCrateDB(
                 val list = mutableListOf<Pair<Instant, JsonObject>>()
                 while (rs.next()) {
                     val ts = rs.getTimestamp("timestamp").toInstant()
-                    @Suppress("UNCHECKED_CAST")
-                    val json = JsonObject(rs.getObject("metrics") as Map<String, Any?>)
+                    val metricsStr = rs.getString("metrics")
+                    val json = if (metricsStr != null) JsonObject(metricsStr) else JsonObject()
                     list.add(ts to json)
                 }
                 list

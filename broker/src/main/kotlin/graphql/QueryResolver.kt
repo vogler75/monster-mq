@@ -671,7 +671,7 @@ class QueryResolver(
             }
 
             // Complete with results after async search finishes
-            vertx.setTimer(50) { // Reduced timer since we're more efficient now
+            vertx.setTimer(50) {
                 if (!completed) {
                     completed = true
                     val topics = topicNames.sorted().map { Topic(it) }

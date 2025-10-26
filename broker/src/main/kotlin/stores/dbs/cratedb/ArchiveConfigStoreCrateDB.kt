@@ -58,11 +58,36 @@ class ArchiveConfigStoreCrateDB(
     }
 
     private fun createConfigTable(connection: Connection) {
+        try {
+            // First, try to drop the old table if it exists with wrong schema
+            // CrateDB requires explicit DROP TABLE with CASCADE for schema migration
+            connection.createStatement().use { statement ->
+                try {
+                    // Check if table exists
+                    val checkSql = "SELECT 1 FROM information_schema.tables WHERE table_name = ?"
+                    connection.prepareStatement(checkSql).use { stmt ->
+                        stmt.setString(1, configTableName)
+                        val rs = stmt.executeQuery()
+                        if (rs.next()) {
+                            // Table exists, drop it to recreate with new schema
+                            logger.info("Dropping existing archive config table to migrate schema")
+                            statement.execute("DROP TABLE IF EXISTS $configTableName")
+                        }
+                    }
+                } catch (e: Exception) {
+                    // If check fails, continue anyway
+                    logger.fine("Could not check for existing table: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            logger.fine("Could not drop existing table: ${e.message}")
+        }
+
         val sql = """
             CREATE TABLE IF NOT EXISTS $configTableName (
                 name STRING PRIMARY KEY,
                 enabled BOOLEAN NOT NULL DEFAULT FALSE,
-                topic_filter ARRAY(STRING) NOT NULL,
+                topic_filter TEXT NOT NULL,
                 retained_only BOOLEAN NOT NULL DEFAULT FALSE,
                 last_val_type STRING NOT NULL,
                 archive_type STRING NOT NULL,
@@ -197,9 +222,9 @@ class ArchiveConfigStoreCrateDB(
                         preparedStatement.setString(1, archiveGroup.name)
                         preparedStatement.setBoolean(2, enabled)
 
-                        // Convert topic filter list to CrateDB array format
-                        val topicFilterArray = connection.createArrayOf("STRING", archiveGroup.topicFilter.toTypedArray())
-                        preparedStatement.setArray(3, topicFilterArray)
+                        // Convert topic filter list to JSON string
+                        val topicFilterJson = io.vertx.core.json.JsonArray(archiveGroup.topicFilter).encode()
+                        preparedStatement.setString(3, topicFilterJson)
 
                         preparedStatement.setBoolean(4, archiveGroup.retainedOnly)
                         preparedStatement.setString(5, archiveGroup.getLastValType().name)
@@ -284,10 +309,15 @@ class ArchiveConfigStoreCrateDB(
     private fun resultSetToArchiveGroup(resultSet: ResultSet): ArchiveGroup {
         val name = resultSet.getString("name")
 
-        // Parse topic filter from CrateDB array
-        val topicFilterArray = resultSet.getArray("topic_filter")
-        val topicFilter = if (topicFilterArray != null) {
-            (topicFilterArray.array as Array<*>).map { it.toString() }
+        // Parse topic filter from JSON string
+        val topicFilterJson = resultSet.getString("topic_filter")
+        val topicFilter = if (topicFilterJson != null) {
+            try {
+                io.vertx.core.json.JsonArray(topicFilterJson).list.map { it.toString() }
+            } catch (e: Exception) {
+                logger.warning("Failed to parse topic_filter JSON: ${e.message}")
+                emptyList()
+            }
         } else {
             emptyList()
         }

@@ -95,6 +95,13 @@ Key configuration sections:
 - **Build Tool**: Maven
 - **Protocol**: MQTT 3.1.1 (MQTT5 not yet supported)
 
+## Git and Commit Guidelines
+
+- **Do NOT auto-commit changes**: Only commit when explicitly instructed
+- **Do NOT commit as Claude**: Do not include "Generated with Claude Code" or "Co-Authored-By: Claude" in commits
+- **Manual commits only**: Wait for explicit `"please commit"` or similar instruction before committing
+- Create branches for work, but changes should remain staged/unstaged until instructed otherwise
+
 ## Development Notes
 
 - The project uses Vert.X's asynchronous programming model extensively

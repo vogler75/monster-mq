@@ -886,11 +886,6 @@ open class SessionHandler(
     private fun findClients(topicName: String): Set<Pair<String, Int>> {
         // Uses dual-index: O(1) for exact + O(depth) for wildcards
         val result = subscriptionManager.findAllSubscribers(topicName).toSet()
-        if (result.isNotEmpty()) {
-            logger.fine("Found [${result.size}] clients for topic '$topicName': ${result.map { it.first }}")
-        } else {
-            logger.finest { "Found [${result.size}] clients for topic '$topicName'" }
-        }
         return result
     }
 
@@ -1297,11 +1292,8 @@ open class SessionHandler(
         val subscribers = findClients(topicName)
 
         if (subscribers.isEmpty()) {
-            logger.fine { "No subscribers for topic [$topicName] (${messages.size} messages)" }
             return
         }
-
-        logger.fine { "Found ${subscribers.size} subscribers for topic [$topicName]: ${subscribers.map { it.first }}" }
 
         // Group by QoS and process all subscribers
         messages.groupBy { it.qosLevel }.forEach { (msgQos, msgsWithQos) ->

@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Enhanced MongoDB Message Store with performance optimizations
- * - Optimized wildcard topic matching using topic levels
+ * - Optimized wildcard topic matching using fixed topic level fields (like PostgreSQL)
  * - Connection pooling and write concern tuning
  * - Async operations to prevent blocking
  * - Implements IMessageStoreExtended for advanced features
@@ -37,7 +37,7 @@ class MessageStoreMongoDB(
 
     private val logger = Utils.getLogger(this::class.java, name)
     private val collectionName = name.lowercase()
-    
+
     @Volatile
     private var mongoClient: MongoClient? = null
     @Volatile
@@ -54,6 +54,19 @@ class MessageStoreMongoDB(
 
     // Cache for error reporting
     private var lastError: Int = 0
+
+    private companion object {
+        const val MAX_FIXED_TOPIC_LEVELS = 9
+        val FIXED_TOPIC_COLUMN_NAMES = (0 until MAX_FIXED_TOPIC_LEVELS).map { "topic_${it+1}" }
+
+        fun splitTopic(topicName: String): Triple<List<String>, List<String>, String> {
+            val levels = Utils.getTopicLevels(topicName)
+            val first = levels.take(MAX_FIXED_TOPIC_LEVELS)
+            val rest = levels.drop(MAX_FIXED_TOPIC_LEVELS)
+            val last = levels.lastOrNull() ?: ""
+            return Triple(first, rest, last)
+        }
+    }
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -178,16 +191,13 @@ class MessageStoreMongoDB(
                 IndexOptions().unique(true).name("topic_unique_idx")
             )
 
-            // Compound index for topic levels (optimized wildcard matching)
+            // Compound index for fixed topic levels (optimized wildcard matching)
+            // Similar to PostgreSQL approach with indexed topic_1..topic_9 fields
+            val topicIndexFields = mutableMapOf<String, Int>()
+            FIXED_TOPIC_COLUMN_NAMES.forEach { topicIndexFields[it] = 1 }
             targetCollection.createIndex(
-                Document(mapOf(
-                    "topic_levels.L0" to 1,
-                    "topic_levels.L1" to 1,
-                    "topic_levels.L2" to 1,
-                    "topic_levels.L3" to 1,
-                    "topic_levels.L4" to 1
-                )),
-                IndexOptions().name("topic_levels_idx").sparse(true)
+                Document(topicIndexFields),
+                IndexOptions().name("topic_levels_idx")
             )
 
             // Index for client_id queries
@@ -208,14 +218,26 @@ class MessageStoreMongoDB(
         }
     }
 
-    private fun topicLevelsAsDocument(topicName: String): Document {
-        val levels = Utils.getTopicLevels(topicName)
-        val document = Document()
-        levels.forEachIndexed { index, level ->
-            document.append("L$index", level)
+    /**
+     * Create document fields for storing topic levels in fixed columns (like PostgreSQL)
+     * Returns a map that should be merged into the main document
+     */
+    private fun getTopicLevelFields(topicName: String): Map<String, Any?> {
+        val (first, rest, last) = splitTopic(topicName)
+        val fields = mutableMapOf<String, Any?>()
+
+        // Store fixed topic levels in topic_1, topic_2, ... topic_9 fields
+        FIXED_TOPIC_COLUMN_NAMES.forEachIndexed { index, fieldName ->
+            fields[fieldName] = first.getOrNull(index) ?: ""
         }
-        document.append("depth", levels.size)
-        return document
+
+        // Store remaining levels in array
+        fields["topic_r"] = if (rest.isNotEmpty()) rest else listOf<String>()
+
+        // Store last level
+        fields["topic_l"] = last
+
+        return fields
     }
 
     override fun get(topicName: String): BrokerMessage? {
@@ -279,8 +301,8 @@ class MessageStoreMongoDB(
 
             val bulkOperations = messages.map { message ->
                 val filter = Filters.eq("topic", message.topicName)
-                val update = Document("\$set", Document(mapOf(
-                    "topic_levels" to topicLevelsAsDocument(message.topicName),
+                val updateFieldsMap: MutableMap<String, Any?> = mutableMapOf(
+                    "topic" to message.topicName,  // Explicitly set topic field
                     "time" to Instant.ofEpochMilli(message.time.toEpochMilli()),
                     "payload" to Binary(message.payload),
                     "payload_json" to message.getPayloadAsJson(),
@@ -288,14 +310,18 @@ class MessageStoreMongoDB(
                     "retained" to message.isRetain,
                     "client_id" to message.clientId,
                     "message_uuid" to message.messageUuid
-                )))
+                )
+                // Add fixed topic level fields
+                updateFieldsMap.putAll(getTopicLevelFields(message.topicName))
+
+                val update = Document("\$set", Document(updateFieldsMap))
                 UpdateOneModel<Document>(filter, update, UpdateOptions().upsert(true))
             }
 
             // Bulk write with unordered for better performance
             val options = BulkWriteOptions().ordered(false)
             activeCollection.bulkWrite(bulkOperations, options)
-            
+
             if (lastError != 0) {
                 logger.info("Batch insert successful after error")
                 lastError = 0
@@ -372,12 +398,24 @@ class MessageStoreMongoDB(
 
     override fun findMatchingTopics(topicPattern: String, callback: (String) -> Boolean) {
         try {
+            // Wait for connection with timeout (max 5 seconds for browsing)
+            val connectionWaitStart = System.currentTimeMillis()
+            val connectionTimeoutMs = 5_000L
+
+            while (!isConnected && (System.currentTimeMillis() - connectionWaitStart) < connectionTimeoutMs) {
+                if (collection != null) {
+                    // Connection appears ready, break out of wait loop
+                    break
+                }
+                Thread.sleep(50) // Check every 50ms
+            }
+
             val activeCollection = getActiveCollection() ?: run {
-                logger.warning("MongoDB not connected, skipping find topics for [$name]")
+                logger.warning("MongoDB not connected after ${System.currentTimeMillis() - connectionWaitStart}ms, skipping find topics for [$name]")
                 return
             }
 
-            // For exact topic match (no wildcards), use existence check (like LIMIT 1)
+            // For exact topic match (no wildcards), use existence check
             if (!topicPattern.contains("+") && !topicPattern.contains("#")) {
                 val filter = Filters.eq("topic", topicPattern)
                 val exists = activeCollection.find(filter).limit(1).iterator().use { it.hasNext() }
@@ -387,72 +425,53 @@ class MessageStoreMongoDB(
                 return
             }
 
-            // For wildcard patterns, use aggregation pipeline to extract topic names efficiently
-            val levels = Utils.getTopicLevels(topicPattern)
-
-            // Handle pattern like 'a/+' - find topics like 'a/b' even if only 'a/b/c' exists
-            val extractDepth = if (topicPattern.endsWith("#")) {
-                // Multi-level wildcard - extract at the # level and deeper
-                levels.size - 1
-            } else {
-                // Single level or exact match - extract at pattern depth
-                levels.size
-            }
-
-            val matchStage = Document("\$match", createWildcardFilter(topicPattern))
-
-            // Use aggregation to extract topic prefixes at the desired depth
-            val projectStage = Document("\$project", Document().apply {
-                put("_id", 0)
-
-                // Create array of topic levels for projection
-                val topicLevelsArray = Document("\$slice", listOf("\$topic_levels.L", extractDepth))
-                put("extracted_levels", topicLevelsArray)
-
-                // Convert array back to topic string
-                val topicString = Document("\$reduce", Document().apply {
-                    put("input", "\$extracted_levels")
-                    put("initialValue", "")
-                    put("in", Document("\$concat", listOf(
-                        "\$\$value",
-                        Document("\$cond", listOf(
-                            Document("\$eq", listOf("\$\$value", "")),
-                            "",
-                            "/"
-                        )),
-                        "\$\$this"
-                    )))
-                })
-                put("extracted_topic", topicString)
-            })
-
-            // Group to get distinct topic names
-            val groupStage = Document("\$group", Document().apply {
-                put("_id", "\$extracted_topic")
-            })
-
-            // Filter out empty topics
-            val filterStage = Document("\$match", Document("_id", Document("\$ne", "")))
-
-            val pipeline = listOf(matchStage, projectStage, groupStage, filterStage)
-
-            logger.fine { "MongoDB aggregation pipeline for findMatchingTopics: $pipeline" }
+            // For wildcard patterns, fetch matching documents and extract full topics
+            val matchFilter = createWildcardFilter(topicPattern)
+            val patternLevels = Utils.getTopicLevels(topicPattern)
 
             val startTime = System.currentTimeMillis()
             var count = 0
+            val extractedTopics = mutableSetOf<String>()
 
-            activeCollection.aggregate(pipeline).iterator().use { cursor ->
+            // Debug: log collection diagnostics
+            val totalDocs = activeCollection.countDocuments()
+            val sample = activeCollection.find().limit(1).first()
+            val sampleKeys = sample?.keys ?: emptySet()
+
+            // Count unique topics (should equal totalDocs if collection is correct)
+            val allDocs = activeCollection.find().projection(Projections.include("topic")).into(mutableListOf())
+            val uniqueTopics = allDocs.mapNotNull { it.getString("topic") }.toSet()
+
+            logger.info { "Collection diagnostic for [$name]:" }
+            logger.info { "  Total documents: $totalDocs" }
+            logger.info { "  Unique topics: ${uniqueTopics.size}" }
+            logger.fine { "  Sample document keys: $sampleKeys" }
+            logger.fine { "  Sample document: $sample" }
+            logger.fine { "  Filter for pattern [$topicPattern]: $matchFilter" }
+
+            // Fetch documents matching the filter (this is fast with proper indexes)
+            var docCount = 0
+            activeCollection.find(matchFilter).iterator().use { cursor ->
                 while (cursor.hasNext()) {
                     val document = cursor.next()
-                    count++
-                    val topic = document.getString("_id")
-                    if (topic != null && topic.isNotEmpty()) {
-                        if (!callback(topic)) {
-                            break // Stop if callback returns false
+                    docCount++
+                    // The simplest approach: just use the full topic stored in the document
+                    val topic = document.getString("topic")
+                    if (topic != null) {
+                        // Apply the same topic extraction logic as PostgreSQL
+                        val browseResult = extractBrowseTopicFromPattern(topic, topicPattern)
+                        if (browseResult != null && !extractedTopics.contains(browseResult)) {
+                            extractedTopics.add(browseResult)
+                            count++
+                            val continueProcessing = callback(browseResult)
+                            if (!continueProcessing) {
+                                break
+                            }
                         }
                     }
                 }
             }
+            logger.fine { "Scanned $docCount documents, extracted $count unique browse topics for pattern [$topicPattern]" }
 
             val duration = System.currentTimeMillis() - startTime
             logger.fine { "Found $count distinct topics in ${duration}ms for pattern [$topicPattern]" }
@@ -463,7 +482,50 @@ class MessageStoreMongoDB(
     }
 
     /**
-     * Create optimized filter for wildcard topic matching
+     * Extract the topic level to show based on the browse pattern
+     * Same logic as in QueryResolver and PostgreSQL implementation
+     */
+    private fun extractBrowseTopicFromPattern(messageTopic: String, pattern: String): String? {
+        val patternLevels = Utils.getTopicLevels(pattern)
+        val messageLevels = Utils.getTopicLevels(messageTopic)
+
+        // Find the index of the wildcard in the pattern
+        val wildcardIndex = patternLevels.indexOfFirst { it == "+" || it == "#" }
+        if (wildcardIndex == -1) {
+            // No wildcard, should match exactly
+            return if (messageTopic == pattern) messageTopic else null
+        }
+
+        // Check if the message topic has enough levels to match the pattern up to wildcard
+        if (messageLevels.size < wildcardIndex) {
+            return null
+        }
+
+        // Check if the prefix matches
+        for (i in 0 until wildcardIndex) {
+            if (patternLevels[i] != messageLevels[i]) {
+                return null
+            }
+        }
+
+        // For single-level wildcard (+), return the topic up to and including the matched level
+        if (patternLevels[wildcardIndex] == "+") {
+            if (messageLevels.size > wildcardIndex) {
+                return messageLevels.take(wildcardIndex + 1).joinToString("/")
+            }
+        }
+
+        // For multi-level wildcard (#), return the full topic
+        if (patternLevels[wildcardIndex] == "#") {
+            return messageTopic
+        }
+
+        return null
+    }
+
+    /**
+     * Create optimized filter for wildcard topic matching using fixed topic level fields
+     * Handles backward compatibility with old topic_levels nested structure
      */
     private fun createWildcardFilter(topicPattern: String): Bson {
         if (!topicPattern.contains("+") && !topicPattern.contains("#")) {
@@ -474,33 +536,55 @@ class MessageStoreMongoDB(
         val levels = Utils.getTopicLevels(topicPattern)
         val filters = mutableListOf<Bson>()
 
+        // Simple patterns like "+" on root should return all documents
+        // and let Kotlin code filter them by browse logic
+        // This also works with old documents that don't have topic_N fields
+        if (levels.size == 1 && levels[0] == "+") {
+            // Return all documents - will be filtered in findMatchingTopics
+            return Document()
+        }
+
         levels.forEachIndexed { index, level ->
             when (level) {
                 "#" -> {
-                    // Multi-level wildcard - match depth >= current
-                    if (index > 0) {
-                        filters.add(Filters.gte("topic_levels.depth", index))
-                    }
+                    // Multi-level wildcard - match any depth at or beyond current level
                     return@forEachIndexed
                 }
                 "+" -> {
-                    // Single-level wildcard - just check depth
-                    // Level can be anything, no filter needed
+                    // Single-level wildcard - any value at this position
+                    // Don't add a filter - document may have the field or not
                 }
                 else -> {
-                    // Exact level match
-                    filters.add(Filters.eq("topic_levels.L$index", level))
+                    // Exact level match - try both new and old schema
+                    if (index < MAX_FIXED_TOPIC_LEVELS) {
+                        filters.add(Filters.eq(FIXED_TOPIC_COLUMN_NAMES[index], level))
+                    } else {
+                        val arrayIndex = index - MAX_FIXED_TOPIC_LEVELS
+                        filters.add(Filters.eq("topic_r.$arrayIndex", level))
+                    }
                 }
             }
         }
 
-        // If pattern doesn't end with #, ensure exact depth match
-        if (!topicPattern.endsWith("#")) {
-            filters.add(Filters.eq("topic_levels.depth", levels.size))
+        // If pattern has no wildcards, ensure exact depth match
+        // For browse queries with +, don't constrain depth - let Kotlin group by browse level
+        if (!topicPattern.contains("+") && !topicPattern.contains("#")) {
+            if (levels.size <= MAX_FIXED_TOPIC_LEVELS) {
+                // For patterns with 9 or fewer levels, the next fixed field should be empty
+                // But this may not work with old documents, so only add if we have other filters
+                if (filters.isNotEmpty()) {
+                    filters.add(Filters.eq(FIXED_TOPIC_COLUMN_NAMES[levels.size], ""))
+                }
+            } else {
+                val expectedRestCount = levels.size - MAX_FIXED_TOPIC_LEVELS
+                if (filters.isNotEmpty()) {
+                    filters.add(Filters.eq("topic_r.${expectedRestCount}", null))
+                }
+            }
         }
 
         return if (filters.isEmpty()) {
-            Document() // Match all
+            Document() // Match all - will filter in Kotlin
         } else {
             Filters.and(filters)
         }
@@ -670,8 +754,20 @@ class MessageStoreMongoDB(
 
     override suspend fun createTable(): Boolean {
         return try {
+            // Wait for connection with timeout (max 30 seconds)
+            val startTime = System.currentTimeMillis()
+            val timeoutMs = 30_000L
+
+            while (!isConnected && (System.currentTimeMillis() - startTime) < timeoutMs) {
+                if (database != null) {
+                    // Connection appears ready, break out of wait loop
+                    break
+                }
+                Thread.sleep(100) // Check every 100ms
+            }
+
             if (!isConnected || database == null) {
-                logger.warning("MongoDB not connected, cannot create collection for [$collectionName]")
+                logger.warning("MongoDB not connected after ${System.currentTimeMillis() - startTime}ms, cannot create collection for [$collectionName]")
                 return false
             }
 
