@@ -28,14 +28,20 @@ async function graphqlQuery(query, variables = {}) {
 
 async function loadFlowClasses(){
     const q = `query { flowClasses { name namespace version description nodes { id } connections { fromNode toNode fromOutput toInput } updatedAt } }`;
-    try { const data = await graphqlQuery(q); flowClasses = data.flowClasses||[]; }
+    try { const data = await graphqlQuery(q); flowClasses = data.flowClasses||[]; renderClassesTable(); }
     catch(e){ console.error(e); showNotification('Failed to load flow classes','error'); }
 }
 
 async function loadFlowInstances(){
     const q = `query { flowInstances { name namespace nodeId flowClassId inputMappings { nodeInput } outputMappings { nodeOutput } enabled status { running executionCount errorCount } updatedAt } }`;
-    try { const data = await graphqlQuery(q); flowInstances = data.flowInstances||[]; populateInstanceTypeFilter(); }
-    catch(e){ console.error(e); showNotification('Failed to load flow instances','error'); }
+    try {
+        const data = await graphqlQuery(q);
+        flowInstances = data.flowInstances||[];
+        console.log('Loaded flow instances:', flowInstances.length);
+        populateInstanceTypeFilter();
+        renderInstancesTable();
+    }
+    catch(e){ console.error('Error loading flow instances:', e); showNotification('Failed to load flow instances','error'); }
 }
 
 // ---------------------- Interactions ----------------------
@@ -96,11 +102,19 @@ function renderClassesTable(){
 function renderInstancesTable(){
     const tbody = document.querySelector('#instances-table tbody'); if(!tbody) return;
     let rows = flowInstances.slice();
+    console.log('renderInstancesTable: Total instances:', rows.length);
     // Filter by selected flow class type
-    if(selectedInstanceType) rows = rows.filter(r => r.flowClassId === selectedInstanceType);
+    if(selectedInstanceType) {
+        rows = rows.filter(r => r.flowClassId === selectedInstanceType);
+        console.log('After type filter:', rows.length);
+    }
     // Filter by search text
-    if(filters.instances) rows = rows.filter(r => (r.name+" "+r.namespace+" "+r.flowClassId).toLowerCase().includes(filters.instances));
+    if(filters.instances) {
+        rows = rows.filter(r => (r.name+" "+r.namespace+" "+r.flowClassId).toLowerCase().includes(filters.instances));
+        console.log('After search filter:', rows.length);
+    }
     const { key, dir } = sortState.instances; rows.sort((a,b)=>compareValues(a,b,key,dir));
+    console.log('Final rows to display:', rows.length);
     if(rows.length===0){ tbody.innerHTML='<tr><td colspan="9" style="text-align:center; color:#6c757d;">No flow instances</td></tr>'; return; }
     tbody.innerHTML = rows.map(r=>{
         const startStopBtn = r.enabled
@@ -346,50 +360,6 @@ async function loadFlowClasses() {
     } catch (error) {
         console.error('Error loading flow classes:', error);
         showNotification('Failed to load flow classes', 'error');
-    }
-}
-
-async function loadFlowInstances() {
-    const query = `
-        query {
-            flowInstances {
-                name
-                namespace
-                nodeId
-                flowClassId
-                inputMappings {
-                    nodeInput
-                    type
-                    value
-                }
-                outputMappings {
-                    nodeOutput
-                    topic
-                }
-                variables
-                enabled
-                status {
-                    running
-                    lastExecution
-                    executionCount
-                    errorCount
-                    lastError
-                    subscribedTopics
-                }
-                createdAt
-                updatedAt
-                isOnCurrentNode
-            }
-        }
-    `;
-
-    try {
-        const data = await graphqlQuery(query);
-        flowInstances = data.flowInstances || [];
-        renderFlowInstances();
-    } catch (error) {
-        console.error('Error loading flow instances:', error);
-        showNotification('Failed to load flow instances', 'error');
     }
 }
 
