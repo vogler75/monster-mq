@@ -255,7 +255,7 @@ async function importDevices() {
 
         // Call GraphQL mutation to import devices
         const query = `
-            mutation ImportDevices($configs: [JSON!]!) {
+            mutation ImportDevices($configs: [DeviceInput!]!) {
                 importDevices(configs: $configs) {
                     success
                     imported

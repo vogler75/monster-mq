@@ -1319,14 +1319,36 @@ extend type Mutation {
     jdbcLogger: JDBCLoggerMutations!
 }
 
+# Input type for Device Configuration Import
+# Accepts the same fields as the Device output type to allow importing exported files
+input DeviceInput {
+    # Unique device name (required)
+    name: String!
+    # Device namespace for MQTT topics (required)
+    namespace: String!
+    # Cluster node assignment (required)
+    nodeId: String!
+    # Device-specific configuration as JSON (optional - can be empty object)
+    config: JSON
+    # Whether the device is enabled (will be ignored - always imported as disabled)
+    enabled: Boolean
+    # Device type (OPCUA_CLIENT, MQTT_CLIENT, MQTT_SERVER, KAFKA_CLIENT, etc)
+    type: String
+    # When the device was created (ignored on import - will be set to current time)
+    createdAt: String
+    # When the device was last updated (ignored on import - will be set to current time)
+    updatedAt: String
+}
+
 # Extend Mutations for Device Management
 extend type Mutation {
-    # Import devices from a JSON array
+    # Import devices from a list of Device configurations
     # Supports bulk import of device configurations for backup restoration or migration
+    # All imported devices are automatically set to enabled=false for safety
     # Returns import result with statistics and any errors
     importDevices(
         # Array of device configurations to import
-        configs: [JSON!]!
+        configs: [DeviceInput!]!
     ): ImportDeviceConfigResult!
 }
 

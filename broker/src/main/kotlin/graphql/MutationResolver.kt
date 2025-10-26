@@ -299,7 +299,12 @@ class MutationResolver(
                 return@DataFetcher future
             }
 
-            deviceStore.importConfigs(configs).onComplete { result ->
+            // Force enabled=false for all imported devices (safety: prevent accidental activation)
+            val configsWithDisabled = configs.map { config ->
+                config.toMutableMap().apply { put("enabled", false) }
+            }
+
+            deviceStore.importConfigs(configsWithDisabled).onComplete { result ->
                 if (result.succeeded()) {
                     val importResult = result.result()
                     val resultMap = mapOf(
