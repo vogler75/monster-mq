@@ -47,6 +47,7 @@ class ArchiveGroup(
     private val lastValRetentionStr: String? = null,
     private val archiveRetentionStr: String? = null,
     private val purgeIntervalStr: String? = null,
+    private val maxMemoryEntries: Long? = null,
     private val databaseConfig: JsonObject
 ) : AbstractVerticle() {
 
@@ -128,8 +129,7 @@ class ArchiveGroup(
                 if (storeReady) {
                     logger.info("ArchiveGroup [$name] started successfully - LastValueStore is ready")
 
-                    // Start retention scheduling for LastVal store now that it's ready
-                    startLastValRetentionScheduling()
+                    // LastVal store uses automatic LRU eviction, no scheduling needed
 
                     startPromise.complete()
 
@@ -209,7 +209,7 @@ class ArchiveGroup(
                 callback(true)
             }
             MessageStoreType.MEMORY -> {
-                val store = MessageStoreMemory(storeName)
+                val store = MessageStoreMemory(storeName, maxMemoryEntries)
                 lastValStore = store
                 val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onComplete { result ->
@@ -233,7 +233,7 @@ class ArchiveGroup(
             MessageStoreType.HAZELCAST -> {
                 if (!Monster.isClustered()) {
                     logger.warning("Hazelcast store type requested for [$storeName] but clustering is not enabled. Falling back to MEMORY store. Use -cluster flag to enable Hazelcast.")
-                    val store = MessageStoreMemory(storeName)
+                    val store = MessageStoreMemory(storeName, maxMemoryEntries)
                     lastValStore = store
                     val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                     vertx.deployVerticle(store, options).onComplete { result ->
@@ -279,7 +279,7 @@ class ArchiveGroup(
                             }
                         } else {
                             logger.warning("Hazelcast store type requested for [$storeName] but cluster manager is not available. Falling back to MEMORY store.")
-                            val store = MessageStoreMemory(storeName)
+                            val store = MessageStoreMemory(storeName, maxMemoryEntries)
                             lastValStore = store
                             val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                             vertx.deployVerticle(store, options).onComplete { result ->
@@ -575,20 +575,6 @@ class ArchiveGroup(
         }
     }
 
-    private fun startLastValRetentionScheduling() {
-        // Schedule store purge if configured
-        if (lastValStore != null && lastValRetentionMs != null && purgeIntervalMs != null) {
-            val timerId = vertx.setPeriodic(purgeIntervalMs) { _ ->
-                purgeLastValStore()
-            }
-            timers.add(timerId)
-
-            logger.info("Scheduled LastVal purge for [$name] every ${purgeIntervalMs}ms with retention ${lastValRetentionMs}ms")
-        } else {
-            logger.fine { "LastVal retention scheduling not configured for [$name] - store: ${lastValStore != null}, retention: $lastValRetentionMs, interval: $purgeIntervalMs" }
-        }
-    }
-
     private fun startArchiveRetentionScheduling() {
         // Schedule archive purge if configured
         if (archiveStore != null && archiveRetentionMs != null && purgeIntervalMs != null) {
@@ -611,51 +597,6 @@ class ArchiveGroup(
             vertx.cancelTimer(timerId)
         }
         timers.clear()
-    }
-
-    private fun purgeLastValStore() {
-        val retentionMs = lastValRetentionMs ?: return
-        val messageStore = lastValStore ?: return
-
-        // Use cluster-wide distributed lock to ensure only one node performs purging
-        val lockName = "purge-lock-$name-LastVal"
-        val sharedData = vertx.sharedData()
-
-        sharedData.getLockWithTimeout(lockName, 30000).onComplete { lockResult ->
-            if (lockResult.succeeded()) {
-                val lock = lockResult.result()
-                logger.fine { "Acquired purge lock for LastVal store [$name] - starting purge" }
-
-                vertx.executeBlocking(Callable<PurgeResult> {
-                    val olderThan = Instant.now().minusMillis(retentionMs)
-                    logger.fine { "Starting LastVal purge for [$name] - removing messages older than $olderThan" }
-
-                    messageStore.purgeOldMessages(olderThan)
-                }).onComplete { asyncResult ->
-                    // Always release the lock
-                    lock.release()
-
-                    if (asyncResult.succeeded()) {
-                        val result = asyncResult.result()
-                        if (result.deletedCount > 0 || result.elapsedTimeMs > 30000) {
-                            logger.info("LastVal purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms")
-                        } else {
-                            logger.fine { "LastVal purge for [$name] completed: deleted ${result.deletedCount} messages in ${result.elapsedTimeMs}ms" }
-                        }
-
-                        // Warn if purge takes too long
-                        if (result.elapsedTimeMs > 30000) {
-                            logger.warning("LastVal purge for [$name] took ${result.elapsedTimeMs}ms - consider adjusting purge interval or retention period")
-                        }
-                    } else {
-                        logger.severe("Error during LastVal purge for [$name]: ${asyncResult.cause()?.message}")
-                    }
-                }
-            } else {
-                // Lock acquisition failed - another node is likely purging or lock timed out
-                logger.fine { "Could not acquire purge lock for LastVal store [$name] - skipping purge (likely another cluster node is purging)" }
-            }
-        }
     }
 
     private fun purgeArchiveStore() {
@@ -727,6 +668,21 @@ class ArchiveGroup(
             val archiveRetentionMs = DurationParser.parse(archiveRetentionStr)
             val purgeIntervalMs = DurationParser.parse(purgeIntervalStr)
 
+            // Detect if LastValRetention is size-based (ends with "k") or time-based
+            val maxMemoryEntries = if (lastValRetentionStr.endsWith("k")) {
+                lastValRetentionMs  // Already parsed as count (e.g., "50k" → 50000)
+            } else {
+                // Time-based retention detected (e.g., "7d", "1h") but memory store doesn't support it
+                if (lastValType == MessageStoreType.MEMORY) {
+                    throw IllegalArgumentException(
+                        "Archive group '$name' uses MEMORY LastValType but LastValRetention '$lastValRetentionStr' is time-based. " +
+                        "Memory store requires size-based retention (e.g., '50k' for 50,000 entries). " +
+                        "Use 'LastValRetention: \"50k\"' format instead, or switch to a persistent store (POSTGRES, CRATEDB, MONGODB, SQLITE)."
+                    )
+                }
+                null  // Other store types (HAZELCAST, POSTGRES, etc.) use time-based retention
+            }
+
             val payloadFormat = PayloadFormat.parse(config.getString("PayloadFormat", "DEFAULT"))
 
             return ArchiveGroup(
@@ -742,6 +698,7 @@ class ArchiveGroup(
                 lastValRetentionStr = lastValRetentionStr,
                 archiveRetentionStr = archiveRetentionStr,
                 purgeIntervalStr = purgeIntervalStr,
+                maxMemoryEntries = maxMemoryEntries,
                 databaseConfig = databaseConfig
             )
         }
