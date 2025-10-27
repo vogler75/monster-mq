@@ -6,6 +6,13 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Detect architecture and set tag suffix
+ARCH=$(uname -m)
+ARCH_SUFFIX=""
+if [ "$ARCH" = "aarch64" ]; then
+    ARCH_SUFFIX="-arm64"
+fi
+
 # Parse command line arguments
 TESTING=false
 PUBLISH_MODE="ask"  # can be "ask", "yes", or "no"
@@ -68,18 +75,18 @@ cp -r ../broker/target/dependencies target/
 
 # Build Docker image
 if [ "$TESTING" = true ]; then
-    docker build -t rocworks/monstermq:testing .
+    docker build -t rocworks/monstermq:testing$ARCH_SUFFIX .
 else
-    docker build -t rocworks/monstermq:$version -t rocworks/monstermq:latest .
+    docker build -t rocworks/monstermq:$version$ARCH_SUFFIX -t rocworks/monstermq:latest$ARCH_SUFFIX .
 fi
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Docker image built successfully${NC}"
     if [ "$TESTING" = true ]; then
-        echo -e "${GREEN}  - rocworks/monstermq:testing${NC}"
+        echo -e "${GREEN}  - rocworks/monstermq:testing${ARCH_SUFFIX}${NC}"
     else
-        echo -e "${GREEN}  - rocworks/monstermq:${version}${NC}"
-        echo -e "${GREEN}  - rocworks/monstermq:latest${NC}"
+        echo -e "${GREEN}  - rocworks/monstermq:${version}${ARCH_SUFFIX}${NC}"
+        echo -e "${GREEN}  - rocworks/monstermq:latest${ARCH_SUFFIX}${NC}"
     fi
 
     # Handle publishing based on mode
@@ -99,19 +106,19 @@ if [ $? -eq 0 ]; then
     if [ "$SHOULD_PUSH" = true ]; then
         echo -e "${YELLOW}Pushing Docker image to Docker Hub...${NC}"
         if [ "$TESTING" = true ]; then
-            docker push rocworks/monstermq:testing
+            docker push rocworks/monstermq:testing$ARCH_SUFFIX
         else
-            docker push rocworks/monstermq:latest
-            docker push rocworks/monstermq:$version
+            docker push rocworks/monstermq:latest$ARCH_SUFFIX
+            docker push rocworks/monstermq:$version$ARCH_SUFFIX
         fi
         echo -e "${GREEN}✓ Docker image pushed successfully${NC}"
     else
         echo -e "${YELLOW}Docker image not pushed. To push later, run:${NC}"
         if [ "$TESTING" = true ]; then
-            echo "  docker push rocworks/monstermq:testing"
+            echo "  docker push rocworks/monstermq:testing$ARCH_SUFFIX"
         else
-            echo "  docker push rocworks/monstermq:latest"
-            echo "  docker push rocworks/monstermq:$version"
+            echo "  docker push rocworks/monstermq:latest$ARCH_SUFFIX"
+            echo "  docker push rocworks/monstermq:$version$ARCH_SUFFIX"
         fi
     fi
 else
