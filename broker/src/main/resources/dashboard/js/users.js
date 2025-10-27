@@ -529,6 +529,11 @@ class UserManager {
         const selectAllBtn = document.getElementById('select-all-acl-btn');
         const selectedCount = document.getElementById('selected-count');
 
+        // Guard: if there are no ACL rules, these elements won't exist
+        if (!selectAllCheckbox || !deleteSelectedBtn || !selectedCount || checkboxes.length === 0) {
+            return;
+        }
+
         const updateDeleteButton = () => {
             const checkedBoxes = document.querySelectorAll('.acl-rule-checkbox:checked');
             selectedCount.textContent = checkedBoxes.length;
