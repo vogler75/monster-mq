@@ -614,7 +614,7 @@ class ArchiveGroup(
 
                 vertx.executeBlocking(Callable<PurgeResult> {
                     val olderThan = Instant.now().minusMillis(retentionMs)
-                    logger.info { "Starting Archive purge for [$name] - removing messages older than $olderThan" }
+                    logger.fine { "Starting Archive purge for [$name] - removing messages older than $olderThan" }
 
                     messageArchive.purgeOldMessages(olderThan)
                 }).onComplete { asyncResult ->
