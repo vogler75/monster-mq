@@ -11,11 +11,25 @@ import io.vertx.core.json.JsonArray
 import java.time.Instant
 import java.util.concurrent.Callable
 
-class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessageStore {
+class MessageStoreMemory(
+    private val name: String,
+    private val maxMemoryEntries: Long? = null
+): AbstractVerticle(), IMessageStore {
     private val logger = Utils.getLogger(this::class.java, name)
 
     private val index = TopicTree<Void, Void>()
-    private val store = mutableMapOf<String, BrokerMessage>()
+
+    // Use LinkedHashMap with LRU eviction if maxMemoryEntries is set, otherwise use unlimited HashMap
+    private val store = if (maxMemoryEntries != null && maxMemoryEntries > 0) {
+        object : LinkedHashMap<String, BrokerMessage>(16, 0.75f, true) {
+            // true = access-order (LRU mode): most recently accessed entries stay at the end
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BrokerMessage>): Boolean {
+                return size > maxMemoryEntries
+            }
+        }
+    } else {
+        mutableMapOf<String, BrokerMessage>()
+    }
 
     private val addAddress = EventBusAddresses.Store.add(name)
     private val delAddress = EventBusAddresses.Store.delete(name)
@@ -71,40 +85,10 @@ class MessageStoreMemory(private val name: String): AbstractVerticle(), IMessage
     }
     
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
-        val startTime = System.currentTimeMillis()
-        val topicsToDelete = mutableListOf<String>()
-        var checkedCount = 0
-        
-        logger.fine { "Starting purge for [$name] - removing messages older than $olderThan" }
-        
-        // Iterate through all messages and collect topics to delete
-        // Process in batches to avoid blocking for too long
-        val iterator = store.entries.iterator()
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            checkedCount++
-            
-            if (entry.value.time.isBefore(olderThan)) {
-                topicsToDelete.add(entry.key)
-            }
-            
-            // Log progress every 100,000 items
-            if (checkedCount % 100000 == 0) {
-                logger.fine { "Purge progress for [$name]: checked $checkedCount items, found ${topicsToDelete.size} to delete" }
-            }
-        }
-        
-        // Delete the collected topics
-        if (topicsToDelete.isNotEmpty()) {
-            delAll(topicsToDelete)
-        }
-        
-        val elapsedTimeMs = System.currentTimeMillis() - startTime
-        val result = PurgeResult(topicsToDelete.size, elapsedTimeMs)
-        
-        logger.fine { "Purge completed for [$name]: deleted ${result.deletedCount} of $checkedCount messages in ${result.elapsedTimeMs}ms" }
-        
-        return result
+        // No-op: LRU eviction in LinkedHashMap handles cleanup automatically.
+        // If maxMemoryEntries is set, old entries are evicted when size exceeds the limit,
+        // making time-based purging unnecessary.
+        return PurgeResult(0, 0)
     }
 
     override fun dropStorage(): Boolean {

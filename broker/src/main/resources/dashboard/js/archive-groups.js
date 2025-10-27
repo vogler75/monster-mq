@@ -52,6 +52,31 @@ class ArchiveGroupsManager {
             e.preventDefault();
             this.saveArchiveGroup();
         });
+
+        // Update lastValRetention help text based on LastValType selection
+        const lastValTypeSelect = document.getElementById('lastValType');
+        if (lastValTypeSelect) {
+            lastValTypeSelect.addEventListener('change', (e) => {
+                this.updateLastValRetentionHelp(e.target.value);
+            });
+        }
+    }
+
+    updateLastValRetentionHelp(lastValType) {
+        const helpDiv = document.querySelector('label[for="lastValRetention"] + input + .help-text') ||
+                       document.querySelector('[for="lastValRetention"]').parentElement.querySelector('.help-text');
+
+        if (!helpDiv) return;
+
+        if (lastValType === 'MEMORY') {
+            helpDiv.textContent = 'Size-based format required for MEMORY store (e.g., 50k, 100000k = number of entries)';
+        } else if (lastValType === 'NONE') {
+            helpDiv.textContent = 'No retention needed for NONE store';
+        } else if (['POSTGRES', 'CRATEDB', 'MONGODB', 'SQLITE', 'HAZELCAST'].includes(lastValType)) {
+            helpDiv.textContent = 'Time-based format (e.g., 7d, 24h, 60m, 1y)';
+        } else {
+            helpDiv.textContent = 'Size-based (MEMORY): 50k, 100000k | Time-based (others): 7d, 24h, 60m';
+        }
     }
 
     async loadArchiveGroups() {
@@ -342,6 +367,30 @@ class ArchiveGroupsManager {
         if (!name || !topicFilterText || !lastValType || !archiveType) {
             this.showError('Please fill in all required fields');
             return;
+        }
+
+        // Validate lastValRetention format with MEMORY store
+        if (lastValType === 'MEMORY' && lastValRetention) {
+            // Check if retention is time-based (ends with d, h, m, s, w, M, y)
+            if (/^[0-9]+(d|h|m|s|w|M|y)$/.test(lastValRetention)) {
+                this.showError(
+                    `MEMORY store does not support time-based retention ("${lastValRetention}").\n\n` +
+                    `Use size-based format instead, e.g., "50k" or "100000k" (number of entries).\n\n` +
+                    `Or switch to a persistent store (POSTGRES, CRATEDB, MONGODB, SQLITE) to use time-based retention.`
+                );
+                return;
+            }
+            // Check if it's size-based (ends with k)
+            if (!lastValRetention.endsWith('k')) {
+                this.showError(
+                    `MEMORY store requires size-based retention format.\n\n` +
+                    `Use format like "50k" or "100000k" where k = 1,000 entries.\n\n` +
+                    `Examples:\n` +
+                    `- 50k = keep last 50,000 entries\n` +
+                    `- 100k = keep last 100,000 entries`
+                );
+                return;
+            }
         }
 
         // Parse topic filters

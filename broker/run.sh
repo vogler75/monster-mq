@@ -103,4 +103,5 @@ if [ "$DEV_MODE" = true ]; then
 fi
 
 # Start MonsterMQ
+echo java $JAVA_OPTS -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt $DEV_OPTS "${REMAINING_ARGS[@]}"
 java $JAVA_OPTS -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt $DEV_OPTS "${REMAINING_ARGS[@]}"
