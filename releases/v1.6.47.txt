@@ -1,0 +1,10 @@
+Release v1.6.47
+Built from commit: 2e6aff8
+Date: 2025-10-27 20:00:23
+
+Changes since v1.6.46:
+---
+2e6aff8 Merge branch 'fix/issue-41-acl-editing'
+76f1a56 Fix ACL list editing error when user has no rules
+4c6a28f Added arm64 image build support
+3a72021 Update ArchiveGroup.kt
