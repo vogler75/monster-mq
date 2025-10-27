@@ -1,0 +1,26 @@
+Release v1.6.46
+Built from commit: 75dbc87
+Date: 2025-10-27 07:24:36
+
+Changes since v1.6.45:
+---
+75dbc87 Implement LRU-based memory store to replace time-based purging (#40)
+46872cf Rename topicIndexSize to subscriptionCount in metrics
+a3015a7 Simplify session node filter and GraphQL query
+bb3e822 Remove redundant archive group retrieval log
+76ed931 Update device import to use DeviceInput and force disabled
+8f81a36 Improve flow instance loading and table rendering
+05e764d Change config column type to VARCHAR in DeviceConfigStoreCrateDB
+76e78fd Add payload format support to message stores
+de14494 Improve batch insert error handling in MessageStoreCrateDB
+c5e9ea2 Merge pull request #35 from vogler75/fix/34-mongodb-configstore-init
+6d91951 Add explicit transaction management to MessageStoreCrateDB
+6db78ad Migrate CrateDB schema to use JSON strings
+d822de1 Refactor topic matching and config store initialization
+b90e220 Remove verbose logging from message browsing
+965e3bc Optimize MongoDB topic matching and indexing
+106253f Improve topic depth matching and MongoDB connection wait
+e2bcbe8 Add commit guidelines and fix MongoDB document fields
+1f42433 Remove verbose SessionHandler log messages
+2d87b3b Fix #34: MongoDB ConfigStore initialization - use correct config keys
+3aaad56 Fix #34: Improve MongoDB ConfigStore initialization error messages
