@@ -137,7 +137,12 @@ const VisualFlow = (() => {
       };
     }
 
-    state.nodes.push({ id, type, name: type+'_'+state.nodes.length, config, inputs:[...def.defaultInputs], outputs:[...def.defaultOutputs], language:'javascript', position:{ x:120 + (state.nodes.length*30)%400, y:120 + Math.floor(state.nodes.length/10)*100 }});
+    const nodeObj = { id, type, name: type+'_'+state.nodes.length, config, inputs:[...def.defaultInputs], outputs:[...def.defaultOutputs], position:{ x:120 + (state.nodes.length*30)%400, y:120 + Math.floor(state.nodes.length/10)*100 }};
+    // Only add language field for code execution nodes
+    if(type === 'function' || type === 'timer') {
+      nodeObj.language = 'javascript';
+    }
+    state.nodes.push(nodeObj);
     selectNode(id);
     renderAll();
     refreshConnectionHelper();
@@ -426,13 +431,19 @@ const VisualFlow = (() => {
     const input={
       name, namespace, version,
       description: qs('#fc-description').value.trim()||null,
-      nodes: state.nodes.map(n=>({
-        id:n.id, type:n.type, name:n.name,
-        config: n.config||{},  // Preserve full config object for all node types
-        inputs:n.inputs, outputs:n.outputs,
-        language:n.language||'javascript',
-        position: n.position? { x:n.position.x, y:n.position.y }: null
-      })),
+      nodes: state.nodes.map(n=>{
+        const nodeObj = {
+          id:n.id, type:n.type, name:n.name,
+          config: n.config||{},  // Preserve full config object for all node types
+          inputs:n.inputs, outputs:n.outputs,
+          position: n.position? { x:n.position.x, y:n.position.y }: null
+        };
+        // Only include language for code execution nodes
+        if(n.type === 'function' || n.type === 'timer') {
+          nodeObj.language = n.language || 'javascript';
+        }
+        return nodeObj;
+      }),
       connections: state.connections.map(c=>({
         fromNode:c.fromNode, fromOutput:c.fromOutput,
         toNode:c.toNode, toInput:c.toInput

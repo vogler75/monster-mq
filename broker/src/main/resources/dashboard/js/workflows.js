@@ -1,7 +1,7 @@
 /**
  * MonsterMQ Workflows List Page (Refactored)
  * Table-based listing of Flow Classes & Flow Instances.
- * Editing moved to workflows-edit.html + workflows-edit.js.
+ * Editing moved to workflows-visual.html for Flow Classes.
  */
 
 let flowClasses = [];
@@ -92,8 +92,7 @@ function renderClassesTable(){
         <td style="text-align:right;">${r.connections.length}</td>
         <td>${formatDateTime(r.updatedAt)}</td>
           <td><div style="display:flex; gap:.4rem;">
-              <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=class&name=${encodeURIComponent(r.name)}'">Edit</button>
-              <button class="btn-action btn-visual" onclick="location.href='/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Visual</button>
+              <button class="btn-action btn-visual" onclick="location.href='/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Edit</button>
               <button class="btn-action btn-delete" onclick="listPageDeleteFlowClass('${escapeHtml(r.name)}')">Delete</button>
           </div></td>
     </tr>`).join('');
@@ -131,7 +130,6 @@ function renderInstancesTable(){
         <td>${formatDateTime(r.updatedAt)}</td>
     <td><div style="display:flex; gap:.4rem;">
         ${startStopBtn}
-        <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=instance&name=${encodeURIComponent(r.name)}'">Edit</button>
         <button class="btn-action btn-delete" onclick="listPageDeleteFlowInstance('${escapeHtml(r.name)}')">Delete</button>
     </div></td>
     </tr>`; }).join('');
