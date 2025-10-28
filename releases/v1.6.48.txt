@@ -1,0 +1,9 @@
+Release v1.6.48
+Built from commit: 92f4920
+Date: 2025-10-28 23:37:33
+
+Changes since v1.6.47:
+---
+92f4920 Remove legacy workflows edit page and script
+f392445 Improve entity property extraction for JDBC results
+d980699 Add database and timer node support to flow engine
