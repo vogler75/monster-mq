@@ -66,10 +66,11 @@ class JdbcManager {
             }
             obj is List<*> -> obj.map { convertToJsonSerializable(it) }
             else -> {
-                // Handle Neo4j objects by extracting their properties
-                val className = obj.javaClass.name
-                if (className.contains("neo4j") || className.contains("Neo4j")) {
-                    extractNeo4jObjectProperties(obj)
+                // Try generic entity extraction first (works with Neo4j, graph databases, etc.)
+                val extracted = extractEntityProperties(obj)
+                // If entity extraction returned a map with properties, use it
+                if (extracted is Map<*, *> && extracted.isNotEmpty()) {
+                    extracted
                 } else {
                     // Use Jackson to convert other complex objects
                     try {
@@ -86,38 +87,106 @@ class JdbcManager {
     }
 
     /**
-     * Extract properties from Neo4j objects (Node, Relationship, Record, etc.)
+     * Extract properties from entity-like objects (works with Neo4j, graph databases, etc.)
+     * Uses reflection to call common entity methods: id(), identity(), labels(), properties(), asMap(), etc.
+     * This is database-agnostic and works with any object that exposes entity-like methods.
      */
-    private fun extractNeo4jObjectProperties(obj: Any): Any? {
+    private fun extractEntityProperties(obj: Any): Any? {
         return try {
             val result = mutableMapOf<String, Any?>()
             val javaClass = obj.javaClass
 
-            // Get all methods and extract property values
-            javaClass.methods.forEach { method ->
+            // Try to extract common entity properties using various method names
+            // This works generically with any object that exposes entity-like methods
+            val methodNamesToTry = listOf(
+                "id" to "identity",
+                "identity" to "identity",
+                "getId" to "identity",
+                "getIdentity" to "identity",
+                "elementId" to "elementId",
+                "getElementId" to "elementId"
+            )
+
+            for ((methodName, resultKey) in methodNamesToTry) {
                 try {
-                    // Skip certain methods
-                    if (method.name.startsWith("get") && method.parameterCount == 0 &&
-                        !method.name.endsWith("Class") && method.returnType != Void.TYPE) {
-                        val value = method.invoke(obj)
-                        val propertyName = method.name.removePrefix("get").replaceFirstChar { it.lowercase() }
-                        result[propertyName] = convertToJsonSerializable(value)
+                    val method = javaClass.getMethod(methodName)
+                    method.isAccessible = true
+                    val value = method.invoke(obj)
+                    if (value != null) {
+                        result[resultKey] = value
                     }
+                } catch (e: NoSuchMethodException) {
+                    // Method doesn't exist, continue to next
                 } catch (e: Exception) {
-                    // Skip properties that can't be accessed
+                    // Skip on other errors
                 }
             }
 
-            // If we extracted properties, return the map; otherwise try Jackson
+            // Try to extract labels/types
+            val labelMethodNames = listOf("labels", "getLabels", "types", "getTypes")
+            for (methodName in labelMethodNames) {
+                try {
+                    val method = javaClass.getMethod(methodName)
+                    method.isAccessible = true
+                    val value = method.invoke(obj)
+                    if (value is Collection<*>) {
+                        result["labels"] = value.toList()
+                        break
+                    }
+                } catch (e: NoSuchMethodException) {
+                    // Method doesn't exist, continue
+                } catch (e: Exception) {
+                    // Skip on other errors
+                }
+            }
+
+            // Try to extract properties as Map
+            val propertyMethodNames = listOf("properties", "getProperties", "asMap", "toMap")
+            for (methodName in propertyMethodNames) {
+                try {
+                    val method = javaClass.getMethod(methodName)
+                    method.isAccessible = true
+                    val propsValue = method.invoke(obj)
+                    if (propsValue is Map<*, *>) {
+                        @Suppress("UNCHECKED_CAST")
+                        val propsMap = propsValue as Map<String, Any?>
+                        result["properties"] = convertToJsonSerializable(propsMap)
+                        break
+                    }
+                } catch (e: NoSuchMethodException) {
+                    // Method doesn't exist, continue
+                } catch (e: Exception) {
+                    // Skip on other errors
+                }
+            }
+
+            // If we extracted some entity properties, return the map
             if (result.isNotEmpty()) {
                 result
             } else {
-                val jsonStr = objectMapper.writeValueAsString(obj)
-                objectMapper.readValue(jsonStr, Map::class.java)
+                // Fallback to generic getter extraction for plain objects
+                javaClass.methods.forEach { method ->
+                    try {
+                        if (method.name.startsWith("get") && method.parameterCount == 0 &&
+                            !method.name.endsWith("Class") && method.returnType != Void.TYPE) {
+                            val value = method.invoke(obj)
+                            val propertyName = method.name.removePrefix("get").replaceFirstChar { it.lowercase() }
+                            result[propertyName] = convertToJsonSerializable(value)
+                        }
+                    } catch (e: Exception) {
+                        // Skip properties that can't be accessed
+                    }
+                }
+
+                if (result.isNotEmpty()) {
+                    result
+                } else {
+                    obj.toString()
+                }
             }
         } catch (e: Exception) {
-            logger.fine("Could not extract Neo4j object properties: ${e.message}")
-            obj.toString()
+            logger.fine("Could not extract entity properties: ${e.message}")
+            emptyMap<String, Any?>()
         }
     }
 
@@ -168,7 +237,9 @@ class JdbcManager {
                 while (resultSet.next()) {
                     val row = mutableListOf<Any?>()
                     for (i in 1..columnCount) {
-                        row.add(convertToJsonSerializable(resultSet.getObject(i)))
+                        val obj = resultSet.getObject(i)
+                        logger.fine("Column $i (${metaData.getColumnName(i)}): type=${obj?.javaClass?.name}, value=$obj")
+                        row.add(convertToJsonSerializable(obj))
                     }
                     result.add(JsonArray(row))
                 }
