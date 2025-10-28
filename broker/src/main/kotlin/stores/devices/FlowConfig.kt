@@ -283,3 +283,103 @@ data class TopicValue(
         }
     }
 }
+
+/**
+ * JDBC Database connection configuration
+ * Driver is automatically inferred from JDBC URL scheme
+ */
+data class DatabaseConnectionConfig(
+    val name: String,
+    val jdbcUrl: String,
+    val username: String,
+    val password: String,
+    val connectionTimeout: Long = 30000,
+    val maxPoolSize: Int = 10,
+    val minIdle: Int = 2
+) {
+    /**
+     * Get the JDBC driver class name inferred from the URL
+     */
+    fun getDriverClassName(): String {
+        return when {
+            jdbcUrl.contains("postgresql") -> "org.postgresql.Driver"
+            jdbcUrl.contains("mysql") -> "com.mysql.cj.jdbc.Driver"
+            jdbcUrl.contains("neo4j") -> "org.neo4j.jdbc.Neo4jDriver"
+            else -> "org.postgresql.Driver"  // Default fallback
+        }
+    }
+
+    fun toJsonObject(): JsonObject {
+        return JsonObject()
+            .put("name", name)
+            .put("jdbcUrl", jdbcUrl)
+            .put("username", username)
+            .put("password", password)
+            .put("connectionTimeout", connectionTimeout)
+            .put("maxPoolSize", maxPoolSize)
+            .put("minIdle", minIdle)
+    }
+
+    companion object {
+        fun fromJsonObject(json: JsonObject): DatabaseConnectionConfig {
+            return DatabaseConnectionConfig(
+                name = json.getString("name"),
+                jdbcUrl = json.getString("jdbcUrl"),
+                username = json.getString("username"),
+                password = json.getString("password"),
+                connectionTimeout = json.getLong("connectionTimeout", 30000),
+                maxPoolSize = json.getInteger("maxPoolSize", 10),
+                minIdle = json.getInteger("minIdle", 2)
+            )
+        }
+    }
+}
+
+/**
+ * Connection lifecycle mode for Database nodes
+ */
+enum class DatabaseConnectionMode {
+    PER_TRIGGER,      // Open and close connection with each execution
+    FLOW_INSTANCE     // Open when flow starts, close when flow stops
+}
+
+enum class DatabaseOperationType {
+    QUERY,      // SELECT, MATCH, etc. - returns result rows
+    MUTATION    // INSERT, UPDATE, DELETE, CREATE, etc. - returns affected rows count
+}
+
+/**
+ * Database node configuration stored in node.config
+ * Supports both inline JDBC details and reference to named connection
+ */
+data class DatabaseNodeConfig(
+    val driverClassName: String? = null,  // Optional: help with JDBC URL validation
+    val sqlStatement: String? = null,  // Pre-configured SQL (null means dynamic)
+    val operationType: DatabaseOperationType = DatabaseOperationType.QUERY,  // User-selected type
+    val connectionMode: DatabaseConnectionMode = DatabaseConnectionMode.PER_TRIGGER,
+    val healthCheckInterval: Long = 60000,  // Milliseconds, 0 = disabled
+    val enableDynamicSql: Boolean = false   // Allow SQL from input trigger
+) {
+    fun toJsonObject(): JsonObject {
+        return JsonObject()
+            .put("driverClassName", driverClassName)
+            .put("sqlStatement", sqlStatement)
+            .put("operationType", operationType.name)
+            .put("connectionMode", connectionMode.name)
+            .put("healthCheckInterval", healthCheckInterval)
+            .put("enableDynamicSql", enableDynamicSql)
+    }
+
+    companion object {
+        fun fromJsonObject(json: JsonObject): DatabaseNodeConfig {
+            return DatabaseNodeConfig(
+                driverClassName = json.getString("driverClassName"),
+                sqlStatement = json.getString("sqlStatement"),
+                operationType = DatabaseOperationType.valueOf(json.getString("operationType", "QUERY")),
+                connectionMode = DatabaseConnectionMode.valueOf(json.getString("connectionMode", "PER_TRIGGER")),
+                healthCheckInterval = json.getLong("healthCheckInterval", 60000),
+                enableDynamicSql = json.getBoolean("enableDynamicSql", false)
+            )
+        }
+    }
+}

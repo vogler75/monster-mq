@@ -86,6 +86,14 @@ class FlowInstanceExecutor(
         try {
             logger.info("[${instanceConfig.name}] Stopping flow instance")
 
+            // Cancel all running timers
+            nodeStates.values.forEach { nodeState ->
+                val timerId = nodeState["timerId"] as? Long
+                if (timerId != null) {
+                    vertx.cancelTimer(timerId)
+                }
+            }
+
             // Unsubscribe from MQTT topics
             unsubscribeFromTopics()
 
@@ -243,6 +251,14 @@ class FlowInstanceExecutor(
                     logger.fine { "[${instanceConfig.name}]   Executing function node..." }
                     executeFunctionNode(node, inputs, nodeState, flowVars)
                 }
+                "database" -> {
+                    logger.fine { "[${instanceConfig.name}]   Executing database node..." }
+                    executeDatabaseNode(node, inputs, nodeState)
+                }
+                "timer" -> {
+                    logger.fine { "[${instanceConfig.name}]   Setting up timer node..." }
+                    setupTimerNode(node, nodeState)
+                }
                 else -> {
                     logger.warning("[${instanceConfig.name}] Unsupported node type: ${node.type}")
                 }
@@ -362,7 +378,8 @@ class FlowInstanceExecutor(
                     logger.fine { "[${instanceConfig.name}]   Script called outputs.send($portName, $value)" }
                     handleNodeOutput(node.id, portName, value)
                 },
-                instanceName = instanceConfig.name
+                instanceName = instanceConfig.name,
+                flowClass = flowClass
             )
         }.onComplete { asyncResult ->
             if (asyncResult.succeeded()) {
@@ -385,6 +402,195 @@ class FlowInstanceExecutor(
                 errorCount++
                 lastError = asyncResult.cause()?.message
             }
+        }
+    }
+
+    /**
+     * Setup a timer node that periodically publishes to output
+     */
+    private fun setupTimerNode(
+        node: FlowNode,
+        nodeState: MutableMap<String, Any>
+    ) {
+        try {
+            val frequency = node.config.getLong("frequency", 1000)
+            val value = node.config.getString("value", "tick")
+            val autoStart = node.config.getBoolean("autoStart", true)
+
+            if (frequency <= 0) {
+                logger.warning("[${instanceConfig.name}] Timer node ${node.id} has invalid frequency: $frequency")
+                handleNodeOutput(node.id, "error", "Invalid frequency: must be > 0")
+                return
+            }
+
+            // Check if timer is already running
+            val timerId = nodeState["timerId"] as? Long
+            if (timerId != null) {
+                logger.fine { "[${instanceConfig.name}] Timer ${node.id} is already running" }
+                return
+            }
+
+            // Only start if autoStart is true
+            if (!autoStart) {
+                logger.fine { "[${instanceConfig.name}] Timer ${node.id} configured but autoStart is false" }
+                return
+            }
+
+            // Start periodic timer
+            val newTimerId = vertx.setPeriodic(frequency) {
+                logger.fine { "[${instanceConfig.name}] Timer ${node.id} tick" }
+                try {
+                    // Parse value - try as JSON first, fallback to string
+                    val outputValue = try {
+                        io.vertx.core.json.JsonObject(value)
+                    } catch (e: Exception) {
+                        value
+                    }
+                    handleNodeOutput(node.id, "tick", outputValue)
+                } catch (e: Exception) {
+                    logger.severe("[${instanceConfig.name}] Timer node ${node.id} error: ${e.message}")
+                    handleNodeOutput(node.id, "error", e.message ?: "Unknown error")
+                }
+            }
+
+            // Store timer ID for cleanup
+            nodeState["timerId"] = newTimerId
+            logger.info("[${instanceConfig.name}] Timer ${node.id} started with frequency ${frequency}ms")
+
+        } catch (e: Exception) {
+            logger.severe("[${instanceConfig.name}] Error setting up timer node ${node.id}: ${e.message}")
+            e.printStackTrace()
+            errorCount++
+            lastError = e.message
+            handleNodeOutput(node.id, "error", e.message ?: "Unknown error")
+        }
+    }
+
+    /**
+     * Execute a database node
+     */
+    private fun executeDatabaseNode(
+        node: FlowNode,
+        inputs: Map<String, FlowScriptEngine.InputValue>,
+        nodeState: MutableMap<String, Any>
+    ) {
+        try {
+            logger.fine { "[${instanceConfig.name}]   Reading database node config..." }
+
+            val dbNodeConfig = DatabaseNodeConfig.fromJsonObject(node.config)
+            logger.fine { "[${instanceConfig.name}]   DB Node Config: $dbNodeConfig" }
+
+            // Get the JDBC manager (singleton)
+            val jdbcManager = JdbcManagerHolder.getInstance()
+
+            // For now, we'll use a simple database connection config from the node config
+            // In a real implementation, this would be loaded from a database config store
+            val jdbcUrl = node.config.getString("jdbcUrl")
+            val username = node.config.getString("username", "")
+            val password = node.config.getString("password", "")
+
+            logger.fine { "[${instanceConfig.name}]   JDBC URL: $jdbcUrl" }
+            logger.fine { "[${instanceConfig.name}]   Username: $username" }
+
+            if (jdbcUrl.isBlank()) {
+                logger.warning("[${instanceConfig.name}] Database node ${node.id} has no jdbcUrl configured")
+                handleNodeOutput(node.id, "error", "No database URL configured")
+                return
+            }
+
+            // Driver is automatically inferred from the JDBC URL
+            val connectionConfig = DatabaseConnectionConfig(
+                name = node.id,
+                jdbcUrl = jdbcUrl,
+                username = username,
+                password = password
+            )
+
+            logger.fine { "[${instanceConfig.name}]   Connection config: $connectionConfig" }
+
+            // Get SQL statement (either from config or from input)
+            var sqlStatement = dbNodeConfig.sqlStatement
+
+            if (sqlStatement.isNullOrBlank() && dbNodeConfig.enableDynamicSql) {
+                // Look for SQL in inputs
+                sqlStatement = inputs["sql"]?.value?.toString()
+            }
+
+            if (sqlStatement.isNullOrBlank()) {
+                logger.warning("[${instanceConfig.name}] Database node ${node.id} has no SQL statement")
+                handleNodeOutput(node.id, "error", "No SQL statement provided")
+                return
+            }
+
+            logger.fine { "[${instanceConfig.name}]   Executing SQL: $sqlStatement" }
+
+            // Get arguments if provided
+            val argumentsInput = inputs["arguments"]?.value
+            val arguments = when (argumentsInput) {
+                is List<*> -> argumentsInput
+                is JsonObject -> argumentsInput.getMap().values.toList()
+                else -> emptyList<Any?>()
+            }
+
+            logger.fine { "[${instanceConfig.name}]   Arguments: $arguments" }
+
+            // Execute the query
+            vertx.executeBlocking<Any> {
+                try {
+                    // Determine execution type based on user-selected operation type
+                    val isQuery = dbNodeConfig.operationType == DatabaseOperationType.QUERY
+
+                    if (isQuery) {
+                        // Execute QUERY (returns result rows)
+                        val queryResult = jdbcManager.executeQuery(connectionConfig, sqlStatement, arguments)
+                        if (queryResult.isSuccess) {
+                            val resultData = queryResult.getOrNull()
+                            logger.fine { "[${instanceConfig.name}]   Query result: ${resultData?.size()} rows" }
+                            resultData
+                        } else {
+                            val exception = queryResult.exceptionOrNull()
+                            logger.severe("[${instanceConfig.name}]   Query error: ${exception?.message}")
+                            throw exception ?: Exception("Query execution failed")
+                        }
+                    } else {
+                        // Execute DML statement
+                        val dmlResult = jdbcManager.executeDml(connectionConfig, sqlStatement, arguments)
+                        if (dmlResult.isSuccess) {
+                            val affectedRows = dmlResult.getOrNull() ?: 0
+                            logger.fine { "[${instanceConfig.name}]   DML result: $affectedRows rows affected" }
+                            JsonObject()
+                                .put("affectedRows", affectedRows)
+                                .put("success", true)
+                        } else {
+                            val exception = dmlResult.exceptionOrNull()
+                            logger.severe("[${instanceConfig.name}]   DML error: ${exception?.message}")
+                            throw exception ?: Exception("DML execution failed")
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.severe("[${instanceConfig.name}]   Database execution error: ${e.message}")
+                    throw e
+                }
+            }.onComplete { asyncResult ->
+                if (asyncResult.succeeded()) {
+                    val result = asyncResult.result()
+                    logger.fine { "[${instanceConfig.name}]   Database execution completed" }
+                    handleNodeOutput(node.id, "result", result)
+                } else {
+                    logger.severe("[${instanceConfig.name}]   Database execution async error: ${asyncResult.cause()?.message}")
+                    asyncResult.cause()?.printStackTrace()
+                    errorCount++
+                    lastError = asyncResult.cause()?.message
+                    handleNodeOutput(node.id, "error", asyncResult.cause()?.message ?: "Unknown error")
+                }
+            }
+
+        } catch (e: Exception) {
+            logger.severe("[${instanceConfig.name}] Error executing database node ${node.id}: ${e.message}")
+            e.printStackTrace()
+            errorCount++
+            lastError = e.message
+            handleNodeOutput(node.id, "error", e.message ?: "Unknown error")
         }
     }
 

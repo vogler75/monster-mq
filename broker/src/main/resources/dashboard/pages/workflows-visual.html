@@ -809,6 +809,7 @@
           <p>Select a node to edit its properties</p>
         </div>
         <div id="node-form" style="display:none;">
+          <!-- Common fields for all node types -->
           <div class="form-group">
             <label class="form-label">Node ID</label>
             <input id="n-id" placeholder="Unique node identifier">
@@ -833,33 +834,112 @@
             <input id="n-outputs" placeholder="output1, output2">
             <span class="inline-hint">Comma-separated port names</span>
           </div>
-          <div class="form-group">
-            <label class="form-label">
-              Script
-              <button onclick="openHelp('script-api')" class="help-badge" style="border: none; cursor: pointer;" title="Help: Script API">?</button>
-              <button class="btn btn-secondary btn-small" style="float: right; padding: 0.25rem 0.5rem; font-size: 0.7rem;" onclick="VisualFlow.openScriptInWindow()" title="Open full-screen script editor">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"></path>
-                </svg>
-                Expand Editor
-              </button>
-            </label>
-            <div class="code-editor">
-              <div class="code-editor-header">
-                <span class="code-editor-lang">JavaScript</span>
-                <button class="btn btn-secondary btn-small" style="margin-left: auto; padding: 0.25rem 0.5rem; font-size: 0.65rem;" onclick="VisualFlow.validateScript()" title="Validate JavaScript syntax">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="20 6 9 17 4 12"></polyline>
+
+          <!-- Function Node Form -->
+          <div id="node-form-function" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">
+                Script
+                <button onclick="openHelp('script-api')" class="help-badge" style="border: none; cursor: pointer;" title="Help: Script API">?</button>
+                <button class="btn btn-secondary btn-small" style="float: right; padding: 0.25rem 0.5rem; font-size: 0.7rem;" onclick="VisualFlow.openScriptInWindow()" title="Open full-screen script editor">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"></path>
                   </svg>
-                  Validate
+                  Expand Editor
                 </button>
+              </label>
+              <div class="code-editor">
+                <div class="code-editor-header">
+                  <span class="code-editor-lang">JavaScript</span>
+                  <button class="btn btn-secondary btn-small" style="margin-left: auto; padding: 0.25rem 0.5rem; font-size: 0.65rem;" onclick="VisualFlow.validateScript()" title="Validate JavaScript syntax">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    Validate
+                  </button>
+                </div>
+                <div class="code-editor-body">
+                  <textarea id="n-script" placeholder="// Write your node logic here..." spellcheck="false"></textarea>
+                </div>
+                <div id="script-validation" style="display: none; padding: 0.5rem 0.75rem; border-top: 1px solid var(--border-color); font-size: 0.7rem;"></div>
               </div>
-              <div class="code-editor-body">
-                <textarea id="n-script" placeholder="// Write your node logic here..." spellcheck="false"></textarea>
-              </div>
-              <div id="script-validation" style="display: none; padding: 0.5rem 0.75rem; border-top: 1px solid var(--border-color); font-size: 0.7rem;"></div>
             </div>
           </div>
+
+          <!-- Database Node Form -->
+          <div id="node-form-database" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">Database Driver</label>
+              <select id="n-driver-class">
+                <option value="">-- Select Database Type --</option>
+                <option value="org.postgresql.Driver">PostgreSQL</option>
+                <option value="com.mysql.cj.jdbc.Driver">MySQL</option>
+                <option value="org.neo4j.jdbc.Neo4jDriver">Neo4j</option>
+              </select>
+              <span class="inline-hint">Optional: helps validate JDBC URL format</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">JDBC URL</label>
+              <input id="n-jdbc-url" placeholder="jdbc:postgresql://localhost:5432/mydb">
+              <span class="inline-hint">Examples: jdbc:postgresql://host/db, jdbc:mysql://host/db, jdbc:neo4j://host:7687/neo4j</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Username</label>
+              <input id="n-username" placeholder="database_user">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Password</label>
+              <input id="n-password" type="password" placeholder="password">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Operation Type</label>
+              <select id="n-operation-type">
+                <option value="QUERY">Query (returns rows)</option>
+                <option value="MUTATION">Mutation (returns affected rows)</option>
+              </select>
+              <span class="inline-hint">Select QUERY for SELECT, MATCH, etc. or MUTATION for INSERT, UPDATE, DELETE, CREATE, etc.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">SQL Statement</label>
+              <textarea id="n-sql-statement" placeholder="SELECT * FROM users WHERE id = ?" style="min-height: 80px; font-family: monospace;"></textarea>
+              <span class="inline-hint">Leave empty if using dynamic SQL from input</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Connection Mode</label>
+              <select id="n-connection-mode">
+                <option value="PER_TRIGGER">Per Trigger (open/close each time)</option>
+                <option value="FLOW_INSTANCE">Flow Instance (keep open)</option>
+              </select>
+            </div>
+            <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+              <input type="checkbox" id="n-dynamic-sql" style="width: 20px; height: 20px; cursor: pointer;">
+              <label class="form-label" style="margin: 0;">Enable Dynamic SQL (from input)</label>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Health Check Interval (ms)</label>
+              <input id="n-health-check" type="number" placeholder="60000" value="60000">
+              <span class="inline-hint">0 to disable</span>
+            </div>
+          </div>
+
+          <!-- Timer Node Form -->
+          <div id="node-form-timer" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">Frequency (milliseconds)</label>
+              <input id="n-frequency" type="number" placeholder="1000" value="1000">
+              <span class="inline-hint">How often to publish (e.g., 1000 = every second)</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Value to Publish</label>
+              <input id="n-timer-value" placeholder='tick' value="tick">
+              <span class="inline-hint">Can be plain text or JSON (e.g., {"count":1})</span>
+            </div>
+            <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+              <input type="checkbox" id="n-auto-start" style="width: 20px; height: 20px; cursor: pointer;" checked>
+              <label class="form-label" style="margin: 0;">Auto Start when flow starts</label>
+            </div>
+          </div>
+
           <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
             <button class="btn btn-primary btn-small" style="flex: 1;" onclick="VisualFlow.saveNode()">Update</button>
             <button class="btn btn-danger btn-small" onclick="VisualFlow.deleteNode()">Delete</button>

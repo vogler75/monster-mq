@@ -1,6 +1,10 @@
 package at.rocworks.flowengine
 
 import at.rocworks.Utils
+import at.rocworks.stores.devices.FlowClass
+import at.rocworks.stores.devices.FlowNode
+import at.rocworks.stores.devices.DatabaseConnectionConfig
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import org.graalvm.polyglot.Context
 import java.util.logging.Logger
@@ -41,6 +45,7 @@ class FlowScriptEngine {
      * @param flowVariables Flow-wide variables
      * @param onOutput Callback when script calls outputs.send(portName, value)
      * @param instanceName Optional flow instance name for log prefixing
+     * @param flowClass Optional flow class definition for database node access
      * @return ExecutionResult with success status and any errors
      */
     fun execute(
@@ -50,7 +55,8 @@ class FlowScriptEngine {
         state: MutableMap<String, Any>,
         flowVariables: Map<String, Any>,
         onOutput: (portName: String, value: Any?) -> Unit,
-        instanceName: String? = null
+        instanceName: String? = null,
+        flowClass: FlowClass? = null
     ): ExecutionResult {
         try {
             val bindings = context.getBindings(normalizeLanguage(language))
@@ -103,6 +109,19 @@ class FlowScriptEngine {
             // Console helper
             val consoleProxy = ConsoleProxy(instanceName)
             bindings.putMember("console", consoleProxy)
+
+            // Database nodes helper (for accessing database nodes from scripts)
+            if (flowClass != null) {
+                val databasesProxy = DatabasesProxy(flowClass)
+                // Create a dynamic proxy object that allows accessing databases by name
+                val dbsWrapper = object {
+                    @Suppress("unused")
+                    fun get(nodeId: String): Any? {
+                        return databasesProxy.get(nodeId)
+                    }
+                }
+                bindings.putMember("dbs", dbsWrapper)
+            }
 
             // Get or compile the script function
             val scriptFunction = compiledScripts.getOrPut(script) {
@@ -275,5 +294,159 @@ class FlowScriptEngine {
         }
 
         fun getLogs(): List<String> = logs.toList()
+    }
+
+    /**
+     * Proxy for accessing database nodes from scripts
+     * Provides access to all database nodes in the flow with fluent API:
+     * flow.dbs.<databaseNodeName>.open()
+     * flow.dbs.<databaseNodeName>.execute(sql, arguments)
+     * flow.dbs.<databaseNodeName>.close()
+     */
+    class DatabasesProxy(private val flowClass: FlowClass) {
+        private val databaseNodes: Map<String, FlowNode> = flowClass.nodes
+            .filter { it.type == "database" }
+            .associateBy { it.id }
+
+        @Suppress("unused")
+        fun get(nodeId: String): DatabaseNodeProxy? {
+            val node = databaseNodes[nodeId] ?: return null
+            return DatabaseNodeProxy(node)
+        }
+
+        inner class DatabaseNodeProxy(private val node: FlowNode) {
+            private var connection: java.sql.Connection? = null
+            private val jdbcManager = JdbcManagerHolder.getInstance()
+
+            @Suppress("unused")
+            fun open(): Boolean {
+                return try {
+                    val jdbcUrl = node.config.getString("jdbcUrl")
+                    val username = node.config.getString("username", "")
+                    val password = node.config.getString("password", "")
+
+                    if (jdbcUrl.isBlank()) {
+                        logger.warning("Database node ${node.id} has no jdbcUrl configured")
+                        return false
+                    }
+
+                    // Driver is automatically inferred from the JDBC URL
+                    val connectionConfig = DatabaseConnectionConfig(
+                        name = node.id,
+                        jdbcUrl = jdbcUrl,
+                        username = username,
+                        password = password
+                    )
+
+                    connection = jdbcManager.getConnection(connectionConfig)
+                    true
+                } catch (e: Exception) {
+                    logger.severe("Failed to open database connection for ${node.id}: ${e.message}")
+                    false
+                }
+            }
+
+            @Suppress("unused")
+            fun execute(sql: String, arguments: Any? = null): JsonObject {
+                return try {
+                    if (connection == null) {
+                        open()
+                    }
+
+                    if (connection == null) {
+                        return JsonObject()
+                            .put("success", false)
+                            .put("error", "Database connection not available")
+                    }
+
+                    // Parse arguments
+                    val args = when (arguments) {
+                        is List<*> -> arguments
+                        is JsonObject -> arguments.getMap().values.toList()
+                        null -> emptyList<Any?>()
+                        else -> listOf(arguments)
+                    }
+
+                    // Prepare statement
+                    val preparedStmt = connection!!.prepareStatement(sql)
+                    args.forEachIndexed { index, arg ->
+                        preparedStmt.setObject(index + 1, arg)
+                    }
+
+                    // Determine if it's SELECT or DML
+                    val trimmedSql = sql.trim().uppercase()
+                    val isSelect = trimmedSql.startsWith("SELECT")
+
+                    val result = if (isSelect) {
+                        val resultSet = preparedStmt.executeQuery()
+                        val metaData = resultSet.metaData
+                        val columnCount = metaData.columnCount
+                        val result = JsonObject()
+
+                        // Get column info
+                        val columnNames = mutableListOf<Any>()
+                        val columnTypes = mutableListOf<Any>()
+
+                        for (i in 1..columnCount) {
+                            columnNames.add(metaData.getColumnName(i))
+                            columnTypes.add(metaData.getColumnTypeName(i))
+                        }
+
+                        val rows = mutableListOf<Any>()
+                        rows.add(columnNames)
+                        rows.add(columnTypes)
+
+                        while (resultSet.next()) {
+                            val row = mutableListOf<Any?>()
+                            for (i in 1..columnCount) {
+                                row.add(resultSet.getObject(i))
+                            }
+                            rows.add(row)
+                        }
+
+                        resultSet.close()
+                        preparedStmt.close()
+
+                        result.put("success", true)
+                            .put("rows", io.vertx.core.json.JsonArray(rows))
+                    } else {
+                        val affectedRows = preparedStmt.executeUpdate()
+                        preparedStmt.close()
+
+                        JsonObject()
+                            .put("success", true)
+                            .put("affectedRows", affectedRows)
+                    }
+
+                    result
+                } catch (e: Exception) {
+                    logger.severe("Database execution error for ${node.id}: ${e.message}")
+                    JsonObject()
+                        .put("success", false)
+                        .put("error", e.message ?: "Unknown error")
+                }
+            }
+
+            @Suppress("unused")
+            fun close(): Boolean {
+                return try {
+                    connection?.close()
+                    connection = null
+                    true
+                } catch (e: Exception) {
+                    logger.severe("Failed to close database connection for ${node.id}: ${e.message}")
+                    false
+                }
+            }
+
+            @Suppress("unused")
+            fun isConnected(): Boolean {
+                return try {
+                    connection != null && !connection!!.isClosed && connection!!.isValid(5)
+                } catch (e: Exception) {
+                    false
+                }
+            }
+        }
     }
 }

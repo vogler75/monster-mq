@@ -142,86 +142,65 @@ class FlowQueries(
                         "icon" to "code"
                     ),
                     mapOf(
-                        "type" to "switch",
-                        "category" to "function",
-                        "description" to "Route messages based on conditions",
-                        "defaultInputs" to listOf("in"),
-                        "defaultOutputs" to listOf<String>(),
+                        "type" to "database",
+                        "category" to "integration",
+                        "description" to "Execute SQL queries against JDBC databases",
+                        "defaultInputs" to listOf("trigger", "sql", "arguments"),
+                        "defaultOutputs" to listOf("result", "error"),
                         "configSchema" to mapOf(
-                            "property" to mapOf(
+                            "jdbcUrl" to mapOf(
                                 "type" to "string",
-                                "description" to "Property to evaluate"
+                                "description" to "JDBC connection URL (e.g., jdbc:postgresql://localhost:5432/db, jdbc:mysql://localhost/db, jdbc:neo4j:bolt://localhost:7687)"
                             ),
-                            "rules" to mapOf(
-                                "type" to "array",
-                                "description" to "Routing rules"
-                            )
-                        ),
-                        "icon" to "fork"
-                    ),
-                    mapOf(
-                        "type" to "change",
-                        "category" to "function",
-                        "description" to "Modify message properties",
-                        "defaultInputs" to listOf("in"),
-                        "defaultOutputs" to listOf("out"),
-                        "configSchema" to mapOf(
-                            "rules" to mapOf(
-                                "type" to "array",
-                                "description" to "Transformation rules"
-                            )
-                        ),
-                        "icon" to "edit"
-                    ),
-                    mapOf(
-                        "type" to "template",
-                        "category" to "function",
-                        "description" to "Format strings using templates",
-                        "defaultInputs" to listOf<String>(),
-                        "defaultOutputs" to listOf("result"),
-                        "configSchema" to mapOf(
-                            "template" to mapOf(
+                            "username" to mapOf(
                                 "type" to "string",
-                                "description" to "Template string with {{variables}}"
+                                "description" to "Database username"
                             ),
-                            "format" to mapOf(
+                            "password" to mapOf(
                                 "type" to "string",
-                                "enum" to listOf("plain", "json", "yaml")
-                            )
-                        ),
-                        "icon" to "file-text"
-                    ),
-                    mapOf(
-                        "type" to "delay",
-                        "category" to "function",
-                        "description" to "Delay, throttle, or debounce messages",
-                        "defaultInputs" to listOf("in"),
-                        "defaultOutputs" to listOf("out"),
-                        "configSchema" to mapOf(
-                            "type" to mapOf(
-                                "type" to "string",
-                                "enum" to listOf("delay", "throttle", "debounce")
+                                "description" to "Database password"
                             ),
-                            "timeout" to mapOf(
+                            "sqlStatement" to mapOf(
+                                "type" to "string",
+                                "description" to "SQL query or DML statement (optional, can be provided via input)"
+                            ),
+                            "connectionMode" to mapOf(
+                                "type" to "string",
+                                "enum" to listOf("PER_TRIGGER", "FLOW_INSTANCE"),
+                                "description" to "Connection lifecycle mode"
+                            ),
+                            "enableDynamicSql" to mapOf(
+                                "type" to "boolean",
+                                "description" to "Allow SQL statement to be provided via input"
+                            ),
+                            "healthCheckInterval" to mapOf(
                                 "type" to "number",
-                                "description" to "Delay in milliseconds"
+                                "description" to "Connection health check interval in milliseconds (0 to disable)"
+                            )
+                        ),
+                        "icon" to "database"
+                    ),
+                    mapOf(
+                        "type" to "timer",
+                        "category" to "source",
+                        "description" to "Periodically publish a value based on a frequency",
+                        "defaultInputs" to listOf<String>(),
+                        "defaultOutputs" to listOf("tick"),
+                        "configSchema" to mapOf(
+                            "frequency" to mapOf(
+                                "type" to "number",
+                                "description" to "Frequency in milliseconds between publications (e.g., 1000 for every second)"
+                            ),
+                            "value" to mapOf(
+                                "type" to "string",
+                                "description" to "Optional fixed value to publish on each tick (JSON or plain text)"
+                            ),
+                            "autoStart" to mapOf(
+                                "type" to "boolean",
+                                "description" to "Start timer automatically when flow instance starts"
                             )
                         ),
                         "icon" to "clock"
-                    ),
-                    mapOf(
-                        "type" to "filter",
-                        "category" to "function",
-                        "description" to "Filter messages based on conditions",
-                        "defaultInputs" to listOf("in"),
-                        "defaultOutputs" to listOf("pass", "block"),
-                        "configSchema" to mapOf(
-                            "condition" to mapOf(
-                                "type" to "string",
-                                "description" to "Filter condition"
-                            )
-                        ),
-                        "icon" to "filter"
                     )
                 )
 

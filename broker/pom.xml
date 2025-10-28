@@ -171,6 +171,20 @@
             <version>42.7.7</version>
         </dependency>
 
+        <!-- MySQL JDBC Driver -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>8.2.0</version>
+        </dependency>
+
+        <!-- Neo4j JDBC Driver -->
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-jdbc</artifactId>
+            <version>6.1.0</version>
+        </dependency>
+
         <!-- MongoDB Driver -->
         <dependency>
             <groupId>org.mongodb</groupId>

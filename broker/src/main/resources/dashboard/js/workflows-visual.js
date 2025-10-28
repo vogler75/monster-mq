@@ -50,10 +50,10 @@ const VisualFlow = (() => {
   }
 
   async function loadNodeTypes(){
-    const q = `query { flowNodeTypes { type defaultInputs defaultOutputs icon } }`;
+    const q = `query { flowNodeTypes { type category description defaultInputs defaultOutputs icon configSchema } }`;
     const data = await gql(q);
-    // limit to function nodes for now
-    state.nodeTypes = (data.flowNodeTypes||[]).filter(nt=>nt.type==='function');
+    // Include all node types (function, database, etc.)
+    state.nodeTypes = (data.flowNodeTypes||[]);
   }
 
   async function loadFlowClassIfNeeded(){
@@ -63,11 +63,13 @@ const VisualFlow = (() => {
     // If it errors in practice, adjust schema query accordingly.
     let data;
     try {
-      const q = `query($name:String){ flowClasses(name:$name){ name namespace version description nodes { id type name config { script } inputs outputs language position { x y } } connections { fromNode fromOutput toNode toInput } } }`;
+      // Try fetching config as an object with all fields
+      const q = `query($name:String){ flowClasses(name:$name){ name namespace version description nodes { id type name config inputs outputs language position { x y } } connections { fromNode fromOutput toNode toInput } } }`;
       data = await gql(q,{name: state.className});
     } catch(err){
-      console.warn('Query with config { script } failed, retrying with raw config:', err.message);
-      const qFallback = `query($name:String){ flowClasses(name:$name){ name namespace version description nodes { id type name config inputs outputs language position { x y } } connections { fromNode fromOutput toNode toInput } } }`;
+      console.warn('Query with config failed:', err.message);
+      // Fallback: fetch without config details
+      const qFallback = `query($name:String){ flowClasses(name:$name){ name namespace version description nodes { id type name inputs outputs language position { x y } } connections { fromNode fromOutput toNode toInput } } }`;
       data = await gql(qFallback,{name: state.className});
     }
     const list = data.flowClasses||[];
@@ -75,8 +77,8 @@ const VisualFlow = (() => {
     if(!state.flowClass){ notify('Flow class not found','error'); return; }
     state.nodes = state.flowClass.nodes.map(n=>({
       ...n,
-      // Normalize config to ensure script present
-      config: (n.config && typeof n.config === 'object') ? { script: n.config.script||'' } : { script: '' },
+      // Normalize config to preserve all fields (not just script)
+      config: (n.config && typeof n.config === 'object') ? n.config : {},
       position: n.position||{x:100,y:100}
     }));
     state.connections = state.flowClass.connections.map(c=>({ ...c }));
@@ -110,7 +112,32 @@ const VisualFlow = (() => {
   function addNodeType(type){
     const def = state.nodeTypes.find(nt=>nt.type===type); if(!def) return;
     const id = 'node_'+Date.now();
-    state.nodes.push({ id, type, name: type+'_'+state.nodes.length, config:{ script:''}, inputs:[...def.defaultInputs], outputs:[...def.defaultOutputs], language:'javascript', position:{ x:120 + (state.nodes.length*30)%400, y:120 + Math.floor(state.nodes.length/10)*100 }});
+
+    // Initialize config based on node type
+    let config = {};
+    if(type === 'function'){
+      config = { script: '' };
+    } else if(type === 'database'){
+      config = {
+        driverClassName: '',
+        jdbcUrl: '',
+        username: '',
+        password: '',
+        operationType: 'QUERY',
+        sqlStatement: '',
+        connectionMode: 'PER_TRIGGER',
+        enableDynamicSql: false,
+        healthCheckInterval: 60000
+      };
+    } else if(type === 'timer'){
+      config = {
+        frequency: 1000,
+        value: 'tick',
+        autoStart: true
+      };
+    }
+
+    state.nodes.push({ id, type, name: type+'_'+state.nodes.length, config, inputs:[...def.defaultInputs], outputs:[...def.defaultOutputs], language:'javascript', position:{ x:120 + (state.nodes.length*30)%400, y:120 + Math.floor(state.nodes.length/10)*100 }});
     selectNode(id);
     renderAll();
     refreshConnectionHelper();
@@ -154,7 +181,26 @@ const VisualFlow = (() => {
     n.name=qs('#n-name').value.trim()||n.id;
     n.inputs=qs('#n-inputs').value.split(',').map(s=>s.trim()).filter(Boolean);
     n.outputs=qs('#n-outputs').value.split(',').map(s=>s.trim()).filter(Boolean);
-    n.config.script=qs('#n-script').value;
+
+    // Save config based on node type
+    if(n.type === 'function'){
+      n.config.script=qs('#n-script').value;
+    } else if(n.type === 'database'){
+      n.config.driverClassName = qs('#n-driver-class')?.value || '';
+      n.config.jdbcUrl = qs('#n-jdbc-url')?.value || '';
+      n.config.username = qs('#n-username')?.value || '';
+      n.config.password = qs('#n-password')?.value || '';
+      n.config.operationType = qs('#n-operation-type')?.value || 'QUERY';
+      n.config.sqlStatement = qs('#n-sql-statement')?.value || '';
+      n.config.connectionMode = qs('#n-connection-mode')?.value || 'PER_TRIGGER';
+      n.config.enableDynamicSql = qs('#n-dynamic-sql')?.checked || false;
+      n.config.healthCheckInterval = parseInt(qs('#n-health-check')?.value || '60000');
+    } else if(n.type === 'timer'){
+      n.config.frequency = parseInt(qs('#n-frequency')?.value || '1000');
+      n.config.value = qs('#n-timer-value')?.value || 'tick';
+      n.config.autoStart = qs('#n-auto-start')?.checked || true;
+    }
+
     renderAll();
     refreshConnectionHelper();
     markDirty();
@@ -262,7 +308,77 @@ const VisualFlow = (() => {
   function deleteConnection(i){ state.connections.splice(i,1); renderAll(); }
 
   // ------------- Node Panel -------------
-  function updateNodePanel(){ const n=currentNode(); const empty=qs('#node-panel-empty'); const form=qs('#node-form'); if(!n){ empty.style.display='block'; form.style.display='none'; return; } empty.style.display='none'; form.style.display='block'; qs('#n-id').value=n.id; qs('#n-name').value=n.name; qs('#n-inputs').value=n.inputs.join(', '); qs('#n-outputs').value=n.outputs.join(', '); qs('#n-script').value=n.config?.script||''; enhanceScriptEditor(); }
+  function updateNodePanel(){
+    const n=currentNode();
+    const empty=qs('#node-panel-empty');
+    const form=qs('#node-form');
+    const funcForm=qs('#node-form-function');
+    const dbForm=qs('#node-form-database');
+
+    if(!n){
+      empty.style.display='block';
+      form.style.display='none';
+      return;
+    }
+
+    empty.style.display='none';
+    form.style.display='block';
+
+    // Common fields
+    qs('#n-id').value=n.id;
+    qs('#n-name').value=n.name;
+    qs('#n-inputs').value=n.inputs.join(', ');
+    qs('#n-outputs').value=n.outputs.join(', ');
+
+    // Show/hide node-type-specific forms
+    const timerForm = qs('#node-form-timer');
+    if(funcForm) funcForm.style.display = n.type === 'function' ? 'block' : 'none';
+    if(dbForm) dbForm.style.display = n.type === 'database' ? 'block' : 'none';
+    if(timerForm) timerForm.style.display = n.type === 'timer' ? 'block' : 'none';
+
+    // Populate function form
+    if(n.type === 'function'){
+      const scriptField = qs('#n-script');
+      if(scriptField){
+        scriptField.value=n.config?.script||'';
+        enhanceScriptEditor();
+      }
+    }
+
+    // Populate database form
+    if(n.type === 'database'){
+      const driverField = qs('#n-driver-class');
+      const jdbcUrlField = qs('#n-jdbc-url');
+      const usernameField = qs('#n-username');
+      const passwordField = qs('#n-password');
+      const operationTypeField = qs('#n-operation-type');
+      const sqlField = qs('#n-sql-statement');
+      const modeField = qs('#n-connection-mode');
+      const dynamicField = qs('#n-dynamic-sql');
+      const healthField = qs('#n-health-check');
+
+      if(driverField) driverField.value = n.config?.driverClassName || '';
+      if(jdbcUrlField) jdbcUrlField.value = n.config?.jdbcUrl || '';
+      if(usernameField) usernameField.value = n.config?.username || '';
+      if(passwordField) passwordField.value = n.config?.password || '';
+      if(operationTypeField) operationTypeField.value = n.config?.operationType || 'QUERY';
+      if(sqlField) sqlField.value = n.config?.sqlStatement || '';
+      if(modeField) modeField.value = n.config?.connectionMode || 'PER_TRIGGER';
+      if(dynamicField) dynamicField.checked = n.config?.enableDynamicSql || false;
+      if(healthField) healthField.value = n.config?.healthCheckInterval || 60000;
+    }
+
+    // Populate timer form
+    if(n.type === 'timer'){
+      const frequencyField = qs('#n-frequency');
+      const timerValueField = qs('#n-timer-value');
+      const autoStartField = qs('#n-auto-start');
+
+      if(frequencyField) frequencyField.value = n.config?.frequency || 1000;
+      if(timerValueField) timerValueField.value = n.config?.value || 'tick';
+      if(autoStartField) autoStartField.checked = n.config?.autoStart !== false;
+    }
+  }
   // Enhance script area after panel update
   function enhanceScriptEditor(){
     const ta=qs('#n-script');
@@ -312,7 +428,7 @@ const VisualFlow = (() => {
       description: qs('#fc-description').value.trim()||null,
       nodes: state.nodes.map(n=>({
         id:n.id, type:n.type, name:n.name,
-        config:{ script:n.config.script||'' },
+        config: n.config||{},  // Preserve full config object for all node types
         inputs:n.inputs, outputs:n.outputs,
         language:n.language||'javascript',
         position: n.position? { x:n.position.x, y:n.position.y }: null
