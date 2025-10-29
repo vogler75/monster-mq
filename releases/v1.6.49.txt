@@ -1,0 +1,26 @@
+Release v1.6.49
+Built from commit: 0a56bd5
+Date: 2025-10-29 16:59:15
+
+Changes since v1.6.48:
+---
+0a56bd5 Persist selected flow class in sessionStorage
+41e351c Add improved navigation and instance controls to workflows UI
+c32ca70 Remove synthetic root node from topic browser
+882a959 Refactor topic browser panel and update tree styles
+078fe7f Update edit button to link to visual workflow page
+a561e94 Add support for static text input mappings in flows
+635831f Add per-instance restart to visual workflow editor
+3059e56 Hide inputs/outputs for timer and database nodes
+cdee605 Refactor timer node initialization and config
+f495c6c Update sidebar collapsed nav-item styles
+3af4e5b Improve sidebar collapsed state styling
+aa88e87 Improve dashboard dev workflow and log viewer UI
+ad63b8f Redirect class editing to visual editor and clean up
+4df8c4a Add restart all instances feature and split editors
+f94d29c Add workflows edit page and refactor workflow JS
+48a8bca Improve sidebar layout and click handling
+0018a52 Hide log viewer when help modal is open
+447f8cb Enhance node palette with SVG icons and improved styles
+5633708 Refactor flow instance loading by selected class
+f4227a8 Improve workflows UI: Click flow class to view instances
