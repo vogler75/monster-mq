@@ -270,12 +270,48 @@ Your node scripts execute in a JavaScript runtime with access to the following g
 
 ### inputs Object
 
-Access input values from MQTT topics or connected nodes:
+**IMPORTANT**: Access input values using the property syntax with `.value`:
 
-- `inputs.<portName>.value` - The actual data value
-- `inputs.<portName>.type` - "topic"
-- `inputs.<portName>.timestamp` - When the data was received (milliseconds)
-- `inputs.<portName>.topic` - Source MQTT topic (for topic inputs)
+```javascript
+// ✓ CORRECT - Use property access with .value
+let temperature = inputs.temp.value;
+let humidity = inputs.humidity.value;
+let payload = inputs.payload.value;
+
+// ✗ WRONG - Do NOT use .get() method
+let temperature = inputs.get('temp');      // ERROR: inputs.get is not a function
+let humidity = inputs.get('humidity');     // ERROR: This will fail!
+```
+
+The `inputs` object provides direct property access to each input port. Each input port has these properties:
+
+- `inputs.<portName>.value` - **The actual data value** (this is what you want!)
+- `inputs.<portName>.type` - Input type, typically "topic"
+- `inputs.<portName>.timestamp` - When the data was received (milliseconds since epoch)
+- `inputs.<portName>.topic` - Source MQTT topic (for topic-based inputs)
+
+**Examples of correct input access:**
+
+```javascript
+// Numeric input
+let temp = parseFloat(inputs.temperature.value);
+
+// String input
+let deviceId = inputs.deviceId.value;
+
+// Object/JSON input
+let sensorData = inputs.payload.value;  // Already parsed as object
+let temperature = sensorData.temp;
+
+// Check if input exists before using
+if (inputs.temperature && inputs.temperature.value !== undefined) {
+    let temp = inputs.temperature.value;
+}
+
+// Access metadata
+console.log("Received from topic:", inputs.temperature.topic);
+console.log("Received at:", new Date(inputs.temperature.timestamp));
+```
 
 ### msg Object
 

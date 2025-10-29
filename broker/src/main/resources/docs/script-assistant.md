@@ -35,17 +35,47 @@ If the context shows "User has selected these lines to modify":
 **Explanation:** Brief description of what changed and why.
 
 ## Best Practices
-- Use the MonsterMQ Script API correctly (refer to workflow.md documentation)
-- Handle errors gracefully
-- Log important operations using `logger.info()` or `logger.error()`
-- Remember that `inputs` is a Map, access values with `inputs.get('portName')`
-- Remember that `outputs` is a Map, send values with `outputs.put('portName', value)`
-- Scripts run in a sandboxed Java/Kotlin environment using GraalVM
+- Use the MonsterMQ Script API correctly (refer to workflow-reference.md documentation)
+- Handle errors gracefully with try-catch blocks
+- Log important operations using `console.log()`, `console.warn()`, or `console.error()`
+- **IMPORTANT**: Access inputs using property syntax: `inputs.portName.value` (NOT `inputs.get()`)
+- Send outputs using: `outputs.send('portName', value)`
+- Scripts run in a JavaScript/GraalVM environment
 - Keep code concise and efficient
 
+## Critical Syntax Rules
+
+### Accessing Inputs (MOST IMPORTANT!)
+```javascript
+// ✓ CORRECT - Property access with .value
+let temperature = inputs.temp.value;
+let payload = inputs.payload.value;
+let humidity = inputs.humidity.value;
+
+// ✗ WRONG - Do NOT use .get() method
+let temperature = inputs.get('temp');  // ERROR: This will fail!
+```
+
+**The inputs object uses JavaScript property access, NOT map methods.**
+
+### Sending Outputs
+```javascript
+// ✓ CORRECT - Use outputs.send(portName, value)
+outputs.send('result', processedData);
+outputs.send('error', errorMessage);
+```
+
+### Accessing Variables
+```javascript
+// ✓ CORRECT - Direct property access
+let threshold = parseFloat(flow.threshold);
+let apiKey = flow.apiKey;
+```
+
 ## Common Tasks
-- Reading from input ports: `const data = inputs.get('payload')`
-- Writing to output ports: `outputs.put('result', processedData)`
-- Accessing flow variables: `flow.getVariable('myVar')`
-- Logging: `logger.info('Processing started')`
-- Publishing MQTT: `mqtt.publish('topic', 'payload')`
+- Reading from input ports: `const data = inputs.payload.value`
+- Numeric input: `const temp = parseFloat(inputs.temperature.value)`
+- Writing to output ports: `outputs.send('result', processedData)`
+- Accessing flow variables: `const threshold = parseFloat(flow.threshold)`
+- Logging: `console.log('Processing started')`
+- Error logging: `console.error('Failed:', error.message)`
