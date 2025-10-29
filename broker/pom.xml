@@ -14,6 +14,7 @@
         <kotlin.compiler.jvmTarget>21</kotlin.compiler.jvmTarget>
         <vertx.version>5.0.5</vertx.version>
         <guava.version>33.5.0-jre</guava.version>
+        <jackson.version>2.18.1</jackson.version>
     </properties>
 
     <repositories>
@@ -22,6 +23,19 @@
             <url>https://repo1.maven.org/maven2/</url>
         </repository>
     </repositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Jackson BOM to ensure consistent versions across all Jackson dependencies -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <sourceDirectory>src/main/kotlin</sourceDirectory>
@@ -242,6 +256,13 @@
             <groupId>com.graphql-java</groupId>
             <artifactId>graphql-java-extended-scalars</artifactId>
             <version>22.0</version>
+        </dependency>
+
+        <!-- Google Generative AI (Gemini) -->
+        <dependency>
+            <groupId>com.google.genai</groupId>
+            <artifactId>google-genai</artifactId>
+            <version>1.24.0</version>
         </dependency>
 
         <!-- BCrypt for password hashing -->

@@ -379,12 +379,16 @@ const FlowEdit = (() => {
 
     const currentScript = scriptEl.value;
     const nodeName = node.name;
+    const inputs = node.inputs ? node.inputs.join(', ') : '';
+    const outputs = node.outputs ? node.outputs.join(', ') : '';
 
     // Open shared modal
     ScriptEditorModal.open({
       title: 'Script Editor',
       subtitle: `Node: ${nodeName}`,
       initialScript: currentScript,
+      inputs: inputs,
+      outputs: outputs,
       onSave: (updatedScript) => {
         scriptEl.value = updatedScript;
         node.config.script = updatedScript;

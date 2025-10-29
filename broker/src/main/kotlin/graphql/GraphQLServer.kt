@@ -67,7 +67,8 @@ class GraphQLServer(
     private val metricsStore: IMetricsStore?,
     private val archiveHandler: ArchiveHandler?,
     private val dashboardPath: String? = null,
-    private val sharedDeviceConfigStore: IDeviceConfigStore? = null
+    private val sharedDeviceConfigStore: IDeviceConfigStore? = null,
+    private val genAiProvider: at.rocworks.genai.IGenAiProvider? = null
 ) {
     companion object {
         private val logger: Logger = Utils.getLogger(GraphQLServer::class.java)
@@ -237,7 +238,8 @@ class GraphQLServer(
             "schema-queries.graphqls",     // Query type definitions
             "schema-mutations.graphqls",   // Mutation type definitions
             "schema-subscriptions.graphqls", // Subscription type definitions
-            "schema-flows.graphqls"        // Flow Engine types and operations
+            "schema-flows.graphqls",       // Flow Engine types and operations
+            "schema-genai.graphqls"        // GenAI integration
         )
 
         return schemaFiles.joinToString("\n") { filename ->
@@ -347,6 +349,9 @@ class GraphQLServer(
         val flowQueries = deviceStore?.let { FlowQueries(vertx, it) }
         val flowMutations = deviceStore?.let { FlowMutations(vertx, it) }
 
+        // Initialize GenAI resolver
+        val genAiResolver = genAiProvider?.let { GenAiResolver(vertx, it) }
+
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
             .scalar(ExtendedScalars.GraphQLLong)
@@ -454,6 +459,20 @@ class GraphQLServer(
                             dataFetcher("flowNodeTypes", resolver.flowNodeTypes())
                         }
                     }
+                    // GenAI queries
+                    .apply {
+                        genAiResolver?.let { resolver ->
+                            dataFetcher("genai", resolver.genai())
+                        }
+                    }
+            }
+            // Register GenAI Query type
+            .type("GenAiQuery") { builder ->
+                builder.apply {
+                    genAiResolver?.let { resolver ->
+                        dataFetcher("ask", resolver.ask())
+                    }
+                }
             }
             // Register mutation resolvers
             .type("Mutation") { builder ->

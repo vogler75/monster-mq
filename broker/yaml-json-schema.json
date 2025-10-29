@@ -287,6 +287,51 @@
         }
       }
     },
+    "GenAI": {
+      "type": "object",
+      "description": "Generative AI integration configuration for JavaScript coding assistance",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Enable GenAI integration for AI-supported JavaScript coding",
+          "default": false
+        },
+        "Provider": {
+          "type": "string",
+          "description": "AI provider to use",
+          "enum": ["gemini", "claude", "openai"],
+          "default": "gemini"
+        },
+        "ApiKey": {
+          "type": "string",
+          "description": "API key for the selected provider (supports environment variable substitution like ${GENAI_API_KEY})"
+        },
+        "Model": {
+          "type": "string",
+          "description": "Optional model name to use (provider-specific, e.g., 'gemini-pro', 'claude-3-opus', 'gpt-4')"
+        },
+        "MaxTokens": {
+          "type": "integer",
+          "description": "Maximum number of tokens in the response",
+          "default": 2048,
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "Temperature": {
+          "type": "number",
+          "description": "Sampling temperature for response generation (0.0 to 2.0, higher = more creative)",
+          "default": 0.7,
+          "minimum": 0.0,
+          "maximum": 2.0
+        },
+        "DocsPath": {
+          "type": "string",
+          "description": "Path to documentation directory containing markdown files for context",
+          "default": "docs"
+        }
+      },
+      "required": ["ApiKey"]
+    },
     "ArchiveGroups": {
       "type": "array",
       "description": "Archive group configurations",

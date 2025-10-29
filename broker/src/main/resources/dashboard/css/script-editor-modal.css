@@ -204,3 +204,129 @@
   border: 1px solid #ffc107;
   color: #ffc107;
 }
+
+/* AI Assistant Panel */
+.script-editor-ai-panel {
+  background: #1a1d28;
+  border-top: 1px solid #2d3139;
+  padding: 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.script-editor-ai-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #14b8a6;
+}
+
+.script-editor-ai-header svg {
+  flex-shrink: 0;
+}
+
+.script-editor-ai-input-area {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.script-editor-ai-input {
+  flex: 1;
+  background: #0f1117;
+  border: 1px solid #2d3139;
+  border-radius: 6px;
+  color: #e8eaed;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.script-editor-ai-input:focus {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.2);
+}
+
+.script-editor-ai-input::placeholder {
+  color: #6b7280;
+}
+
+.script-editor-ai-send {
+  background: #14b8a6;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.script-editor-ai-send:hover:not(:disabled) {
+  background: #0f9688;
+  transform: translateY(-1px);
+}
+
+.script-editor-ai-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.script-editor-ai-send svg {
+  flex-shrink: 0;
+}
+
+.script-editor-ai-feedback {
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  animation: slideIn 0.2s ease;
+}
+
+.script-editor-ai-feedback.loading {
+  background: rgba(107, 114, 128, 0.15);
+  border: 1px solid #6b7280;
+  color: #9ca3af;
+}
+
+.script-editor-ai-feedback.success {
+  background: rgba(20, 184, 166, 0.15);
+  border: 1px solid #14b8a6;
+  color: #14b8a6;
+}
+
+.script-editor-ai-feedback.error {
+  background: rgba(220, 53, 69, 0.15);
+  border: 1px solid #dc3545;
+  color: #dc3545;
+}
+
+.script-editor-ai-feedback.info {
+  background: rgba(124, 58, 237, 0.15);
+  border: 1px solid #7c3aed;
+  color: #a78bfa;
+}
+
+.ai-loading,
+.ai-success-header,
+.ai-error-header,
+.ai-info-header {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.ai-explanation {
+  color: #e8eaed;
+  line-height: 1.5;
+  margin-top: 0.5rem;
+  white-space: pre-wrap;
+}

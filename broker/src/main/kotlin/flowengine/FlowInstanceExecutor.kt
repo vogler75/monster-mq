@@ -630,9 +630,7 @@ class FlowInstanceExecutor(
                 } else {
                     val errorMsg = buildString {
                         append("Database execution failed")
-                        if (sqlStatement != null) {
-                            append("\nSQL: $sqlStatement")
-                        }
+                        append("\nSQL: $sqlStatement")
                         if (arguments.isNotEmpty()) {
                             append("\nArguments: $arguments")
                         }

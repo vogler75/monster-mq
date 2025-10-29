@@ -1,0 +1,49 @@
+# Generative AI Integration Schema
+#
+# Provides AI-assisted JavaScript coding capabilities through the dashboard.
+# Supports querying AI models (Gemini, Claude, OpenAI) for code generation,
+# documentation, and development assistance.
+
+"GenAI response containing the AI-generated content and metadata"
+type GenAiResponse {
+    "The AI-generated text response"
+    response: String!
+
+    "The specific model that generated this response (e.g., 'gemini-pro', 'claude-3-opus')"
+    model: String
+
+    "Error message if the request failed"
+    error: String
+}
+
+"GenAI query interface for AI-supported JavaScript coding"
+type GenAiQuery {
+    """
+    Ask the AI a question with optional context and documentation.
+
+    The prompt parameter is required and contains your question.
+    The context parameter is optional and provides additional background information.
+    The docs parameter is optional and lists documentation files to include as context.
+    """
+    ask(
+        "The main prompt/question for the AI"
+        prompt: String!
+
+        "Optional additional context to help the AI understand your specific use case"
+        context: String
+
+        "Optional list of documentation markdown files to include as context"
+        docs: [String!]
+    ): GenAiResponse!
+}
+
+# Extend the root Query type with GenAI capabilities
+extend type Query {
+    """
+    Access AI-assisted JavaScript coding features.
+
+    Requires GenAI to be enabled in configuration and a valid API key.
+    Returns null if GenAI is disabled or not configured.
+    """
+    genai: GenAiQuery
+}

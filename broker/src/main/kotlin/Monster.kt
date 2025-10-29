@@ -826,6 +826,15 @@ MORE INFO:
                     null to null
                 }
 
+                // GenAI Provider
+                val genAiConfig = configJson.getJsonObject("GenAI", JsonObject())
+                val genAiProvider = try {
+                    at.rocworks.genai.GenAiProviderFactory.create(vertx, genAiConfig).get()
+                } catch (e: Exception) {
+                    logger.warning("Failed to initialize GenAI provider: ${e.message}")
+                    null
+                }
+
                 // GraphQL Server
                 val graphQLConfig = configJson.getJsonObject("GraphQL", JsonObject())
                 val graphQLEnabled = graphQLConfig.getBoolean("Enabled", true)
@@ -845,7 +854,8 @@ MORE INFO:
                         metricsStore,
                         this.archiveHandler,
                         dashboardPath,
-                        deviceConfigStore
+                        deviceConfigStore,
+                        genAiProvider
                     )
                 } else {
                     logger.info("GraphQL server is disabled in configuration")

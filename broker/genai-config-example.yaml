@@ -1,0 +1,67 @@
+# GenAI Configuration Example for MonsterMQ
+# Add this section to your config.yaml to enable AI-supported JavaScript coding
+
+# Enable GraphQL server (required for GenAI to work)
+GraphQL:
+  Enabled: true
+  Port: 4000
+  Path: /graphql
+  CorsEnabled: true
+
+# GenAI Configuration
+GenAI:
+  # Enable GenAI integration
+  Enabled: true
+
+  # AI provider: "gemini", "claude" (future), or "openai" (future)
+  Provider: "gemini"
+
+  # API key for the selected provider
+  # You can use environment variable substitution: ${VARIABLE_NAME}
+  # Set your API key in environment: export GENAI_API_KEY="your-key-here"
+  ApiKey: "${GENAI_API_KEY}"
+
+  # Optional: Specific model to use
+  # Gemini models: gemini-2.5-flash (default), gemini-1.5-pro, etc.
+  Model: "gemini-2.5-flash"
+
+  # Optional: Maximum tokens in response (default: 2048)
+  MaxTokens: 2048
+
+  # Optional: Temperature for response generation (0.0-2.0, default: 0.7)
+  # Higher = more creative, Lower = more focused/deterministic
+  Temperature: 0.7
+
+  # Optional: Path to documentation directory in resources (default: "docs")
+  # Documentation files should be in src/main/resources/docs/
+  DocsPath: "docs"
+
+# Example GraphQL Query
+# Once configured, you can query the GenAI endpoint:
+#
+# query {
+#   genai {
+#     ask(
+#       prompt: "How do I subscribe to MQTT topics using JavaScript?"
+#       docs: ["workflow.md"]
+#     ) {
+#       response
+#       model
+#       error
+#     }
+#   }
+# }
+#
+# With context:
+# query {
+#   genai {
+#     ask(
+#       prompt: "Generate a function to publish temperature data"
+#       context: "I'm using a DHT22 sensor that outputs JSON"
+#       docs: ["javascript-api.md"]
+#     ) {
+#       response
+#       model
+#     }
+#   }
+# }
