@@ -153,24 +153,8 @@ class TopicBrowser {
     }
 
     createRootNode() {
-        // Create a root "Broker" node
-        const rootItem = this.createTreeItem('Broker', 'root', false, true);
-        this.tree.appendChild(rootItem);
-
-        // Create child container for the root
-        const childContainer = document.createElement('ul');
-        childContainer.className = 'tree-children';
-        rootItem.appendChild(childContainer);
-
-        // Load the first level topics under the root
-        this.loadTopicLevel('+', childContainer, '');
-
-        // Auto-expand the root node
-        const rootData = this.treeNodes.get('root');
-        if (rootData) {
-            rootData.toggle.classList.add('expanded');
-            rootData.expanded = true;
-        }
+        // Load the root level topics directly (don't create a synthetic root)
+        this.loadTopicLevel('+', this.tree, '');
     }
 
     async loadTopicLevel(pattern, container, parentPath = '') {
