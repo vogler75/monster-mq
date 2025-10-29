@@ -230,9 +230,12 @@ class SidebarManager {
         const sidebar = document.getElementById('sidebar');
         const sidebarBrand = sidebar ? sidebar.querySelector('.sidebar-brand') : null;
         if (sidebarBrand) {
-            sidebarBrand.addEventListener('click', () => {
-                if (sidebar && sidebar.classList.contains('collapsed')) {
-                    window.toggleSidebar();
+            sidebarBrand.addEventListener('click', (e) => {
+                // Only toggle if clicking directly on the brand, not on nav items
+                if (e.target === sidebarBrand || e.target.closest('.sidebar-brand')) {
+                    if (sidebar && sidebar.classList.contains('collapsed')) {
+                        window.toggleSidebar();
+                    }
                 }
             });
         }
@@ -240,7 +243,9 @@ class SidebarManager {
         // Save sidebar scroll position before navigating (exclude user menu item)
         const navItems = document.querySelectorAll('.nav-item:not(.user-menu-item)');
         navItems.forEach(item => {
-            item.addEventListener('click', () => {
+            item.addEventListener('click', (e) => {
+                // Stop propagation to prevent brand click handler from toggling
+                e.stopPropagation();
                 const sidebarNav = document.getElementById('sidebar-nav');
                 if (sidebarNav) {
                     localStorage.setItem('monstermq_sidebar_scroll', sidebarNav.scrollTop.toString());

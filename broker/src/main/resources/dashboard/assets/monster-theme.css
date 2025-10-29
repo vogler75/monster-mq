@@ -48,8 +48,10 @@ body {
     height: 100vh;
     background: var(--dark-surface);
     border-right: 1px solid var(--dark-border);
-    z-index: 1000;
+    z-index: 10000;
     transition: width 0.3s ease;
+    display: flex;
+    flex-direction: column;
 }
 
 .sidebar.collapsed {
@@ -131,9 +133,17 @@ body {
 
 .sidebar-nav {
     padding: 1rem 0;
-    height: calc(100% - 60px);
+    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
+}
+
+.sidebar-footer {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--dark-border);
+    background: var(--dark-surface);
+    flex-shrink: 0;
+    z-index: 10001;
 }
 
 .nav-section {
