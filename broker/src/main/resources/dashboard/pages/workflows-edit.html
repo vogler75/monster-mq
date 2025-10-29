@@ -8,9 +8,11 @@
         // Redirect to the appropriate editor based on type parameter
         const urlParams = new URLSearchParams(window.location.search);
         const type = urlParams.get('type');
+        const name = urlParams.get('name');
 
         if (type === 'class') {
-            window.location.href = '/pages/workflows-edit-class.html?' + window.location.search.substring(1);
+            // Redirect class edits to the visual editor
+            window.location.href = '/pages/workflows-visual.html?' + window.location.search.substring(1);
         } else if (type === 'instance') {
             window.location.href = '/pages/workflows-edit-instance.html?' + window.location.search.substring(1);
         } else {
