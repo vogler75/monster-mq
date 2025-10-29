@@ -2,8 +2,6 @@ class TopicBrowserSidePanel {
     constructor() {
         this.panel = document.getElementById('topic-browser-panel');
         this.tree = document.getElementById('topic-panel-tree-root');
-        this.dataViewer = document.getElementById('topic-panel-data');
-        this.dataContent = document.getElementById('topic-panel-data-content');
         this.archiveGroupSelect = document.getElementById('topic-panel-archive-group');
         this.toggleButton = document.getElementById('topic-browser-floating-toggle');
         this.resizeHandle = document.getElementById('topic-panel-resize-handle');
@@ -242,29 +240,12 @@ class TopicBrowserSidePanel {
         this.tree.innerHTML = '';
         this.treeNodes.clear();
         this.selectedTopic = null;
-        this.showEmptyDataViewer();
         this.createRootNode();
     }
 
     createRootNode() {
-        // Create a root "Broker" node
-        const rootItem = this.createTreeItem('Broker', 'root', false, true);
-        this.tree.appendChild(rootItem);
-
-        // Create child container for the root
-        const childContainer = document.createElement('ul');
-        childContainer.className = 'tree-children';
-        rootItem.appendChild(childContainer);
-
-        // Load the first level topics under the root
-        this.loadTopicLevel('+', childContainer, '');
-
-        // Auto-expand the root node
-        const rootData = this.treeNodes.get('root');
-        if (rootData) {
-            rootData.toggle.classList.add('expanded');
-            rootData.expanded = true;
-        }
+        // Load the root level topics directly (don't create a synthetic root)
+        this.loadTopicLevel('+', this.tree, '');
     }
 
     async loadTopicLevel(pattern, container, parentPath = '') {
@@ -339,7 +320,10 @@ class TopicBrowserSidePanel {
             if (parentLevels === 0) {
                 // Root level - show the first part of each topic
                 const topLevel = levels[0];
-                const hasChildren = true;
+
+                // For browse mode, assume all first-level topics can be expanded
+                // since browseTopics only returns topics that exist
+                const hasChildren = true; // Always assume children for browse results
                 const hasValue = levels.length === 1 && topic.hasValue;
 
                 if (!grouped.has(topLevel)) {
@@ -355,7 +339,10 @@ class TopicBrowserSidePanel {
             } else if (levels.length > parentLevels) {
                 // Deeper levels
                 const nextLevel = levels[parentLevels];
-                const hasChildren = true;
+
+                // For browse mode, assume all returned topics can potentially have children
+                // since browseTopics only returns topics that exist in the hierarchy
+                const hasChildren = true; // Always assume children for browse results
                 const hasValue = levels.length === parentLevels + 1 && topic.hasValue;
 
                 if (!grouped.has(nextLevel)) {
@@ -514,81 +501,17 @@ class TopicBrowserSidePanel {
         }
     }
 
-    async selectTopic(fullPath) {
+    selectTopic(fullPath) {
         // Update UI selection
         const allItems = document.querySelectorAll('.topic-panel-tree .tree-item');
         allItems.forEach(item => item.classList.remove('selected'));
-        
+
         const nodeData = this.treeNodes.get(fullPath);
         if (nodeData) {
             nodeData.item.classList.add('selected');
         }
 
         this.selectedTopic = fullPath;
-
-        // Load topic data
-        await this.loadTopicData(fullPath);
-    }
-
-    async loadTopicData(topicPath) {
-        try {
-            // Show loading
-            this.dataViewer.classList.remove('empty');
-            this.dataContent.textContent = 'Loading...';
-
-            const query = `
-                query GetTopicData($topic: String!, $archiveGroup: String!) {
-                    currentValue(topic: $topic, archiveGroup: $archiveGroup) {
-                        payload
-                        timestamp
-                        format
-                    }
-                }
-            `;
-
-            const response = await graphqlClient.query(query, {
-                topic: topicPath,
-                archiveGroup: this.selectedArchiveGroup
-            });
-
-            if (response && response.currentValue) {
-                const data = response.currentValue;
-                let displayText = '';
-
-                if (data.payload) {
-                    try {
-                        // Try to parse as JSON for pretty printing if format is JSON
-                        if (data.format === 'JSON') {
-                            const jsonData = JSON.parse(data.payload);
-                            displayText = JSON.stringify(jsonData, null, 2);
-                        } else {
-                            displayText = data.payload;
-                        }
-                    } catch (e) {
-                        // Not valid JSON, display as text
-                        displayText = data.payload;
-                    }
-                } else {
-                    displayText = 'No data available';
-                }
-
-                if (data.timestamp) {
-                    displayText += `\n\n--- Timestamp: ${new Date(data.timestamp).toLocaleString()} ---`;
-                }
-
-                this.dataContent.textContent = displayText;
-            } else {
-                this.dataContent.textContent = 'No data found for this topic';
-            }
-        } catch (error) {
-            console.error('Error loading topic data:', error);
-            this.dataContent.textContent = `Error: ${error.message}`;
-        }
-    }
-
-    showEmptyDataViewer() {
-        this.dataViewer.classList.add('empty');
-        this.dataContent.textContent = '';
     }
 
     createLoadingItem() {
@@ -603,6 +526,19 @@ class TopicBrowserSidePanel {
         li.className = 'tree-node';
         li.innerHTML = `<div class="tree-item" style="color: var(--monster-red); font-style: italic;">Error: ${message}</div>`;
         return li;
+    }
+
+    // Static helper methods for convenient access
+    static toggle() {
+        if (window.topicBrowserSidePanel) window.topicBrowserSidePanel.toggle();
+    }
+
+    static close() {
+        if (window.topicBrowserSidePanel) window.topicBrowserSidePanel.close();
+    }
+
+    static open() {
+        if (window.topicBrowserSidePanel) window.topicBrowserSidePanel.open();
     }
 }
 

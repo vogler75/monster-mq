@@ -290,6 +290,69 @@
             background: rgba(124, 58, 237, 0.1);
         }
 
+        .topic-panel-tree .tree-item.selected {
+            background: rgba(124, 58, 237, 0.2);
+            color: var(--monster-light);
+        }
+
+        .topic-panel-tree .tree-item.has-data {
+            color: var(--monster-green);
+            font-weight: 500;
+        }
+
+        .topic-panel-tree .tree-toggle {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 0.5rem;
+            border: none;
+            background: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+        }
+
+        .topic-panel-tree .tree-toggle:hover {
+            background: var(--dark-border);
+            color: var(--text-primary);
+        }
+
+        .topic-panel-tree .tree-toggle.expanded {
+            transform: rotate(90deg);
+        }
+
+        .topic-panel-tree .tree-toggle:empty {
+            visibility: hidden;
+        }
+
+        .topic-panel-tree .tree-children {
+            margin-left: 1.5rem;
+            border-left: 1px solid var(--dark-border);
+            padding-left: 0.5rem;
+        }
+
+        .topic-panel-tree .tree-children.collapsed {
+            display: none;
+        }
+
+        .topic-panel-tree .tree-icon {
+            margin-right: 0.5rem;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .topic-panel-tree .tree-icon.folder {
+            color: var(--monster-purple);
+        }
+
+        .topic-panel-tree .tree-icon.topic {
+            color: var(--monster-green);
+        }
+
         .link-back {
             font-size: 0.8rem;
             color: var(--primary-color);
