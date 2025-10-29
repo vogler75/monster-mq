@@ -36,10 +36,10 @@ class GenAiResolver(
     }
 
     /**
-     * Ask query resolver
+     * Generate query resolver
      * Sends a request to the AI provider with prompt, context, and docs
      */
-    fun ask(): DataFetcher<CompletableFuture<GenAiResponseGraphQL>> {
+    fun generate(): DataFetcher<CompletableFuture<GenAiResponseGraphQL>> {
         return DataFetcher { env ->
             val future = CompletableFuture<GenAiResponseGraphQL>()
 
@@ -80,7 +80,7 @@ class GenAiResolver(
                 )
 
                 // Call provider asynchronously
-                genAiProvider.ask(request)
+                genAiProvider.generate(request)
                     .thenAccept { response ->
                         val graphqlResponse = GenAiResponseGraphQL(
                             response = response.response,

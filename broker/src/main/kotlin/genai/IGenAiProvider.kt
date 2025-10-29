@@ -29,12 +29,12 @@ interface IGenAiProvider {
     fun initialize(vertx: Vertx, config: Map<String, Any>): CompletableFuture<Void>
 
     /**
-     * Send a request to the AI provider
+     * Generate a response from the AI provider
      *
      * @param request The GenAI request containing prompt, context, and docs
      * @return CompletableFuture with the AI response
      */
-    fun ask(request: GenAiRequest): CompletableFuture<GenAiResponse>
+    fun generate(request: GenAiRequest): CompletableFuture<GenAiResponse>
 
     /**
      * Check if the provider is ready to accept requests

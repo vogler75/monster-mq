@@ -470,7 +470,7 @@ class GraphQLServer(
             .type("GenAiQuery") { builder ->
                 builder.apply {
                     genAiResolver?.let { resolver ->
-                        dataFetcher("ask", resolver.ask())
+                        dataFetcher("generate", resolver.generate())
                     }
                 }
             }

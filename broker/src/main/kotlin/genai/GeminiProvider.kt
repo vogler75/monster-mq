@@ -66,7 +66,7 @@ class GeminiProvider : IGenAiProvider {
         return future
     }
 
-    override fun ask(request: GenAiRequest): CompletableFuture<GenAiResponse> {
+    override fun generate(request: GenAiRequest): CompletableFuture<GenAiResponse> {
         if (!isReady()) {
             return CompletableFuture.completedFuture(
                 GenAiResponse.error("Provider not initialized")

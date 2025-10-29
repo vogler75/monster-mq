@@ -109,11 +109,11 @@ const ScriptEditorModal = (() => {
     document.getElementById('script-editor-close').addEventListener('click', close);
 
     // AI Assistant event listeners
-    document.getElementById('script-editor-ai-send').addEventListener('click', askAI);
+    document.getElementById('script-editor-ai-send').addEventListener('click', generateWithAI);
     aiInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        askAI();
+        generateWithAI();
       }
     });
 
@@ -234,7 +234,7 @@ const ScriptEditorModal = (() => {
     return textarea ? textarea.value : '';
   }
 
-  async function askAI() {
+  async function generateWithAI() {
     const question = aiInput.value.trim();
     if (!question) {
       return;
@@ -310,9 +310,9 @@ const ScriptEditorModal = (() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: `
-            query AskAI($prompt: String!, $context: String, $docs: [String!]) {
+            query GenerateAI($prompt: String!, $context: String, $docs: [String!]) {
               genai {
-                ask(prompt: $prompt, context: $context, docs: $docs) {
+                generate(prompt: $prompt, context: $context, docs: $docs) {
                   response
                   model
                   error
@@ -334,7 +334,7 @@ const ScriptEditorModal = (() => {
         throw new Error(result.errors[0].message);
       }
 
-      const aiResponse = result.data?.genai?.ask;
+      const aiResponse = result.data?.genai?.generate;
 
       if (aiResponse.error) {
         throw new Error(aiResponse.error);
