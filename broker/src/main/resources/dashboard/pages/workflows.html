@@ -571,26 +571,10 @@
                         </table>
                     </div>
                 </div>
-                <div class="section-container" id="instances-section">
+                <div class="section-container" id="instances-section" style="display: none;">
                     <div class="table-header">
                         <div class="table-title">
-                            <h2>Flow Instances</h2>
-                            <div style="display: flex; gap: 1rem; align-items: center; margin-top: 1rem;">
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <label for="instance-type-filter" style="color: var(--text-primary); font-weight: 500;">Filter by Type:</label>
-                                    <select id="instance-type-filter" class="form-control" style="width: 250px; padding: 0.6rem;" onchange="filterInstancesByType(this.value)">
-                                        <option value="">-- All Types --</option>
-                                    </select>
-                                </div>
-                                <button class="btn btn-secondary" id="restart-all-btn" onclick="restartAllInstancesOfType()" style="display: none;" title="Restart all instances of selected type">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.5rem;">
-                                        <path d="M23 4v6h-6"></path>
-                                        <path d="M1 20v-6h6"></path>
-                                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36M20.49 15a9 9 0 0 1-14.85 3.36"></path>
-                                    </svg>
-                                    Restart All
-                                </button>
-                            </div>
+                            <h2>Flow Instances for: <span id="selected-class-name" style="color: var(--primary-color);">-</span></h2>
                         </div>
                         <div class="table-actions">
                             <button class="btn btn-secondary btn-icon" onclick="loadFlowInstances()" title="Refresh flow instances">

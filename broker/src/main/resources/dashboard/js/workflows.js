@@ -8,16 +8,14 @@ let flowClasses = [];
 let flowInstances = [];
 let sortState = { classes: { key: 'name', dir: 'asc' }, instances: { key: 'name', dir: 'asc' } };
 let filters = { classes: '', instances: '' };
-let selectedInstanceType = ''; // Track selected flow type filter
+let selectedFlowClassName = ''; // Track selected flow class
 
 document.addEventListener('DOMContentLoaded', initListPage);
 
 async function initListPage(){
     await Promise.all([loadFlowClasses(), loadFlowInstances()]);
     setupListInteractions();
-    populateInstanceTypeFilter();
     renderClassesTable();
-    renderInstancesTable();
 }
 
 // ---------------------- GraphQL ----------------------
@@ -38,8 +36,9 @@ async function loadFlowInstances(){
         const data = await graphqlQuery(q);
         flowInstances = data.flowInstances||[];
         console.log('Loaded flow instances:', flowInstances.length);
-        populateInstanceTypeFilter();
-        renderInstancesTable();
+        if(selectedFlowClassName) {
+            renderInstancesTable();
+        }
     }
     catch(e){ console.error('Error loading flow instances:', e); showNotification('Failed to load flow instances','error'); }
 }
@@ -54,26 +53,21 @@ function setupListInteractions(){
     document.querySelectorAll('#instances-table thead th[data-sort]').forEach(th=>{ th.style.cursor='pointer'; th.addEventListener('click', ()=>toggleSort('instances', th.getAttribute('data-sort'))); });
 }
 
-// ---------------------- Flow Type Filtering ----------------------
-function populateInstanceTypeFilter(){
-    const select = document.getElementById('instance-type-filter');
-    if(!select) return;
+// ---------------------- Flow Class Selection ----------------------
+function selectFlowClass(flowClassName){
+    selectedFlowClassName = flowClassName;
+    const instanceSection = document.getElementById('instances-section');
+    const selectedNameEl = document.getElementById('selected-class-name');
 
-    // Get unique flow class IDs
-    const uniqueTypes = [...new Set(flowInstances.map(i => i.flowClassId))].sort();
+    // Show instances section and update title
+    if(selectedFlowClassName) {
+        instanceSection.style.display = 'block';
+        selectedNameEl.textContent = selectedFlowClassName;
+    } else {
+        instanceSection.style.display = 'none';
+        selectedNameEl.textContent = '-';
+    }
 
-    // Add options
-    let html = '<option value="">-- All Types --</option>';
-    uniqueTypes.forEach(type => {
-        html += `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`;
-    });
-    select.innerHTML = html;
-}
-
-function filterInstancesByType(flowClassId){
-    selectedInstanceType = flowClassId;
-    const restartBtn = document.getElementById('restart-all-btn');
-    if(restartBtn) restartBtn.style.display = flowClassId ? 'inline-flex' : 'none';
     renderInstancesTable();
 }
 
@@ -84,16 +78,16 @@ function renderClassesTable(){
     if(filters.classes) rows = rows.filter(r => (r.name+" "+r.namespace).toLowerCase().includes(filters.classes));
     const { key, dir } = sortState.classes; rows.sort((a,b)=>compareValues(a,b,key,dir));
     if(rows.length===0){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center; color:#6c757d;">No flow classes</td></tr>'; return; }
-    tbody.innerHTML = rows.map(r=>`<tr>
+    tbody.innerHTML = rows.map(r=>`<tr style="cursor: pointer; ${selectedFlowClassName === r.name ? 'background: var(--background-secondary); border-left: 3px solid var(--primary-color);' : ''}" onclick="selectFlowClass('${escapeHtml(r.name)}')" oncontextmenu="event.stopPropagation();">
         <td>${escapeHtml(r.name)}</td>
         <td>${escapeHtml(r.namespace||'')}</td>
         <td>${escapeHtml(r.version||'')}</td>
         <td style="text-align:right;">${r.nodes.length}</td>
         <td style="text-align:right;">${r.connections.length}</td>
         <td>${formatDateTime(r.updatedAt)}</td>
-          <td><div style="display:flex; gap:.4rem;">
-              <button class="btn-action btn-visual" onclick="location.href='/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Edit</button>
-              <button class="btn-action btn-delete" onclick="listPageDeleteFlowClass('${escapeHtml(r.name)}')">Delete</button>
+          <td style="pointer-events: auto;" onclick="event.stopPropagation();"><div style="display:flex; gap:.4rem;">
+              <button class="btn-action btn-visual" onclick="event.stopPropagation(); location.href='/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Edit</button>
+              <button class="btn-action btn-delete" onclick="event.stopPropagation(); listPageDeleteFlowClass('${escapeHtml(r.name)}')">Delete</button>
           </div></td>
     </tr>`).join('');
 }
@@ -102,19 +96,19 @@ function renderInstancesTable(){
     const tbody = document.querySelector('#instances-table tbody'); if(!tbody) return;
     let rows = flowInstances.slice();
     console.log('renderInstancesTable: Total instances:', rows.length);
-    // Filter by selected flow class type
-    if(selectedInstanceType) {
-        rows = rows.filter(r => r.flowClassId === selectedInstanceType);
-        console.log('After type filter:', rows.length);
+    // Filter by selected flow class
+    if(selectedFlowClassName) {
+        rows = rows.filter(r => r.flowClassId === selectedFlowClassName);
+        console.log('After flow class filter:', rows.length);
     }
     // Filter by search text
     if(filters.instances) {
-        rows = rows.filter(r => (r.name+" "+r.namespace+" "+r.flowClassId).toLowerCase().includes(filters.instances));
+        rows = rows.filter(r => (r.name+" "+r.namespace).toLowerCase().includes(filters.instances));
         console.log('After search filter:', rows.length);
     }
     const { key, dir } = sortState.instances; rows.sort((a,b)=>compareValues(a,b,key,dir));
     console.log('Final rows to display:', rows.length);
-    if(rows.length===0){ tbody.innerHTML='<tr><td colspan="9" style="text-align:center; color:#6c757d;">No flow instances</td></tr>'; return; }
+    if(rows.length===0){ tbody.innerHTML='<tr><td colspan="9" style="text-align:center; color:#6c757d;">No flow instances found for this flow class</td></tr>'; return; }
     tbody.innerHTML = rows.map(r=>{
         const startStopBtn = r.enabled
             ? `<button class="btn-icon" title="Stop" onclick="listPageStopFlowInstance('${escapeHtml(r.name)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg></button>`
@@ -161,68 +155,6 @@ async function listPageStopFlowInstance(name){
     const mutation = `mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`;
     try { await graphqlQuery(mutation,{name}); showNotification('Instance disabled','success'); await loadFlowInstances(); renderInstancesTable(); }
     catch(e){ console.error(e); showNotification('Disable failed: '+e.message,'error'); }
-}
-
-async function restartAllInstancesOfType(){
-    if(!selectedInstanceType){
-        showNotification('Please select a flow type first','error');
-        return;
-    }
-
-    const instancesToRestart = flowInstances.filter(i => i.flowClassId === selectedInstanceType);
-    if(instancesToRestart.length === 0){
-        showNotification('No instances found for this type','error');
-        return;
-    }
-
-    const typeDisplayName = selectedInstanceType;
-    if(!confirm(`Restart all ${instancesToRestart.length} instance(s) of type "${typeDisplayName}"?`)) return;
-
-    try {
-        let successCount = 0;
-        let failCount = 0;
-
-        // Disable all instances
-        for(const instance of instancesToRestart){
-            try {
-                const mutation = `mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`;
-                await graphqlQuery(mutation, {name: instance.name});
-                successCount++;
-            } catch(e){
-                console.error(e);
-                failCount++;
-            }
-        }
-
-        // Small delay between disable and enable
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Enable all instances again
-        for(const instance of instancesToRestart){
-            if(instance.enabled){ // Only re-enable if it was previously enabled
-                try {
-                    const mutation = `mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`;
-                    await graphqlQuery(mutation, {name: instance.name});
-                } catch(e){
-                    console.error(e);
-                    failCount++;
-                }
-            }
-        }
-
-        await loadFlowInstances();
-        populateInstanceTypeFilter();
-        renderInstancesTable();
-
-        if(failCount === 0){
-            showNotification(`Successfully restarted ${successCount} instance(s)`, 'success');
-        } else {
-            showNotification(`Restarted ${successCount} instance(s), ${failCount} failed`, 'error');
-        }
-    } catch(e){
-        console.error(e);
-        showNotification('Restart failed: '+e.message, 'error');
-    }
 }
 
 // ---------------------- Sorting & Helpers ----------------------
