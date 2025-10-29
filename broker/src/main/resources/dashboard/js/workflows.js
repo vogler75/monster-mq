@@ -1,7 +1,7 @@
 /**
  * MonsterMQ Workflows List Page (Refactored)
  * Table-based listing of Flow Classes & Flow Instances.
- * Editing moved to workflows-visual.html for Flow Classes.
+ * Editing moved to workflows-edit.html + workflows-edit.js.
  */
 
 let flowClasses = [];
@@ -26,7 +26,7 @@ async function graphqlQuery(query, variables = {}) {
 
 async function loadFlowClasses(){
     const q = `query { flowClasses { name namespace version description nodes { id } connections { fromNode toNode fromOutput toInput } updatedAt } }`;
-    try { const data = await graphqlQuery(q); flowClasses = data.flowClasses||[]; renderClassesTable(); }
+    try { const data = await graphqlQuery(q); flowClasses = data.flowClasses||[]; }
     catch(e){ console.error(e); showNotification('Failed to load flow classes','error'); }
 }
 
@@ -37,9 +37,7 @@ async function loadFlowInstances(){
         renderInstancesTable();
         return;
     }
-
-    // Otherwise, if called without a selected class, just do nothing (instances loaded on demand)
-    console.log('No flow class selected, skipping instance load');
+    // Otherwise, skip loading instances (loaded on demand)
 }
 
 async function loadFlowInstancesForClass(flowClassName){
@@ -68,19 +66,26 @@ async function selectFlowClass(flowClassName){
     const instanceSection = document.getElementById('instances-section');
     const selectedNameEl = document.getElementById('selected-class-name');
 
-    // Show instances section and update title
     if(selectedFlowClassName) {
-        instanceSection.style.display = 'block';
-        selectedNameEl.textContent = selectedFlowClassName;
-        // Load instances for the selected flow class
+        if(instanceSection) instanceSection.style.display = 'block';
+        if(selectedNameEl) selectedNameEl.textContent = selectedFlowClassName;
         await loadFlowInstancesForClass(selectedFlowClassName);
     } else {
-        instanceSection.style.display = 'none';
-        selectedNameEl.textContent = '-';
+        if(instanceSection) instanceSection.style.display = 'none';
+        if(selectedNameEl) selectedNameEl.textContent = '-';
         flowInstances = [];
     }
 
+    renderClassesTable(); // Re-render to show selection highlight
     renderInstancesTable();
+}
+
+function createNewInstance(){
+    if(!selectedFlowClassName){
+        showNotification('Please select a flow class first','error');
+        return;
+    }
+    location.href = `/pages/workflows-edit.html?type=instance&flowClassId=${encodeURIComponent(selectedFlowClassName)}`;
 }
 
 // ---------------------- Rendering ----------------------
@@ -90,16 +95,17 @@ function renderClassesTable(){
     if(filters.classes) rows = rows.filter(r => (r.name+" "+r.namespace).toLowerCase().includes(filters.classes));
     const { key, dir } = sortState.classes; rows.sort((a,b)=>compareValues(a,b,key,dir));
     if(rows.length===0){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center; color:#6c757d;">No flow classes</td></tr>'; return; }
-    tbody.innerHTML = rows.map(r=>`<tr style="cursor: pointer; ${selectedFlowClassName === r.name ? 'background: var(--background-secondary); border-left: 3px solid var(--primary-color);' : ''}" onclick="selectFlowClass('${escapeHtml(r.name)}')" oncontextmenu="event.stopPropagation();">
+    tbody.innerHTML = rows.map(r=>`<tr style="cursor:pointer; ${selectedFlowClassName === r.name ? 'background: var(--background-secondary); border-left: 3px solid var(--primary-color);' : ''}" onclick="selectFlowClass('${escapeHtml(r.name)}')">
         <td>${escapeHtml(r.name)}</td>
         <td>${escapeHtml(r.namespace||'')}</td>
         <td>${escapeHtml(r.version||'')}</td>
         <td style="text-align:right;">${r.nodes.length}</td>
         <td style="text-align:right;">${r.connections.length}</td>
         <td>${formatDateTime(r.updatedAt)}</td>
-          <td style="pointer-events: auto;" onclick="event.stopPropagation();"><div style="display:flex; gap:.4rem;">
-              <button class="btn-action btn-visual" onclick="event.stopPropagation(); location.href='/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Edit</button>
-              <button class="btn-action btn-delete" onclick="event.stopPropagation(); listPageDeleteFlowClass('${escapeHtml(r.name)}')">Delete</button>
+          <td onclick="event.stopPropagation();"><div style="display:flex; gap:.4rem;">
+              <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=class&name=${encodeURIComponent(r.name)}'">Edit</button>
+              <button class="btn-action btn-visual" onclick="location.href='/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Visual</button>
+              <button class="btn-action btn-delete" onclick="listPageDeleteFlowClass('${escapeHtml(r.name)}')">Delete</button>
           </div></td>
     </tr>`).join('');
 }
@@ -107,15 +113,14 @@ function renderClassesTable(){
 function renderInstancesTable(){
     const tbody = document.querySelector('#instances-table tbody'); if(!tbody) return;
     let rows = flowInstances.slice();
-    console.log('renderInstancesTable: Total instances for selected class:', rows.length);
-    // Filter by search text
-    if(filters.instances) {
-        rows = rows.filter(r => (r.name+" "+r.namespace).toLowerCase().includes(filters.instances));
-        console.log('After search filter:', rows.length);
-    }
+    // Filter by search text (instances are already filtered by selected flow class)
+    if(filters.instances) rows = rows.filter(r => (r.name+" "+r.namespace+" "+r.flowClassId).toLowerCase().includes(filters.instances));
     const { key, dir } = sortState.instances; rows.sort((a,b)=>compareValues(a,b,key,dir));
-    console.log('Final rows to display:', rows.length);
-    if(rows.length===0){ tbody.innerHTML='<tr><td colspan="9" style="text-align:center; color:#6c757d;">No flow instances found for this flow class</td></tr>'; return; }
+    if(rows.length===0){
+        const msg = selectedFlowClassName ? 'No flow instances for this class' : 'Select a flow class to view instances';
+        tbody.innerHTML=`<tr><td colspan="9" style="text-align:center; color:#6c757d;">${msg}</td></tr>`;
+        return;
+    }
     tbody.innerHTML = rows.map(r=>{
         const startStopBtn = r.enabled
             ? `<button class="btn-icon" title="Stop" onclick="listPageStopFlowInstance('${escapeHtml(r.name)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg></button>`
@@ -131,6 +136,7 @@ function renderInstancesTable(){
         <td>${formatDateTime(r.updatedAt)}</td>
     <td><div style="display:flex; gap:.4rem;">
         ${startStopBtn}
+        <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=instance&name=${encodeURIComponent(r.name)}&flowClassId=${encodeURIComponent(r.flowClassId)}'">Edit</button>
         <button class="btn-action btn-delete" onclick="listPageDeleteFlowInstance('${escapeHtml(r.name)}')">Delete</button>
     </div></td>
     </tr>`; }).join('');
@@ -141,40 +147,29 @@ function renderInstancesTable(){
 async function listPageDeleteFlowClass(name){
     if(!confirm(`Delete flow class "${name}"?`)) return;
     const mutation = `mutation($name:String!){ flow { deleteClass(name:$name) } }`;
-    try {
-        await graphqlQuery(mutation,{name});
-        showNotification('Deleted','success');
-        // If the deleted class was selected, clear the selection
-        if(selectedFlowClassName === name) {
-            selectedFlowClassName = '';
-            const instanceSection = document.getElementById('instances-section');
-            instanceSection.style.display = 'none';
-            flowInstances = [];
-        }
-        await loadFlowClasses();
-        renderClassesTable();
-    }
+    try { await graphqlQuery(mutation,{name}); showNotification('Deleted','success'); await loadFlowClasses(); renderClassesTable(); }
     catch(e){ console.error(e); showNotification('Delete failed','error'); }
 }
 
 async function listPageDeleteFlowInstance(name){
     if(!confirm(`Delete flow instance "${name}"?`)) return;
     const mutation = `mutation($name:String!){ flow { deleteInstance(name:$name) } }`;
-    try { await graphqlQuery(mutation,{name}); showNotification('Deleted','success'); await loadFlowInstances(); renderInstancesTable(); }
+    try { await graphqlQuery(mutation,{name}); showNotification('Deleted','success'); if(selectedFlowClassName) await loadFlowInstancesForClass(selectedFlowClassName); renderInstancesTable(); }
     catch(e){ console.error(e); showNotification('Delete failed','error'); }
 }
 
 async function listPageStartFlowInstance(name){
     const mutation = `mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`;
-    try { await graphqlQuery(mutation,{name}); showNotification('Instance enabled','success'); await loadFlowInstances(); renderInstancesTable(); }
+    try { await graphqlQuery(mutation,{name}); showNotification('Instance enabled','success'); if(selectedFlowClassName) await loadFlowInstancesForClass(selectedFlowClassName); renderInstancesTable(); }
     catch(e){ console.error(e); showNotification('Enable failed: '+e.message,'error'); }
 }
 
 async function listPageStopFlowInstance(name){
     const mutation = `mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`;
-    try { await graphqlQuery(mutation,{name}); showNotification('Instance disabled','success'); await loadFlowInstances(); renderInstancesTable(); }
+    try { await graphqlQuery(mutation,{name}); showNotification('Instance disabled','success'); if(selectedFlowClassName) await loadFlowInstancesForClass(selectedFlowClassName); renderInstancesTable(); }
     catch(e){ console.error(e); showNotification('Disable failed: '+e.message,'error'); }
 }
+
 
 // ---------------------- Sorting & Helpers ----------------------
 function compareValues(a,b,key,dir){
@@ -309,6 +304,50 @@ async function loadFlowClasses() {
     } catch (error) {
         console.error('Error loading flow classes:', error);
         showNotification('Failed to load flow classes', 'error');
+    }
+}
+
+async function loadFlowInstances() {
+    const query = `
+        query {
+            flowInstances {
+                name
+                namespace
+                nodeId
+                flowClassId
+                inputMappings {
+                    nodeInput
+                    type
+                    value
+                }
+                outputMappings {
+                    nodeOutput
+                    topic
+                }
+                variables
+                enabled
+                status {
+                    running
+                    lastExecution
+                    executionCount
+                    errorCount
+                    lastError
+                    subscribedTopics
+                }
+                createdAt
+                updatedAt
+                isOnCurrentNode
+            }
+        }
+    `;
+
+    try {
+        const data = await graphqlQuery(query);
+        flowInstances = data.flowInstances || [];
+        renderFlowInstances();
+    } catch (error) {
+        console.error('Error loading flow instances:', error);
+        showNotification('Failed to load flow instances', 'error');
     }
 }
 
