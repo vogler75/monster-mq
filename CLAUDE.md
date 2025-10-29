@@ -97,10 +97,14 @@ Key configuration sections:
 
 ## Git and Commit Guidelines
 
-- **Do NOT auto-commit changes**: Only commit when explicitly instructed
+⚠️ **CRITICAL: NEVER AUTO-COMMIT** ⚠️
+
+- **MUST NEVER commit unless explicitly told to do so** - This is non-negotiable. Wait for the user to explicitly say "commit" or "merge to main"
+- **ALWAYS ask the user to review changes first** before committing
 - **Do NOT commit as Claude**: Do not include "Generated with Claude Code" or "Co-Authored-By: Claude" in commits
-- **Manual commits only**: Wait for explicit `"please commit"` or similar instruction before committing
+- **Manual commits only**: Only commit when the user explicitly instructs with phrases like "please commit", "merge to main", "create a commit", etc.
 - Create branches for work, but changes should remain staged/unstaged until instructed otherwise
+- **If you auto-commit, you have made a mistake** - Always err on the side of caution and let the user decide when to commit
 
 ## Development Notes
 

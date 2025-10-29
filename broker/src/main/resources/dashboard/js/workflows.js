@@ -13,7 +13,7 @@ let selectedFlowClassName = ''; // Track selected flow class
 document.addEventListener('DOMContentLoaded', initListPage);
 
 async function initListPage(){
-    await Promise.all([loadFlowClasses(), loadFlowInstances()]);
+    await loadFlowClasses();
     setupListInteractions();
     renderClassesTable();
 }
@@ -31,14 +31,23 @@ async function loadFlowClasses(){
 }
 
 async function loadFlowInstances(){
-    const q = `query { flowInstances { name namespace nodeId flowClassId inputMappings { nodeInput } outputMappings { nodeOutput } enabled status { running executionCount errorCount } updatedAt } }`;
+    // If a flow class is selected, reload instances for that class
+    if(selectedFlowClassName) {
+        await loadFlowInstancesForClass(selectedFlowClassName);
+        renderInstancesTable();
+        return;
+    }
+
+    // Otherwise, if called without a selected class, just do nothing (instances loaded on demand)
+    console.log('No flow class selected, skipping instance load');
+}
+
+async function loadFlowInstancesForClass(flowClassName){
+    const q = `query($flowClassId:String){ flowInstances(flowClassId:$flowClassId) { name namespace nodeId flowClassId inputMappings { nodeInput } outputMappings { nodeOutput } enabled status { running executionCount errorCount } updatedAt } }`;
     try {
-        const data = await graphqlQuery(q);
+        const data = await graphqlQuery(q, { flowClassId: flowClassName });
         flowInstances = data.flowInstances||[];
-        console.log('Loaded flow instances:', flowInstances.length);
-        if(selectedFlowClassName) {
-            renderInstancesTable();
-        }
+        console.log(`Loaded ${flowInstances.length} instances for flow class "${flowClassName}"`);
     }
     catch(e){ console.error('Error loading flow instances:', e); showNotification('Failed to load flow instances','error'); }
 }
@@ -54,7 +63,7 @@ function setupListInteractions(){
 }
 
 // ---------------------- Flow Class Selection ----------------------
-function selectFlowClass(flowClassName){
+async function selectFlowClass(flowClassName){
     selectedFlowClassName = flowClassName;
     const instanceSection = document.getElementById('instances-section');
     const selectedNameEl = document.getElementById('selected-class-name');
@@ -63,9 +72,12 @@ function selectFlowClass(flowClassName){
     if(selectedFlowClassName) {
         instanceSection.style.display = 'block';
         selectedNameEl.textContent = selectedFlowClassName;
+        // Load instances for the selected flow class
+        await loadFlowInstancesForClass(selectedFlowClassName);
     } else {
         instanceSection.style.display = 'none';
         selectedNameEl.textContent = '-';
+        flowInstances = [];
     }
 
     renderInstancesTable();
@@ -95,12 +107,7 @@ function renderClassesTable(){
 function renderInstancesTable(){
     const tbody = document.querySelector('#instances-table tbody'); if(!tbody) return;
     let rows = flowInstances.slice();
-    console.log('renderInstancesTable: Total instances:', rows.length);
-    // Filter by selected flow class
-    if(selectedFlowClassName) {
-        rows = rows.filter(r => r.flowClassId === selectedFlowClassName);
-        console.log('After flow class filter:', rows.length);
-    }
+    console.log('renderInstancesTable: Total instances for selected class:', rows.length);
     // Filter by search text
     if(filters.instances) {
         rows = rows.filter(r => (r.name+" "+r.namespace).toLowerCase().includes(filters.instances));
@@ -134,7 +141,19 @@ function renderInstancesTable(){
 async function listPageDeleteFlowClass(name){
     if(!confirm(`Delete flow class "${name}"?`)) return;
     const mutation = `mutation($name:String!){ flow { deleteClass(name:$name) } }`;
-    try { await graphqlQuery(mutation,{name}); showNotification('Deleted','success'); await loadFlowClasses(); renderClassesTable(); }
+    try {
+        await graphqlQuery(mutation,{name});
+        showNotification('Deleted','success');
+        // If the deleted class was selected, clear the selection
+        if(selectedFlowClassName === name) {
+            selectedFlowClassName = '';
+            const instanceSection = document.getElementById('instances-section');
+            instanceSection.style.display = 'none';
+            flowInstances = [];
+        }
+        await loadFlowClasses();
+        renderClassesTable();
+    }
     catch(e){ console.error(e); showNotification('Delete failed','error'); }
 }
 
