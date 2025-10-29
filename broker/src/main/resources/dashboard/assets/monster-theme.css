@@ -298,6 +298,11 @@ body {
     gap: 0.75rem;
     padding: 0.5rem;
     border-radius: 8px;
+    transition: justify-content 0.2s ease;
+}
+
+.sidebar.collapsed .user-info {
+    justify-content: center;
 }
 
 .user-avatar {
@@ -317,6 +322,13 @@ body {
 .user-details {
     min-width: 0;
     transition: opacity 0.2s ease;
+}
+
+.sidebar.collapsed .user-details {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    pointer-events: none;
 }
 
 .user-name {
