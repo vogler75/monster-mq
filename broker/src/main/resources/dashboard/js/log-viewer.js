@@ -53,6 +53,9 @@ class LogViewer {
       this.connect();
     }
     this.applyBodyPadding();
+    this.updateLogViewerMargin();
+    // Listen for sidebar changes
+    window.addEventListener('sidebarToggled', () => this.updateLogViewerMargin());
   }
 
   createUI() {
@@ -63,7 +66,7 @@ class LogViewer {
     }
     container.innerHTML = `
       <style>
-        .log-viewer { position: fixed; bottom:0; left:0; right:0; background:#1e1e1e; color:#d4d4d4; font-family:Consolas,Monaco,'Courier New',monospace; font-size:12px; border-top:2px solid #007acc; box-shadow:0 -2px 10px rgba(0,0,0,.3); z-index:9999; display:flex; flex-direction:column; transition:height .25s ease; backdrop-filter:blur(4px);} 
+        .log-viewer { position: fixed; bottom:0; left:0; right:0; background:#1e1e1e; color:#d4d4d4; font-family:Consolas,Monaco,'Courier New',monospace; font-size:12px; border-top:2px solid #007acc; box-shadow:0 -2px 10px rgba(0,0,0,.3); z-index:9999; display:flex; flex-direction:column; transition:height .25s ease, margin-left .3s ease; backdrop-filter:blur(4px);} 
         .log-viewer.expanded { height: var(--log-viewer-height, 400px); }
         .log-viewer.collapsed { height:36px !important; }
         .log-viewer-header { display:flex; align-items:center; padding:6px 10px; background:#2d2d2d; border-bottom:1px solid #3e3e3e; cursor:pointer; user-select:none; }
@@ -307,6 +310,8 @@ class LogViewer {
       if ((e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) e.preventDefault();
       e.stopPropagation();
     }, { passive: false });
+    // Handle window resize for responsive behavior
+    window.addEventListener('resize', () => this.updateLogViewerMargin());
   }
 
   toggleCollapse() {
@@ -357,6 +362,23 @@ class LogViewer {
       // Fallback: body padding if no main-content container.
       document.body.style.paddingBottom = viewerHeight + 'px';
     }
+  }
+
+  updateLogViewerMargin() {
+    // Update log viewer's margin-left based on sidebar state
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar || !this.elements.root) return;
+
+    // On mobile, no margin
+    if (window.innerWidth <= 768) {
+      this.elements.root.style.marginLeft = '0';
+      return;
+    }
+
+    // Check if sidebar is collapsed
+    const isCollapsed = sidebar.classList.contains('collapsed');
+    const marginLeft = isCollapsed ? '70px' : '280px';
+    this.elements.root.style.marginLeft = marginLeft;
   }
 
   getCurrentFilters() {

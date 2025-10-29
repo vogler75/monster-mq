@@ -23,6 +23,21 @@ java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt [-clu
 ./run.sh [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
 ```
 
+#### Dashboard Development Mode
+When making changes to HTML/CSS/JavaScript dashboard files, you can run the broker with the `-dashboardPath` option to avoid rebuilding:
+```bash
+cd broker
+./run.sh -dashboardPath src/main/resources/dashboard [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
+```
+
+This allows you to:
+- Edit `.html` files in `src/main/resources/dashboard/pages/`
+- Edit `.css` files in `src/main/resources/dashboard/assets/`
+- Edit `.js` files in `src/main/resources/dashboard/js/`
+- Refresh the browser to see changes immediately without rebuilding the project
+
+This significantly speeds up dashboard development iterations.
+
 ### Running Tests
 ```bash
 cd broker

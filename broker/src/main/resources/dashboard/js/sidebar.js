@@ -310,6 +310,9 @@ window.toggleSidebar = function() {
         const isCollapsed = sidebar.classList.contains('collapsed');
         localStorage.setItem('monstermq_sidebar_collapsed', isCollapsed.toString());
     }
+
+    // Dispatch event so log viewer can update its margin
+    window.dispatchEvent(new CustomEvent('sidebarToggled'));
 };
 
 // Initialize sidebar when DOM is loaded
