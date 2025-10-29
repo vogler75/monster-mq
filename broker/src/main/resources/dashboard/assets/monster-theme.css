@@ -511,6 +511,12 @@ body {
     background: var(--dark-border);
 }
 
+.btn-small {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
 /* Compact action buttons (shared across pages) */
 .btn-action {
     padding: 0.4rem 0.8rem;

@@ -115,7 +115,59 @@ const VisualFlow = (() => {
     qs('#page-title').textContent = state.flowClass? 'Visual Editor: '+fc.name : 'New Flow Class (Visual)';
     qs('#page-subtitle').textContent = state.flowClass? 'Edit visually' : 'Create and design nodes visually';
     qs('#delete-class-btn').style.display = state.flowClass? 'inline-block':'none';
-    qs('#restart-all-btn').style.display = state.flowClass? 'inline-block':'none';
+    if(state.flowClass) loadInstancesForClass();
+  }
+
+  async function loadInstancesForClass(){
+    if(!state.flowClass) return;
+    const flowClassName = state.flowClass.name;
+    const q = `query($flowClassId:String){ flowInstances(flowClassId:$flowClassId) { name enabled } }`;
+    try {
+      const data = await gql(q, { flowClassId: flowClassName });
+      const instances = data.flowInstances || [];
+      const select = qs('#restart-instance-select');
+      const controls = qs('#restart-controls');
+
+      if(!select || !controls) return;
+
+      if(instances.length === 0){
+        controls.style.display = 'none';
+        return;
+      }
+
+      controls.style.display = 'flex';
+      select.innerHTML = instances.map((inst, idx) =>
+        `<option value="${inst.name}" ${idx === 0 ? 'selected' : ''}>${inst.name}</option>`
+      ).join('');
+    } catch(e){
+      console.error('Failed to load instances:', e);
+    }
+  }
+
+  async function restartInstance(){
+    const instanceName = qs('#restart-instance-select')?.value;
+    if(!instanceName){
+      notify('Please select an instance', 'error');
+      return;
+    }
+
+    try {
+      // Disable the instance
+      const disableMutation = `mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`;
+      await gql(disableMutation, { name: instanceName });
+
+      // Wait 500ms
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Enable the instance
+      const enableMutation = `mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`;
+      await gql(enableMutation, { name: instanceName });
+
+      notify(`Instance "${instanceName}" restarted successfully`, 'success');
+    } catch(e){
+      console.error(e);
+      notify('Restart failed: '+e.message, 'error');
+    }
   }
 
   // ------------- Node Operations -------------
@@ -787,7 +839,7 @@ const VisualFlow = (() => {
   }
 
   function cancel(){ state.dirty=false; location.href='/pages/workflows.html'; }
-  return { init, addNodeType, saveClass, deleteClass, restartAllInstances, handlePortClick, deleteConnection, saveNode, deleteNode, addNodeType: addNodeType, resetView, addConnectionHelper, refreshConnectionHelper, keyboardZoom, validateScript, openScriptInWindow, cancel };
+  return { init, addNodeType, saveClass, deleteClass, restartInstance, handlePortClick, deleteConnection, saveNode, deleteNode, addNodeType: addNodeType, resetView, addConnectionHelper, refreshConnectionHelper, keyboardZoom, validateScript, openScriptInWindow, cancel };
 })();
 
 // Make VisualFlow accessible globally

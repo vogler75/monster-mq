@@ -727,7 +727,12 @@
           </div>
           <div class="page-header-actions">
             <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'">Back</button>
-            <button class="btn btn-secondary" id="restart-all-btn" style="display:none; min-width:150px; padding:0.8rem 1.5rem; font-size:0.9rem;" title="Restart all instances of this flow class" onclick="VisualFlow.restartAllInstances()">Restart All</button>
+            <div style="display:none; flex-direction: row; gap:0.5rem; align-items:center;" id="restart-controls">
+              <select id="restart-instance-select" style="padding:0.5rem; border:1px solid #ddd; border-radius:4px;">
+                <option value="">Select instance...</option>
+              </select>
+              <button class="btn btn-secondary btn-small" id="restart-btn" title="Restart selected instance" onclick="VisualFlow.restartInstance()">Restart</button>
+            </div>
             <button class="btn btn-primary btn-small" onclick="VisualFlow.saveClass()">Save</button>
             <button class="btn btn-danger btn-small" id="delete-class-btn" style="display:none;" onclick="VisualFlow.deleteClass()">Delete</button>
           </div>
