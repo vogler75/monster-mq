@@ -115,6 +115,7 @@ const VisualFlow = (() => {
     qs('#page-title').textContent = state.flowClass? 'Visual Editor: '+fc.name : 'New Flow Class (Visual)';
     qs('#page-subtitle').textContent = state.flowClass? 'Edit visually' : 'Create and design nodes visually';
     qs('#delete-class-btn').style.display = state.flowClass? 'inline-block':'none';
+    qs('#restart-all-btn').style.display = state.flowClass? 'inline-block':'none';
   }
 
   // ------------- Node Operations -------------
@@ -480,6 +481,68 @@ const VisualFlow = (() => {
   }
   async function deleteClass(){ if(!state.flowClass){ notify('Nothing to delete','error'); return; } if(!confirm('Delete this flow class?')) return; try { await gql(`mutation($name:String!){ flow { deleteClass(name:$name) } }`, { name: state.flowClass.name }); notify('Deleted','success'); location.href='/pages/workflows.html'; } catch(e){ console.error(e); notify('Delete failed: '+e.message,'error'); } }
 
+  async function restartAllInstances(){
+    if(!state.flowClass){
+      notify('No flow class loaded','error');
+      return;
+    }
+
+    const flowClassName = state.flowClass.name;
+    const q = `query($flowClassId:String){ flowInstances(flowClassId:$flowClassId) { name enabled } }`;
+
+    try {
+      const data = await gql(q, { flowClassId: flowClassName });
+      const instances = data.flowInstances || [];
+
+      if(instances.length === 0){
+        notify('No instances found for this flow class','info');
+        return;
+      }
+
+      if(!confirm(`Restart all ${instances.length} instance(s) of class "${flowClassName}"?`)) return;
+
+      let successCount = 0;
+      let failCount = 0;
+
+      // Disable all instances
+      for(const instance of instances){
+        try {
+          const mutation = `mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`;
+          await gql(mutation, { name: instance.name });
+          successCount++;
+        } catch(e){
+          console.error(e);
+          failCount++;
+        }
+      }
+
+      // Small delay between disable and enable
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Enable all instances again
+      for(const instance of instances){
+        if(instance.enabled){
+          try {
+            const mutation = `mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`;
+            await gql(mutation, { name: instance.name });
+          } catch(e){
+            console.error(e);
+            failCount++;
+          }
+        }
+      }
+
+      if(failCount === 0){
+        notify(`Successfully restarted ${successCount} instance(s)`, 'success');
+      } else {
+        notify(`Restarted ${successCount} instance(s), ${failCount} failed`, 'error');
+      }
+    } catch(e){
+      console.error(e);
+      notify('Restart failed: '+e.message, 'error');
+    }
+  }
+
   // ------------- View Helpers -------------
   function resetView(){ state.view.scale=1; state.view.x=0; state.view.y=0; applyViewTransform(); }
   function applyViewTransform(){ const stage=qs('#stage'); if(!stage) return; const { scale,x,y } = state.view; stage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`; const zi=qs('#zoom-indicator'); if(zi) zi.textContent = Math.round(scale*100)+'%'; }
@@ -722,7 +785,7 @@ const VisualFlow = (() => {
   }
 
   function cancel(){ state.dirty=false; location.href='/pages/workflows.html'; }
-  return { init, addNodeType, saveClass, deleteClass, handlePortClick, deleteConnection, saveNode, deleteNode, addNodeType: addNodeType, resetView, addConnectionHelper, refreshConnectionHelper, keyboardZoom, validateScript, openScriptInWindow, cancel };
+  return { init, addNodeType, saveClass, deleteClass, restartAllInstances, handlePortClick, deleteConnection, saveNode, deleteNode, addNodeType: addNodeType, resetView, addConnectionHelper, refreshConnectionHelper, keyboardZoom, validateScript, openScriptInWindow, cancel };
 })();
 
 // Make VisualFlow accessible globally

@@ -85,7 +85,7 @@ function createNewInstance(){
         showNotification('Please select a flow class first','error');
         return;
     }
-    location.href = `/pages/workflows-edit.html?type=instance&flowClassId=${encodeURIComponent(selectedFlowClassName)}`;
+    location.href = `/pages/workflows-edit-instance.html?type=instance&flowClassId=${encodeURIComponent(selectedFlowClassName)}`;
 }
 
 // ---------------------- Rendering ----------------------
@@ -103,8 +103,9 @@ function renderClassesTable(){
         <td style="text-align:right;">${r.connections.length}</td>
         <td>${formatDateTime(r.updatedAt)}</td>
           <td onclick="event.stopPropagation();"><div style="display:flex; gap:.4rem;">
-              <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=class&name=${encodeURIComponent(r.name)}'">Edit</button>
+              <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit-class.html?type=class&name=${encodeURIComponent(r.name)}'">Edit</button>
               <button class="btn-action btn-visual" onclick="location.href='/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Visual</button>
+              <button class="btn-action btn-secondary" title="Restart all instances of this class" onclick="restartAllInstancesOfClass('${escapeHtml(r.name)}')">Restart All</button>
               <button class="btn-action btn-delete" onclick="listPageDeleteFlowClass('${escapeHtml(r.name)}')">Delete</button>
           </div></td>
     </tr>`).join('');
@@ -136,7 +137,7 @@ function renderInstancesTable(){
         <td>${formatDateTime(r.updatedAt)}</td>
     <td><div style="display:flex; gap:.4rem;">
         ${startStopBtn}
-        <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit.html?type=instance&name=${encodeURIComponent(r.name)}&flowClassId=${encodeURIComponent(r.flowClassId)}'">Edit</button>
+        <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit-instance.html?type=instance&name=${encodeURIComponent(r.name)}&flowClassId=${encodeURIComponent(r.flowClassId)}'">Edit</button>
         <button class="btn-action btn-delete" onclick="listPageDeleteFlowInstance('${escapeHtml(r.name)}')">Delete</button>
     </div></td>
     </tr>`; }).join('');
@@ -170,6 +171,69 @@ async function listPageStopFlowInstance(name){
     catch(e){ console.error(e); showNotification('Disable failed: '+e.message,'error'); }
 }
 
+async function restartAllInstancesOfClass(flowClassName){
+    if(!flowClassName){
+        showNotification('Please select a flow class first','error');
+        return;
+    }
+
+    // Load instances for this flow class
+    await loadFlowInstancesForClass(flowClassName);
+    const instancesToRestart = flowInstances;
+
+    if(instancesToRestart.length === 0){
+        showNotification('No instances found for this flow class','info');
+        return;
+    }
+
+    if(!confirm(`Restart all ${instancesToRestart.length} instance(s) of class "${flowClassName}"?`)) return;
+
+    try {
+        let successCount = 0;
+        let failCount = 0;
+
+        // Disable all instances
+        for(const instance of instancesToRestart){
+            try {
+                const mutation = `mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`;
+                await graphqlQuery(mutation, {name: instance.name});
+                successCount++;
+            } catch(e){
+                console.error(e);
+                failCount++;
+            }
+        }
+
+        // Small delay between disable and enable
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Enable all instances again
+        for(const instance of instancesToRestart){
+            if(instance.enabled){ // Only re-enable if it was previously enabled
+                try {
+                    const mutation = `mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`;
+                    await graphqlQuery(mutation, {name: instance.name});
+                } catch(e){
+                    console.error(e);
+                    failCount++;
+                }
+            }
+        }
+
+        // Reload instances
+        await loadFlowInstancesForClass(flowClassName);
+        renderInstancesTable();
+
+        if(failCount === 0){
+            showNotification(`Successfully restarted ${successCount} instance(s)`, 'success');
+        } else {
+            showNotification(`Restarted ${successCount} instance(s), ${failCount} failed`, 'error');
+        }
+    } catch(e){
+        console.error(e);
+        showNotification('Restart failed: '+e.message, 'error');
+    }
+}
 
 // ---------------------- Sorting & Helpers ----------------------
 function compareValues(a,b,key,dir){
