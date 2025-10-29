@@ -85,14 +85,23 @@ const VisualFlow = (() => {
   }
 
   // ------------- Palette & Class Form -------------
+  function getNodeIcon(type){
+    const icons = {
+      function: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>',
+      database: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>',
+      timer: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l3 2"></path><path d="M9 2h6"></path></svg>'
+    };
+    return icons[type] || '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>';
+  }
+
   function buildPalette(){
     const pal = qs('#node-palette'); if(!pal) return;
     pal.innerHTML = state.nodeTypes.map(nt=>`
       <div class="palette-item" onclick="VisualFlow.addNodeType('${nt.type}')">
-        <div class="palette-item-icon">${escape(nt.icon||'📦')}</div>
+        <div class="palette-item-icon">${getNodeIcon(nt.type)}</div>
         <div class="palette-item-info">
           <div class="palette-item-name">${escape(nt.type)}</div>
-          <div class="palette-item-desc">Click to add node</div>
+          <div class="palette-item-desc">Add to workflow</div>
         </div>
       </div>
     `).join('');
