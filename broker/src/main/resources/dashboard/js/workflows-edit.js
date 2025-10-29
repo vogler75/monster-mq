@@ -575,10 +575,29 @@ const FlowEdit = (() => {
 
   function escape(str){ return (str??'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
+  function goBack(){
+    const p = new URLSearchParams(location.search);
+    const fromVisual = p.get('from') === 'visual';
+    const className = p.get('class');
+
+    if(fromVisual){
+      // Called from workflows-visual.html, go back there
+      if(className){
+        location.href = `/pages/workflows-visual.html?name=${encodeURIComponent(className)}`;
+      } else {
+        // Fallback: go to workflows list
+        location.href = '/pages/workflows.html';
+      }
+    } else {
+      // Called from workflows.html, go back there
+      location.href = '/pages/workflows.html';
+    }
+  }
+
   return {
     init, addNode, editNode, saveNode, openScriptEditor, cancelNodeEdit, removeNode, addConnectionRow, removeConnection,
     addInputMapping, updateInputMapping, removeInputMapping, addOutputMapping, updateOutputMapping, removeOutputMapping,
-    addVariable, updateVariableKey, updateVariableVal, removeVariable, save, deleteItem, cancel, restartAllInstances, addOutputMappingRow: addOutputMapping
+    addVariable, updateVariableKey, updateVariableVal, removeVariable, save, deleteItem, cancel, restartAllInstances, addOutputMappingRow: addOutputMapping, goBack
   };
 })();
 

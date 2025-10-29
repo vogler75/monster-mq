@@ -127,15 +127,20 @@ const VisualFlow = (() => {
       const instances = data.flowInstances || [];
       const select = qs('#restart-instance-select');
       const controls = qs('#restart-controls');
+      const btn = qs('#instance-btn');
 
-      if(!select || !controls) return;
+      if(!select || !controls || !btn) return;
 
       if(instances.length === 0){
         controls.style.display = 'none';
+        btn.style.display = 'inline-block';
+        btn.textContent = 'Create Instance';
         return;
       }
 
       controls.style.display = 'flex';
+      btn.style.display = 'inline-block';
+      btn.textContent = 'Edit Instance';
       select.innerHTML = instances.map((inst, idx) =>
         `<option value="${inst.name}" ${idx === 0 ? 'selected' : ''}>${inst.name}</option>`
       ).join('');
@@ -839,7 +844,28 @@ const VisualFlow = (() => {
   }
 
   function cancel(){ state.dirty=false; location.href='/pages/workflows.html'; }
-  return { init, addNodeType, saveClass, deleteClass, restartInstance, handlePortClick, deleteConnection, saveNode, deleteNode, addNodeType: addNodeType, resetView, addConnectionHelper, refreshConnectionHelper, keyboardZoom, validateScript, openScriptInWindow, cancel };
+
+  function handleInstanceButton(){
+    const btn = qs('#instance-btn');
+    if(!btn) return;
+
+    if(btn.textContent === 'Create Instance'){
+      // Navigate to create new instance with current class
+      if(state.flowClass){
+        location.href = `/pages/workflows-edit-instance.html?type=instance&class=${encodeURIComponent(state.flowClass.name)}&from=visual`;
+      }
+    } else if(btn.textContent === 'Edit Instance'){
+      // Navigate to edit selected instance
+      const selectedInstance = qs('#restart-instance-select')?.value;
+      if(selectedInstance){
+        location.href = `/pages/workflows-edit-instance.html?type=instance&name=${encodeURIComponent(selectedInstance)}&class=${encodeURIComponent(state.flowClass.name)}&from=visual`;
+      } else {
+        notify('Please select an instance', 'error');
+      }
+    }
+  }
+
+  return { init, addNodeType, saveClass, deleteClass, restartInstance, handlePortClick, deleteConnection, saveNode, deleteNode, addNodeType: addNodeType, resetView, addConnectionHelper, refreshConnectionHelper, keyboardZoom, validateScript, openScriptInWindow, cancel, handleInstanceButton };
 })();
 
 // Make VisualFlow accessible globally
