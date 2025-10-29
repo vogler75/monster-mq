@@ -141,9 +141,7 @@ const VisualFlow = (() => {
       };
     } else if(type === 'timer'){
       config = {
-        frequency: 1000,
-        value: 'tick',
-        autoStart: true
+        frequency: 1000
       };
     }
 
@@ -212,8 +210,7 @@ const VisualFlow = (() => {
       n.config.healthCheckInterval = parseInt(qs('#n-health-check')?.value || '60000');
     } else if(n.type === 'timer'){
       n.config.frequency = parseInt(qs('#n-frequency')?.value || '1000');
-      n.config.value = qs('#n-timer-value')?.value || 'tick';
-      n.config.autoStart = qs('#n-auto-start')?.checked || true;
+      n.config.value = qs('#n-timer-value')?.value ?? '';
     }
 
     renderAll();
@@ -387,11 +384,9 @@ const VisualFlow = (() => {
     if(n.type === 'timer'){
       const frequencyField = qs('#n-frequency');
       const timerValueField = qs('#n-timer-value');
-      const autoStartField = qs('#n-auto-start');
 
       if(frequencyField) frequencyField.value = n.config?.frequency || 1000;
-      if(timerValueField) timerValueField.value = n.config?.value || 'tick';
-      if(autoStartField) autoStartField.checked = n.config?.autoStart !== false;
+      if(timerValueField) timerValueField.value = n.config?.value ?? '';
     }
   }
   // Enhance script area after panel update

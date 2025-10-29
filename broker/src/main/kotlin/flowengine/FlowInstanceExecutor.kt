@@ -69,6 +69,9 @@ class FlowInstanceExecutor(
             logger.fine { "[${instanceConfig.name}]   - Topic inputs: ${topicInputMappings.size}" }
             logger.fine { "[${instanceConfig.name}]   - Subscribed topics: ${topicToNodeInputs.keys}" }
 
+            // Initialize timer nodes with autoStart enabled
+            initializeTimerNodes()
+
             // Subscribe to MQTT topics
             subscribeToTopics()
 
@@ -108,6 +111,21 @@ class FlowInstanceExecutor(
             logger.severe("[${instanceConfig.name}] Error stopping flow instance: ${e.message}")
             e.printStackTrace()
             stopPromise.fail(e)
+        }
+    }
+
+    /**
+     * Initialize all timer nodes - they always start with the flow
+     */
+    private fun initializeTimerNodes() {
+        try {
+            flowClass.nodes.filter { it.type == "timer" }.forEach { node ->
+                val nodeState = nodeStates.getOrPut(node.id) { ConcurrentHashMap() }
+                logger.fine { "[${instanceConfig.name}] Initializing timer node: ${node.id}" }
+                setupTimerNode(node, nodeState)
+            }
+        } catch (e: Exception) {
+            logger.warning("[${instanceConfig.name}] Error initializing timer nodes: ${e.message}")
         }
     }
 
@@ -414,8 +432,7 @@ class FlowInstanceExecutor(
     ) {
         try {
             val frequency = node.config.getLong("frequency", 1000)
-            val value = node.config.getString("value", "tick")
-            val autoStart = node.config.getBoolean("autoStart", true)
+            val value = node.config.getString("value", "")
 
             if (frequency <= 0) {
                 logger.warning("[${instanceConfig.name}] Timer node ${node.id} has invalid frequency: $frequency")
@@ -430,21 +447,24 @@ class FlowInstanceExecutor(
                 return
             }
 
-            // Only start if autoStart is true
-            if (!autoStart) {
-                logger.fine { "[${instanceConfig.name}] Timer ${node.id} configured but autoStart is false" }
-                return
-            }
-
             // Start periodic timer
             val newTimerId = vertx.setPeriodic(frequency) {
                 logger.fine { "[${instanceConfig.name}] Timer ${node.id} tick" }
                 try {
-                    // Parse value - try as JSON first, fallback to string
-                    val outputValue = try {
-                        io.vertx.core.json.JsonObject(value)
-                    } catch (e: Exception) {
-                        value
+                    // Generate output value
+                    val outputValue = if (value.isBlank()) {
+                        // If value is empty, generate timestamp JSON
+                        val now = java.time.Instant.now()
+                        io.vertx.core.json.JsonObject()
+                            .put("ts", now.toString())
+                            .put("ms", now.toEpochMilli())
+                    } else {
+                        // Use configured value - try as JSON first, fallback to string
+                        try {
+                            io.vertx.core.json.JsonObject(value)
+                        } catch (e: Exception) {
+                            value
+                        }
                     }
                     handleNodeOutput(node.id, "tick", outputValue)
                 } catch (e: Exception) {
