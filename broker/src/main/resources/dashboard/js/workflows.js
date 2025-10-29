@@ -16,6 +16,12 @@ async function initListPage(){
     await loadFlowClasses();
     setupListInteractions();
     renderClassesTable();
+
+    // Restore previously selected class from sessionStorage
+    const selectedClass = sessionStorage.getItem('selectedFlowClass');
+    if(selectedClass && flowClasses.some(c => c.name === selectedClass)){
+        await selectFlowClass(selectedClass);
+    }
 }
 
 // ---------------------- GraphQL ----------------------
@@ -69,11 +75,13 @@ async function selectFlowClass(flowClassName){
     if(selectedFlowClassName) {
         if(instanceSection) instanceSection.style.display = 'block';
         if(selectedNameEl) selectedNameEl.textContent = selectedFlowClassName;
+        sessionStorage.setItem('selectedFlowClass', selectedFlowClassName); // Remember selection
         await loadFlowInstancesForClass(selectedFlowClassName);
     } else {
         if(instanceSection) instanceSection.style.display = 'none';
         if(selectedNameEl) selectedNameEl.textContent = '-';
         flowInstances = [];
+        sessionStorage.removeItem('selectedFlowClass');
     }
 
     renderClassesTable(); // Re-render to show selection highlight
