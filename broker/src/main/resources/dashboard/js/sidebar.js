@@ -355,9 +355,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!window.__monsterMQLogViewer.isConnected && !window.__monsterMQLogViewer.ws) {
                     window.__monsterMQLogViewer.connect();
                 }
-            } else {
-                console.warn('LogViewer class not loaded yet. Ensure /js/log-viewer.js is included globally.');
             }
+            // LogViewer is optional - pages can load without it
         }
     }
 });

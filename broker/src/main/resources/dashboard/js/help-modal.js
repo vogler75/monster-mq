@@ -173,6 +173,12 @@ const HelpModal = (() => {
 
     // Show overlay
     overlay.classList.add('active');
+
+    // Hide log viewer if it exists
+    const logViewer = document.querySelector('[class*="log-viewer"]');
+    if (logViewer) {
+      logViewer.style.display = 'none';
+    }
   }
 
   function close() {
@@ -184,6 +190,12 @@ const HelpModal = (() => {
           iframe.src = '';
         }
       }, 300);
+    }
+
+    // Show log viewer if it exists
+    const logViewer = document.querySelector('[class*="log-viewer"]');
+    if (logViewer) {
+      logViewer.style.display = '';
     }
   }
 
