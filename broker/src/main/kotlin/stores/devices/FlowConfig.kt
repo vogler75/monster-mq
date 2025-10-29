@@ -137,7 +137,8 @@ data class FlowClass(
  * Type of flow input
  */
 enum class FlowInputType {
-    TOPIC  // Dynamic input from MQTT topic (triggers flow)
+    TOPIC,  // Dynamic input from MQTT topic (triggers flow)
+    TEXT    // Static text value (does not trigger flow, used as constant input)
 }
 
 /**

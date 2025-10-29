@@ -408,10 +408,11 @@ const FlowEdit = (() => {
         if(val==='---') return `<option disabled>── inputs ──</option>`;
         return `<option value="${escape(val)}" ${m.nodeInput===val?'selected':''}>${escape(val)}</option>`;
       }).join('');
+      const placeholder = m.type === 'TEXT' ? 'Text value' : 'MQTT topic';
       return `<tr>
         <td><select class="form-control" onchange="FlowEdit.updateInputMapping(${idx},'nodeInput',this.value)">${options}</select></td>
-        <td><select class="form-control" onchange="FlowEdit.updateInputMapping(${idx},'type',this.value)"><option value="TOPIC" ${m.type==='TOPIC'?'selected':''}>TOPIC</option></select></td>
-        <td><input class="form-control" value="${escape(m.value)}" onchange="FlowEdit.updateInputMapping(${idx},'value',this.value)" placeholder="MQTT topic"></td>
+        <td><select class="form-control" onchange="FlowEdit.updateInputMapping(${idx},'type',this.value)"><option value="TOPIC" ${m.type==='TOPIC'?'selected':''}>TOPIC</option><option value="TEXT" ${m.type==='TEXT'?'selected':''}>TEXT</option></select></td>
+        <td><input class="form-control" value="${escape(m.value)}" onchange="FlowEdit.updateInputMapping(${idx},'value',this.value)" placeholder="${placeholder}"></td>
         <td>
           <button class="btn-icon btn-delete" onclick="FlowEdit.removeInputMapping(${idx})" title="Delete Input Mapping">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">

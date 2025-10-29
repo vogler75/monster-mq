@@ -44,11 +44,13 @@ class FlowInstanceExecutor(
     // Input mappings organized by topic
     private val topicInputMappings: Map<String, String> // "nodeId.inputName" -> "mqtt/topic"
     private val topicToNodeInputs: Map<String, List<String>> // "mqtt/topic" -> ["nodeId.inputName", ...]
+    private val textInputMappings: Map<String, String> // "nodeId.inputName" -> "text value"
 
     init {
-        // Organize input mappings by topic
+        // Organize input mappings by topic and text
         val topicMap = mutableMapOf<String, String>()
         val topicToInputs = mutableMapOf<String, MutableList<String>>()
+        val textMap = mutableMapOf<String, String>()
 
         flowInstance.inputMappings.forEach { mapping ->
             when (mapping.type) {
@@ -56,11 +58,15 @@ class FlowInstanceExecutor(
                     topicMap[mapping.nodeInput] = mapping.value
                     topicToInputs.getOrPut(mapping.value) { mutableListOf() }.add(mapping.nodeInput)
                 }
+                FlowInputType.TEXT -> {
+                    textMap[mapping.nodeInput] = mapping.value
+                }
             }
         }
 
         topicInputMappings = topicMap
         topicToNodeInputs = topicToInputs
+        textInputMappings = textMap
     }
 
     override fun start(startPromise: Promise<Void>) {
@@ -349,6 +355,30 @@ class FlowInstanceExecutor(
                     topic = topicName
                 )
             }
+
+            // Check if this is a static text input (constant value)
+            val textValue = textInputMappings[nodeInput]
+            if (textValue != null && inputs[inputName] == null) {
+                // Try to parse as JSON array or object first, otherwise use as string
+                val parsedValue = try {
+                    val trimmed = textValue.trim()
+                    when {
+                        trimmed.startsWith("[") -> io.vertx.core.json.JsonArray(textValue)
+                        trimmed.startsWith("{") -> io.vertx.core.json.JsonObject(textValue)
+                        else -> textValue
+                    }
+                } catch (e: Exception) {
+                    // If JSON parsing fails, use as plain string
+                    textValue
+                }
+
+                inputs[inputName] = FlowScriptEngine.InputValue(
+                    value = parsedValue,
+                    type = FlowScriptEngine.InputType.TOPIC,
+                    timestamp = System.currentTimeMillis(),
+                    topic = null
+                )
+            }
         }
 
         return inputs
@@ -548,6 +578,7 @@ class FlowInstanceExecutor(
             val argumentsInput = inputs["arguments"]?.value
             val arguments = when (argumentsInput) {
                 is List<*> -> argumentsInput
+                is io.vertx.core.json.JsonArray -> argumentsInput.list
                 is JsonObject -> argumentsInput.getMap().values.toList()
                 else -> emptyList<Any?>()
             }
@@ -597,11 +628,21 @@ class FlowInstanceExecutor(
                     logger.fine { "[${instanceConfig.name}]   Database execution completed" }
                     handleNodeOutput(node.id, "result", result)
                 } else {
+                    val errorMsg = buildString {
+                        append("Database execution failed")
+                        if (sqlStatement != null) {
+                            append("\nSQL: $sqlStatement")
+                        }
+                        if (arguments.isNotEmpty()) {
+                            append("\nArguments: $arguments")
+                        }
+                        append("\nError: ${asyncResult.cause()?.message}")
+                    }
                     logger.severe("[${instanceConfig.name}]   Database execution async error: ${asyncResult.cause()?.message}")
                     asyncResult.cause()?.printStackTrace()
                     errorCount++
                     lastError = asyncResult.cause()?.message
-                    handleNodeOutput(node.id, "error", asyncResult.cause()?.message ?: "Unknown error")
+                    handleNodeOutput(node.id, "error", errorMsg)
                 }
             }
 
