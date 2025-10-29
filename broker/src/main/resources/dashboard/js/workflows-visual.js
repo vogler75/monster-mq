@@ -348,6 +348,13 @@ const VisualFlow = (() => {
     if(dbForm) dbForm.style.display = n.type === 'database' ? 'block' : 'none';
     if(timerForm) timerForm.style.display = n.type === 'timer' ? 'block' : 'none';
 
+    // Hide inputs/outputs for timer and database nodes (they have fixed ports)
+    const inputsGroup = qs('#inputs-group');
+    const outputsGroup = qs('#outputs-group');
+    const hideInputsOutputs = n.type === 'timer' || n.type === 'database';
+    if(inputsGroup) inputsGroup.style.display = hideInputsOutputs ? 'none' : 'block';
+    if(outputsGroup) outputsGroup.style.display = hideInputsOutputs ? 'none' : 'block';
+
     // Populate function form
     if(n.type === 'function'){
       const scriptField = qs('#n-script');
