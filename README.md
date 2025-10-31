@@ -561,7 +561,7 @@ See the [Workflows documentation](doc/workflows.md) for complete guide, examples
 
 ## 📄 License
 
-This project is licensed under the GNU GENERAL PUBLIC Version 3 License.
+This project is licensed under the GNU General Public License v3.0.
 
 ---
 
