@@ -489,7 +489,7 @@ class MessageStoreCrateDB(
         val sql = """
         SELECT topic
         FROM $tableName AS t
-        WHERE topic_l <> '${Const.MCP_CONFIG_TOPIC}'
+        WHERE topic_l <> '${Const.CONFIG_TOPIC}'
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
         ORDER BY topic
@@ -525,9 +525,9 @@ class MessageStoreCrateDB(
         // CrateDB uses different JSON operators than PostgreSQL
         // CrateDB: payload_json['config'] ~ 'pattern'
         val sql = """
-        SELECT RTRIM(topic, '/${Const.MCP_CONFIG_TOPIC}') AS topic, payload_json AS config
+        SELECT RTRIM(topic, '/${Const.CONFIG_TOPIC}') AS topic, payload_json AS config
         FROM $tableName
-        WHERE topic_l = '${Const.MCP_CONFIG_TOPIC}'
+        WHERE topic_l = '${Const.CONFIG_TOPIC}'
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
         AND ${if (ignoreCase) "LOWER(payload_json['${config}'])" else "payload_json['${config}']"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
         ORDER BY topic

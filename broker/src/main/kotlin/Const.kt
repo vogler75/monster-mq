@@ -3,12 +3,6 @@ package at.rocworks
 import java.util.logging.Level
 
 object Const {
-    const val GLOBAL_CLIENT_NAMESPACE = "CNS"
-    const val GLOBAL_EVENT_NAMESPACE = "DNS"
-
-    const val GLOBAL_SUBSCRIPTION_TABLE_NAMESPACE = "ST"
-    const val GLOBAL_CLIENT_TABLE_NAMESPACE = "CT"
-
     const val TOPIC_KEY = "Topic"
     const val CLIENT_KEY = "Client"
     const val QOS_KEY = "QoS"
@@ -24,9 +18,10 @@ object Const {
     const val SYS_TOPIC_NAME = "\$SYS"
     const val LOG_TOPIC_NAME = "syslogs"
 
+    const val CONFIG_TOPIC = "<config>"    
+
     const val MCP_ARCHIVE_GROUP = "Default"
-    const val MCP_CONFIG_TOPIC = "<config>"
-    
+
     const val SQLITE_DEFAULT_PATH = "sqlite"
     
     const val ANONYMOUS_USER = "Anonymous"

@@ -713,7 +713,7 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
                 result.add(JsonArray().add("topic").add("description")) // Header row for the result table
                 list.forEach {
                     val config =
-                        retainedStore["$it/${Const.MCP_CONFIG_TOPIC}"] // TODO: should be optimized to do a fetch with the list of topics
+                        retainedStore["$it/${Const.CONFIG_TOPIC}"] // TODO: should be optimized to do a fetch with the list of topics
                     result.add(
                         JsonArray()
                             .add(it)

@@ -8,7 +8,6 @@ import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.MessageStoreType
 import at.rocworks.stores.PayloadFormat
 import at.rocworks.data.PurgeResult
-import at.rocworks.stores.cratedb.MessageStoreCrateDB
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -418,7 +417,7 @@ class MessageStorePostgres(
         val sql = """
         SELECT topic
         FROM $tableName AS t 
-        WHERE topic_l <> '${Const.MCP_CONFIG_TOPIC}'
+        WHERE topic_l <> '${Const.CONFIG_TOPIC}'
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}        
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"} 
         ORDER BY topic
@@ -448,9 +447,9 @@ class MessageStorePostgres(
         val sqlNamespacePattern = if (namespace.isEmpty()) "%" else "$namespace/%"
 
         val sql = """
-        SELECT RTRIM(topic, '/${Const.MCP_CONFIG_TOPIC}') AS topic, payload_json AS config, payload_json AS config
+        SELECT RTRIM(topic, '/${Const.CONFIG_TOPIC}') AS topic, payload_json AS config, payload_json AS config
         FROM $tableName
-        WHERE topic_l = '${Const.MCP_CONFIG_TOPIC}' 
+        WHERE topic_l = '${Const.CONFIG_TOPIC}' 
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
         AND payload_json->>'${config}' ${if (ignoreCase) "~* ?" else "~ ?"}   
         ORDER BY topic

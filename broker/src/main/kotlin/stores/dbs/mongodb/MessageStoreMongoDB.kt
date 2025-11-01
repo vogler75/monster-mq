@@ -633,7 +633,7 @@ class MessageStoreMongoDB(
             val filters = mutableListOf<Bson>()
 
             // Filter for topics ending with MCP_CONFIG_TOPIC
-            val topicLevels = Utils.getTopicLevels(Const.MCP_CONFIG_TOPIC)
+            val topicLevels = Utils.getTopicLevels(Const.CONFIG_TOPIC)
             if (topicLevels.isNotEmpty()) {
                 val lastLevel = topicLevels.last()
                 filters.add(Filters.regex("topic", ".*/${lastLevel}$"))
@@ -667,7 +667,7 @@ class MessageStoreMongoDB(
             for (doc in cursor) {
                 val topic = doc.getString("topic") ?: ""
                 // Remove the config topic suffix
-                val cleanTopic = topic.replace("/${Const.MCP_CONFIG_TOPIC}", "")
+                val cleanTopic = topic.replace("/${Const.CONFIG_TOPIC}", "")
                 val configJson = doc.getString("payload_json") ?: ""
                 resultTopics.add(Pair(cleanTopic, configJson))
             }

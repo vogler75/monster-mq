@@ -441,7 +441,7 @@ class MessageStoreSQLite(
         val sql = """
         SELECT topic
         FROM $tableName AS t 
-        WHERE topic_l != '${Const.MCP_CONFIG_TOPIC}'
+        WHERE topic_l != '${Const.CONFIG_TOPIC}'
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}        
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"} 
         ORDER BY topic
@@ -467,9 +467,9 @@ class MessageStoreSQLite(
 
         // SQLite uses different JSON syntax than PostgreSQL
         val sql = """
-        SELECT REPLACE(topic, '/${Const.MCP_CONFIG_TOPIC}', '') AS topic, payload_json AS config
+        SELECT REPLACE(topic, '/${Const.CONFIG_TOPIC}', '') AS topic, payload_json AS config
         FROM $tableName
-        WHERE topic_l = '${Const.MCP_CONFIG_TOPIC}' 
+        WHERE topic_l = '${Const.CONFIG_TOPIC}' 
         AND ${if (ignoreCase) "LOWER(topic)" else "topic"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
         AND ${if (ignoreCase) "LOWER(json_extract(payload_json, '$.$config'))" else "json_extract(payload_json, '$.$config')"} LIKE ${if (ignoreCase) "LOWER(?)" else "?"}
         ORDER BY topic
