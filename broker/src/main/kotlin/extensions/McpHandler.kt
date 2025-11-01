@@ -6,7 +6,6 @@ import at.rocworks.stores.IMessageArchive
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.IMessageStoreExtended
-import at.rocworks.stores.postgres.MessageArchivePostgres
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.Vertx
@@ -24,8 +23,6 @@ class McpHandler(
     private val logger = Utils.getLogger(this::class.java)
 
     private val tools: MutableMap<String, AsyncTool> = HashMap<String, AsyncTool>()
-
-    private val messageArchiveExtended = messageArchive as? IMessageArchiveExtended
 
     companion object {
         private const val JSONRPC_VERSION = "2.0"
@@ -47,6 +44,30 @@ class McpHandler(
 
     init {
         registerTools()
+        logStoreWarnings()
+    }
+
+    private fun logStoreWarnings() {
+        val warnings = mutableListOf<String>()
+
+        if (retainedStore !is IMessageStoreExtended) {
+            warnings.add("Retained store is not extended - find-topics-by-name and find-topics-by-description tools will return empty results")
+        }
+
+        if (messageStore == null || messageStore !is IMessageStoreExtended) {
+            warnings.add("Message store is not available or not extended - get-topic-value tool may have limited functionality")
+        }
+
+        if (messageArchive == null || messageArchive !is IMessageArchiveExtended) {
+            warnings.add("Archive group is not extended - query-message-archive and query-message-archive-by-sql tools will not be available")
+        }
+
+        if (warnings.isNotEmpty()) {
+            logger.warning("MCP handler initialized with limitations:")
+            warnings.forEach { warning -> logger.warning("  - $warning") }
+        } else {
+            logger.info("All MCP stores are fully extended - all tools will be available")
+        }
     }
 
     private fun createResponse(id: Any?, result: JsonObject?): JsonObject {
@@ -304,11 +325,9 @@ class McpHandler(
 
     private fun registerTools() {
         // Register tools
-        // Only register topic discovery tools if retained store is extended
-        if (retainedStore is IMessageStoreExtended) {
-            registerTool(
-                AsyncTool(
-                    "find-topics-by-name",
+        registerTool(
+            AsyncTool(
+                "find-topics-by-name",
                 """
 **Find Topics by Name**
 
@@ -434,12 +453,9 @@ This tool helps discover relevant data streams based on their descriptive conten
                     )
                     .put("required", JsonArray().add("description")),
                 ::findTopicsByDescriptionTool
-                )
             )
-        }
-        // Only register get-topic-value if message store is available
-        if (messageStore != null) {
-            registerTool(
+        )
+        registerTool(
                 AsyncTool(
                     "get-topic-value",
                     """
@@ -511,12 +527,9 @@ JsonObject()
                     )
                     .put("required", JsonArray().add("topics")),
                 ::getTopicValueTool
-                )
             )
-        }
-        // Only register query-message-archive if archive group is extended
-        if (messageArchiveExtended != null) {
-            registerTool(
+        )
+        registerTool(
                 AsyncTool(
                     "query-message-archive",
                     """
@@ -607,10 +620,7 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
                     ::queryMessageArchive
                 )
             )
-        }
-        // Only register query-message-archive-by-sql if archive group is extended
-        if (messageArchiveExtended != null) {
-            registerTool(
+        registerTool(
                 AsyncTool(
                     "query-message-archive-by-sql",
                     """
@@ -707,16 +717,12 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
                     ::queryMessageArchiveBySql
                 )
             )
-        }
     }
 
     // --------------------------------------------------------------------------------------------------------------
 
     private fun findTopicsByNameTool(args: JsonObject): Future<JsonArray> {
         logger.info("findTopicByNameTool called with args: $args")
-        if (retainedStore !is IMessageStoreExtended) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "This tool is not available. Retained store is not extended."))
-        }
         if (!args.containsKey("name")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Name parameter required"))
         }
@@ -726,8 +732,11 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
             try {
-                val list = ((messageStore as? IMessageStoreExtended)?.findTopicsByName(name, ignoreCase, namespace) ?: emptyList()) +
-                        (retainedStore as IMessageStoreExtended).findTopicsByName(name, ignoreCase, namespace)
+                val extendedMessageStore = messageStore as? IMessageStoreExtended
+                val extendedRetainedStore = retainedStore as? IMessageStoreExtended
+
+                val list = (extendedMessageStore?.findTopicsByName(name, ignoreCase, namespace) ?: emptyList()) +
+                        (extendedRetainedStore?.findTopicsByName(name, ignoreCase, namespace) ?: emptyList())
                 val distinctList = list.distinct()
                 val result = JsonArray()
                 result.add(JsonArray().add("topic").add("description")) // Header row for the result table
@@ -758,9 +767,6 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 
     private fun findTopicsByDescriptionTool(args: JsonObject): Future<JsonArray> {
         logger.info("findTopicByDescriptionTool called with args: $args")
-        if (retainedStore !is IMessageStoreExtended) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "This tool is not available. Retained store is not extended."))
-        }
         if (!args.containsKey("description")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Description parameter required"))
         }
@@ -770,7 +776,8 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
             try {
-                val list = (retainedStore as IMessageStoreExtended).findTopicsByConfig("Description", description, ignoreCase, namespace)
+                val extendedRetainedStore = retainedStore as? IMessageStoreExtended
+                val list = extendedRetainedStore?.findTopicsByConfig("Description", description, ignoreCase, namespace) ?: emptyList()
                 val result = JsonArray()
                 result.add(JsonArray().add("topic").add("description")) // Header row for the result table
                 list.forEach { result.add(JsonArray().add(it.first).add(it.second)) }
@@ -792,9 +799,6 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 
     private fun getTopicValueTool(args: JsonObject): Future<JsonArray> {
         logger.info("getTopicValueTool called with args: $args")
-        if (messageStore == null) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "This tool is not available. Message store is not available."))
-        }
         if (!args.containsKey("topics")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Topic parameter required"))
         }
@@ -826,9 +830,6 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 
     private fun queryMessageArchive(args: JsonObject): Future<JsonArray> {
         logger.info("queryMessageArchive called with args: $args")
-        if (messageArchiveExtended == null) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Message archive is not configured. This tool requires an extended archive group."))
-        }
         if (!args.containsKey("topic")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Topic parameter required"))
         }
@@ -837,10 +838,14 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val endTime = args.getString("endTime")?.let { Instant.parse(it) }
         val limit = args.getInteger("limit", 1000)
 
+        if (messageArchive !is IMessageArchiveExtended) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Message archive is not extended or not available. This tool requires an extended archive group."))
+        }
+
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
             try {
-                val result = messageArchiveExtended.getHistory(topic, startTime, endTime, limit)
+                val result = messageArchive.getHistory(topic, startTime, endTime, limit)
                 // Convert JsonArray of JsonObjects to JsonArray of JsonArrays for markdown conversion
                 val tableFormat = convertHistoryToTableFormat(result)
                 val answer = JsonArray().add(
@@ -861,32 +866,30 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 
     private fun queryMessageArchiveBySql(args: JsonObject): Future<JsonArray> {
         logger.info("queryMessageArchiveBySql called with args: $args")
-        if (messageArchive == null) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Message archive is not configured. This tool requires an extended archive group."))
-        }
         if (!args.containsKey("sql")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "SQL parameter required"))
         }
+
+        if (messageArchive !is IMessageArchiveExtended) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Message archive is not extended or not available. This tool requires an extended archive group."))
+        }
+
         val sql = args.getString("sql", "")
         val promise = Promise.promise<JsonArray>()
-        if (messageArchive is MessageArchivePostgres) {
-            vertx.executeBlocking(Callable {
-                try {
-                    val result = messageArchive!!.executeQuery(sql)
-                    val answer = JsonArray().add(
-                        JsonObject()
-                            .put("type", "text")
-                            .put("text", convertJsonTableToMarkdown(result))
-                    )
-                    promise.complete(answer)
-                } catch (e: Exception) {
-                    logger.severe("Error executing SQL query: ${e.message}")
-                    promise.fail(McpException(JSONRPC_INTERNAL_ERROR, "Error executing SQL query: ${e.message}"))
-                }
-            })
-        } else {
-            promise.fail(McpException(JSONRPC_INVALID_ARGUMENT, "Unsupported message archive type for SQL queries"))
-        }
+        vertx.executeBlocking(Callable {
+            try {
+                val result = messageArchive.executeQuery(sql)
+                val answer = JsonArray().add(
+                    JsonObject()
+                        .put("type", "text")
+                        .put("text", convertJsonTableToMarkdown(result))
+                )
+                promise.complete(answer)
+            } catch (e: Exception) {
+                logger.severe("Error executing SQL query: ${e.message}")
+                promise.fail(McpException(JSONRPC_INTERNAL_ERROR, "Error executing SQL query: ${e.message}"))
+            }
+        })
         return promise.future()
     }
 

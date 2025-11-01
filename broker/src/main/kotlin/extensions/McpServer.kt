@@ -39,15 +39,10 @@ class McpServer(
         private const val MCP_PATH = "/mcp"
     }
 
-    // Check if archive group is extended
-    private val isArchiveGroupExtended = messageArchive != null &&
-        retainedStore is IMessageStoreExtended &&
-        (messageStore != null && messageStore is IMessageStoreExtended)
-
     private var mcpHandler: McpHandler? = null
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Archive group extended: $isArchiveGroupExtended")
+        logger.info("Starting MCP server")
 
         mcpHandler = McpHandler(vertx, retainedStore, messageStore, messageArchive) // McpHandler is initialized
 
