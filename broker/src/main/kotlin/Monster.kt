@@ -777,16 +777,9 @@ MORE INFO:
                 val mcpConfig = configJson.getJsonObject("MCP", JsonObject())
                 val mcpEnabled = mcpConfig.getBoolean("Enabled", true)
                 val mcpPort = mcpConfig.getInteger("Port", 3000)
-                val mcpArchiveGroup = archiveGroups.find { it.name == Const.MCP_ARCHIVE_GROUP }
-
-                val lastValStore = mcpArchiveGroup?.lastValStore
-                val archiveStore = mcpArchiveGroup?.archiveStore
-
                 val mcpServer = if (mcpEnabled) {
                     logger.info("Starting MCP server on port $mcpPort")
-                    McpServer("0.0.0.0", mcpPort, retainedStore,
-                        lastValStore,
-                        archiveStore)  // Always pass null to test non-extended archive group handling
+                    McpServer("0.0.0.0", mcpPort, retainedStore, archiveHandler)
                 } else {
                     logger.info("MCP server is disabled in configuration")
                     null

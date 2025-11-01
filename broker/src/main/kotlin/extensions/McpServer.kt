@@ -1,10 +1,8 @@
 package at.rocworks.extensions
 
 import at.rocworks.Utils
-import at.rocworks.stores.IMessageArchive
-import at.rocworks.stores.IMessageArchiveExtended
+import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.IMessageStore
-import at.rocworks.stores.IMessageStoreExtended
 
 import io.vertx.core.*
 import io.vertx.core.http.HttpServerOptions
@@ -22,8 +20,7 @@ class McpServer(
     private val host: String,
     private val port: Int,
     private val retainedStore: IMessageStore,
-    private val messageStore: IMessageStore?,
-    private val messageArchive: IMessageArchive?
+    private val archiveHandler: ArchiveHandler
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -44,7 +41,7 @@ class McpServer(
     override fun start(startPromise: Promise<Void>) {
         logger.info("Starting MCP server")
 
-        mcpHandler = McpHandler(vertx, retainedStore, messageStore, messageArchive) // McpHandler is initialized
+        mcpHandler = McpHandler(vertx, retainedStore, archiveHandler) // McpHandler is initialized
 
         val router = Router.router(vertx)
         router.route().handler(BodyHandler.create())

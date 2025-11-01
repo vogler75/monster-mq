@@ -2,6 +2,8 @@ package at.rocworks.extensions
 
 import at.rocworks.Const
 import at.rocworks.Utils
+import at.rocworks.handlers.ArchiveGroup
+import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.IMessageArchive
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.IMessageStore
@@ -17,14 +19,15 @@ import java.util.concurrent.Callable
 class McpHandler(
     private val vertx: Vertx,
     private val retainedStore: IMessageStore,
-    private val messageStore: IMessageStore?,
-    private val messageArchive: IMessageArchive?
+    private val archiveHandler: ArchiveHandler
 ) {
     private val logger = Utils.getLogger(this::class.java)
 
     private val tools: MutableMap<String, AsyncTool> = HashMap<String, AsyncTool>()
 
     companion object {
+        private const val DEFAULT_ARCHIVE_GROUP = "Default"
+
         private const val JSONRPC_VERSION = "2.0"
         private const val PROTOCOL_VERSION = "2024-11-05"
 
@@ -47,19 +50,32 @@ class McpHandler(
         logStoreWarnings()
     }
 
+    /**
+     * Get an archive group by name. Defaults to "Default" if no name is provided.
+     */
+    private fun getArchiveGroup(name: String? = null): ArchiveGroup? {
+        val groupName = name ?: DEFAULT_ARCHIVE_GROUP
+        return archiveHandler.getDeployedArchiveGroups()[groupName]
+    }
+
     private fun logStoreWarnings() {
+        val defaultArchiveGroup = getArchiveGroup()
         val warnings = mutableListOf<String>()
 
         if (retainedStore !is IMessageStoreExtended) {
             warnings.add("Retained store is not extended - find-topics-by-name and find-topics-by-description tools will return empty results")
         }
 
-        if (messageStore == null || messageStore !is IMessageStoreExtended) {
-            warnings.add("Message store is not available or not extended - get-topic-value tool may have limited functionality")
-        }
+        if (defaultArchiveGroup == null) {
+            warnings.add("Default archive group '$DEFAULT_ARCHIVE_GROUP' is not available - some tools may not work")
+        } else {
+            if (defaultArchiveGroup.lastValStore == null || defaultArchiveGroup.lastValStore !is IMessageStoreExtended) {
+                warnings.add("Default archive group message store is not available or not extended - get-topic-value tool may have limited functionality")
+            }
 
-        if (messageArchive == null || messageArchive !is IMessageArchiveExtended) {
-            warnings.add("Archive group is not extended - query-message-archive and query-message-archive-by-sql tools will not be available")
+            if (defaultArchiveGroup.archiveStore == null || defaultArchiveGroup.archiveStore !is IMessageArchiveExtended) {
+                warnings.add("Default archive group archive store is not extended - query-message-archive and query-message-archive-by-sql tools will not be available")
+            }
         }
 
         if (warnings.isNotEmpty()) {
@@ -179,7 +195,8 @@ class McpHandler(
 
     private fun handleListTools(): JsonObject {
         val toolsArray = JsonArray()
-        for (tool in tools.values) {
+        // Sort tools by name for consistent ordering
+        for (tool in tools.values.sortedBy { it.name }) {
             val toolInfo = JsonObject()
                 .put("name", tool.name)
                 .put("description", tool.description)
@@ -357,6 +374,11 @@ This tool helps locate specific data streams or topic hierarchies within a messa
 - Useful for filtering large topic hierarchies by system, device, or category
 - Example: namespace `production` only searches topics starting with `production`
 
+**Archive Group:**
+- Optional archiveGroup parameter specifies which archive group to search
+- Defaults to "Default" if not specified
+- Each archive group contains its own message store with different topics
+
 **Best Practices:**
 - Start with broader patterns and narrow down if needed
 - Use namespace filtering for large systems to improve performance
@@ -380,6 +402,10 @@ This tool helps locate specific data streams or topic hierarchies within a messa
                             .put("namespace", JsonObject()
                                 .put("type", "string")
                                 .put("description", "Optional namespace to limit the search to a specific topic prefix")
+                            )
+                            .put("archiveGroup", JsonObject()
+                                .put("type", "string")
+                                .put("description", "Optional archive group name (defaults to 'Default')")
                             )
                     )
                     .put("required", JsonArray().add("name")),
@@ -425,6 +451,11 @@ This tool helps discover relevant data streams based on their descriptive conten
 - Example: namespace `production/sensors` only searches sensor topics in production
 - Combines with regex patterns for precise filtering
 
+**Archive Group:**
+- Optional archiveGroup parameter specifies which archive group to search
+- Defaults to "Default" if not specified
+- Each archive group contains its own retained store with different topics
+
 **Best Practices:**
 - Start with simple patterns like `.*keyword.*` and refine as needed
 - Use namespace filtering to narrow scope before applying complex regex
@@ -449,6 +480,10 @@ This tool helps discover relevant data streams based on their descriptive conten
                             .put("namespace", JsonObject()
                                 .put("type", "string")
                                 .put("description", "Optional namespace to limit the search to a specific topic prefix")
+                            )
+                            .put("archiveGroup", JsonObject()
+                                .put("type", "string")
+                                .put("description", "Optional archive group name (defaults to 'Default')")
                             )
                     )
                     .put("required", JsonArray().add("description")),
@@ -508,11 +543,16 @@ Retrieves the current or most recent values stored for one or more MQTT topics. 
 - Group related topics together in the array for efficient bulk retrieval
 - Even for single topics, always pass them as an array with one element
 
+**Archive Group:**
+- Optional archiveGroup parameter specifies which archive group to query
+- Defaults to "Default" if not specified
+- Each archive group maintains its own last value store
+
 **Error Handling:**
 - Verify MQTT topics exist and are accessible before attempting to get their values
 - Handle cases where topics may not have any retained messages
 - Individual topics in the array may fail while others succeed
-- Check the returned object for null values indicating missing or unavailable topics 
+- Check the returned object for null values indicating missing or unavailable topics
                 """.trimIndent(),
 JsonObject()
                     .put("type", "object")
@@ -523,6 +563,10 @@ JsonObject()
                                     .put("type", "array")
                                     .put("items", JsonObject().put("type", "string"))
                                     .put("description", "Array of topics to get the values for")
+                            )
+                            .put("archiveGroup", JsonObject()
+                                .put("type", "string")
+                                .put("description", "Optional archive group name (defaults to 'Default')")
                             )
                     )
                     .put("required", JsonArray().add("topics")),
@@ -569,6 +613,18 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
 - Messages are returned chronologically, so you get the oldest messages first
 - Increase limit for comprehensive historical analysis, decrease for quick sampling
 
+**lastMinutes** (optional):
+- Query messages from the last N minutes
+- If specified, automatically sets startTime to (current time - N minutes) and endTime to current time
+- Overrides any manually specified startTime and endTime parameters
+- Convenient shorthand for recent data queries
+- Example: `lastMinutes: 60` retrieves messages from the last hour
+
+**archiveGroup** (optional, defaults to "Default"):
+- Specifies which archive group to query
+- Each archive group has its own message archive
+- Use this to query different data stores or environments
+
 **Use Cases:**
 - Analyze sensor data trends: `sensors/temperature/outdoor` over the last week
 - Debug device behavior: `devices/thermostat/errors` during a specific incident
@@ -590,6 +646,8 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
 - For real-time data, use the get-topic-value tool instead
 
 **Example Queries:**
+- Last 30 minutes: `lastMinutes: 30`
+- Last hour: `lastMinutes: 60`
 - Last 24 hours: `startTime: "2024-01-15T00:00:00Z"`, `endTime: "2024-01-16T00:00:00Z"`
 - Specific incident window: `startTime: "2024-01-15T14:30:00Z"`, `endTime: "2024-01-15T15:00:00Z"`
 - Sample recent data: `limit: 100` (no time range for most recent 100 messages)
@@ -614,6 +672,14 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
                                     .put("type", "integer")
                                     .put("description", "Maximum number of messages to return")
                                     .put("default", 100)
+                                )
+                                .put("lastMinutes", JsonObject()
+                                    .put("type", "integer")
+                                    .put("description", "Query messages from the last N minutes (overrides startTime and endTime)")
+                                )
+                                .put("archiveGroup", JsonObject()
+                                    .put("type", "string")
+                                    .put("description", "Optional archive group name (defaults to 'Default')")
                                 )
                         )
                         .put("required", JsonArray().add("topic")),
@@ -662,6 +728,11 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 - **For plain number/string in payload_json:** use `payload_json::text::numeric` or `(payload_json#>>'{}')::numeric` to convert directly
 - Include proper WHERE clauses with time filters for performance
 - Maximum query length: 8000 characters
+
+**archiveGroup** (optional, defaults to "Default"):
+- Specifies which archive group to query
+- Each archive group has its own archive database table
+- Use this to query different data stores or environments
 
 **SQL Guidelines:**
 - **Time-based grouping:** Use `date_trunc('hour'|'day'|'week'|'month', time)` for temporal aggregations
@@ -712,6 +783,10 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
                                     .put("type", "string")
                                     .put("description", "SQL query to execute against the message archive")
                                 )
+                                .put("archiveGroup", JsonObject()
+                                    .put("type", "string")
+                                    .put("description", "Optional archive group name (defaults to 'Default')")
+                                )
                         )
                         .put("required", JsonArray().add("sql")),
                     ::queryMessageArchiveBySql
@@ -729,9 +804,13 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val ignoreCase = args.getBoolean("ignoreCase", true)
         val namespace = args.getString("namespace", "")
         val name = args.getString("name", "")
+        val archiveGroupName = args.getString("archiveGroup")
+
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
             try {
+                val archiveGroup = getArchiveGroup(archiveGroupName)
+                val messageStore = archiveGroup?.lastValStore
                 val extendedMessageStore = messageStore as? IMessageStoreExtended
                 val extendedRetainedStore = retainedStore as? IMessageStoreExtended
 
@@ -773,9 +852,12 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val ignoreCase = args.getBoolean("ignoreCase", true)
         val description = args.getString("description", "")
         val namespace = args.getString("namespace", "")
+        val archiveGroupName = args.getString("archiveGroup")
+
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
             try {
+                // This tool only searches in the retained store (not archive group specific)
                 val extendedRetainedStore = retainedStore as? IMessageStoreExtended
                 val list = extendedRetainedStore?.findTopicsByConfig("Description", description, ignoreCase, namespace) ?: emptyList()
                 val result = JsonArray()
@@ -803,10 +885,15 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Topic parameter required"))
         }
         val topics = args.getJsonArray("topics", JsonArray())
+        val archiveGroupName = args.getString("archiveGroup")
+
         val result = JsonArray()
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
             try {
+                val archiveGroup = getArchiveGroup(archiveGroupName)
+                val messageStore = archiveGroup?.lastValStore
+
                 result.add(JsonArray().add("topic").add("value")) // Header row for the result table
                 topics.forEach { topic -> // TODO: Should be optimized to do a fetch with the list of topics directly in the database
                     val message = topic.toString().let { retainedStore[it] ?: messageStore?.get(it) }
@@ -834,17 +921,31 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Topic parameter required"))
         }
         val topic = args.getString("topic", "")
-        val startTime = args.getString("startTime")?.let { Instant.parse(it) }
-        val endTime = args.getString("endTime")?.let { Instant.parse(it) }
         val limit = args.getInteger("limit", 1000)
+        val archiveGroupName = args.getString("archiveGroup")
+        val lastMinutes = args.getInteger("lastMinutes")
 
-        if (messageArchive !is IMessageArchiveExtended) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Message archive is not extended or not available. This tool requires an extended archive group."))
+        // Calculate time range based on lastMinutes or use provided startTime/endTime
+        val (startTime, endTime) = if (lastMinutes != null) {
+            val now = Instant.now()
+            val start = now.minusSeconds(lastMinutes.toLong() * 60)
+            Pair(start, now)
+        } else {
+            val start = args.getString("startTime")?.let { Instant.parse(it) }
+            val end = args.getString("endTime")?.let { Instant.parse(it) }
+            Pair(start, end)
         }
 
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
             try {
+                val archiveGroup = getArchiveGroup(archiveGroupName)
+                val messageArchive = archiveGroup?.archiveStore
+
+                if (messageArchive !is IMessageArchiveExtended) {
+                    throw McpException(JSONRPC_INVALID_ARGUMENT, "Message archive is not extended or not available for archive group '${archiveGroupName ?: DEFAULT_ARCHIVE_GROUP}'. This tool requires an extended archive group.")
+                }
+
                 val result = messageArchive.getHistory(topic, startTime, endTime, limit)
                 // Convert JsonArray of JsonObjects to JsonArray of JsonArrays for markdown conversion
                 val tableFormat = convertHistoryToTableFormat(result)
@@ -870,14 +971,19 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "SQL parameter required"))
         }
 
-        if (messageArchive !is IMessageArchiveExtended) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Message archive is not extended or not available. This tool requires an extended archive group."))
-        }
-
         val sql = args.getString("sql", "")
+        val archiveGroupName = args.getString("archiveGroup")
+
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
             try {
+                val archiveGroup = getArchiveGroup(archiveGroupName)
+                val messageArchive = archiveGroup?.archiveStore
+
+                if (messageArchive !is IMessageArchiveExtended) {
+                    throw McpException(JSONRPC_INVALID_ARGUMENT, "Message archive is not extended or not available for archive group '${archiveGroupName ?: DEFAULT_ARCHIVE_GROUP}'. This tool requires an extended archive group.")
+                }
+
                 val result = messageArchive.executeQuery(sql)
                 val answer = JsonArray().add(
                     JsonObject()
