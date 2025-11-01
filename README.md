@@ -150,9 +150,6 @@ Logging:
 GraphQL:
   Enabled: true
   Port: 4000
-MCP:
-  Enabled: true
-  Port: 3000
 ```
 
 #### PostgreSQL Multi-Schema Setup
@@ -250,9 +247,9 @@ MonsterMQ follows a modular, event-driven architecture built on Eclipse Vert.x, 
 │                                                                                 │
 │  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐   │
 │  │   GraphQL API        │  │   Web Dashboard      │  │   MCP Server         │   │
-│  │  • Queries           │  │  • Configuration     │  │  • AI Integration    │   │
-│  │  • Mutations         │  │  • Topic Browser     │  │  • Model Context     │   │
-│  │  • Subscriptions     │  │  • Flow Editor       │  │  • Port 3000         │   │
+│  │  • Queries           │  │  • Configuration     │  │  • Coming Soon       │   │
+│  │  • Mutations         │  │  • Topic Browser     │  │  • GraphQL API       │   │
+│  │  • Subscriptions     │  │  • Flow Editor       │  │  • SQL Queries       │   │
 │  │  • Port 4000         │  │  • User Management   │  │                      │   │ 
 │  └──────────────────────┘  └──────────────────────┘  └──────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -313,7 +310,7 @@ For detailed documentation, see the [`doc/`](doc/) directory:
 - **[Neo4j Integration](doc/neo4j.md)** - Graph database for MQTT topic hierarchies
 - **[GraphQL API](doc/graphql.md)** - Real-time data access and management
 - **[MQTT JSON-RPC 2.0 API](doc/mqtt-api.md)** - Execute GraphQL queries/mutations over MQTT
-- **[MCP Server](doc/mcp.md)** - AI model integration and analytics
+- **[MCP Server](doc/mcp.md)** - MCP Ready (coming soon) - AI model integration with GraphQL API and SQL queries
 - **[Workflows (Flow Engine)](doc/workflows.md)** - Visual flow-based programming and data processing
 - **[Kafka Integration](doc/kafka.md)** - Stream processing and event sourcing
 - **[MQTT Logging](doc/mqtt-logging.md)** - Real-time system logging via MQTT topics
@@ -346,7 +343,6 @@ services:
       - "9001:9001"    # WebSocket TLS
       - "4840:4840"    # OPC UA Server
       - "4000:4000"    # GraphQL API
-      - "3000:3000"    # MCP Server
     volumes:
       - ./log:/app/log
       - ./config.yaml:/app/config.yaml
@@ -387,10 +383,6 @@ Postgres:
 GraphQL:
   Enabled: true
   Port: 4000
-
-MCP:
-  Enabled: true
-  Port: 3000
 ```
 
 > docker-compose up -d
@@ -406,7 +398,6 @@ MCP:
 | WebSocket TLS | 9001 | MQTT over secure WebSocket |
 | **OPC UA Server** | **4840** | **Industrial protocol with MQTT bridge** |
 | GraphQL API | 4000 | Management and real-time data |
-| MCP Server | 3000 | AI model integration |
 
 ## 🧪 Example Usage
 
