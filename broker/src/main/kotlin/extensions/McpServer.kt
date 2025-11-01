@@ -50,18 +50,24 @@ class McpServer(
         router.post(MCP_PATH).handler { ctx: RoutingContext ->
             logger.info("Post request received for MCP at path $MCP_PATH")
             val body = ctx.body().asJsonObject()
+
+            // Set keep-alive header for all responses to maintain connection
+            ctx.response().putHeader("Connection", "keep-alive")
+
             mcpHandler!!.handleRequest(body)
                 .onComplete { ar ->
                     if (ar.succeeded()) {
                         val result: JsonObject? = ar.result()
                         if (result != null) {
+                            // Regular request with response - return JSON
                             ctx.response()
                                 .putHeader("Content-Type", "application/json")
                                 .end(result.encode())
                         } else {
-                            // For notifications that return null
+                            // For notifications (no id) - send 202 Accepted with empty body
+                            // Per MCP spec: 202 acknowledges receipt without requiring a response
                             ctx.response()
-                                .setStatusCode(204)
+                                .setStatusCode(202)
                                 .end()
                         }
                     } else {
