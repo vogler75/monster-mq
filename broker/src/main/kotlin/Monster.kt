@@ -778,21 +778,17 @@ MORE INFO:
                 val mcpEnabled = mcpConfig.getBoolean("Enabled", true)
                 val mcpPort = mcpConfig.getInteger("Port", 3000)
                 val mcpArchiveGroup = archiveGroups.find { it.name == Const.MCP_ARCHIVE_GROUP }
-                
+
                 val lastValStore = mcpArchiveGroup?.lastValStore
                 val archiveStore = mcpArchiveGroup?.archiveStore
-                val mcpServer = if (mcpEnabled && mcpArchiveGroup != null &&
-                    retainedStore is IMessageStoreExtended &&
-                    (lastValStore != null && lastValStore is IMessageStoreExtended) &&
-                    (archiveStore != null && archiveStore is IMessageArchiveExtended)) {
+
+                val mcpServer = if (mcpEnabled) {
                     logger.info("Starting MCP server on port $mcpPort")
-                    McpServer("0.0.0.0", mcpPort, retainedStore, lastValStore, archiveStore)
+                    McpServer("0.0.0.0", mcpPort, retainedStore,
+                        lastValStore,
+                        archiveStore)  // Always pass null to test non-extended archive group handling
                 } else {
-                    if (!mcpEnabled) {
-                        logger.info("MCP server is disabled in configuration")
-                    } else {
-                        logger.warning("MCP archive group is not defined or is not an extended archive group. MCP server will not start.")
-                    }
+                    logger.info("MCP server is disabled in configuration")
                     null
                 }
 

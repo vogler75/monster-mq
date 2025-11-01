@@ -2,7 +2,9 @@ package at.rocworks.extensions
 
 import at.rocworks.Const
 import at.rocworks.Utils
+import at.rocworks.stores.IMessageArchive
 import at.rocworks.stores.IMessageArchiveExtended
+import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.IMessageStoreExtended
 import at.rocworks.stores.postgres.MessageArchivePostgres
 import io.vertx.core.Future
@@ -15,13 +17,15 @@ import java.util.concurrent.Callable
 
 class McpHandler(
     private val vertx: Vertx,
-    private val retainedStore: IMessageStoreExtended,
-    private val messageStore: IMessageStoreExtended,
-    private val messageArchive: IMessageArchiveExtended
+    private val retainedStore: IMessageStore,
+    private val messageStore: IMessageStore?,
+    private val messageArchive: IMessageArchive?
 ) {
     private val logger = Utils.getLogger(this::class.java)
 
     private val tools: MutableMap<String, AsyncTool> = HashMap<String, AsyncTool>()
+
+    private val messageArchiveExtended = messageArchive as? IMessageArchiveExtended
 
     companion object {
         private const val JSONRPC_VERSION = "2.0"
@@ -300,9 +304,11 @@ class McpHandler(
 
     private fun registerTools() {
         // Register tools
-        registerTool(
-            AsyncTool(
-                "find-topics-by-name",
+        // Only register topic discovery tools if retained store is extended
+        if (retainedStore is IMessageStoreExtended) {
+            registerTool(
+                AsyncTool(
+                    "find-topics-by-name",
                 """
 **Find Topics by Name**
 
@@ -428,12 +434,15 @@ This tool helps discover relevant data streams based on their descriptive conten
                     )
                     .put("required", JsonArray().add("description")),
                 ::findTopicsByDescriptionTool
+                )
             )
-        )
-        registerTool(
-            AsyncTool(
-                "get-topic-value",
-                """
+        }
+        // Only register get-topic-value if message store is available
+        if (messageStore != null) {
+            registerTool(
+                AsyncTool(
+                    "get-topic-value",
+                    """
 **Get Topic Value**
 
 Retrieves the current or most recent values stored for one or more MQTT topics. This tool provides real-time access to the latest data points or messages published to MQTT topics (also referred to as tags or datapoints in some systems).
@@ -502,12 +511,15 @@ JsonObject()
                     )
                     .put("required", JsonArray().add("topics")),
                 ::getTopicValueTool
+                )
             )
-        )
-        registerTool(
-            AsyncTool(
-                "query-message-archive",
-                """
+        }
+        // Only register query-message-archive if archive group is extended
+        if (messageArchiveExtended != null) {
+            registerTool(
+                AsyncTool(
+                    "query-message-archive",
+                    """
 **Query Message Archive**
 
 Retrieves historical MQTT messages for a specific topic within a specified time range. This tool enables analysis of message patterns, trends, and historical data from MQTT topics (also referred to as tags or datapoints).
@@ -567,38 +579,41 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
 **Example Queries:**
 - Last 24 hours: `startTime: "2024-01-15T00:00:00Z"`, `endTime: "2024-01-16T00:00:00Z"`
 - Specific incident window: `startTime: "2024-01-15T14:30:00Z"`, `endTime: "2024-01-15T15:00:00Z"`
-- Sample recent data: `limit: 100` (no time range for most recent 100 messages)                    
-                """.trimIndent(),
-                JsonObject()
-                    .put("type", "object")
-                    .put(
-                        "properties", JsonObject()
-                            .put("topic", JsonObject()
-                                 .put("type", "string")
-                                 .put("description", "Topic to get the message archive for")
-                            )
-                            .put("startTime", JsonObject()
-                                .put("type", "string")
-                                .put("description", "Start time for the archive in ISO 8601 format")
-                            )
-                            .put("endTime", JsonObject()
-                                .put("type", "string")
-                                .put("description", "End time for the archive in ISO 8601 format")
-                            )
-                            .put("limit", JsonObject()
-                                .put("type", "integer")
-                                .put("description", "Maximum number of messages to return")
-                                .put("default", 100)
-                            )
-                    )
-                    .put("required", JsonArray().add("topic")),
-                ::queryMessageArchive
+- Sample recent data: `limit: 100` (no time range for most recent 100 messages)
+                    """.trimIndent(),
+                    JsonObject()
+                        .put("type", "object")
+                        .put(
+                            "properties", JsonObject()
+                                .put("topic", JsonObject()
+                                     .put("type", "string")
+                                     .put("description", "Topic to get the message archive for")
+                                )
+                                .put("startTime", JsonObject()
+                                    .put("type", "string")
+                                    .put("description", "Start time for the archive in ISO 8601 format")
+                                )
+                                .put("endTime", JsonObject()
+                                    .put("type", "string")
+                                    .put("description", "End time for the archive in ISO 8601 format")
+                                )
+                                .put("limit", JsonObject()
+                                    .put("type", "integer")
+                                    .put("description", "Maximum number of messages to return")
+                                    .put("default", 100)
+                                )
+                        )
+                        .put("required", JsonArray().add("topic")),
+                    ::queryMessageArchive
+                )
             )
-        )
-        registerTool(
-        AsyncTool(
-            "query-message-archive-by-sql",
-            """
+        }
+        // Only register query-message-archive-by-sql if archive group is extended
+        if (messageArchiveExtended != null) {
+            registerTool(
+                AsyncTool(
+                    "query-message-archive-by-sql",
+                    """
 **Query Message Archive by SQL**
 
 Execute PostgreSQL queries against historical MQTT topic data stored in the $MCP_ARCHIVE_TABLE table. This tool enables advanced analysis of time-series IoT data through SQL aggregations, statistical operations, and complex filtering across multiple topics and time periods. **IMPORTANT: You MUST use the `get-topic-value` tool first to inspect the current payload structure of your topics before using this tool.**
@@ -612,7 +627,7 @@ Execute PostgreSQL queries against historical MQTT topic data stored in the $MCP
 **Database Schema:**
 The $MCP_ARCHIVE_TABLE table contains the following columns:
 - `topic` (text, NOT NULL) - MQTT topic path
-- `time` (timestamptz, NOT NULL) - Message timestamp  
+- `time` (timestamptz, NOT NULL) - Message timestamp
 - `payload_json` (jsonb) - JSON-formatted message payload **or plain number/string values**
 - `qos` (int4) - MQTT Quality of Service level
 - `retained` (bool) - Whether message was retained
@@ -677,27 +692,31 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 - Hourly temperature averages (after discovering 'temperature' key via `get-topic-value`): `SELECT date_trunc('hour', time) as hour, AVG((payload_json->>'temperature')::numeric) as avg_temp FROM $MCP_ARCHIVE_TABLE WHERE topic = 'sensors/temperature/room1' AND time >= NOW() - INTERVAL '24 hours' GROUP BY hour ORDER BY hour`
 - **Plain number values:** `SELECT date_trunc('hour', time) as hour, AVG(payload_json::text::numeric) as avg_value FROM $MCP_ARCHIVE_TABLE WHERE topic = 'sensors/simple_value' AND time >= NOW() - INTERVAL '24 hours' GROUP BY hour ORDER BY hour`
 - Daily message counts: `SELECT date_trunc('day', time) as day, COUNT(*) as msg_count FROM $MCP_ARCHIVE_TABLE WHERE topic LIKE 'devices/%' AND time >= '2024-01-01' GROUP BY day ORDER BY day`
-- Multi-topic statistics (after identifying 'value' key): `SELECT topic, MIN((payload_json->>'value')::numeric) as min_val, MAX((payload_json->>'value')::numeric) as max_val FROM $MCP_ARCHIVE_TABLE WHERE topic IN ('sensor1', 'sensor2') AND time >= NOW() - INTERVAL '7 days' GROUP BY topic`                
-            """.trimIndent(),
-            JsonObject()
-                .put("type", "object")
-                .put(
-                    "properties", JsonObject()
-                        .put("sql", JsonObject()
-                            .put("type", "string")
-                            .put("description", "SQL query to execute against the message archive")
+- Multi-topic statistics (after identifying 'value' key): `SELECT topic, MIN((payload_json->>'value')::numeric) as min_val, MAX((payload_json->>'value')::numeric) as max_val FROM $MCP_ARCHIVE_TABLE WHERE topic IN ('sensor1', 'sensor2') AND time >= NOW() - INTERVAL '7 days' GROUP BY topic`
+                    """.trimIndent(),
+                    JsonObject()
+                        .put("type", "object")
+                        .put(
+                            "properties", JsonObject()
+                                .put("sql", JsonObject()
+                                    .put("type", "string")
+                                    .put("description", "SQL query to execute against the message archive")
+                                )
                         )
+                        .put("required", JsonArray().add("sql")),
+                    ::queryMessageArchiveBySql
                 )
-                .put("required", JsonArray().add("sql")),
-               ::queryMessageArchiveBySql
             )
-        )
+        }
     }
 
     // --------------------------------------------------------------------------------------------------------------
 
     private fun findTopicsByNameTool(args: JsonObject): Future<JsonArray> {
         logger.info("findTopicByNameTool called with args: $args")
+        if (retainedStore !is IMessageStoreExtended) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "This tool is not available. Retained store is not extended."))
+        }
         if (!args.containsKey("name")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Name parameter required"))
         }
@@ -707,11 +726,12 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
             try {
-                val list = (messageStore.findTopicsByName(name, ignoreCase, namespace) +
-                        retainedStore.findTopicsByName(name, ignoreCase, namespace)).distinct()
+                val list = ((messageStore as? IMessageStoreExtended)?.findTopicsByName(name, ignoreCase, namespace) ?: emptyList()) +
+                        (retainedStore as IMessageStoreExtended).findTopicsByName(name, ignoreCase, namespace)
+                val distinctList = list.distinct()
                 val result = JsonArray()
                 result.add(JsonArray().add("topic").add("description")) // Header row for the result table
-                list.forEach {
+                distinctList.forEach {
                     val config =
                         retainedStore["$it/${Const.CONFIG_TOPIC}"] // TODO: should be optimized to do a fetch with the list of topics
                     result.add(
@@ -738,6 +758,9 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 
     private fun findTopicsByDescriptionTool(args: JsonObject): Future<JsonArray> {
         logger.info("findTopicByDescriptionTool called with args: $args")
+        if (retainedStore !is IMessageStoreExtended) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "This tool is not available. Retained store is not extended."))
+        }
         if (!args.containsKey("description")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Description parameter required"))
         }
@@ -747,7 +770,7 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
             try {
-                val list = retainedStore.findTopicsByConfig("Description", description, ignoreCase, namespace)
+                val list = (retainedStore as IMessageStoreExtended).findTopicsByConfig("Description", description, ignoreCase, namespace)
                 val result = JsonArray()
                 result.add(JsonArray().add("topic").add("description")) // Header row for the result table
                 list.forEach { result.add(JsonArray().add(it.first).add(it.second)) }
@@ -769,6 +792,9 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 
     private fun getTopicValueTool(args: JsonObject): Future<JsonArray> {
         logger.info("getTopicValueTool called with args: $args")
+        if (messageStore == null) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "This tool is not available. Message store is not available."))
+        }
         if (!args.containsKey("topics")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Topic parameter required"))
         }
@@ -779,7 +805,7 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
             try {
                 result.add(JsonArray().add("topic").add("value")) // Header row for the result table
                 topics.forEach { topic -> // TODO: Should be optimized to do a fetch with the list of topics directly in the database
-                    val message = topic.toString().let { retainedStore[it] ?: messageStore[it] }
+                    val message = topic.toString().let { retainedStore[it] ?: messageStore?.get(it) }
                     result.add(JsonArray().add(topic.toString()).add(message?.payload?.toString(Charsets.UTF_8) ?: ""))
                 }
                 val answer = JsonArray().add(
@@ -800,6 +826,9 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 
     private fun queryMessageArchive(args: JsonObject): Future<JsonArray> {
         logger.info("queryMessageArchive called with args: $args")
+        if (messageArchiveExtended == null) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Message archive is not configured. This tool requires an extended archive group."))
+        }
         if (!args.containsKey("topic")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Topic parameter required"))
         }
@@ -811,7 +840,7 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
             try {
-                val result = messageArchive.getHistory(topic, startTime, endTime, limit)
+                val result = messageArchiveExtended.getHistory(topic, startTime, endTime, limit)
                 // Convert JsonArray of JsonObjects to JsonArray of JsonArrays for markdown conversion
                 val tableFormat = convertHistoryToTableFormat(result)
                 val answer = JsonArray().add(
@@ -832,6 +861,9 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 
     private fun queryMessageArchiveBySql(args: JsonObject): Future<JsonArray> {
         logger.info("queryMessageArchiveBySql called with args: $args")
+        if (messageArchive == null) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Message archive is not configured. This tool requires an extended archive group."))
+        }
         if (!args.containsKey("sql")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "SQL parameter required"))
         }
@@ -840,7 +872,7 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         if (messageArchive is MessageArchivePostgres) {
             vertx.executeBlocking(Callable {
                 try {
-                    val result = messageArchive.executeQuery(sql)
+                    val result = messageArchive!!.executeQuery(sql)
                     val answer = JsonArray().add(
                         JsonObject()
                             .put("type", "text")

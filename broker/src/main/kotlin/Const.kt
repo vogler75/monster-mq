@@ -18,7 +18,7 @@ object Const {
     const val SYS_TOPIC_NAME = "\$SYS"
     const val LOG_TOPIC_NAME = "syslogs"
 
-    const val CONFIG_TOPIC = "<config>"    
+    const val CONFIG_TOPIC = "<config>"
 
     const val MCP_ARCHIVE_GROUP = "Default"
 

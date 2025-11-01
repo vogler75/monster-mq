@@ -21,9 +21,9 @@ import java.util.UUID
 class McpServer(
     private val host: String,
     private val port: Int,
-    private val retainedStore: IMessageStoreExtended,
-    private val messageStore: IMessageStoreExtended,
-    private val messageArchive: IMessageArchiveExtended
+    private val retainedStore: IMessageStore,
+    private val messageStore: IMessageStore?,
+    private val messageArchive: IMessageArchive?
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -39,9 +39,16 @@ class McpServer(
         private const val MCP_PATH = "/mcp"
     }
 
+    // Check if archive group is extended
+    private val isArchiveGroupExtended = messageArchive != null &&
+        retainedStore is IMessageStoreExtended &&
+        (messageStore != null && messageStore is IMessageStoreExtended)
+
     private var mcpHandler: McpHandler? = null
 
     override fun start(startPromise: Promise<Void>) {
+        logger.info("Archive group extended: $isArchiveGroupExtended")
+
         mcpHandler = McpHandler(vertx, retainedStore, messageStore, messageArchive) // McpHandler is initialized
 
         val router = Router.router(vertx)
