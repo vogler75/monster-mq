@@ -1,0 +1,17 @@
+Release v1.6.50
+Built from commit: 9cef916
+Date: 2025-11-01 11:55:29
+
+Changes since v1.6.49:
+---
+9cef916 Set keep-alive header and update notification response
+3472c8e Add archive group support to MCP server and handler
+514fdcd Refactor MCP handler tool registration and checks
+1703dd0 Refactor MCP server and handler for flexible archive group support
+f4ecc9e Refactor config topic constant usage
+9df386f Update MCP references and clarify feature status
+5aeab49 Create GRAALVM-CAPABILITIES-ANALYSIS.md
+e99cdd0 Fix incorrect license name in README
+f06259a Rename 'ask' to 'generate' in GenAI interfaces and schema
+ca990a4 Update script and workflow docs for new input/output API
+e1a3908 Add GenAI integration with Gemini provider and dashboard AI assistant
