@@ -396,7 +396,7 @@
         <dependency>
             <groupId>org.graalvm.polyglot</groupId>
             <artifactId>polyglot</artifactId>
-            <version>25.0.0</version>
+            <version>25.0.1</version>
         </dependency>
 
         <!-- GraalVM JavaScript (GraalJS) -->
@@ -404,7 +404,7 @@
         <dependency>
             <groupId>org.graalvm.polyglot</groupId>
             <artifactId>js</artifactId>
-            <version>25.0.0</version>
+            <version>25.0.1</version>
             <type>pom</type>
         </dependency>
 
