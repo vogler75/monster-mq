@@ -95,6 +95,8 @@ else
     JAVA_OPTS=""
 fi
 
+JAVA_OPTS="$JAVA_OPTS --enable-native-access=ALL-UNNAMED"
+
 # Prepare development options
 DEV_OPTS=""
 if [ "$DEV_MODE" = true ]; then
