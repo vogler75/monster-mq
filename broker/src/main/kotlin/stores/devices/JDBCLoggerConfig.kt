@@ -143,7 +143,8 @@ data class JDBCLoggerConfig(
             errors.add("username cannot be blank")
         }
 
-        if (password.isBlank()) {
+        // Password is required for all databases except Snowflake (which uses private key authentication)
+        if (databaseType.uppercase() != "SNOWFLAKE" && password.isBlank()) {
             errors.add("password cannot be blank")
         }
 

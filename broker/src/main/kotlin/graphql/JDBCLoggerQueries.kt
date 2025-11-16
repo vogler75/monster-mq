@@ -130,7 +130,8 @@ class JDBCLoggerQueries(
                 "diskPath" to config.diskPath,
                 "bulkSize" to config.bulkSize,
                 "bulkTimeoutMs" to config.bulkTimeoutMs,
-                "reconnectDelayMs" to config.reconnectDelayMs
+                "reconnectDelayMs" to config.reconnectDelayMs,
+                "dbSpecificConfig" to config.dbSpecificConfig.map
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

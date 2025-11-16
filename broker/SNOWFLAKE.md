@@ -118,11 +118,29 @@ Schema: PUBLIC
 
 ## Table Creation
 
-The Snowflake logger requires tables to be pre-created in Snowflake. Tables must match your JSON schema configuration.
+The Snowflake logger can automatically create tables based on your JSON schema if the `autoCreateTable` option is enabled (enabled by default). Alternatively, you can pre-create tables manually in Snowflake.
 
-### Example Table Creation
+### Automatic Table Creation
 
-Based on a JSON schema for sensor data:
+When `autoCreateTable` is enabled and a fixed `tableName` is specified (not using `tableNameJsonPath`), the logger will:
+
+1. **Extract field definitions** from the JSON schema `properties`
+2. **Create the table** with `CREATE TABLE IF NOT EXISTS`
+3. **Add clustering key** on the first timestamp field for better query performance
+
+Field types are mapped from JSON schema to Snowflake types:
+- `format: "timestamp"` or `format: "timestampms"` → `TIMESTAMP_NTZ`
+- `type: "string"` → `VARCHAR`
+- `type: "number"` → `DOUBLE`
+- `type: "integer"` → `BIGINT`
+- `type: "boolean"` → `BOOLEAN`
+- Other types → `VARIANT`
+
+**Note:** All field names are automatically converted to UPPERCASE and quoted to match Snowflake conventions.
+
+### Manual Table Creation
+
+If you prefer to create tables manually, or need custom column types, based on a JSON schema for sensor data:
 
 ```sql
 CREATE TABLE "SCADA"."PUBLIC"."SENSOR_DATA" (

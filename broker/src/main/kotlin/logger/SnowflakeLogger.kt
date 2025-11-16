@@ -105,6 +105,12 @@ class SnowflakeLogger : JDBCLoggerBase() {
                 connection = snowflakeDriver.connect(jdbcUrl, props)
 
                 logger.info("Connected to Snowflake successfully via JDBC")
+
+                // Auto-create table if enabled and table name is fixed (not dynamic)
+                if (cfg.autoCreateTable && cfg.tableName != null) {
+                    createTableIfNotExists(cfg.tableName!!)
+                }
+
                 null
             } catch (e: Exception) {
                 logger.severe("Failed to connect to Snowflake: ${e.javaClass.name}: ${e.message}")
@@ -268,6 +274,89 @@ class SnowflakeLogger : JDBCLoggerBase() {
                 message.contains("timeout") ||
                 message.contains("authentication")
             }
+        }
+    }
+
+    private fun createTableIfNotExists(tableName: String) {
+        val conn = connection ?: throw SQLException("Not connected to Snowflake")
+
+        try {
+            logger.info("Checking if Snowflake table '$tableName' exists in $database.$schema...")
+
+            // Extract field definitions from JSON schema
+            val schemaProperties = cfg.jsonSchema.getJsonObject("properties")
+            if (schemaProperties == null || schemaProperties.isEmpty) {
+                logger.warning("No properties defined in JSON schema, skipping table creation")
+                return
+            }
+
+            // Find timestamp field (first one with format=timestamp or format=timestampms)
+            var timestampField: String? = null
+            val columns = mutableListOf<String>()
+
+            schemaProperties.fieldNames().forEach { fieldName ->
+                val fieldSchema = schemaProperties.getJsonObject(fieldName)
+                val fieldType = fieldSchema?.getString("type") ?: "string"
+                val format = fieldSchema?.getString("format")
+
+                // Determine Snowflake type
+                val sqlType = when {
+                    format == "timestamp" || format == "timestampms" -> {
+                        if (timestampField == null) {
+                            timestampField = fieldName  // Remember first timestamp field
+                        }
+                        "TIMESTAMP_NTZ"  // Snowflake timestamp without timezone
+                    }
+                    fieldType == "string" -> "VARCHAR"
+                    fieldType == "number" -> "DOUBLE"
+                    fieldType == "integer" -> "BIGINT"
+                    fieldType == "boolean" -> "BOOLEAN"
+                    else -> "VARIANT"  // Snowflake's flexible type for JSON
+                }
+
+                // Snowflake uses uppercase identifiers by default, quote them to preserve case
+                columns.add("    \"${fieldName.uppercase()}\" $sqlType")
+            }
+
+            // Build CREATE TABLE statement
+            val columnsSQL = columns.joinToString(",\n")
+            val fullTableName = "\"$database\".\"$schema\".\"${tableName.uppercase()}\""
+            val createTableSQL = """
+                CREATE TABLE IF NOT EXISTS $fullTableName (
+                $columnsSQL
+                )
+                """.trimIndent()
+
+            logger.fine("Executing CREATE TABLE:\n$createTableSQL")
+
+            conn.createStatement().use { stmt ->
+                stmt.execute(createTableSQL)
+            }
+
+            // Create clustering key on timestamp field if it exists (improves query performance)
+            if (timestampField != null) {
+                val clusterSQL = """
+                    ALTER TABLE $fullTableName
+                    CLUSTER BY (\"${timestampField.uppercase()}\")
+                    """.trimIndent()
+
+                logger.info("Creating clustering key on timestamp field '$timestampField'")
+                try {
+                    conn.createStatement().use { stmt ->
+                        stmt.execute(clusterSQL)
+                    }
+                } catch (e: SQLException) {
+                    // Clustering key might already exist or table might already be clustered
+                    logger.fine("Could not add clustering key (may already exist): ${e.message}")
+                }
+            }
+
+            logger.info("Snowflake table '$tableName' is ready in $database.$schema")
+
+        } catch (e: SQLException) {
+            logger.severe("Failed to create Snowflake table '$tableName': ${e.message}")
+            e.printStackTrace()
+            throw e
         }
     }
 }

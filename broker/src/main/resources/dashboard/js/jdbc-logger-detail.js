@@ -132,18 +132,21 @@ class JDBCLoggerDetailManager {
                     "type": "string",
                     "format": "timestamp"
                 },
-                "sensor_id": {
+                "metric": {
                     "type": "string"
                 },
                 "value": {
                     "type": "number"
                 }
             },
-            "required": ["value"],
+            "required": [
+                "metric",
+                "value"
+            ],
             "arrayPath": "$.sensors[*]",
             "mapping": {
                 "ts": "$.timestamp",
-                "sensor_id": "$.id",
+                "metric": "$.metric",
                 "value": "$.value"
             }
         };
@@ -273,6 +276,9 @@ class JDBCLoggerDetailManager {
     populateForm() {
         const logger = this.originalLogger;
 
+        console.log('Populating form with logger:', logger);
+        console.log('Logger config:', logger.config);
+
         // Basic info
         document.getElementById('logger-name').value = logger.name;
         document.getElementById('logger-name').disabled = true; // Can't change name when editing
@@ -281,15 +287,24 @@ class JDBCLoggerDetailManager {
         document.getElementById('logger-enabled').checked = logger.enabled;
 
         // Database config
-        document.getElementById('logger-db-type').value = logger.config.databaseType;
+        const dbTypeSelect = document.getElementById('logger-db-type');
+        dbTypeSelect.value = logger.config.databaseType;
+
         document.getElementById('logger-jdbc-url').value = logger.config.jdbcUrl;
         document.getElementById('logger-username').value = logger.config.username;
         document.getElementById('logger-password').value = ''; // Don't populate password
         document.getElementById('logger-password').placeholder = 'Leave blank to keep current password';
 
-        // Snowflake-specific config (if present)
-        if (logger.config.dbSpecificConfig && logger.config.databaseType === 'SNOWFLAKE') {
-            const sfConfig = logger.config.dbSpecificConfig;
+        // Setup database type change listener BEFORE triggering change event
+        this.setupDatabaseTypeListener();
+
+        // Trigger change event to show/hide Snowflake section
+        dbTypeSelect.dispatchEvent(new Event('change'));
+
+        // Snowflake-specific config (if present) - populate AFTER triggering change event
+        if (logger.config.databaseType === 'SNOWFLAKE') {
+            console.log('Loading Snowflake config:', logger.config.dbSpecificConfig);
+            const sfConfig = logger.config.dbSpecificConfig || {};
             document.getElementById('logger-sf-account').value = sfConfig.account || '';
             document.getElementById('logger-sf-private-key-file').value = sfConfig.privateKeyFile || '';
             document.getElementById('logger-sf-warehouse').value = sfConfig.warehouse || '';
@@ -328,9 +343,6 @@ class JDBCLoggerDetailManager {
         document.getElementById('logger-updated-at').textContent =
             logger.updatedAt ? new Date(logger.updatedAt).toLocaleString() : '-';
         document.getElementById('timestamps-section').style.display = 'block';
-
-        // Setup database type change listener to update JDBC URL placeholder
-        this.setupDatabaseTypeListener();
     }
 
     renderMetrics() {
@@ -434,15 +446,18 @@ class JDBCLoggerDetailManager {
             }
         }
 
-        // Password is required for new loggers or when updating password on existing loggers
-        if (this.isNewLogger && !password) {
-            this.showError('Password is required for new loggers');
-            return false;
-        }
+        // Password is required for new loggers (except Snowflake which uses private key authentication)
+        // or when updating password on existing loggers
+        if (databaseType !== 'SNOWFLAKE') {
+            if (this.isNewLogger && !password) {
+                this.showError('Password is required for new loggers');
+                return false;
+            }
 
-        if (!this.isNewLogger && updatePasswordCheckbox && updatePasswordCheckbox.checked && !password) {
-            this.showError('Please enter a new password or uncheck "Update Password"');
-            return false;
+            if (!this.isNewLogger && updatePasswordCheckbox && updatePasswordCheckbox.checked && !password) {
+                this.showError('Please enter a new password or uncheck "Update Password"');
+                return false;
+            }
         }
 
         const topicFilters = topicFiltersText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
