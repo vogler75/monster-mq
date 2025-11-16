@@ -343,6 +343,7 @@ class JDBCLoggerDetailManager {
         const databaseType = document.getElementById('logger-db-type').value;
         const jdbcUrl = document.getElementById('logger-jdbc-url').value.trim();
         const username = document.getElementById('logger-username').value.trim();
+        const updatePasswordCheckbox = document.getElementById('logger-update-password');
         const password = document.getElementById('logger-password').value;
         const topicFiltersText = document.getElementById('logger-topic-filters').value.trim();
         const tableName = document.getElementById('logger-table-name').value.trim();
@@ -359,9 +360,14 @@ class JDBCLoggerDetailManager {
             return false;
         }
 
-        // Password is required for new loggers but optional for editing
+        // Password is required for new loggers or when updating password on existing loggers
         if (this.isNewLogger && !password) {
             this.showError('Password is required for new loggers');
+            return false;
+        }
+
+        if (!this.isNewLogger && updatePasswordCheckbox && updatePasswordCheckbox.checked && !password) {
+            this.showError('Please enter a new password or uncheck "Update Password"');
             return false;
         }
 
