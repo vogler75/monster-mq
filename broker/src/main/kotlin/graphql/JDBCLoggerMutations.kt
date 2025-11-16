@@ -271,7 +271,7 @@ class JDBCLoggerMutations(
             databaseType = configMap["databaseType"] as? String ?: "QuestDB",
             jdbcUrl = configMap["jdbcUrl"] as? String ?: "jdbc:questdb:http://localhost:9000",
             username = configMap["username"] as? String ?: "admin",
-            password = configMap["password"] as? String ?: "quest",
+            password = configMap["password"] as? String ?: "", // Empty password means don't change it (merge logic in updateJDBCLogger handles this)
             topicFilters = (configMap["topicFilters"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
             tableName = configMap["tableName"] as? String,
             tableNameJsonPath = configMap["tableNameJsonPath"] as? String,
@@ -317,16 +317,11 @@ class JDBCLoggerMutations(
 
     private fun deviceToMap(device: DeviceConfig): Map<String, Any?> {
         val currentNodeId = Monster.getClusterNodeId(vertx) ?: "local"
-        val config = try { JDBCLoggerConfig.fromJson(device.config) } catch (e: Exception) {
+        val config = try {
+            JDBCLoggerConfig.fromJson(device.config)
+        } catch (e: Exception) {
             logger.severe("Failed to parse JDBCLoggerConfig for ${device.name}: ${e.message}")
-            JDBCLoggerConfig(
-                databaseType = "QuestDB",
-                jdbcUrl = "jdbc:questdb:http://localhost:9000",
-                username = "admin",
-                password = "quest",
-                topicFilters = emptyList(),
-                jsonSchema = JsonObject()
-            )
+            throw e // Re-throw to prevent returning corrupted data with default values
         }
         return mapOf(
             "name" to device.name,

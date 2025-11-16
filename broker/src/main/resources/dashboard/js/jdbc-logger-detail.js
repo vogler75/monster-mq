@@ -417,6 +417,7 @@ class JDBCLoggerDetailManager {
             const databaseType = document.getElementById('logger-db-type').value;
             const jdbcUrl = document.getElementById('logger-jdbc-url').value.trim();
             const username = document.getElementById('logger-username').value.trim();
+            const updatePasswordCheckbox = document.getElementById('logger-update-password');
             const password = document.getElementById('logger-password').value;
 
             const topicFiltersText = document.getElementById('logger-topic-filters').value.trim();
@@ -457,10 +458,11 @@ class JDBCLoggerDetailManager {
                 }
             };
 
-            // Only include password if provided
-            // - For new loggers: password is required (validated above)
-            // - For editing: if empty, password won't be changed on backend
-            if (password && password.trim().length > 0) {
+            // Only include password if:
+            // - For new loggers: password is always required (validated above)
+            // - For editing: only if checkbox is checked AND password is provided
+            const shouldUpdatePassword = this.isNewLogger || (updatePasswordCheckbox && updatePasswordCheckbox.checked);
+            if (shouldUpdatePassword && password && password.trim().length > 0) {
                 input.config.password = password;
             }
 
