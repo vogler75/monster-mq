@@ -33,6 +33,8 @@ The Snowflake JDBC Logger uses the Snowflake JDBC Thin Driver to connect to Snow
 | Field | Description | Default | Example |
 |-------|-------------|---------|---------|
 | **Role** | Snowflake role to use | `ACCOUNTADMIN` | `DATA_ENGINEER` |
+| **Topic Name Column** | Column name for storing MQTT topic | (empty) | `mqtt_topic` |
+| **Auto Create Table** | Automatically create table if not exists | `true` | `true` or `false` |
 
 ## Generating RSA Key Pair
 
@@ -158,10 +160,24 @@ CLUSTER BY ("TIMESTAMP");
 
 **Note:** Snowflake uses uppercase identifiers by default. The logger automatically converts field names to uppercase and quotes them.
 
-## JSON Schema Example
+## JSON Schema Examples
 
-Example JSON schema for validating MQTT messages:
+### Example 1: Direct Field Mapping (No Transformation)
 
+When incoming JSON field names match your desired column names:
+
+**Incoming Payload:**
+```json
+{
+  "timestamp": "2024-01-15T10:30:00Z",
+  "sensor_id": "temp-01",
+  "temperature": 23.5,
+  "pressure": 1013.2,
+  "status": "OK"
+}
+```
+
+**JSON Schema:**
 ```json
 {
   "type": "object",
@@ -186,6 +202,164 @@ Example JSON schema for validating MQTT messages:
   "required": ["timestamp", "sensor_id"]
 }
 ```
+
+**Result:** Table columns `TIMESTAMP`, `SENSOR_ID`, `TEMPERATURE`, `PRESSURE`, `STATUS`
+
+### Example 2: Field Transformation with Mapping
+
+When incoming JSON field names differ from desired column names:
+
+**Incoming Payload:**
+```json
+{
+  "TimeMS": 1705315800000,
+  "SensorID": "temp-01",
+  "Value": 23.5,
+  "Quality": "Good"
+}
+```
+
+**JSON Schema with Mapping:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "format": "timestampms"
+    },
+    "sensor_id": {
+      "type": "string"
+    },
+    "value": {
+      "type": "number"
+    },
+    "quality": {
+      "type": "string"
+    }
+  },
+  "mapping": {
+    "ts": "$.TimeMS",
+    "sensor_id": "$.SensorID",
+    "value": "$.Value",
+    "quality": "$.Quality"
+  },
+  "required": ["sensor_id", "value"]
+}
+```
+
+**Result:** Table columns `TS`, `SENSOR_ID`, `VALUE`, `QUALITY`
+
+**How it works:**
+- `properties` defines target database column names
+- `mapping` defines JSONPath expressions to extract from source payload
+- When `mapping` exists, JSON Schema validation is skipped
+- `required` validates that extracted values are not null
+
+### Example 3: Nested Field Extraction
+
+**Incoming Payload:**
+```json
+{
+  "device": {
+    "id": "sensor-01",
+    "location": "warehouse-a"
+  },
+  "reading": {
+    "timestamp": 1705315800000,
+    "value": 23.5,
+    "unit": "celsius"
+  }
+}
+```
+
+**JSON Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "format": "timestampms"
+    },
+    "device_id": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "temperature": {
+      "type": "number"
+    },
+    "unit": {
+      "type": "string"
+    }
+  },
+  "mapping": {
+    "ts": "$.reading.timestamp",
+    "device_id": "$.device.id",
+    "location": "$.device.location",
+    "temperature": "$.reading.value",
+    "unit": "$.reading.unit"
+  },
+  "required": ["device_id", "temperature"]
+}
+```
+
+**Result:** Table columns `TS`, `DEVICE_ID`, `LOCATION`, `TEMPERATURE`, `UNIT`
+
+### Example 4: Including MQTT Topic Name
+
+To track which MQTT topic each record came from, use the `topicNameColumn` configuration:
+
+**Configuration:**
+```yaml
+Topic Name Column: mqtt_topic
+```
+
+**JSON Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "number",
+      "format": "timestampms"
+    },
+    "value": {
+      "type": "number"
+    }
+  },
+  "mapping": {
+    "ts": "$.TimeMS",
+    "value": "$.Value"
+  },
+  "required": ["value"]
+}
+```
+
+**Incoming Message:**
+- **Topic:** `factory/line1/temperature`
+- **Payload:** `{"TimeMS": 1705315800000, "Value": 23.5}`
+
+**Result:**
+- Table columns: `TS`, `VALUE`, `MQTT_TOPIC`
+- Inserted row: `(1705315800000, 23.5, 'factory/line1/temperature')`
+
+**When auto-create is enabled:**
+```sql
+CREATE TABLE IF NOT EXISTS "SCADA"."PUBLIC"."SENSOR_DATA" (
+    "TS" TIMESTAMP_NTZ,
+    "VALUE" DOUBLE,
+    "MQTT_TOPIC" VARCHAR
+)
+```
+
+**Notes:**
+- Topic column is added automatically to CREATE TABLE statements
+- Topic column is added automatically to INSERT statements
+- Leave `topicNameColumn` empty to exclude topic from database
+- Topic column type is VARCHAR in Snowflake
 
 ## JDBC Connection Properties
 
