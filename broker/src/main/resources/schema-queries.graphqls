@@ -1370,6 +1370,10 @@ enum JDBCLoggerDatabaseType {
     POSTGRESQL
     # TimescaleDB - PostgreSQL extension for time-series data
     TIMESCALEDB
+    # MySQL - popular open-source relational database
+    MYSQL
+    # Snowflake - cloud data warehouse with streaming ingest
+    SNOWFLAKE
 }
 
 # Queue type enum for JDBC Logger buffering
@@ -1418,6 +1422,9 @@ type JDBCLoggerConfig {
     bulkTimeoutMs: Long!
     # Delay before reconnecting on failure in milliseconds
     reconnectDelayMs: Long!
+    # Database-specific configuration (JSON object for database-specific settings)
+    # For Snowflake: {privateKeyFile, account, url, role, scheme, port, database, schema}
+    dbSpecificConfig: JSON
 }
 
 # Metrics for a JDBC Logger connector

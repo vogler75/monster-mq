@@ -203,6 +203,7 @@
                                     <option value="POSTGRESQL">PostgreSQL</option>
                                     <option value="TIMESCALEDB">TimescaleDB</option>
                                     <option value="MYSQL">MySQL</option>
+                                    <option value="SNOWFLAKE">Snowflake</option>
                                 </select>
                             </div>
                             <div class="form-group">
@@ -220,6 +221,47 @@
                                 </div>
                                 <div id="password-field-group" style="display: none; margin-top: 0.5rem;">
                                     <input type="password" id="logger-password" placeholder="Enter new password">
+                                </div>
+                            </div>
+
+                            <!-- Snowflake-specific configuration (shown only when Snowflake is selected) -->
+                            <div id="snowflake-config-section" style="display: none;">
+                                <div class="form-group">
+                                    <label for="logger-sf-private-key-file">Private Key File *</label>
+                                    <input type="text" id="logger-sf-private-key-file" placeholder="/path/to/snowflake.p8">
+                                    <small class="form-hint">Path to RSA private key file (.p8 format)</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-account">Account *</label>
+                                    <input type="text" id="logger-sf-account" placeholder="xx00000">
+                                    <small class="form-hint">Snowflake account identifier</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-url">URL *</label>
+                                    <input type="text" id="logger-sf-url" placeholder="https://xx00000.eu-central-1.snowflakecomputing.com:443">
+                                    <small class="form-hint">Snowflake connection URL</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-role">Role *</label>
+                                    <input type="text" id="logger-sf-role" value="accountadmin" placeholder="accountadmin">
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-scheme">Scheme</label>
+                                    <input type="text" id="logger-sf-scheme" value="https" placeholder="https">
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-port">Port</label>
+                                    <input type="number" id="logger-sf-port" value="443" placeholder="443" min="1" max="65535">
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-database">Database *</label>
+                                    <input type="text" id="logger-sf-database" placeholder="SCADA">
+                                    <small class="form-hint">Snowflake database name</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-schema">Schema *</label>
+                                    <input type="text" id="logger-sf-schema" placeholder="SCADA">
+                                    <small class="form-hint">Snowflake schema name</small>
                                 </div>
                             </div>
                         </div>

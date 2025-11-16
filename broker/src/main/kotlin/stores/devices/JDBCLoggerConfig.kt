@@ -39,7 +39,13 @@ data class JDBCLoggerConfig(
 
     // Auto table creation
     val autoCreateTable: Boolean = true,            // Automatically create table if not exists
-    val partitionBy: String = "DAY"                 // QuestDB partition strategy: HOUR, DAY, WEEK, MONTH, YEAR, NONE
+    val partitionBy: String = "DAY",                // QuestDB partition strategy: HOUR, DAY, WEEK, MONTH, YEAR, NONE
+
+    // Database-specific configuration (JSON object for database-specific settings)
+    // Examples:
+    // - Snowflake: {privateKeyFile, account, url, role, scheme, port, database, schema}
+    // - Future databases can add their own specific settings here
+    val dbSpecificConfig: JsonObject = JsonObject()
 ) {
     /**
      * Get the JDBC driver class name inferred from the URL
@@ -53,6 +59,17 @@ data class JDBCLoggerConfig(
             jdbcUrl.contains("mysql") -> "com.mysql.cj.jdbc.Driver"
             else -> "org.postgresql.Driver"  // Default fallback for PostgreSQL-compatible databases (QuestDB, TimescaleDB, etc.)
         }
+    }
+
+    /**
+     * Get a database-specific configuration value
+     */
+    fun getDbSpecificString(key: String, defaultValue: String = ""): String {
+        return dbSpecificConfig.getString(key, defaultValue)
+    }
+
+    fun getDbSpecificInteger(key: String, defaultValue: Int = 0): Int {
+        return dbSpecificConfig.getInteger(key, defaultValue)
     }
 
     companion object {
@@ -77,7 +94,8 @@ data class JDBCLoggerConfig(
                 bulkTimeoutMs = obj.getLong("bulkTimeoutMs", 5000),
                 reconnectDelayMs = obj.getLong("reconnectDelayMs", 5000),
                 autoCreateTable = obj.getBoolean("autoCreateTable", true),
-                partitionBy = obj.getString("partitionBy", "DAY")
+                partitionBy = obj.getString("partitionBy", "DAY"),
+                dbSpecificConfig = obj.getJsonObject("dbSpecificConfig") ?: JsonObject()
             )
         }
     }
@@ -101,6 +119,7 @@ data class JDBCLoggerConfig(
             .put("reconnectDelayMs", reconnectDelayMs)
             .put("autoCreateTable", autoCreateTable)
             .put("partitionBy", partitionBy)
+            .put("dbSpecificConfig", dbSpecificConfig)
     }
 
     fun validate(): List<String> {
@@ -111,12 +130,15 @@ data class JDBCLoggerConfig(
             errors.add("databaseType cannot be blank")
         }
 
-        if (jdbcUrl.isBlank()) {
-            errors.add("jdbcUrl cannot be blank")
-        }
+        // JDBC URL validation (skip for Snowflake which doesn't use JDBC)
+        if (databaseType.uppercase() != "SNOWFLAKE") {
+            if (jdbcUrl.isBlank()) {
+                errors.add("jdbcUrl cannot be blank")
+            }
 
-        if (!jdbcUrl.startsWith("jdbc:")) {
-            errors.add("jdbcUrl must start with 'jdbc:'")
+            if (!jdbcUrl.startsWith("jdbc:")) {
+                errors.add("jdbcUrl must start with 'jdbc:'")
+            }
         }
 
         if (username.isBlank()) {
@@ -168,6 +190,37 @@ data class JDBCLoggerConfig(
             errors.add("bulkTimeoutMs should be >= 100 ms")
         }
 
+        // Database-specific validation
+        if (databaseType.uppercase() == "SNOWFLAKE") {
+            validateSnowflakeConfig(errors)
+        }
+
         return errors
+    }
+
+    /**
+     * Validate Snowflake-specific configuration
+     */
+    private fun validateSnowflakeConfig(errors: MutableList<String>) {
+        val requiredFields = listOf(
+            "privateKeyFile" to "Private Key File",
+            "account" to "Account",
+            "url" to "URL",
+            "role" to "Role",
+            "database" to "Database",
+            "schema" to "Schema"
+        )
+
+        for ((key, displayName) in requiredFields) {
+            if (dbSpecificConfig.getString(key).isNullOrBlank()) {
+                errors.add("Snowflake configuration requires '$displayName' ($key)")
+            }
+        }
+
+        // Port validation
+        val port = dbSpecificConfig.getInteger("port", 0)
+        if (port != null && port > 0 && (port < 1 || port > 65535)) {
+            errors.add("Snowflake port must be between 1 and 65535")
+        }
     }
 }
