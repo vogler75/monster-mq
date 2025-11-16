@@ -130,15 +130,13 @@ data class JDBCLoggerConfig(
             errors.add("databaseType cannot be blank")
         }
 
-        // JDBC URL validation (skip for Snowflake which doesn't use JDBC)
-        if (databaseType.uppercase() != "SNOWFLAKE") {
-            if (jdbcUrl.isBlank()) {
-                errors.add("jdbcUrl cannot be blank")
-            }
+        // JDBC URL validation
+        if (jdbcUrl.isBlank()) {
+            errors.add("jdbcUrl cannot be blank")
+        }
 
-            if (!jdbcUrl.startsWith("jdbc:")) {
-                errors.add("jdbcUrl must start with 'jdbc:'")
-            }
+        if (!jdbcUrl.startsWith("jdbc:")) {
+            errors.add("jdbcUrl must start with 'jdbc:'")
         }
 
         if (username.isBlank()) {
@@ -203,10 +201,9 @@ data class JDBCLoggerConfig(
      */
     private fun validateSnowflakeConfig(errors: MutableList<String>) {
         val requiredFields = listOf(
-            "privateKeyFile" to "Private Key File",
             "account" to "Account",
-            "url" to "URL",
-            "role" to "Role",
+            "privateKeyFile" to "Private Key File",
+            "warehouse" to "Warehouse",
             "database" to "Database",
             "schema" to "Schema"
         )
@@ -217,10 +214,6 @@ data class JDBCLoggerConfig(
             }
         }
 
-        // Port validation
-        val port = dbSpecificConfig.getInteger("port", 0)
-        if (port != null && port > 0 && (port < 1 || port > 65535)) {
-            errors.add("Snowflake port must be between 1 and 65535")
-        }
+        // Role is optional - defaults to ACCOUNTADMIN
     }
 }

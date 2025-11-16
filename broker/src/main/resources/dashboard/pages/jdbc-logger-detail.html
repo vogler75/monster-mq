@@ -227,31 +227,19 @@
                             <!-- Snowflake-specific configuration (shown only when Snowflake is selected) -->
                             <div id="snowflake-config-section" style="display: none;">
                                 <div class="form-group">
-                                    <label for="logger-sf-private-key-file">Private Key File *</label>
-                                    <input type="text" id="logger-sf-private-key-file" placeholder="/path/to/snowflake.p8">
-                                    <small class="form-hint">Path to RSA private key file (.p8 format)</small>
-                                </div>
-                                <div class="form-group">
                                     <label for="logger-sf-account">Account *</label>
-                                    <input type="text" id="logger-sf-account" placeholder="xx00000">
+                                    <input type="text" id="logger-sf-account" placeholder="MYORG-MYACCOUNT or xy12345">
                                     <small class="form-hint">Snowflake account identifier</small>
                                 </div>
                                 <div class="form-group">
-                                    <label for="logger-sf-url">URL *</label>
-                                    <input type="text" id="logger-sf-url" placeholder="https://xx00000.eu-central-1.snowflakecomputing.com:443">
-                                    <small class="form-hint">Snowflake connection URL</small>
+                                    <label for="logger-sf-private-key-file">Private Key File *</label>
+                                    <input type="text" id="logger-sf-private-key-file" placeholder="/path/to/rsa_key.p8">
+                                    <small class="form-hint">Path to RSA private key file in PKCS#8 format (.p8)</small>
                                 </div>
                                 <div class="form-group">
-                                    <label for="logger-sf-role">Role *</label>
-                                    <input type="text" id="logger-sf-role" value="accountadmin" placeholder="accountadmin">
-                                </div>
-                                <div class="form-group">
-                                    <label for="logger-sf-scheme">Scheme</label>
-                                    <input type="text" id="logger-sf-scheme" value="https" placeholder="https">
-                                </div>
-                                <div class="form-group">
-                                    <label for="logger-sf-port">Port</label>
-                                    <input type="number" id="logger-sf-port" value="443" placeholder="443" min="1" max="65535">
+                                    <label for="logger-sf-warehouse">Warehouse *</label>
+                                    <input type="text" id="logger-sf-warehouse" placeholder="COMPUTE_WH">
+                                    <small class="form-hint">Snowflake warehouse for query execution</small>
                                 </div>
                                 <div class="form-group">
                                     <label for="logger-sf-database">Database *</label>
@@ -260,8 +248,13 @@
                                 </div>
                                 <div class="form-group">
                                     <label for="logger-sf-schema">Schema *</label>
-                                    <input type="text" id="logger-sf-schema" placeholder="SCADA">
+                                    <input type="text" id="logger-sf-schema" placeholder="PUBLIC">
                                     <small class="form-hint">Snowflake schema name</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-role">Role</label>
+                                    <input type="text" id="logger-sf-role" placeholder="ACCOUNTADMIN">
+                                    <small class="form-hint">Snowflake role (optional, default: ACCOUNTADMIN)</small>
                                 </div>
                             </div>
                         </div>

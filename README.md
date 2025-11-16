@@ -22,6 +22,8 @@ Advanced database integration for real-time data archiving and analytics:
 - **SQLite** - Lightweight embedded deployments
 - **CrateDB** - Distributed analytics and large-scale IoT data
 - **MongoDB** - Document-based storage with flexible schema
+- **MySQL** - Widely-used relational database
+- **Snowflake** - Cloud data warehouse with private key authentication
 - **Custom JDBC** - Support for any JDBC-compatible database
 
 #### Archive Groups 🗄️
@@ -37,6 +39,35 @@ Flexible message storage with configurable retention and archiving:
 **Note:** Two archive groups are automatically created:
 - **Default** - In-memory store for process images (disabled by default, must be enabled in configuration)
 - **Syslogs** - Archive for broker system logs (disabled by default, requires `ArchiveType` to be defined before enabling)
+
+#### JDBC Logger 📝
+Schema-based MQTT message logging to databases with JSON validation:
+
+- **Schema Validation** - Validate MQTT messages against JSON Schema before writing
+- **Bulk Writes** - Configurable batch size and timeout for optimal performance
+- **Dynamic Tables** - Extract table name from message payload using JSONPath
+- **Queue Buffering** - Memory or disk-based message queuing with overflow protection
+- **Auto Table Creation** - Automatically create tables based on JSON schema
+- **Field Mapping** - Map JSON fields to database columns with JSONPath expressions
+- **Supported Databases**:
+  - **QuestDB** - High-performance time-series database
+  - **PostgreSQL** - Enterprise-grade relational database
+  - **TimescaleDB** - PostgreSQL extension for time-series data
+  - **MySQL** - Popular open-source database
+  - **Snowflake** - Cloud data warehouse ([configuration guide](broker/SNOWFLAKE.md))
+
+**Snowflake Configuration Example:**
+```yaml
+JDBC URL: jdbc:snowflake://account.snowflakecomputing.com
+Account: MYORG-MYACCOUNT
+Username: mqtt_logger_user
+Private Key File: /etc/snowflake/keys/rsa_key.p8
+Warehouse: COMPUTE_WH
+Database: IOT_DATA
+Schema: SENSORS
+```
+
+For detailed Snowflake setup, see [SNOWFLAKE.md](broker/SNOWFLAKE.md).
 
 ### Device Integration 🔌
 
@@ -227,10 +258,11 @@ MonsterMQ follows a modular, event-driven architecture built on Eclipse Vert.x, 
 │                                                                                 │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
 │  │ PostgreSQL  │  │  CrateDB    │  │  MongoDB    │  │   SQLite    │             │
-│  │ QuestDB     │  │ TimescaleDB │  │   Kafka     │  │   Custom    │             │
+│  │ QuestDB     │  │ TimescaleDB │  │   Kafka     │  │   MySQL     │             │
+│  │ Snowflake   │  │   Custom    │  │             │  │             │             │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘             │
 │                                                                                 │
-│  Sessions • Retained Messages • Message Archives • Last Values • System Logs    │
+│  Sessions • Retained • Archives • Last Values • Logs • JDBC Logger (Schema)     │
 └────────────────────────────────┬────────────────────────────────────────────────┘
                                  │
 ┌────────────────────────────────▼────────────────────────────────────────────────┐
@@ -277,7 +309,8 @@ MonsterMQ follows a modular, event-driven architecture built on Eclipse Vert.x, 
 
 #### 4. **Archive & Storage**
 - **Archive Groups** - Configurable message persistence with retention policies
-- **Multi-Database** - Support for PostgreSQL, QuestDB, TimescaleDB, MongoDB, CrateDB, SQLite
+- **JDBC Logger** - Schema-based message logging with validation (PostgreSQL, QuestDB, TimescaleDB, MySQL, Snowflake)
+- **Multi-Database** - Support for PostgreSQL, QuestDB, TimescaleDB, MongoDB, CrateDB, SQLite, MySQL, Snowflake
 - **JSON Schema** - Message validation and transformation
 - **Connection Pooling** - Enterprise-grade database connection management
 

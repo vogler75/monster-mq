@@ -282,7 +282,8 @@ class JDBCLoggerMutations(
             diskPath = configMap["diskPath"] as? String ?: "./buffer",
             bulkSize = (configMap["bulkSize"] as? Number)?.toInt() ?: 1000,
             bulkTimeoutMs = (configMap["bulkTimeoutMs"] as? Number)?.toLong() ?: 5000L,
-            reconnectDelayMs = (configMap["reconnectDelayMs"] as? Number)?.toLong() ?: 5000L
+            reconnectDelayMs = (configMap["reconnectDelayMs"] as? Number)?.toLong() ?: 5000L,
+            dbSpecificConfig = JsonObject((configMap["dbSpecificConfig"] as? Map<*, *>)?.mapKeys { it.key.toString() }?.mapValues { it.value ?: "" } ?: emptyMap<String, Any>())
         )
 
         val configJson = jdbcConfig.toJson()
@@ -342,7 +343,8 @@ class JDBCLoggerMutations(
                 "diskPath" to config.diskPath,
                 "bulkSize" to config.bulkSize,
                 "bulkTimeoutMs" to config.bulkTimeoutMs,
-                "reconnectDelayMs" to config.reconnectDelayMs
+                "reconnectDelayMs" to config.reconnectDelayMs,
+                "dbSpecificConfig" to config.dbSpecificConfig.map
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

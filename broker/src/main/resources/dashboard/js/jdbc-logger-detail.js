@@ -169,10 +169,9 @@ class JDBCLoggerDetailManager {
             // Show/hide Snowflake-specific configuration
             if (dbType === 'SNOWFLAKE') {
                 snowflakeConfigSection.style.display = 'block';
-                jdbcUrlInput.required = false;
-                jdbcUrlInput.disabled = true;
-                jdbcUrlInput.value = '';
-                jdbcUrlInput.placeholder = 'Not required for Snowflake';
+                jdbcUrlInput.required = true;
+                jdbcUrlInput.disabled = false;
+                placeholder = 'jdbc:snowflake://account.snowflakecomputing.com';
             } else {
                 snowflakeConfigSection.style.display = 'none';
                 jdbcUrlInput.required = true;
@@ -194,9 +193,9 @@ class JDBCLoggerDetailManager {
                     default:
                         placeholder = 'jdbc:...';
                 }
-
-                jdbcUrlInput.placeholder = placeholder;
             }
+
+            jdbcUrlInput.placeholder = placeholder;
         });
     }
 
@@ -291,14 +290,12 @@ class JDBCLoggerDetailManager {
         // Snowflake-specific config (if present)
         if (logger.config.dbSpecificConfig && logger.config.databaseType === 'SNOWFLAKE') {
             const sfConfig = logger.config.dbSpecificConfig;
-            document.getElementById('logger-sf-private-key-file').value = sfConfig.privateKeyFile || '';
             document.getElementById('logger-sf-account').value = sfConfig.account || '';
-            document.getElementById('logger-sf-url').value = sfConfig.url || '';
-            document.getElementById('logger-sf-role').value = sfConfig.role || 'accountadmin';
-            document.getElementById('logger-sf-scheme').value = sfConfig.scheme || 'https';
-            document.getElementById('logger-sf-port').value = sfConfig.port || 443;
+            document.getElementById('logger-sf-private-key-file').value = sfConfig.privateKeyFile || '';
+            document.getElementById('logger-sf-warehouse').value = sfConfig.warehouse || '';
             document.getElementById('logger-sf-database').value = sfConfig.database || '';
             document.getElementById('logger-sf-schema').value = sfConfig.schema || '';
+            document.getElementById('logger-sf-role').value = sfConfig.role || 'ACCOUNTADMIN';
         }
 
         // MQTT config
@@ -418,29 +415,21 @@ class JDBCLoggerDetailManager {
             return false;
         }
 
-        // For Snowflake, JDBC URL is not required
-        if (!databaseType || !username) {
+        if (!databaseType || !jdbcUrl || !username) {
             this.showError('Please fill in all database configuration fields');
-            return false;
-        }
-
-        // JDBC URL is required for non-Snowflake databases
-        if (databaseType !== 'SNOWFLAKE' && !jdbcUrl) {
-            this.showError('JDBC URL is required');
             return false;
         }
 
         // Snowflake-specific validation
         if (databaseType === 'SNOWFLAKE') {
-            const sfPrivateKeyFile = document.getElementById('logger-sf-private-key-file').value.trim();
             const sfAccount = document.getElementById('logger-sf-account').value.trim();
-            const sfUrl = document.getElementById('logger-sf-url').value.trim();
-            const sfRole = document.getElementById('logger-sf-role').value.trim();
+            const sfPrivateKeyFile = document.getElementById('logger-sf-private-key-file').value.trim();
+            const sfWarehouse = document.getElementById('logger-sf-warehouse').value.trim();
             const sfDatabase = document.getElementById('logger-sf-database').value.trim();
             const sfSchema = document.getElementById('logger-sf-schema').value.trim();
 
-            if (!sfPrivateKeyFile || !sfAccount || !sfUrl || !sfRole || !sfDatabase || !sfSchema) {
-                this.showError('Please fill in all Snowflake configuration fields');
+            if (!sfAccount || !sfPrivateKeyFile || !sfWarehouse || !sfDatabase || !sfSchema) {
+                this.showError('Please fill in all required Snowflake fields (Account, Private Key, Warehouse, Database, Schema)');
                 return false;
             }
         }
@@ -562,14 +551,12 @@ class JDBCLoggerDetailManager {
             // Snowflake-specific configuration
             if (databaseType === 'SNOWFLAKE') {
                 const dbSpecificConfig = {
-                    privateKeyFile: document.getElementById('logger-sf-private-key-file').value.trim(),
                     account: document.getElementById('logger-sf-account').value.trim(),
-                    url: document.getElementById('logger-sf-url').value.trim(),
-                    role: document.getElementById('logger-sf-role').value.trim(),
-                    scheme: document.getElementById('logger-sf-scheme').value.trim(),
-                    port: parseInt(document.getElementById('logger-sf-port').value),
+                    privateKeyFile: document.getElementById('logger-sf-private-key-file').value.trim(),
+                    warehouse: document.getElementById('logger-sf-warehouse').value.trim(),
                     database: document.getElementById('logger-sf-database').value.trim(),
-                    schema: document.getElementById('logger-sf-schema').value.trim()
+                    schema: document.getElementById('logger-sf-schema').value.trim(),
+                    role: document.getElementById('logger-sf-role').value.trim() || 'ACCOUNTADMIN'
                 };
                 input.config.dbSpecificConfig = dbSpecificConfig;
             } else {
@@ -590,6 +577,7 @@ class JDBCLoggerDetailManager {
                                     name
                                     enabled
                                 }
+                                errors
                             }
                         }
                     }
@@ -599,7 +587,9 @@ class JDBCLoggerDetailManager {
                     console.log('Logger created successfully');
                     window.location.href = '/pages/jdbc-loggers.html';
                 } else {
-                    this.showError('Failed to create logger');
+                    const errors = result.jdbcLogger.create.errors || [];
+                    const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to create logger';
+                    this.showError(errorMessage);
                 }
             } else {
                 // Update existing logger
@@ -612,6 +602,7 @@ class JDBCLoggerDetailManager {
                                     name
                                     enabled
                                 }
+                                errors
                             }
                         }
                     }
@@ -621,7 +612,9 @@ class JDBCLoggerDetailManager {
                     console.log('Logger updated successfully');
                     window.location.href = '/pages/jdbc-loggers.html';
                 } else {
-                    this.showError('Failed to update logger');
+                    const errors = result.jdbcLogger.update.errors || [];
+                    const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to update logger';
+                    this.showError(errorMessage);
                 }
             }
         } catch (error) {
