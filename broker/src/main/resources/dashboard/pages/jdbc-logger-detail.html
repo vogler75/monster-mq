@@ -342,6 +342,11 @@
                                 <small class="form-hint">Extract table name from message using JSONPath</small>
                             </div>
                             <div class="form-group">
+                                <label for="logger-topic-name-column">Topic Name Column</label>
+                                <input type="text" id="logger-topic-name-column" placeholder="e.g., mqtt_topic">
+                                <small class="form-hint">Column name for storing MQTT topic (optional - leave empty to exclude topic)</small>
+                            </div>
+                            <div class="form-group">
                                 <div class="checkbox-group">
                                     <input type="checkbox" id="logger-auto-create-table" checked>
                                     <label for="logger-auto-create-table">Auto-create Table</label>

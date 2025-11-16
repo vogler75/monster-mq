@@ -155,12 +155,17 @@ class SnowflakeLogger : JDBCLoggerBase() {
         try {
             logger.fine { "Writing bulk of ${rows.size} rows to Snowflake table $tableName" }
 
-            // Build INSERT statement based on fields in first row
+            // Build INSERT statement based on fields in first row + optional topic column
             val fields = rows.first().fields.keys.toList()
-            val placeholders = fields.joinToString(", ") { "?" }
+            val allFields = if (cfg.topicNameColumn != null) {
+                fields + cfg.topicNameColumn!!
+            } else {
+                fields
+            }
+            val placeholders = allFields.joinToString(", ") { "?" }
 
             // Snowflake uses uppercase identifiers by default, but we'll quote them to preserve case
-            val fieldNames = fields.joinToString(", ") { "\"${it.uppercase()}\"" }
+            val fieldNames = allFields.joinToString(", ") { "\"${it.uppercase()}\"" }
 
             val sql = "INSERT INTO \"$database\".\"$schema\".\"${tableName.uppercase()}\" ($fieldNames) VALUES ($placeholders)"
 
@@ -168,10 +173,11 @@ class SnowflakeLogger : JDBCLoggerBase() {
 
             conn.prepareStatement(sql).use { ps ->
                 rows.forEach { row ->
-                    // Set parameter values with type-specific setters
-                    fields.forEachIndexed { index, fieldName ->
+                    var paramIndex = 1
+
+                    // Set parameter values from fields with type-specific setters
+                    fields.forEach { fieldName ->
                         val value = row.fields[fieldName]
-                        val paramIndex = index + 1
                         logger.fine { "Setting parameter $paramIndex to value '$value' (${value?.javaClass?.name ?: "null"})" }
 
                         when (value) {
@@ -189,7 +195,15 @@ class SnowflakeLogger : JDBCLoggerBase() {
                             is ByteArray -> ps.setBytes(paramIndex, value)
                             else -> ps.setObject(paramIndex, value)
                         }
+                        paramIndex++
                     }
+
+                    // Add topic column if configured
+                    if (cfg.topicNameColumn != null) {
+                        ps.setString(paramIndex, row.topic)
+                        logger.fine { "Setting parameter $paramIndex (topic) to value '${row.topic}'" }
+                    }
+
                     ps.addBatch()
                 }
 
@@ -316,6 +330,11 @@ class SnowflakeLogger : JDBCLoggerBase() {
 
                 // Snowflake uses uppercase identifiers by default, quote them to preserve case
                 columns.add("    \"${fieldName.uppercase()}\" $sqlType")
+            }
+
+            // Add topic name column if configured
+            if (cfg.topicNameColumn != null) {
+                columns.add("    \"${cfg.topicNameColumn!!.uppercase()}\" VARCHAR")
             }
 
             // Build CREATE TABLE statement

@@ -123,6 +123,7 @@ class JDBCLoggerQueries(
                 "topicFilters" to config.topicFilters,
                 "tableName" to config.tableName,
                 "tableNameJsonPath" to config.tableNameJsonPath,
+                "topicNameColumn" to config.topicNameColumn,
                 "payloadFormat" to config.payloadFormat.uppercase(),
                 "jsonSchema" to config.jsonSchema.map,
                 "queueType" to config.queueType.uppercase(),

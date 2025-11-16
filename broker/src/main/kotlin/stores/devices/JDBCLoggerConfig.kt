@@ -20,6 +20,7 @@ data class JDBCLoggerConfig(
     // Table configuration
     val tableName: String? = null,                  // Fixed table name (mutually exclusive with tableNameJsonPath)
     val tableNameJsonPath: String? = null,          // JSONPath to extract table name from payload (e.g., "$.metadata.table")
+    val topicNameColumn: String? = null,            // Column name for MQTT topic (optional - if set, topic name is included in inserts)
 
     // Schema and validation
     val payloadFormat: String = "JSON",             // "JSON", "XML" (future support)
@@ -85,6 +86,7 @@ data class JDBCLoggerConfig(
                 topicFilters = topicFilters,
                 tableName = obj.getString("tableName"),
                 tableNameJsonPath = obj.getString("tableNameJsonPath"),
+                topicNameColumn = obj.getString("topicNameColumn"),
                 payloadFormat = obj.getString("payloadFormat", "JSON"),
                 jsonSchema = obj.getJsonObject("jsonSchema") ?: JsonObject(),
                 queueType = obj.getString("queueType", "MEMORY"),
@@ -109,6 +111,7 @@ data class JDBCLoggerConfig(
             .put("topicFilters", JsonArray(topicFilters))
             .put("tableName", tableName)
             .put("tableNameJsonPath", tableNameJsonPath)
+            .put("topicNameColumn", topicNameColumn)
             .put("payloadFormat", payloadFormat)
             .put("jsonSchema", jsonSchema)
             .put("queueType", queueType)

@@ -224,6 +224,7 @@ class JDBCLoggerDetailManager {
                             topicFilters
                             tableName
                             tableNameJsonPath
+                            topicNameColumn
                             payloadFormat
                             jsonSchema
                             queueType
@@ -321,6 +322,7 @@ class JDBCLoggerDetailManager {
         // Table config
         document.getElementById('logger-table-name').value = logger.config.tableName || '';
         document.getElementById('logger-table-jsonpath').value = logger.config.tableNameJsonPath || '';
+        document.getElementById('logger-topic-name-column').value = logger.config.topicNameColumn || '';
         document.getElementById('logger-auto-create-table').checked = logger.config.autoCreateTable !== false; // Default to true
 
         // JSON Schema
@@ -515,6 +517,7 @@ class JDBCLoggerDetailManager {
             const topicFilters = topicFiltersText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
             const tableName = document.getElementById('logger-table-name').value.trim() || null;
             const tableNameJsonPath = document.getElementById('logger-table-jsonpath').value.trim() || null;
+            const topicNameColumn = document.getElementById('logger-topic-name-column').value.trim() || null;
             const payloadFormat = document.getElementById('logger-payload-format').value;
 
             const jsonSchemaText = document.getElementById('logger-json-schema').value.trim();
@@ -565,6 +568,9 @@ class JDBCLoggerDetailManager {
             }
             if (tableNameJsonPath) {
                 input.config.tableNameJsonPath = tableNameJsonPath;
+            }
+            if (topicNameColumn) {
+                input.config.topicNameColumn = topicNameColumn;
             }
 
             // Snowflake-specific configuration
