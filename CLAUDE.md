@@ -112,14 +112,15 @@ Key configuration sections:
 
 ## Git and Commit Guidelines
 
-⚠️ **CRITICAL: NEVER AUTO-COMMIT** ⚠️
+⚠️ **CRITICAL: NEVER AUTO-COMMIT UNDER ANY CIRCUMSTANCES** ⚠️
 
-- **MUST NEVER commit unless explicitly told to do so** - This is non-negotiable. Wait for the user to explicitly say "commit" or "merge to main"
-- **ALWAYS ask the user to review changes first** before committing
-- **Do NOT commit as Claude**: Do not include "Generated with Claude Code" or "Co-Authored-By: Claude" in commits
-- **Manual commits only**: Only commit when the user explicitly instructs with phrases like "please commit", "merge to main", "create a commit", etc.
-- Create branches for work, but changes should remain staged/unstaged until instructed otherwise
-- **If you auto-commit, you have made a mistake** - Always err on the side of caution and let the user decide when to commit
+- **MUST NEVER automatically commit changes** - This is non-negotiable and absolute. Claude Code must NEVER create commits without explicit user authorization
+- **Wait for explicit user instruction** - Only commit when the user explicitly says "commit", "merge to main", "create a commit", or similar clear instruction
+- **ALWAYS present changes for review first** - Show the user what was changed (via git diff or git status) and ask if they want you to proceed with committing
+- **Do NOT commit as Claude** - Do not include "Generated with Claude Code" or "Co-Authored-By: Claude" in commits
+- **Create branches for work** - Create feature/fix branches as needed, but changes should remain staged/unstaged until explicitly instructed to commit
+- **If you auto-commit, you have made a critical mistake** - Always err on the side of caution and let the user decide when and how to commit their changes
+- **No assumptions about commit intent** - Even if it seems obvious that changes should be committed, always wait for explicit user instruction
 
 ## Development Notes
 
