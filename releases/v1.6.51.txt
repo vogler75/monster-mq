@@ -1,0 +1,21 @@
+Release v1.6.51
+Built from commit: 98c702c
+Date: 2025-11-16 16:17:00
+
+Changes since v1.6.50:
+---
+98c702c Merge branch 'feature/snowflake'
+62a07ce Improve Snowflake documentation with additional JSON schema examples
+a28cea3 Add support for storing MQTT topic in JDBC loggers
+e031179 Add autoCreateTable option to JDBC Logger config
+f288899 Add automatic Snowflake table creation and improve config handling
+19b4ea1 Refactor Snowflake JDBC Logger integration and UI
+0b90c3b Add Snowflake support to JDBC Logger
+f86546f Fix issue #53: Prevent Neo4j JDBC driver from interfering with PostgreSQL logger
+66117a8 Fix issue #52: Backend defaults overwriting password
+1c44719 docs: Strengthen git/commit guidelines in CLAUDE.md
+42491cb Fix issue #52: Improve password field in JDBC logger
+dcbbf36 Update JDK to GraalVM 25 and enable native access
+ffe0764 Merge branch 'main' of github.com:vogler75/monster-mq
+cbfa86b Update on docker entrypoint.sh
+9cc862c Remove MCP SDK dependency from broker module
