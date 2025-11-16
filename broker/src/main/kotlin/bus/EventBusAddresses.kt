@@ -137,6 +137,14 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // SparkplugB Decoder (SparkplugB -> MQTT with transformations)
+    object SparkplugBDecoder {
+        private const val DECODER_NS = "$BASE.decoder.sparkplugb"
+        const val CONNECTORS_LIST = "$DECODER_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$DECODER_NS.connectors.list.$nodeId"
+        fun connectorMetrics(deviceName: String) = "$DECODER_NS.metrics.$deviceName"
+    }
+
     // Archive Groups
     object Archive {
         private const val ARCHIVE_NS = "$BASE.archive"

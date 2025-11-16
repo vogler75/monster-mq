@@ -6,6 +6,31 @@ import at.rocworks.data.BrokerMessage
 import io.vertx.core.json.JsonObject
 import org.eclipse.tahu.message.SparkplugBPayloadDecoder
 
+/**
+ * @deprecated This class is deprecated and will be removed in a future version.
+ * Use SparkplugBDecoderExtension instead, which provides configurable device-based
+ * SparkplugB decoding with regex-based routing and topic transformations.
+ *
+ * Migration Guide:
+ * 1. Remove "SparkplugMetricExpansion" from your config.yaml
+ * 2. Create a SparkplugB Decoder device via GraphQL API or Web Dashboard
+ * 3. Configure rules with regex patterns for nodeId/deviceId matching
+ * 4. Use template variables ($nodeId, $deviceId) in destination topics
+ * 5. Apply regex transformations (e.g., s/\./\//g) to convert hierarchies
+ *
+ * Example: To replicate old behavior (decode all to spBv1.0e slash star):
+ * Create a SparkplugB Decoder device via GraphQL mutation with:
+ * - sourceNamespace: "spBv1.0"
+ * - rule: nodeIdRegex ".*", deviceIdRegex ".*"
+ * - destinationTopic: "spBv1.0e/dollar-nodeId/dollar-deviceId" (use $ instead of dollar)
+ *
+ * See: SparkplugBDecoderExtension, SparkplugBDecoderConnector, SparkplugBDecoderConfig
+ */
+@Deprecated(
+    message = "Use SparkplugBDecoderExtension for configurable device-based SparkplugB decoding",
+    replaceWith = ReplaceWith("SparkplugBDecoderExtension", "at.rocworks.devices.sparkplugb.SparkplugBDecoderExtension"),
+    level = DeprecationLevel.WARNING
+)
 class SparkplugExtension(config: JsonObject) {
     private val logger = Utils.getLogger(this::class.java)
 

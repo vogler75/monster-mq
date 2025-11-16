@@ -74,7 +74,8 @@ open class SessionHandler(
     private fun nodeMessageAddress(nodeId: String) = EventBusAddresses.Node.messages(nodeId)
     private fun localNodeMessageAddress() = nodeMessageAddress(Monster.getClusterNodeId(vertx))
 
-    private val sparkplugHandler = Monster.getSparkplugExtension()
+    // Removed: sparkplugHandler - replaced by SparkplugB Decoder Device system
+    // SparkplugB decoding is now managed through configurable decoder devices
 
     private val inFlightMessages = HashMap<String, ArrayBlockingQueue<BrokerMessage>>()
 
@@ -1155,12 +1156,10 @@ open class SessionHandler(
             processMessageImmediately(message)
         }
 
-        // Still save to archive and handle Sparkplug expansion (happens for both paths)
+        // Still save to archive (happens for both paths)
         messageHandler.saveMessage(message)
-        sparkplugHandler?.metricExpansion(message) { spbMessage ->
-            logger.finest { "Publishing Sparkplug message [${spbMessage.topicName}] [${Utils.getCurrentFunctionName()}]" }
-            publishMessage(spbMessage) // Recursive call for Sparkplug messages
-        }
+        // Removed: sparkplugHandler?.metricExpansion() - replaced by SparkplugB Decoder Device system
+        // SparkplugB decoding is now handled by SparkplugBDecoderConnector verticles
     }
 
     /**

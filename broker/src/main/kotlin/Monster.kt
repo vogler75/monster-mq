@@ -13,7 +13,6 @@ import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
 import at.rocworks.extensions.graphql.GraphQLServer
 import at.rocworks.extensions.McpServer
-import at.rocworks.extensions.SparkplugExtension
 import at.rocworks.extensions.ApiService
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
@@ -44,6 +43,7 @@ import at.rocworks.devices.winccoa.WinCCOaExtension
 import at.rocworks.devices.winccua.WinCCUaExtension
 import at.rocworks.devices.plc4x.Plc4xExtension
 import at.rocworks.devices.neo4j.Neo4jExtension
+import at.rocworks.devices.sparkplugb.SparkplugBDecoderExtension
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.flowengine.FlowEngineExtension
 import at.rocworks.logging.MqttLogHandler
@@ -162,12 +162,9 @@ class Monster(args: Array<String>) {
             return getInstance().clusterManager
         }
 
-        fun getSparkplugExtension(): SparkplugExtension? {
-            return getInstance().configJson.getJsonObject("SparkplugMetricExpansion", JsonObject())?.let {
-                if (it.getBoolean("Enabled", false)) SparkplugExtension(it)
-                else null
-            }
-        }
+        // Removed: getSparkplugExtension() - replaced by SparkplugB Decoder Device system
+        // SparkplugB decoding is now managed through configurable decoder devices
+        // See SparkplugBDecoderExtension for the new implementation
 
         fun setSessionHandler(handler: SessionHandler) {
             getInstance().sessionHandler = handler
@@ -977,6 +974,12 @@ MORE INFO:
                         val jdbcLoggerExtension = at.rocworks.logger.JDBCLoggerExtension()
                         val jdbcLoggerDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(jdbcLoggerExtension, jdbcLoggerDeploymentOptions)
+                    }
+                    .compose {
+                        // SparkplugB Decoder Extension
+                        val sparkplugBDecoderExtension = SparkplugBDecoderExtension()
+                        val sparkplugBDecoderDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(sparkplugBDecoderExtension, sparkplugBDecoderDeploymentOptions)
                     }
                     .compose {
                         // Flow Engine Extension

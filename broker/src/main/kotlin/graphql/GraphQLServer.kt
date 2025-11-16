@@ -32,6 +32,8 @@ import at.rocworks.graphql.Neo4jClientConfigQueries
 import at.rocworks.graphql.Neo4jClientConfigMutations
 import at.rocworks.graphql.JDBCLoggerQueries
 import at.rocworks.graphql.JDBCLoggerMutations
+import at.rocworks.graphql.SparkplugBDecoderQueries
+import at.rocworks.graphql.SparkplugBDecoderMutations
 import at.rocworks.graphql.FlowQueries
 import at.rocworks.graphql.FlowMutations
 import at.rocworks.stores.DeviceConfigStoreFactory
@@ -239,6 +241,7 @@ class GraphQLServer(
             "schema-mutations.graphqls",   // Mutation type definitions
             "schema-subscriptions.graphqls", // Subscription type definitions
             "schema-flows.graphqls",       // Flow Engine types and operations
+            "schema-sparkplugb-decoder.graphqls", // SparkplugB Decoder device types and operations
             "schema-genai.graphqls"        // GenAI integration
         )
 
@@ -345,6 +348,10 @@ class GraphQLServer(
         val jdbcLoggerQueries = deviceStore?.let { JDBCLoggerQueries(vertx, it) }
         val jdbcLoggerMutations = deviceStore?.let { JDBCLoggerMutations(vertx, it) }
 
+        // Initialize SparkplugB Decoder resolvers
+        val sparkplugBDecoderQueries = deviceStore?.let { SparkplugBDecoderQueries(vertx, it) }
+        val sparkplugBDecoderMutations = deviceStore?.let { SparkplugBDecoderMutations(vertx, it) }
+
         // Initialize Flow Engine resolvers
         val flowQueries = deviceStore?.let { FlowQueries(vertx, it) }
         val flowMutations = deviceStore?.let { FlowMutations(vertx, it) }
@@ -449,6 +456,12 @@ class GraphQLServer(
                     .apply {
                         jdbcLoggerQueries?.let { resolver ->
                             dataFetcher("jdbcLoggers", resolver.jdbcLoggers())
+                        }
+                    }
+                    // SparkplugB Decoder queries
+                    .apply {
+                        sparkplugBDecoderQueries?.let { resolver ->
+                            dataFetcher("sparkplugBDecoders", resolver.sparkplugBDecoders())
                         }
                     }
                     // Flow Engine queries
@@ -558,6 +571,13 @@ class GraphQLServer(
                         jdbcLoggerMutations?.let { _ ->
                             // Return an empty object - actual resolvers are on JDBCLoggerMutations type
                             dataFetcher("jdbcLogger") { _ -> emptyMap<String, Any>() }
+                        }
+                    }
+                    // SparkplugB Decoder mutations - grouped under sparkplugBDecoder
+                    .apply {
+                        sparkplugBDecoderMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on SparkplugBDecoderMutations type
+                            dataFetcher("sparkplugBDecoder") { _ -> emptyMap<String, Any>() }
                         }
                     }
                     // Flow Engine mutations - grouped under flow
@@ -701,6 +721,20 @@ class GraphQLServer(
                         dataFetcher("stop", resolver.stopJDBCLogger())
                         dataFetcher("toggle", resolver.toggleJDBCLogger())
                         dataFetcher("reassign", resolver.reassignJDBCLogger())
+                    }
+                }
+            }
+            // Register SparkplugB Decoder Mutations type
+            .type("SparkplugBDecoderMutations") { builder ->
+                builder.apply {
+                    sparkplugBDecoderMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createSparkplugBDecoder())
+                        dataFetcher("update", resolver.updateSparkplugBDecoder())
+                        dataFetcher("delete", resolver.deleteSparkplugBDecoder())
+                        dataFetcher("toggle", resolver.toggleSparkplugBDecoder())
+                        dataFetcher("reassign", resolver.reassignSparkplugBDecoder())
+                        dataFetcher("addRule", resolver.addRule())
+                        dataFetcher("deleteRule", resolver.deleteRule())
                     }
                 }
             }

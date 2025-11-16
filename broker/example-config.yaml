@@ -49,8 +49,11 @@ BulkProcessing:
   WorkerThreads: 4           # Number of parallel worker threads (recommended: 2-8)
 
 # Sparkplug B support configuration
-SparkplugMetricExpansion:
-  Enabled: true
+# DEPRECATED: SparkplugMetricExpansion is replaced by SparkplugB Decoder Devices
+# Configure SparkplugB decoders via GraphQL API or Web Dashboard instead
+# See: doc/sparkplugb-decoder.md for migration guide
+# SparkplugMetricExpansion:
+#   Enabled: false  # This option is no longer used
 
 # SQLite configuration
 SQLite:

@@ -1,0 +1,175 @@
+#############################################
+# SparkplugB Decoder Configuration         #
+#############################################
+
+# SparkplugB Decoder Device provides configurable decoding of SparkplugB messages with
+# regex-based routing and topic transformations. Unlike the old global SparkplugB extension,
+# decoders are managed as devices with granular control over which messages to decode and
+# how to route them.
+#
+# Features:
+# - Regex-based filtering by nodeId and deviceId patterns
+# - Template-based topic routing with variable substitution ($nodeId, $deviceId)
+# - Regex transformations on variables (e.g., convert dots to slashes)
+# - Multiple decoders with different routing rules
+# - First-match-wins rule processing
+# - Cluster-aware deployment
+
+# SparkplugB Decoder Rule - Defines regex-based routing for SparkplugB messages
+type SparkplugBDecoderRule {
+    # Rule identifier
+    name: String!
+    # Regex pattern to match SparkplugB node ID (e.g., "^acme\\..*", ".*")
+    nodeIdRegex: String!
+    # Regex pattern to match SparkplugB device ID (e.g., "^sensor-", ".*")
+    deviceIdRegex: String!
+    # MQTT topic template with variables $nodeId, $deviceId
+    # Example: "factory/decoded/$nodeId/$deviceId"
+    destinationTopic: String!
+    # Optional transformations for nodeId and deviceId
+    # Key: "nodeId" or "deviceId"
+    # Value: Regex substitution in format s/pattern/replacement/flags
+    # Example: {"nodeId": "s/\\./\\//g"} converts dots to slashes
+    transformations: JSON
+}
+
+# SparkplugB Decoder Configuration
+type SparkplugBDecoderConfig {
+    # Source SparkplugB namespace (default: "spBv1.0")
+    sourceNamespace: String!
+    # Ordered list of decoding rules (first match wins)
+    rules: [SparkplugBDecoderRule!]!
+}
+
+# SparkplugB Decoder Metrics
+type SparkplugBDecoderMetrics {
+    # Messages per second received from SparkplugB topics
+    messagesIn: Float!
+    # Messages per second published to decoded topics
+    messagesOut: Float!
+    # Messages per second skipped (no matching rule)
+    messagesSkipped: Float!
+    # ISO 8601 timestamp when these metrics were captured
+    timestamp: String!
+}
+
+# SparkplugB Decoder Device
+type SparkplugBDecoder {
+    # Unique device name across the cluster
+    name: String!
+    # MQTT namespace for internal communication
+    namespace: String!
+    # Cluster node ID where this decoder runs
+    nodeId: String!
+    # Decoder configuration with rules
+    config: SparkplugBDecoderConfig!
+    # Whether this decoder is enabled
+    enabled: Boolean!
+    # ISO 8601 timestamp when this device was created
+    createdAt: String!
+    # ISO 8601 timestamp when this device was last updated
+    updatedAt: String!
+    # Whether this decoder is running on the current node
+    isOnCurrentNode: Boolean!
+    # Current metrics for this SparkplugB decoder
+    metrics: SparkplugBDecoderMetrics!
+}
+
+#############################################
+# SparkplugB Decoder Inputs                #
+#############################################
+
+# Input for creating/updating a SparkplugB Decoder Rule
+input SparkplugBDecoderRuleInput {
+    # Rule identifier
+    name: String!
+    # Regex pattern to match SparkplugB node ID
+    nodeIdRegex: String!
+    # Regex pattern to match SparkplugB device ID
+    deviceIdRegex: String!
+    # MQTT topic template with $nodeId and $deviceId variables
+    destinationTopic: String!
+    # Optional transformations (JSON object mapping variable names to regex substitutions)
+    transformations: JSON
+}
+
+# Input for SparkplugB Decoder Configuration
+input SparkplugBDecoderConfigInput {
+    # Source SparkplugB namespace (default: "spBv1.0")
+    sourceNamespace: String
+    # Ordered list of decoding rules
+    rules: [SparkplugBDecoderRuleInput!]!
+}
+
+# Input for creating/updating a SparkplugB Decoder Device
+input SparkplugBDecoderInput {
+    # Unique device name
+    name: String!
+    # MQTT namespace
+    namespace: String!
+    # Cluster node ID
+    nodeId: String!
+    # Decoder configuration
+    config: SparkplugBDecoderConfigInput!
+    # Whether this decoder is enabled
+    enabled: Boolean
+}
+
+#############################################
+# SparkplugB Decoder Queries               #
+#############################################
+
+extend type Query {
+    # Get all SparkplugB Decoder devices across the cluster
+    # Returns decoders from all cluster nodes, showing their assignment and status
+    # Use optional filters to narrow results to specific decoder or node
+    sparkplugBDecoders(
+        # Filter by specific decoder name (optional)
+        name: String,
+        # Filter by cluster node ID (optional, null returns current node)
+        node: String
+    ): [SparkplugBDecoder!]!
+}
+
+#############################################
+# SparkplugB Decoder Mutations             #
+#############################################
+
+# Response from SparkplugB Decoder mutations
+type SparkplugBDecoderResponse {
+    # Whether the operation succeeded
+    success: Boolean!
+    # Error messages if operation failed
+    errors: [String!]
+    # The created/updated decoder (null on delete)
+    decoder: SparkplugBDecoder
+}
+
+# SparkplugB Decoder mutations namespace
+type SparkplugBDecoderMutations {
+    # Create a new SparkplugB Decoder device
+    create(input: SparkplugBDecoderInput!): SparkplugBDecoderResponse!
+
+    # Update an existing SparkplugB Decoder device
+    update(name: String!, input: SparkplugBDecoderInput!): SparkplugBDecoderResponse!
+
+    # Delete a SparkplugB Decoder device
+    delete(name: String!): SparkplugBDecoderResponse!
+
+    # Toggle enabled/disabled state of a SparkplugB Decoder device
+    toggle(name: String!, enabled: Boolean!): SparkplugBDecoderResponse!
+
+    # Reassign a SparkplugB Decoder device to a different cluster node
+    reassign(name: String!, nodeId: String!): SparkplugBDecoderResponse!
+
+    # Add a new rule to an existing SparkplugB Decoder device
+    addRule(deviceName: String!, rule: SparkplugBDecoderRuleInput!): SparkplugBDecoderResponse!
+
+    # Delete a rule from a SparkplugB Decoder device
+    deleteRule(deviceName: String!, ruleName: String!): SparkplugBDecoderResponse!
+}
+
+extend type Mutation {
+    # SparkplugB Decoder device management operations
+    sparkplugBDecoder: SparkplugBDecoderMutations!
+}
