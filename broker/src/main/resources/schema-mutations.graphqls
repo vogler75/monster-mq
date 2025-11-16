@@ -1408,6 +1408,8 @@ input JDBCLoggerConfigInput {
     bulkTimeoutMs: Long = 5000
     # Delay before reconnecting on failure in milliseconds
     reconnectDelayMs: Long = 5000
+    # Automatically create table if it doesn't exist (only works with fixed table name)
+    autoCreateTable: Boolean = true
     # Database-specific configuration (JSON object for database-specific settings)
     # For Snowflake: {privateKeyFile, account, url, role, scheme, port, database, schema}
     dbSpecificConfig: JSON

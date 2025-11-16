@@ -131,6 +131,7 @@ class JDBCLoggerQueries(
                 "bulkSize" to config.bulkSize,
                 "bulkTimeoutMs" to config.bulkTimeoutMs,
                 "reconnectDelayMs" to config.reconnectDelayMs,
+                "autoCreateTable" to config.autoCreateTable,
                 "dbSpecificConfig" to config.dbSpecificConfig.map
             ),
             "enabled" to device.enabled,

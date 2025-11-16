@@ -283,6 +283,7 @@ class JDBCLoggerMutations(
             bulkSize = (configMap["bulkSize"] as? Number)?.toInt() ?: 1000,
             bulkTimeoutMs = (configMap["bulkTimeoutMs"] as? Number)?.toLong() ?: 5000L,
             reconnectDelayMs = (configMap["reconnectDelayMs"] as? Number)?.toLong() ?: 5000L,
+            autoCreateTable = configMap["autoCreateTable"] as? Boolean ?: true,
             dbSpecificConfig = JsonObject((configMap["dbSpecificConfig"] as? Map<*, *>)?.mapKeys { it.key.toString() }?.mapValues { it.value ?: "" } ?: emptyMap<String, Any>())
         )
 
@@ -344,6 +345,7 @@ class JDBCLoggerMutations(
                 "bulkSize" to config.bulkSize,
                 "bulkTimeoutMs" to config.bulkTimeoutMs,
                 "reconnectDelayMs" to config.reconnectDelayMs,
+                "autoCreateTable" to config.autoCreateTable,
                 "dbSpecificConfig" to config.dbSpecificConfig.map
             ),
             "enabled" to device.enabled,

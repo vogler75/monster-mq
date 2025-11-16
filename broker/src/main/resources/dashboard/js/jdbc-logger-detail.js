@@ -232,6 +232,7 @@ class JDBCLoggerDetailManager {
                             bulkSize
                             bulkTimeoutMs
                             reconnectDelayMs
+                            autoCreateTable
                             dbSpecificConfig
                         }
                         metrics {
@@ -320,6 +321,7 @@ class JDBCLoggerDetailManager {
         // Table config
         document.getElementById('logger-table-name').value = logger.config.tableName || '';
         document.getElementById('logger-table-jsonpath').value = logger.config.tableNameJsonPath || '';
+        document.getElementById('logger-auto-create-table').checked = logger.config.autoCreateTable !== false; // Default to true
 
         // JSON Schema
         document.getElementById('logger-json-schema').value =
@@ -525,6 +527,7 @@ class JDBCLoggerDetailManager {
             const bulkSize = parseInt(document.getElementById('logger-bulk-size').value);
             const bulkTimeoutMs = parseInt(document.getElementById('logger-bulk-timeout').value);
             const reconnectDelayMs = parseInt(document.getElementById('logger-reconnect-delay').value);
+            const autoCreateTable = document.getElementById('logger-auto-create-table').checked;
 
             const input = {
                 name,
@@ -543,7 +546,8 @@ class JDBCLoggerDetailManager {
                     diskPath,
                     bulkSize,
                     bulkTimeoutMs,
-                    reconnectDelayMs
+                    reconnectDelayMs,
+                    autoCreateTable
                 }
             };
 
