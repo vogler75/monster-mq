@@ -152,6 +152,38 @@ class JDBCLoggerDetailManager {
         // Hide timestamps and metrics sections (only for editing)
         document.getElementById('timestamps-section').style.display = 'none';
         document.getElementById('metrics-section').style.display = 'none';
+
+        // Setup database type change listener to update JDBC URL placeholder
+        this.setupDatabaseTypeListener();
+    }
+
+    setupDatabaseTypeListener() {
+        const dbTypeSelect = document.getElementById('logger-db-type');
+        const jdbcUrlInput = document.getElementById('logger-jdbc-url');
+
+        dbTypeSelect.addEventListener('change', () => {
+            const dbType = dbTypeSelect.value;
+            let placeholder = '';
+
+            switch(dbType) {
+                case 'QUESTDB':
+                    placeholder = 'jdbc:postgresql://localhost:8812/qdb';
+                    break;
+                case 'POSTGRESQL':
+                    placeholder = 'jdbc:postgresql://localhost:5432/mydb';
+                    break;
+                case 'TIMESCALEDB':
+                    placeholder = 'jdbc:postgresql://localhost:5432/timescale';
+                    break;
+                case 'MYSQL':
+                    placeholder = 'jdbc:mysql://localhost:3306/mydb';
+                    break;
+                default:
+                    placeholder = 'jdbc:...';
+            }
+
+            jdbcUrlInput.placeholder = placeholder;
+        });
     }
 
     async loadLogger() {
@@ -271,6 +303,9 @@ class JDBCLoggerDetailManager {
         document.getElementById('logger-updated-at').textContent =
             logger.updatedAt ? new Date(logger.updatedAt).toLocaleString() : '-';
         document.getElementById('timestamps-section').style.display = 'block';
+
+        // Setup database type change listener to update JDBC URL placeholder
+        this.setupDatabaseTypeListener();
     }
 
     renderMetrics() {

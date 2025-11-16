@@ -155,6 +155,10 @@ class JDBCLoggerExtension : AbstractVerticle() {
                     logger.info("Using PostgreSQL logger for TimescaleDB (PostgreSQL compatible)")
                     PostgreSQLLogger()
                 }
+                "MYSQL" -> {
+                    logger.info("Using MySQL logger for database type: ${config.databaseType}")
+                    MySQLLogger()
+                }
                 else -> {
                     logger.warning("Unknown database type: ${config.databaseType}, using PostgreSQL logger as fallback")
                     PostgreSQLLogger()

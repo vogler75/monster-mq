@@ -1,30 +1,24 @@
 package at.rocworks.logger
 
-import io.vertx.core.Future
-import io.vertx.core.Promise
-import java.sql.Connection
-import java.sql.DriverManager
 import java.sql.SQLException
 
 /**
- * PostgreSQL implementation of JDBC Logger
- * Supports PostgreSQL and compatible databases (TimescaleDB, QuestDB via PostgreSQL wire protocol)
+ * MySQL implementation of JDBC Logger
+ * Extends PostgreSQLLogger and overrides MySQL-specific table creation
  */
-open class PostgreSQLLogger : JDBCLoggerBase() {
+class MySQLLogger : PostgreSQLLogger() {
 
-    protected var connection: Connection? = null
-
-    override fun connect(): Future<Void> {
-        val promise = Promise.promise<Void>()
+    override fun connect(): io.vertx.core.Future<Void> {
+        val promise = io.vertx.core.Promise.promise<Void>()
 
         vertx.executeBlocking<Void>({
             try {
                 // Determine the correct driver based on JDBC URL to avoid conflicts with other drivers on classpath
                 val driverClassName = cfg.getDriverClassName()
-                logger.info("Connecting to PostgreSQL: ${cfg.jdbcUrl}, Using driver: $driverClassName, Username: ${cfg.username}")
+                logger.info("Connecting to MySQL: ${cfg.jdbcUrl}, Using driver: $driverClassName, Username: ${cfg.username}")
 
                 // Load the specific JDBC driver - this ensures the correct driver is used
-                // even when multiple JDBC drivers (e.g., Neo4j, MySQL) are on the classpath
+                // even when multiple JDBC drivers (e.g., Neo4j, PostgreSQL) are on the classpath
                 Class.forName(driverClassName)
 
                 // Create connection
@@ -32,9 +26,9 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
                 properties.setProperty("user", cfg.username)
                 properties.setProperty("password", cfg.password)
 
-                connection = DriverManager.getConnection(cfg.jdbcUrl, properties)
+                connection = java.sql.DriverManager.getConnection(cfg.jdbcUrl, properties)
 
-                logger.info("Connected to PostgreSQL successfully")
+                logger.info("Connected to MySQL successfully")
 
                 // Auto-create table if enabled and table name is fixed (not dynamic)
                 if (cfg.autoCreateTable && cfg.tableName != null) {
@@ -43,7 +37,7 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
 
                 null
             } catch (e: Exception) {
-                logger.severe("Failed to connect to PostgreSQL: ${e.javaClass.name}: ${e.message}")
+                logger.severe("Failed to connect to MySQL: ${e.javaClass.name}: ${e.message}")
                 logger.severe("Connection details - URL: ${cfg.jdbcUrl}, Username: ${cfg.username}")
                 e.printStackTrace() // Print full stack trace
                 throw e
@@ -59,16 +53,16 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
         return promise.future()
     }
 
-    override fun disconnect(): Future<Void> {
-        val promise = Promise.promise<Void>()
+    override fun disconnect(): io.vertx.core.Future<Void> {
+        val promise = io.vertx.core.Promise.promise<Void>()
 
         try {
             connection?.close()
             connection = null
-            logger.info("Disconnected from PostgreSQL")
+            logger.info("Disconnected from MySQL")
             promise.complete()
         } catch (e: Exception) {
-            logger.warning("Error disconnecting from PostgreSQL: ${e.message}")
+            logger.warning("Error disconnecting from MySQL: ${e.message}")
             promise.fail(e)
         }
 
@@ -76,7 +70,7 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
     }
 
     override fun writeBulk(tableName: String, rows: List<BufferedRow>) {
-        val conn = connection ?: throw SQLException("Not connected to PostgreSQL")
+        val conn = connection ?: throw SQLException("Not connected to MySQL")
 
         if (rows.isEmpty()) {
             return
@@ -86,9 +80,9 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
             // Build INSERT statement based on fields in first row
             val fields = rows.first().fields.keys.toList()
             val placeholders = fields.joinToString(", ") { "?" }
-            val fieldNames = fields.joinToString(", ")
+            val fieldNames = fields.joinToString(", ") { "`$it`" }  // MySQL uses backticks
 
-            val sql = "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders)"
+            val sql = "INSERT INTO `$tableName` ($fieldNames) VALUES ($placeholders)"
 
             logger.fine { "Writing bulk of ${rows.size} rows to table $tableName SQL: $sql" }
 
@@ -135,27 +129,27 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
 
             // Check for table not found errors
             if (e.message?.contains("table", ignoreCase = true) == true ||
-                e.message?.contains("relation", ignoreCase = true) == true ||
-                e.sqlState == "42P01") {  // PostgreSQL error code for undefined_table
+                e.message?.contains("doesn't exist", ignoreCase = true) == true ||
+                e.errorCode == 1146) {  // MySQL error code for table doesn't exist
                 logger.severe("=".repeat(80))
                 logger.severe("ERROR: Table '$tableName' does not exist!")
                 logger.severe("You need to create the table first based on your JSON schema.")
                 logger.severe("Example SQL for your schema:")
-                logger.severe("  CREATE TABLE $tableName (")
+                logger.severe("  CREATE TABLE `$tableName` (")
                 rows.first().fields.forEach { (name, value) ->
                     val type = when (value) {
-                        is String -> "TEXT"
-                        is Int -> "INTEGER"
+                        is String -> "VARCHAR(255)"
+                        is Int -> "INT"
                         is Long -> "BIGINT"
-                        is Double -> "DOUBLE PRECISION"
-                        is Float -> "REAL"
+                        is Double -> "DOUBLE"
+                        is Float -> "FLOAT"
                         is Boolean -> "BOOLEAN"
                         else -> "TEXT"
                     }
-                    logger.severe("    $name $type,")
+                    logger.severe("    `$name` $type,")
                 }
                 logger.severe("    PRIMARY KEY (...)")
-                logger.severe("  );")
+                logger.severe("  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
                 logger.severe("=".repeat(80))
             }
 
@@ -163,11 +157,11 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
         }
     }
 
-    protected open fun createTableIfNotExists(tableName: String) {
+    override fun createTableIfNotExists(tableName: String) {
         val conn = connection ?: throw SQLException("Not connected")
 
         try {
-            logger.info("Checking if PostgreSQL table '$tableName' exists...")
+            logger.info("Checking if MySQL table '$tableName' exists...")
 
             // Extract field definitions from JSON schema
             val schemaProperties = cfg.jsonSchema.getJsonObject("properties")
@@ -185,7 +179,7 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
                 val fieldType = fieldSchema?.getString("type") ?: "string"
                 val format = fieldSchema?.getString("format")
 
-                // Determine PostgreSQL type
+                // Determine MySQL type
                 val sqlType = when {
                     format == "timestamp" || format == "timestampms" -> {
                         if (timestampField == null) {
@@ -194,22 +188,22 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
                         "TIMESTAMP"
                     }
                     fieldType == "string" -> "TEXT"
-                    fieldType == "number" -> "DOUBLE PRECISION"
+                    fieldType == "number" -> "DOUBLE"
                     fieldType == "integer" -> "BIGINT"
                     fieldType == "boolean" -> "BOOLEAN"
                     else -> "TEXT"
                 }
 
-                columns.add("    $fieldName $sqlType")
+                columns.add("    `$fieldName` $sqlType")
             }
 
-            // Build CREATE TABLE statement with SERIAL primary key
+            // Build CREATE TABLE statement with AUTO_INCREMENT primary key
             val columnsSQL = columns.joinToString(",\n")
             val createTableSQL = """
-                CREATE TABLE IF NOT EXISTS "$tableName" (
-                    id SERIAL PRIMARY KEY,
+                CREATE TABLE IF NOT EXISTS `$tableName` (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
                 $columnsSQL
-                )
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """.trimIndent()
 
             logger.fine("Executing CREATE TABLE:\n$createTableSQL")
@@ -221,17 +215,24 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
             // Create index on timestamp field if it exists
             if (timestampField != null) {
                 val createIndexSQL = """
-                    CREATE INDEX IF NOT EXISTS "${tableName}_${timestampField}_idx"
-                    ON "$tableName" ($timestampField DESC)
+                    CREATE INDEX `${tableName}_${timestampField}_idx`
+                    ON `$tableName` (`$timestampField` DESC)
                     """.trimIndent()
 
                 logger.info("Creating index on timestamp field '$timestampField'")
-                conn.createStatement().use { stmt ->
-                    stmt.execute(createIndexSQL)
+                try {
+                    conn.createStatement().use { stmt ->
+                        stmt.execute(createIndexSQL)
+                    }
+                } catch (e: SQLException) {
+                    // Index might already exist, which is fine
+                    if (e.errorCode != 1061) {  // 1061 = Duplicate key name
+                        logger.warning("Error creating index: ${e.message}")
+                    }
                 }
             }
 
-            logger.info("PostgreSQL table '$tableName' is ready")
+            logger.info("MySQL table '$tableName' is ready")
 
         } catch (e: SQLException) {
             logger.warning("Error creating table '$tableName': ${e.message}")
@@ -245,21 +246,13 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
                 // Check this exception and all chained exceptions
                 var current: SQLException? = e
                 while (current != null) {
-                    // Check SQL state codes for connection errors
-                    // 08xxx = Connection Exception
-                    // 57P01 = admin_shutdown
-                    // 57P02 = crash_shutdown
-                    // 57P03 = cannot_connect_now
-                    when (current.sqlState) {
-                        "08000", // connection_exception
-                        "08003", // connection_does_not_exist
-                        "08006", // connection_failure
-                        "08001", // sqlclient_unable_to_establish_sqlconnection
-                        "08004", // sqlserver_rejected_establishment_of_sqlconnection
-                        "08007", // transaction_resolution_unknown
-                        "57P01", // admin_shutdown
-                        "57P02", // crash_shutdown
-                        "57P03"  // cannot_connect_now
+                    // Check MySQL-specific error codes for connection errors
+                    when (current.errorCode) {
+                        2002, // Can't connect to MySQL server
+                        2003, // Can't connect to MySQL server on '%s' (%d)
+                        2006, // MySQL server has gone away
+                        2013, // Lost connection to MySQL server during query
+                        2055  // Lost connection to MySQL server at '%s', system error: %d
                         -> return true
                     }
 
@@ -275,7 +268,8 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
                         message.contains("socket") ||
                         message.contains("broken pipe") ||
                         message.contains("connection reset") ||
-                        message.contains("not connected")
+                        message.contains("not connected") ||
+                        message.contains("gone away")
                     ) {
                         return true
                     }

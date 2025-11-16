@@ -41,6 +41,20 @@ data class JDBCLoggerConfig(
     val autoCreateTable: Boolean = true,            // Automatically create table if not exists
     val partitionBy: String = "DAY"                 // QuestDB partition strategy: HOUR, DAY, WEEK, MONTH, YEAR, NONE
 ) {
+    /**
+     * Get the JDBC driver class name inferred from the URL
+     * This ensures the correct driver is loaded even when multiple JDBC drivers are on the classpath
+     * Note: Neo4j is NOT supported in JDBC Logger (only in Flow Engine)
+     * Note: QuestDB and TimescaleDB both use jdbc:postgresql:// URLs
+     */
+    fun getDriverClassName(): String {
+        return when {
+            jdbcUrl.contains("postgresql") -> "org.postgresql.Driver"
+            jdbcUrl.contains("mysql") -> "com.mysql.cj.jdbc.Driver"
+            else -> "org.postgresql.Driver"  // Default fallback for PostgreSQL-compatible databases (QuestDB, TimescaleDB, etc.)
+        }
+    }
+
     companion object {
         fun fromJson(obj: JsonObject): JDBCLoggerConfig {
             val topicFiltersArray = obj.getJsonArray("topicFilters", JsonArray())
