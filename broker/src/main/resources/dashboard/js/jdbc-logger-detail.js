@@ -132,18 +132,21 @@ class JDBCLoggerDetailManager {
                     "type": "string",
                     "format": "timestamp"
                 },
-                "sensor_id": {
+                "metric": {
                     "type": "string"
                 },
                 "value": {
                     "type": "number"
                 }
             },
-            "required": ["value"],
+            "required": [
+                "metric",
+                "value"
+            ],
             "arrayPath": "$.sensors[*]",
             "mapping": {
                 "ts": "$.timestamp",
-                "sensor_id": "$.id",
+                "metric": "$.metric",
                 "value": "$.value"
             }
         };
@@ -160,26 +163,39 @@ class JDBCLoggerDetailManager {
     setupDatabaseTypeListener() {
         const dbTypeSelect = document.getElementById('logger-db-type');
         const jdbcUrlInput = document.getElementById('logger-jdbc-url');
+        const snowflakeConfigSection = document.getElementById('snowflake-config-section');
 
         dbTypeSelect.addEventListener('change', () => {
             const dbType = dbTypeSelect.value;
             let placeholder = '';
 
-            switch(dbType) {
-                case 'QUESTDB':
-                    placeholder = 'jdbc:postgresql://localhost:8812/qdb';
-                    break;
-                case 'POSTGRESQL':
-                    placeholder = 'jdbc:postgresql://localhost:5432/mydb';
-                    break;
-                case 'TIMESCALEDB':
-                    placeholder = 'jdbc:postgresql://localhost:5432/timescale';
-                    break;
-                case 'MYSQL':
-                    placeholder = 'jdbc:mysql://localhost:3306/mydb';
-                    break;
-                default:
-                    placeholder = 'jdbc:...';
+            // Show/hide Snowflake-specific configuration
+            if (dbType === 'SNOWFLAKE') {
+                snowflakeConfigSection.style.display = 'block';
+                jdbcUrlInput.required = true;
+                jdbcUrlInput.disabled = false;
+                placeholder = 'jdbc:snowflake://account.snowflakecomputing.com';
+            } else {
+                snowflakeConfigSection.style.display = 'none';
+                jdbcUrlInput.required = true;
+                jdbcUrlInput.disabled = false;
+
+                switch(dbType) {
+                    case 'QUESTDB':
+                        placeholder = 'jdbc:postgresql://localhost:8812/qdb';
+                        break;
+                    case 'POSTGRESQL':
+                        placeholder = 'jdbc:postgresql://localhost:5432/mydb';
+                        break;
+                    case 'TIMESCALEDB':
+                        placeholder = 'jdbc:postgresql://localhost:5432/timescale';
+                        break;
+                    case 'MYSQL':
+                        placeholder = 'jdbc:mysql://localhost:3306/mydb';
+                        break;
+                    default:
+                        placeholder = 'jdbc:...';
+                }
             }
 
             jdbcUrlInput.placeholder = placeholder;
@@ -208,6 +224,7 @@ class JDBCLoggerDetailManager {
                             topicFilters
                             tableName
                             tableNameJsonPath
+                            topicNameColumn
                             payloadFormat
                             jsonSchema
                             queueType
@@ -216,6 +233,8 @@ class JDBCLoggerDetailManager {
                             bulkSize
                             bulkTimeoutMs
                             reconnectDelayMs
+                            autoCreateTable
+                            dbSpecificConfig
                         }
                         metrics {
                             messagesIn
@@ -259,6 +278,9 @@ class JDBCLoggerDetailManager {
     populateForm() {
         const logger = this.originalLogger;
 
+        console.log('Populating form with logger:', logger);
+        console.log('Logger config:', logger.config);
+
         // Basic info
         document.getElementById('logger-name').value = logger.name;
         document.getElementById('logger-name').disabled = true; // Can't change name when editing
@@ -267,11 +289,31 @@ class JDBCLoggerDetailManager {
         document.getElementById('logger-enabled').checked = logger.enabled;
 
         // Database config
-        document.getElementById('logger-db-type').value = logger.config.databaseType;
+        const dbTypeSelect = document.getElementById('logger-db-type');
+        dbTypeSelect.value = logger.config.databaseType;
+
         document.getElementById('logger-jdbc-url').value = logger.config.jdbcUrl;
         document.getElementById('logger-username').value = logger.config.username;
         document.getElementById('logger-password').value = ''; // Don't populate password
         document.getElementById('logger-password').placeholder = 'Leave blank to keep current password';
+
+        // Setup database type change listener BEFORE triggering change event
+        this.setupDatabaseTypeListener();
+
+        // Trigger change event to show/hide Snowflake section
+        dbTypeSelect.dispatchEvent(new Event('change'));
+
+        // Snowflake-specific config (if present) - populate AFTER triggering change event
+        if (logger.config.databaseType === 'SNOWFLAKE') {
+            console.log('Loading Snowflake config:', logger.config.dbSpecificConfig);
+            const sfConfig = logger.config.dbSpecificConfig || {};
+            document.getElementById('logger-sf-account').value = sfConfig.account || '';
+            document.getElementById('logger-sf-private-key-file').value = sfConfig.privateKeyFile || '';
+            document.getElementById('logger-sf-warehouse').value = sfConfig.warehouse || '';
+            document.getElementById('logger-sf-database').value = sfConfig.database || '';
+            document.getElementById('logger-sf-schema').value = sfConfig.schema || '';
+            document.getElementById('logger-sf-role').value = sfConfig.role || 'ACCOUNTADMIN';
+        }
 
         // MQTT config
         document.getElementById('logger-topic-filters').value = logger.config.topicFilters.join('\n');
@@ -280,6 +322,8 @@ class JDBCLoggerDetailManager {
         // Table config
         document.getElementById('logger-table-name').value = logger.config.tableName || '';
         document.getElementById('logger-table-jsonpath').value = logger.config.tableNameJsonPath || '';
+        document.getElementById('logger-topic-name-column').value = logger.config.topicNameColumn || '';
+        document.getElementById('logger-auto-create-table').checked = logger.config.autoCreateTable !== false; // Default to true
 
         // JSON Schema
         document.getElementById('logger-json-schema').value =
@@ -303,9 +347,6 @@ class JDBCLoggerDetailManager {
         document.getElementById('logger-updated-at').textContent =
             logger.updatedAt ? new Date(logger.updatedAt).toLocaleString() : '-';
         document.getElementById('timestamps-section').style.display = 'block';
-
-        // Setup database type change listener to update JDBC URL placeholder
-        this.setupDatabaseTypeListener();
     }
 
     renderMetrics() {
@@ -395,15 +436,32 @@ class JDBCLoggerDetailManager {
             return false;
         }
 
-        // Password is required for new loggers or when updating password on existing loggers
-        if (this.isNewLogger && !password) {
-            this.showError('Password is required for new loggers');
-            return false;
+        // Snowflake-specific validation
+        if (databaseType === 'SNOWFLAKE') {
+            const sfAccount = document.getElementById('logger-sf-account').value.trim();
+            const sfPrivateKeyFile = document.getElementById('logger-sf-private-key-file').value.trim();
+            const sfWarehouse = document.getElementById('logger-sf-warehouse').value.trim();
+            const sfDatabase = document.getElementById('logger-sf-database').value.trim();
+            const sfSchema = document.getElementById('logger-sf-schema').value.trim();
+
+            if (!sfAccount || !sfPrivateKeyFile || !sfWarehouse || !sfDatabase || !sfSchema) {
+                this.showError('Please fill in all required Snowflake fields (Account, Private Key, Warehouse, Database, Schema)');
+                return false;
+            }
         }
 
-        if (!this.isNewLogger && updatePasswordCheckbox && updatePasswordCheckbox.checked && !password) {
-            this.showError('Please enter a new password or uncheck "Update Password"');
-            return false;
+        // Password is required for new loggers (except Snowflake which uses private key authentication)
+        // or when updating password on existing loggers
+        if (databaseType !== 'SNOWFLAKE') {
+            if (this.isNewLogger && !password) {
+                this.showError('Password is required for new loggers');
+                return false;
+            }
+
+            if (!this.isNewLogger && updatePasswordCheckbox && updatePasswordCheckbox.checked && !password) {
+                this.showError('Please enter a new password or uncheck "Update Password"');
+                return false;
+            }
         }
 
         const topicFilters = topicFiltersText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
@@ -459,6 +517,7 @@ class JDBCLoggerDetailManager {
             const topicFilters = topicFiltersText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
             const tableName = document.getElementById('logger-table-name').value.trim() || null;
             const tableNameJsonPath = document.getElementById('logger-table-jsonpath').value.trim() || null;
+            const topicNameColumn = document.getElementById('logger-topic-name-column').value.trim() || null;
             const payloadFormat = document.getElementById('logger-payload-format').value;
 
             const jsonSchemaText = document.getElementById('logger-json-schema').value.trim();
@@ -471,6 +530,7 @@ class JDBCLoggerDetailManager {
             const bulkSize = parseInt(document.getElementById('logger-bulk-size').value);
             const bulkTimeoutMs = parseInt(document.getElementById('logger-bulk-timeout').value);
             const reconnectDelayMs = parseInt(document.getElementById('logger-reconnect-delay').value);
+            const autoCreateTable = document.getElementById('logger-auto-create-table').checked;
 
             const input = {
                 name,
@@ -489,7 +549,8 @@ class JDBCLoggerDetailManager {
                     diskPath,
                     bulkSize,
                     bulkTimeoutMs,
-                    reconnectDelayMs
+                    reconnectDelayMs,
+                    autoCreateTable
                 }
             };
 
@@ -508,6 +569,24 @@ class JDBCLoggerDetailManager {
             if (tableNameJsonPath) {
                 input.config.tableNameJsonPath = tableNameJsonPath;
             }
+            if (topicNameColumn) {
+                input.config.topicNameColumn = topicNameColumn;
+            }
+
+            // Snowflake-specific configuration
+            if (databaseType === 'SNOWFLAKE') {
+                const dbSpecificConfig = {
+                    account: document.getElementById('logger-sf-account').value.trim(),
+                    privateKeyFile: document.getElementById('logger-sf-private-key-file').value.trim(),
+                    warehouse: document.getElementById('logger-sf-warehouse').value.trim(),
+                    database: document.getElementById('logger-sf-database').value.trim(),
+                    schema: document.getElementById('logger-sf-schema').value.trim(),
+                    role: document.getElementById('logger-sf-role').value.trim() || 'ACCOUNTADMIN'
+                };
+                input.config.dbSpecificConfig = dbSpecificConfig;
+            } else {
+                input.config.dbSpecificConfig = {};
+            }
 
             console.log('Saving JDBC logger with input:', input);
 
@@ -523,6 +602,7 @@ class JDBCLoggerDetailManager {
                                     name
                                     enabled
                                 }
+                                errors
                             }
                         }
                     }
@@ -532,7 +612,9 @@ class JDBCLoggerDetailManager {
                     console.log('Logger created successfully');
                     window.location.href = '/pages/jdbc-loggers.html';
                 } else {
-                    this.showError('Failed to create logger');
+                    const errors = result.jdbcLogger.create.errors || [];
+                    const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to create logger';
+                    this.showError(errorMessage);
                 }
             } else {
                 // Update existing logger
@@ -545,6 +627,7 @@ class JDBCLoggerDetailManager {
                                     name
                                     enabled
                                 }
+                                errors
                             }
                         }
                     }
@@ -554,7 +637,9 @@ class JDBCLoggerDetailManager {
                     console.log('Logger updated successfully');
                     window.location.href = '/pages/jdbc-loggers.html';
                 } else {
-                    this.showError('Failed to update logger');
+                    const errors = result.jdbcLogger.update.errors || [];
+                    const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to update logger';
+                    this.showError(errorMessage);
                 }
             }
         } catch (error) {

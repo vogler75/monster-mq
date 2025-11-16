@@ -77,10 +77,15 @@ class MySQLLogger : PostgreSQLLogger() {
         }
 
         try {
-            // Build INSERT statement based on fields in first row
+            // Build INSERT statement based on fields in first row + optional topic column
             val fields = rows.first().fields.keys.toList()
-            val placeholders = fields.joinToString(", ") { "?" }
-            val fieldNames = fields.joinToString(", ") { "`$it`" }  // MySQL uses backticks
+            val allFields = if (cfg.topicNameColumn != null) {
+                fields + cfg.topicNameColumn!!
+            } else {
+                fields
+            }
+            val placeholders = allFields.joinToString(", ") { "?" }
+            val fieldNames = allFields.joinToString(", ") { "`$it`" }  // MySQL uses backticks
 
             val sql = "INSERT INTO `$tableName` ($fieldNames) VALUES ($placeholders)"
 
@@ -88,10 +93,11 @@ class MySQLLogger : PostgreSQLLogger() {
 
             conn.prepareStatement(sql).use { ps ->
                 rows.forEach { row ->
-                    // Set parameter values with type-specific setters for better performance
-                    fields.forEachIndexed { index, fieldName ->
+                    var paramIndex = 1
+
+                    // Set parameter values from fields with type-specific setters
+                    fields.forEach { fieldName ->
                         val value = row.fields[fieldName]
-                        val paramIndex = index + 1
                         logger.fine { "Setting parameter $paramIndex to value '$value' (${value?.javaClass?.name ?: "null"})" }
                         when (value) {
                             null -> ps.setNull(paramIndex, java.sql.Types.NULL)
@@ -108,7 +114,15 @@ class MySQLLogger : PostgreSQLLogger() {
                             is ByteArray -> ps.setBytes(paramIndex, value)
                             else -> ps.setObject(paramIndex, value)  // Fallback for other types
                         }
+                        paramIndex++
                     }
+
+                    // Add topic column if configured
+                    if (cfg.topicNameColumn != null) {
+                        ps.setString(paramIndex, row.topic)
+                        logger.fine { "Setting parameter $paramIndex (topic) to value '${row.topic}'" }
+                    }
+
                     ps.addBatch()
                 }
 
@@ -195,6 +209,11 @@ class MySQLLogger : PostgreSQLLogger() {
                 }
 
                 columns.add("    `$fieldName` $sqlType")
+            }
+
+            // Add topic name column if configured
+            if (cfg.topicNameColumn != null) {
+                columns.add("    `${cfg.topicNameColumn}` TEXT")
             }
 
             // Build CREATE TABLE statement with AUTO_INCREMENT primary key

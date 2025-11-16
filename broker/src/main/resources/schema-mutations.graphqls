@@ -1392,6 +1392,8 @@ input JDBCLoggerConfigInput {
     tableName: String
     # JSONPath to extract table name from payload (e.g., "$.metadata.table")
     tableNameJsonPath: String
+    # Column name for MQTT topic (optional - if set, topic name is included in inserts)
+    topicNameColumn: String
     # Payload format (JSON or XML)
     payloadFormat: JDBCLoggerPayloadFormat = JSON
     # JSON Schema for validation and field extraction
@@ -1408,6 +1410,11 @@ input JDBCLoggerConfigInput {
     bulkTimeoutMs: Long = 5000
     # Delay before reconnecting on failure in milliseconds
     reconnectDelayMs: Long = 5000
+    # Automatically create table if it doesn't exist (only works with fixed table name)
+    autoCreateTable: Boolean = true
+    # Database-specific configuration (JSON object for database-specific settings)
+    # For Snowflake: {privateKeyFile, account, url, role, scheme, port, database, schema}
+    dbSpecificConfig: JSON
 }
 
 # Input for creating or updating a JDBC Logger

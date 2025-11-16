@@ -123,6 +123,7 @@ class JDBCLoggerQueries(
                 "topicFilters" to config.topicFilters,
                 "tableName" to config.tableName,
                 "tableNameJsonPath" to config.tableNameJsonPath,
+                "topicNameColumn" to config.topicNameColumn,
                 "payloadFormat" to config.payloadFormat.uppercase(),
                 "jsonSchema" to config.jsonSchema.map,
                 "queueType" to config.queueType.uppercase(),
@@ -130,7 +131,9 @@ class JDBCLoggerQueries(
                 "diskPath" to config.diskPath,
                 "bulkSize" to config.bulkSize,
                 "bulkTimeoutMs" to config.bulkTimeoutMs,
-                "reconnectDelayMs" to config.reconnectDelayMs
+                "reconnectDelayMs" to config.reconnectDelayMs,
+                "autoCreateTable" to config.autoCreateTable,
+                "dbSpecificConfig" to config.dbSpecificConfig.map
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

@@ -275,6 +275,7 @@ class JDBCLoggerMutations(
             topicFilters = (configMap["topicFilters"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
             tableName = configMap["tableName"] as? String,
             tableNameJsonPath = configMap["tableNameJsonPath"] as? String,
+            topicNameColumn = configMap["topicNameColumn"] as? String,
             payloadFormat = configMap["payloadFormat"] as? String ?: "JSON",
             jsonSchema = JsonObject((configMap["jsonSchema"] as? Map<*, *>)?.mapKeys { it.key.toString() }?.mapValues { it.value ?: "" } ?: emptyMap<String, Any>()),
             queueType = configMap["queueType"] as? String ?: "MEMORY",
@@ -282,7 +283,9 @@ class JDBCLoggerMutations(
             diskPath = configMap["diskPath"] as? String ?: "./buffer",
             bulkSize = (configMap["bulkSize"] as? Number)?.toInt() ?: 1000,
             bulkTimeoutMs = (configMap["bulkTimeoutMs"] as? Number)?.toLong() ?: 5000L,
-            reconnectDelayMs = (configMap["reconnectDelayMs"] as? Number)?.toLong() ?: 5000L
+            reconnectDelayMs = (configMap["reconnectDelayMs"] as? Number)?.toLong() ?: 5000L,
+            autoCreateTable = configMap["autoCreateTable"] as? Boolean ?: true,
+            dbSpecificConfig = JsonObject((configMap["dbSpecificConfig"] as? Map<*, *>)?.mapKeys { it.key.toString() }?.mapValues { it.value ?: "" } ?: emptyMap<String, Any>())
         )
 
         val configJson = jdbcConfig.toJson()
@@ -335,6 +338,7 @@ class JDBCLoggerMutations(
                 "topicFilters" to config.topicFilters,
                 "tableName" to config.tableName,
                 "tableNameJsonPath" to config.tableNameJsonPath,
+                "topicNameColumn" to config.topicNameColumn,
                 "payloadFormat" to config.payloadFormat.uppercase(),
                 "jsonSchema" to config.jsonSchema.map,
                 "queueType" to config.queueType.uppercase(),
@@ -342,7 +346,9 @@ class JDBCLoggerMutations(
                 "diskPath" to config.diskPath,
                 "bulkSize" to config.bulkSize,
                 "bulkTimeoutMs" to config.bulkTimeoutMs,
-                "reconnectDelayMs" to config.reconnectDelayMs
+                "reconnectDelayMs" to config.reconnectDelayMs,
+                "autoCreateTable" to config.autoCreateTable,
+                "dbSpecificConfig" to config.dbSpecificConfig.map
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

@@ -203,6 +203,7 @@
                                     <option value="POSTGRESQL">PostgreSQL</option>
                                     <option value="TIMESCALEDB">TimescaleDB</option>
                                     <option value="MYSQL">MySQL</option>
+                                    <option value="SNOWFLAKE">Snowflake</option>
                                 </select>
                             </div>
                             <div class="form-group">
@@ -220,6 +221,40 @@
                                 </div>
                                 <div id="password-field-group" style="display: none; margin-top: 0.5rem;">
                                     <input type="password" id="logger-password" placeholder="Enter new password">
+                                </div>
+                            </div>
+
+                            <!-- Snowflake-specific configuration (shown only when Snowflake is selected) -->
+                            <div id="snowflake-config-section" style="display: none;">
+                                <div class="form-group">
+                                    <label for="logger-sf-account">Account *</label>
+                                    <input type="text" id="logger-sf-account" placeholder="MYORG-MYACCOUNT or xy12345">
+                                    <small class="form-hint">Snowflake account identifier</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-private-key-file">Private Key File *</label>
+                                    <input type="text" id="logger-sf-private-key-file" placeholder="/path/to/rsa_key.p8">
+                                    <small class="form-hint">Path to RSA private key file in PKCS#8 format (.p8)</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-warehouse">Warehouse *</label>
+                                    <input type="text" id="logger-sf-warehouse" placeholder="COMPUTE_WH">
+                                    <small class="form-hint">Snowflake warehouse for query execution</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-database">Database *</label>
+                                    <input type="text" id="logger-sf-database" placeholder="SCADA">
+                                    <small class="form-hint">Snowflake database name</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-schema">Schema *</label>
+                                    <input type="text" id="logger-sf-schema" placeholder="PUBLIC">
+                                    <small class="form-hint">Snowflake schema name</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-role">Role</label>
+                                    <input type="text" id="logger-sf-role" placeholder="ACCOUNTADMIN">
+                                    <small class="form-hint">Snowflake role (optional, default: ACCOUNTADMIN)</small>
                                 </div>
                             </div>
                         </div>
@@ -305,6 +340,18 @@
                                 <label for="logger-table-jsonpath">Table Name JSONPath</label>
                                 <input type="text" id="logger-table-jsonpath" placeholder="e.g., $.device_type">
                                 <small class="form-hint">Extract table name from message using JSONPath</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-topic-name-column">Topic Name Column</label>
+                                <input type="text" id="logger-topic-name-column" placeholder="e.g., mqtt_topic">
+                                <small class="form-hint">Column name for storing MQTT topic (optional - leave empty to exclude topic)</small>
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="logger-auto-create-table" checked>
+                                    <label for="logger-auto-create-table">Auto-create Table</label>
+                                </div>
+                                <small class="form-hint">Automatically create table if it doesn't exist (only works with fixed table name)</small>
                             </div>
                         </div>
                     </div>

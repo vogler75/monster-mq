@@ -159,6 +159,10 @@ class JDBCLoggerExtension : AbstractVerticle() {
                     logger.info("Using MySQL logger for database type: ${config.databaseType}")
                     MySQLLogger()
                 }
+                "SNOWFLAKE" -> {
+                    logger.info("Using Snowflake logger for database type: ${config.databaseType}")
+                    SnowflakeLogger()
+                }
                 else -> {
                     logger.warning("Unknown database type: ${config.databaseType}, using PostgreSQL logger as fallback")
                     PostgreSQLLogger()

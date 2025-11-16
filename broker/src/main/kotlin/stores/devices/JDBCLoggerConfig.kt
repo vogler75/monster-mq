@@ -20,6 +20,7 @@ data class JDBCLoggerConfig(
     // Table configuration
     val tableName: String? = null,                  // Fixed table name (mutually exclusive with tableNameJsonPath)
     val tableNameJsonPath: String? = null,          // JSONPath to extract table name from payload (e.g., "$.metadata.table")
+    val topicNameColumn: String? = null,            // Column name for MQTT topic (optional - if set, topic name is included in inserts)
 
     // Schema and validation
     val payloadFormat: String = "JSON",             // "JSON", "XML" (future support)
@@ -39,7 +40,13 @@ data class JDBCLoggerConfig(
 
     // Auto table creation
     val autoCreateTable: Boolean = true,            // Automatically create table if not exists
-    val partitionBy: String = "DAY"                 // QuestDB partition strategy: HOUR, DAY, WEEK, MONTH, YEAR, NONE
+    val partitionBy: String = "DAY",                // QuestDB partition strategy: HOUR, DAY, WEEK, MONTH, YEAR, NONE
+
+    // Database-specific configuration (JSON object for database-specific settings)
+    // Examples:
+    // - Snowflake: {privateKeyFile, account, url, role, scheme, port, database, schema}
+    // - Future databases can add their own specific settings here
+    val dbSpecificConfig: JsonObject = JsonObject()
 ) {
     /**
      * Get the JDBC driver class name inferred from the URL
@@ -55,6 +62,17 @@ data class JDBCLoggerConfig(
         }
     }
 
+    /**
+     * Get a database-specific configuration value
+     */
+    fun getDbSpecificString(key: String, defaultValue: String = ""): String {
+        return dbSpecificConfig.getString(key, defaultValue)
+    }
+
+    fun getDbSpecificInteger(key: String, defaultValue: Int = 0): Int {
+        return dbSpecificConfig.getInteger(key, defaultValue)
+    }
+
     companion object {
         fun fromJson(obj: JsonObject): JDBCLoggerConfig {
             val topicFiltersArray = obj.getJsonArray("topicFilters", JsonArray())
@@ -68,6 +86,7 @@ data class JDBCLoggerConfig(
                 topicFilters = topicFilters,
                 tableName = obj.getString("tableName"),
                 tableNameJsonPath = obj.getString("tableNameJsonPath"),
+                topicNameColumn = obj.getString("topicNameColumn"),
                 payloadFormat = obj.getString("payloadFormat", "JSON"),
                 jsonSchema = obj.getJsonObject("jsonSchema") ?: JsonObject(),
                 queueType = obj.getString("queueType", "MEMORY"),
@@ -77,7 +96,8 @@ data class JDBCLoggerConfig(
                 bulkTimeoutMs = obj.getLong("bulkTimeoutMs", 5000),
                 reconnectDelayMs = obj.getLong("reconnectDelayMs", 5000),
                 autoCreateTable = obj.getBoolean("autoCreateTable", true),
-                partitionBy = obj.getString("partitionBy", "DAY")
+                partitionBy = obj.getString("partitionBy", "DAY"),
+                dbSpecificConfig = obj.getJsonObject("dbSpecificConfig") ?: JsonObject()
             )
         }
     }
@@ -91,6 +111,7 @@ data class JDBCLoggerConfig(
             .put("topicFilters", JsonArray(topicFilters))
             .put("tableName", tableName)
             .put("tableNameJsonPath", tableNameJsonPath)
+            .put("topicNameColumn", topicNameColumn)
             .put("payloadFormat", payloadFormat)
             .put("jsonSchema", jsonSchema)
             .put("queueType", queueType)
@@ -101,6 +122,7 @@ data class JDBCLoggerConfig(
             .put("reconnectDelayMs", reconnectDelayMs)
             .put("autoCreateTable", autoCreateTable)
             .put("partitionBy", partitionBy)
+            .put("dbSpecificConfig", dbSpecificConfig)
     }
 
     fun validate(): List<String> {
@@ -111,6 +133,7 @@ data class JDBCLoggerConfig(
             errors.add("databaseType cannot be blank")
         }
 
+        // JDBC URL validation
         if (jdbcUrl.isBlank()) {
             errors.add("jdbcUrl cannot be blank")
         }
@@ -123,7 +146,8 @@ data class JDBCLoggerConfig(
             errors.add("username cannot be blank")
         }
 
-        if (password.isBlank()) {
+        // Password is required for all databases except Snowflake (which uses private key authentication)
+        if (databaseType.uppercase() != "SNOWFLAKE" && password.isBlank()) {
             errors.add("password cannot be blank")
         }
 
@@ -168,6 +192,32 @@ data class JDBCLoggerConfig(
             errors.add("bulkTimeoutMs should be >= 100 ms")
         }
 
+        // Database-specific validation
+        if (databaseType.uppercase() == "SNOWFLAKE") {
+            validateSnowflakeConfig(errors)
+        }
+
         return errors
+    }
+
+    /**
+     * Validate Snowflake-specific configuration
+     */
+    private fun validateSnowflakeConfig(errors: MutableList<String>) {
+        val requiredFields = listOf(
+            "account" to "Account",
+            "privateKeyFile" to "Private Key File",
+            "warehouse" to "Warehouse",
+            "database" to "Database",
+            "schema" to "Schema"
+        )
+
+        for ((key, displayName) in requiredFields) {
+            if (dbSpecificConfig.getString(key).isNullOrBlank()) {
+                errors.add("Snowflake configuration requires '$displayName' ($key)")
+            }
+        }
+
+        // Role is optional - defaults to ACCOUNTADMIN
     }
 }

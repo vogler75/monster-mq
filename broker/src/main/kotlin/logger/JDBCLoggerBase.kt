@@ -306,13 +306,19 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                 return
             }
 
-            // Validate against JSON Schema
-            try {
-                jsonSchemaValidator.validate(payloadJson)
-            } catch (e: ValidationException) {
-                validationErrorsCounter.incrementAndGet()
-                logger.warning("Schema validation failed for topic ${message.topicName}: ${e.message}")
-                return
+            // Validate against JSON Schema only if no mapping is defined
+            // When mapping is used, the schema defines target columns, not source structure
+            val hasMapping = cfg.jsonSchema.getJsonObject("mapping") != null
+            if (!hasMapping) {
+                try {
+                    jsonSchemaValidator.validate(payloadJson)
+                } catch (e: ValidationException) {
+                    validationErrorsCounter.incrementAndGet()
+                    logger.warning("Schema validation failed for topic ${message.topicName}: ${e.message}")
+                    return
+                }
+            } else {
+                logger.fine { "Skipping JSON Schema validation - using mapping-based extraction" }
             }
 
             // Extract table name
@@ -457,6 +463,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             }
         }
 
+        logger.fine { "Extracted fields: ${fields.keys.joinToString(", ") { "$it=${fields[it]}" }}" }
         return fields
     }
 
@@ -505,9 +512,19 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
 
     private fun hasRequiredFields(fields: Map<String, Any?>): Boolean {
         val required = cfg.jsonSchema.getJsonArray("required") ?: return true
-        return required.all { requiredField ->
-            fields.containsKey(requiredField.toString()) && fields[requiredField.toString()] != null
+
+        // Debug logging
+        logger.fine { "Checking required fields. Required: ${required.list}, Available fields: ${fields.keys}" }
+
+        val result = required.all { requiredField ->
+            val hasKey = fields.containsKey(requiredField.toString())
+            val hasValue = fields[requiredField.toString()] != null
+            logger.fine { "  Field '$requiredField': hasKey=$hasKey, hasValue=$hasValue, value=${fields[requiredField.toString()]}" }
+            hasKey && hasValue
         }
+
+        logger.fine { "Required fields check result: $result" }
+        return result
     }
 
     /**

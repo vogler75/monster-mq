@@ -1370,6 +1370,10 @@ enum JDBCLoggerDatabaseType {
     POSTGRESQL
     # TimescaleDB - PostgreSQL extension for time-series data
     TIMESCALEDB
+    # MySQL - popular open-source relational database
+    MYSQL
+    # Snowflake - cloud data warehouse with streaming ingest
+    SNOWFLAKE
 }
 
 # Queue type enum for JDBC Logger buffering
@@ -1402,6 +1406,8 @@ type JDBCLoggerConfig {
     tableName: String
     # JSONPath to extract table name from payload (e.g., "$.metadata.table")
     tableNameJsonPath: String
+    # Column name for MQTT topic (optional - if set, topic name is included in inserts)
+    topicNameColumn: String
     # Payload format (JSON or XML)
     payloadFormat: JDBCLoggerPayloadFormat!
     # JSON Schema for validation and field extraction
@@ -1418,6 +1424,11 @@ type JDBCLoggerConfig {
     bulkTimeoutMs: Long!
     # Delay before reconnecting on failure in milliseconds
     reconnectDelayMs: Long!
+    # Automatically create table if it doesn't exist (only works with fixed table name)
+    autoCreateTable: Boolean!
+    # Database-specific configuration (JSON object for database-specific settings)
+    # For Snowflake: {privateKeyFile, account, url, role, scheme, port, database, schema}
+    dbSpecificConfig: JSON
 }
 
 # Metrics for a JDBC Logger connector

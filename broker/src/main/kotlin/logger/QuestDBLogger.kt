@@ -58,6 +58,11 @@ class QuestDBLogger : PostgreSQLLogger() {
                 columns.add("    $fieldName $sqlType")
             }
 
+            // Add topic name column if configured
+            if (cfg.topicNameColumn != null) {
+                columns.add("    ${cfg.topicNameColumn} STRING")
+            }
+
             if (timestampField == null) {
                 logger.warning("No timestamp field found in JSON schema, cannot create QuestDB table (timestamp designation required)")
                 return
