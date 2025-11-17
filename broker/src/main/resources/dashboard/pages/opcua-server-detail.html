@@ -475,10 +475,11 @@
                 <div class="form-group">
                     <label for="address-data-type">Data Type</label>
                     <select id="address-data-type">
-                        <option value="TEXT">TEXT</option>
-                        <option value="INT">INT</option>
-                        <option value="DOUBLE">DOUBLE</option>
-                        <option value="BOOL">BOOL</option>
+                        <option value="BINARY">BINARY - ByteString (raw payload bytes)</option>
+                        <option value="TEXT">TEXT - String (payload as UTF-8 text)</option>
+                        <option value="NUMERIC">NUMERIC - Double (parse payload as number)</option>
+                        <option value="BOOLEAN">BOOLEAN - Boolean (parse payload as true/false)</option>
+                        <option value="JSON">JSON - Custom JSON format ({"value": x, "timestamp": "iso", "status": int})</option>
                     </select>
                 </div>
                 <div class="form-group">

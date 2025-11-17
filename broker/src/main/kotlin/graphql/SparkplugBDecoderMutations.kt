@@ -662,6 +662,7 @@ class SparkplugBDecoderMutations(
 
         val rules = rulesInput.mapNotNull { ruleInput ->
             if (ruleInput is Map<*, *>) {
+                @Suppress("UNCHECKED_CAST")
                 parseRule(ruleInput as Map<String, Any>)
             } else {
                 null

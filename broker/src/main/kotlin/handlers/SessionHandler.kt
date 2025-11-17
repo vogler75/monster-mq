@@ -1625,7 +1625,7 @@ open class SessionHandler(
         topicFilter: String,
         qos: Int
     ) {
-        logger.info("Internal client '$clientId' subscribing to topicFilter='$topicFilter' with QoS $qos")
+        logger.fine { "Internal client '$clientId' subscribing to topicFilter='$topicFilter' with QoS $qos" }
 
         // Subscribe using normal subscription mechanism
         subscriptionManager.subscribe(clientId, topicFilter, qos)
@@ -1642,7 +1642,7 @@ open class SessionHandler(
      * @param topicFilter MQTT topic filter to unsubscribe from
      */
     fun unsubscribeInternalClient(clientId: String, topicFilter: String) {
-        logger.info("Internal client '$clientId' unsubscribing from '$topicFilter'")
+        logger.fine { "Internal client '$clientId' unsubscribing from '$topicFilter'" }
 
         // Unsubscribe using normal subscription mechanism
         subscriptionManager.unsubscribe(clientId, topicFilter)
