@@ -63,8 +63,6 @@ Kafka:
     Enabled: false      # Set to true to use Kafka instead of Vert.x EventBus
     Topic: monster-bus  # Topic for internal MonsterMQ communication
    
-# Optional: SparkplugB Extension
-SparkplugMetricExpansion:
   Enabled: true    # Expand SparkplugB messages before streaming to Kafka
 
 # MCP Server configuration

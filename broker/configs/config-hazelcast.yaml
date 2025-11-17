@@ -27,10 +27,6 @@ Postgres:
   User: system
   Pass: manager
 
-# Optional: SparkplugB Extension
-SparkplugMetricExpansion:
-  Enabled: false
-
 # MCP Server configuration
 MCP:
   Enabled: true

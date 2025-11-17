@@ -10,8 +10,6 @@ SessionStoreType: SQLITE
 RetainedStoreType: SQLITE
 ConfigStoreType: SQLITE
 
-SparkplugMetricExpansion:
-  Enabled: true
 
 # SQLite configuration
 SQLite:
