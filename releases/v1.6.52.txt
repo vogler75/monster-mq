@@ -1,0 +1,15 @@
+Release v1.6.52
+Built from commit: 23ad7f9
+Date: 2025-11-17 21:01:25
+
+Changes since v1.6.51:
+---
+23ad7f9 Remove SparkplugMetricExpansion from config files
+f233c04 Update OPC UA data types and improve logging granularity
+c3377fd Add subscription filters to SparkplugB decoder
+0eeb283 Add cluster node selector to SparkplugB decoder form
+5ed8386 Improve decoder rule matching and update UI button styles
+bfe28e8 Refactor SparkplugB subscription to use specific message types
+93393bc Add SparkplugB Decoder UI and backend improvements
+e72b94e Add SparkplugB decoder device integration
+06efd31 Add WinCC OA integration documentation
