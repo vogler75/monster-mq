@@ -142,6 +142,12 @@ class SparkplugBDecoderQueries(
     private fun configToMap(config: SparkplugBDecoderConfig): Map<String, Any> {
         return mapOf(
             "sourceNamespace" to config.sourceNamespace,
+            "subscriptions" to config.subscriptions.map { subscription ->
+                mapOf(
+                    "nodeId" to subscription.nodeId,
+                    "deviceIds" to subscription.deviceIds
+                )
+            },
             "rules" to config.rules.map { rule ->
                 mapOf(
                     "name" to rule.name,

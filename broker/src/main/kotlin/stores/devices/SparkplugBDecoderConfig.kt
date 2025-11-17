@@ -164,13 +164,18 @@ data class SparkplugBDecoderRule(
 
     /**
      * Check if nodeId and deviceId match this rule's patterns
-     * Uses containsMatchIn() to allow partial matches (e.g., "Siemens" matches "Siemens_Plant1")
-     * For exact matches, use anchors (e.g., "^Siemens$")
+     * Uses standard regex matches() - the entire string must match the pattern
+     *
+     * Examples:
+     * - "Siemens" matches only exactly "Siemens"
+     * - ".*Siemens.*" matches anything containing "Siemens"
+     * - "Siemens.*" matches strings starting with "Siemens"
+     * - ".*" matches everything including empty string
      */
     fun matches(nodeId: String, deviceId: String): Boolean {
         return try {
-            val nodeIdMatches = Regex(nodeIdRegex).containsMatchIn(nodeId)
-            val deviceIdMatches = Regex(deviceIdRegex).containsMatchIn(deviceId)
+            val nodeIdMatches = Regex(nodeIdRegex).matches(nodeId)
+            val deviceIdMatches = Regex(deviceIdRegex).matches(deviceId)
             nodeIdMatches && deviceIdMatches
         } catch (e: Exception) {
             false
@@ -202,14 +207,71 @@ data class SparkplugBDecoderRule(
 }
 
 /**
+ * SparkplugB Subscription Entry
+ * Defines specific group/node/device combinations to subscribe to
+ */
+data class SparkplugBSubscription(
+    val groupId: String = "+",                  // Group ID (use "+" for all groups)
+    val nodeId: String,                         // Specific node ID to subscribe to
+    val deviceIds: List<String> = emptyList()   // List of device IDs (empty = all devices for this node)
+) {
+    companion object {
+        fun fromJsonObject(json: JsonObject): SparkplugBSubscription {
+            val deviceIdsArray = json.getJsonArray("deviceIds", JsonArray())
+            val deviceIds = deviceIdsArray.mapNotNull { it as? String }
+
+            return SparkplugBSubscription(
+                groupId = json.getString("groupId", "+"),
+                nodeId = json.getString("nodeId"),
+                deviceIds = deviceIds
+            )
+        }
+    }
+
+    fun toJsonObject(): JsonObject {
+        val deviceIdsArray = JsonArray()
+        deviceIds.forEach { deviceIdsArray.add(it) }
+
+        return JsonObject()
+            .put("groupId", groupId)
+            .put("nodeId", nodeId)
+            .put("deviceIds", deviceIdsArray)
+    }
+
+    fun validate(): List<String> {
+        val errors = mutableListOf<String>()
+
+        if (groupId.isBlank()) {
+            errors.add("groupId cannot be blank")
+        }
+
+        if (nodeId.isBlank()) {
+            errors.add("nodeId cannot be blank")
+        }
+
+        return errors
+    }
+}
+
+/**
  * SparkplugB Decoder Configuration
  */
 data class SparkplugBDecoderConfig(
     val sourceNamespace: String = "spBv1.0",    // Source SparkplugB namespace (default: "spBv1.0")
+    val subscriptions: List<SparkplugBSubscription> = emptyList(), // Specific node/device subscriptions (empty = subscribe to all)
     val rules: List<SparkplugBDecoderRule> = emptyList() // Ordered list of decoding rules (first match wins)
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): SparkplugBDecoderConfig {
+            val subscriptionsArray = json.getJsonArray("subscriptions", JsonArray())
+            val subscriptions = subscriptionsArray.mapNotNull { subObj ->
+                try {
+                    SparkplugBSubscription.fromJsonObject(subObj as JsonObject)
+                } catch (e: Exception) {
+                    null // Skip invalid subscriptions
+                }
+            }
+
             val rulesArray = json.getJsonArray("rules", JsonArray())
             val rules = rulesArray.mapNotNull { ruleObj ->
                 try {
@@ -221,12 +283,18 @@ data class SparkplugBDecoderConfig(
 
             return SparkplugBDecoderConfig(
                 sourceNamespace = json.getString("sourceNamespace", "spBv1.0"),
+                subscriptions = subscriptions,
                 rules = rules
             )
         }
     }
 
     fun toJsonObject(): JsonObject {
+        val subscriptionsArray = JsonArray()
+        subscriptions.forEach { subscription ->
+            subscriptionsArray.add(subscription.toJsonObject())
+        }
+
         val rulesArray = JsonArray()
         rules.forEach { rule ->
             rulesArray.add(rule.toJsonObject())
@@ -234,6 +302,7 @@ data class SparkplugBDecoderConfig(
 
         return JsonObject()
             .put("sourceNamespace", sourceNamespace)
+            .put("subscriptions", subscriptionsArray)
             .put("rules", rulesArray)
     }
 
@@ -266,6 +335,14 @@ data class SparkplugBDecoderConfig(
             }
         }
 
+        // Validate each subscription
+        subscriptions.forEachIndexed { index, subscription ->
+            val subErrors = subscription.validate()
+            subErrors.forEach { error ->
+                errors.add("Subscription ${index + 1} ('${subscription.nodeId}'): $error")
+            }
+        }
+
         return errors
     }
 
@@ -283,12 +360,41 @@ data class SparkplugBDecoderConfig(
      * Get subscription topic filters for this decoder
      * Returns list of topics for all protobuf message types (NBIRTH, NDEATH, NDATA, NCMD, DBIRTH, DDEATH, DDATA, DCMD)
      * Excludes STATE messages which are not protobuf and not relevant for decoding
+     *
+     * If subscriptions are configured, generates specific topic filters for each group/node/device combination.
+     * If no subscriptions are configured, uses the groupId parameter for the group filter and wildcards for nodes/devices.
+     *
+     * @param groupId The Group ID to use when no specific subscriptions are configured (use "+" for all groups)
      */
-    fun getSubscriptionTopics(): List<String> {
-        // Subscribe only to protobuf message types, not STATE
+    fun getSubscriptionTopics(groupId: String = "+"): List<String> {
         val messageTypes = listOf("NBIRTH", "NDEATH", "NDATA", "NCMD", "DBIRTH", "DDEATH", "DDATA", "DCMD")
-        return messageTypes.map { messageType ->
-            "$sourceNamespace/+/$messageType/#"
+
+        return if (subscriptions.isEmpty()) {
+            // No specific subscriptions - subscribe to all nodes/devices for the specified group
+            messageTypes.map { messageType ->
+                "$sourceNamespace/$groupId/$messageType/#"
+            }
+        } else {
+            // Build specific subscriptions for each group/node/device combination
+            val topics = mutableListOf<String>()
+
+            subscriptions.forEach { subscription ->
+                if (subscription.deviceIds.isEmpty()) {
+                    // No device IDs - subscribe to all devices for this node
+                    messageTypes.forEach { messageType ->
+                        topics.add("$sourceNamespace/${subscription.groupId}/$messageType/${subscription.nodeId}/#")
+                    }
+                } else {
+                    // Specific device IDs - subscribe to each device individually
+                    subscription.deviceIds.forEach { deviceId ->
+                        messageTypes.forEach { messageType ->
+                            topics.add("$sourceNamespace/${subscription.groupId}/$messageType/${subscription.nodeId}/$deviceId")
+                        }
+                    }
+                }
+            }
+
+            topics
         }
     }
 }

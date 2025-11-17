@@ -111,7 +111,7 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
         internalClientId?.let { clientId ->
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
-                val subscriptionTopics = decoderConfig.getSubscriptionTopics()
+                val subscriptionTopics = decoderConfig.getSubscriptionTopics(deviceConfig.namespace)
                 subscriptionTopics.forEach { topic ->
                     sessionHandler.unsubscribeInternalClient(clientId, topic)
                 }
@@ -155,8 +155,9 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
     private fun subscribeToSparkplugMessages(): Future<Void> {
         val promise = Promise.promise<Void>()
 
-        val subscriptionTopics = decoderConfig.getSubscriptionTopics()
-        logger.info("Subscribing to ${subscriptionTopics.size} SparkplugB message types for device ${deviceConfig.name}")
+        // Use the device's namespace field as the Group ID for subscriptions
+        val subscriptionTopics = decoderConfig.getSubscriptionTopics(deviceConfig.namespace)
+        logger.info("Subscribing to ${subscriptionTopics.size} SparkplugB topics for device ${deviceConfig.name} with Group ID '${deviceConfig.namespace}'")
 
         // Get SessionHandler
         val sessionHandler = Monster.getSessionHandler()
@@ -240,14 +241,20 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
             }
 
             // Find matching rule
+            logger.fine { "Looking for rule match: nodeId='$edgeNodeId', deviceId='$deviceId'" }
+            decoderConfig.rules.forEach { rule ->
+                val matches = rule.matches(edgeNodeId, deviceId)
+                logger.fine { "  Rule '${rule.name}': nodeIdRegex='${rule.nodeIdRegex}', deviceIdRegex='${rule.deviceIdRegex}', matches=$matches" }
+            }
+
             val rule = decoderConfig.findMatchingRule(edgeNodeId, deviceId)
             if (rule == null) {
-                logger.fine { "No matching rule found for nodeId=$edgeNodeId, deviceId=$deviceId" }
+                logger.fine { "No matching rule found for nodeId='$edgeNodeId', deviceId='$deviceId'" }
                 messagesSkippedCounter.incrementAndGet()
                 return
             }
 
-            logger.fine { "Matched rule: ${rule.name} for nodeId=$edgeNodeId, deviceId=$deviceId" }
+            logger.fine { "Matched rule: ${rule.name} for nodeId='$edgeNodeId', deviceId='$deviceId'" }
 
             // Decode and publish based on message type
             if (messageType in PROTOBUF_MESSAGE_TYPES) {

@@ -23,6 +23,11 @@ async function loadDecoders() {
                     enabled
                     config {
                         sourceNamespace
+                        subscriptions {
+                            groupId
+                            nodeId
+                            deviceIds
+                        }
                         rules {
                             name
                             nodeIdRegex

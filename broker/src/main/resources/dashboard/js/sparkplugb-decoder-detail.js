@@ -2,6 +2,7 @@
 
 let isEditMode = false;
 let currentDecoderName = null;
+let subscriptions = [];
 let rules = [];
 
 // GraphQL wrapper
@@ -73,6 +74,11 @@ async function loadDecoder() {
                     enabled
                     config {
                         sourceNamespace
+                        subscriptions {
+                            groupId
+                            nodeId
+                            deviceIds
+                        }
                         rules {
                             name
                             nodeIdRegex
@@ -109,8 +115,92 @@ function populateForm(decoder) {
     document.getElementById('enabled').checked = decoder.enabled;
     document.getElementById('sourceNamespace').value = decoder.config.sourceNamespace || 'spBv1.0';
 
+    subscriptions = decoder.config.subscriptions || [];
     rules = decoder.config.rules || [];
+
+    renderSubscriptions();
     renderRules();
+}
+
+// Subscription Management Functions
+function renderSubscriptions() {
+    const container = document.getElementById('subscriptionsList');
+
+    if (subscriptions.length === 0) {
+        container.innerHTML = `
+            <div style="background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                <p style="color: var(--text-primary); margin: 0; display: flex; align-items: start; gap: 0.5rem;">
+                    <svg width="20" height="20" fill="var(--monster-purple)" viewBox="0 0 24 24" style="flex-shrink: 0; margin-top: 2px;">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                    </svg>
+                    <span><strong>No subscriptions configured.</strong> The decoder will subscribe to ALL nodes and devices using wildcards. Add specific subscriptions below to filter which messages are received.</span>
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = subscriptions.map((sub, index) => `
+        <div class="rule-item">
+            <div class="rule-header">
+                <h3>Subscription: ${escapeHtml(sub.nodeId || `Subscription ${index + 1}`)}</h3>
+                <button type="button" class="btn btn-icon btn-remove" onclick="removeSubscription(${index})" title="Remove Subscription">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="rule-fields">
+                <div class="form-group">
+                    <label>Group ID *</label>
+                    <input type="text" value="${escapeHtml(sub.groupId || '+')}" onchange="updateSubscriptionGroupId(${index}, this.value)" placeholder="+" required>
+                    <span class="help-text">SparkplugB Group ID. Use "+" for all groups or specify a specific group name.</span>
+                </div>
+                <div class="form-group">
+                    <label>Node ID *</label>
+                    <input type="text" value="${escapeHtml(sub.nodeId || '')}" onchange="updateSubscriptionNodeId(${index}, this.value)" required>
+                    <span class="help-text">Specific SparkplugB node ID to subscribe to</span>
+                </div>
+                <div class="form-group">
+                    <label>Device IDs (optional)</label>
+                    <input type="text" value="${escapeHtml((sub.deviceIds || []).join(', '))}" onchange="updateSubscriptionDeviceIds(${index}, this.value)" placeholder="Device1, Device2, Device3">
+                    <span class="help-text">Comma-separated device IDs. Leave empty to subscribe to all devices for this node.</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function addSubscription() {
+    subscriptions.push({
+        groupId: '+',
+        nodeId: '',
+        deviceIds: []
+    });
+    renderSubscriptions();
+}
+
+function removeSubscription(index) {
+    if (confirm('Are you sure you want to remove this subscription?')) {
+        subscriptions.splice(index, 1);
+        renderSubscriptions();
+    }
+}
+
+function updateSubscriptionGroupId(index, value) {
+    subscriptions[index].groupId = value.trim() || '+';
+}
+
+function updateSubscriptionNodeId(index, value) {
+    subscriptions[index].nodeId = value.trim();
+}
+
+function updateSubscriptionDeviceIds(index, value) {
+    // Split by comma, trim whitespace, and filter out empty strings
+    subscriptions[index].deviceIds = value
+        .split(',')
+        .map(id => id.trim())
+        .filter(id => id.length > 0);
 }
 
 function renderRules() {
@@ -140,12 +230,12 @@ function renderRules() {
                 <div class="form-group">
                     <label>Node ID Regex *</label>
                     <input type="text" value="${escapeHtml(rule.nodeIdRegex || '')}" onchange="updateRuleField(${index}, 'nodeIdRegex', this.value)" required>
-                    <span class="help-text">Regex pattern to match SparkplugB node ID (e.g., "^acme\\..*" or ".*")</span>
+                    <span class="help-text">Regex: "Siemens" (exact), ".*Siemens.*" (contains), "Siemens.*" (starts with), ".*" (all)</span>
                 </div>
                 <div class="form-group">
                     <label>Device ID Regex *</label>
                     <input type="text" value="${escapeHtml(rule.deviceIdRegex || '')}" onchange="updateRuleField(${index}, 'deviceIdRegex', this.value)" required>
-                    <span class="help-text">Regex pattern to match SparkplugB device ID (e.g., "^sensor-" or ".*")</span>
+                    <span class="help-text">Regex: "Device1" (exact), ".*Device1.*" (contains), ".*" (all including empty)</span>
                 </div>
                 <div class="form-group">
                     <label>Destination Topic Template *</label>
@@ -282,6 +372,11 @@ async function saveDecoder(event) {
             enabled: enabled,
             config: {
                 sourceNamespace: sourceNamespace,
+                subscriptions: subscriptions.filter(sub => sub.nodeId && sub.nodeId.trim().length > 0).map(sub => ({
+                    groupId: sub.groupId || '+',
+                    nodeId: sub.nodeId,
+                    deviceIds: sub.deviceIds || []
+                })),
                 rules: rules.map(rule => ({
                     name: rule.name,
                     nodeIdRegex: rule.nodeIdRegex,
@@ -324,7 +419,6 @@ async function saveDecoder(event) {
         const response = isEditMode ? result.sparkplugBDecoder?.update : result.sparkplugBDecoder?.create;
 
         if (response?.success) {
-            alert('Decoder saved successfully!');
             window.location.href = 'sparkplugb-decoders.html';
         } else {
             alert('Failed to save decoder:\n' + (response?.errors?.join('\n') || 'Unknown error'));

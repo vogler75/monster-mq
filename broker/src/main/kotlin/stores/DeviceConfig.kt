@@ -63,7 +63,7 @@ data class DeviceConfig(
     }
 
     fun validateNamespace(): Boolean {
-        return namespace.matches(Regex("^[a-zA-Z0-9_/-]+$"))
+        return namespace.isNotBlank()
     }
 
     fun validateName(): Boolean {
@@ -108,10 +108,6 @@ data class DeviceConfigRequest(
 
         if (namespace.isBlank()) {
             errors.add("namespace cannot be blank")
-        }
-
-        if (!namespace.matches(Regex("^[a-zA-Z0-9_/-]+$"))) {
-            errors.add("namespace must contain only letters, numbers, underscores, hyphens, and slashes")
         }
 
         if (nodeId.isBlank()) {

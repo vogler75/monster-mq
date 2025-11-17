@@ -15,6 +15,16 @@
 # - First-match-wins rule processing
 # - Cluster-aware deployment
 
+# SparkplugB Subscription Entry - Defines specific group/node/device combinations to subscribe to
+type SparkplugBSubscription {
+    # Group ID (use "+" for all groups)
+    groupId: String!
+    # Specific node ID to subscribe to
+    nodeId: String!
+    # List of device IDs (empty = all devices for this node)
+    deviceIds: [String!]!
+}
+
 # SparkplugB Decoder Rule - Defines regex-based routing for SparkplugB messages
 type SparkplugBDecoderRule {
     # Rule identifier
@@ -37,6 +47,8 @@ type SparkplugBDecoderRule {
 type SparkplugBDecoderConfig {
     # Source SparkplugB namespace (default: "spBv1.0")
     sourceNamespace: String!
+    # Specific node/device subscriptions (empty = subscribe to all)
+    subscriptions: [SparkplugBSubscription!]!
     # Ordered list of decoding rules (first match wins)
     rules: [SparkplugBDecoderRule!]!
 }
@@ -57,7 +69,7 @@ type SparkplugBDecoderMetrics {
 type SparkplugBDecoder {
     # Unique device name across the cluster
     name: String!
-    # MQTT namespace for internal communication
+    # SparkplugB Group ID to subscribe to (use "+" for all groups)
     namespace: String!
     # Cluster node ID where this decoder runs
     nodeId: String!
@@ -79,6 +91,16 @@ type SparkplugBDecoder {
 # SparkplugB Decoder Inputs                #
 #############################################
 
+# Input for creating/updating a SparkplugB Subscription
+input SparkplugBSubscriptionInput {
+    # Group ID (use "+" for all groups)
+    groupId: String!
+    # Specific node ID to subscribe to
+    nodeId: String!
+    # List of device IDs (empty = all devices for this node)
+    deviceIds: [String!]
+}
+
 # Input for creating/updating a SparkplugB Decoder Rule
 input SparkplugBDecoderRuleInput {
     # Rule identifier
@@ -97,6 +119,8 @@ input SparkplugBDecoderRuleInput {
 input SparkplugBDecoderConfigInput {
     # Source SparkplugB namespace (default: "spBv1.0")
     sourceNamespace: String
+    # Specific node/device subscriptions (empty = subscribe to all with wildcards)
+    subscriptions: [SparkplugBSubscriptionInput!]
     # Ordered list of decoding rules
     rules: [SparkplugBDecoderRuleInput!]!
 }
@@ -105,7 +129,7 @@ input SparkplugBDecoderConfigInput {
 input SparkplugBDecoderInput {
     # Unique device name
     name: String!
-    # MQTT namespace
+    # SparkplugB Group ID to subscribe to (use "+" for all groups)
     namespace: String!
     # Cluster node ID
     nodeId: String!
