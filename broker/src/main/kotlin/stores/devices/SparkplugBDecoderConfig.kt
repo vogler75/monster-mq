@@ -208,10 +208,10 @@ data class SparkplugBDecoderRule(
 
 /**
  * SparkplugB Subscription Entry
- * Defines specific group/node/device combinations to subscribe to
+ * Defines specific node/device combinations to subscribe to
+ * Note: The Group ID comes from the decoder's namespace field
  */
 data class SparkplugBSubscription(
-    val groupId: String = "+",                  // Group ID (use "+" for all groups)
     val nodeId: String,                         // Specific node ID to subscribe to
     val deviceIds: List<String> = emptyList()   // List of device IDs (empty = all devices for this node)
 ) {
@@ -221,7 +221,6 @@ data class SparkplugBSubscription(
             val deviceIds = deviceIdsArray.mapNotNull { it as? String }
 
             return SparkplugBSubscription(
-                groupId = json.getString("groupId", "+"),
                 nodeId = json.getString("nodeId"),
                 deviceIds = deviceIds
             )
@@ -233,17 +232,12 @@ data class SparkplugBSubscription(
         deviceIds.forEach { deviceIdsArray.add(it) }
 
         return JsonObject()
-            .put("groupId", groupId)
             .put("nodeId", nodeId)
             .put("deviceIds", deviceIdsArray)
     }
 
     fun validate(): List<String> {
         val errors = mutableListOf<String>()
-
-        if (groupId.isBlank()) {
-            errors.add("groupId cannot be blank")
-        }
 
         if (nodeId.isBlank()) {
             errors.add("nodeId cannot be blank")
@@ -361,10 +355,10 @@ data class SparkplugBDecoderConfig(
      * Returns list of topics for all protobuf message types (NBIRTH, NDEATH, NDATA, NCMD, DBIRTH, DDEATH, DDATA, DCMD)
      * Excludes STATE messages which are not protobuf and not relevant for decoding
      *
-     * If subscriptions are configured, generates specific topic filters for each group/node/device combination.
+     * If subscriptions are configured, generates specific topic filters for each node/device combination.
      * If no subscriptions are configured, uses the groupId parameter for the group filter and wildcards for nodes/devices.
      *
-     * @param groupId The Group ID to use when no specific subscriptions are configured (use "+" for all groups)
+     * @param groupId The Group ID from the decoder's namespace field (use "+" for all groups)
      */
     fun getSubscriptionTopics(groupId: String = "+"): List<String> {
         val messageTypes = listOf("NBIRTH", "NDEATH", "NDATA", "NCMD", "DBIRTH", "DDEATH", "DDATA", "DCMD")
@@ -375,20 +369,20 @@ data class SparkplugBDecoderConfig(
                 "$sourceNamespace/$groupId/$messageType/#"
             }
         } else {
-            // Build specific subscriptions for each group/node/device combination
+            // Build specific subscriptions for each node/device combination using the provided groupId
             val topics = mutableListOf<String>()
 
             subscriptions.forEach { subscription ->
                 if (subscription.deviceIds.isEmpty()) {
                     // No device IDs - subscribe to all devices for this node
                     messageTypes.forEach { messageType ->
-                        topics.add("$sourceNamespace/${subscription.groupId}/$messageType/${subscription.nodeId}/#")
+                        topics.add("$sourceNamespace/$groupId/$messageType/${subscription.nodeId}/#")
                     }
                 } else {
                     // Specific device IDs - subscribe to each device individually
                     subscription.deviceIds.forEach { deviceId ->
                         messageTypes.forEach { messageType ->
-                            topics.add("$sourceNamespace/${subscription.groupId}/$messageType/${subscription.nodeId}/$deviceId")
+                            topics.add("$sourceNamespace/$groupId/$messageType/${subscription.nodeId}/$deviceId")
                         }
                     }
                 }

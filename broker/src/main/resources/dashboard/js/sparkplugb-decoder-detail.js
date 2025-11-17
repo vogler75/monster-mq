@@ -75,7 +75,6 @@ async function loadDecoder() {
                     config {
                         sourceNamespace
                         subscriptions {
-                            groupId
                             nodeId
                             deviceIds
                         }
@@ -152,18 +151,13 @@ function renderSubscriptions() {
             </div>
             <div class="rule-fields">
                 <div class="form-group">
-                    <label>Group ID *</label>
-                    <input type="text" value="${escapeHtml(sub.groupId || '+')}" onchange="updateSubscriptionGroupId(${index}, this.value)" placeholder="+" required>
-                    <span class="help-text">SparkplugB Group ID. Use "+" for all groups or specify a specific group name.</span>
-                </div>
-                <div class="form-group">
                     <label>Node ID *</label>
-                    <input type="text" value="${escapeHtml(sub.nodeId || '')}" onchange="updateSubscriptionNodeId(${index}, this.value)" required>
+                    <input type="text" value="${escapeHtml(sub.nodeId || '')}" oninput="updateSubscriptionNodeId(${index}, this.value)" required>
                     <span class="help-text">Specific SparkplugB node ID to subscribe to</span>
                 </div>
                 <div class="form-group">
                     <label>Device IDs (optional)</label>
-                    <input type="text" value="${escapeHtml((sub.deviceIds || []).join(', '))}" onchange="updateSubscriptionDeviceIds(${index}, this.value)" placeholder="Device1, Device2, Device3">
+                    <input type="text" value="${escapeHtml((sub.deviceIds || []).join(', '))}" oninput="updateSubscriptionDeviceIds(${index}, this.value)" placeholder="Device1, Device2, Device3">
                     <span class="help-text">Comma-separated device IDs. Leave empty to subscribe to all devices for this node.</span>
                 </div>
             </div>
@@ -173,7 +167,6 @@ function renderSubscriptions() {
 
 function addSubscription() {
     subscriptions.push({
-        groupId: '+',
         nodeId: '',
         deviceIds: []
     });
@@ -185,10 +178,6 @@ function removeSubscription(index) {
         subscriptions.splice(index, 1);
         renderSubscriptions();
     }
-}
-
-function updateSubscriptionGroupId(index, value) {
-    subscriptions[index].groupId = value.trim() || '+';
 }
 
 function updateSubscriptionNodeId(index, value) {
@@ -224,22 +213,22 @@ function renderRules() {
             <div class="rule-fields">
                 <div class="form-group">
                     <label>Rule Name *</label>
-                    <input type="text" value="${escapeHtml(rule.name || '')}" onchange="updateRuleName(${index}, this.value)" required>
+                    <input type="text" value="${escapeHtml(rule.name || '')}" oninput="updateRuleName(${index}, this.value)" required>
                     <span class="help-text">Unique identifier for this rule</span>
                 </div>
                 <div class="form-group">
                     <label>Node ID Regex *</label>
-                    <input type="text" value="${escapeHtml(rule.nodeIdRegex || '')}" onchange="updateRuleField(${index}, 'nodeIdRegex', this.value)" required>
+                    <input type="text" value="${escapeHtml(rule.nodeIdRegex || '')}" oninput="updateRuleField(${index}, 'nodeIdRegex', this.value)" required>
                     <span class="help-text">Regex: "Siemens" (exact), ".*Siemens.*" (contains), "Siemens.*" (starts with), ".*" (all)</span>
                 </div>
                 <div class="form-group">
                     <label>Device ID Regex *</label>
-                    <input type="text" value="${escapeHtml(rule.deviceIdRegex || '')}" onchange="updateRuleField(${index}, 'deviceIdRegex', this.value)" required>
+                    <input type="text" value="${escapeHtml(rule.deviceIdRegex || '')}" oninput="updateRuleField(${index}, 'deviceIdRegex', this.value)" required>
                     <span class="help-text">Regex: "Device1" (exact), ".*Device1.*" (contains), ".*" (all including empty)</span>
                 </div>
                 <div class="form-group">
                     <label>Destination Topic Template *</label>
-                    <input type="text" value="${escapeHtml(rule.destinationTopic || '')}" onchange="updateRuleField(${index}, 'destinationTopic', this.value)" required>
+                    <input type="text" value="${escapeHtml(rule.destinationTopic || '')}" oninput="updateRuleField(${index}, 'destinationTopic', this.value)" required>
                     <span class="help-text">Topic template with variables: $nodeId, $deviceId (e.g., "factory/decoded/$nodeId/$deviceId")</span>
                 </div>
                 <div class="form-group">
@@ -268,7 +257,7 @@ function renderTransformations(transformations, ruleIndex) {
                 <option value="nodeId" ${key === 'nodeId' ? 'selected' : ''}>nodeId</option>
                 <option value="deviceId" ${key === 'deviceId' ? 'selected' : ''}>deviceId</option>
             </select>
-            <input type="text" value="${escapeHtml(value)}" onchange="updateTransformationValue(${ruleIndex}, '${escapeHtml(key)}', this.value)" placeholder="s/pattern/replacement/flags">
+            <input type="text" value="${escapeHtml(value)}" oninput="updateTransformationValue(${ruleIndex}, '${escapeHtml(key)}', this.value)" placeholder="s/pattern/replacement/flags">
             <button type="button" class="btn btn-icon btn-remove" onclick="removeTransformation(${ruleIndex}, '${escapeHtml(key)}')">
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -373,7 +362,6 @@ async function saveDecoder(event) {
             config: {
                 sourceNamespace: sourceNamespace,
                 subscriptions: subscriptions.filter(sub => sub.nodeId && sub.nodeId.trim().length > 0).map(sub => ({
-                    groupId: sub.groupId || '+',
                     nodeId: sub.nodeId,
                     deviceIds: sub.deviceIds || []
                 })),

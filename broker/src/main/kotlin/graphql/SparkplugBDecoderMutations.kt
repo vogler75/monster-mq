@@ -658,8 +658,18 @@ class SparkplugBDecoderMutations(
      */
     private fun parseConfig(configInput: Map<*, *>): SparkplugBDecoderConfig {
         val sourceNamespace = configInput["sourceNamespace"] as? String ?: "spBv1.0"
-        val rulesInput = configInput["rules"] as? List<*> ?: emptyList<Any>()
 
+        val subscriptionsInput = configInput["subscriptions"] as? List<*> ?: emptyList<Any>()
+        val subscriptions = subscriptionsInput.mapNotNull { subInput ->
+            if (subInput is Map<*, *>) {
+                @Suppress("UNCHECKED_CAST")
+                parseSubscription(subInput as Map<String, Any>)
+            } else {
+                null
+            }
+        }
+
+        val rulesInput = configInput["rules"] as? List<*> ?: emptyList<Any>()
         val rules = rulesInput.mapNotNull { ruleInput ->
             if (ruleInput is Map<*, *>) {
                 @Suppress("UNCHECKED_CAST")
@@ -671,7 +681,21 @@ class SparkplugBDecoderMutations(
 
         return SparkplugBDecoderConfig(
             sourceNamespace = sourceNamespace,
+            subscriptions = subscriptions,
             rules = rules
+        )
+    }
+
+    /**
+     * Parse SparkplugBSubscription from GraphQL input
+     */
+    private fun parseSubscription(subInput: Map<String, Any>): at.rocworks.stores.devices.SparkplugBSubscription {
+        val nodeId = subInput["nodeId"] as String
+        val deviceIds = (subInput["deviceIds"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+
+        return at.rocworks.stores.devices.SparkplugBSubscription(
+            nodeId = nodeId,
+            deviceIds = deviceIds
         )
     }
 
@@ -732,6 +756,12 @@ class SparkplugBDecoderMutations(
     private fun configToMap(config: SparkplugBDecoderConfig): Map<String, Any> {
         return mapOf(
             "sourceNamespace" to config.sourceNamespace,
+            "subscriptions" to config.subscriptions.map { sub ->
+                mapOf(
+                    "nodeId" to sub.nodeId,
+                    "deviceIds" to sub.deviceIds
+                )
+            },
             "rules" to config.rules.map { rule ->
                 mapOf(
                     "name" to rule.name,

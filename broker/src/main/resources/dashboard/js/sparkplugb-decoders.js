@@ -24,7 +24,6 @@ async function loadDecoders() {
                     config {
                         sourceNamespace
                         subscriptions {
-                            groupId
                             nodeId
                             deviceIds
                         }

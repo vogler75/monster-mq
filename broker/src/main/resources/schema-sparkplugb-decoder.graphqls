@@ -15,10 +15,9 @@
 # - First-match-wins rule processing
 # - Cluster-aware deployment
 
-# SparkplugB Subscription Entry - Defines specific group/node/device combinations to subscribe to
+# SparkplugB Subscription Entry - Defines specific node/device combinations to subscribe to
+# Note: The Group ID comes from the decoder's namespace field
 type SparkplugBSubscription {
-    # Group ID (use "+" for all groups)
-    groupId: String!
     # Specific node ID to subscribe to
     nodeId: String!
     # List of device IDs (empty = all devices for this node)
@@ -92,9 +91,8 @@ type SparkplugBDecoder {
 #############################################
 
 # Input for creating/updating a SparkplugB Subscription
+# Note: The Group ID comes from the decoder's namespace field
 input SparkplugBSubscriptionInput {
-    # Group ID (use "+" for all groups)
-    groupId: String!
     # Specific node ID to subscribe to
     nodeId: String!
     # List of device IDs (empty = all devices for this node)
