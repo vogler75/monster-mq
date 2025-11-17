@@ -89,28 +89,26 @@ function renderDecoders(decoders) {
                 <td class="metric-value">${formatNumber(metrics.messagesSkipped || 0)}/s</td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn btn-icon btn-view" onclick="viewDecoder('${escapeHtml(decoder.name)}')" title="View Details">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        <button class="btn-icon btn-view" onclick="viewDecoder('${escapeHtml(decoder.name)}')" title="Edit" aria-label="Edit">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
                             </svg>
                         </button>
                         ${decoder.enabled ?
-                            `<button class="btn btn-icon btn-pause" onclick="toggleDecoder('${escapeHtml(decoder.name)}', false)" title="Disable">
-                                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            `<button class="btn-icon btn-pause" onclick="toggleDecoder('${escapeHtml(decoder.name)}', false)" title="Stop Decoder">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
                                 </svg>
                             </button>` :
-                            `<button class="btn btn-icon btn-play" onclick="toggleDecoder('${escapeHtml(decoder.name)}', true)" title="Enable">
-                                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            `<button class="btn-icon btn-play" onclick="toggleDecoder('${escapeHtml(decoder.name)}', true)" title="Start Decoder">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M8 5v14l11-7z"/>
                                 </svg>
                             </button>`
                         }
-                        <button class="btn btn-icon btn-delete" onclick="deleteDecoder('${escapeHtml(decoder.name)}')" title="Delete">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        <button class="btn-icon btn-delete" onclick="deleteDecoder('${escapeHtml(decoder.name)}')" title="Delete" aria-label="Delete">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                             </svg>
                         </button>
                     </div>

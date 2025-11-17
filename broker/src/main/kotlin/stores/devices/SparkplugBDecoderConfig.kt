@@ -164,11 +164,13 @@ data class SparkplugBDecoderRule(
 
     /**
      * Check if nodeId and deviceId match this rule's patterns
+     * Uses containsMatchIn() to allow partial matches (e.g., "Siemens" matches "Siemens_Plant1")
+     * For exact matches, use anchors (e.g., "^Siemens$")
      */
     fun matches(nodeId: String, deviceId: String): Boolean {
         return try {
-            val nodeIdMatches = Regex(nodeIdRegex).matches(nodeId)
-            val deviceIdMatches = Regex(deviceIdRegex).matches(deviceId)
+            val nodeIdMatches = Regex(nodeIdRegex).containsMatchIn(nodeId)
+            val deviceIdMatches = Regex(deviceIdRegex).containsMatchIn(deviceId)
             nodeIdMatches && deviceIdMatches
         } catch (e: Exception) {
             false
