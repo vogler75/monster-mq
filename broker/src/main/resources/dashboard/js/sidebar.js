@@ -115,6 +115,11 @@ class SidebarManager {
                         href: '/pages/neo4j-clients.html',
                         icon: '<circle cx="6" cy="12" r="2" fill="currentColor"></circle><circle cx="12" cy="6" r="2" fill="currentColor"></circle><circle cx="12" cy="18" r="2" fill="currentColor"></circle><circle cx="18" cy="12" r="2" fill="currentColor"></circle><line x1="7.5" y1="10.5" x2="10.5" y2="7.5"></line><line x1="7.5" y1="13.5" x2="10.5" y2="16.5"></line><line x1="13.5" y1="7.5" x2="16.5" y2="10.5"></line><line x1="13.5" y1="16.5" x2="16.5" y2="13.5"></line>',
                         text: 'Neo4j Clients'
+                    },
+                    {
+                        href: '/pages/sparkplugb-decoders.html',
+                        icon: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>',
+                        text: 'SparkplugB Decoders'
                     }
                 ]
             },

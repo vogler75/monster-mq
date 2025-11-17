@@ -46,7 +46,10 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
     private var internalClientId: String? = null
 
     companion object {
-        // SparkplugB topic structure: spBv1.0/namespace/group_id/message_type/edge_node_id/[device_id]
+        // SparkplugB topic structures:
+        // STATE (3 levels): spBv1.0/STATE/<primary_host_id> (plain text, not protobuf)
+        // Node-level (4 levels): spBv1.0/<groupId>/<messageType>/<nodeId> (protobuf)
+        // Device-level (5 levels): spBv1.0/<groupId>/<messageType>/<nodeId>/<deviceId> (protobuf)
         // Message types with protobuf data
         private val PROTOBUF_MESSAGE_TYPES = listOf(
             "NBIRTH", // Birth certificate for Sparkplug Edge Nodes
@@ -204,19 +207,41 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
             val topic = message.topicName
             logger.fine { "Received SparkplugB message: $topic" }
 
-            // Parse SparkplugB topic: spBv1.0/namespace/group_id/message_type/edge_node_id/[device_id]
+            // Parse SparkplugB topic
+            // Special case - STATE: spBv1.0/STATE/<primary_host_id> (3 levels)
+            // Node-level: spBv1.0/<groupId>/<messageType>/<nodeId> (4 levels)
+            // Device-level: spBv1.0/<groupId>/<messageType>/<nodeId>/<deviceId> (5 levels)
             val topicLevels = topic.split("/")
-            if (topicLevels.size < 5) {
-                logger.warning("Invalid SparkplugB topic structure: $topic (expected at least 5 levels)")
+
+            // Handle STATE message special case
+            if (topicLevels.size == 3 && topicLevels[1] == "STATE") {
+                val namespace = topicLevels[0]
+                val primaryHostId = topicLevels[2]
+
+                // Skip if namespace doesn't match
+                if (namespace != decoderConfig.sourceNamespace) {
+                    logger.fine { "Skipping STATE message - namespace mismatch: $namespace != ${decoderConfig.sourceNamespace}" }
+                    messagesSkippedCounter.incrementAndGet()
+                    return
+                }
+
+                logger.fine { "Received STATE message for host: $primaryHostId - skipping (not applicable for decoding)" }
+                messagesSkippedCounter.incrementAndGet()
+                return
+            }
+
+            // Regular message parsing
+            if (topicLevels.size < 4) {
+                logger.warning("Invalid SparkplugB topic structure: $topic (expected at least 4 levels or STATE format)")
                 messagesSkippedCounter.incrementAndGet()
                 return
             }
 
             val namespace = topicLevels[0]
             val groupId = topicLevels[1]
-            val messageType = topicLevels[3]
-            val edgeNodeId = topicLevels[4]
-            val deviceId = if (topicLevels.size > 5) topicLevels[5] else ""
+            val messageType = topicLevels[2]
+            val edgeNodeId = topicLevels[3]
+            val deviceId = if (topicLevels.size > 4) topicLevels[4] else ""
 
             logger.fine { "Parsed SparkplugB topic - namespace: $namespace, groupId: $groupId, messageType: $messageType, nodeId: $edgeNodeId, deviceId: $deviceId" }
 
@@ -238,10 +263,7 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
             logger.fine { "Matched rule: ${rule.name} for nodeId=$edgeNodeId, deviceId=$deviceId" }
 
             // Decode and publish based on message type
-            if (messageType == "STATE") {
-                // STATE is not a protobuf message - pass through as-is
-                publishDecodedMessage(rule, edgeNodeId, deviceId, "STATE", message.payload)
-            } else if (messageType in PROTOBUF_MESSAGE_TYPES) {
+            if (messageType in PROTOBUF_MESSAGE_TYPES) {
                 // Decode protobuf message and publish each metric
                 decodeAndPublishMetrics(rule, edgeNodeId, deviceId, messageType, message.payload)
             } else {

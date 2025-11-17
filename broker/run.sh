@@ -97,6 +97,8 @@ fi
 
 JAVA_OPTS="$JAVA_OPTS --enable-native-access=ALL-UNNAMED"
 
+# Note: Protobuf version upgraded to 4.28.3 for Java 21+ compatibility
+
 # Prepare development options
 DEV_OPTS=""
 if [ "$DEV_MODE" = true ]; then

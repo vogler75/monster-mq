@@ -184,9 +184,18 @@ data class SparkplugBDecoderRule(
         val transformedDeviceId = applyTransformation("deviceId", deviceId)
 
         // Substitute template variables
-        return destinationTopic
+        var topic = destinationTopic
             .replace("\$nodeId", transformedNodeId)
             .replace("\$deviceId", transformedDeviceId)
+
+        // Clean up: remove empty deviceId path segments (e.g., "decoded/node//" -> "decoded/node/")
+        // This handles node-level messages where deviceId is empty
+        topic = topic.replace(Regex("/+"), "/")  // Replace multiple slashes with single slash
+        if (topic.endsWith("/")) {
+            topic = topic.dropLast(1)  // Remove trailing slash
+        }
+
+        return topic
     }
 }
 

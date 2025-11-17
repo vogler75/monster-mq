@@ -867,6 +867,13 @@ class GraphQLServer(
                     .dataFetcher("metrics", metricsResolver.jdbcLoggerMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.jdbcLoggerMetricsHistory())
             }
+            .type("SparkplugBDecoder") { builder ->
+                builder.apply {
+                    sparkplugBDecoderQueries?.let { queries ->
+                        dataFetcher("metrics", queries.sparkplugBDecoderMetrics())
+                    }
+                }
+            }
             .type("ArchiveGroupInfo") { builder ->
                 builder.apply {
                     archiveGroupResolver?.let { resolver ->

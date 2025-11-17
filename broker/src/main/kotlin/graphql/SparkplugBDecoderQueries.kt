@@ -75,7 +75,8 @@ class SparkplugBDecoderQueries(
      */
     private fun deviceToMap(device: DeviceConfig): Map<String, Any> {
         val config = SparkplugBDecoderConfig.fromJsonObject(device.config)
-        val isOnCurrentNode = device.nodeId == Monster.getClusterNodeId(vertx)
+        val currentNodeId = Monster.getClusterNodeId(vertx)
+        val isOnCurrentNode = device.nodeId == currentNodeId
 
         return mapOf(
             "name" to device.name,
@@ -86,44 +87,53 @@ class SparkplugBDecoderQueries(
             "createdAt" to device.createdAt.toString(),
             "updatedAt" to device.updatedAt.toString(),
             "isOnCurrentNode" to isOnCurrentNode,
-            "metrics" to DataFetcher { _ ->
-                fetchMetrics(device.name)
-            }
+            // Empty metrics placeholder; actual resolver in GraphQLServer
+            "metrics" to emptyMap<String, Any>()
         )
     }
 
     /**
-     * Fetch metrics for a SparkplugB decoder
+     * Fetch metrics for a SparkplugB decoder - used by GraphQL type resolver
      */
-    private fun fetchMetrics(deviceName: String): CompletableFuture<Map<String, Any>> {
-        val future = CompletableFuture<Map<String, Any>>()
-        val addr = EventBusAddresses.SparkplugBDecoder.connectorMetrics(deviceName)
+    fun sparkplugBDecoderMetrics(): DataFetcher<CompletableFuture<Map<String, Any>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any>>()
+            val decoder = env.getSource<Map<String, Any>>()
+            val deviceName = decoder?.get("name") as? String
 
-        vertx.eventBus().request<JsonObject>(addr, JsonObject()).onComplete { result ->
-            if (result.succeeded()) {
-                val metricsJson = result.result().body()
-                val metrics = mapOf(
-                    "messagesIn" to metricsJson.getDouble("messagesInRate", 0.0),
-                    "messagesOut" to metricsJson.getDouble("messagesOutRate", 0.0),
-                    "messagesSkipped" to metricsJson.getDouble("messagesSkippedRate", 0.0),
-                    "timestamp" to Instant.now().toString()
-                )
-                future.complete(metrics)
-            } else {
-                logger.fine { "Failed to fetch metrics for SparkplugB Decoder '$deviceName': ${result.cause()?.message}" }
-                // Return zeros instead of null to avoid GraphQL errors
-                future.complete(
-                    mapOf(
-                        "messagesIn" to 0.0,
-                        "messagesOut" to 0.0,
-                        "messagesSkipped" to 0.0,
+            if (deviceName == null) {
+                future.complete(createEmptyMetrics())
+                return@DataFetcher future
+            }
+
+            val addr = EventBusAddresses.SparkplugBDecoder.connectorMetrics(deviceName)
+            vertx.eventBus().request<JsonObject>(addr, JsonObject()).onComplete { result ->
+                if (result.succeeded()) {
+                    val metricsJson = result.result().body()
+                    val metrics = mapOf(
+                        "messagesIn" to metricsJson.getDouble("messagesInRate", 0.0),
+                        "messagesOut" to metricsJson.getDouble("messagesOutRate", 0.0),
+                        "messagesSkipped" to metricsJson.getDouble("messagesSkippedRate", 0.0),
                         "timestamp" to Instant.now().toString()
                     )
-                )
+                    future.complete(metrics)
+                } else {
+                    logger.fine("Failed to fetch metrics for SparkplugB Decoder '$deviceName': ${result.cause()?.message}")
+                    future.complete(createEmptyMetrics())
+                }
             }
-        }
 
-        return future
+            future
+        }
+    }
+
+    private fun createEmptyMetrics(): Map<String, Any> {
+        return mapOf(
+            "messagesIn" to 0.0,
+            "messagesOut" to 0.0,
+            "messagesSkipped" to 0.0,
+            "timestamp" to Instant.now().toString()
+        )
     }
 
     /**
