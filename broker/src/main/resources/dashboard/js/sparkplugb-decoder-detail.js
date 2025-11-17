@@ -15,6 +15,9 @@ async function graphqlQuery(query, variables = {}) {
 }
 
 async function init() {
+    // Load cluster nodes first
+    await loadClusterNodes();
+
     const params = new URLSearchParams(window.location.search);
     currentDecoderName = params.get('name');
 
@@ -26,6 +29,36 @@ async function init() {
     } else {
         // Create mode - add one default rule
         addRule();
+    }
+}
+
+async function loadClusterNodes() {
+    try {
+        const query = `
+            query GetBrokers {
+                brokers {
+                    nodeId
+                    isCurrent
+                }
+            }
+        `;
+
+        const result = await graphqlQuery(query);
+        const clusterNodes = result.brokers || [];
+
+        // Populate node selector
+        const nodeSelect = document.getElementById('nodeId');
+        if (nodeSelect) {
+            nodeSelect.innerHTML = '<option value="">Select Node...</option>';
+            clusterNodes.forEach(node => {
+                const option = document.createElement('option');
+                option.value = node.nodeId;
+                option.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
+                nodeSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading cluster nodes:', error);
     }
 }
 

@@ -16,17 +16,31 @@
             max-width: 1200px;
             margin: 0 auto;
         }
-        .form-header {
+        .page-header {
+            margin-bottom: 2rem;
+        }
+        .page-header-content {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
         }
-        .form-header h1 {
+        .page-header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        .page-title {
             margin: 0;
             color: var(--text-primary);
             font-size: 1.75rem;
             font-weight: 700;
+        }
+        .page-subtitle {
+            margin: 0.5rem 0 0 0;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
         }
         .form-section {
             background: var(--dark-surface);
@@ -78,13 +92,21 @@
             font-size: 0.75rem;
             color: var(--text-secondary);
         }
+        input[type="checkbox"] {
+            width: auto;
+            accent-color: var(--monster-purple);
+            transform: scale(1.2);
+        }
+
         .checkbox-group {
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
-        .checkbox-group input[type="checkbox"] {
-            width: auto;
+
+        .checkbox-group label {
+            margin-bottom: 0;
+            cursor: pointer;
         }
         .rules-list {
             display: flex;
@@ -118,13 +140,6 @@
             grid-template-columns: 150px 1fr auto;
             gap: 0.5rem;
             align-items: start;
-        }
-        .form-actions {
-            display: flex;
-            gap: 1rem;
-            justify-content: flex-end;
-            padding-top: 1.5rem;
-            border-top: 1px solid var(--dark-border);
         }
         .btn-add {
             background: var(--monster-purple);
@@ -175,8 +190,21 @@
     <div class="main-content" id="main-content">
         <div class="container">
             <div class="form-container">
-                <div class="form-header">
-                    <h1 id="pageTitle">⚡ Create SparkplugB Decoder</h1>
+                <div class="page-header">
+                    <div class="page-header-content">
+                        <div>
+                            <h1 class="page-title" id="pageTitle">⚡ Create SparkplugB Decoder</h1>
+                            <p class="page-subtitle">Configure SparkplugB message decoding rules</p>
+                        </div>
+                        <div class="page-header-actions">
+                            <button type="button" class="btn btn-secondary" onclick="window.location.href='sparkplugb-decoders.html'">
+                                Back to Decoders
+                            </button>
+                            <button type="submit" form="decoderForm" class="btn btn-primary">
+                                Save Decoder
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <form id="decoderForm">
@@ -195,13 +223,16 @@
                                 <span class="help-text">MQTT namespace for decoded topics</span>
                             </div>
                             <div class="form-group">
-                                <label for="nodeId">Node ID *</label>
-                                <input type="text" id="nodeId" required>
-                                <span class="help-text">Cluster node where decoder runs</span>
+                                <label for="nodeId">Cluster Node *</label>
+                                <select id="nodeId" required>
+                                    <option value="">Select Node...</option>
+                                </select>
                             </div>
-                            <div class="form-group checkbox-group">
-                                <input type="checkbox" id="enabled" checked>
-                                <label for="enabled">Enabled</label>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="enabled" checked>
+                                    <label for="enabled">Enabled</label>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -226,12 +257,6 @@
                             </svg>
                             Add Rule
                         </button>
-                    </div>
-
-                    <!-- Form Actions -->
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" onclick="window.location.href='sparkplugb-decoders.html'">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Save Decoder</button>
                     </div>
                 </form>
             </div>
