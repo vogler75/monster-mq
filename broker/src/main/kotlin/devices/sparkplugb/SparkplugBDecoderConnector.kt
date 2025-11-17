@@ -46,11 +46,11 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
     private var internalClientId: String? = null
 
     companion object {
-        // SparkplugB topic structures:
-        // STATE (3 levels): spBv1.0/STATE/<primary_host_id> (plain text, not protobuf)
-        // Node-level (4 levels): spBv1.0/<groupId>/<messageType>/<nodeId> (protobuf)
-        // Device-level (5 levels): spBv1.0/<groupId>/<messageType>/<nodeId>/<deviceId> (protobuf)
-        // Message types with protobuf data
+        // SparkplugB topic structures we subscribe to (protobuf only):
+        // Node-level (4 levels): spBv1.0/<groupId>/<messageType>/<nodeId>
+        // Device-level (5 levels): spBv1.0/<groupId>/<messageType>/<nodeId>/<deviceId>
+        //
+        // Subscribed message types (all protobuf):
         private val PROTOBUF_MESSAGE_TYPES = listOf(
             "NBIRTH", // Birth certificate for Sparkplug Edge Nodes
             "NDEATH", // Death certificate for Sparkplug Edge Nodes
@@ -111,10 +111,12 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
         internalClientId?.let { clientId ->
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
-                val subscriptionTopic = decoderConfig.getSubscriptionTopic()
-                sessionHandler.unsubscribeInternalClient(clientId, subscriptionTopic)
+                val subscriptionTopics = decoderConfig.getSubscriptionTopics()
+                subscriptionTopics.forEach { topic ->
+                    sessionHandler.unsubscribeInternalClient(clientId, topic)
+                }
                 sessionHandler.unregisterInternalClient(clientId)
-                logger.info("Unsubscribed internal client '$clientId' from topic '$subscriptionTopic'")
+                logger.info("Unsubscribed internal client '$clientId' from ${subscriptionTopics.size} topics")
             }
         }
 
@@ -153,8 +155,8 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
     private fun subscribeToSparkplugMessages(): Future<Void> {
         val promise = Promise.promise<Void>()
 
-        val subscriptionTopic = decoderConfig.getSubscriptionTopic()
-        logger.info("Subscribing to SparkplugB messages: $subscriptionTopic for device ${deviceConfig.name}")
+        val subscriptionTopics = decoderConfig.getSubscriptionTopics()
+        logger.info("Subscribing to ${subscriptionTopics.size} SparkplugB message types for device ${deviceConfig.name}")
 
         // Get SessionHandler
         val sessionHandler = Monster.getSessionHandler()
@@ -187,11 +189,13 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
             }
         }
 
-        // Subscribe via SessionHandler - this treats us as a regular MQTT client internally
-        logger.info("Internal subscription for SparkplugB decoder '$internalClientId' to MQTT topic '$subscriptionTopic' with QoS 0")
-        sessionHandler.subscribeInternalClient(internalClientId!!, subscriptionTopic, 0)
+        // Subscribe via SessionHandler to all message type topics
+        subscriptionTopics.forEach { topic ->
+            logger.fine { "Internal subscription for SparkplugB decoder '$internalClientId' to MQTT topic '$topic' with QoS 0" }
+            sessionHandler.subscribeInternalClient(internalClientId!!, topic, 0)
+        }
 
-        logger.info("Successfully created internal MQTT subscription for device ${deviceConfig.name}")
+        logger.info("Successfully created ${subscriptionTopics.size} internal MQTT subscriptions for device ${deviceConfig.name}")
         promise.complete()
 
         return promise.future()
@@ -208,31 +212,14 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
             logger.fine { "Received SparkplugB message: $topic" }
 
             // Parse SparkplugB topic
-            // Special case - STATE: spBv1.0/STATE/<primary_host_id> (3 levels)
             // Node-level: spBv1.0/<groupId>/<messageType>/<nodeId> (4 levels)
             // Device-level: spBv1.0/<groupId>/<messageType>/<nodeId>/<deviceId> (5 levels)
+            // Note: We only subscribe to protobuf message types (NBIRTH, NDEATH, NDATA, NCMD, DBIRTH, DDEATH, DDATA, DCMD)
+            // STATE messages are not subscribed to, as they're not protobuf and not relevant for decoding
             val topicLevels = topic.split("/")
 
-            // Handle STATE message special case
-            if (topicLevels.size == 3 && topicLevels[1] == "STATE") {
-                val namespace = topicLevels[0]
-                val primaryHostId = topicLevels[2]
-
-                // Skip if namespace doesn't match
-                if (namespace != decoderConfig.sourceNamespace) {
-                    logger.fine { "Skipping STATE message - namespace mismatch: $namespace != ${decoderConfig.sourceNamespace}" }
-                    messagesSkippedCounter.incrementAndGet()
-                    return
-                }
-
-                logger.fine { "Received STATE message for host: $primaryHostId - skipping (not applicable for decoding)" }
-                messagesSkippedCounter.incrementAndGet()
-                return
-            }
-
-            // Regular message parsing
             if (topicLevels.size < 4) {
-                logger.warning("Invalid SparkplugB topic structure: $topic (expected at least 4 levels or STATE format)")
+                logger.warning("Invalid SparkplugB topic structure: $topic (expected at least 4 levels)")
                 messagesSkippedCounter.incrementAndGet()
                 return
             }

@@ -278,9 +278,15 @@ data class SparkplugBDecoderConfig(
     }
 
     /**
-     * Get the subscription topic filter for this decoder
+     * Get subscription topic filters for this decoder
+     * Returns list of topics for all protobuf message types (NBIRTH, NDEATH, NDATA, NCMD, DBIRTH, DDEATH, DDATA, DCMD)
+     * Excludes STATE messages which are not protobuf and not relevant for decoding
      */
-    fun getSubscriptionTopic(): String {
-        return "$sourceNamespace/#"
+    fun getSubscriptionTopics(): List<String> {
+        // Subscribe only to protobuf message types, not STATE
+        val messageTypes = listOf("NBIRTH", "NDEATH", "NDATA", "NCMD", "DBIRTH", "DDEATH", "DDATA", "DCMD")
+        return messageTypes.map { messageType ->
+            "$sourceNamespace/+/$messageType/#"
+        }
     }
 }
