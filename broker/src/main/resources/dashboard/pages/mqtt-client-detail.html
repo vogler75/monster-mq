@@ -40,9 +40,36 @@
         .mode-badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.3rem 0.6rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
         .mode-subscribe { background: rgba(16, 185, 129, 0.15); color: var(--monster-green); }
         .mode-publish { background: rgba(59, 130, 246, 0.15); color: var(--monster-teal); }
-        .btn-action { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; background: var(--dark-surface-2); border: 1px solid var(--dark-border); }
+        .btn-icon {
+            padding: 0.6rem;
+            min-width: auto;
+            width: auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            background: var(--dark-surface-2);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            align-items: center;
+        }
+        .btn-edit { color: var(--monster-purple); }
+        .btn-edit:hover {
+            background: rgba(124, 58, 237, 0.1);
+            border-color: var(--monster-purple);
+        }
         .btn-delete { color: var(--monster-red); }
-        .btn-delete:hover { background: rgba(239, 68, 68, 0.1); border-color: var(--monster-red); }
+        .btn-delete:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: var(--monster-red);
+        }
+        .qos-badge { padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; background: rgba(124, 58, 237, 0.15); color: var(--monster-purple); }
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: center; z-index: 9999; padding: 2rem; }
         .modal-content { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
         .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center; }
@@ -319,6 +346,57 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
                 <button type="submit" class="btn btn-primary" onclick="addAddress()">Add Address</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Address Modal -->
+    <div id="edit-address-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Address Mapping</h3>
+                <button class="modal-close" onclick="hideEditAddressModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-address-form">
+                    <div class="form-group">
+                        <label for="edit-address-mode">Mode *</label>
+                        <select id="edit-address-mode" required>
+                            <option value="SUBSCRIBE">SUBSCRIBE (Remote → Local)</option>
+                            <option value="PUBLISH">PUBLISH (Local → Remote)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-address-remote-topic">Remote Topic *</label>
+                        <input type="text" id="edit-address-remote-topic" required placeholder="e.g., sensor/+/temperature">
+                        <small style="color: var(--text-muted);">Supports MQTT wildcards: + (single level), # (multi-level)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-address-local-topic">Local Topic *</label>
+                        <input type="text" id="edit-address-local-topic" required placeholder="e.g., remote/sensor/+/temperature">
+                        <small style="color: var(--text-muted);">Supports MQTT wildcards: + (single level), # (multi-level)</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="edit-address-remove-path">
+                            <label for="edit-address-remove-path">Remove Base Path</label>
+                        </div>
+                        <small style="color: var(--text-muted);">Remove the base path before wildcards from topic names</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-address-qos">QoS Level *</label>
+                        <select id="edit-address-qos" required>
+                            <option value="0">QoS 0 - At most once</option>
+                            <option value="1">QoS 1 - At least once</option>
+                            <option value="2">QoS 2 - Exactly once</option>
+                        </select>
+                        <small style="color: var(--text-muted);">Quality of Service level for MQTT messages</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideEditAddressModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" onclick="updateAddress()">Update Address</button>
             </div>
         </div>
     </div>

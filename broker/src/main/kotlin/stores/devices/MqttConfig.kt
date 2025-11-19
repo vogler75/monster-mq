@@ -93,7 +93,9 @@ data class MqttClientConnectionConfig(
     val bufferEnabled: Boolean = false,
     val bufferSize: Int = 5000,
     val persistBuffer: Boolean = false,
-    val deleteOldestMessages: Boolean = true
+    val deleteOldestMessages: Boolean = true,
+    // Loop prevention (prevents bridge from republishing its own messages)
+    val loopPrevention: Boolean = true
 ) {
     companion object {
         const val PROTOCOL_TCP = "tcp"
@@ -127,7 +129,8 @@ data class MqttClientConnectionConfig(
                     bufferEnabled = json.getBoolean("bufferEnabled", false),
                     bufferSize = json.getInteger("bufferSize", 5000),
                     persistBuffer = json.getBoolean("persistBuffer", false),
-                    deleteOldestMessages = json.getBoolean("deleteOldestMessages", true)
+                    deleteOldestMessages = json.getBoolean("deleteOldestMessages", true),
+                    loopPrevention = json.getBoolean("loopPrevention", true)
                 )
             } catch (e: Exception) {
                 println("Overall error in fromJsonObject: ${e.message}")
@@ -152,6 +155,7 @@ data class MqttClientConnectionConfig(
             .put("bufferSize", bufferSize)
             .put("persistBuffer", persistBuffer)
             .put("deleteOldestMessages", deleteOldestMessages)
+            .put("loopPrevention", loopPrevention)
 
         // Add addresses array if we have addresses
         if (addresses.isNotEmpty()) {

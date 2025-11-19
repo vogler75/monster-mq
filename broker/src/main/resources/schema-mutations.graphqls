@@ -667,6 +667,11 @@ type MqttClientMutations {
     # New mappings will immediately start synchronizing data
     addAddress(deviceName: String!, input: MqttClientAddressInput!): MqttClientResult!
 
+    # Update an existing address mapping for an MQTT client
+    # Modifies the topic mapping, mode, or other settings for an existing address
+    # Changes take effect immediately and the address will be redeployed with new settings
+    updateAddress(deviceName: String!, remoteTopic: String!, input: MqttClientAddressInput!): MqttClientResult!
+
     # Remove an address mapping from an MQTT client
     # Stops data synchronization for the specified remote topic while keeping other mappings active
     deleteAddress(deviceName: String!, remoteTopic: String!): MqttClientResult!

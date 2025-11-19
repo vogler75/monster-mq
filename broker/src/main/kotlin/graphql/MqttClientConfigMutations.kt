@@ -576,6 +576,155 @@ class MqttClientConfigMutations(
         }
     }
 
+    fun updateMqttClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any>>()
+
+            try {
+                val deviceName = env.getArgument<String>("deviceName")
+                val remoteTopic = env.getArgument<String>("remoteTopic")
+                val inputMap = env.getArgument<Map<String, Any>>("input")
+
+                if (deviceName == null || remoteTopic == null || inputMap == null) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Device name, remoteTopic, and input are required")
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                val mode = inputMap["mode"] as? String
+                val newRemoteTopic = inputMap["remoteTopic"] as? String
+                val localTopic = inputMap["localTopic"] as? String
+                val removePath = inputMap["removePath"] as? Boolean ?: true
+                val qos = inputMap["qos"] as? Int ?: 0
+
+                if (mode == null || newRemoteTopic == null || localTopic == null) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Mode, remoteTopic, and localTopic are required")
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                // Create the updated address object
+                val updatedAddress = MqttClientAddress(
+                    mode = mode,
+                    remoteTopic = newRemoteTopic,
+                    localTopic = localTopic,
+                    removePath = removePath,
+                    qos = qos
+                )
+
+                val validationErrors = updatedAddress.validate()
+                if (validationErrors.isNotEmpty()) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to validationErrors
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                // Get the existing device
+                deviceStore.getDevice(deviceName).onComplete { existingResult ->
+                    if (existingResult.failed()) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Database error: ${existingResult.cause()?.message}")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    val existingDevice = existingResult.result()
+                    if (existingDevice == null) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Device '$deviceName' not found")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    // Parse existing config from JsonObject
+                    val existingConfig = MqttClientConnectionConfig.fromJsonObject(existingDevice.config)
+
+                    // Check if the address to update exists
+                    if (!existingConfig.addresses.any { it.remoteTopic == remoteTopic }) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Address with remoteTopic '$remoteTopic' not found for device '$deviceName'")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    // If remoteTopic changed, check that the new one doesn't already exist
+                    if (remoteTopic != newRemoteTopic && existingConfig.addresses.any { it.remoteTopic == newRemoteTopic }) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Address with remoteTopic '$newRemoteTopic' already exists for device '$deviceName'")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    // Update the address
+                    val updatedAddresses = existingConfig.addresses.map {
+                        if (it.remoteTopic == remoteTopic) updatedAddress else it
+                    }
+                    val updatedConfig = existingConfig.copy(addresses = updatedAddresses)
+                    val updatedDevice = existingDevice.copy(config = updatedConfig.toJsonObject(), updatedAt = Instant.now())
+
+                    deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
+                        if (saveResult.succeeded()) {
+                            val savedDevice = saveResult.result()
+
+                            // Notify extension about the change
+                            notifyDeviceConfigChange("updateAddress", savedDevice)
+
+                            future.complete(
+                                mapOf(
+                                    "success" to true,
+                                    "client" to deviceToMap(savedDevice),
+                                    "errors" to emptyList<String>()
+                                )
+                            )
+                        } else {
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Failed to update address: ${saveResult.cause()?.message}")
+                                )
+                            )
+                        }
+                    }
+                }
+
+            } catch (e: Exception) {
+                logger.severe("Error updating MQTT client address: ${e.message}")
+                future.complete(
+                    mapOf(
+                        "success" to false,
+                        "errors" to listOf("Failed to update address: ${e.message}")
+                    )
+                )
+            }
+
+            future
+        }
+    }
+
     fun deleteMqttClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()

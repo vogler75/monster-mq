@@ -600,6 +600,7 @@ class GraphQLServer(
                         dataFetcher("toggle", resolver.toggleMqttClient())
                         dataFetcher("reassign", resolver.reassignMqttClient())
                         dataFetcher("addAddress", resolver.addMqttClientAddress())
+                        dataFetcher("updateAddress", resolver.updateMqttClientAddress())
                         dataFetcher("deleteAddress", resolver.deleteMqttClientAddress())
                     }
                 }

@@ -7,6 +7,7 @@ class MqttClientDetailManager {
         this.clientData = null;
         this.clusterNodes = [];
         this.deleteAddressRemoteTopic = null;
+        this.editAddressOriginalRemoteTopic = null;
         this.init();
     }
 
@@ -168,13 +169,22 @@ class MqttClientDetailManager {
                 <td>${address.removePath ? 'Yes' : 'No'}</td>
                 <td><span class="qos-badge">QoS ${address.qos ?? 0}</span></td>
                 <td>
-                    <button class="btn-action btn-delete"
-                            onclick="mqttClientDetailManager.deleteAddress('${this.escapeHtml(address.remoteTopic)}')"
-                            title="Delete Address">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                        </svg>
-                    </button>
+                    <div class="action-buttons">
+                        <button class="btn-icon btn-edit"
+                                onclick="mqttClientDetailManager.editAddress('${this.escapeHtml(address.remoteTopic)}')"
+                                title="Edit Address">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                            </svg>
+                        </button>
+                        <button class="btn-icon btn-delete"
+                                onclick="mqttClientDetailManager.deleteAddress('${this.escapeHtml(address.remoteTopic)}')"
+                                title="Delete Address">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                            </svg>
+                        </button>
+                    </div>
                 </td>
             `;
             tbody.appendChild(row);
@@ -328,6 +338,78 @@ class MqttClientDetailManager {
         }
     }
 
+    editAddress(remoteTopic) {
+        // Find the address by remoteTopic
+        const address = this.clientData.config.addresses.find(a => a.remoteTopic === remoteTopic);
+        if (!address) {
+            this.showError('Address not found');
+            return;
+        }
+
+        // Store original remote topic for update
+        this.editAddressOriginalRemoteTopic = remoteTopic;
+
+        // Populate edit form
+        document.getElementById('edit-address-mode').value = address.mode;
+        document.getElementById('edit-address-remote-topic').value = address.remoteTopic;
+        document.getElementById('edit-address-local-topic').value = address.localTopic;
+        document.getElementById('edit-address-remove-path').checked = address.removePath;
+        document.getElementById('edit-address-qos').value = address.qos ?? 0;
+
+        // Show modal
+        this.showEditAddressModal();
+    }
+
+    async updateAddress() {
+        const form = document.getElementById('edit-address-form');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        const updatedAddress = {
+            mode: document.getElementById('edit-address-mode').value,
+            remoteTopic: document.getElementById('edit-address-remote-topic').value.trim(),
+            localTopic: document.getElementById('edit-address-local-topic').value.trim(),
+            removePath: document.getElementById('edit-address-remove-path').checked,
+            qos: parseInt(document.getElementById('edit-address-qos').value)
+        };
+
+        try {
+            const mutation = `
+                mutation UpdateMqttClientAddress($deviceName: String!, $remoteTopic: String!, $input: MqttClientAddressInput!) {
+                    mqttClient {
+                        updateAddress(deviceName: $deviceName, remoteTopic: $remoteTopic, input: $input) {
+                            success
+                            errors
+                        }
+                    }
+                }
+            `;
+
+            const result = await this.client.query(mutation, {
+                deviceName: this.clientName,
+                remoteTopic: this.editAddressOriginalRemoteTopic,
+                input: updatedAddress
+            });
+
+            if (result.mqttClient.updateAddress.success) {
+                this.hideEditAddressModal();
+                await this.loadClientData();
+                this.showSuccess('Address mapping updated successfully');
+            } else {
+                const errors = result.mqttClient.updateAddress.errors || ['Unknown error'];
+                this.showError('Failed to update address: ' + errors.join(', '));
+            }
+
+        } catch (error) {
+            console.error('Error updating address:', error);
+            this.showError('Failed to update address: ' + error.message);
+        }
+
+        this.editAddressOriginalRemoteTopic = null;
+    }
+
     deleteAddress(remoteTopic) {
         this.deleteAddressRemoteTopic = remoteTopic;
         document.getElementById('delete-address-name').textContent = remoteTopic;
@@ -380,6 +462,14 @@ class MqttClientDetailManager {
 
     hideAddAddressModal() {
         document.getElementById('add-address-modal').style.display = 'none';
+    }
+
+    showEditAddressModal() {
+        document.getElementById('edit-address-modal').style.display = 'flex';
+    }
+
+    hideEditAddressModal() {
+        document.getElementById('edit-address-modal').style.display = 'none';
     }
 
     showConfirmDeleteAddressModal() {
@@ -469,6 +559,18 @@ function addAddress() {
     mqttClientDetailManager.addAddress();
 }
 
+function showEditAddressModal() {
+    mqttClientDetailManager.showEditAddressModal();
+}
+
+function hideEditAddressModal() {
+    mqttClientDetailManager.hideEditAddressModal();
+}
+
+function updateAddress() {
+    mqttClientDetailManager.updateAddress();
+}
+
 function hideConfirmDeleteAddressModal() {
     mqttClientDetailManager.hideConfirmDeleteAddressModal();
 }
@@ -491,6 +593,8 @@ document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal')) {
         if (e.target.id === 'add-address-modal') {
             mqttClientDetailManager.hideAddAddressModal();
+        } else if (e.target.id === 'edit-address-modal') {
+            mqttClientDetailManager.hideEditAddressModal();
         } else if (e.target.id === 'confirm-delete-address-modal') {
             mqttClientDetailManager.hideConfirmDeleteAddressModal();
         }

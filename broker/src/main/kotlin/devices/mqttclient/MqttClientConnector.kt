@@ -32,6 +32,7 @@ class MqttClientConnector : AbstractVerticle() {
     // Metrics counters
     private val messagesInCounter = java.util.concurrent.atomic.AtomicLong(0) // remote -> local
     private val messagesOutCounter = java.util.concurrent.atomic.AtomicLong(0) // local -> remote
+    private val messagesLoopSkippedCounter = java.util.concurrent.atomic.AtomicLong(0) // skipped due to loop prevention
     private var lastMetricsReset = System.currentTimeMillis()
 
 
@@ -413,6 +414,16 @@ class MqttClientConnector : AbstractVerticle() {
 
     private fun handleLocalMqttMessage(localMessage: BrokerMessage) {
         try {
+            // LOOP PREVENTION: Skip if message originated from this bridge and loop prevention is enabled
+            if (mqttConfig.loopPrevention) {
+                val bridgeClientId = "mqttclient-${deviceConfig.name}"
+                if (localMessage.senderId == bridgeClientId || localMessage.clientId == bridgeClientId) {
+                    logger.fine { "Skipping message from ${localMessage.topicName} - originated from bridge itself (clientId: $bridgeClientId)" }
+                    messagesLoopSkippedCounter.incrementAndGet()
+                    return
+                }
+            }
+
             // Check each publish address to see if this message matches
             publishAddresses.values.forEach { address ->
                 if (MqttTopicTransformer.matchesLocalPattern(localMessage.topicName, address.localTopic)) {
@@ -468,11 +479,13 @@ class MqttClientConnector : AbstractVerticle() {
                 val elapsedSec = if (elapsedMs > 0) elapsedMs / 1000.0 else 1.0
                 val inCount = messagesInCounter.getAndSet(0)
                 val outCount = messagesOutCounter.getAndSet(0)
+                val loopSkippedCount = messagesLoopSkippedCounter.getAndSet(0)
                 lastMetricsReset = now
                 val json = io.vertx.core.json.JsonObject()
                     .put("device", deviceConfig.name)
                     .put("messagesInRate", inCount / elapsedSec)
                     .put("messagesOutRate", outCount / elapsedSec)
+                    .put("messagesLoopSkipped", loopSkippedCount)
                     .put("elapsedMs", elapsedMs)
                 msg.reply(json)
             } catch (e: Exception) {
