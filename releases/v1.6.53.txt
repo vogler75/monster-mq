@@ -1,0 +1,9 @@
+Release v1.6.53
+Built from commit: 1159d13
+Date: 2025-11-19 19:26:21
+
+Changes since v1.6.52:
+---
+1159d13 Merge branch 'fix/#56' - MQTT Client Bridge loop prevention and UI improvements
+d698a16 Add Edit Address functionality to MQTT Client Bridge UI
+d519d5d Add loop prevention to MQTT Client Bridge
