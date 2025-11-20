@@ -1,0 +1,11 @@
+Release v1.6.55
+Built from commit: 45455f5
+Date: 2025-11-20 20:21:34
+
+Changes since v1.6.54:
+---
+45455f5 Refactor duplicate key handling in JDBC loggers
+0d5846f Add duplicate key handling to JDBC loggers
+55a3938 Merge branch 'fix/#58' - Add SSL certificate verification option for MQTT Client Bridge
+ff53cb6 Improve SSL handling and config parsing for MQTT client
+829a7c7 Add SSL certificate verification toggle for MQTT clients
