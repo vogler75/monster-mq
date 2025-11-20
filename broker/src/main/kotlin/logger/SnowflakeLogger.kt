@@ -167,9 +167,7 @@ class SnowflakeLogger : JDBCLoggerBase() {
             // Snowflake uses uppercase identifiers by default, but we'll quote them to preserve case
             val fieldNames = allFields.joinToString(", ") { "\"${it.uppercase()}\"" }
 
-            // Build SQL with optional conditional insert for duplicate key handling
-            // Note: Snowflake doesn't support INSERT IGNORE, so we use INSERT with ignoreDuplicates flag
-            // If ignoreDuplicates is enabled, duplicate key errors will be caught and logged as warnings
+            // Use regular INSERT - duplicate key errors will be caught and counted
             val sql = "INSERT INTO \"$database\".\"$schema\".\"${tableName.uppercase()}\" ($fieldNames) VALUES ($placeholders)"
 
             logger.fine { "Snowflake SQL: $sql" }
@@ -224,27 +222,10 @@ class SnowflakeLogger : JDBCLoggerBase() {
                                       e.message?.contains("unique constraint", ignoreCase = true) == true
 
             if (isDuplicateKeyError) {
-                if (cfg.ignoreDuplicates) {
-                    // Silently ignore - only log at FINE level for debugging
-                    logger.fine { "Duplicate key violation detected - ignoring as per configuration: ${e.message}" }
-                    return  // Don't rethrow the exception
-                } else {
-                    // Log as severe error with helpful message
-                    logger.severe("SQL error writing to Snowflake table $tableName: ${e.javaClass.name}: ${e.message}")
-                    logger.severe("SQL State: ${e.sqlState}, Error Code: ${e.errorCode}")
-                    logger.severe("=".repeat(80))
-                    logger.severe("ERROR: Duplicate key violation detected!")
-                    logger.severe("Message: ${e.message}")
-                    logger.severe("")
-                    logger.severe("To ignore duplicate key errors, configure the logger with:")
-                    logger.severe("  ignoreDuplicates: true")
-                    logger.severe("  uniqueKeyColumns: [column1, column2, ...]")
-                    logger.severe("")
-                    logger.severe("Note: Snowflake doesn't support INSERT IGNORE like MySQL/PostgreSQL")
-                    logger.severe("When ignoreDuplicates is enabled, duplicate errors are caught but")
-                    logger.severe("the entire batch will fail. Consider using smaller bulkSize values.")
-                    logger.severe("=".repeat(80))
-                }
+                // Count duplicates and silently ignore - only log at FINE level for debugging
+                duplicatesIgnoredCounter.incrementAndGet()
+                logger.fine { "Duplicate key violation detected - ignoring: ${e.message}" }
+                return  // Don't rethrow the exception
             }
 
             // Log all other errors as severe

@@ -93,13 +93,8 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
             val placeholders = allFields.joinToString(", ") { "?" }
             val fieldNames = allFields.joinToString(", ")
 
-            // Build SQL with optional ON CONFLICT clause for duplicate key handling
-            val sql = if (cfg.ignoreDuplicates && cfg.uniqueKeyColumns.isNotEmpty()) {
-                val conflictColumns = cfg.uniqueKeyColumns.joinToString(", ")
-                "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders) ON CONFLICT ($conflictColumns) DO NOTHING"
-            } else {
-                "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders)"
-            }
+            // Use regular INSERT - duplicate key errors will be caught and counted
+            val sql = "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders)"
 
             logger.fine { "Writing bulk of ${rows.size} rows to table $tableName SQL: $sql" }
 
@@ -147,24 +142,10 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
         } catch (e: SQLException) {
             // Check for duplicate key errors FIRST (PostgreSQL SQL State: 23505)
             if (e.sqlState == "23505") {
-                if (cfg.ignoreDuplicates) {
-                    // Silently ignore - only log at FINE level for debugging
-                    logger.fine { "Duplicate key violation detected - ignoring as per configuration: ${e.message}" }
-                    return  // Don't rethrow the exception
-                } else {
-                    // Log as severe error with helpful message
-                    logger.severe("SQL error writing to table $tableName: ${e.javaClass.name}: ${e.message}")
-                    logger.severe("SQL State: ${e.sqlState}, Error Code: ${e.errorCode}")
-                    logger.severe("=".repeat(80))
-                    logger.severe("ERROR: Duplicate key violation detected!")
-                    logger.severe("SQL State: ${e.sqlState} - unique_violation")
-                    logger.severe("Message: ${e.message}")
-                    logger.severe("")
-                    logger.severe("To ignore duplicate key errors, configure the logger with:")
-                    logger.severe("  ignoreDuplicates: true")
-                    logger.severe("  uniqueKeyColumns: [column1, column2, ...]")
-                    logger.severe("=".repeat(80))
-                }
+                // Count duplicates and silently ignore - only log at FINE level for debugging
+                duplicatesIgnoredCounter.incrementAndGet()
+                logger.fine { "Duplicate key violation detected - ignoring: ${e.message}" }
+                return  // Don't rethrow the exception
             }
 
             // Log all other errors as severe

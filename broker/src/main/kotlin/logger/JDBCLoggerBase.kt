@@ -60,6 +60,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
     private val messagesWrittenCounter = AtomicLong(0)
     private val validationErrorsCounter = AtomicLong(0)
     private val writeErrorsCounter = AtomicLong(0)
+    protected val duplicatesIgnoredCounter = AtomicLong(0)
     private var lastMetricsReset = System.currentTimeMillis()
 
     // Bulk timeout tracking
@@ -732,6 +733,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
         val skippedCount = messagesSkippedCounter.getAndSet(0)
         val validationErrorCount = validationErrorsCounter.getAndSet(0)
         val writeErrorCount = writeErrorsCounter.getAndSet(0)
+        val duplicatesIgnoredCount = duplicatesIgnoredCounter.getAndSet(0)
         lastMetricsReset = now
 
         return mapOf(
@@ -741,6 +743,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             "messagesSkipped" to (skippedCount / elapsedSec),
             "validationErrors" to (validationErrorCount / elapsedSec),
             "writeErrors" to (writeErrorCount / elapsedSec),
+            "duplicatesIgnored" to (duplicatesIgnoredCount / elapsedSec),
             "queueSize" to queue.getSize(),
             "queueCapacity" to queue.getCapacity(),
             "queueFull" to queue.isQueueFull()
