@@ -1,0 +1,7 @@
+Release v1.6.56
+Built from commit: b451422
+Date: 2025-11-20 20:30:21
+
+Changes since v1.6.55:
+---
+b451422 Fix ACL modal display issue - closes #59
