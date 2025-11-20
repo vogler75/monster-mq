@@ -65,9 +65,7 @@ class MqttClientManager {
                         createdAt
                         updatedAt
                         config {
-                            protocol
-                            hostname
-                            port
+                            brokerUrl
                             username
                             clientId
                             cleanSession
@@ -144,7 +142,7 @@ class MqttClientManager {
             const statusClass = client.enabled ? 'status-enabled' : 'status-disabled';
             const statusText = client.enabled ? 'Enabled' : 'Disabled';
             const nodeIndicator = client.isOnCurrentNode ? '📍 ' : '';
-            const brokerUrl = `${client.config.protocol}://${client.config.hostname}:${client.config.port}`;
+            const brokerUrl = client.config.brokerUrl;
 
             row.innerHTML = `
                 <td>
@@ -214,9 +212,7 @@ class MqttClientManager {
             nodeId: document.getElementById('client-node').value,
             enabled: document.getElementById('client-enabled').checked,
             config: {
-                protocol: document.getElementById('client-protocol').value,
-                hostname: document.getElementById('client-hostname').value.trim(),
-                port: parseInt(document.getElementById('client-port').value),
+                brokerUrl: document.getElementById('client-broker-url').value.trim(),
                 username: document.getElementById('client-username').value.trim() || null,
                 password: document.getElementById('client-password').value || null,
                 clientId: document.getElementById('client-id').value.trim(),

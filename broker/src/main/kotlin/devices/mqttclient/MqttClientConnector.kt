@@ -150,11 +150,11 @@ class MqttClientConnector : AbstractVerticle() {
         isReconnecting = true
 
         try {
-            logger.info("Connecting to remote MQTT broker: ${mqttConfig.getBrokerUrl()}")
+            logger.info("Connecting to remote MQTT broker: ${mqttConfig.brokerUrl}")
 
             // Create Paho MQTT client
             val persistence = MemoryPersistence()
-            client = MqttAsyncClient(mqttConfig.getBrokerUrl(), mqttConfig.clientId, persistence)
+            client = MqttAsyncClient(mqttConfig.brokerUrl, mqttConfig.clientId, persistence)
 
             // Configure connection options
             val connOpts = MqttConnectOptions().apply {
@@ -169,9 +169,10 @@ class MqttClientConnector : AbstractVerticle() {
                     password = mqttConfig.password?.toCharArray() ?: charArrayOf()
                 }
 
-                // Set SSL/TLS for secure protocols
-                if (mqttConfig.protocol == MqttClientConnectionConfig.PROTOCOL_TCPS ||
-                    mqttConfig.protocol == MqttClientConnectionConfig.PROTOCOL_WSS) {
+                // Set SSL/TLS for secure protocols (ssl:// and wss://)
+                val protocol = mqttConfig.getProtocol()
+                if (protocol == MqttClientConnectionConfig.PROTOCOL_SSL ||
+                    protocol == MqttClientConnectionConfig.PROTOCOL_WSS) {
                     socketFactory = SSLSocketFactory.getDefault() as SSLSocketFactory
                 }
             }
@@ -215,7 +216,7 @@ class MqttClientConnector : AbstractVerticle() {
                     vertx.runOnContext {
                         isConnected = true
                         isReconnecting = false
-                        logger.info("Connected to remote MQTT broker: ${mqttConfig.getBrokerUrl()}")
+                        logger.info("Connected to remote MQTT broker: ${mqttConfig.brokerUrl}")
 
                         // Setup subscriptions
                         setupSubscriptions()

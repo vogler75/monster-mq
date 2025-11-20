@@ -657,12 +657,10 @@ type MqttClientAddress {
 
 # MQTT Client connection configuration
 type MqttClientConnectionConfig {
-    # Connection protocol: "tcp", "tcps" (TLS), "ws" (WebSocket), "wss" (WebSocket Secure)
-    protocol: String!
-    # Remote broker hostname or IP address
-    hostname: String!
-    # Remote broker port (typically 1883 for TCP, 8883 for TLS)
-    port: Int!
+    # Broker URL with protocol, host, port, and optional path
+    # Examples: "tcp://broker.example.com:1883", "ssl://broker.example.com:8883", "wss://broker.example.com:443/mqtt"
+    # Supported protocols: tcp, ssl (for TLS/SSL), ws (WebSocket), wss (WebSocket Secure)
+    brokerUrl: String!
     # Username for authentication (optional)
     username: String
     # Client ID to use when connecting to remote broker

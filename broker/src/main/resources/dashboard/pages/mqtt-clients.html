@@ -359,21 +359,11 @@ Add Bridge
                         <input type="text" id="client-namespace" required placeholder="e.g., mqtt/remote1">
                     </div>
                     <div class="form-group">
-                        <label for="client-protocol">Protocol *</label>
-                        <select id="client-protocol" required>
-                            <option value="tcp">TCP</option>
-                            <option value="tcps">TCP+TLS</option>
-                            <option value="ws">WebSocket</option>
-                            <option value="wss">WebSocket+TLS</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="client-hostname">Hostname *</label>
-                        <input type="text" id="client-hostname" required placeholder="broker.example.com">
-                    </div>
-                    <div class="form-group">
-                        <label for="client-port">Port *</label>
-                        <input type="number" id="client-port" required value="1883">
+                        <label for="client-broker-url">Broker URL *</label>
+                        <input type="text" id="client-broker-url" required placeholder="e.g., ssl://broker.example.com:8883">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                            Examples: tcp://host:1883, ssl://host:8883, wss://host:443/mqtt
+                        </small>
                     </div>
                     <div class="form-group">
                         <label for="client-id">Client ID *</label>

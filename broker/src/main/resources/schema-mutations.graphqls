@@ -710,12 +710,10 @@ input MqttClientInput {
 
 # Input for MQTT client connection configuration
 input MqttClientConnectionConfigInput {
-    # Connection protocol: "tcp", "tcps", "ws", "wss"
-    protocol: String = "tcp"
-    # Remote broker hostname or IP address
-    hostname: String!
-    # Remote broker port
-    port: Int = 1883
+    # Broker URL with protocol, host, port, and optional path
+    # Examples: "tcp://broker.example.com:1883", "ssl://broker.example.com:8883", "wss://broker.example.com:443/mqtt"
+    # Supported protocols: tcp, ssl (for TLS/SSL), ws (WebSocket), wss (WebSocket Secure)
+    brokerUrl: String!
     # Username for authentication (optional)
     username: String
     # Password for authentication (optional)

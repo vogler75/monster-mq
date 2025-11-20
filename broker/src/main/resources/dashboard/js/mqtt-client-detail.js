@@ -55,7 +55,7 @@ class MqttClientDetailManager {
                     mqttClients(name: $name) {
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
                         config {
-                            protocol hostname port username clientId cleanSession keepAlive reconnectDelay connectionTimeout
+                            brokerUrl username clientId cleanSession keepAlive reconnectDelay connectionTimeout
                             bufferEnabled bufferSize persistBuffer deleteOldestMessages
                             addresses { mode remoteTopic localTopic removePath qos }
                         }
@@ -89,15 +89,13 @@ class MqttClientDetailManager {
 
         // Update page title
         document.getElementById('page-title').textContent = `MQTT Bridge: ${d.name}`;
-        document.getElementById('page-subtitle').textContent = `${d.namespace} - ${cfg.protocol}://${cfg.hostname}:${cfg.port}`;
+        document.getElementById('page-subtitle').textContent = `${d.namespace} - ${cfg.brokerUrl}`;
 
         // Populate form fields
         document.getElementById('client-name').value = d.name;
         document.getElementById('client-name').disabled = true; // Can't change name in edit mode
         document.getElementById('client-namespace').value = d.namespace;
-        document.getElementById('client-protocol').value = cfg.protocol;
-        document.getElementById('client-hostname').value = cfg.hostname;
-        document.getElementById('client-port').value = cfg.port;
+        document.getElementById('client-broker-url').value = cfg.brokerUrl;
         document.getElementById('client-username').value = cfg.username || '';
         document.getElementById('client-id').value = cfg.clientId;
         document.getElementById('client-node').value = d.nodeId;
@@ -204,9 +202,7 @@ class MqttClientDetailManager {
             nodeId: document.getElementById('client-node').value,
             enabled: document.getElementById('client-enabled').checked,
             config: {
-                protocol: document.getElementById('client-protocol').value,
-                hostname: document.getElementById('client-hostname').value.trim(),
-                port: parseInt(document.getElementById('client-port').value),
+                brokerUrl: document.getElementById('client-broker-url').value.trim(),
                 username: document.getElementById('client-username').value.trim() || null,
                 password: document.getElementById('client-password').value || null,
                 clientId: document.getElementById('client-id').value.trim(),

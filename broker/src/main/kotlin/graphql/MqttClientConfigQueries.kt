@@ -107,9 +107,7 @@ class MqttClientConfigQueries(
             "namespace" to device.namespace,
             "nodeId" to device.nodeId,
             "config" to mapOf(
-                "protocol" to config.protocol,
-                "hostname" to config.hostname,
-                "port" to config.port,
+                "brokerUrl" to config.brokerUrl,
                 "username" to (config.username ?: ""),
                 "password" to (config.password ?: ""),
                 "clientId" to config.clientId,

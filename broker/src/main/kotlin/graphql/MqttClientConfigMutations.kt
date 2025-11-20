@@ -841,9 +841,7 @@ class MqttClientConfigMutations(
         } ?: throw IllegalArgumentException("Invalid or missing 'config' field")
 
         val config = MqttClientConnectionConfig(
-            protocol = configMap["protocol"] as? String ?: "tcp",
-            hostname = configMap["hostname"] as? String ?: "localhost",
-            port = (configMap["port"] as? Number)?.toInt() ?: 1883,
+            brokerUrl = configMap["brokerUrl"] as? String ?: throw IllegalArgumentException("brokerUrl is required"),
             username = configMap["username"] as? String,
             password = configMap["password"] as? String,
             clientId = configMap["clientId"] as? String ?: "monstermq-client",
@@ -851,7 +849,12 @@ class MqttClientConfigMutations(
             keepAlive = (configMap["keepAlive"] as? Number)?.toInt() ?: 60,
             reconnectDelay = (configMap["reconnectDelay"] as? Number)?.toLong() ?: 5000L,
             connectionTimeout = (configMap["connectionTimeout"] as? Number)?.toLong() ?: 30000L,
-            addresses = emptyList() // Addresses are managed separately
+            addresses = emptyList(), // Addresses are managed separately
+            bufferEnabled = configMap["bufferEnabled"] as? Boolean ?: false,
+            bufferSize = (configMap["bufferSize"] as? Number)?.toInt() ?: 5000,
+            persistBuffer = configMap["persistBuffer"] as? Boolean ?: false,
+            deleteOldestMessages = configMap["deleteOldestMessages"] as? Boolean ?: true,
+            loopPrevention = configMap["loopPrevention"] as? Boolean ?: true
         )
 
         return DeviceConfigRequest(
@@ -887,15 +890,17 @@ class MqttClientConfigMutations(
             "namespace" to device.namespace,
             "nodeId" to device.nodeId,
             "config" to mapOf(
-                "protocol" to config.protocol,
-                "hostname" to config.hostname,
-                "port" to config.port,
+                "brokerUrl" to config.brokerUrl,
                 "username" to config.username,
                 "clientId" to config.clientId,
                 "cleanSession" to config.cleanSession,
                 "keepAlive" to config.keepAlive,
                 "reconnectDelay" to config.reconnectDelay,
                 "connectionTimeout" to config.connectionTimeout,
+                "bufferEnabled" to config.bufferEnabled,
+                "bufferSize" to config.bufferSize,
+                "persistBuffer" to config.persistBuffer,
+                "deleteOldestMessages" to config.deleteOldestMessages,
                 "addresses" to config.addresses.map { address ->
                     mapOf(
                         "mode" to address.mode,

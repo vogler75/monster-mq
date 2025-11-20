@@ -78,9 +78,7 @@ data class MqttClientAddress(
  * MQTT Client connection configuration parameters
  */
 data class MqttClientConnectionConfig(
-    val protocol: String,          // "tcp", "tcps", "ws", "wss"
-    val hostname: String,
-    val port: Int,
+    val brokerUrl: String,         // Complete broker URL (e.g., "tcp://host:1883", "ssl://host:8883", "wss://host:443/mqtt")
     val username: String? = null,
     val password: String? = null,
     val clientId: String,
@@ -99,7 +97,7 @@ data class MqttClientConnectionConfig(
 ) {
     companion object {
         const val PROTOCOL_TCP = "tcp"
-        const val PROTOCOL_TCPS = "tcps"
+        const val PROTOCOL_SSL = "ssl"  // Changed from PROTOCOL_TCPS for Paho compatibility
         const val PROTOCOL_WS = "ws"
         const val PROTOCOL_WSS = "wss"
 
@@ -115,9 +113,7 @@ data class MqttClientConnectionConfig(
                 }
 
                 return MqttClientConnectionConfig(
-                    protocol = json.getString("protocol", PROTOCOL_TCP),
-                    hostname = json.getString("hostname", "localhost"),
-                    port = json.getInteger("port", 1883),
+                    brokerUrl = json.getString("brokerUrl") ?: "tcp://localhost:1883",
                     username = json.getString("username"),
                     password = json.getString("password"),
                     clientId = json.getString("clientId", "monstermq-client"),
@@ -141,9 +137,7 @@ data class MqttClientConnectionConfig(
 
     fun toJsonObject(): JsonObject {
         val result = JsonObject()
-            .put("protocol", protocol)
-            .put("hostname", hostname)
-            .put("port", port)
+            .put("brokerUrl", brokerUrl)
             .put("username", username)
             .put("password", password)
             .put("clientId", clientId)
@@ -169,23 +163,44 @@ data class MqttClientConnectionConfig(
         return result
     }
 
+    /**
+     * Extract protocol from broker URL
+     */
+    fun getProtocol(): String? {
+        return try {
+            val uri = java.net.URI(brokerUrl)
+            uri.scheme
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun validate(): List<String> {
         val errors = mutableListOf<String>()
 
-        if (protocol.isBlank()) {
-            errors.add("protocol cannot be blank")
+        if (brokerUrl.isBlank()) {
+            errors.add("brokerUrl cannot be blank")
         }
 
-        if (protocol !in listOf(PROTOCOL_TCP, PROTOCOL_TCPS, PROTOCOL_WS, PROTOCOL_WSS)) {
-            errors.add("protocol must be one of: $PROTOCOL_TCP, $PROTOCOL_TCPS, $PROTOCOL_WS, $PROTOCOL_WSS")
-        }
+        // Validate URL format and protocol
+        try {
+            val uri = java.net.URI(brokerUrl)
+            val protocol = uri.scheme
 
-        if (hostname.isBlank()) {
-            errors.add("hostname cannot be blank")
-        }
+            if (protocol.isNullOrBlank()) {
+                errors.add("brokerUrl must include a protocol (tcp://, ssl://, ws://, or wss://)")
+            } else if (protocol !in listOf(PROTOCOL_TCP, PROTOCOL_SSL, PROTOCOL_WS, PROTOCOL_WSS)) {
+                errors.add("protocol must be one of: $PROTOCOL_TCP, $PROTOCOL_SSL, $PROTOCOL_WS, $PROTOCOL_WSS")
+            }
 
-        if (port < 1 || port > 65535) {
-            errors.add("port must be between 1 and 65535")
+            if (uri.host.isNullOrBlank()) {
+                errors.add("brokerUrl must include a hostname")
+            }
+
+            // Port is optional - default ports will be used by Paho:
+            // tcp:// = 1883, ssl:// = 8883, ws:// = 80, wss:// = 443
+        } catch (e: Exception) {
+            errors.add("invalid brokerUrl format: ${e.message}")
         }
 
         if (clientId.isBlank()) {
@@ -217,12 +232,5 @@ data class MqttClientConnectionConfig(
         }
 
         return errors
-    }
-
-    /**
-     * Build the MQTT broker URL from protocol, hostname, and port
-     */
-    fun getBrokerUrl(): String {
-        return "$protocol://$hostname:$port"
     }
 }
