@@ -130,17 +130,9 @@ data class MqttClientConnectionConfig(
                     deleteOldestMessages = json.getBoolean("deleteOldestMessages", true),
                     loopPrevention = json.getBoolean("loopPrevention", true),
                     // Default to true (secure by default) - can be disabled for self-signed certificates
-                    // Use explicit null check because getBoolean can return null even with default if value is explicitly null
-                    sslVerifyCertificate = run {
-                        val value = json.getValue("sslVerifyCertificate")
-                        println("[MqttConfig] Raw sslVerifyCertificate value from JSON: $value (type: ${value?.javaClass?.simpleName})")
-                        val result = when (value) {
-                            is Boolean -> value
-                            null -> true
-                            else -> true
-                        }
-                        println("[MqttConfig] Parsed sslVerifyCertificate: $result")
-                        result
+                    sslVerifyCertificate = when (val value = json.getValue("sslVerifyCertificate")) {
+                        is Boolean -> value
+                        else -> true
                     }
                 )
             } catch (e: Exception) {

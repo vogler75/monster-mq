@@ -14,6 +14,7 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
+import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManager
@@ -177,13 +178,14 @@ class MqttClientConnector : AbstractVerticle() {
                 val protocol = mqttConfig.getProtocol()
                 if (protocol == MqttClientConnectionConfig.PROTOCOL_SSL ||
                     protocol == MqttClientConnectionConfig.PROTOCOL_WSS) {
-                    socketFactory = if (mqttConfig.sslVerifyCertificate) {
+                    if (mqttConfig.sslVerifyCertificate) {
                         // Use default SSL socket factory with certificate verification
-                        SSLSocketFactory.getDefault() as SSLSocketFactory
+                        socketFactory = SSLSocketFactory.getDefault() as SSLSocketFactory
                     } else {
-                        // Create a trust-all SSL socket factory (disables certificate verification)
+                        // Disable certificate and hostname verification (INSECURE!)
                         logger.warning("SSL certificate verification is DISABLED for ${deviceConfig.name}. This is not recommended for production!")
-                        createTrustAllSslSocketFactory()
+                        socketFactory = createTrustAllSslSocketFactory()
+                        sslHostnameVerifier = HostnameVerifier { _, _ -> true }
                     }
                 }
             }
@@ -238,6 +240,8 @@ class MqttClientConnector : AbstractVerticle() {
                     vertx.runOnContext {
                         isReconnecting = false
                         logger.severe("Failed to connect to remote MQTT broker: ${exception?.message}")
+                        logger.severe("Exception details: ${exception?.toString()}")
+                        exception?.printStackTrace()
                         scheduleReconnection()
                     }
                 }
@@ -508,26 +512,59 @@ class MqttClientConnector : AbstractVerticle() {
     }
 
     /**
-     * Creates an SSL socket factory that trusts all certificates (INSECURE)
+     * Creates an SSL socket factory that trusts all certificates and disables hostname verification (INSECURE)
      * This should only be used for development/testing with self-signed certificates
      */
     private fun createTrustAllSslSocketFactory(): SSLSocketFactory {
-        val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
-                // Trust all client certificates
-            }
-
-            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-                // Trust all server certificates
-            }
-
-            override fun getAcceptedIssuers(): Array<X509Certificate> {
-                return arrayOf()
-            }
+        // Create a custom X509ExtendedTrustManager instead of X509TrustManager to prevent wrapping
+        val trustAllCerts = arrayOf<TrustManager>(object : javax.net.ssl.X509ExtendedTrustManager() {
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String, socket: java.net.Socket) {}
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String, socket: java.net.Socket) {}
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String, engine: javax.net.ssl.SSLEngine) {}
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String, engine: javax.net.ssl.SSLEngine) {}
+            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
         })
 
         val sslContext = SSLContext.getInstance("TLS")
         sslContext.init(null, trustAllCerts, java.security.SecureRandom())
-        return sslContext.socketFactory
+
+        // Wrap the factory to disable endpoint identification on all created sockets
+        val delegate = sslContext.socketFactory
+        return object : SSLSocketFactory() {
+            override fun getDefaultCipherSuites() = delegate.defaultCipherSuites
+            override fun getSupportedCipherSuites() = delegate.supportedCipherSuites
+
+            private fun configureSocket(socket: java.net.Socket): java.net.Socket {
+                if (socket is javax.net.ssl.SSLSocket) {
+                    val params = socket.sslParameters
+                    params.endpointIdentificationAlgorithm = null
+                    socket.sslParameters = params
+                    logger.fine("Configured SSL socket with disabled endpoint identification")
+                }
+                return socket
+            }
+
+            override fun createSocket(): java.net.Socket {
+                return configureSocket(delegate.createSocket())
+            }
+
+            override fun createSocket(s: java.net.Socket?, host: String?, port: Int, autoClose: Boolean): java.net.Socket {
+                return configureSocket(delegate.createSocket(s, host, port, autoClose))
+            }
+
+            override fun createSocket(host: String?, port: Int) =
+                configureSocket(delegate.createSocket(host, port))
+
+            override fun createSocket(host: String?, port: Int, localHost: java.net.InetAddress?, localPort: Int) =
+                configureSocket(delegate.createSocket(host, port, localHost, localPort))
+
+            override fun createSocket(host: java.net.InetAddress?, port: Int) =
+                configureSocket(delegate.createSocket(host, port))
+
+            override fun createSocket(address: java.net.InetAddress?, port: Int, localAddress: java.net.InetAddress?, localPort: Int) =
+                configureSocket(delegate.createSocket(address, port, localAddress, localPort))
+        }
     }
 }
