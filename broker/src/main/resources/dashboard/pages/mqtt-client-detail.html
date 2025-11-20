@@ -204,6 +204,15 @@
                                 <label for="client-clean-session">Clean Session</label>
                             </div>
                         </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="client-ssl-verify" checked>
+                                <label for="client-ssl-verify">Verify SSL Certificate</label>
+                            </div>
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                Uncheck to allow self-signed certificates (not recommended for production)
+                            </small>
+                        </div>
 
                         <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Disconnected Buffer</h4>
 

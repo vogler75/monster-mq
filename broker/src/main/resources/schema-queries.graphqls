@@ -683,6 +683,8 @@ type MqttClientConnectionConfig {
     persistBuffer: Boolean!
     # Whether to delete oldest messages when buffer is full (true = FIFO, false = reject new)
     deleteOldestMessages: Boolean!
+    # Whether to verify SSL certificates (disable for self-signed certificates)
+    sslVerifyCertificate: Boolean!
 }
 
 # MQTT Client configuration

@@ -736,6 +736,8 @@ input MqttClientConnectionConfigInput {
     persistBuffer: Boolean = false
     # Whether to delete oldest messages when buffer is full (default: true = FIFO, false = reject new)
     deleteOldestMessages: Boolean = true
+    # Whether to verify SSL certificates (default: true, disable for self-signed certificates)
+    sslVerifyCertificate: Boolean = true
 }
 
 # Input for MQTT client address mapping
