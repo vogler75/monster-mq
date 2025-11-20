@@ -87,7 +87,12 @@ class MySQLLogger : PostgreSQLLogger() {
             val placeholders = allFields.joinToString(", ") { "?" }
             val fieldNames = allFields.joinToString(", ") { "`$it`" }  // MySQL uses backticks
 
-            val sql = "INSERT INTO `$tableName` ($fieldNames) VALUES ($placeholders)"
+            // Build SQL with optional INSERT IGNORE for duplicate key handling
+            val sql = if (cfg.ignoreDuplicates) {
+                "INSERT IGNORE INTO `$tableName` ($fieldNames) VALUES ($placeholders)"
+            } else {
+                "INSERT INTO `$tableName` ($fieldNames) VALUES ($placeholders)"
+            }
 
             logger.fine { "Writing bulk of ${rows.size} rows to table $tableName SQL: $sql" }
 
@@ -133,6 +138,31 @@ class MySQLLogger : PostgreSQLLogger() {
             }
 
         } catch (e: SQLException) {
+            // Check for duplicate key errors FIRST (MySQL Error Code: 1062)
+            if (e.errorCode == 1062) {
+                if (cfg.ignoreDuplicates) {
+                    // Silently ignore - only log at FINE level for debugging
+                    logger.fine { "Duplicate key violation detected - ignoring as per configuration: ${e.message}" }
+                    return  // Don't rethrow the exception
+                } else {
+                    // Log as severe error with helpful message
+                    logger.severe("SQL error writing to table $tableName: ${e.javaClass.name}: ${e.message}")
+                    logger.severe("SQL State: ${e.sqlState}, Error Code: ${e.errorCode}")
+                    logger.severe("=".repeat(80))
+                    logger.severe("ERROR: Duplicate key violation detected!")
+                    logger.severe("Error Code: ${e.errorCode} - Duplicate entry")
+                    logger.severe("Message: ${e.message}")
+                    logger.severe("")
+                    logger.severe("To ignore duplicate key errors, configure the logger with:")
+                    logger.severe("  ignoreDuplicates: true")
+                    logger.severe("  uniqueKeyColumns: [column1, column2, ...]")
+                    logger.severe("")
+                    logger.severe("Note: MySQL INSERT IGNORE will silently skip duplicate rows")
+                    logger.severe("=".repeat(80))
+                }
+            }
+
+            // Log all other errors as severe
             logger.severe("SQL error writing to table $tableName: ${e.javaClass.name}: ${e.message}")
             logger.severe("SQL State: ${e.sqlState}, Error Code: ${e.errorCode}")
 

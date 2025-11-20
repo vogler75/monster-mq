@@ -6,6 +6,11 @@ import java.sql.SQLException
  * QuestDB implementation of JDBC Logger
  * Uses PostgreSQL wire protocol but with QuestDB-specific table partitioning
  * Optimized for time-series data with fast ingestion and out-of-order inserts
+ *
+ * Duplicate Key Handling:
+ * - QuestDB supports PostgreSQL's ON CONFLICT DO NOTHING syntax (inherited from PostgreSQLLogger)
+ * - When ignoreDuplicates=true and uniqueKeyColumns are configured, duplicate rows are silently skipped
+ * - QuestDB uses same SQL State codes as PostgreSQL (23505 for unique_violation)
  */
 class QuestDBLogger : PostgreSQLLogger() {
 

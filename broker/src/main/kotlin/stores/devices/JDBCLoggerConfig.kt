@@ -42,6 +42,10 @@ data class JDBCLoggerConfig(
     val autoCreateTable: Boolean = true,            // Automatically create table if not exists
     val partitionBy: String = "DAY",                // QuestDB partition strategy: HOUR, DAY, WEEK, MONTH, YEAR, NONE
 
+    // Duplicate key handling
+    val ignoreDuplicates: Boolean = true,           // Ignore duplicate key errors instead of failing (default: true)
+    val uniqueKeyColumns: List<String> = emptyList(), // Columns that identify duplicates (required when ignoreDuplicates = true)
+
     // Database-specific configuration (JSON object for database-specific settings)
     // Examples:
     // - Snowflake: {privateKeyFile, account, url, role, scheme, port, database, schema}
@@ -78,6 +82,9 @@ data class JDBCLoggerConfig(
             val topicFiltersArray = obj.getJsonArray("topicFilters", JsonArray())
             val topicFilters = topicFiltersArray.mapNotNull { it as? String }
 
+            val uniqueKeyColumnsArray = obj.getJsonArray("uniqueKeyColumns", JsonArray())
+            val uniqueKeyColumns = uniqueKeyColumnsArray.mapNotNull { it as? String }
+
             return JDBCLoggerConfig(
                 databaseType = obj.getString("databaseType", "QuestDB"),
                 jdbcUrl = obj.getString("jdbcUrl", "jdbc:questdb:http://localhost:9000"),
@@ -97,6 +104,8 @@ data class JDBCLoggerConfig(
                 reconnectDelayMs = obj.getLong("reconnectDelayMs", 5000),
                 autoCreateTable = obj.getBoolean("autoCreateTable", true),
                 partitionBy = obj.getString("partitionBy", "DAY"),
+                ignoreDuplicates = obj.getBoolean("ignoreDuplicates", true),
+                uniqueKeyColumns = uniqueKeyColumns,
                 dbSpecificConfig = obj.getJsonObject("dbSpecificConfig") ?: JsonObject()
             )
         }
@@ -122,6 +131,8 @@ data class JDBCLoggerConfig(
             .put("reconnectDelayMs", reconnectDelayMs)
             .put("autoCreateTable", autoCreateTable)
             .put("partitionBy", partitionBy)
+            .put("ignoreDuplicates", ignoreDuplicates)
+            .put("uniqueKeyColumns", JsonArray(uniqueKeyColumns))
             .put("dbSpecificConfig", dbSpecificConfig)
     }
 
@@ -191,6 +202,11 @@ data class JDBCLoggerConfig(
         if (bulkTimeoutMs < 100) {
             errors.add("bulkTimeoutMs should be >= 100 ms")
         }
+
+        // Duplicate key handling validation
+        // Note: We don't enforce uniqueKeyColumns when ignoreDuplicates is true
+        // If uniqueKeyColumns is empty, duplicate errors will still be caught but the
+        // database-specific INSERT statement won't include ON CONFLICT clause
 
         // Database-specific validation
         if (databaseType.uppercase() == "SNOWFLAKE") {
