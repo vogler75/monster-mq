@@ -127,7 +127,8 @@ class MqttClientConfigQueries(
                 "bufferEnabled" to config.bufferEnabled,
                 "bufferSize" to config.bufferSize,
                 "persistBuffer" to config.persistBuffer,
-                "deleteOldestMessages" to config.deleteOldestMessages
+                "deleteOldestMessages" to config.deleteOldestMessages,
+                "sslVerifyCertificate" to config.sslVerifyCertificate
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

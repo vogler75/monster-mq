@@ -93,7 +93,9 @@ data class MqttClientConnectionConfig(
     val persistBuffer: Boolean = false,
     val deleteOldestMessages: Boolean = true,
     // Loop prevention (prevents bridge from republishing its own messages)
-    val loopPrevention: Boolean = true
+    val loopPrevention: Boolean = true,
+    // SSL/TLS configuration
+    val sslVerifyCertificate: Boolean = true  // Verify SSL certificates (disable for self-signed certificates)
 ) {
     companion object {
         const val PROTOCOL_TCP = "tcp"
@@ -126,7 +128,20 @@ data class MqttClientConnectionConfig(
                     bufferSize = json.getInteger("bufferSize", 5000),
                     persistBuffer = json.getBoolean("persistBuffer", false),
                     deleteOldestMessages = json.getBoolean("deleteOldestMessages", true),
-                    loopPrevention = json.getBoolean("loopPrevention", true)
+                    loopPrevention = json.getBoolean("loopPrevention", true),
+                    // Default to true (secure by default) - can be disabled for self-signed certificates
+                    // Use explicit null check because getBoolean can return null even with default if value is explicitly null
+                    sslVerifyCertificate = run {
+                        val value = json.getValue("sslVerifyCertificate")
+                        println("[MqttConfig] Raw sslVerifyCertificate value from JSON: $value (type: ${value?.javaClass?.simpleName})")
+                        val result = when (value) {
+                            is Boolean -> value
+                            null -> true
+                            else -> true
+                        }
+                        println("[MqttConfig] Parsed sslVerifyCertificate: $result")
+                        result
+                    }
                 )
             } catch (e: Exception) {
                 println("Overall error in fromJsonObject: ${e.message}")
@@ -150,6 +165,7 @@ data class MqttClientConnectionConfig(
             .put("persistBuffer", persistBuffer)
             .put("deleteOldestMessages", deleteOldestMessages)
             .put("loopPrevention", loopPrevention)
+            .put("sslVerifyCertificate", sslVerifyCertificate)
 
         // Add addresses array if we have addresses
         if (addresses.isNotEmpty()) {

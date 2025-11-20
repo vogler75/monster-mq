@@ -14,7 +14,11 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
+import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
+import java.security.cert.X509Certificate
 import org.eclipse.paho.client.mqttv3.MqttMessage as PahoMqttMessage
 
 /**
@@ -173,7 +177,14 @@ class MqttClientConnector : AbstractVerticle() {
                 val protocol = mqttConfig.getProtocol()
                 if (protocol == MqttClientConnectionConfig.PROTOCOL_SSL ||
                     protocol == MqttClientConnectionConfig.PROTOCOL_WSS) {
-                    socketFactory = SSLSocketFactory.getDefault() as SSLSocketFactory
+                    socketFactory = if (mqttConfig.sslVerifyCertificate) {
+                        // Use default SSL socket factory with certificate verification
+                        SSLSocketFactory.getDefault() as SSLSocketFactory
+                    } else {
+                        // Create a trust-all SSL socket factory (disables certificate verification)
+                        logger.warning("SSL certificate verification is DISABLED for ${deviceConfig.name}. This is not recommended for production!")
+                        createTrustAllSslSocketFactory()
+                    }
                 }
             }
 
@@ -494,5 +505,29 @@ class MqttClientConnector : AbstractVerticle() {
             }
         }
         logger.info("Registered metrics endpoint for device ${deviceConfig.name} at address $addr")
+    }
+
+    /**
+     * Creates an SSL socket factory that trusts all certificates (INSECURE)
+     * This should only be used for development/testing with self-signed certificates
+     */
+    private fun createTrustAllSslSocketFactory(): SSLSocketFactory {
+        val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
+                // Trust all client certificates
+            }
+
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+                // Trust all server certificates
+            }
+
+            override fun getAcceptedIssuers(): Array<X509Certificate> {
+                return arrayOf()
+            }
+        })
+
+        val sslContext = SSLContext.getInstance("TLS")
+        sslContext.init(null, trustAllCerts, java.security.SecureRandom())
+        return sslContext.socketFactory
     }
 }

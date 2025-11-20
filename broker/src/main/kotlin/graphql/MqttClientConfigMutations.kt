@@ -854,7 +854,8 @@ class MqttClientConfigMutations(
             bufferSize = (configMap["bufferSize"] as? Number)?.toInt() ?: 5000,
             persistBuffer = configMap["persistBuffer"] as? Boolean ?: false,
             deleteOldestMessages = configMap["deleteOldestMessages"] as? Boolean ?: true,
-            loopPrevention = configMap["loopPrevention"] as? Boolean ?: true
+            loopPrevention = configMap["loopPrevention"] as? Boolean ?: true,
+            sslVerifyCertificate = configMap["sslVerifyCertificate"] as? Boolean ?: true
         )
 
         return DeviceConfigRequest(
@@ -901,6 +902,7 @@ class MqttClientConfigMutations(
                 "bufferSize" to config.bufferSize,
                 "persistBuffer" to config.persistBuffer,
                 "deleteOldestMessages" to config.deleteOldestMessages,
+                "sslVerifyCertificate" to config.sslVerifyCertificate,
                 "addresses" to config.addresses.map { address ->
                     mapOf(
                         "mode" to address.mode,

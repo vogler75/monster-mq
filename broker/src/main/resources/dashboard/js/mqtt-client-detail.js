@@ -56,7 +56,7 @@ class MqttClientDetailManager {
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
                         config {
                             brokerUrl username clientId cleanSession keepAlive reconnectDelay connectionTimeout
-                            bufferEnabled bufferSize persistBuffer deleteOldestMessages
+                            bufferEnabled bufferSize persistBuffer deleteOldestMessages sslVerifyCertificate
                             addresses { mode remoteTopic localTopic removePath qos }
                         }
                     }
@@ -70,6 +70,7 @@ class MqttClientDetailManager {
             }
 
             this.clientData = result.mqttClients[0];
+            console.log('[DEBUG] Loaded client data:', JSON.stringify(this.clientData.config, null, 2));
             this.renderClientInfo();
             this.renderAddressesList();
 
@@ -104,6 +105,10 @@ class MqttClientDetailManager {
         document.getElementById('client-connection-timeout').value = cfg.connectionTimeout;
         document.getElementById('client-enabled').checked = d.enabled;
         document.getElementById('client-clean-session').checked = cfg.cleanSession;
+        // Default to true (secure by default) if undefined or null
+        const sslVerifyFromServer = (cfg.sslVerifyCertificate === true || cfg.sslVerifyCertificate === false) ? cfg.sslVerifyCertificate : true;
+        console.log('[DEBUG] Setting SSL Verify checkbox to:', sslVerifyFromServer, 'from server value:', cfg.sslVerifyCertificate);
+        document.getElementById('client-ssl-verify').checked = sslVerifyFromServer;
         document.getElementById('client-buffer-enabled').checked = cfg.bufferEnabled || false;
         document.getElementById('client-buffer-size').value = cfg.bufferSize || 5000;
         document.getElementById('client-persist-buffer').checked = cfg.persistBuffer || false;
@@ -196,6 +201,9 @@ class MqttClientDetailManager {
             return;
         }
 
+        const sslVerifyValue = document.getElementById('client-ssl-verify').checked;
+        console.log('[DEBUG] SSL Verify checkbox value:', sslVerifyValue);
+
         const updateData = {
             name: document.getElementById('client-name').value.trim(),
             namespace: document.getElementById('client-namespace').value.trim(),
@@ -213,9 +221,12 @@ class MqttClientDetailManager {
                 bufferEnabled: document.getElementById('client-buffer-enabled').checked,
                 bufferSize: parseInt(document.getElementById('client-buffer-size').value),
                 persistBuffer: document.getElementById('client-persist-buffer').checked,
-                deleteOldestMessages: document.getElementById('client-delete-oldest').checked
+                deleteOldestMessages: document.getElementById('client-delete-oldest').checked,
+                sslVerifyCertificate: sslVerifyValue
             }
         };
+
+        console.log('[DEBUG] Update data being sent:', JSON.stringify(updateData, null, 2));
 
         try {
             const mutation = `
@@ -238,6 +249,7 @@ class MqttClientDetailManager {
             });
 
             if (result.mqttClient.update.success) {
+                console.log('[DEBUG] Update successful, reloading data...');
                 await this.loadClientData();
                 this.showSuccess('Bridge updated successfully');
             } else {
