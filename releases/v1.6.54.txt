@@ -1,0 +1,7 @@
+Release v1.6.54
+Built from commit: 1a7bc2e
+Date: 2025-11-20 13:37:44
+
+Changes since v1.6.53:
+---
+1a7bc2e Refactor MQTT config to use brokerUrl instead of protocol/host/port
