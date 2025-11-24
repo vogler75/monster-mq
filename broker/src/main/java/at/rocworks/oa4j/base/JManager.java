@@ -205,15 +205,16 @@ public class JManager extends Manager implements Runnable {
             }
         } else {
             setDebugConsole();
-            if (!errmsg1.equals(""))
+            if (!errmsg1.isEmpty())
                 JDebug.out.warning(errmsg1);
-            if (!errmsg2.equals(""))
+            if (!errmsg2.isEmpty())
                 JDebug.out.warning(errmsg2);                
         }
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
-                Thread.sleep(200);
+                JManager.log(ErrPrio.PRIO_INFO, ErrCode.NOERR, "Shutdown in one second...");
+                Thread.sleep(1000);
                 stop();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
