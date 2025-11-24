@@ -28,7 +28,7 @@ fun main(args: Array<String>) {
     }
 }
 
-class MonsterOA(winccoaArgs: Array<String>) {
+class MonsterOA(args: Array<String>) {
     private val logger: Logger = Logger.getLogger("MonsterOA")
     private var manager: JManager? = null
     private var monster: Monster? = null
@@ -40,11 +40,11 @@ class MonsterOA(winccoaArgs: Array<String>) {
             // Step 1: Initialize JManager with WinCC OA
             logger.info("MonsterOA: Initializing JManager...")
             manager = JManager()
-            manager!!.init(winccoaArgs).start()
+            manager!!.init(args).start()
             logger.info("MonsterOA: JManager initialized successfully")
 
             // Step 2: Extract application arguments (those after "--")
-            val appArgs = extractApplicationArguments(winccoaArgs)
+            val appArgs = extractApplicationArguments(args)
             logger.info("MonsterOA: Starting MonsterMQ with ${appArgs.size} application arguments:")
             appArgs.forEachIndexed { index, arg ->
                 logger.info("  [$index] = '$arg'")
