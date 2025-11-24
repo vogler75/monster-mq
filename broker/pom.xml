@@ -38,12 +38,46 @@
     </dependencyManagement>
 
     <build>
-        <sourceDirectory>src/main/kotlin</sourceDirectory>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.0</version>
+                <executions>
+                    <execution>
+                        <id>java-compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>java-test-compile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>testCompile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <source>21</source>
+                    <target>21</target>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.jetbrains.kotlin</groupId>
                 <artifactId>kotlin-maven-plugin</artifactId>
-                <version>2.1.21</version>           
+                <version>2.1.21</version>
+                <configuration>
+                    <sourceDirs>
+                        <sourceDir>src/main/kotlin</sourceDir>
+                        <sourceDir>src/main/java</sourceDir>
+                    </sourceDirs>
+                    <testSourceDirs>
+                        <testSourceDir>src/test/kotlin</testSourceDir>
+                        <testSourceDir>src/test/java</testSourceDir>
+                    </testSourceDirs>
+                </configuration>
                 <executions>
                     <execution>
                         <id>compile</id>
@@ -93,15 +127,6 @@
                         </configuration>
                     </execution>
                 </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.0</version>
-                <configuration>
-                    <source>21</source>
-                    <target>21</target>
-                </configuration>
             </plugin>
         </plugins>
     </build>

@@ -14,6 +14,7 @@ import at.rocworks.data.MqttSubscriptionCodec
 import at.rocworks.extensions.graphql.GraphQLServer
 import at.rocworks.extensions.McpServer
 import at.rocworks.extensions.ApiService
+import at.rocworks.extensions.oa4j.Oa4jManager
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.handlers.ArchiveHandler
@@ -779,6 +780,25 @@ MORE INFO:
                     McpServer("0.0.0.0", mcpPort, retainedStore, archiveHandler)
                 } else {
                     logger.info("MCP server is disabled in configuration")
+                    null
+                }
+
+                // oa4j Manager (WinCC OA for Java integration)
+                val oa4jEnabled = configJson.getJsonObject("WinCCOA", JsonObject()).getBoolean("Enabled", false)
+                val oa4jManager = if (oa4jEnabled) {
+                    try {
+                        logger.info("Initializing oa4j manager")
+                        val manager = Oa4jManager.create(vertx, configJson)
+                        manager.init()
+                        manager.start()
+                        manager
+                    } catch (e: Exception) {
+                        logger.warning("Failed to initialize oa4j manager: ${e.message}")
+                        e.printStackTrace()
+                        null
+                    }
+                } else {
+                    logger.fine("oa4j manager is disabled in configuration")
                     null
                 }
 
