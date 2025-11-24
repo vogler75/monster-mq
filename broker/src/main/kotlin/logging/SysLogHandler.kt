@@ -1,8 +1,6 @@
 package at.rocworks.logging
 
-import at.rocworks.Const
 import at.rocworks.Monster
-import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import io.vertx.core.json.JsonObject
 import java.util.logging.Handler
@@ -23,20 +21,20 @@ import java.util.logging.Logger
  * - Configurable minimum log level
  * - Automatic node identification
  */
-class MqttLogHandler : Handler() {
+class SysLogHandler : Handler() {
 
     private var nodeId: String = "unknown"
     private var initialized = false
 
     companion object {
-        private var instance: MqttLogHandler? = null
+        private var instance: SysLogHandler? = null
 
         /**
-         * Initialize and install the MQTT log handler
+         * Initialize and install the log handler
          */
-        fun install(): MqttLogHandler {
+        fun install(): SysLogHandler {
             if (instance == null) {
-                instance = MqttLogHandler()
+                instance = SysLogHandler()
 
                 // Add to root logger to capture all logging
                 val rootLogger = Logger.getLogger("")
@@ -49,7 +47,7 @@ class MqttLogHandler : Handler() {
         }
 
         /**
-         * Remove the MQTT log handler
+         * Remove the log handler
          */
         fun uninstall() {
             instance?.let { handler ->
@@ -69,7 +67,7 @@ class MqttLogHandler : Handler() {
     override fun publish(record: LogRecord) {
         try {
             // Skip our own log messages to prevent infinite loops
-            if (record.loggerName == MqttLogHandler::class.java.name) {
+            if (record.loggerName == SysLogHandler::class.java.name) {
                 return
             }
             
@@ -88,9 +86,6 @@ class MqttLogHandler : Handler() {
             val vertx =
                 Monster.getVertx() ?: // Vertx not available yet, skip silently (no error logging to prevent loops)
                 return
-
-            // Create MQTT topic based on node and log level
-            val levelName = record.level.name.lowercase()
 
             // Create JSON payload with log information
             val logData = JsonObject().apply {

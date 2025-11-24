@@ -45,9 +45,8 @@ import at.rocworks.devices.winccua.WinCCUaExtension
 import at.rocworks.devices.plc4x.Plc4xExtension
 import at.rocworks.devices.neo4j.Neo4jExtension
 import at.rocworks.devices.sparkplugb.SparkplugBDecoderExtension
-import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.flowengine.FlowEngineExtension
-import at.rocworks.logging.MqttLogHandler
+import at.rocworks.logging.SysLogHandler
 import at.rocworks.logging.SyslogVerticle
 import handlers.MetricsHandler
 import java.io.File
@@ -883,10 +882,10 @@ MORE INFO:
                         if (mqttLoggingEnabled || memoryLoggingEnabled) {
                             try {
                                 logger.info("Installing log handler for system-wide log capture (fixed at INFO level)...")
-                                val mqttLogHandler = MqttLogHandler.install()
+                                val sysLogHandler = SysLogHandler.install()
 
                                 // Set the log level to INFO (fixed)
-                                mqttLogHandler.level = Level.INFO
+                                sysLogHandler.level = Level.INFO
                                 logger.info("Log handler installed successfully at INFO level (MQTT: $mqttLoggingEnabled, Memory: $memoryLoggingEnabled)")
                             } catch (e: Exception) {
                                 logger.severe("Failed to install log handler: ${e.message}")
