@@ -29,7 +29,7 @@ fun main(args: Array<String>) {
 }
 
 class MonsterOA(args: Array<String>) {
-    private val logger: Logger = Logger.getLogger("MonsterOA")
+    private val logger: Logger = Utils.getLogger(this::class.java)
     private var manager: JManager? = null
     private var monster: Monster? = null
 

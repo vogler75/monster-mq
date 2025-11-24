@@ -61,7 +61,7 @@ fun main(args: Array<String>) {
 }
 
 class Monster(args: Array<String>) {
-    private val logger: Logger = Logger.getLogger("Monster")
+    private val logger: Logger = Utils.getLogger(this::class.java)
 
     private val isClustered = args.find { it == "-cluster" } != null
 
@@ -104,7 +104,7 @@ class Monster(args: Array<String>) {
     companion object {
         private var singleton: Monster? = null
         private var sqliteVerticleDeploymentId: String? = null
-        private val logger = Logger.getLogger("Monster")
+        private val logger = Utils.getLogger(this::class.java)
 
         private fun getInstance(): Monster = if (singleton==null) throw Exception("Monster instance is not initialized.") else singleton!!
 
@@ -258,16 +258,16 @@ class Monster(args: Array<String>) {
                 vertx.deployVerticle(SQLiteVerticle(), deploymentOptions).onComplete { result ->
                     if (result.succeeded()) {
                         sqliteVerticleDeploymentId = result.result()
-                        Logger.getLogger("Monster").info("SQLiteVerticle deployed as singleton with ID: ${sqliteVerticleDeploymentId}")
+                        logger.info("SQLiteVerticle deployed as singleton with ID: ${sqliteVerticleDeploymentId}")
                         promise.complete(result.result())
                     } else {
-                        Logger.getLogger("Monster").severe("Failed to deploy SQLiteVerticle: ${result.cause()?.message}")
+                        logger.severe("Failed to deploy SQLiteVerticle: ${result.cause()?.message}")
                         promise.fail(result.cause())
                     }
                 }
                 promise.future()
             } else {
-                Logger.getLogger("Monster").fine("SQLiteVerticle already deployed with ID: $sqliteVerticleDeploymentId")
+                logger.fine("SQLiteVerticle already deployed with ID: $sqliteVerticleDeploymentId")
                 Future.succeededFuture(sqliteVerticleDeploymentId)
             }
         }

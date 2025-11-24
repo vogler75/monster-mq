@@ -528,6 +528,6 @@ public class JManager extends Manager implements Runnable {
      * @param exception The exception to log
      */
     public static void stackTrace(Throwable exception) {
-        stackTrace(ErrPrio.PRIO_WARNING, ErrCode.UNEXPECTEDSTATE, exception);
+        stackTrace(ErrPrio.PRIO_SEVERE, ErrCode.UNEXPECTEDSTATE, exception);
     }
 }

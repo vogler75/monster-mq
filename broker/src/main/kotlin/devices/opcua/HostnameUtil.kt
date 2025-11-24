@@ -1,5 +1,6 @@
 package at.rocworks.devices.opcua
 
+import at.rocworks.Utils
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.NetworkInterface
@@ -9,7 +10,7 @@ import java.util.Collections
 import java.util.logging.Logger
 
 object HostnameUtil {
-    private val logger = Logger.getLogger(this::class.java.simpleName)
+    private val logger = Utils.getLogger(this::class.java)
 
     /**
      * @return the local hostname, if possible. Failure results in "localhost".

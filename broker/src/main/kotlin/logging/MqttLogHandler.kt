@@ -25,12 +25,10 @@ import java.util.logging.Logger
  */
 class MqttLogHandler : Handler() {
 
-    private val logger: Logger = Utils.getLogger(MqttLogHandler::class.java)
     private var nodeId: String = "unknown"
     private var initialized = false
 
     companion object {
-        const val LOG_TOPIC_PREFIX = "${Const.SYS_TOPIC_NAME}/${Const.LOG_TOPIC_NAME}"
         private var instance: MqttLogHandler? = null
 
         /**
@@ -93,7 +91,6 @@ class MqttLogHandler : Handler() {
 
             // Create MQTT topic based on node and log level
             val levelName = record.level.name.lowercase()
-            val topic = "$LOG_TOPIC_PREFIX/$nodeId/$levelName"
 
             // Create JSON payload with log information
             val logData = JsonObject().apply {
@@ -142,7 +139,7 @@ class MqttLogHandler : Handler() {
             val nodeSpecificAddress = EventBusAddresses.Syslog.logsForNode(nodeId)
             vertx.eventBus().publish(nodeSpecificAddress, logData)
 
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Silently ignore all errors to prevent logging loops
             // Do NOT use System.err.println or any logging here
         }

@@ -17,6 +17,9 @@
 */
 package at.rocworks.oa4j.base;
 
+import at.rocworks.oa4j.jni.ErrCode;
+import at.rocworks.oa4j.jni.ErrPrio;
+
 import java.io.Serializable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -52,7 +55,7 @@ public class JSemaphore implements Serializable {
             try {
                 this.wait();
             } catch (InterruptedException ex) {
-                Logger.getLogger(JSemaphore.class.getName()).log(Level.SEVERE, null, ex);
+                JManager.stackTrace(ex);
             }
         }
         value=0;
@@ -73,7 +76,7 @@ public class JSemaphore implements Serializable {
                 try {
                     this.wait(timeout);
                 } catch (InterruptedException ex) {
-                    Logger.getLogger(JSemaphore.class.getName()).log(Level.SEVERE, null, ex);
+                    JManager.stackTrace(ex);
                 }
                 timedout = (value==0);
             }
@@ -113,7 +116,7 @@ public class JSemaphore implements Serializable {
             try {
                 this.wait();
             } catch (InterruptedException ex) {
-                Logger.getLogger(JSemaphore.class.getName()).log(Level.SEVERE, null, ex);
+                JManager.stackTrace(ex);
             }
         }
     }
@@ -126,7 +129,7 @@ public class JSemaphore implements Serializable {
             try {
                 this.wait();
             } catch (InterruptedException ex) {
-                Logger.getLogger(JSemaphore.class.getName()).log(Level.SEVERE, null, ex);
+                JManager.stackTrace(ex);
             }
         }
     }
@@ -142,9 +145,10 @@ public class JSemaphore implements Serializable {
             try {
                 this.wait();
             } catch (InterruptedException ex) {
-                Logger.getLogger(JSemaphore.class.getName()).log(Level.SEVERE, null, ex);
+                JManager.stackTrace(ex);
             }
-        }    }
+        }
+    }
 
     /**
      * Wait until analog semaphore becomes less than or equal than given value
@@ -155,7 +159,7 @@ public class JSemaphore implements Serializable {
             try {
                 this.wait();
             } catch (InterruptedException ex) {
-                Logger.getLogger(JSemaphore.class.getName()).log(Level.SEVERE, null, ex);
+                JManager.stackTrace(ex);
             }
         }
     }
@@ -199,7 +203,7 @@ public class JSemaphore implements Serializable {
             try {
                 this.wait();
             } catch (InterruptedException ex) {
-                Logger.getLogger(JSemaphore.class.getName()).log(Level.SEVERE, null, ex);
+                JManager.stackTrace(ex);
             }
         }
         this.value--;

@@ -397,7 +397,7 @@ class YourDeviceConfigMutations(
     private val deviceStore: IDeviceConfigStore,
     private val vertx: Vertx
 ) {
-    private val logger = Logger.getLogger(this::class.java.name)
+    private val logger = Utils.getLogger(this::class.java)
 
     fun createYourDeviceConfig(env: DataFetchingEnvironment): CompletableFuture<DeviceConfig> {
         val name = env.getArgument<String>("name")
