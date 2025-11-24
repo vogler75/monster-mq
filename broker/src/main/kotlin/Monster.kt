@@ -56,6 +56,7 @@ import java.util.logging.Logger
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
+    // Print working directory and user.dir property
     Monster(args)
 }
 
@@ -280,35 +281,6 @@ class Monster(args: Array<String>) {
         if (args.contains("-help") || args.contains("--help") || args.contains("-h")) {
             printHelp()
             exitProcess(0)
-        }
-
-        // Validate command-line arguments
-        val validArguments = setOf("-cluster", "-config", "-archiveConfig", "-log", "-dashboardPath", "-workerPoolSize", "-help", "--help", "-h")
-        var i = 0
-        while (i < args.size) {
-            val arg = args[i]
-            if (arg.startsWith("-")) {
-                if (!validArguments.contains(arg)) {
-                    println("ERROR: Unknown argument: $arg")
-                    println("Use -help to see available options")
-                    exitProcess(1)
-                }
-                // Check if argument expects a value
-                if (arg in setOf("-config", "-archiveConfig", "-log", "-dashboardPath", "-workerPoolSize")) {
-                    if (i + 1 >= args.size || args[i + 1].startsWith("-")) {
-                        println("ERROR: Argument $arg requires a value")
-                        exitProcess(1)
-                    }
-                    i += 2 // Skip the argument and its value
-                } else {
-                    i += 1 // Skip just the argument
-                }
-            } else {
-                // This shouldn't happen if arguments are properly paired
-                println("ERROR: Unexpected value without argument: $arg")
-                println("Use -help to see available options")
-                exitProcess(1)
-            }
         }
 
         if (singleton==null) singleton = this
