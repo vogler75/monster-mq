@@ -20,9 +20,8 @@ class DataReplicator<T>(
     private val vertx: Vertx,
     private val eventBusAddress: String,
     private val codec: MessageCodec<T, T>? = null,
-    private val loggerName: String = "DataReplicator"
 ) {
-    private val logger: Logger = Utils.getLogger(DataReplicator::class.java, loggerName)
+    private val logger: Logger = Utils.getLogger(DataReplicator::class.java)
     private val localData = ConcurrentHashMap<String, T>()
 
     // Event types for data synchronization

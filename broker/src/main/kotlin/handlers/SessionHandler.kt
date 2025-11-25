@@ -166,8 +166,8 @@ open class SessionHandler(
         logger.info("Start session handler.")
 
         // Initialize cluster data replicators
-        clientNodeMapping = DataReplicator(vertx, clientMappingAddress, null, "ClientNodeMapping")
-        topicNodeMapping = SetMapReplicator(vertx, topicMappingAddress, "TopicNodeMapping")
+        clientNodeMapping = DataReplicator(vertx, clientMappingAddress)
+        topicNodeMapping = SetMapReplicator(vertx, topicMappingAddress)
 
         // Register codec for client-node mapping (still needed for compatibility with HealthHandler if needed)
         vertx.eventBus().registerDefaultCodec(ClientNodeMapping::class.java, ClientNodeMappingCodec())

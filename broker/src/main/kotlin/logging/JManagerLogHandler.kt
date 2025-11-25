@@ -67,7 +67,7 @@ class JManagerLogHandler : Handler() {
             val message = "${record.message}"
 
             // Log through JManager
-            JManager.log(priority, ErrCode.NOERR, "[$loggerName] $message")
+            JManager.log(priority, ErrCode.NOERR, "[${loggerName.padEnd(30)}] $message")
         } catch (e: Exception) {
             // Silently ignore errors to prevent logging loops
         }

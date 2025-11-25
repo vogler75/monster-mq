@@ -14,9 +14,8 @@ import java.util.logging.Logger
 class SetMapReplicator(
     private val vertx: Vertx,
     private val eventBusAddress: String,
-    loggerName: String = "SetMapReplicator"
 ) {
-    private val logger: Logger = Utils.getLogger(SetMapReplicator::class.java, loggerName)
+    private val logger: Logger = Utils.getLogger(SetMapReplicator::class.java)
     private val localData = ConcurrentHashMap<String, MutableSet<String>>()
 
     enum class EventType {
