@@ -1,7 +1,6 @@
 package at.rocworks.extensions.graphql
 
 import at.rocworks.Const
-import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.*
@@ -16,7 +15,6 @@ import at.rocworks.handlers.ArchiveGroup
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import io.vertx.core.json.JsonArray
-import kotlinx.coroutines.runBlocking
 import java.util.concurrent.CompletableFuture
 
 class ArchiveGroupResolver(
@@ -286,7 +284,7 @@ class ArchiveGroupResolver(
 
                 // Parse durations to milliseconds
                 val lastValRetentionMs = try {
-                    lastValRetention?.let { DurationParser.parse(it) }
+                    lastValRetention?.let { Utils.parseDuration(it) }
                 } catch (e: Exception) {
                     future.complete(mapOf(
                         "success" to false,
@@ -295,7 +293,7 @@ class ArchiveGroupResolver(
                     return@DataFetcher future
                 }
                 val archiveRetentionMs = try {
-                    archiveRetention?.let { DurationParser.parse(it) }
+                    archiveRetention?.let { Utils.parseDuration(it) }
                 } catch (e: Exception) {
                     future.complete(mapOf(
                         "success" to false,
@@ -304,7 +302,7 @@ class ArchiveGroupResolver(
                     return@DataFetcher future
                 }
                 val purgeIntervalMs = try {
-                    purgeInterval?.let { DurationParser.parse(it) }
+                    purgeInterval?.let { Utils.parseDuration(it) }
                 } catch (e: Exception) {
                     future.complete(mapOf(
                         "success" to false,
@@ -481,7 +479,7 @@ class ArchiveGroupResolver(
 
                             val lastValRetentionMs = if (lastValRetention != null) {
                                 try {
-                                    DurationParser.parse(lastValRetention)
+                                    Utils.parseDuration(lastValRetention)
                                 } catch (e: Exception) {
                                     future.complete(mapOf(
                                         "success" to false,
@@ -494,7 +492,7 @@ class ArchiveGroupResolver(
                             }
                             val archiveRetentionMs = if (archiveRetention != null) {
                                 try {
-                                    DurationParser.parse(archiveRetention)
+                                    Utils.parseDuration(archiveRetention)
                                 } catch (e: Exception) {
                                     future.complete(mapOf(
                                         "success" to false,
@@ -507,7 +505,7 @@ class ArchiveGroupResolver(
                             }
                             val purgeIntervalMs = if (purgeInterval != null) {
                                 try {
-                                    DurationParser.parse(purgeInterval)
+                                    Utils.parseDuration(purgeInterval)
                                 } catch (e: Exception) {
                                     future.complete(mapOf(
                                         "success" to false,

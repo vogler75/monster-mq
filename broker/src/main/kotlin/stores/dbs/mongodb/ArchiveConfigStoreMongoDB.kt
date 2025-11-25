@@ -241,9 +241,9 @@ class ArchiveConfigStoreMongoDB(
             lastValType = lastValType,
             archiveType = archiveType,
             payloadFormat = payloadFormat,
-            lastValRetentionMs = lastValRetention?.let { DurationParser.parse(it) },
-            archiveRetentionMs = archiveRetention?.let { DurationParser.parse(it) },
-            purgeIntervalMs = purgeInterval?.let { DurationParser.parse(it) },
+            lastValRetentionMs = lastValRetention?.let { Utils.parseDuration(it) },
+            archiveRetentionMs = archiveRetention?.let { Utils.parseDuration(it) },
+            purgeIntervalMs = purgeInterval?.let { Utils.parseDuration(it) },
             lastValRetentionStr = lastValRetention,
             archiveRetentionStr = archiveRetention,
             purgeIntervalStr = purgeInterval,
@@ -264,13 +264,13 @@ class ArchiveConfigStoreMongoDB(
 
         // Add optional duration fields
         archiveGroup.getLastValRetentionMs()?.let { ms ->
-            document.append("last_val_retention", DurationParser.formatDuration(ms))
+            document.append("last_val_retention", Utils.formatDuration(ms))
         }
         archiveGroup.getArchiveRetentionMs()?.let { ms ->
-            document.append("archive_retention", DurationParser.formatDuration(ms))
+            document.append("archive_retention", Utils.formatDuration(ms))
         }
         archiveGroup.getPurgeIntervalMs()?.let { ms ->
-            document.append("purge_interval", DurationParser.formatDuration(ms))
+            document.append("purge_interval", Utils.formatDuration(ms))
         }
 
         return document

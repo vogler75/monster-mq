@@ -214,9 +214,9 @@ class ArchiveConfigStoreCrateDB(
             try {
                 db.connection?.let { connection ->
                     connection.prepareStatement(sql).use { preparedStatement ->
-                        val lastValRetention = archiveGroup.getLastValRetentionMs()?.let { DurationParser.formatDuration(it) }
-                        val archiveRetention = archiveGroup.getArchiveRetentionMs()?.let { DurationParser.formatDuration(it) }
-                        val purgeInterval = archiveGroup.getPurgeIntervalMs()?.let { DurationParser.formatDuration(it) }
+                        val lastValRetention = archiveGroup.getLastValRetentionMs()?.let { Utils.formatDuration(it) }
+                        val archiveRetention = archiveGroup.getArchiveRetentionMs()?.let { Utils.formatDuration(it) }
+                        val purgeInterval = archiveGroup.getPurgeIntervalMs()?.let { Utils.formatDuration(it) }
 
                         preparedStatement.setString(1, archiveGroup.name)
                         preparedStatement.setBoolean(2, enabled)
@@ -339,9 +339,9 @@ class ArchiveConfigStoreCrateDB(
             lastValType = lastValType,
             archiveType = archiveType,
             payloadFormat = payloadFormat,
-            lastValRetentionMs = lastValRetention?.let { DurationParser.parse(it) },
-            archiveRetentionMs = archiveRetention?.let { DurationParser.parse(it) },
-            purgeIntervalMs = purgeInterval?.let { DurationParser.parse(it) },
+            lastValRetentionMs = lastValRetention?.let { Utils.parseDuration(it) },
+            archiveRetentionMs = archiveRetention?.let { Utils.parseDuration(it) },
+            purgeIntervalMs = purgeInterval?.let { Utils.parseDuration(it) },
             databaseConfig = JsonObject() // Will be populated from config
         )
     }

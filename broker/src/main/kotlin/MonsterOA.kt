@@ -1,6 +1,7 @@
 package at.rocworks
 
 import at.rocworks.oa4j.base.JManager
+import at.rocworks.logging.JManagerLogHandler
 import java.util.logging.Logger
 import kotlin.system.exitProcess
 
@@ -36,6 +37,19 @@ class MonsterOA(args: Array<String>) {
     init {
         try {
             instance = this
+
+            // Step 0: Install JManager log handler and remove all default handlers
+            // This redirects all logs to JManager's log system instead of console/files
+            val rootLogger = Logger.getLogger("")
+
+            // Remove all default handlers to prevent duplicate logging
+            rootLogger.handlers.toList().forEach { handler ->
+                rootLogger.removeHandler(handler)
+            }
+
+            // Install JManager log handler
+            JManagerLogHandler.install()
+            logger.info("MonsterOA: JManager log handler installed")
 
             // Step 1: Initialize JManager with WinCC OA
             logger.info("MonsterOA: Initializing JManager...")

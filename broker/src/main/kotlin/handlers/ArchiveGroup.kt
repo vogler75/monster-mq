@@ -664,9 +664,9 @@ class ArchiveGroup(
             val archiveRetentionStr = config.getString("ArchiveRetention")
             val purgeIntervalStr = config.getString("PurgeInterval")
 
-            val lastValRetentionMs = DurationParser.parse(lastValRetentionStr)
-            val archiveRetentionMs = DurationParser.parse(archiveRetentionStr)
-            val purgeIntervalMs = DurationParser.parse(purgeIntervalStr)
+            val lastValRetentionMs = Utils.parseDuration(lastValRetentionStr)
+            val archiveRetentionMs = Utils.parseDuration(archiveRetentionStr)
+            val purgeIntervalMs = Utils.parseDuration(purgeIntervalStr)
 
             // Detect if LastValRetention is size-based (ends with "k") or time-based
             val maxMemoryEntries = if (lastValRetentionStr.endsWith("k")) {
