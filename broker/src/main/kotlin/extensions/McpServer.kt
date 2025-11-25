@@ -98,8 +98,8 @@ class McpServer(
         }
         */
         // Get handler for MCP
-        router.get("/mcp").handler { ctx: RoutingContext ->
-            logger.info("Get request received for MCP: " + ctx.request().headers())
+        router.get(MCP_PATH).handler { ctx: RoutingContext ->
+            logger.info("Get request received for MCP: " + (ctx.request().headers()).toString().replace("\n", " "))
             val response = ctx.response()
             response.putHeader("Content-Type", "text/event-stream")
                 .putHeader("Cache-Control", "no-cache")
@@ -109,7 +109,7 @@ class McpServer(
 
             val connectionId = UUID.randomUUID().toString()
             val connection = Connection(connectionId, response)
-            connections.put(connectionId, connection)
+            connections[connectionId] = connection
 
             // Send initial connection event
             sendMessage(
@@ -117,7 +117,7 @@ class McpServer(
             )
 
             // Send heartbeat every 30 seconds
-            val timerId = vertx.setPeriodic(10000, Handler { id: Long? ->
+            val timerId = vertx.setPeriodic(30000, Handler { id: Long? ->
                 if (connections.containsKey(connectionId)) {
                     sendMessage(
                         connection, "heartbeat", JsonObject()
@@ -170,8 +170,6 @@ class McpServer(
             .put("data", put)
 
         connection.response.write("data: ${message.encode()}\n\n")
-        logger.info("Sent message to connection ${connection.connectionId}: $message")
+        logger.fine("Sent message to connection ${connection.connectionId}: $message")
     }
 }
-
-
