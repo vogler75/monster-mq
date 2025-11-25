@@ -416,12 +416,14 @@ MORE INFO:
         logger.info("Monster config file: $configFile")
         return ConfigRetriever.create(
             vertx,
-            ConfigRetrieverOptions().addStore(
-                ConfigStoreOptions()
-                    .setType("file")
-                    .setFormat("yaml")
-                    .setConfig(JsonObject().put("path", configFile))
-            )
+            ConfigRetrieverOptions()
+                .setScanPeriod(0) // Disable config file scanning to avoid file system errors during shutdown
+                .addStore(
+                    ConfigStoreOptions()
+                        .setType("file")
+                        .setFormat("yaml")
+                        .setConfig(JsonObject().put("path", configFile))
+                )
         )
     }
 
