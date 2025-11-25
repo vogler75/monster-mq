@@ -163,7 +163,7 @@ open class SessionHandler(
     )
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Start session handler...")
+        logger.info("Start session handler.")
 
         // Initialize cluster data replicators
         clientNodeMapping = DataReplicator(vertx, clientMappingAddress, null, "ClientNodeMapping")

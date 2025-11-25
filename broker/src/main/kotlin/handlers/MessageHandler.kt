@@ -44,7 +44,7 @@ class MessageHandler(
     }
 
     override fun start() {
-        logger.info("Start message handler [${Utils.getCurrentFunctionName()}]")
+        logger.info("Start message handler.")
         writerThread("RM", retainedQueueStore, ::retainedQueueWriter)
         archiveGroups.forEach { group ->
             registerArchiveGroup(group)
