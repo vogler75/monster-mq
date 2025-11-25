@@ -23,7 +23,6 @@ import at.rocworks.stores.postgres.MessageArchivePostgres
 import at.rocworks.stores.postgres.MessageStorePostgres
 import at.rocworks.stores.sqlite.MessageArchiveSQLite
 import at.rocworks.stores.sqlite.MessageStoreSQLite
-import at.rocworks.utils.DurationParser
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.DeploymentOptions
 import io.vertx.core.Future

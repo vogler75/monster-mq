@@ -8,7 +8,6 @@ import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IArchiveConfigStore
 import at.rocworks.stores.MessageStoreType
 import at.rocworks.stores.MessageArchiveType
-import at.rocworks.utils.DurationParser
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
