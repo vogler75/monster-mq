@@ -59,10 +59,7 @@ class MonsterOA(args: Array<String>) {
 
             // Step 2: Extract application arguments (those after "--")
             val appArgs = extractApplicationArguments(args)
-            logger.info("MonsterOA: Starting MonsterMQ with ${appArgs.size} application arguments:")
-            appArgs.forEachIndexed { index, arg ->
-                logger.info("  [$index] = '$arg'")
-            }
+            logger.info("MonsterOA: Starting with ${appArgs.size} arguments ["+appArgs.joinToString(" ")+"]")
 
             // Step 3: Initialize Monster with filtered arguments
             logger.info("MonsterOA: Initializing Monster...")
