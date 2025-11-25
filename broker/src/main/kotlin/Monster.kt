@@ -928,14 +928,20 @@ MORE INFO:
                         vertx.deployVerticle(winCCOaExtension, winCCOaDeploymentOptions)
                     }
                     .compose {
-                        // OA Datapoint Bridge (native oa4j dpConnect for $OA/ topics)
+                        // OA Datapoint Bridge (native oa4j dpConnect for !OA/ topics)
                         // Only starts if running as MonsterOA (JManager) and enabled in config
                         val oaBridgeConfig = configJson.getJsonObject("Oa4jBridge")
                         if (oaBridgeConfig?.getBoolean("Enabled", false) == true) {
                             val namespace = oaBridgeConfig.getString("Namespace", "")
                             if (namespace.isNotEmpty()) {
+                                val attributes = oaBridgeConfig.getJsonArray("Attributes")
+                                    ?: io.vertx.core.json.JsonArray()
+                                        .add("_online.._value")
+                                        .add("_online.._stime")
+                                        .add("_online.._status")
                                 val bridgeConfig = JsonObject()
                                     .put("namespace", namespace)
+                                    .put("attributes", attributes)
                                 val oa4jBridge = Oa4jBridge()
                                 val oaDeploymentOptions = DeploymentOptions().setConfig(bridgeConfig)
                                 vertx.deployVerticle(oa4jBridge, oaDeploymentOptions)

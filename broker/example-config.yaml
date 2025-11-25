@@ -93,6 +93,16 @@ GraphQL:
   Port: 4000
   Path: /graphql
 
+# Native WinCC OA Datapoint Bridge (requires MonsterOA entry point)
+# Allows MQTT clients to subscribe to WinCC OA datapoints via !OA/<namespace>/dp/<datapoint> topics
+Oa4jBridge:
+  Enabled: false
+  Namespace: "s1"  # WinCC OA system namespace
+  Attributes:      # List of WinCC OA attributes to connect (JSON keys derived from attribute names)
+    - "_online.._value"   # -> "value" in JSON
+    - "_online.._stime"   # -> "stime" in JSON
+    - "_online.._status"  # -> "status" in JSON
+
 # Archive group examples (import via -archiveConfig or GraphQL mutations)
 ArchiveGroups:
   - Name: Default

@@ -25,16 +25,23 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
 
 /**
- * OA Datapoint Bridge - Native WinCC OA dpConnect for $OA/ topics
+ * OA Datapoint Bridge - Native WinCC OA dpConnect for !OA/ topics
  *
  * Allows MQTT clients to subscribe to WinCC OA datapoints via special topics:
- *   $OA/<namespace>/dp/<datapoint-name>
+ *   !OA/<namespace>/dp/<datapoint-name>
  *
  * When a client subscribes, this verticle performs a native dpConnect via oa4j
- * and publishes value changes to the MQTT topic as JSON:
- *   {"Value": <any>, "State": <number>, "Time": "<ISO8601>"}
+ * and publishes value changes to the MQTT topic as JSON using configured attributes.
+ *
+ * JSON format uses attribute config names as keys:
+ *   - "_online.._value" -> "value"
+ *   - "_online.._stime" -> "stime"
+ *   - "_online.._status" -> "status"
+ *
+ * Example output: {"value": <any>, "status": <number>, "stime": "<ISO8601>"}
  *
  * Features:
+ * - Configurable attributes list via config.yaml
  * - Reference counting: multiple clients subscribing to the same DP share one dpConnect
  * - Automatic dpDisconnect when all subscribers are gone
  * - Cluster-aware: subscription requests are received via EventBus from any node
@@ -47,8 +54,8 @@ class Oa4jBridge : AbstractVerticle() {
     // Configured namespace (e.g., "s1")
     private lateinit var namespace: String
 
-    // Fixed attributes to connect
-    private val attributes = listOf("_online.._value", "_online.._stime", "_online.._status")
+    // Configurable attributes to connect (e.g., "_online.._value", "_online.._stime", "_online.._status")
+    private lateinit var attributes: List<String>
 
     // Track active dpConnects with reference counting
     // Key: datapointName (without attributes), Value: DpConnectionState
@@ -72,7 +79,7 @@ class Oa4jBridge : AbstractVerticle() {
 
         /**
          * Parse an OA subscription topic
-         * Format: $OA/<namespace>/dp/<datapoint-name>
+         * Format: !OA/<namespace>/dp/<datapoint-name>
          * Returns: Triple(namespace, "dp", datapointName) or null if invalid
          */
         fun parseOaTopic(topic: String): Triple<String, String, String>? {
@@ -105,10 +112,18 @@ class Oa4jBridge : AbstractVerticle() {
                 return
             }
 
+            // Load attributes from config
+            val attributesArray = config.getJsonArray("attributes")
+            attributes = if (attributesArray != null && attributesArray.size() > 0) {
+                attributesArray.map { it.toString() }
+            } else {
+                listOf("_online.._value", "_online.._stime", "_online.._status")
+            }
+
             // Register EventBus consumers
             setupEventBusHandlers()
 
-            logger.info("Oa4jBridge started for namespace '$namespace'")
+            logger.info("Oa4jBridge started for namespace '$namespace' with attributes: $attributes")
             startPromise.complete()
 
         } catch (e: Exception) {
@@ -282,7 +297,7 @@ class Oa4jBridge : AbstractVerticle() {
 
     private fun handleDpValues(state: DpConnectionState, hotlink: JDpHLGroup) {
         try {
-            logger.info("Oa4jBridge: hotlink callback for '${state.datapointName}' with ${hotlink.numberOfItems} items")
+            logger.fine("Oa4jBridge: hotlink callback for '${state.datapointName}' with ${hotlink.numberOfItems} items")
 
             // Build JSON from values
             val json = JsonObject()
@@ -290,43 +305,43 @@ class Oa4jBridge : AbstractVerticle() {
             hotlink.items.forEach { item: JDpVCItem ->
                 val dpName = item.dpName
                 val config = item.dpIdentifier.config // e.g., "_online.._value"
-
                 logger.fine { "Oa4jBridge: Processing item dpName='$dpName', config='$config', value='${item.variable}'" }
 
-                when {
-                    config.endsWith(".._value") -> {
-                        json.put("Value", convertValue(item))
-                    }
-                    config.endsWith(".._stime") -> {
-                        // stime is a TimeVar, get the time value from the variable itself
-                        val timeVar = item.variable
-                        if (timeVar is TimeVar) {
-                            json.put("Time", formatTime(timeVar.time))
-                        } else {
-                            json.put("Time", formatTime(item.time))
-                        }
-                    }
-                    config.endsWith(".._status") -> {
-                        json.put("Status", item.variable.toInt(0))
-                    }
+                // Extract JSON key from config (e.g., "_online.._value" -> "value")
+                val jsonKey = extractJsonKey(config)
+
+                // Handle time values specially (TimeVar needs time extraction)
+                if (item.variable.isA() == VariableType.TimeVar) {
+                    val timeVar = item.variable as TimeVar
+                    json.put(jsonKey, formatTime(timeVar.time))
+                } else {
+                    json.put(jsonKey, convertValue(item))
                 }
             }
 
-            logger.info("Oa4jBridge: Built JSON for '${state.datapointName}': ${json.encode()}")
-            logger.info("Oa4jBridge: mqttTopic='${state.mqttTopic}', hasValue=${json.containsKey("Value")}")
-
-            // Only publish if we have at least a value
-            if (json.containsKey("Value")) {
-                logger.info("Oa4jBridge: Calling publishToMqtt for '${state.mqttTopic}'")
+            // Publish if we have any values
+            if (!json.isEmpty) {
                 publishToMqtt(state.mqttTopic, json)
-                logger.info("Oa4jBridge: publishToMqtt returned for '${state.mqttTopic}'")
             } else {
-                logger.warning("Oa4jBridge: No Value in hotlink for '${state.datapointName}', not publishing")
+                logger.warning("Oa4jBridge: Empty JSON for '${state.datapointName}', not publishing")
             }
 
         } catch (e: Exception) {
             logger.severe("Oa4jBridge: Error handling dpValues for '${state.datapointName}': ${e.message}")
             e.printStackTrace()
+        }
+    }
+
+    /**
+     * Extract JSON key from config attribute name.
+     * E.g., "_online.._value" -> "value", "_online.._stime" -> "stime"
+     */
+    private fun extractJsonKey(config: String): String {
+        val lastDoubleDot = config.lastIndexOf("..")
+        return if (lastDoubleDot >= 0 && lastDoubleDot + 2 < config.length) {
+            config.substring(lastDoubleDot + 2)
+        } else {
+            config
         }
     }
 
