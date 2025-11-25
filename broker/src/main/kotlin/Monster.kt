@@ -118,7 +118,6 @@ class Monster(args: Array<String>) {
 
             val defaultStoreType = configJson.getString("DefaultStoreType")
             if (defaultStoreType != null) {
-                logger.info("Using DefaultStoreType '$defaultStoreType' for $storeTypeKey")
                 return defaultStoreType
             }
 

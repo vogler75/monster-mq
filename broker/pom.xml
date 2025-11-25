@@ -71,11 +71,9 @@
                 <configuration>
                     <sourceDirs>
                         <sourceDir>src/main/kotlin</sourceDir>
-                        <sourceDir>src/main/java</sourceDir>
                     </sourceDirs>
                     <testSourceDirs>
                         <testSourceDir>src/test/kotlin</testSourceDir>
-                        <testSourceDir>src/test/java</testSourceDir>
                     </testSourceDirs>
                 </configuration>
                 <executions>
