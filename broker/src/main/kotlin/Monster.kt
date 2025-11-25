@@ -274,7 +274,10 @@ class Monster(args: Array<String>) {
     }
 
     init {
-        Utils.initLogging()
+        // Check if we're running under JManager (MonsterOA)
+        if (MonsterOA.getInstance() == null) {
+            Utils.initLogging()
+        }
 
         // Check for help argument first
         if (args.contains("-help") || args.contains("--help") || args.contains("-h")) {
