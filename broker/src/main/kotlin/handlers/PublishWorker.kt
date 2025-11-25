@@ -237,24 +237,13 @@ class PublishWorkerPool(
      * This method attempts graceful shutdown but doesn't block indefinitely.
      */
     fun shutdown() {
-        logger.info("Shutting down PublishWorkerPool...")
-
+        logger.info("Shutting down PublishWorker...")
         try {
             // Request graceful shutdown (no new tasks accepted)
-            executor.shutdown()
-
-            // Wait briefly (5 seconds) for workers to finish current batches
-            if (executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                logger.info("PublishWorkerPool shutdown complete (graceful)")
-            } else {
-                // If workers don't finish in 5 seconds, force shutdown
-                logger.warning("PublishWorkerPool graceful shutdown timeout, forcing shutdown")
-                executor.shutdownNow()
-                logger.info("PublishWorkerPool force shutdown complete")
-            }
-        } catch (e: InterruptedException) {
-            logger.warning("Interrupted waiting for PublishWorkerPool shutdown, forcing: ${e.message}")
             executor.shutdownNow()
+            logger.info("PublishWorkerPool force shutdown complete")
+        } catch (e: InterruptedException) {
+            logger.warning("Interrupted waiting for PublishWorker shutdown: ${e.message}")
         }
     }
 
