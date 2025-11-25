@@ -261,16 +261,16 @@
     },
     "Oa4jBridge": {
       "type": "object",
-      "description": "Native WinCC OA datapoint bridge configuration. Allows MQTT clients to subscribe to WinCC OA datapoints via !OA/<namespace>/dp/<datapoint> topics. Requires MonsterMQ to run as a WinCC OA manager (MonsterOA entry point).",
+      "description": "Native WinCC OA bridge configuration. Allows MQTT clients to interact with WinCC OA via !OA/<namespace>/<operation>/<name> topics. Operations: dps (dpConnect), dpt (dpTypeGet), sql (SQL query). Requires MonsterMQ to run as a WinCC OA manager (MonsterOA entry point).",
       "properties": {
         "Enabled": {
           "type": "boolean",
-          "description": "Enable the OA datapoint bridge",
+          "description": "Enable the OA bridge",
           "default": false
         },
         "Namespace": {
           "type": "string",
-          "description": "Namespace identifier for this WinCC OA system (e.g., 's1'). MQTT clients subscribe to !OA/<namespace>/dp/<datapoint> to receive datapoint values."
+          "description": "Namespace identifier for this WinCC OA system (e.g., 's1'). MQTT clients use !OA/<namespace>/<operation>/<name> topics."
         },
         "Attributes": {
           "type": "array",

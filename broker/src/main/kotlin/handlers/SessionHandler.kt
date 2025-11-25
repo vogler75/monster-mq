@@ -1071,20 +1071,22 @@ open class SessionHandler(
                 logger.severe("Subscribe request failed [${error}] [${Utils.getCurrentFunctionName()}]")
             }
 
-        // Check for OA datapoint subscription (!OA/<namespace>/dp/<datapoint>)
+        // Check for OA subscription (!OA/<namespace>/<operation>/<name>)
         val oaParsed = Oa4jBridge.parseOaTopic(topicName)
         if (oaParsed != null) {
-            val (namespace, _, datapointName) = oaParsed
-            logger.fine { "OA subscription detected for client [${client.clientId}]: namespace='$namespace', dp='$datapointName'" }
-
-            // Publish subscription request to EventBus (cluster-wide)
-            val oaRequest = JsonObject()
-                .put("clientId", client.clientId)
-                .put("namespace", namespace)
-                .put("datapointName", datapointName)
-                .put("mqttTopic", topicName)
-
-            vertx.eventBus().publish(EventBusAddresses.Oa4jBridge.SUBSCRIPTION_ADD, oaRequest)
+            val (namespace, operation, name) = oaParsed
+            when (operation) {
+                Oa4jBridge.OP_DPS -> {
+                    logger.fine { "OA dps subscription detected for client [${client.clientId}]: namespace='$namespace', dp='$name'" }
+                    val oaRequest = JsonObject()
+                        .put("clientId", client.clientId)
+                        .put("namespace", namespace)
+                        .put("datapointName", name)
+                        .put("mqttTopic", topicName)
+                    vertx.eventBus().publish(EventBusAddresses.Oa4jBridge.SUBSCRIPTION_ADD, oaRequest)
+                }
+                // Future: Oa4jBridge.OP_DPT, Oa4jBridge.OP_SQL handlers
+            }
         }
     }
 

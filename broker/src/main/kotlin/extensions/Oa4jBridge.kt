@@ -25,13 +25,20 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
 
 /**
- * OA Datapoint Bridge - Native WinCC OA dpConnect for !OA/ topics
+ * OA Bridge - Native WinCC OA integration for !OA/ topics
  *
- * Allows MQTT clients to subscribe to WinCC OA datapoints via special topics:
- *   !OA/<namespace>/dp/<datapoint-name>
+ * Allows MQTT clients to interact with WinCC OA via special topics:
+ *   !OA/<namespace>/<operation>/<name>
  *
- * When a client subscribes, this verticle performs a native dpConnect via oa4j
- * and publishes value changes to the MQTT topic as JSON using configured attributes.
+ * Supported operations:
+ *   - dps: dpConnect subscription - subscribe to datapoint value changes
+ *   - dpt: dpTypeGet (future) - get datapoint type information
+ *   - sql: SQL query (future) - execute SQL queries
+ *
+ * Example topic: !OA/s1/dps/ExampleDP_Arg1
+ *
+ * When a client subscribes to a dps topic, this verticle performs a native dpConnect
+ * via oa4j and publishes value changes to the MQTT topic as JSON.
  *
  * JSON format uses attribute config names as keys:
  *   - "_online.._value" -> "value"
@@ -74,19 +81,25 @@ class Oa4jBridge : AbstractVerticle() {
     )
 
     companion object {
-        // Topic prefix for OA datapoint subscriptions
+        // Topic prefix for OA subscriptions
         const val OA_TOPIC_PREFIX = "!OA/"
+
+        // Operation types
+        const val OP_DPS = "dps"  // dpConnect subscription
+        const val OP_DPT = "dpt"  // dpTypeGet (future)
+        const val OP_SQL = "sql"  // SQL query (future)
 
         /**
          * Parse an OA subscription topic
-         * Format: !OA/<namespace>/dp/<datapoint-name>
-         * Returns: Triple(namespace, "dp", datapointName) or null if invalid
+         * Format: !OA/<namespace>/<operation>/<name>
+         * Operations: dps (dpConnect), dpt (dpTypeGet), sql (SQL query)
+         * Returns: Triple(namespace, operation, name) or null if invalid
          */
         fun parseOaTopic(topic: String): Triple<String, String, String>? {
             if (!topic.startsWith(OA_TOPIC_PREFIX)) return null
 
             val parts = topic.removePrefix(OA_TOPIC_PREFIX).split("/", limit = 3)
-            if (parts.size >= 3 && parts[1] == "dp") {
+            if (parts.size >= 3) {
                 return Triple(parts[0], parts[1], parts[2])
             }
             return null
@@ -172,14 +185,19 @@ class Oa4jBridge : AbstractVerticle() {
             // Check if this is an OA topic
             val oaParsed = parseOaTopic(topic)
             if (oaParsed != null) {
-                val (parsedNamespace, _, datapointName) = oaParsed
+                val (parsedNamespace, operation, datapointName) = oaParsed
                 if (parsedNamespace == namespace) {
-                    logger.fine { "Oa4jBridge: SUBSCRIPTION_DELETE received for client '${subscription.clientId}', topic '$topic'" }
-                    handleSubscriptionRemove(
-                        clientId = subscription.clientId,
-                        requestedNamespace = parsedNamespace,
-                        datapointName = datapointName
-                    )
+                    when (operation) {
+                        OP_DPS -> {
+                            logger.fine { "Oa4jBridge: SUBSCRIPTION_DELETE received for client '${subscription.clientId}', topic '$topic'" }
+                            handleSubscriptionRemove(
+                                clientId = subscription.clientId,
+                                requestedNamespace = parsedNamespace,
+                                datapointName = datapointName
+                            )
+                        }
+                        // Future: OP_DPT, OP_SQL handlers
+                    }
                 }
             }
         }
