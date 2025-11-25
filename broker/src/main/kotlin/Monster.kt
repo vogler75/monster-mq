@@ -41,6 +41,7 @@ import at.rocworks.devices.mqttclient.MqttClientExtension
 import at.rocworks.devices.kafkaclient.KafkaClientExtension
 import at.rocworks.devices.winccoa.WinCCOaExtension
 import at.rocworks.devices.winccua.WinCCUaExtension
+import at.rocworks.extensions.Oa4jBridge
 import at.rocworks.devices.plc4x.Plc4xExtension
 import at.rocworks.devices.neo4j.Neo4jExtension
 import at.rocworks.devices.sparkplugb.SparkplugBDecoderExtension
@@ -921,10 +922,30 @@ MORE INFO:
                         vertx.deployVerticle(kafkaClientExtension, kafkaDeploymentOptions)
                     }
                     .compose {
-                        // WinCC OA Client Extension
+                        // WinCC OA Client Extension (GraphQL-based)
                         val winCCOaExtension = WinCCOaExtension()
                         val winCCOaDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(winCCOaExtension, winCCOaDeploymentOptions)
+                    }
+                    .compose {
+                        // OA Datapoint Bridge (native oa4j dpConnect for $OA/ topics)
+                        // Only starts if running as MonsterOA (JManager) and enabled in config
+                        val oaBridgeConfig = configJson.getJsonObject("OaDatapointBridge")
+                        if (oaBridgeConfig?.getBoolean("Enabled", false) == true) {
+                            val namespace = oaBridgeConfig.getString("Namespace", "")
+                            if (namespace.isNotEmpty()) {
+                                val bridgeConfig = JsonObject()
+                                    .put("namespace", namespace)
+                                val oa4jBridge = Oa4jBridge()
+                                val oaDeploymentOptions = DeploymentOptions().setConfig(bridgeConfig)
+                                vertx.deployVerticle(oa4jBridge, oaDeploymentOptions)
+                            } else {
+                                logger.warning("OaDatapointBridge enabled but no namespace configured")
+                                Future.succeededFuture<String>()
+                            }
+                        } else {
+                            Future.succeededFuture<String>()
+                        }
                     }
                     .compose {
                         // WinCC Unified Client Extension

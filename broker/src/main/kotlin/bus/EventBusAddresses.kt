@@ -97,12 +97,21 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
-    // WinCC OA Client (WinCC OA -> MQTT)
+    // WinCC OA Client (WinCC OA -> MQTT via GraphQL)
     object WinCCOaBridge {
         private const val BRIDGE_NS = "$BASE.bridge.winccoa"
         const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
         fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
+    // OA Datapoint Bridge (native oa4j dpConnect for !OA/ topics)
+    object OaDatapointBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.oa"
+
+        // Subscription add (cluster-wide publish)
+        // Unsubscription is handled via Cluster.SUBSCRIPTION_DELETE
+        const val SUBSCRIPTION_ADD = "$BRIDGE_NS.subscription.add"
     }
 
     // WinCC Unified Client (WinCC Unified -> MQTT)

@@ -9,6 +9,7 @@ import at.rocworks.MqttClient
 import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
 import at.rocworks.extensions.ApiService
+import at.rocworks.extensions.Oa4jBridge
 import at.rocworks.cluster.DataReplicator
 import at.rocworks.cluster.SetMapReplicator
 import at.rocworks.data.*
@@ -1069,6 +1070,22 @@ open class SessionHandler(
             .onFailure { error ->
                 logger.severe("Subscribe request failed [${error}] [${Utils.getCurrentFunctionName()}]")
             }
+
+        // Check for OA datapoint subscription (!OA/<namespace>/dp/<datapoint>)
+        val oaParsed = Oa4jBridge.parseOaTopic(topicName)
+        if (oaParsed != null) {
+            val (namespace, _, datapointName) = oaParsed
+            logger.fine { "OA subscription detected for client [${client.clientId}]: namespace='$namespace', dp='$datapointName'" }
+
+            // Publish subscription request to EventBus (cluster-wide)
+            val oaRequest = JsonObject()
+                .put("clientId", client.clientId)
+                .put("namespace", namespace)
+                .put("datapointName", datapointName)
+                .put("mqttTopic", topicName)
+
+            vertx.eventBus().publish(EventBusAddresses.OaDatapointBridge.SUBSCRIPTION_ADD, oaRequest)
+        }
     }
 
     private fun subscribeCommand(command: Message<JsonObject>) {

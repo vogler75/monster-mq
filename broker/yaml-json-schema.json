@@ -259,6 +259,21 @@
         }
       }
     },
+    "OaDatapointBridge": {
+      "type": "object",
+      "description": "Native WinCC OA datapoint bridge configuration. Allows MQTT clients to subscribe to WinCC OA datapoints via $OA/<namespace>/dp/<datapoint> topics. Requires MonsterMQ to run as a WinCC OA manager (MonsterOA entry point).",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Enable the OA datapoint bridge",
+          "default": false
+        },
+        "Namespace": {
+          "type": "string",
+          "description": "Namespace identifier for this WinCC OA system (e.g., 's1'). MQTT clients subscribe to $OA/<namespace>/dp/<datapoint> to receive datapoint values."
+        }
+      }
+    },
     "GraphQL": {
       "type": "object",
       "description": "GraphQL server configuration",
