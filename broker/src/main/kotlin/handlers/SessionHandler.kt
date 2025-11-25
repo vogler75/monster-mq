@@ -1084,7 +1084,7 @@ open class SessionHandler(
                 .put("datapointName", datapointName)
                 .put("mqttTopic", topicName)
 
-            vertx.eventBus().publish(EventBusAddresses.OaDatapointBridge.SUBSCRIPTION_ADD, oaRequest)
+            vertx.eventBus().publish(EventBusAddresses.Oa4jBridge.SUBSCRIPTION_ADD, oaRequest)
         }
     }
 

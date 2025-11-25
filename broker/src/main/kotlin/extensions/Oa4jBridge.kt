@@ -90,7 +90,7 @@ class Oa4jBridge : AbstractVerticle() {
         try {
             // Check if JManager is available
             if (MonsterOA.getInstance() == null) {
-                logger.info("OaDatapointBridge: JManager not available, not starting")
+                logger.info("Oa4jBridge: JManager not available, not starting")
                 startPromise.complete()
                 return
             }
@@ -100,7 +100,7 @@ class Oa4jBridge : AbstractVerticle() {
             namespace = config.getString("namespace", "")
 
             if (namespace.isEmpty()) {
-                logger.warning("OaDatapointBridge: No namespace configured, not starting")
+                logger.warning("Oa4jBridge: No namespace configured, not starting")
                 startPromise.complete()
                 return
             }
@@ -108,36 +108,36 @@ class Oa4jBridge : AbstractVerticle() {
             // Register EventBus consumers
             setupEventBusHandlers()
 
-            logger.info("OaDatapointBridge started for namespace '$namespace'")
+            logger.info("Oa4jBridge started for namespace '$namespace'")
             startPromise.complete()
 
         } catch (e: Exception) {
-            logger.severe("OaDatapointBridge: Failed to start: ${e.message}")
+            logger.severe("Oa4jBridge: Failed to start: ${e.message}")
             startPromise.fail(e)
         }
     }
 
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("OaDatapointBridge: Stopping...")
+        logger.info("Oa4jBridge: Stopping...")
 
         // Disconnect all active dpConnects
         activeConnections.values.forEach { state ->
             try {
                 state.dpConnect?.disconnect()
             } catch (e: Exception) {
-                logger.warning("OaDatapointBridge: Error disconnecting ${state.datapointName}: ${e.message}")
+                logger.warning("Oa4jBridge: Error disconnecting ${state.datapointName}: ${e.message}")
             }
         }
         activeConnections.clear()
         clientSubscriptions.clear()
 
-        logger.info("OaDatapointBridge: Stopped")
+        logger.info("Oa4jBridge: Stopped")
         stopPromise.complete()
     }
 
     private fun setupEventBusHandlers() {
         // Handle subscription add requests
-        vertx.eventBus().consumer<JsonObject>(EventBusAddresses.OaDatapointBridge.SUBSCRIPTION_ADD) { message ->
+        vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Oa4jBridge.SUBSCRIPTION_ADD) { message ->
             val request = message.body()
             handleSubscriptionAdd(
                 clientId = request.getString("clientId"),
@@ -159,7 +159,7 @@ class Oa4jBridge : AbstractVerticle() {
             if (oaParsed != null) {
                 val (parsedNamespace, _, datapointName) = oaParsed
                 if (parsedNamespace == namespace) {
-                    logger.fine { "OaDatapointBridge: SUBSCRIPTION_DELETE received for client '${subscription.clientId}', topic '$topic'" }
+                    logger.fine { "Oa4jBridge: SUBSCRIPTION_DELETE received for client '${subscription.clientId}', topic '$topic'" }
                     handleSubscriptionRemove(
                         clientId = subscription.clientId,
                         requestedNamespace = parsedNamespace,
@@ -178,11 +178,11 @@ class Oa4jBridge : AbstractVerticle() {
     ) {
         // Check if this is for our namespace
         if (requestedNamespace != namespace) {
-            logger.fine { "OaDatapointBridge: Ignoring subscription for namespace '$requestedNamespace' (we are '$namespace')" }
+            logger.fine { "Oa4jBridge: Ignoring subscription for namespace '$requestedNamespace' (we are '$namespace')" }
             return
         }
 
-        logger.info("OaDatapointBridge: Adding subscription for client '$clientId' to DP '$datapointName'")
+        logger.info("Oa4jBridge: Adding subscription for client '$clientId' to DP '$datapointName'")
 
         // Track client subscription
         clientSubscriptions.computeIfAbsent(clientId) { ConcurrentHashMap.newKeySet() }.add(datapointName)
@@ -192,7 +192,7 @@ class Oa4jBridge : AbstractVerticle() {
             if (existing != null) {
                 // Add client to existing connection
                 existing.subscriberClientIds.add(clientId)
-                logger.fine { "OaDatapointBridge: Added client '$clientId' to existing dpConnect for '$datapointName' (${existing.subscriberClientIds.size} subscribers)" }
+                logger.fine { "Oa4jBridge: Added client '$clientId' to existing dpConnect for '$datapointName' (${existing.subscriberClientIds.size} subscribers)" }
                 existing
             } else {
                 // Create new connection state and do dpConnect
@@ -217,7 +217,7 @@ class Oa4jBridge : AbstractVerticle() {
         // Check if this is for our namespace
         if (requestedNamespace != namespace) return
 
-        logger.info("OaDatapointBridge: Removing subscription for client '$clientId' from DP '$datapointName'")
+        logger.info("Oa4jBridge: Removing subscription for client '$clientId' from DP '$datapointName'")
 
         // Remove from client tracking
         clientSubscriptions[clientId]?.remove(datapointName)
@@ -231,7 +231,7 @@ class Oa4jBridge : AbstractVerticle() {
                 performDpDisconnect(state)
                 null  // Remove from map
             } else {
-                logger.fine { "OaDatapointBridge: Removed client '$clientId' from dpConnect for '$datapointName' (${state.subscriberClientIds.size} subscribers remaining)" }
+                logger.fine { "Oa4jBridge: Removed client '$clientId' from dpConnect for '$datapointName' (${state.subscriberClientIds.size} subscribers remaining)" }
                 state
             }
         }
@@ -243,7 +243,7 @@ class Oa4jBridge : AbstractVerticle() {
             "${state.datapointName}:$attr"
         }
 
-        logger.info("OaDatapointBridge: dpConnect for '${state.datapointName}': $dpeList")
+        logger.info("Oa4jBridge: dpConnect for '${state.datapointName}': $dpeList")
 
         try {
             // Create dpConnect with hotlink callback
@@ -261,10 +261,10 @@ class Oa4jBridge : AbstractVerticle() {
 
             state.dpConnect = dpConnect
             state.isConnected = true
-            logger.info("OaDatapointBridge: dpConnect successful for '${state.datapointName}'")
+            logger.info("Oa4jBridge: dpConnect successful for '${state.datapointName}'")
 
         } catch (e: Exception) {
-            logger.severe("OaDatapointBridge: dpConnect failed for '${state.datapointName}': ${e.message}")
+            logger.severe("Oa4jBridge: dpConnect failed for '${state.datapointName}': ${e.message}")
             e.printStackTrace()
         }
     }
@@ -272,9 +272,9 @@ class Oa4jBridge : AbstractVerticle() {
     private fun performDpDisconnect(state: DpConnectionState) {
         try {
             state.dpConnect?.disconnect()
-            logger.info("OaDatapointBridge: dpDisconnect for '${state.datapointName}'")
+            logger.info("Oa4jBridge: dpDisconnect for '${state.datapointName}'")
         } catch (e: Exception) {
-            logger.warning("OaDatapointBridge: dpDisconnect failed for '${state.datapointName}': ${e.message}")
+            logger.warning("Oa4jBridge: dpDisconnect failed for '${state.datapointName}': ${e.message}")
         }
         state.dpConnect = null
         state.isConnected = false
@@ -282,7 +282,7 @@ class Oa4jBridge : AbstractVerticle() {
 
     private fun handleDpValues(state: DpConnectionState, hotlink: JDpHLGroup) {
         try {
-            logger.info("OaDatapointBridge: hotlink callback for '${state.datapointName}' with ${hotlink.numberOfItems} items")
+            logger.info("Oa4jBridge: hotlink callback for '${state.datapointName}' with ${hotlink.numberOfItems} items")
 
             // Build JSON from values
             val json = JsonObject()
@@ -291,7 +291,7 @@ class Oa4jBridge : AbstractVerticle() {
                 val dpName = item.dpName
                 val config = item.dpIdentifier.config // e.g., "_online.._value"
 
-                logger.fine { "OaDatapointBridge: Processing item dpName='$dpName', config='$config', value='${item.variable}'" }
+                logger.fine { "Oa4jBridge: Processing item dpName='$dpName', config='$config', value='${item.variable}'" }
 
                 when {
                     config.endsWith(".._value") -> {
@@ -312,20 +312,20 @@ class Oa4jBridge : AbstractVerticle() {
                 }
             }
 
-            logger.info("OaDatapointBridge: Built JSON for '${state.datapointName}': ${json.encode()}")
-            logger.info("OaDatapointBridge: mqttTopic='${state.mqttTopic}', hasValue=${json.containsKey("Value")}")
+            logger.info("Oa4jBridge: Built JSON for '${state.datapointName}': ${json.encode()}")
+            logger.info("Oa4jBridge: mqttTopic='${state.mqttTopic}', hasValue=${json.containsKey("Value")}")
 
             // Only publish if we have at least a value
             if (json.containsKey("Value")) {
-                logger.info("OaDatapointBridge: Calling publishToMqtt for '${state.mqttTopic}'")
+                logger.info("Oa4jBridge: Calling publishToMqtt for '${state.mqttTopic}'")
                 publishToMqtt(state.mqttTopic, json)
-                logger.info("OaDatapointBridge: publishToMqtt returned for '${state.mqttTopic}'")
+                logger.info("Oa4jBridge: publishToMqtt returned for '${state.mqttTopic}'")
             } else {
-                logger.warning("OaDatapointBridge: No Value in hotlink for '${state.datapointName}', not publishing")
+                logger.warning("Oa4jBridge: No Value in hotlink for '${state.datapointName}', not publishing")
             }
 
         } catch (e: Exception) {
-            logger.severe("OaDatapointBridge: Error handling dpValues for '${state.datapointName}': ${e.message}")
+            logger.severe("Oa4jBridge: Error handling dpValues for '${state.datapointName}': ${e.message}")
             e.printStackTrace()
         }
     }
@@ -385,15 +385,15 @@ class Oa4jBridge : AbstractVerticle() {
             clientId = "oa-datapoint-bridge-$namespace"
         )
 
-        logger.info("OaDatapointBridge: Publishing to '$topic': ${payload.encode()}")
+        logger.info("Oa4jBridge: Publishing to '$topic': ${payload.encode()}")
 
         // Use SessionHandler to publish (ensures distribution across cluster)
         val sessionHandler = Monster.getSessionHandler()
         if (sessionHandler != null) {
             sessionHandler.publishMessage(message)
-            logger.info("OaDatapointBridge: Message published successfully to '$topic'")
+            logger.info("Oa4jBridge: Message published successfully to '$topic'")
         } else {
-            logger.severe("OaDatapointBridge: SessionHandler is null, cannot publish to '$topic'")
+            logger.severe("Oa4jBridge: SessionHandler is null, cannot publish to '$topic'")
         }
     }
 }

@@ -259,7 +259,7 @@
         }
       }
     },
-    "OaDatapointBridge": {
+    "Oa4jBridge": {
       "type": "object",
       "description": "Native WinCC OA datapoint bridge configuration. Allows MQTT clients to subscribe to WinCC OA datapoints via $OA/<namespace>/dp/<datapoint> topics. Requires MonsterMQ to run as a WinCC OA manager (MonsterOA entry point).",
       "properties": {

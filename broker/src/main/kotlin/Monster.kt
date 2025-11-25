@@ -930,7 +930,7 @@ MORE INFO:
                     .compose {
                         // OA Datapoint Bridge (native oa4j dpConnect for $OA/ topics)
                         // Only starts if running as MonsterOA (JManager) and enabled in config
-                        val oaBridgeConfig = configJson.getJsonObject("OaDatapointBridge")
+                        val oaBridgeConfig = configJson.getJsonObject("Oa4jBridge")
                         if (oaBridgeConfig?.getBoolean("Enabled", false) == true) {
                             val namespace = oaBridgeConfig.getString("Namespace", "")
                             if (namespace.isNotEmpty()) {
@@ -940,7 +940,7 @@ MORE INFO:
                                 val oaDeploymentOptions = DeploymentOptions().setConfig(bridgeConfig)
                                 vertx.deployVerticle(oa4jBridge, oaDeploymentOptions)
                             } else {
-                                logger.warning("OaDatapointBridge enabled but no namespace configured")
+                                logger.warning("Oa4jBridge enabled but no namespace configured")
                                 Future.succeededFuture<String>()
                             }
                         } else {

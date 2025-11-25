@@ -106,7 +106,7 @@ object EventBusAddresses {
     }
 
     // OA Datapoint Bridge (native oa4j dpConnect for !OA/ topics)
-    object OaDatapointBridge {
+    object Oa4jBridge {
         private const val BRIDGE_NS = "$BASE.bridge.oa"
 
         // Subscription add (cluster-wide publish)
