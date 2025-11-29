@@ -44,12 +44,12 @@ class FlowEngineExtension : AbstractVerticle() {
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting FlowEngineExtension...")
+        logger.fine("Starting FlowEngineExtension...")
 
         try {
             // Get current node ID
             currentNodeId = Monster.getClusterNodeId(vertx)
-            logger.info("FlowEngineExtension running on node: $currentNodeId")
+            logger.fine("FlowEngineExtension running on node: $currentNodeId")
 
             // Initialize device store
             initializeDeviceStore()
@@ -58,7 +58,7 @@ class FlowEngineExtension : AbstractVerticle() {
                 .compose { setupEventBusHandlers() }
                 .onComplete { result ->
                     if (result.succeeded()) {
-                        logger.info("FlowEngineExtension started successfully")
+                        logger.fine("FlowEngineExtension started successfully")
                         startPromise.complete()
                     } else {
                         logger.severe("Failed to start FlowEngineExtension: ${result.cause()?.message}")
@@ -74,7 +74,7 @@ class FlowEngineExtension : AbstractVerticle() {
     }
 
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("Stopping FlowEngineExtension...")
+        logger.fine("Stopping FlowEngineExtension...")
 
         try {
             // Undeploy all flow verticles
@@ -139,7 +139,7 @@ class FlowEngineExtension : AbstractVerticle() {
                 deviceStore.initialize()
                     .onComplete { result ->
                         if (result.succeeded()) {
-                            logger.info("Flow Engine device store initialized successfully")
+                            logger.fine("Flow Engine device store initialized successfully")
                             promise.complete()
                         } else {
                             logger.severe("Failed to initialize DeviceConfigStore: ${result.cause()?.message}")
@@ -174,7 +174,7 @@ class FlowEngineExtension : AbstractVerticle() {
                     classes.forEach { flowClass ->
                         flowClasses[flowClass.name] = flowClass
                     }
-                    logger.info("Loaded ${flowClasses.size} flow classes")
+                    if (flowClasses.size>0) logger.info("Loaded ${flowClasses.size} flow classes")
                     promise.complete()
                 } else {
                     logger.severe("Failed to load flow classes: ${result.cause()?.message}")
@@ -196,7 +196,7 @@ class FlowEngineExtension : AbstractVerticle() {
                     val flows = result.result().filter { device ->
                         device.type == DeviceConfig.DEVICE_TYPE_FLOW_OBJECT
                     }
-                    logger.info("Found ${flows.size} enabled flow instances assigned to node $currentNodeId")
+                    logger.fine("Found ${flows.size} enabled flow instances assigned to node $currentNodeId")
 
                     if (flows.isEmpty()) {
                         promise.complete()
@@ -213,7 +213,7 @@ class FlowEngineExtension : AbstractVerticle() {
                                 completedCount++
                                 if (deployResult.succeeded()) {
                                     successCount++
-                                    logger.info("Successfully deployed flow ${flow.name}")
+                                    logger.fine("Successfully deployed flow ${flow.name}")
                                 } else {
                                     logger.warning("Failed to deploy flow ${flow.name}: ${deployResult.cause()?.message}")
                                 }
@@ -332,7 +332,7 @@ class FlowEngineExtension : AbstractVerticle() {
             val deviceName = changeData.getString("deviceName")
             val deviceType = changeData.getString("deviceType")
 
-            logger.fine("Handling flow config change: $operation for $deviceType $deviceName")
+            logger.finer("Handling flow config change: $operation for $deviceType $deviceName")
 
             when (deviceType) {
                 DeviceConfig.DEVICE_TYPE_FLOW_CLASS -> {
@@ -340,7 +340,7 @@ class FlowEngineExtension : AbstractVerticle() {
                     deviceStore.getDevice(deviceName).onComplete { result ->
                         if (result.succeeded() && result.result() != null) {
                             flowClasses[deviceName] = result.result()!!
-                            logger.fine("Reloaded flow class: $deviceName")
+                            logger.finer("Reloaded flow class: $deviceName")
                             message.reply(JsonObject().put("success", true))
                         } else {
                             message.fail(500, "Failed to reload flow class")

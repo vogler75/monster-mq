@@ -49,22 +49,22 @@ class MonsterOA(args: Array<String>) {
 
             // Install JManager log handler
             JManagerLogHandler.install()
-            logger.info("MonsterOA: JManager log handler installed")
+            logger.fine("MonsterOA: JManager log handler installed")
 
             // Step 1: Initialize JManager with WinCC OA
-            logger.info("MonsterOA: Initializing JManager...")
+            logger.fine("MonsterOA: Initializing JManager...")
             manager = JManager()
             manager!!.init(args).start()
-            logger.info("MonsterOA: JManager initialized successfully")
+            logger.fine("MonsterOA: JManager initialized successfully")
 
             // Step 2: Extract application arguments (those after "--")
             val appArgs = extractApplicationArguments(args)
-            logger.info("MonsterOA: Starting with ${appArgs.size} arguments ["+appArgs.joinToString(" ")+"]")
+            logger.fine("MonsterOA: Starting with ${appArgs.size} arguments ["+appArgs.joinToString(" ")+"]")
 
             // Step 3: Initialize Monster with filtered arguments
-            logger.info("MonsterOA: Initializing Monster...")
+            logger.fine("MonsterOA: Initializing Monster...")
             monster = Monster(appArgs.toTypedArray())
-            logger.info("MonsterOA: Monster initialized successfully")
+            logger.fine("MonsterOA: Monster initialized successfully")
 
         } catch (e: Exception) {
             logger.severe("MonsterOA: Initialization failed: ${e.message}")

@@ -92,7 +92,7 @@ class ApiService(
             nodeId = Monster.getClusterNodeId(vertx)
             apiTopicPrefix = "\$API/$nodeId/$serviceName"
 
-            logger.info("Starting API Service '$serviceName' on node $nodeId with topic prefix: $apiTopicPrefix")
+            logger.fine("Starting API Service '$serviceName' on node $nodeId with topic prefix: $apiTopicPrefix")
 
             // Create HTTP client for GraphQL communication
             val options = HttpClientOptions()
@@ -132,7 +132,7 @@ class ApiService(
                 httpClient.close()
             }
 
-            logger.info("API Service stopped")
+            logger.fine("API Service stopped")
             stopPromise.complete()
         } catch (e: Exception) {
             stopPromise.fail(e)
@@ -148,16 +148,16 @@ class ApiService(
         val eventBusAddress = "api.service.requests.$nodeId"
         val consumer = vertx.eventBus().consumer<BrokerMessage>(eventBusAddress) { message ->
             val brokerMessage = message.body()
-            logger.fine("ApiService received message on topic: ${brokerMessage.topicName}")
+            logger.finer("ApiService received message on topic: ${brokerMessage.topicName}")
             if (shouldHandleMessage(brokerMessage.topicName)) {
-                logger.fine("Processing API request from topic: ${brokerMessage.topicName}")
+                logger.finer("Processing API request from topic: ${brokerMessage.topicName}")
                 handleApiRequest(brokerMessage)
             } else {
-                logger.fine("Message does not match API request pattern: ${brokerMessage.topicName}")
+                logger.finer("Message does not match API request pattern: ${brokerMessage.topicName}")
             }
         }
 
-        logger.info("Registered API topic handler for: ${'$'}API/$nodeId/$serviceName/+/request/+ (listening on event bus: $eventBusAddress)")
+        logger.fine("Registered API topic handler for: ${'$'}API/$nodeId/$serviceName/+/request/+ (listening on event bus: $eventBusAddress)")
     }
 
     /**
@@ -190,7 +190,7 @@ class ApiService(
      * Handle incoming API request
      */
     private fun handleApiRequest(message: BrokerMessage) {
-        logger.fine("handleApiRequest called for topic: ${message.topicName}")
+        logger.finer("handleApiRequest called for topic: ${message.topicName}")
 
         val requestId = extractRequestId(message.topicName) ?: run {
             logger.warning("Invalid API topic format: ${message.topicName}")
@@ -202,7 +202,7 @@ class ApiService(
             return
         }
 
-        logger.fine("Extracted requestId: $requestId, realm: $realm")
+        logger.finer("Extracted requestId: $requestId, realm: $realm")
 
         // Check concurrent request limit
         if (pendingRequests.size >= maxConcurrentRequests) {
@@ -213,7 +213,7 @@ class ApiService(
 
         // Parse JSON-RPC request
         val payload = message.payload.toString(Charsets.UTF_8)
-        logger.fine("API Request payload: $payload")
+        logger.finer("API Request payload: $payload")
 
         val requestJson = try {
             JsonObject(payload)
@@ -229,7 +229,7 @@ class ApiService(
             return
         }
 
-        logger.fine("Valid JSON-RPC request: method=${jsonRpcRequest.method}, id=${jsonRpcRequest.id}")
+        logger.finer("Valid JSON-RPC request: method=${jsonRpcRequest.method}, id=${jsonRpcRequest.id}")
 
         // Create timeout timer
         val timerId = vertx.setTimer(requestTimeoutMs) {
@@ -343,7 +343,7 @@ class ApiService(
      */
     private fun sendSuccessResponse(requestId: String, data: Any?, jsonRpcId: String, realm: String) {
         try {
-            logger.fine("Sending success response for requestId=$requestId, id=$jsonRpcId, realm=$realm")
+            logger.finer("Sending success response for requestId=$requestId, id=$jsonRpcId, realm=$realm")
             val response = JsonRpcResponse.success(jsonRpcId, data)
             publishResponse(requestId, response.toJsonObject(), realm)
         } catch (e: Exception) {
@@ -357,7 +357,7 @@ class ApiService(
      */
     private fun sendErrorResponse(requestId: String, code: Int, message: String, realm: String) {
         try {
-            logger.fine("Sending error response for requestId=$requestId, code=$code, message=$message, realm=$realm")
+            logger.finer("Sending error response for requestId=$requestId, code=$code, message=$message, realm=$realm")
             val response = JsonRpcResponse.error(requestId, code, message)
             publishResponse(requestId, response.toJsonObject(), realm)
         } catch (e: Exception) {
@@ -372,7 +372,7 @@ class ApiService(
     private fun publishResponse(requestId: String, response: JsonObject, realm: String) {
         try {
             val responseTopic = "$apiTopicPrefix/$realm/response/$requestId"
-            logger.fine("Publishing response to topic: $responseTopic, payload: ${response.encode()}")
+            logger.finer("Publishing response to topic: $responseTopic, payload: ${response.encode()}")
 
             val responseMessage = BrokerMessage(
                 messageUuid = java.util.UUID.randomUUID().toString(),
@@ -389,7 +389,7 @@ class ApiService(
             // Publish using SessionHandler's internal publish
             sessionHandler.publishInternal("API_SERVICE", responseMessage)
 
-            logger.fine("API response published to $responseTopic")
+            logger.finer("API response published to $responseTopic")
         } catch (e: Exception) {
             logger.warning("Failed to publish response: ${e.message}")
             e.printStackTrace()
@@ -411,7 +411,7 @@ class ApiService(
         }
 
         if (timedOut.isNotEmpty()) {
-            logger.info("Cleaned up ${timedOut.size} timed out requests")
+            logger.fine("Cleaned up ${timedOut.size} timed out requests")
         }
     }
 }

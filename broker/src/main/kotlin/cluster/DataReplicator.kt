@@ -56,7 +56,7 @@ class DataReplicator<T>(
             handleReplicationEvent(message)
         }
 
-        logger.info("ClusterDataReplicator initialized at address: $eventBusAddress")
+        logger.fine("ClusterDataReplicator initialized at address: $eventBusAddress")
     }
 
     /**

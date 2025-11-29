@@ -51,12 +51,12 @@ class OpcUaExtension : AbstractVerticle() {
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting OpcUaExtension...")
+        logger.fine("Starting OpcUaExtension...")
 
         try {
             // Get current node ID
             currentNodeId = Monster.getClusterNodeId(vertx)
-            logger.info("OpcUaExtension running on node: $currentNodeId")
+            logger.fine("OpcUaExtension running on node: $currentNodeId")
 
             // Initialize shared data
             deviceRegistry = vertx.sharedData().getLocalMap("opcua.device.registry")
@@ -67,7 +67,7 @@ class OpcUaExtension : AbstractVerticle() {
                 .compose { setupEventBusHandlers() }
                 .onComplete { result ->
                     if (result.succeeded()) {
-                        logger.info("OpcUaExtension started successfully")
+                        logger.fine("OpcUaExtension started successfully")
                         startPromise.complete()
                     } else {
                         logger.severe("Failed to start OpcUaExtension: ${result.cause()?.message}")
@@ -82,7 +82,7 @@ class OpcUaExtension : AbstractVerticle() {
     }
 
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("Stopping OpcUaExtension...")
+        logger.fine("Stopping OpcUaExtension...")
 
         // Undeploy all connectors
         val undeployFutures = deployedConnectors.values.map { deploymentId ->
@@ -93,7 +93,7 @@ class OpcUaExtension : AbstractVerticle() {
             .compose { deviceStore.close() }
             .onComplete { result ->
                 if (result.succeeded()) {
-                    logger.info("OpcUaExtension stopped successfully")
+                    logger.fine("OpcUaExtension stopped successfully")
                     stopPromise.complete()
                 } else {
                     logger.warning("Error during OpcUaExtension shutdown: ${result.cause()?.message}")
@@ -119,7 +119,7 @@ class OpcUaExtension : AbstractVerticle() {
                 deviceStore.initialize()
                     .onComplete { result ->
                         if (result.succeeded()) {
-                            logger.info("OPC UA device store initialized successfully")
+                            logger.fine("OPC UA device store initialized successfully")
                             promise.complete()
                         } else {
                             logger.severe("Failed to initialize DeviceConfigStore: ${result.cause()?.message}")
@@ -154,7 +154,7 @@ class OpcUaExtension : AbstractVerticle() {
                     val devices = result.result().filter { device ->
                         device.type == DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT
                     }
-                    logger.info("Found ${devices.size} enabled OPC UA Client devices assigned to node $currentNodeId")
+                    logger.fine("Found ${devices.size} enabled OPC UA Client devices assigned to node $currentNodeId")
 
                     if (devices.isEmpty()) {
                         promise.complete()
@@ -171,7 +171,7 @@ class OpcUaExtension : AbstractVerticle() {
                                 completedCount++
                                 if (deployResult.succeeded()) {
                                     successCount++
-                                    logger.info("Successfully deployed connector for device ${device.name}")
+                                    logger.fine("Successfully deployed connector for device ${device.name}")
                                 } else {
                                     logger.warning("Failed to deploy connector for device ${device.name}: ${deployResult.cause()?.message}")
                                 }
@@ -179,17 +179,18 @@ class OpcUaExtension : AbstractVerticle() {
                                 // Complete when all devices have been processed (regardless of success/failure)
                                 if (completedCount == devices.size) {
                                     logger.info("OPC UA device deployment completed: $successCount/$completedCount devices deployed successfully")
-            // Provide list of active connector device names (OPC UA clients) - node-specific address
-            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.OpcUaBridge.connectorsList(currentNodeId)) { msg ->
-                try {
-                    val list = activeDevices.keys.toList()
-                    msg.reply(JsonObject().put("devices", list))
-                } catch (e: Exception) {
-                    msg.fail(500, e.message)
-                }
-            }
+                                    // Provide list of active connector device names (OPC UA clients) - node-specific address
+                                    vertx.eventBus()
+                                        .consumer<JsonObject>(EventBusAddresses.OpcUaBridge.connectorsList(currentNodeId)) { msg ->
+                                            try {
+                                                val list = activeDevices.keys.toList()
+                                                msg.reply(JsonObject().put("devices", list))
+                                            } catch (e: Exception) {
+                                                msg.fail(500, e.message)
+                                            }
+                                        }
 
-            promise.complete()
+                                    promise.complete()
 
                                 }
                             }
@@ -226,7 +227,7 @@ class OpcUaExtension : AbstractVerticle() {
                         activeDevices[device.name] = device
                         deviceRegistry[device.namespace] = device.name
 
-                        logger.info("Deployed OpcUaConnector for device ${device.name} (${deploymentId})")
+                        logger.fine("Deployed OpcUaConnector for device ${device.name} (${deploymentId})")
                         promise.complete(deploymentId)
                     } else {
                         logger.severe("Failed to deploy connector for device ${device.name}: ${result.cause()?.message}")
@@ -255,7 +256,7 @@ class OpcUaExtension : AbstractVerticle() {
                     }
 
                     if (result.succeeded()) {
-                        logger.info("Undeployed OpcUaConnector for device $deviceName")
+                        logger.fine("Undeployed OpcUaConnector for device $deviceName")
                         promise.complete()
                     } else {
                         logger.warning("Failed to undeploy connector for device $deviceName: ${result.cause()?.message}")
@@ -294,7 +295,7 @@ class OpcUaExtension : AbstractVerticle() {
             val operation = changeData.getString("operation") // "add", "update", "delete", "toggle", "reassign"
             val deviceName = changeData.getString("deviceName")
 
-            logger.info("Handling device config change: $operation for device $deviceName")
+            logger.fine("Handling device config change: $operation for device $deviceName")
 
             when (operation) {
                 "add", "update", "addAddress", "deleteAddress" -> {
@@ -307,7 +308,7 @@ class OpcUaExtension : AbstractVerticle() {
                             .compose { deployConnectorForDevice(device) }
                             .onComplete { result ->
                                 if (result.succeeded()) {
-                                    logger.info("Successfully redeployed connector for device $deviceName after $operation")
+                                    logger.fine("Successfully redeployed connector for device $deviceName after $operation")
                                     message.reply(JsonObject().put("success", true))
                                 } else {
                                     logger.warning("Failed to redeploy connector for device $deviceName after $operation: ${result.cause()?.message}")

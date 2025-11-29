@@ -82,7 +82,7 @@ class GraphQLServer(
     private val authContext = GraphQLAuthContext(userManager)
 
     fun start() {
-        logger.info("Starting GraphQL server on port $port")
+        logger.fine("Starting GraphQL server on port $port")
 
         val schema = loadSchema()
         val graphQL = createGraphQL(schema)
@@ -168,7 +168,7 @@ class GraphQLServer(
             try {
                 val req = ctx.request()
                 // Downgraded to FINE to reduce noise at INFO level
-                logger.fine("WS HANDSHAKE incoming: remote=${req.remoteAddress()} path=${req.path()} headers=${req.headers().entries().joinToString { it.key + '=' + it.value }}")
+                logger.finer("WS HANDSHAKE incoming: remote=${req.remoteAddress()} path=${req.path()} headers=${req.headers().entries().joinToString { it.key + '=' + it.value }}")
             } catch (e: Exception) {
                 logger.severe("WS HANDSHAKE logging failed: ${e.message}")
             }
@@ -200,7 +200,7 @@ class GraphQLServer(
                     .setCachingEnabled(false)  // Disable caching for development
             } else {
                 // Production mode: serve from classpath resources
-                logger.info("Dashboard serving from classpath resources")
+                logger.fine("Dashboard serving from classpath resources")
                 StaticHandler.create("dashboard")
                     .setIndexPage("pages/login.html")
                     .setCachingEnabled(false)  // Disable caching for development
@@ -213,16 +213,13 @@ class GraphQLServer(
             .setHost("0.0.0.0")
             .addWebSocketSubProtocol("graphql-transport-ws")  // Required for browser WebSocket clients
 
-        logger.info("Creating HTTP server with options: port=$port, host=0.0.0.0, WebSocket subprotocol: graphql-transport-ws")
+        logger.fine("Creating HTTP server with options: port=$port, host=0.0.0.0, WebSocket subprotocol: graphql-transport-ws")
         try {
             vertx.createHttpServer(options)
                 .requestHandler(router)
                 .listen(port, "0.0.0.0")  // Explicitly specify port and host
                 .onSuccess {
-                    logger.info("GraphQL server started successfully on port $port")
-                    logger.info("GraphQL endpoint: http://localhost:$port$path")
-                    logger.info("GraphQL WebSocket endpoint: ws://localhost:$port${path}ws")
-                    logger.info("Dashboard available at: http://localhost:$port")
+                    logger.info("GraphQL server started successfully on port $port with path $path and ${path}ws")
                 }
                 .onFailure { err ->
                     logger.severe("Failed to start GraphQL server: ${err.message}")
@@ -266,7 +263,7 @@ class GraphQLServer(
     private fun buildRuntimeWiring(): RuntimeWiring {
         // Use shared device store if provided, otherwise create a new one
         val deviceStore = if (sharedDeviceConfigStore != null) {
-            logger.fine("Using shared device config store")
+            logger.finer("Using shared device config store")
             sharedDeviceConfigStore
         } else {
             // Initialize device store first (needed by query and mutation resolvers)
@@ -283,13 +280,13 @@ class GraphQLServer(
                     if (result.failed()) {
                         logger.warning("Failed to initialize OPC UA device store: ${result.cause()?.message}")
                     } else {
-                        logger.info("OPC UA device store initialized successfully")
+                        logger.fine("OPC UA device store initialized successfully")
                         // Try to start health checks if available (for MongoDB and SQLite)
                         try {
                             val method = store?.javaClass?.getMethod("startHealthChecks", Vertx::class.java)
                             method?.invoke(store, vertx)
                         } catch (e: Exception) {
-                            logger.fine("Health checks not available or already started for device store: ${e.message}")
+                            logger.finer("Health checks not available or already started for device store: ${e.message}")
                         }
                     }
                 }

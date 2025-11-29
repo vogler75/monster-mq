@@ -541,7 +541,7 @@ class MqttClientConnector : AbstractVerticle() {
                     val params = socket.sslParameters
                     params.endpointIdentificationAlgorithm = null
                     socket.sslParameters = params
-                    logger.fine("Configured SSL socket with disabled endpoint identification")
+                    logger.finer("Configured SSL socket with disabled endpoint identification")
                 }
                 return socket
             }

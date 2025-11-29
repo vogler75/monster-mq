@@ -48,9 +48,9 @@ class SyslogVerticle(
             // Initialize the in-memory store if enabled
             if (enableSyslogStore) {
                 InMemorySyslogStore.initialize(maxEntries)
-                logger.info("SyslogVerticle started with in-memory store enabled (maxEntries=$maxEntries)")
+                logger.fine("SyslogVerticle started with in-memory store enabled (maxEntries=$maxEntries)")
             } else {
-                logger.info("SyslogVerticle started with in-memory store disabled")
+                logger.fine("SyslogVerticle started with in-memory store disabled")
             }
 
             // Set up event bus consumer for incoming log entries on node-specific address
@@ -58,9 +58,9 @@ class SyslogVerticle(
             vertx.eventBus().consumer<JsonObject>(nodeSpecificAddress) { message ->
                 handleLogEntry(message.body())
             }
-            logger.info("SyslogVerticle listening on address: $nodeSpecificAddress")
+            logger.fine("SyslogVerticle listening on address: $nodeSpecificAddress")
 
-            logger.info("SyslogVerticle initialized successfully")
+            logger.fine("SyslogVerticle initialized successfully")
             startPromise.complete()
         } catch (e: Exception) {
             logger.severe("Failed to start SyslogVerticle: ${e.message}")
@@ -70,7 +70,7 @@ class SyslogVerticle(
 
     override fun stop(stopPromise: Promise<Void>) {
         try {
-            logger.info("SyslogVerticle stopping")
+            logger.fine("SyslogVerticle stopping")
             stopPromise.complete()
         } catch (e: Exception) {
             logger.warning("Error stopping SyslogVerticle: ${e.message}")

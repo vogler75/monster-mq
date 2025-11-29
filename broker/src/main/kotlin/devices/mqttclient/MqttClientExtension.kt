@@ -51,12 +51,11 @@ class MqttClientExtension : AbstractVerticle() {
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting MqttClientExtension...")
-
+        logger.fine("Starting MqttClientExtension...")
         try {
             // Get current node ID
             currentNodeId = Monster.getClusterNodeId(vertx)
-            logger.info("MqttClientExtension running on node: $currentNodeId")
+            logger.fine("MqttClientExtension running on node: $currentNodeId")
 
             // Initialize shared data
             deviceRegistry = vertx.sharedData().getLocalMap("mqttclient.device.registry")
@@ -67,7 +66,7 @@ class MqttClientExtension : AbstractVerticle() {
                 .compose { setupEventBusHandlers() }
                 .onComplete { result ->
                     if (result.succeeded()) {
-                        logger.info("MqttClientExtension started successfully")
+                        logger.fine("MqttClientExtension started successfully")
                         startPromise.complete()
                     } else {
                         logger.severe("Failed to start MqttClientExtension: ${result.cause()?.message}")
@@ -82,7 +81,7 @@ class MqttClientExtension : AbstractVerticle() {
     }
 
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("Stopping MqttClientExtension...")
+        logger.fine("Stopping MqttClientExtension...")
 
         // Undeploy all connectors
         val undeployFutures = deployedConnectors.values.map { deploymentId ->
@@ -120,7 +119,7 @@ class MqttClientExtension : AbstractVerticle() {
                 deviceStore.initialize()
                     .onComplete { result ->
                         if (result.succeeded()) {
-                            logger.info("MQTT Client device store initialized successfully")
+                            logger.fine("MQTT Client device store initialized successfully")
                             promise.complete()
                         } else {
                             logger.severe("Failed to initialize DeviceConfigStore: ${result.cause()?.message}")
@@ -155,7 +154,7 @@ class MqttClientExtension : AbstractVerticle() {
                     val devices = result.result().filter { device ->
                         device.type == DeviceConfig.DEVICE_TYPE_MQTT_CLIENT
                     }
-                    logger.info("Found ${devices.size} enabled MQTT Client devices assigned to node $currentNodeId")
+                    logger.fine("Found ${devices.size} enabled MQTT Client devices assigned to node $currentNodeId")
 
                     if (devices.isEmpty()) {
                         promise.complete()
@@ -172,7 +171,7 @@ class MqttClientExtension : AbstractVerticle() {
                                 completedCount++
                                 if (deployResult.succeeded()) {
                                     successCount++
-                                    logger.info("Successfully deployed connector for device ${device.name}")
+                                    logger.fine("Successfully deployed connector for device ${device.name}")
                                 } else {
                                     logger.warning("Failed to deploy connector for device ${device.name}: ${deployResult.cause()?.message}")
                                 }

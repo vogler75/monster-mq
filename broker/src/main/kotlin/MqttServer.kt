@@ -54,7 +54,7 @@ class MqttServer(
 
         mqttServer.listen(port)
             .onSuccess { server ->
-                logger.info("MQTT Server is listening on port [${server.actualPort()}] SSL [$ssl] WS [$useWebSocket] [${deploymentID()}] [${Utils.getCurrentFunctionName()}]")
+                logger.info("MQTT Server is listening on port [${server.actualPort()}] [${if (useWebSocket) "WS " else "TCP"}][${if (ssl) "TLS" else "   "}] [${Utils.getCurrentFunctionName()}]")
                 startPromise.complete()
             }
             .onFailure { error ->

@@ -187,7 +187,7 @@ class Neo4jConnector : AbstractVerticle() {
                     FOR (n:MqttNode)
                     ON (n.System, n.Path)
                 """.trimIndent())
-                logger.fine("MqttNode index created")
+                logger.finer("MqttNode index created")
             }
 
             session?.executeWrite { tx ->
@@ -196,7 +196,7 @@ class Neo4jConnector : AbstractVerticle() {
                     FOR (n:MqttValue)
                     ON (n.System, n.NodeId)
                 """.trimIndent())
-                logger.fine("MqttValue index created")
+                logger.finer("MqttValue index created")
             }
 
             // Create namespace root node

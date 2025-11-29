@@ -88,7 +88,7 @@ class UserManager(
                     if (isEnabled) {
                         startCacheRefresh()
                     }
-                    logger.info("User store initialized successfully")
+                    logger.fine("User store initialized successfully")
                     startPromise.complete()
                 } else {
                     logger.severe("Failed to initialize user store: ${result.cause()?.message}")
@@ -233,7 +233,7 @@ class UserManager(
             userStore?.let { store ->
                 aclCache.loadFromStore(store).compose {
                     aclCache.clearPermissionCache()
-                    logger.info("ACL cache refreshed manually")
+                    logger.fine("ACL cache refreshed manually")
                     Future.succeededFuture<Void>()
                 }
             } ?: Future.succeededFuture()
@@ -478,7 +478,7 @@ class UserManager(
                 }
             }, cacheRefreshInterval, cacheRefreshInterval, TimeUnit.SECONDS)
             
-            logger.info("Started periodic cache refresh every ${cacheRefreshInterval}s")
+            logger.fine("Started periodic cache refresh every ${cacheRefreshInterval}s")
         }
     }
 }

@@ -35,7 +35,7 @@ class OpcUaServerExtension(
 
     override fun start(startPromise: Promise<Void>) {
         currentNodeId = Monster.getClusterNodeId(vertx)
-        logger.info("Starting OPC UA Server Extension on node: $currentNodeId")
+        logger.fine("Starting OPC UA Server Extension on node: $currentNodeId")
 
         // Register message bus handlers
         registerMessageHandlers()
@@ -47,7 +47,7 @@ class OpcUaServerExtension(
     }
 
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("Stopping OPC UA Server Extension")
+        logger.fine("Stopping OPC UA Server Extension")
 
         // Stop all running servers
         runningServers.forEach { (name, instance) ->
@@ -85,8 +85,6 @@ class OpcUaServerExtension(
         vertx.eventBus().consumer<JsonObject>(statusAddress) { message ->
             handleStatusRequest(message)
         }
-
-        logger.info("Registered message bus handlers for OPC UA Server control")
     }
 
     /**
@@ -95,7 +93,7 @@ class OpcUaServerExtension(
     private fun handleControlCommand(message: Message<JsonObject>) {
         try {
             val command = OpcUaServerCommand.fromJsonObject(message.body())
-            logger.info("Received control command: ${command.action} for server: ${command.serverName}")
+            logger.fine("Received control command: ${command.action} for server: ${command.serverName}")
 
             // Check if this command is for this node
             if (command.nodeId != "*" && command.nodeId != currentNodeId) {
@@ -191,9 +189,6 @@ class OpcUaServerExtension(
                                 }
                                 val config = OpcUaServerConfig.fromJsonObject(serverConfigJson)
                                 logger.info("Loaded OPC UA server '${device.name}' (legacy nested format) with ${config.addresses.size} address mappings")
-                                config.addresses.forEach { addr ->
-                                    logger.info("  Address mapping: ${addr.mqttTopic} -> ${addr.displayName} (${addr.dataType})")
-                                }
                                 config
                             } else {
                                 // New flattened format or legacy fallback
@@ -207,9 +202,6 @@ class OpcUaServerExtension(
 
                                 val config = OpcUaServerConfig.fromJsonObject(serverConfigJson)
                                 logger.info("Loaded OPC UA server '${device.name}' (flattened format) with ${config.addresses.size} address mappings")
-                                config.addresses.forEach { addr ->
-                                    logger.info("  Address mapping: ${addr.mqttTopic} -> ${addr.displayName} (${addr.dataType})")
-                                }
                                 config
                             }
 
@@ -222,9 +214,6 @@ class OpcUaServerExtension(
                             logger.severe("Failed to load OPC UA Server configuration ${device.name}: ${e.message}")
                         }
                     }
-
-                    logger.info("Starting ${configs.count { it.enabled }} OPC UA Server configurations asynchronously")
-
                 } catch (e: Exception) {
                     logger.severe("Failed to load OPC UA Server configurations: ${e.message}")
                 }
@@ -354,7 +343,7 @@ class OpcUaServerExtension(
 
             if (runningServer != null) {
                 // Server is running - update configuration dynamically
-                logger.info("Dynamically updating OPC UA server '$serverName' configuration")
+                logger.fine("Dynamically updating OPC UA server '$serverName' configuration")
 
                 // Update the server's configuration in memory
                 runningServer.updateConfiguration(newConfig)

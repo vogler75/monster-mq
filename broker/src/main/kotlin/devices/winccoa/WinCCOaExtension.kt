@@ -52,12 +52,12 @@ class WinCCOaExtension : AbstractVerticle() {
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting WinCCOaExtension...")
+        logger.fine("Starting WinCCOaExtension...")
 
         try {
             // Get current node ID
             currentNodeId = Monster.getClusterNodeId(vertx)
-            logger.info("WinCCOaExtension running on node: $currentNodeId")
+            logger.fine("WinCCOaExtension running on node: $currentNodeId")
 
             // Initialize shared data
             deviceRegistry = vertx.sharedData().getLocalMap("winccoa.device.registry")
@@ -68,7 +68,7 @@ class WinCCOaExtension : AbstractVerticle() {
                 .compose { setupEventBusHandlers() }
                 .onComplete { result ->
                     if (result.succeeded()) {
-                        logger.info("WinCCOaExtension started successfully")
+                        logger.fine("WinCCOaExtension started successfully")
                         startPromise.complete()
                     } else {
                         logger.severe("Failed to start WinCCOaExtension: ${result.cause()?.message}")
@@ -83,7 +83,7 @@ class WinCCOaExtension : AbstractVerticle() {
     }
 
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("Stopping WinCCOaExtension...")
+        logger.fine("Stopping WinCCOaExtension...")
 
         // Undeploy all connectors
         val undeployFutures = deployedConnectors.values.map { deploymentId ->
@@ -94,7 +94,7 @@ class WinCCOaExtension : AbstractVerticle() {
             .compose { deviceStore.close() }
             .onComplete { result ->
                 if (result.succeeded()) {
-                    logger.info("WinCCOaExtension stopped successfully")
+                    logger.fine("WinCCOaExtension stopped successfully")
                     stopPromise.complete()
                 } else {
                     logger.warning("Error during WinCCOaExtension shutdown: ${result.cause()?.message}")
@@ -120,7 +120,7 @@ class WinCCOaExtension : AbstractVerticle() {
                 deviceStore.initialize()
                     .onComplete { result ->
                         if (result.succeeded()) {
-                            logger.info("WinCC OA device store initialized successfully")
+                            logger.fine("WinCC OA device store initialized successfully")
                             promise.complete()
                         } else {
                             logger.severe("Failed to initialize DeviceConfigStore: ${result.cause()?.message}")
@@ -155,7 +155,7 @@ class WinCCOaExtension : AbstractVerticle() {
                     val devices = result.result().filter { device ->
                         device.type == DeviceConfig.DEVICE_TYPE_WINCCOA_CLIENT
                     }
-                    logger.info("Found ${devices.size} enabled WinCC OA Client devices assigned to node $currentNodeId")
+                    logger.fine("Found ${devices.size} enabled WinCC OA Client devices assigned to node $currentNodeId")
 
                     if (devices.isEmpty()) {
                         promise.complete()
@@ -172,7 +172,7 @@ class WinCCOaExtension : AbstractVerticle() {
                                 completedCount++
                                 if (deployResult.succeeded()) {
                                     successCount++
-                                    logger.info("Successfully deployed connector for device ${device.name}")
+                                    logger.fine("Successfully deployed connector for device ${device.name}")
                                 } else {
                                     logger.warning("Failed to deploy connector for device ${device.name}: ${deployResult.cause()?.message}")
                                 }
@@ -216,7 +216,7 @@ class WinCCOaExtension : AbstractVerticle() {
                         activeDevices[device.name] = device
                         deviceRegistry[device.namespace] = device.name
 
-                        logger.info("Deployed WinCCOaConnector for device ${device.name} (${deploymentId})")
+                        logger.fine("Deployed WinCCOaConnector for device ${device.name} (${deploymentId})")
                         promise.complete(deploymentId)
                     } else {
                         logger.severe("Failed to deploy connector for device ${device.name}: ${result.cause()?.message}")
@@ -245,7 +245,7 @@ class WinCCOaExtension : AbstractVerticle() {
                     }
 
                     if (result.succeeded()) {
-                        logger.info("Undeployed WinCCOaConnector for device $deviceName")
+                        logger.fine("Undeployed WinCCOaConnector for device $deviceName")
                         promise.complete()
                     } else {
                         logger.warning("Failed to undeploy connector for device $deviceName: ${result.cause()?.message}")
@@ -317,23 +317,23 @@ class WinCCOaExtension : AbstractVerticle() {
             val operation = changeData.getString("operation") // "add", "update", "delete", "toggle", "reassign"
             val deviceName = changeData.getString("deviceName")
 
-            logger.info("Handling device config change: $operation for device $deviceName")
+            logger.fine("Handling device config change: $operation for device $deviceName")
 
             when (operation) {
                 "add", "update", "addAddress", "deleteAddress" -> {
                     val deviceJson = changeData.getJsonObject("device")
                     val device = DeviceConfig.fromJsonObject(deviceJson)
 
-                    logger.info("Device $deviceName: nodeId=${device.nodeId}, currentNodeId=$currentNodeId, enabled=${device.enabled}, isAssigned=${device.isAssignedToNode(currentNodeId)}")
+                    logger.fine("Device $deviceName: nodeId=${device.nodeId}, currentNodeId=$currentNodeId, enabled=${device.enabled}, isAssigned=${device.isAssignedToNode(currentNodeId)}")
 
                     if (device.isAssignedToNode(currentNodeId) && device.enabled) {
                         // Redeploy connector for this device
-                        logger.info("Deploying WinCC OA connector for device $deviceName on node $currentNodeId")
+                        logger.fine("Deploying WinCC OA connector for device $deviceName on node $currentNodeId")
                         undeployConnectorForDevice(deviceName)
                             .compose { deployConnectorForDevice(device) }
                             .onComplete { result ->
                                 if (result.succeeded()) {
-                                    logger.info("Successfully redeployed connector for device $deviceName after $operation")
+                                    logger.fine("Successfully redeployed connector for device $deviceName after $operation")
                                     message.reply(JsonObject().put("success", true))
                                 } else {
                                     logger.warning("Failed to redeploy connector for device $deviceName after $operation: ${result.cause()?.message}")
@@ -342,7 +342,7 @@ class WinCCOaExtension : AbstractVerticle() {
                             }
                     } else {
                         // Device not for this node or disabled - just undeploy if exists
-                        logger.info("Skipping deployment for device $deviceName: not assigned to this node or disabled")
+                        logger.fine("Skipping deployment for device $deviceName: not assigned to this node or disabled")
                         undeployConnectorForDevice(deviceName)
                             .onComplete { message.reply(JsonObject().put("success", true)) }
                     }

@@ -75,11 +75,11 @@ class ArchiveConfigStoreCrateDB(
                     }
                 } catch (e: Exception) {
                     // If check fails, continue anyway
-                    logger.fine("Could not check for existing table: ${e.message}")
+                    logger.finer("Could not check for existing table: ${e.message}")
                 }
             }
         } catch (e: Exception) {
-            logger.fine("Could not drop existing table: ${e.message}")
+            logger.finer("Could not drop existing table: ${e.message}")
         }
 
         val sql = """

@@ -361,7 +361,7 @@ class SnowflakeLogger : JDBCLoggerBase() {
                 )
                 """.trimIndent()
 
-            logger.fine("Executing CREATE TABLE:\n$createTableSQL")
+            logger.finer("Executing CREATE TABLE:\n$createTableSQL")
 
             conn.createStatement().use { stmt ->
                 stmt.execute(createTableSQL)
@@ -381,7 +381,7 @@ class SnowflakeLogger : JDBCLoggerBase() {
                     }
                 } catch (e: SQLException) {
                     // Clustering key might already exist or table might already be clustered
-                    logger.fine("Could not add clustering key (may already exist): ${e.message}")
+                    logger.finer("Could not add clustering key (may already exist): ${e.message}")
                 }
             }
 

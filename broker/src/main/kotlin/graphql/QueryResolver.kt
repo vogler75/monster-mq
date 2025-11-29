@@ -419,7 +419,7 @@ class QueryResolver(
                 null -> emptyList()
                 else -> emptyList()
             }
-            logger.fine("QueryResolver.systemLogs - levelArg: $levelArg, levelFilters: $levelFilters")
+            logger.finer("QueryResolver.systemLogs - levelArg: $levelArg, levelFilters: $levelFilters")
             val loggerFilter = env.getArgument<String?>("logger")
             val sourceClassFilter = env.getArgument<String?>("sourceClass")
             val sourceMethodFilter = env.getArgument<String?>("sourceMethod")
@@ -472,7 +472,7 @@ class QueryResolver(
                     // Apply level filter - check if log level matches any of the requested levels
                     if (levelFilters.isNotEmpty()) {
                         val logLevel = logData.getString("level")
-                        logger.fine("Comparing logLevel='$logLevel' against levelFilters=$levelFilters, contains=${levelFilters.contains(logLevel)}")
+                        logger.finer("Comparing logLevel='$logLevel' against levelFilters=$levelFilters, contains=${levelFilters.contains(logLevel)}")
                         if (logLevel != null && !levelFilters.contains(logLevel)) continue
                     }
 

@@ -164,7 +164,7 @@ open class SessionHandler(
     )
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Start session handler.")
+        logger.fine("Start session handler.")
 
         // Initialize cluster data replicators
         clientNodeMapping = DataReplicator(vertx, clientMappingAddress)
@@ -202,9 +202,9 @@ open class SessionHandler(
 
         // Log the replication mode
         if (Monster.isClustered()) {
-            logger.info("Using ClusterDataReplicator for distributed data synchronization in cluster mode")
+            logger.fine("Using ClusterDataReplicator for distributed data synchronization in cluster mode")
         } else {
-            logger.info("Using ClusterDataReplicator in local mode (no replication)")
+            logger.fine("Using ClusterDataReplicator in local mode (no replication)")
         }
 
         vertx.eventBus().consumer<JsonObject>(clientStatusAddress) { message ->
@@ -431,13 +431,13 @@ open class SessionHandler(
         // Only subscribe to message bus if it's Kafka (external source)
         // Internal Vert.x message bus broadcast is no longer used - we use targeted messaging
         val f0 = if (messageBus is at.rocworks.bus.MessageBusKafka) {
-            logger.info("Subscribing to Kafka message bus for external messages [${Utils.getCurrentFunctionName()}]")
+            logger.fine("Subscribing to Kafka message bus for external messages [${Utils.getCurrentFunctionName()}]")
             messageBus.subscribeToMessageBus { message ->
                 // Messages from Kafka should use targeted distribution
                 publishMessage(message)
             }
         } else {
-            logger.info("Skipping internal message bus subscription - using targeted messaging only [${Utils.getCurrentFunctionName()}]")
+            logger.fine("Skipping internal message bus subscription - using targeted messaging only [${Utils.getCurrentFunctionName()}]")
             Future.succeededFuture()
         }
 
@@ -477,7 +477,7 @@ open class SessionHandler(
 
         // Start bulk message flusher if enabled
         if (bulkMessagingEnabled) {
-            logger.info("Starting bulk message flusher with timeout=${bulkMessagingTimeoutMs}ms, bulkSize=$bulkMessagingBulkSize")
+            logger.fine("Starting bulk message flusher with timeout=${bulkMessagingTimeoutMs}ms, bulkSize=$bulkMessagingBulkSize")
             bulkFlushTimerId = vertx.setPeriodic(bulkMessagingTimeoutMs) {
                 flushBulkBuffers()
             }
@@ -490,7 +490,7 @@ open class SessionHandler(
 
         // Start publish bulk processing if enabled
         if (publishBulkProcessingEnabled) {
-            logger.info("Starting publish bulk processor with timeout=${publishBulkTimeoutMs}ms, bulkSize=$publishBulkSize, workers=$publishWorkerThreads")
+            logger.fine("Starting publish bulk processor with timeout=${publishBulkTimeoutMs}ms, bulkSize=$publishBulkSize, workers=$publishWorkerThreads")
 
             // Initialize and start worker pool
             publishWorkerPool = PublishWorkerPool(vertx, this, publishWorkerThreads)
@@ -498,10 +498,10 @@ open class SessionHandler(
 
             // Register shutdown hook for graceful worker shutdown
             Runtime.getRuntime().addShutdownHook(Thread({
-                logger.info("Shutdown hook: initiated, closing worker pool")
+                logger.fine("Shutdown hook: initiated, closing worker pool")
                 try {
                     publishWorkerPool?.shutdown()
-                    logger.info("Shutdown hook: worker pool closed successfully")
+                    logger.fine("Shutdown hook: worker pool closed successfully")
                 } catch (e: Exception) {
                     logger.severe("Shutdown hook: error closing worker pool: ${e.message}")
                 }
@@ -520,7 +520,7 @@ open class SessionHandler(
             }
         }
 
-        logger.info("Loading all sessions and their subscriptions [${Utils.getCurrentFunctionName()}]")
+        logger.fine("Loading all sessions and their subscriptions [${Utils.getCurrentFunctionName()}]")
         val f1 = sessionStore.iterateAllSessions { clientId, nodeId, connected, cleanSession ->
             val localNodeId = Monster.getClusterNodeId(vertx)
 
@@ -546,7 +546,7 @@ open class SessionHandler(
             }
         }
 
-        logger.info("Loading all subscriptions [${Utils.getCurrentFunctionName()}]")
+        logger.fine("Loading all subscriptions [${Utils.getCurrentFunctionName()}]")
         val f2 = sessionStore.iterateSubscriptions { topicName, clientId, qos ->
             // Add to subscription manager (routes to exact or wildcard index)
             subscriptionManager.subscribe(clientId, topicName, qos)
@@ -559,7 +559,7 @@ open class SessionHandler(
 
         Future.all(f0, f1, f2).onComplete {
             if (it.succeeded()) {
-                logger.info("Session handler ready [${Utils.getCurrentFunctionName()}]")
+                logger.fine("Session handler ready [${Utils.getCurrentFunctionName()}]")
                 startPromise.complete()
             } else {
                 startPromise.fail(it.cause())
@@ -1648,7 +1648,7 @@ open class SessionHandler(
 
         // Subscribe using normal subscription mechanism
         subscriptionManager.subscribe(clientId, topicFilter, qos)
-        logger.fine("Subscription registered: client='$clientId' topicFilter='$topicFilter'")
+        logger.finer("Subscription registered: client='$clientId' topicFilter='$topicFilter'")
 
         // Update topic-node mapping for cluster awareness
         val localNodeId = Monster.getClusterNodeId(vertx)
@@ -1744,7 +1744,7 @@ open class SessionHandler(
             val message = BrokerMessage("", "\$SYS/brokers/$nodeName/messaging", metricsJson)
             publishMessage(message)
         } catch (e: Exception) {
-            logger.fine("Error publishing bulk messaging metrics: ${e.message}")
+            logger.finer("Error publishing bulk messaging metrics: ${e.message}")
         }
     }
 
@@ -1760,19 +1760,19 @@ open class SessionHandler(
             // Cancel periodic timers
             if (bulkFlushTimerId >= 0) {
                 vertx.cancelTimer(bulkFlushTimerId)
-                logger.fine("Cancelled bulk flush timer")
+                logger.finer("Cancelled bulk flush timer")
             }
             if (bulkMessagingMetricsTimerId >= 0) {
                 vertx.cancelTimer(bulkMessagingMetricsTimerId)
-                logger.fine("Cancelled bulk messaging metrics timer")
+                logger.finer("Cancelled bulk messaging metrics timer")
             }
             if (publishBatchFlushTimerId >= 0) {
                 vertx.cancelTimer(publishBatchFlushTimerId)
-                logger.fine("Cancelled publish batch flush timer")
+                logger.finer("Cancelled publish batch flush timer")
             }
             if (publishWorkerLogTimerId >= 0) {
                 vertx.cancelTimer(publishWorkerLogTimerId)
-                logger.fine("Cancelled worker log timer")
+                logger.finer("Cancelled worker log timer")
             }
 
             // Final worker load log before shutdown

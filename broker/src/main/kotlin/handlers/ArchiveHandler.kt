@@ -105,14 +105,14 @@ class ArchiveHandler(
             handleArchiveEvent(message)
         }
 
-        logger.info("ArchiveHandler event handlers registered")
+        logger.fine("ArchiveHandler event handlers registered")
     }
 
     private fun loadArchiveConfig(): Future<Void> {
         val promise = Promise.promise<Void>()
 
         try {
-            logger.info("Loading archive configuration from: $archiveConfigFile")
+            logger.fine("Loading archive configuration from: $archiveConfigFile")
 
             val archiveConfigRetriever = ConfigRetriever.create(
                 vertx,
@@ -144,7 +144,7 @@ class ArchiveHandler(
                         } else {
                             // Merge or replace ArchiveGroups in main config (existing behavior)
                             configJson.put("ArchiveGroups", archiveGroups)
-                            logger.info("Loaded ${archiveGroups.size()} archive groups from $archiveConfigFile into memory")
+                            logger.fine("Loaded ${archiveGroups.size()} archive groups from $archiveConfigFile into memory")
                             promise.complete()
                         }
                     } else {
@@ -178,7 +178,7 @@ class ArchiveHandler(
         val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
         vertx.deployVerticle(configStore as AbstractVerticle, options).onComplete { deployResult ->
             if (deployResult.succeeded()) {
-                logger.info("ConfigStore deployed for import")
+                logger.fine("ConfigStore deployed for import")
                 // Store reference to deployed ConfigStore
                 deployedConfigStore = configStore
 
@@ -194,7 +194,7 @@ class ArchiveHandler(
 
                         configStore.saveArchiveGroup(archiveGroup, enabled).map { success ->
                             if (success) {
-                                logger.info("Imported ArchiveGroup [${archiveGroup.name}] to database")
+                                logger.fine("Imported ArchiveGroup [${archiveGroup.name}] to database")
                                 1
                             } else {
                                 logger.warning("Failed to import ArchiveGroup [${archiveGroup.name}] to database")
@@ -213,12 +213,12 @@ class ArchiveHandler(
                         if (it.succeeded()) it.result() as? Int else null
                     }.sum()
 
-                    logger.info("Successfully imported $importedCount archive groups from $archiveConfigFile to database")
+                    logger.fine("Successfully imported $importedCount archive groups from $archiveConfigFile to database")
 
                     // Undeploy the temporary ConfigStore
                     vertx.undeploy(deployResult.result()).onComplete { undeployResult ->
                         if (undeployResult.succeeded()) {
-                            logger.info("Temporary ConfigStore undeployed after import")
+                            logger.fine("Temporary ConfigStore undeployed after import")
                             promise.complete()
                         } else {
                             logger.warning("Failed to undeploy temporary ConfigStore: ${undeployResult.cause()?.message}")
@@ -258,7 +258,7 @@ class ArchiveHandler(
         val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
         vertx.deployVerticle(configStore as AbstractVerticle, options).onComplete { deployResult ->
             if (deployResult.succeeded()) {
-                logger.info("ConfigStore deployed successfully")
+                logger.fine("ConfigStore deployed successfully")
                 // Store reference to deployed ConfigStore
                 deployedConfigStore = configStore
 
@@ -268,7 +268,7 @@ class ArchiveHandler(
                 // Check if "Default" archive group exists, create if not
                 configStore.getArchiveGroup("Default").onComplete { getDefaultResult ->
                     if (getDefaultResult.succeeded() && getDefaultResult.result() == null) {
-                        logger.info("Default archive group not found, creating it")
+                        logger.fine("Default archive group not found, creating it")
                         val defaultArchiveGroup = ArchiveGroup(
                             name = "Default",
                             topicFilter = listOf("#"),
@@ -286,7 +286,7 @@ class ArchiveHandler(
                         )
                         configStore.saveArchiveGroup(defaultArchiveGroup, enabled = false).onComplete { saveResult ->
                             if (saveResult.succeeded() && saveResult.result()) {
-                                logger.info("Default archive group created successfully")
+                                logger.fine("Default archive group created successfully")
                             } else {
                                 logger.warning("Failed to create default archive group")
                             }
@@ -319,7 +319,7 @@ ArchiveGroup(
                         }
 
                         if (archiveGroups.isEmpty()) {
-                            logger.info("No enabled archive groups found in database")
+                            logger.fine("No enabled archive groups found in database")
                             promise.complete(emptyList())
                             return@onComplete
                         }
@@ -333,7 +333,7 @@ ArchiveGroup(
                                 val archiveInfo = ArchiveGroupInfo(archiveGroup, deploymentId, true)
                                 deployedArchiveGroups[archiveGroup.name] = archiveInfo
 
-                                logger.info("ArchiveGroup [${archiveGroup.name}] deployed successfully from database with ID: $deploymentId")
+                                logger.fine("ArchiveGroup [${archiveGroup.name}] deployed successfully from database with ID: $deploymentId")
                                 archiveGroup
                             }
                         }
@@ -441,7 +441,7 @@ ArchiveGroup(
 
         // Check if already deployed
         if (deployedArchiveGroups.containsKey(name)) {
-            logger.fine("ArchiveGroup [$name] is already deployed")
+            logger.finer("ArchiveGroup [$name] is already deployed")
             promise.complete(true) // Return true since it's already deployed
             return promise.future()
         }
@@ -454,7 +454,7 @@ ArchiveGroup(
                 if (result.succeeded() && result.result() != null) {
                     deployArchiveGroupRuntime(result.result()!!).onComplete { deployResult ->
                         if (deployResult.succeeded()) {
-                            logger.info("ArchiveGroup [$name] deployed successfully - database connections will be established in background")
+                            logger.fine("ArchiveGroup [$name] deployed successfully - database connections will be established in background")
                             promise.complete(true)
                             // Broadcast to cluster (unless this is a cluster event replication)
                             if (shouldBroadcast) {
@@ -476,7 +476,7 @@ ArchiveGroup(
                 if (result.succeeded() && result.result() != null) {
                     deployArchiveGroupRuntime(result.result()!!).onComplete { deployResult ->
                         if (deployResult.succeeded()) {
-                            logger.info("ArchiveGroup [$name] deployed successfully - database connections will be established in background")
+                            logger.fine("ArchiveGroup [$name] deployed successfully - database connections will be established in background")
                             promise.complete(true)
                             // Broadcast to cluster (unless this is a cluster event replication)
                             if (shouldBroadcast) {
@@ -502,12 +502,12 @@ ArchiveGroup(
 
         val archiveInfo = deployedArchiveGroups[name]
         if (archiveInfo == null) {
-            logger.fine("ArchiveGroup [$name] is not deployed")
+            logger.finer("ArchiveGroup [$name] is not deployed")
             promise.complete(true) // Return true since it's already stopped
             return promise.future()
         }
 
-        logger.info("Stopping ArchiveGroup [$name] with deployment ID: ${archiveInfo.deploymentId}")
+        logger.fine("Stopping ArchiveGroup [$name] with deployment ID: ${archiveInfo.deploymentId}")
 
         // Always undeploy the verticle, regardless of connection state
         // Use a shorter timeout to prevent hanging
@@ -516,7 +516,7 @@ ArchiveGroup(
         vertx.undeploy(archiveInfo.deploymentId).onComplete { result ->
             if (!undeployPromise.future().isComplete) {
                 if (result.succeeded()) {
-                    logger.info("ArchiveGroup [$name] undeployed successfully")
+                    logger.fine("ArchiveGroup [$name] undeployed successfully")
                     undeployPromise.complete(archiveInfo.deploymentId)
                 } else {
                     logger.warning("Undeploy of ArchiveGroup [$name] failed but proceeding with cleanup: ${result.cause()?.message}")
@@ -537,7 +537,7 @@ ArchiveGroup(
         undeployPromise.future().onComplete {
             // Always clean up tracking, regardless of undeploy success
             deployedArchiveGroups.remove(name)
-            logger.info("ArchiveGroup [$name] stopped and removed from tracking")
+            logger.fine("ArchiveGroup [$name] stopped and removed from tracking")
 
             // Unregister from MessageHandler
             messageHandler?.unregisterArchiveGroup(name)
@@ -583,7 +583,7 @@ ArchiveGroup(
      */
     fun setMessageHandler(messageHandler: MessageHandler) {
         this.messageHandler = messageHandler
-        logger.info("MessageHandler reference set for dynamic archive group registration")
+        logger.fine("MessageHandler reference set for dynamic archive group registration")
     }
 
     fun listArchiveGroups(): JsonArray {
@@ -622,24 +622,24 @@ ArchiveGroup(
 
         // Skip events from the same node to avoid duplicate processing (only in local event bus)
         if (!Monster.isClustered() && sourceNodeId == currentNodeId) {
-            logger.fine("Skipping archive event from same node in non-clustered mode: event=$event, archiveGroup=$archiveGroupName")
+            logger.finer("Skipping archive event from same node in non-clustered mode: event=$event, archiveGroup=$archiveGroupName")
             return
         }
 
         when (event) {
             "STARTED" -> {
-                logger.info("Received cluster event to start ArchiveGroup [$archiveGroupName]")
+                logger.fine("Received cluster event to start ArchiveGroup [$archiveGroupName]")
                 startArchiveGroup(archiveGroupName, shouldBroadcast = false).onComplete { result ->
                     if (!result.succeeded()) {
-                        logger.fine("ArchiveGroup [$archiveGroupName] already started or start failed: ${result.cause()?.message}")
+                        logger.finer("ArchiveGroup [$archiveGroupName] already started or start failed: ${result.cause()?.message}")
                     }
                 }
             }
             "STOPPED" -> {
-                logger.info("Received cluster event to stop ArchiveGroup [$archiveGroupName]")
+                logger.fine("Received cluster event to stop ArchiveGroup [$archiveGroupName]")
                 stopArchiveGroup(archiveGroupName, shouldBroadcast = false).onComplete { result ->
                     if (!result.succeeded()) {
-                        logger.fine("ArchiveGroup [$archiveGroupName] already stopped or stop failed: ${result.cause()?.message}")
+                        logger.finer("ArchiveGroup [$archiveGroupName] already stopped or stop failed: ${result.cause()?.message}")
                     }
                 }
             }
@@ -727,7 +727,7 @@ ArchiveGroup(
                 val deploymentId = result.result()
                 val archiveInfo = ArchiveGroupInfo(archiveGroup, deploymentId, true)
                 deployedArchiveGroups[archiveGroup.name] = archiveInfo
-                logger.info("ArchiveGroup [${archiveGroup.name}] deployed at runtime with ID: $deploymentId")
+                logger.fine("ArchiveGroup [${archiveGroup.name}] deployed at runtime with ID: $deploymentId")
 
                 // Register with MessageHandler for message routing
                 messageHandler?.registerArchiveGroup(archiveGroup)
@@ -866,7 +866,7 @@ val archiveGroup = ArchiveGroup(
         }
 
         vertx.eventBus().publish("mq.cluster.archive.events", eventData)
-        logger.fine("Broadcasted archive event: $event for ArchiveGroup [$archiveGroupName] from node $currentNodeId")
+        logger.finer("Broadcasted archive event: $event for ArchiveGroup [$archiveGroupName] from node $currentNodeId")
     }
 
     fun getDeployedArchiveGroups(): Map<String, ArchiveGroup> {

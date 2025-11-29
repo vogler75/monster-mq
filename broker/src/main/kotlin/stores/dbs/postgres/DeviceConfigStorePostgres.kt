@@ -154,7 +154,7 @@ class DeviceConfigStorePostgres(
                 stmt.execute(MIGRATE_SCHEMA)
                 stmt.execute(CREATE_INDEXES)
             }
-            logger.info("DeviceConfigStorePostgres initialized successfully")
+            logger.fine("DeviceConfigStorePostgres initialized successfully")
             promise.complete()
         } catch (e: Exception) {
             logger.severe("Failed to initialize DeviceConfigStorePostgres: ${e.message}")

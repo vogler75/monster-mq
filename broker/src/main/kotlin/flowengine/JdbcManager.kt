@@ -78,7 +78,7 @@ class JdbcManager {
                         objectMapper.readValue(jsonStr, Map::class.java)
                     } catch (e: Exception) {
                         // Fallback to toString if Jackson serialization fails
-                        logger.fine("Could not serialize ${obj.javaClass.name} with Jackson: ${e.message}, using toString()")
+                        logger.finer("Could not serialize ${obj.javaClass.name} with Jackson: ${e.message}, using toString()")
                         obj.toString()
                     }
                 }
@@ -185,7 +185,7 @@ class JdbcManager {
                 }
             }
         } catch (e: Exception) {
-            logger.fine("Could not extract entity properties: ${e.message}")
+            logger.finer("Could not extract entity properties: ${e.message}")
             emptyMap<String, Any?>()
         }
     }
@@ -197,9 +197,9 @@ class JdbcManager {
     fun executeQuery(config: DatabaseConnectionConfig, sql: String, arguments: List<Any?>? = null): Result<JsonArray> {
         return try {
             val driverClass = config.getDriverClassName()
-            logger.fine("JdbcManager: Loading driver: $driverClass for URL: ${config.jdbcUrl}")
+            logger.finer("JdbcManager: Loading driver: $driverClass for URL: ${config.jdbcUrl}")
             Class.forName(driverClass)
-            logger.fine("JdbcManager: Connecting to URL: ${config.jdbcUrl} with user: ${config.username}")
+            logger.finer("JdbcManager: Connecting to URL: ${config.jdbcUrl} with user: ${config.username}")
             val conn = DriverManager.getConnection(
                 config.jdbcUrl,
                 config.username,
@@ -238,7 +238,7 @@ class JdbcManager {
                     val row = mutableListOf<Any?>()
                     for (i in 1..columnCount) {
                         val obj = resultSet.getObject(i)
-                        logger.fine("Column $i (${metaData.getColumnName(i)}): type=${obj?.javaClass?.name}, value=$obj")
+                        logger.finer("Column $i (${metaData.getColumnName(i)}): type=${obj?.javaClass?.name}, value=$obj")
                         row.add(convertToJsonSerializable(obj))
                     }
                     result.add(JsonArray(row))
@@ -262,9 +262,9 @@ class JdbcManager {
     fun executeDml(config: DatabaseConnectionConfig, sql: String, arguments: List<Any?>? = null): Result<Int> {
         return try {
             val driverClass = config.getDriverClassName()
-            logger.fine("JdbcManager: Loading driver: $driverClass for URL: ${config.jdbcUrl}")
+            logger.finer("JdbcManager: Loading driver: $driverClass for URL: ${config.jdbcUrl}")
             Class.forName(driverClass)
-            logger.fine("JdbcManager: Connecting to URL: ${config.jdbcUrl} with user: ${config.username}")
+            logger.finer("JdbcManager: Connecting to URL: ${config.jdbcUrl} with user: ${config.username}")
             val conn = DriverManager.getConnection(
                 config.jdbcUrl,
                 config.username,

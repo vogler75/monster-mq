@@ -81,7 +81,7 @@ class QuestDBLogger : PostgreSQLLogger() {
                 ) timestamp($timestampField) PARTITION BY ${cfg.partitionBy}                
                 """.trimIndent()
 
-            logger.fine("Executing CREATE TABLE:\n$createTableSQL")
+            logger.finer("Executing CREATE TABLE:\n$createTableSQL")
 
             conn.createStatement().use { stmt ->
                 stmt.execute(createTableSQL)

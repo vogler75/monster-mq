@@ -256,7 +256,7 @@ class Monster(args: Array<String>) {
                 vertx.deployVerticle(SQLiteVerticle(), deploymentOptions).onComplete { result ->
                     if (result.succeeded()) {
                         sqliteVerticleDeploymentId = result.result()
-                        logger.info("SQLiteVerticle deployed as singleton with ID: ${sqliteVerticleDeploymentId}")
+                        logger.fine("SQLiteVerticle deployed as singleton with ID: ${sqliteVerticleDeploymentId}")
                         promise.complete(result.result())
                     } else {
                         logger.severe("Failed to deploy SQLiteVerticle: ${result.cause()?.message}")
@@ -265,7 +265,7 @@ class Monster(args: Array<String>) {
                 }
                 promise.future()
             } else {
-                logger.fine("SQLiteVerticle already deployed with ID: $sqliteVerticleDeploymentId")
+                logger.finer("SQLiteVerticle already deployed with ID: $sqliteVerticleDeploymentId")
                 Future.succeededFuture(sqliteVerticleDeploymentId)
             }
         }
@@ -332,7 +332,7 @@ class Monster(args: Array<String>) {
             }
         }
 
-        logger.info("Cluster: ${isClustered()}")
+        logger.fine("Cluster: ${isClustered()}")
 
         val builder = Vertx.builder()
         // Apply worker pool size if specified via command line
@@ -340,7 +340,7 @@ class Monster(args: Array<String>) {
             val vertxOptions = VertxOptions()
                 .setWorkerPoolSize(poolSize)
             builder.with(vertxOptions)
-            logger.info("Vertx worker thread pool size set to $poolSize (via -workerPoolSize argument)")
+            logger.fine("Vertx worker thread pool size set to $poolSize (via -workerPoolSize argument)")
         }
 
         if (isClustered())
@@ -415,7 +415,7 @@ MORE INFO:
     }
 
     private fun getConfigRetriever(vertx: Vertx): ConfigRetriever {
-        logger.info("Monster config file: $configFile")
+        logger.fine("Monster config file: $configFile")
         return ConfigRetriever.create(
             vertx,
             ConfigRetrieverOptions()
@@ -464,7 +464,7 @@ MORE INFO:
                     logger.warning("Config: AllowRootWildcardSubscription read failed: ${e.message}")
                     true
                 }
-                logger.info("Config: AllowRootWildcardSubscription=$allowRootWildcardSubscriptionFlag")
+                logger.fine("Config: AllowRootWildcardSubscription=$allowRootWildcardSubscriptionFlag")
 
                 // Read rate limiting configuration (default 0 = unlimited)
                 maxPublishRate = try {
@@ -473,7 +473,7 @@ MORE INFO:
                     logger.warning("Config: MaxPublishRate read failed: ${e.message}")
                     0
                 }
-                logger.info("Config: MaxPublishRate=$maxPublishRate msg/s" + if (maxPublishRate == 0) " (unlimited)" else "")
+                logger.fine("Config: MaxPublishRate=$maxPublishRate msg/s" + if (maxPublishRate == 0) " (unlimited)" else "")
 
                 maxSubscribeRate = try {
                     configJson.getInteger("MaxSubscribeRate", 0)
@@ -481,7 +481,7 @@ MORE INFO:
                     logger.warning("Config: MaxSubscribeRate read failed: ${e.message}")
                     0
                 }
-                logger.info("Config: MaxSubscribeRate=$maxSubscribeRate msg/s" + if (maxSubscribeRate == 0) " (unlimited)" else "")
+                logger.fine("Config: MaxSubscribeRate=$maxSubscribeRate msg/s" + if (maxSubscribeRate == 0) " (unlimited)" else "")
 
                 // Read queue size configuration (defaults: 50,000 for each queue type)
                 configJson.getJsonObject("Queues", JsonObject()).let { queuesConfig ->
@@ -498,7 +498,7 @@ MORE INFO:
                         50_000
                     }
                 }
-                logger.info("Config: Queue sizes - Subscription=$subscriptionQueueSize, Message=$messageQueueSize")
+                logger.fine("Config: Queue sizes - Subscription=$subscriptionQueueSize, Message=$messageQueueSize")
 
                 // Read bulk messaging configuration
                 configJson.getJsonObject("BulkMessaging", JsonObject()).let { bulkConfig ->
@@ -522,9 +522,9 @@ MORE INFO:
                     }
                 }
                 if (bulkMessagingEnabled) {
-                    logger.info("Config: BulkMessaging enabled - TimeoutMS=$bulkMessagingTimeoutMs, BulkSize=$bulkMessagingBulkSize")
+                    logger.fine("Config: BulkMessaging enabled - TimeoutMS=$bulkMessagingTimeoutMs, BulkSize=$bulkMessagingBulkSize")
                 } else {
-                    logger.info("Config: BulkMessaging disabled")
+                    logger.fine("Config: BulkMessaging disabled")
                 }
 
                 // Read publish bulk processing configuration
@@ -555,9 +555,9 @@ MORE INFO:
                     }
                 }
                 if (publishBulkProcessingEnabled) {
-                    logger.info("Config: BulkProcessing enabled - TimeoutMS=$publishBulkTimeoutMs, BulkSize=$publishBulkSize, Workers=$publishWorkerThreads")
+                    logger.fine("Config: BulkProcessing enabled - TimeoutMS=$publishBulkTimeoutMs, BulkSize=$publishBulkSize, Workers=$publishWorkerThreads")
                 } else {
-                    logger.info("Config: BulkProcessing disabled")
+                    logger.fine("Config: BulkProcessing disabled")
                 }
 
                 startMonster(vertx)
@@ -595,7 +595,7 @@ MORE INFO:
                 }
 
                 this.configJson = jsonObj
-                logger.info("Config loaded synchronously for cluster setup")
+                logger.fine("Config loaded synchronously for cluster setup")
             }
         } catch (e: Exception) {
             logger.warning("Failed to load config synchronously: ${e.message}")
@@ -632,7 +632,7 @@ MORE INFO:
 
         this.clusterManager = HazelcastClusterManager(hazelcastConfig)
 
-        logger.info("Cluster setup with node name: ${this.nodeName}")
+        logger.fine("Cluster setup with node name: ${this.nodeName}")
 
         builder.withClusterManager(this.clusterManager)
         builder.buildClustered().onComplete { res: AsyncResult<Vertx?> ->
@@ -661,11 +661,11 @@ MORE INFO:
         val sendBufferSize = tcpServerConfig.getInteger("SendBufferSizeKb", 512) * 1024
 
         val queuedMessagesEnabled = configJson.getBoolean("QueuedMessagesEnabled", true)
-        logger.info("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] QME [$queuedMessagesEnabled]")
-        logger.info("TCP Server Config: MaxMessageSize [${maxMessageSize / 1024}KB] NoDelay [$tcpNoDelay] ReceiveBufferSize [${receiveBufferSize / 1024}KB] SendBufferSize [${sendBufferSize / 1024}KB]")
+        logger.fine("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] QME [$queuedMessagesEnabled]")
+        logger.fine("TCP Server Config: MaxMessageSize [${maxMessageSize / 1024}KB] NoDelay [$tcpNoDelay] ReceiveBufferSize [${receiveBufferSize / 1024}KB] SendBufferSize [${sendBufferSize / 1024}KB]")
 
         val retainedStoreType = MessageStoreType.valueOf(Monster.getRetainedStoreType(configJson))
-        logger.info("RetainedMessageStoreType [${retainedStoreType}]")
+        logger.fine("RetainedMessageStoreType [${retainedStoreType}]")
 
         vertx.eventBus().registerDefaultCodec(BrokerMessage::class.java, BrokerMessageCodec())
         vertx.eventBus().registerDefaultCodec(MqttSubscription::class.java, MqttSubscriptionCodec())
@@ -688,7 +688,7 @@ MORE INFO:
                 logger.severe("Initialization of bus or archive groups failed: ${it.message}")
                 exitProcess(-1)
             }.onComplete {
-                logger.info("Initialization of bus and archive groups completed.")
+                logger.fine("Initialization of bus and archive groups completed.")
                 val archiveGroups = archiveGroupsFuture.result()
 
                 // Message handler
@@ -751,10 +751,9 @@ MORE INFO:
                 val mcpEnabled = mcpConfig.getBoolean("Enabled", true)
                 val mcpPort = mcpConfig.getInteger("Port", 3000)
                 val mcpServer = if (mcpEnabled) {
-                    logger.info("Starting MCP server on port $mcpPort")
                     McpServer("0.0.0.0", mcpPort, retainedStore, archiveHandler)
                 } else {
-                    logger.info("MCP server is disabled in configuration")
+                    logger.fine("MCP server is disabled in configuration")
                     null
                 }
 
@@ -775,7 +774,7 @@ MORE INFO:
                         val store = MetricsStoreFactory.create(storeType, configJson, "metrics")
                         val collectionInterval = metricsConfig.getInteger("CollectionInterval", 10)
                         val retentionHours = metricsConfig.getInteger("RetentionHours", 24)
-                        logger.info("Starting Metrics Store: ${store.getName()} (${store.getType()}) with ${collectionInterval}s collection interval, ${retentionHours}h retention")
+                        logger.fine("Starting Metrics Store: ${store.getName()} (${store.getType()}) with ${collectionInterval}s collection interval, ${retentionHours}h retention")
                         val collector = MetricsHandler(sessionHandler, store, messageBus, messageHandler, collectionInterval, retentionHours)
                         store to collector
                     } catch (e: Exception) {
@@ -784,7 +783,7 @@ MORE INFO:
                         null to null
                     }
                 } else {
-                    logger.info("Metrics collection is disabled in configuration")
+                    logger.fine("Metrics collection is disabled in configuration")
                     null to null
                 }
 
@@ -820,7 +819,7 @@ MORE INFO:
                         genAiProvider
                     )
                 } else {
-                    logger.info("GraphQL server is disabled in configuration")
+                    logger.fine("GraphQL server is disabled in configuration")
                     null
                 }
 
@@ -832,9 +831,9 @@ MORE INFO:
                     ApiService(sessionHandler, "graphql", graphQLPort, graphQLPath)
                 } else {
                     if (!apiEnabled) {
-                        logger.info("API Service is disabled in configuration")
+                        logger.fine("API Service is disabled in configuration")
                     } else if (graphQLServer == null) {
-                        logger.info("GraphQL server is disabled, API Service will not start")
+                        logger.fine("GraphQL server is disabled, API Service will not start")
                     }
                     null
                 }
@@ -866,7 +865,7 @@ MORE INFO:
                         // (Memory logging depends on MqttLogHandler to capture logs)
                         if (mqttLoggingEnabled || memoryLoggingEnabled) {
                             try {
-                                logger.info("Installing log handler for system-wide log capture (fixed at INFO level)...")
+                                logger.fine("Installing log handler for system-wide log capture (fixed at INFO level)...")
                                 val sysLogHandler = SysLogHandler.install()
 
                                 // Set the log level to INFO (fixed)
@@ -877,7 +876,7 @@ MORE INFO:
                                 throw e
                             }
                         } else {
-                            logger.info("Both MQTT and Memory logging are disabled")
+                            logger.fine("Both MQTT and Memory logging are disabled")
                         }
 
                         Future.succeededFuture<String>()
@@ -890,11 +889,11 @@ MORE INFO:
                         val memoryEntries = memoryConfig.getInteger("Entries", 1000)
 
                         if (memoryEnabled) {
-                            logger.info("Deploying SyslogVerticle with memoryEntries=$memoryEntries")
+                            logger.fine("Deploying SyslogVerticle with memoryEntries=$memoryEntries")
                             val syslogVerticle = SyslogVerticle(true, memoryEntries, messageHandler)
                             vertx.deployVerticle(syslogVerticle)
                         } else {
-                            logger.info("In-memory syslog storage is disabled")
+                            logger.fine("In-memory syslog storage is disabled")
                             Future.succeededFuture<String>()
                         }
                     }
@@ -1000,7 +999,7 @@ MORE INFO:
                     .compose {
                         // Deploy API Service after other components are ready
                         if (apiService != null) {
-                            logger.info("Deploying API Service...")
+                            logger.fine("Deploying API Service...")
                             vertx.deployVerticle(apiService)
                         } else {
                             Future.succeededFuture<String>()
@@ -1009,12 +1008,11 @@ MORE INFO:
                     .compose {
                         // Start GraphQL server after all other components are ready
                         if (graphQLServer != null) {
-                            logger.info("Starting GraphQL server...")
+                            logger.fine("Starting GraphQL server...")
                             // Run GraphQL server start asynchronously to avoid blocking
                             vertx.runOnContext {
                                 try {
                                     graphQLServer.start()
-                                    logger.info("GraphQL server started successfully")
                                 } catch (e: Exception) {
                                     logger.severe("Failed to start GraphQL server: ${e.message}")
                                 }
@@ -1188,7 +1186,7 @@ MORE INFO:
                 logger.severe("SQLite directory '${sqliteConfig.path}' is not writable. Please check permissions.")
                 exitProcess(1)
             }
-            logger.info("SQLite directory validated: '${sqliteConfig.path}'")
+            logger.fine("SQLite directory validated: '${sqliteConfig.path}'")
         }
     }
 

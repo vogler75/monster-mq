@@ -517,7 +517,7 @@ class DeviceConfigStoreSQLite(
             sqliteClient.executeQuery("SELECT 1", JsonArray()).result()
             true // Connection is good
         } catch (e: Exception) {
-            logger.fine("Connection check failed: ${e.message}")
+            logger.finer("Connection check failed: ${e.message}")
             false
         }
     }

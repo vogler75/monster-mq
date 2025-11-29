@@ -160,7 +160,7 @@ class ArchiveGroup(
             val undeployFutures = childDeployments.map { deploymentId ->
                 logger.fine { "Undeploying child verticle: $deploymentId" }
                 vertx.undeploy(deploymentId).recover { error ->
-                    logger.fine("Child verticle $deploymentId already undeployed or not found: ${error.message}")
+                    logger.finer("Child verticle $deploymentId already undeployed or not found: ${error.message}")
                     Future.succeededFuture<Void>() // Continue even if undeploy fails
                 }
             }

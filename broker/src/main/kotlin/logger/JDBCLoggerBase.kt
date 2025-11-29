@@ -103,9 +103,9 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             // Initialize JSONPath if configured for dynamic table names
             if (cfg.tableNameJsonPath != null) {
                 tableNameJsonPath = JsonPath.compile(cfg.tableNameJsonPath)
-                logger.info("Using dynamic table name extraction: ${cfg.tableNameJsonPath}")
+                logger.fine("Using dynamic table name extraction: ${cfg.tableNameJsonPath}")
             } else {
-                logger.info("Using fixed table name: ${cfg.tableName}")
+                logger.fine("Using fixed table name: ${cfg.tableName}")
             }
 
             // Initialize queue (memory or disk)
@@ -114,7 +114,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             // Connect to database
             connect()
                 .onSuccess {
-                    logger.info("Database connection established")
+                    logger.fine("Database connection established")
 
                     // Subscribe to MQTT topics
                     subscribeToTopics()
@@ -662,7 +662,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                 shouldCommitQueue = true
             } else {
                 // Connection error occurred, don't clear accumulated rows - they will be retried
-                logger.fine("Keeping ${accumulatedRows.size} messages in buffer due to connection error, will retry")
+                logger.finer("Keeping ${accumulatedRows.size} messages in buffer due to connection error, will retry")
                 // Don't update lastBulkWrite so we'll retry immediately on next iteration
             }
         } else {
@@ -682,7 +682,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
         } else {
             // Don't commit queue - messages will be retried
             // Don't add newMessages to accumulatedRows - they're already in the queue
-            logger.fine("Not committing ${newMessages.size} new messages due to connection error")
+            logger.finer("Not committing ${newMessages.size} new messages due to connection error")
         }
 
         if (blockSize == 0 && accumulatedRows.isEmpty()) {
@@ -779,7 +779,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                 try {
                     disconnect().toCompletionStage().toCompletableFuture().get(5, java.util.concurrent.TimeUnit.SECONDS)
                 } catch (de: Exception) {
-                    logger.fine("Error during disconnect: ${de.message}")
+                    logger.finer("Error during disconnect: ${de.message}")
                 }
 
                 // Wait before reconnecting (use configured delay)

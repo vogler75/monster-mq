@@ -39,7 +39,7 @@ class McpServer(
     private var mcpHandler: McpHandler? = null
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting MCP server")
+        logger.fine("Starting MCP server")
 
         mcpHandler = McpHandler(vertx, retainedStore, archiveHandler) // McpHandler is initialized
 
@@ -48,7 +48,7 @@ class McpServer(
 
         // Post handler for MCP requests
         router.post(MCP_PATH).handler { ctx: RoutingContext ->
-            logger.info("Post request received for MCP at path $MCP_PATH")
+            logger.fine("Post request received for MCP at path $MCP_PATH")
             val body = ctx.body().asJsonObject()
 
             // Set keep-alive header for all responses to maintain connection
@@ -99,7 +99,7 @@ class McpServer(
         */
         // Get handler for MCP
         router.get(MCP_PATH).handler { ctx: RoutingContext ->
-            logger.info("Get request received for MCP: " + (ctx.request().headers()).toString().replace("\n", " "))
+            logger.fine("Get request received for MCP: " + (ctx.request().headers()).toString().replace("\n", " "))
             val response = ctx.response()
             response.putHeader("Content-Type", "text/event-stream")
                 .putHeader("Cache-Control", "no-cache")
@@ -130,7 +130,7 @@ class McpServer(
             response.closeHandler { _ ->
                 vertx.cancelTimer(timerId)
                 connections.remove(connectionId)
-                logger.info("Connection closed: $connectionId")
+                logger.fine("Connection closed: $connectionId")
             }
 
             // Handle client disconnect
@@ -170,6 +170,6 @@ class McpServer(
             .put("data", put)
 
         connection.response.write("data: ${message.encode()}\n\n")
-        logger.fine("Sent message to connection ${connection.connectionId}: $message")
+        logger.finer("Sent message to connection ${connection.connectionId}: $message")
     }
 }

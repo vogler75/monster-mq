@@ -84,7 +84,7 @@ class UserStorePostgres(
                 createIndexesSQL.forEach(stmt::executeUpdate)
             }
             connection.commit()
-            logger.info("PostgreSQL user management tables created")
+            logger.fine("PostgreSQL user management tables created")
             true
         } catch (e: java.sql.SQLException) {
             rollbackQuietly()
@@ -101,7 +101,7 @@ class UserStorePostgres(
                 connection = java.sql.DriverManager.getConnection(url, username, password)
                 connection?.autoCommit = false
                 createTablesSync(connection!!)
-                logger.info("PostgreSQL user management store initialized")
+                logger.fine("PostgreSQL user management store initialized")
                 true
             } catch (e: Exception) {
                 logger.severe("Failed to initialize PostgreSQL user management store: ${e.message}")

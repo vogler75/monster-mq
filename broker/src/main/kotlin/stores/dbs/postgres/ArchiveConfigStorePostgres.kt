@@ -69,7 +69,7 @@ class ArchiveConfigStorePostgres(
                     statement.executeUpdate(createTableSQL)
                 }
                 connection.commit()
-                logger.info("Archive config table is ready [${Utils.getCurrentFunctionName()}]")
+                logger.fine("Archive config table is ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
             } catch (e: Exception) {
                 logger.severe("Error in getting archive config table ready: ${e.message} [${Utils.getCurrentFunctionName()}]")
@@ -280,7 +280,7 @@ class ArchiveConfigStorePostgres(
                 logger.warning("Error saving archive group ${archiveGroup.name}: ${e.message} [${Utils.getCurrentFunctionName()}]")
                 try {
                     db.connection?.rollback()
-                    logger.info("Transaction rolled back after error [${Utils.getCurrentFunctionName()}]")
+                    logger.fine("Transaction rolled back after error [${Utils.getCurrentFunctionName()}]")
                 } catch (rollbackEx: Exception) {
                     logger.warning("Error rolling back transaction: ${rollbackEx.message} [${Utils.getCurrentFunctionName()}]")
                 }

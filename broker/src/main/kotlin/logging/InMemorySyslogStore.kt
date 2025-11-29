@@ -26,7 +26,7 @@ object InMemorySyslogStore {
     fun initialize(maxEntries: Int) {
         this.maxEntries = if (maxEntries > 0) maxEntries else 1000
         logs.clear()
-        logger.info("InMemorySyslogStore initialized with maxEntries=$maxEntries")
+        logger.fine("InMemorySyslogStore initialized with maxEntries=$maxEntries")
     }
 
     /**
@@ -80,7 +80,7 @@ object InMemorySyslogStore {
      */
     fun clear() {
         logs.clear()
-        logger.info("InMemorySyslogStore cleared")
+        logger.fine("InMemorySyslogStore cleared")
     }
 
     /**

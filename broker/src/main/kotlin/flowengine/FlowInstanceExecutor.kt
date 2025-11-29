@@ -660,7 +660,7 @@ class FlowInstanceExecutor(
         try {
             val nodeOutput = "$nodeId.$portName"
 
-            logger.fine("[${instanceConfig.name}] Node $nodeId output on port $portName: $value")
+            logger.finer("[${instanceConfig.name}] Node $nodeId output on port $portName: $value")
 
             // Check if this output is mapped to an MQTT topic
             val outputMapping = flowInstance.outputMappings.find { it.nodeOutput == nodeOutput }

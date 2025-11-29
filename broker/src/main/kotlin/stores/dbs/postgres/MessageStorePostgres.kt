@@ -82,7 +82,7 @@ class MessageStorePostgres(
                     CREATE INDEX IF NOT EXISTS ${tableName}_topic ON $tableName ($pkColumnsString)
                     """.trimIndent())
                     connection.commit()
-                    logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
+                    logger.fine("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
                     promise.complete()
                 }
             } catch (e: Exception) {
@@ -509,7 +509,7 @@ class MessageStorePostgres(
                     preparedStatement.executeUpdate()
                 }
                 connection.commit()
-                logger.info("Dropped table [$tableName] for message store [$name]")
+                logger.fine("Dropped table [$tableName] for message store [$name]")
                 true
             } ?: false
         } catch (e: SQLException) {
@@ -561,7 +561,7 @@ class MessageStorePostgres(
                     CREATE INDEX IF NOT EXISTS ${tableName}_topic ON $tableName ($pkColumnsString)
                     """.trimIndent())
                     connection.commit()
-                    logger.info("Message store table [$name] initialized (created or already exists) [${Utils.getCurrentFunctionName()}]")
+                    logger.fine("Message store table [$name] initialized (created or already exists) [${Utils.getCurrentFunctionName()}]")
                 }
                 true
             } ?: false

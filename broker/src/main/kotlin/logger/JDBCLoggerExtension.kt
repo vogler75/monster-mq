@@ -45,7 +45,7 @@ class JDBCLoggerExtension : AbstractVerticle() {
                 .compose { setupEventBusHandlers() }
                 .onComplete { res ->
                     if (res.succeeded()) {
-                        logger.info("JDBCLoggerExtension started successfully")
+                        logger.fine("JDBCLoggerExtension started successfully")
                         startPromise.complete()
                     } else {
                         logger.severe("Failed to start JDBCLoggerExtension: ${res.cause()?.message}")
@@ -59,13 +59,13 @@ class JDBCLoggerExtension : AbstractVerticle() {
     }
 
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("Stopping JDBCLoggerExtension...")
+        logger.fine("Stopping JDBCLoggerExtension...")
         val undeployFutures = deployedLoggers.values.map { vertx.undeploy(it) }
         @Suppress("UNCHECKED_CAST")
         Future.all<Void>(undeployFutures as List<Future<Void>>)
             .compose { deviceStore.close() }
             .onComplete {
-                logger.info("JDBCLoggerExtension stopped")
+                logger.fine("JDBCLoggerExtension stopped")
                 stopPromise.complete()
             }
     }
@@ -83,7 +83,7 @@ class JDBCLoggerExtension : AbstractVerticle() {
                 deviceStore = store
                 deviceStore.initialize().onComplete { initRes ->
                     if (initRes.succeeded()) {
-                        logger.info("Device store initialized: $storeType")
+                        logger.fine("JDBCLogger Device store initialized: $storeType")
                         p.complete()
                     } else {
                         logger.severe("Failed to initialize device store")
@@ -105,7 +105,7 @@ class JDBCLoggerExtension : AbstractVerticle() {
         deviceStore.getEnabledDevicesByNode(currentNodeId).onComplete { res ->
             if (res.succeeded()) {
                 val devices = res.result().filter { it.type == DeviceConfig.DEVICE_TYPE_JDBC_LOGGER }
-                logger.info("Found ${devices.size} JDBC Logger devices for node $currentNodeId")
+                logger.fine("Found ${devices.size} JDBC Logger devices for node $currentNodeId")
 
                 if (devices.isEmpty()) {
                     p.complete()
@@ -148,19 +148,19 @@ class JDBCLoggerExtension : AbstractVerticle() {
             val jdbcLogger = when (config.databaseType.uppercase()) {
                 "QUESTDB" -> QuestDBLogger()
                 "POSTGRESQL" -> {
-                    logger.info("Using PostgreSQL logger for database type: ${config.databaseType}")
+                    logger.fine("Using PostgreSQL logger for database type: ${config.databaseType}")
                     PostgreSQLLogger()
                 }
                 "TIMESCALEDB" -> {
-                    logger.info("Using PostgreSQL logger for TimescaleDB (PostgreSQL compatible)")
+                    logger.fine("Using PostgreSQL logger for TimescaleDB (PostgreSQL compatible)")
                     PostgreSQLLogger()
                 }
                 "MYSQL" -> {
-                    logger.info("Using MySQL logger for database type: ${config.databaseType}")
+                    logger.fine("Using MySQL logger for database type: ${config.databaseType}")
                     MySQLLogger()
                 }
                 "SNOWFLAKE" -> {
-                    logger.info("Using Snowflake logger for database type: ${config.databaseType}")
+                    logger.fine("Using Snowflake logger for database type: ${config.databaseType}")
                     SnowflakeLogger()
                 }
                 else -> {
@@ -177,7 +177,7 @@ class JDBCLoggerExtension : AbstractVerticle() {
                     deployedLoggers[device.name] = res.result()
                     activeDevices[device.name] = device
                     deviceRegistry[device.namespace] = device.name
-                    logger.info("Deployed JDBC Logger ${device.name} (${config.databaseType}): ${res.result()}")
+                    logger.fine("Deployed JDBC Logger ${device.name} (${config.databaseType}): ${res.result()}")
                     p.complete(res.result())
                 } else {
                     logger.severe("Failed to deploy JDBC Logger ${device.name}: ${res.cause()?.message}")
@@ -202,9 +202,9 @@ class JDBCLoggerExtension : AbstractVerticle() {
             return p.future()
         }
 
-        logger.info("Undeploying JDBC Logger $deviceName")
+        logger.fine("Undeploying JDBC Logger $deviceName")
         vertx.undeploy(deploymentId).onComplete {
-            logger.info("Undeployed JDBC Logger $deviceName")
+            logger.fine("Undeployed JDBC Logger $deviceName")
             p.complete()
         }
         return p.future()
@@ -227,7 +227,7 @@ class JDBCLoggerExtension : AbstractVerticle() {
                 }
             }
 
-            logger.info("Event bus handlers registered")
+            logger.fine("Event bus handlers registered")
             p.complete()
         } catch (e: Exception) {
             logger.severe("Error setting up event bus handlers: ${e.message}")
@@ -242,7 +242,7 @@ class JDBCLoggerExtension : AbstractVerticle() {
             val op = body.getString("operation")
             val name = body.getString("deviceName")
 
-            logger.info("Handling config change: $op for device $name")
+            logger.fine("Handling config change: $op for device $name")
 
             when (op) {
                 "add", "update" -> {

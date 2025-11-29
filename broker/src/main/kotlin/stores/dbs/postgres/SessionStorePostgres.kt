@@ -103,7 +103,7 @@ class SessionStorePostgres(
                     createIndexesSQL.forEach(statement::executeUpdate)
                 }
                 connection.commit()
-                logger.info("Tables are ready [${Utils.getCurrentFunctionName()}]")
+                logger.fine("Tables are ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
             } catch (e: Exception) {
                 logger.severe("Error in getting tables ready: ${e.message} [${Utils.getCurrentFunctionName()}]")
@@ -536,7 +536,7 @@ class SessionStorePostgres(
                     preparedStatement.executeUpdate()
                     val endTime = System.currentTimeMillis()
                     val duration = (endTime - startTime) / 1000.0
-                    logger.info("Purging queued messages finished in $duration seconds [${Utils.getCurrentFunctionName()}]")
+                    logger.fine("Purging queued messages finished in $duration seconds [${Utils.getCurrentFunctionName()}]")
                 }
             }
         } catch (e: SQLException) {
@@ -561,7 +561,7 @@ class SessionStorePostgres(
                 )
                 val endTime = System.currentTimeMillis()
                 val duration = (endTime - startTime) / 1000.0
-                logger.info("Purging sessions finished in $duration seconds [${Utils.getCurrentFunctionName()}]")
+                logger.fine("Purging sessions finished in $duration seconds [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
             logger.warning("Error at purging sessions [${e.message}] [${Utils.getCurrentFunctionName()}]")

@@ -51,7 +51,7 @@ abstract class DatabaseConnection(
             DriverManager.getConnection(url, username, password)
                 ?.let { connection ->
                     this.connection = connection
-                    logger.info("Connection established [${Utils.getCurrentFunctionName()}]")
+                    logger.fine("Connection established [${Utils.getCurrentFunctionName()}]")
                     init(connection).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 }
         } catch (e: Exception) {

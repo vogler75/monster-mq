@@ -206,7 +206,7 @@ class MessageStoreCrateDB(
                             preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 10, message.messageUuid)
                             preparedStatement.addBatch()
                         } catch (e: Exception) {
-                            logger.fine("Error preparing batch statement for message at index $index [${e.message}]")
+                            logger.finer("Error preparing batch statement for message at index $index [${e.message}]")
                             failedIndexes.add(index)
                         }
                     }
@@ -217,7 +217,7 @@ class MessageStoreCrateDB(
                         updateCounts.forEachIndexed { index, count ->
                             if (count == Statement.EXECUTE_FAILED) {
                                 failedIndexes.add(index)
-                                logger.fine("Batch statement at index $index failed to execute")
+                                logger.finer("Batch statement at index $index failed to execute")
                             } else {
                                 successCount++
                             }

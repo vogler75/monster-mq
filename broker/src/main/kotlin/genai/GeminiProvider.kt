@@ -46,7 +46,7 @@ class GeminiProvider : IGenAiProvider {
             temperature = (config["temperature"] as? Number)?.toDouble() ?: 0.7
             docsPath = config["docsPath"] as? String ?: "docs"
 
-            logger.info("Initializing Gemini provider with model: $modelName")
+            logger.fine("Initializing Gemini provider with model: $modelName")
 
             // Create client
             client = Client.builder()
@@ -79,7 +79,7 @@ class GeminiProvider : IGenAiProvider {
                 // Build the complete prompt with context and docs
                 val fullPrompt = buildPrompt(request)
 
-                logger.fine("Sending request to Gemini: ${fullPrompt.substring(0, minOf(100, fullPrompt.length))}...")
+                logger.finer("Sending request to Gemini: ${fullPrompt.substring(0, minOf(100, fullPrompt.length))}...")
 
                 // Create generation config
                 val config = GenerateContentConfig.builder()
@@ -88,7 +88,7 @@ class GeminiProvider : IGenAiProvider {
                     .build()
 
                 // Call Gemini API
-                logger.info("Calling Gemini API with model: $modelName")
+                logger.fine("Calling Gemini API with model: $modelName")
                 val response: GenerateContentResponse = client!!.models.generateContent(
                     modelName,
                     fullPrompt,
@@ -98,7 +98,7 @@ class GeminiProvider : IGenAiProvider {
                 // Extract response text
                 val responseText = response.text() ?: ""
 
-                logger.info("Received response from Gemini")
+                logger.fine("Received response from Gemini")
 
                 GenAiResponse.success(
                     text = responseText,
@@ -122,7 +122,7 @@ class GeminiProvider : IGenAiProvider {
         val future = CompletableFuture<Void>()
         client = null
         initialized = false
-        logger.info("Gemini provider shutdown")
+        logger.fine("Gemini provider shutdown")
         future.complete(null)
         return future
     }
@@ -173,7 +173,7 @@ class GeminiProvider : IGenAiProvider {
                 val resourceStream = this::class.java.classLoader.getResourceAsStream(resourcePath)
                 if (resourceStream != null) {
                     content = resourceStream.bufferedReader().use { it.readText() }
-                    logger.fine("Loaded documentation from classpath: $resourcePath")
+                    logger.finer("Loaded documentation from classpath: $resourcePath")
                 } else {
                     // Fallback to filesystem
                     val file = File(docPath).let { f ->
@@ -184,7 +184,7 @@ class GeminiProvider : IGenAiProvider {
                     if (file.exists() && file.isFile) {
                         content = file.readText()
                         fileName = file.name
-                        logger.fine("Loaded documentation from filesystem: ${file.absolutePath}")
+                        logger.finer("Loaded documentation from filesystem: ${file.absolutePath}")
                     } else {
                         logger.warning("Documentation file not found: $docPath (tried classpath:$resourcePath and filesystem:${file.absolutePath})")
                     }

@@ -53,12 +53,12 @@ class Plc4xExtension : AbstractVerticle() {
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting Plc4xExtension...")
+        logger.fine("Starting Plc4xExtension...")
 
         try {
             // Get current node ID
             currentNodeId = Monster.getClusterNodeId(vertx)
-            logger.info("Plc4xExtension running on node: $currentNodeId")
+            logger.fine("Plc4xExtension running on node: $currentNodeId")
 
             // Initialize shared data
             deviceRegistry = vertx.sharedData().getLocalMap("plc4x.device.registry")
@@ -69,7 +69,7 @@ class Plc4xExtension : AbstractVerticle() {
                 .compose { setupEventBusHandlers() }
                 .onComplete { result ->
                     if (result.succeeded()) {
-                        logger.info("Plc4xExtension started successfully")
+                        logger.fine("Plc4xExtension started successfully")
                         startPromise.complete()
                     } else {
                         logger.severe("Failed to start Plc4xExtension: ${result.cause()?.message}")
@@ -84,7 +84,7 @@ class Plc4xExtension : AbstractVerticle() {
     }
 
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("Stopping Plc4xExtension...")
+        logger.fine("Stopping Plc4xExtension...")
 
         // Undeploy all connectors
         val undeployFutures = deployedConnectors.values.map { deploymentId ->
@@ -95,7 +95,7 @@ class Plc4xExtension : AbstractVerticle() {
             .compose { deviceStore.close() }
             .onComplete { result ->
                 if (result.succeeded()) {
-                    logger.info("Plc4xExtension stopped successfully")
+                    logger.fine("Plc4xExtension stopped successfully")
                     stopPromise.complete()
                 } else {
                     logger.warning("Error during Plc4xExtension shutdown: ${result.cause()?.message}")
@@ -121,7 +121,7 @@ class Plc4xExtension : AbstractVerticle() {
                 deviceStore.initialize()
                     .onComplete { result ->
                         if (result.succeeded()) {
-                            logger.info("PLC4X device store initialized successfully")
+                            logger.fine("PLC4X device store initialized successfully")
                             promise.complete()
                         } else {
                             logger.severe("Failed to initialize DeviceConfigStore: ${result.cause()?.message}")
@@ -156,7 +156,7 @@ class Plc4xExtension : AbstractVerticle() {
                     val devices = result.result().filter { device ->
                         device.type == DeviceConfig.DEVICE_TYPE_PLC4X_CLIENT
                     }
-                    logger.info("Found ${devices.size} enabled PLC4X Client devices assigned to node $currentNodeId")
+                    logger.fine("Found ${devices.size} enabled PLC4X Client devices assigned to node $currentNodeId")
 
                     if (devices.isEmpty()) {
                         promise.complete()
@@ -173,7 +173,7 @@ class Plc4xExtension : AbstractVerticle() {
                                 completedCount++
                                 if (deployResult.succeeded()) {
                                     successCount++
-                                    logger.info("Successfully deployed connector for device ${device.name}")
+                                    logger.fine("Successfully deployed connector for device ${device.name}")
                                 } else {
                                     logger.warning("Failed to deploy connector for device ${device.name}: ${deployResult.cause()?.message}")
                                 }
@@ -217,7 +217,7 @@ class Plc4xExtension : AbstractVerticle() {
                         activeDevices[device.name] = device
                         deviceRegistry[device.namespace] = device.name
 
-                        logger.info("Deployed Plc4xConnector for device ${device.name} (${deploymentId})")
+                        logger.fine("Deployed Plc4xConnector for device ${device.name} (${deploymentId})")
                         promise.complete(deploymentId)
                     } else {
                         logger.severe("Failed to deploy connector for device ${device.name}: ${result.cause()?.message}")
@@ -246,7 +246,7 @@ class Plc4xExtension : AbstractVerticle() {
                     }
 
                     if (result.succeeded()) {
-                        logger.info("Undeployed Plc4xConnector for device $deviceName")
+                        logger.fine("Undeployed Plc4xConnector for device $deviceName")
                         promise.complete()
                     } else {
                         logger.warning("Failed to undeploy connector for device $deviceName: ${result.cause()?.message}")
@@ -319,7 +319,7 @@ class Plc4xExtension : AbstractVerticle() {
             val operation = changeData.getString("operation") // "add", "update", "delete", "toggle", "reassign"
             val deviceName = changeData.getString("deviceName")
 
-            logger.info("Handling device config change: $operation for device $deviceName")
+            logger.fine("Handling device config change: $operation for device $deviceName")
 
             when (operation) {
                 "add", "update", "addAddress", "deleteAddress" -> {
@@ -332,7 +332,7 @@ class Plc4xExtension : AbstractVerticle() {
                             .compose { deployConnectorForDevice(device) }
                             .onComplete { result ->
                                 if (result.succeeded()) {
-                                    logger.info("Successfully redeployed connector for device $deviceName after $operation")
+                                    logger.fine("Successfully redeployed connector for device $deviceName after $operation")
                                     message.reply(JsonObject().put("success", true))
                                 } else {
                                     logger.warning("Failed to redeploy connector for device $deviceName after $operation: ${result.cause()?.message}")

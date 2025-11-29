@@ -54,7 +54,7 @@ class MessageArchivePostgres (
                     statement.executeQuery("SELECT 1")
                 }
                 connection.commit()
-                logger.info("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
+                logger.fine("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
             } catch (e: Exception) {
                 logger.severe("Error initializing connection for [$name]: ${e.message} [${Utils.getCurrentFunctionName()}]")
@@ -124,7 +124,7 @@ class MessageArchivePostgres (
         endTime: Instant?,
         limit: Int
     ): JsonArray {
-        logger.fine("PostgreSQL getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
+        logger.finer("PostgreSQL getHistory called with: topic=$topic, startTime=$startTime, endTime=$endTime, limit=$limit")
         val sql = StringBuilder("SELECT topic, time, payload_blob, payload_json, qos, retained, client_id, message_uuid FROM $tableName WHERE topic LIKE ?")
         val topicPattern = topic.replace("#", "%") // replace "#" wildcard with "%" for SQL LIKE
         val params = mutableListOf<Any>()
@@ -133,17 +133,17 @@ class MessageArchivePostgres (
         startTime?.let {
             sql.append(" AND time >= ?")
             params.add(Timestamp.from(it))
-            logger.fine("Added startTime parameter: $it")
+            logger.finer("Added startTime parameter: $it")
         }
         endTime?.let {
             sql.append(" AND time <= ?")
             params.add(Timestamp.from(it))
-            logger.fine("Added endTime parameter: $it")
+            logger.finer("Added endTime parameter: $it")
         }
         sql.append(" ORDER BY time DESC LIMIT ?")
         params.add(limit)
         
-        logger.fine("Executing PostgreSQL SQL: ${sql.toString()} with parameters: $params")
+        logger.finer("Executing PostgreSQL SQL: ${sql.toString()} with parameters: $params")
 
         val messages = JsonArray()
 
@@ -161,7 +161,7 @@ class MessageArchivePostgres (
                     }
                     val resultSet = preparedStatement.executeQuery()
                     val queryDuration = System.currentTimeMillis() - startTime
-                    logger.fine("PostgreSQL query completed in ${queryDuration}ms")
+                    logger.finer("PostgreSQL query completed in ${queryDuration}ms")
                     
                     val processingStart = System.currentTimeMillis()
                     var rowCount = 0
@@ -187,7 +187,7 @@ class MessageArchivePostgres (
                         messages.add(messageObj)
                     }
                     val processingDuration = System.currentTimeMillis() - processingStart
-                    logger.fine("PostgreSQL data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages")
+                    logger.finer("PostgreSQL data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages")
                 }
             }
         } catch (e: SQLException) {
@@ -271,7 +271,7 @@ class MessageArchivePostgres (
                     preparedStatement.executeUpdate()
                 }
                 connection.commit()
-                logger.info("Dropped table [$tableName] for message archive [$name]")
+                logger.fine("Dropped table [$tableName] for message archive [$name]")
                 true
             } ?: false
         } catch (e: SQLException) {
@@ -321,7 +321,7 @@ class MessageArchivePostgres (
                     // Check if TimescaleDB extension is available
                     val resultSet = statement.executeQuery("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb';")
                     if (resultSet.next()) {
-                        logger.info("TimescaleDB extension is available [${Utils.getCurrentFunctionName()}]")
+                        logger.fine("TimescaleDB extension is available [${Utils.getCurrentFunctionName()}]")
                         val hypertableCheck =
                             statement.executeQuery("SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = '$tableName';")
                         if (!hypertableCheck.next()) {
@@ -330,21 +330,21 @@ class MessageArchivePostgres (
                             val isEmpty = countResult.next() && countResult.getInt("cnt") == 0
 
                             if (isEmpty) {
-                                logger.info("Table $tableName is empty, converting to hypertable... [${Utils.getCurrentFunctionName()}]")
+                                logger.fine("Table $tableName is empty, converting to hypertable... [${Utils.getCurrentFunctionName()}]")
                                 statement.executeQuery("SELECT create_hypertable('$tableName', 'time');")
-                                logger.info("Table $tableName converted to hypertable [${Utils.getCurrentFunctionName()}]")
+                                logger.fine("Table $tableName converted to hypertable [${Utils.getCurrentFunctionName()}]")
                             } else {
                                 logger.warning("Table $tableName is not empty - skipping hypertable conversion. To convert existing data, run: SELECT create_hypertable('$tableName', 'time', migrate_data => true); [${Utils.getCurrentFunctionName()}]")
                             }
                         } else {
-                            logger.info("Table $tableName is already a hypertable [${Utils.getCurrentFunctionName()}]")
+                            logger.fine("Table $tableName is already a hypertable [${Utils.getCurrentFunctionName()}]")
                         }
                     } else {
                         logger.warning("TimescaleDB extension is not available [${Utils.getCurrentFunctionName()}]")
                     }
                 }
                 connection.commit()
-                logger.info("Message archive table [$name] initialized (created or already exists) [${Utils.getCurrentFunctionName()}]")
+                logger.fine("Message archive table [$name] initialized (created or already exists) [${Utils.getCurrentFunctionName()}]")
                 true
             } ?: false
         } catch (e: Exception) {

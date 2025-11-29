@@ -118,7 +118,7 @@ class SparkplugBDecoderQueries(
                     )
                     future.complete(metrics)
                 } else {
-                    logger.fine("Failed to fetch metrics for SparkplugB Decoder '$deviceName': ${result.cause()?.message}")
+                    logger.finer("Failed to fetch metrics for SparkplugB Decoder '$deviceName': ${result.cause()?.message}")
                     future.complete(createEmptyMetrics())
                 }
             }

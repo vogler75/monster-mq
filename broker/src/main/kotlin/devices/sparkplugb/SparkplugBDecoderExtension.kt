@@ -52,12 +52,12 @@ class SparkplugBDecoderExtension : AbstractVerticle() {
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting SparkplugBDecoderExtension...")
+        logger.fine("Starting SparkplugBDecoderExtension...")
 
         try {
             // Get current node ID
             currentNodeId = Monster.getClusterNodeId(vertx)
-            logger.info("SparkplugBDecoderExtension running on node: $currentNodeId")
+            logger.fine("SparkplugBDecoderExtension running on node: $currentNodeId")
 
             // Initialize shared data
             deviceRegistry = vertx.sharedData().getLocalMap("sparkplugb.decoder.device.registry")
@@ -68,7 +68,7 @@ class SparkplugBDecoderExtension : AbstractVerticle() {
                 .compose { setupEventBusHandlers() }
                 .onComplete { result ->
                     if (result.succeeded()) {
-                        logger.info("SparkplugBDecoderExtension started successfully")
+                        logger.fine("SparkplugBDecoderExtension started successfully")
                         startPromise.complete()
                     } else {
                         logger.severe("Failed to start SparkplugBDecoderExtension: ${result.cause()?.message}")
@@ -83,7 +83,7 @@ class SparkplugBDecoderExtension : AbstractVerticle() {
     }
 
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("Stopping SparkplugBDecoderExtension...")
+        logger.fine("Stopping SparkplugBDecoderExtension...")
 
         // Undeploy all connectors
         val undeployFutures = deployedConnectors.values.map { deploymentId ->
@@ -121,7 +121,7 @@ class SparkplugBDecoderExtension : AbstractVerticle() {
                 deviceStore.initialize()
                     .onComplete { result ->
                         if (result.succeeded()) {
-                            logger.info("SparkplugB Decoder device store initialized successfully")
+                            logger.fine("SparkplugB Decoder device store initialized successfully")
                             promise.complete()
                         } else {
                             logger.severe("Failed to initialize DeviceConfigStore: ${result.cause()?.message}")
@@ -156,7 +156,7 @@ class SparkplugBDecoderExtension : AbstractVerticle() {
                     val devices = result.result().filter { device ->
                         device.type == DeviceConfig.DEVICE_TYPE_SPARKPLUGB_DECODER
                     }
-                    logger.info("Found ${devices.size} enabled SparkplugB Decoder devices assigned to node $currentNodeId")
+                    logger.fine("Found ${devices.size} enabled SparkplugB Decoder devices assigned to node $currentNodeId")
 
                     if (devices.isEmpty()) {
                         promise.complete()
@@ -173,7 +173,7 @@ class SparkplugBDecoderExtension : AbstractVerticle() {
                                 completedCount++
                                 if (deployResult.succeeded()) {
                                     successCount++
-                                    logger.info("Successfully deployed connector for device ${device.name}")
+                                    logger.fine("Successfully deployed connector for device ${device.name}")
                                 } else {
                                     logger.warning("Failed to deploy connector for device ${device.name}: ${deployResult.cause()?.message}")
                                 }
@@ -217,7 +217,7 @@ class SparkplugBDecoderExtension : AbstractVerticle() {
                         activeDevices[device.name] = device
                         deviceRegistry[device.namespace] = device.name
 
-                        logger.info("Deployed SparkplugBDecoderConnector for device ${device.name} (${deploymentId})")
+                        logger.fine("Deployed SparkplugBDecoderConnector for device ${device.name} (${deploymentId})")
                         promise.complete(deploymentId)
                     } else {
                         logger.severe("Failed to deploy connector for device ${device.name}: ${result.cause()?.message}")
@@ -246,7 +246,7 @@ class SparkplugBDecoderExtension : AbstractVerticle() {
                     }
 
                     if (result.succeeded()) {
-                        logger.info("Undeployed SparkplugBDecoderConnector for device $deviceName")
+                        logger.fine("Undeployed SparkplugBDecoderConnector for device $deviceName")
                         promise.complete()
                     } else {
                         logger.warning("Failed to undeploy connector for device $deviceName: ${result.cause()?.message}")
@@ -319,23 +319,23 @@ class SparkplugBDecoderExtension : AbstractVerticle() {
             val operation = changeData.getString("operation") // "add", "update", "delete", "toggle", "reassign", "addRule", "deleteRule"
             val deviceName = changeData.getString("deviceName")
 
-            logger.info("Handling device config change: $operation for device $deviceName")
+            logger.fine("Handling device config change: $operation for device $deviceName")
 
             when (operation) {
                 "add", "update", "addRule", "deleteRule" -> {
                     val deviceJson = changeData.getJsonObject("device")
                     val device = DeviceConfig.fromJsonObject(deviceJson)
 
-                    logger.info("Device $deviceName: nodeId=${device.nodeId}, currentNodeId=$currentNodeId, enabled=${device.enabled}, isAssigned=${device.isAssignedToNode(currentNodeId)}")
+                    logger.fine("Device $deviceName: nodeId=${device.nodeId}, currentNodeId=$currentNodeId, enabled=${device.enabled}, isAssigned=${device.isAssignedToNode(currentNodeId)}")
 
                     if (device.isAssignedToNode(currentNodeId) && device.enabled) {
                         // Redeploy connector for this device
-                        logger.info("Deploying SparkplugB Decoder connector for device $deviceName on node $currentNodeId")
+                        logger.fine("Deploying SparkplugB Decoder connector for device $deviceName on node $currentNodeId")
                         undeployConnectorForDevice(deviceName)
                             .compose { deployConnectorForDevice(device) }
                             .onComplete { result ->
                                 if (result.succeeded()) {
-                                    logger.info("Successfully redeployed connector for device $deviceName after $operation")
+                                    logger.fine("Successfully redeployed connector for device $deviceName after $operation")
                                     message.reply(JsonObject().put("success", true))
                                 } else {
                                     logger.warning("Failed to redeploy connector for device $deviceName after $operation: ${result.cause()?.message}")
@@ -344,7 +344,7 @@ class SparkplugBDecoderExtension : AbstractVerticle() {
                             }
                     } else {
                         // Device not for this node or disabled - just undeploy if exists
-                        logger.info("Skipping deployment for device $deviceName: not assigned to this node or disabled")
+                        logger.fine("Skipping deployment for device $deviceName: not assigned to this node or disabled")
                         undeployConnectorForDevice(deviceName)
                             .onComplete { message.reply(JsonObject().put("success", true)) }
                     }

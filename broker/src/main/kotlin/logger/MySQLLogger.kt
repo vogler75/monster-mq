@@ -235,7 +235,7 @@ class MySQLLogger : PostgreSQLLogger() {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """.trimIndent()
 
-            logger.fine("Executing CREATE TABLE:\n$createTableSQL")
+            logger.finer("Executing CREATE TABLE:\n$createTableSQL")
 
             conn.createStatement().use { stmt ->
                 stmt.execute(createTableSQL)

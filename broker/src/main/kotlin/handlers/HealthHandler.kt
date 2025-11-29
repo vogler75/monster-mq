@@ -86,7 +86,7 @@ class HealthHandler(
             sessionHandler.purgeSessions()
             sessionHandler.purgeQueuedMessages()
         }).onComplete {
-            logger.info("Purged sessions and queued messages")
+            logger.fine("Purged sessions and queued messages")
             vertx.setPeriodic(60_000 * 10) {
                 vertx.executeBlocking(Callable { sessionHandler.purgeQueuedMessages() })
             }

@@ -67,7 +67,7 @@ class SubscriptionResolver(
                 null -> listOf("+")
                 else -> listOf("+")
             }
-            logger.fine("SubscriptionResolver.systemLogs - levelArg: $levelArg, levels: $levels")
+            logger.finer("SubscriptionResolver.systemLogs - levelArg: $levelArg, levels: $levels")
             val loggerFilter = env.getArgument<String?>("logger")
             val threadFilter = env.getArgument<Long?>("thread")
             val sourceClassFilter = env.getArgument<String?>("sourceClass")
@@ -418,7 +418,7 @@ class SubscriptionResolver(
                 
                 // Check if level matches any of the level filters
                 val levelMatches = levelFilters.contains("+") || levelFilters.any { matchesTopicFilter(level, it) }
-                logger.fine("Subscription: level='$level', levelFilters=$levelFilters, matches=$levelMatches")
+                logger.finer("Subscription: level='$level', levelFilters=$levelFilters, matches=$levelMatches")
                 if (!levelMatches) return
                 
                 // Apply field filters with regex support

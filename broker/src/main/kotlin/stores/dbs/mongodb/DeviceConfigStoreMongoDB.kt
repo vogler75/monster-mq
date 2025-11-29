@@ -332,7 +332,7 @@ class DeviceConfigStoreMongoDB(
             adminDb.runCommand(Document("ping", 1))
             true // Connection is good
         } catch (e: Exception) {
-            logger.fine("Connection check failed: ${e.message}")
+            logger.finer("Connection check failed: ${e.message}")
             false
         }
     }
@@ -347,7 +347,7 @@ class DeviceConfigStoreMongoDB(
                     try {
                         mongoClient.close()
                     } catch (e: Exception) {
-                        logger.fine("Error closing old MongoDB connection: ${e.message}")
+                        logger.finer("Error closing old MongoDB connection: ${e.message}")
                     }
                     // Create new client
                     mongoClient = MongoClients.create(connectionString)

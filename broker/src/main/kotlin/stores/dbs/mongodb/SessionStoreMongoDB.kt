@@ -55,7 +55,7 @@ class SessionStoreMongoDB(
             queuedMessagesCollection.createIndex(Document("client_id", 1))
             queuedMessagesClientsCollection.createIndex(Document("client_id", 1))
 
-            logger.info("MongoDB connection established successfully.")
+            logger.fine("MongoDB connection established successfully.")
             startPromise.complete()
         } catch (e: Exception) {
             logger.severe("Error while starting MongoDB connection: ${e.message}")

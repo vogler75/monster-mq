@@ -315,7 +315,7 @@ class Oa4jBridge : AbstractVerticle() {
 
     private fun handleDpValues(state: DpConnectionState, hotlink: JDpHLGroup) {
         try {
-            logger.fine("Oa4jBridge: hotlink callback for '${state.datapointName}' with ${hotlink.numberOfItems} items")
+            logger.finer("Oa4jBridge: hotlink callback for '${state.datapointName}' with ${hotlink.numberOfItems} items")
 
             // Build JSON from values
             val json = JsonObject()

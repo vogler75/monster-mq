@@ -68,7 +68,7 @@ class PublishWorker(
      * Main loop: continuously process batches from queue.
      */
     private fun processBatches() {
-        logger.info("PublishWorker[$id] started")
+        logger.fine("PublishWorker[$id] started")
 
         try {
             while (!Thread.currentThread().isInterrupted) {
@@ -77,7 +77,7 @@ class PublishWorker(
                     val batch = batchQueue.poll(100, TimeUnit.MILLISECONDS) ?: continue
                     processSingleBatch(batch)
                 } catch (e: InterruptedException) {
-                    logger.info("PublishWorker[$id] interrupted, stopping")
+                    logger.warning("PublishWorker[$id] interrupted, stopping")
                     Thread.currentThread().interrupt()
                     break
                 } catch (e: Exception) {
@@ -85,7 +85,7 @@ class PublishWorker(
                 }
             }
         } finally {
-            logger.info("PublishWorker[$id] stopped")
+            logger.fine("PublishWorker[$id] stopped")
         }
     }
 
@@ -226,7 +226,7 @@ class PublishWorkerPool(
         workers.forEach { worker ->
             worker.start(executor)
         }
-        logger.info("Started PublishWorkerPool with $numWorkers workers (dedicated executor service, not Vert.x managed)")
+        logger.fine("Started PublishWorkerPool with $numWorkers workers (dedicated executor service, not Vert.x managed)")
     }
 
     /**
@@ -237,11 +237,11 @@ class PublishWorkerPool(
      * This method attempts graceful shutdown but doesn't block indefinitely.
      */
     fun shutdown() {
-        logger.info("Shutting down PublishWorker...")
+        logger.fine("Shutting down PublishWorker...")
         try {
             // Request graceful shutdown (no new tasks accepted)
             executor.shutdownNow()
-            logger.info("PublishWorkerPool force shutdown complete")
+            logger.fine("PublishWorkerPool force shutdown complete")
         } catch (e: InterruptedException) {
             logger.warning("Interrupted waiting for PublishWorker shutdown: ${e.message}")
         }
@@ -292,11 +292,11 @@ class PublishWorkerPool(
      */
     fun logWorkerLoad() {
         val poolMetrics = getMetrics()
-        logger.fine("=== PublishWorkerPool Load ===")
-        logger.fine("Pool Summary: totalBatches=${poolMetrics.totalBatches}, totalMsgs=${poolMetrics.totalMessages}, totalTime=${poolMetrics.totalProcessingTimeMs}ms, avgBatchSize=${poolMetrics.avgBatchSize}, poolThroughput=${poolMetrics.throughputMsgs}msg/s")
+        logger.finer("=== PublishWorkerPool Load ===")
+        logger.finer("Pool Summary: totalBatches=${poolMetrics.totalBatches}, totalMsgs=${poolMetrics.totalMessages}, totalTime=${poolMetrics.totalProcessingTimeMs}ms, avgBatchSize=${poolMetrics.avgBatchSize}, poolThroughput=${poolMetrics.throughputMsgs}msg/s")
 
         workers.forEach { worker ->
-            logger.fine(worker.getStatusString())
+            logger.finer(worker.getStatusString())
         }
     }
 

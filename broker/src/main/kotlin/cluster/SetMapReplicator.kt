@@ -31,7 +31,7 @@ class SetMapReplicator(
             handleReplicationEvent(message)
         }
 
-        logger.info("ClusterSetMapReplicator initialized at address: $eventBusAddress")
+        logger.fine("ClusterSetMapReplicator initialized at address: $eventBusAddress")
     }
 
     /**

@@ -46,7 +46,7 @@ object GenAiProviderFactory {
             // Check if GenAI is enabled
             val enabled = config.getBoolean("Enabled", false)
             if (!enabled) {
-                logger.info("GenAI is disabled in configuration")
+                logger.fine("GenAI is disabled in configuration")
                 future.complete(null)
                 return future
             }
@@ -81,7 +81,7 @@ object GenAiProviderFactory {
             // Create provider instance
             val provider: IGenAiProvider = when (providerType) {
                 ProviderType.GEMINI -> {
-                    logger.info("Creating Gemini provider")
+                    logger.fine("Creating Gemini provider")
                     GeminiProvider()
                 }
                 ProviderType.CLAUDE -> {
@@ -99,7 +99,7 @@ object GenAiProviderFactory {
             // Initialize provider
             provider.initialize(vertx, providerConfig)
                 .thenAccept {
-                    logger.info("GenAI provider ${provider.providerName} initialized successfully with model ${provider.modelName}")
+                    logger.fine("GenAI provider ${provider.providerName} initialized successfully with model ${provider.modelName}")
                     future.complete(provider)
                 }
                 .exceptionally { error ->

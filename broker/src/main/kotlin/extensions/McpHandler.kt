@@ -79,7 +79,6 @@ class McpHandler(
         }
 
         if (warnings.isNotEmpty()) {
-            logger.warning("MCP Handler initialized with limitations:")
             warnings.forEach { warning -> logger.warning("$warning") }
         } else {
             logger.info("All MCP stores are fully extended - all tools will be available")

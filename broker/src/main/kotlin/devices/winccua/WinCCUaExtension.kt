@@ -52,12 +52,12 @@ class WinCCUaExtension : AbstractVerticle() {
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting WinCCUaExtension...")
+        logger.fine("Starting WinCCUaExtension...")
 
         try {
             // Get current node ID
             currentNodeId = Monster.getClusterNodeId(vertx)
-            logger.info("WinCCUaExtension running on node: $currentNodeId")
+            logger.fine("WinCCUaExtension running on node: $currentNodeId")
 
             // Initialize shared data
             deviceRegistry = vertx.sharedData().getLocalMap("winccua.device.registry")
@@ -68,7 +68,7 @@ class WinCCUaExtension : AbstractVerticle() {
                 .compose { setupEventBusHandlers() }
                 .onComplete { result ->
                     if (result.succeeded()) {
-                        logger.info("WinCCUaExtension started successfully")
+                        logger.fine("WinCCUaExtension started successfully")
                         startPromise.complete()
                     } else {
                         logger.severe("Failed to start WinCCUaExtension: ${result.cause()?.message}")
@@ -83,7 +83,7 @@ class WinCCUaExtension : AbstractVerticle() {
     }
 
     override fun stop(stopPromise: Promise<Void>) {
-        logger.info("Stopping WinCCUaExtension...")
+        logger.fine("Stopping WinCCUaExtension...")
 
         // Undeploy all connectors
         val undeployFutures = deployedConnectors.values.map { deploymentId ->
@@ -94,7 +94,7 @@ class WinCCUaExtension : AbstractVerticle() {
             .compose { deviceStore.close() }
             .onComplete { result ->
                 if (result.succeeded()) {
-                    logger.info("WinCCUaExtension stopped successfully")
+                    logger.fine("WinCCUaExtension stopped successfully")
                     stopPromise.complete()
                 } else {
                     logger.warning("Error during WinCCUaExtension shutdown: ${result.cause()?.message}")
@@ -120,7 +120,7 @@ class WinCCUaExtension : AbstractVerticle() {
                 deviceStore.initialize()
                     .onComplete { result ->
                         if (result.succeeded()) {
-                            logger.info("WinCC UA device store initialized successfully")
+                            logger.fine("WinCC UA device store initialized successfully")
                             promise.complete()
                         } else {
                             logger.severe("Failed to initialize DeviceConfigStore: ${result.cause()?.message}")
@@ -155,7 +155,7 @@ class WinCCUaExtension : AbstractVerticle() {
                     val devices = result.result().filter { device ->
                         device.type == DeviceConfig.DEVICE_TYPE_WINCCUA_CLIENT
                     }
-                    logger.info("Found ${devices.size} enabled WinCC UA Client devices assigned to node $currentNodeId")
+                    logger.fine("Found ${devices.size} enabled WinCC UA Client devices assigned to node $currentNodeId")
 
                     if (devices.isEmpty()) {
                         promise.complete()
@@ -172,7 +172,7 @@ class WinCCUaExtension : AbstractVerticle() {
                                 completedCount++
                                 if (deployResult.succeeded()) {
                                     successCount++
-                                    logger.info("Successfully deployed connector for device ${device.name}")
+                                    logger.fine("Successfully deployed connector for device ${device.name}")
                                 } else {
                                     logger.warning("Failed to deploy connector for device ${device.name}: ${deployResult.cause()?.message}")
                                 }
