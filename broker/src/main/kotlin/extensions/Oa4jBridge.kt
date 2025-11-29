@@ -418,13 +418,13 @@ class Oa4jBridge : AbstractVerticle() {
             clientId = "oa-datapoint-bridge-$namespace"
         )
 
-        logger.info("Oa4jBridge: Publishing to '$topic': ${payload.encode()}")
+        logger.finest("Oa4jBridge: Publishing to '$topic': ${payload.encode()}")
 
         // Use SessionHandler to publish (ensures distribution across cluster)
         val sessionHandler = Monster.getSessionHandler()
         if (sessionHandler != null) {
             sessionHandler.publishMessage(message)
-            logger.info("Oa4jBridge: Message published successfully to '$topic'")
+            logger.finest("Oa4jBridge: Message published successfully to '$topic'")
         } else {
             logger.severe("Oa4jBridge: SessionHandler is null, cannot publish to '$topic'")
         }
