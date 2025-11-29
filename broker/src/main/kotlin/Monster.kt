@@ -62,7 +62,7 @@ fun main(args: Array<String>) {
 class Monster(args: Array<String>) {
     private val logger: Logger = Utils.getLogger(this::class.java)
 
-    private val isClustered = args.find { it == "-cluster" } != null
+    private val isClustered = args.find { it == "-cluster" || it == "--cluster" } != null
 
     private val configFile: String
     private var configJson: JsonObject = JsonObject()
@@ -162,20 +162,8 @@ class Monster(args: Array<String>) {
             return getInstance().clusterManager
         }
 
-        // Removed: getSparkplugExtension() - replaced by SparkplugB Decoder Device system
-        // SparkplugB decoding is now managed through configurable decoder devices
-        // See SparkplugBDecoderExtension for the new implementation
-
-        fun setSessionHandler(handler: SessionHandler) {
-            getInstance().sessionHandler = handler
-        }
-
         fun getSessionHandler(): SessionHandler? {
             return getInstance().sessionHandler
-        }
-
-        fun getMessageBus(): IMessageBus? {
-            return getInstance().messageBus
         }
 
         fun getVertx(): Vertx? {
@@ -278,6 +266,8 @@ class Monster(args: Array<String>) {
             Utils.initLogging()
         }
 
+        logger.fine("Monster: Starting with ${args.size} arguments ["+args.joinToString("][")+"]")
+
         // Check for help argument first
         if (args.contains("-help") || args.contains("--help") || args.contains("-h")) {
             printHelp()
@@ -288,7 +278,7 @@ class Monster(args: Array<String>) {
         else throw Exception("Monster instance is already initialized.")
 
         // Config file
-        val configFileIndex = args.indexOf("-config")
+        val configFileIndex = Utils.getArgIndex(args, listOf("-config", "--config"))
         configFile = if (configFileIndex != -1 && configFileIndex + 1 < args.size) {
             args[configFileIndex + 1]
         } else {
@@ -296,7 +286,7 @@ class Monster(args: Array<String>) {
         }
 
         // Archive config file (optional)
-        val archiveConfigIndex = args.indexOf("-archiveConfig")
+        val archiveConfigIndex = Utils.getArgIndex(args, listOf("-archiveConfig", "--archiveConfig"))
         archiveConfigFile = if (archiveConfigIndex != -1 && archiveConfigIndex + 1 < args.size) {
             args[archiveConfigIndex + 1]
         } else {
@@ -304,27 +294,25 @@ class Monster(args: Array<String>) {
         }
 
         // Dashboard path for development (optional)
-        val dashboardPathIndex = args.indexOf("-dashboardPath")
+        val dashboardPathIndex = Utils.getArgIndex(args, listOf("-dashboardPath", "--dashboardPath"))
         dashboardPath = if (dashboardPathIndex != -1 && dashboardPathIndex + 1 < args.size) {
             args[dashboardPathIndex + 1]
         } else {
             null
         }
 
-        args.indexOf("-log").let {
+        Utils.getArgIndex(args, listOf("-log", "--log")).let {
             if (it != -1) {
                 val level = Level.parse(args[it + 1])
-                println("Log Level [$level]")
                 Const.DEBUG_LEVEL = level
             }
         }
 
         // Worker pool size (optional)
-        args.indexOf("-workerPoolSize").let {
+        Utils.getArgIndex(args, listOf("-workerPoolSize", "--workerPoolSize")).let {
             if (it != -1 && it + 1 < args.size) {
                 try {
                     workerPoolSize = args[it + 1].toInt()
-                    println("Worker Pool Size [$workerPoolSize]")
                 } catch (e: NumberFormatException) {
                     println("ERROR: -workerPoolSize argument must be an integer")
                     exitProcess(1)
@@ -865,12 +853,12 @@ MORE INFO:
                         // (Memory logging depends on MqttLogHandler to capture logs)
                         if (mqttLoggingEnabled || memoryLoggingEnabled) {
                             try {
-                                logger.fine("Installing log handler for system-wide log capture (fixed at INFO level)...")
+                                logger.fine("Installing log handler for system-wide log capture (level: ${Const.DEBUG_LEVEL})...")
                                 val sysLogHandler = SysLogHandler.install()
 
-                                // Set the log level to INFO (fixed)
-                                sysLogHandler.level = Level.INFO
-                                logger.info("Log handler installed successfully at INFO level (MQTT: $mqttLoggingEnabled, Memory: $memoryLoggingEnabled)")
+                                // Set the log level to configured debug level
+                                sysLogHandler.level = Const.DEBUG_LEVEL
+                                logger.info("Log handler installed successfully at ${Const.DEBUG_LEVEL} level (MQTT: $mqttLoggingEnabled, Memory: $memoryLoggingEnabled)")
                             } catch (e: Exception) {
                                 logger.severe("Failed to install log handler: ${e.message}")
                                 throw e

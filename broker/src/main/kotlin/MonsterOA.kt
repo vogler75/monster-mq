@@ -38,7 +38,7 @@ class MonsterOA(args: Array<String>) {
         try {
             instance = this
 
-            // Step 0: Install JManager log handler and remove all default handlers
+            // Step 1: Install JManager log handler and remove all default handlers
             // This redirects all logs to JManager's log system instead of console/files
             val rootLogger = Logger.getLogger("")
 
@@ -49,21 +49,17 @@ class MonsterOA(args: Array<String>) {
 
             // Install JManager log handler
             JManagerLogHandler.install()
-            logger.fine("MonsterOA: JManager log handler installed")
 
-            // Step 1: Initialize JManager with WinCC OA
+            // Step 2: Initialize JManager with WinCC OA
             logger.fine("MonsterOA: Initializing JManager...")
             manager = JManager()
             manager!!.init(args).start()
-            logger.fine("MonsterOA: JManager initialized successfully")
 
-            // Step 2: Extract application arguments (those after "--")
-            val appArgs = extractApplicationArguments(args)
-            logger.fine("MonsterOA: Starting with ${appArgs.size} arguments ["+appArgs.joinToString(" ")+"]")
+            logger.fine("MonsterOA: Starting with ${args.size} arguments ["+args.joinToString("][")+"]")
 
             // Step 3: Initialize Monster with filtered arguments
             logger.fine("MonsterOA: Initializing Monster...")
-            monster = Monster(appArgs.toTypedArray())
+            monster = Monster(args)
             logger.fine("MonsterOA: Monster initialized successfully")
 
         } catch (e: Exception) {
@@ -85,14 +81,5 @@ class MonsterOA(args: Array<String>) {
          * Extract arguments that come after "--" in the command line.
          * These are the application-specific arguments for MonsterMQ.
          */
-    }
-
-    private fun extractApplicationArguments(args: Array<String>): List<String> {
-        val separatorIndex = args.indexOf("--")
-        return if (separatorIndex >= 0 && separatorIndex < args.size - 1) {
-            args.drop(separatorIndex + 1)
-        } else {
-            emptyList()
-        }
     }
 }

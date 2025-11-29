@@ -96,4 +96,12 @@ object Utils {
             else -> "${duration.toSeconds()}s"
         }
     }
+
+    fun getArgIndex(args: Array<String>, keys: List<String>): Int {
+        for (key in keys) {
+            val index = args.indexOf(key)
+            if (index != -1) return index
+        }
+        return -1
+    }
 }

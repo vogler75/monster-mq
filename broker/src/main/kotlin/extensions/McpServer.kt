@@ -151,7 +151,7 @@ class McpServer(
             .requestHandler(router)
             .listen()
             .onSuccess { server ->
-                logger.info("MCP Server started on port ${server.actualPort()}")
+                logger.info("MCP Server started on port ${server.actualPort()} with path $MCP_PATH")
                 startPromise.complete()
             }
             .onFailure { error ->
