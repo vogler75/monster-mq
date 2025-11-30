@@ -19,22 +19,22 @@ Security features include:
 ```yaml
 # Enable TLS on MQTT port
 TCPS: 8883
+
+# Optional: Configure keystore (defaults shown)
+SSL:
+  KeyStorePath: server-keystore.jks
+  KeyStorePassword: password
 ```
 
-**Note:** MonsterMQ currently uses a hardcoded SSL configuration:
-- Keystore file: `server-keystore.jks`
-- Keystore password: `password`
-- Location: Must be in the working directory where MonsterMQ is started
-
-To enable SSL, place your `server-keystore.jks` file in the MonsterMQ working directory with the password `password`.
+By default, MonsterMQ looks for `server-keystore.jks` in the working directory with password `password`. You can customize this using the `SSL` configuration section.
 
 ### Certificate Requirements
 
-MonsterMQ requires a Java KeyStore (JKS) file for SSL/TLS functionality. The current implementation has these limitations:
+MonsterMQ requires a Java KeyStore (JKS) file for SSL/TLS functionality:
 
-- **Fixed filename**: `server-keystore.jks`
-- **Fixed password**: `password`
-- **Fixed location**: Working directory
+- **Default filename**: `server-keystore.jks` (configurable via `SSL.KeyStorePath`)
+- **Default password**: `password` (configurable via `SSL.KeyStorePassword`)
+- **Default location**: Working directory (can specify absolute or relative path)
 - **No advanced TLS configuration**: Protocol versions and cipher suites use Java/Vert.x defaults
 
 ### Certificate Generation

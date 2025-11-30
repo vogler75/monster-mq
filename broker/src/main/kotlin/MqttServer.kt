@@ -18,15 +18,17 @@ class MqttServer(
     private val receiveBufferSize: Int = 512 * 1024,
     private val sendBufferSize: Int = 512 * 1024,
     private val sessionHandler: SessionHandler,
-    private val userManager: UserManager
+    private val userManager: UserManager,
+    private val keyStorePath: String = "server-keystore.jks",
+    private val keyStorePassword: String = "password"
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
     private val options = MqttServerOptions().let { it ->
         it.isSsl = ssl
         it.keyCertOptions = JksOptions()
-            .setPath("server-keystore.jks")
-            .setPassword("password")
+            .setPath(keyStorePath)
+            .setPassword(keyStorePassword)
         it.isUseWebSocket = this.useWebSocket
         it.maxMessageSize = this.maxMessageSize
         it.isTcpNoDelay = this.tcpNoDelay      // Disable Nagle's algorithm - send packets immediately, don't coalesce

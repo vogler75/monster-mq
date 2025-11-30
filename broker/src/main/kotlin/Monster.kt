@@ -641,6 +641,11 @@ MORE INFO:
         val useTcpSsl = configJson.getInteger("TCPS", 0)
         val useWsSsl = configJson.getInteger("WSS", 0)
 
+        // Load SSL configuration
+        val sslConfig = configJson.getJsonObject("SSL", JsonObject())
+        val keyStorePath = sslConfig.getString("KeyStorePath", "server-keystore.jks")
+        val keyStorePassword = sslConfig.getString("KeyStorePassword", "password")
+
         // Load TCP server configuration
         val tcpServerConfig = configJson.getJsonObject("MqttTcpServer", JsonObject())
         val maxMessageSize = tcpServerConfig.getInteger("MaxMessageSizeKb", 512) * 1024
@@ -830,8 +835,8 @@ MORE INFO:
                 val servers = listOfNotNull(
                     if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
                     if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
-                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
-                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
+                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword) else null,
+                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword) else null,
                     mcpServer
                 )
 

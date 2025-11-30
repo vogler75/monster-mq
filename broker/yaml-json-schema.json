@@ -87,6 +87,22 @@
       "default": true,
       "description": "Allow clients to subscribe to '#' (root wildcard). If false, SUBSCRIBE acknowledgements for '#' return failure (0x80) and the client remains connected."
     },
+    "SSL": {
+      "type": "object",
+      "description": "SSL/TLS configuration for secure MQTT connections (TCPS and WSS)",
+      "properties": {
+        "KeyStorePath": {
+          "type": "string",
+          "description": "Path to the Java keystore file (.jks) containing the server certificate",
+          "default": "server-keystore.jks"
+        },
+        "KeyStorePassword": {
+          "type": "string",
+          "description": "Password for the keystore file",
+          "default": "password"
+        }
+      }
+    },
     "MqttTcpServer": {
       "type": "object",
       "description": "MQTT TCP server socket configuration for performance tuning",
