@@ -7,13 +7,13 @@ let selectedTrusted = new Set();
 let selectedRejected = new Set();
 
 // Initialize page
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     checkAuthAndLoadData();
     setupEventListeners();
 });
 
 function checkAuthAndLoadData() {
-    const token = localStorage.getItem('monstermq_token');
+    const token = safeStorage.getItem('monstermq_token');
     if (!token) {
         window.location.href = '/pages/login.html';
         return;
@@ -443,5 +443,5 @@ function escapeHtml(text) {
         '"': '&quot;',
         "'": '&#039;'
     };
-    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    return text.replace(/[&<>"']/g, function (m) { return map[m]; });
 }

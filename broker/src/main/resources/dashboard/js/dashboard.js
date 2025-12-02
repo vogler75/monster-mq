@@ -31,7 +31,7 @@ class DashboardManager {
     }
 
     isLoggedIn() {
-        const token = localStorage.getItem('monstermq_token');
+        const token = safeStorage.getItem('monstermq_token');
         if (!token) return false;
 
         // If token is 'null', authentication is disabled
@@ -47,7 +47,7 @@ class DashboardManager {
     }
 
     getAuthHeaders() {
-        const token = localStorage.getItem('monstermq_token');
+        const token = safeStorage.getItem('monstermq_token');
         const headers = {
             'Content-Type': 'application/json'
         };
@@ -623,7 +623,7 @@ class DashboardManager {
     initializeArchiveGroupsChart(archiveGroups) {
         this.archiveGroupsChart.data.labels = [];
         this.archiveGroupsChart.data.datasets = [];
-        const colors = ['#10B981','#3B82F6','#F59E0B','#EF4444','#8B5CF6','#14B8A6','#06B6D4','#F97316','#EC4899','#6366F1'];
+        const colors = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#14B8A6', '#06B6D4', '#F97316', '#EC4899', '#6366F1'];
 
         // Build dataset shells for enabled groups with any history
         const enabledWithHistory = archiveGroups.filter(g => g.enabled && g.metricsHistory && g.metricsHistory.length > 0);
@@ -635,12 +635,12 @@ class DashboardManager {
         if (enabledWithHistory.length === 0) {
             // No data available
             this.archiveGroupsChart.data.labels = ['No Data'];
-        this.archiveGroupsChart.update();
-        console.debug('Archive groups history loaded', {
-            timeframe: timeframe,
-            labels: this.archiveGroupsChart.data.labels.length,
-            datasets: this.archiveGroupsChart.data.datasets.map(d => ({ label: d.label, points: d.data.length, last5: d.data.slice(-5) }))
-        });
+            this.archiveGroupsChart.update();
+            console.debug('Archive groups history loaded', {
+                timeframe: timeframe,
+                labels: this.archiveGroupsChart.data.labels.length,
+                datasets: this.archiveGroupsChart.data.datasets.map(d => ({ label: d.label, points: d.data.length, last5: d.data.slice(-5) }))
+            });
             return;
         }
 
@@ -678,7 +678,7 @@ class DashboardManager {
                 this.archiveGroupsChart.data.datasets[idx].data.push(currentMetric.messagesOut || 0);
                 if (this.archiveGroupsChart.data.datasets[idx].data.length > this.maxDataPoints) this.archiveGroupsChart.data.datasets[idx].data.shift();
             } else {
-                const colors = ['#10B981','#3B82F6','#F59E0B','#EF4444','#8B5CF6','#14B8A6','#06B6D4','#F97316','#EC4899','#6366F1'];
+                const colors = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#14B8A6', '#06B6D4', '#F97316', '#EC4899', '#6366F1'];
                 const color = colors[this.archiveGroupsChart.data.datasets.length % colors.length];
                 this.archiveGroupsChart.data.datasets.push({ label: group.name, data: [currentMetric.messagesOut || 0], borderColor: color, backgroundColor: color + '20', fill: false, tension: 0.4, spanGaps: true });
             }

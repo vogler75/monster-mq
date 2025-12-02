@@ -36,7 +36,7 @@ class JDBCLoggerDetailManager {
     }
 
     isLoggedIn() {
-        const token = localStorage.getItem('monstermq_token');
+        const token = safeStorage.getItem('monstermq_token');
         if (!token) return false;
         if (token === 'null') return true;
 
@@ -180,7 +180,7 @@ class JDBCLoggerDetailManager {
                 jdbcUrlInput.required = true;
                 jdbcUrlInput.disabled = false;
 
-                switch(dbType) {
+                switch (dbType) {
                     case 'QUESTDB':
                         placeholder = 'jdbc:postgresql://localhost:8812/qdb';
                         break;
@@ -328,8 +328,8 @@ class JDBCLoggerDetailManager {
         // JSON Schema
         document.getElementById('logger-json-schema').value =
             typeof logger.config.jsonSchema === 'string' ?
-            logger.config.jsonSchema :
-            JSON.stringify(logger.config.jsonSchema, null, 2);
+                logger.config.jsonSchema :
+                JSON.stringify(logger.config.jsonSchema, null, 2);
 
         // Queue config
         document.getElementById('logger-queue-type').value = logger.config.queueType;

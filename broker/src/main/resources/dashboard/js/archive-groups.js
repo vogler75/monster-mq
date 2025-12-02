@@ -19,7 +19,7 @@ class ArchiveGroupsManager {
     }
 
     isLoggedIn() {
-        const token = localStorage.getItem('monstermq_token');
+        const token = safeStorage.getItem('monstermq_token');
         if (!token) return false;
 
         // If token is 'null', authentication is disabled
@@ -64,7 +64,7 @@ class ArchiveGroupsManager {
 
     updateLastValRetentionHelp(lastValType) {
         const helpDiv = document.querySelector('label[for="lastValRetention"] + input + .help-text') ||
-                       document.querySelector('[for="lastValRetention"]').parentElement.querySelector('.help-text');
+            document.querySelector('[for="lastValRetention"]').parentElement.querySelector('.help-text');
 
         if (!helpDiv) return;
 
@@ -196,12 +196,12 @@ class ArchiveGroupsManager {
                 <td>
                     <div class="topic-filters">
                         ${group.topicFilter.slice(0, 3).map(filter =>
-                            `<span class="topic-filter-tag">${this.escapeHtml(filter)}</span>`
-                        ).join('')}
+                `<span class="topic-filter-tag">${this.escapeHtml(filter)}</span>`
+            ).join('')}
                         ${group.topicFilter.length > 3 ?
-                            `<span class="topic-filter-tag" style="background: var(--accent-blue); color: white;">+${group.topicFilter.length - 3} more</span>` :
-                            ''
-                        }
+                    `<span class="topic-filter-tag" style="background: var(--accent-blue); color: white;">+${group.topicFilter.length - 3} more</span>` :
+                    ''
+                }
                     </div>
                 </td>
                 <td>${(() => {
@@ -224,13 +224,13 @@ class ArchiveGroupsManager {
                 <td>
                     <div class="action-buttons">
                         ${group.enabled ?
-                            `<button class="btn-action btn-disable" onclick="archiveGroupsManager.toggleArchiveGroup('${this.escapeHtml(group.name)}', false)">
+                    `<button class="btn-action btn-disable" onclick="archiveGroupsManager.toggleArchiveGroup('${this.escapeHtml(group.name)}', false)">
                                 Disable
                             </button>` :
-                            `<button class="btn-action btn-enable" onclick="archiveGroupsManager.toggleArchiveGroup('${this.escapeHtml(group.name)}', true)">
+                    `<button class="btn-action btn-enable" onclick="archiveGroupsManager.toggleArchiveGroup('${this.escapeHtml(group.name)}', true)">
                                 Enable
                             </button>`
-                        }
+                }
                         <button class="btn-action btn-edit"
                                 onclick="archiveGroupsManager.editArchiveGroup('${this.escapeHtml(group.name)}')">
                             Edit
@@ -515,7 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Also add GraphQL client extensions for archive groups
 if (window.graphqlClient) {
     // Add archive group methods to the existing GraphQL client
-    window.graphqlClient.getArchiveGroups = async function() {
+    window.graphqlClient.getArchiveGroups = async function () {
         const query = `
             query GetArchiveGroups {
                 archiveGroups {
@@ -541,7 +541,7 @@ if (window.graphqlClient) {
         return result.archiveGroups;
     };
 
-    window.graphqlClient.createArchiveGroup = async function(input) {
+    window.graphqlClient.createArchiveGroup = async function (input) {
         const mutation = `
             mutation CreateArchiveGroup($input: CreateArchiveGroupInput!) {
                 archiveGroup {
@@ -562,7 +562,7 @@ if (window.graphqlClient) {
         return result.archiveGroup.create;
     };
 
-    window.graphqlClient.updateArchiveGroup = async function(input) {
+    window.graphqlClient.updateArchiveGroup = async function (input) {
         const mutation = `
             mutation UpdateArchiveGroup($input: UpdateArchiveGroupInput!) {
                 archiveGroup {
@@ -583,7 +583,7 @@ if (window.graphqlClient) {
         return result.archiveGroup.update;
     };
 
-    window.graphqlClient.deleteArchiveGroup = async function(name) {
+    window.graphqlClient.deleteArchiveGroup = async function (name) {
         const mutation = `
             mutation DeleteArchiveGroup($name: String!) {
                 archiveGroup {
@@ -599,7 +599,7 @@ if (window.graphqlClient) {
         return result.archiveGroup.delete;
     };
 
-    window.graphqlClient.enableArchiveGroup = async function(name) {
+    window.graphqlClient.enableArchiveGroup = async function (name) {
         const mutation = `
             mutation EnableArchiveGroup($name: String!) {
                 archiveGroup {
@@ -620,7 +620,7 @@ if (window.graphqlClient) {
         return result.archiveGroup.enable;
     };
 
-    window.graphqlClient.disableArchiveGroup = async function(name) {
+    window.graphqlClient.disableArchiveGroup = async function (name) {
         const mutation = `
             mutation DisableArchiveGroup($name: String!) {
                 archiveGroup {

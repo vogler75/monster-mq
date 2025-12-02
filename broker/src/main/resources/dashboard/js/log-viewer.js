@@ -28,7 +28,7 @@ class LogViewer {
     this.defaultExpandedHeight = 400;
     this.minHeight = 160;
     this.maxHeight = 800;
-    this.currentHeight = parseInt(localStorage.getItem('monstermq_logviewer_height'), 10) || this.defaultExpandedHeight;
+    this.currentHeight = parseInt(safeStorage.getItem('monstermq_logviewer_height'), 10) || this.defaultExpandedHeight;
     this.isResizing = false;
     // History mode
     this.isHistoryMode = false;
@@ -284,7 +284,7 @@ class LogViewer {
         const h = Math.min(this.maxHeight, Math.max(this.minHeight, vh - e.clientY));
         this.currentHeight = h;
         this.elements.root.style.setProperty('--log-viewer-height', h + 'px');
-        localStorage.setItem('monstermq_logviewer_height', String(h));
+        safeStorage.setItem(this.storageKey, String(h));
         this.applyBodyPadding();
       };
       const up = () => {
@@ -392,13 +392,13 @@ class LogViewer {
     return filters;
   }
 
-  reconnectWithFilters() { 
+  reconnectWithFilters() {
     // Don't reconnect if we're in history mode
     if (this.isHistoryMode) return;
-    
-    this.disconnect(); 
+
+    this.disconnect();
     // Small delay to ensure disconnect completes before reconnecting
-    setTimeout(() => this.connect(), 100); 
+    setTimeout(() => this.connect(), 100);
   }
 
   connect() {
@@ -417,12 +417,12 @@ class LogViewer {
   handleMessage(msg) {
     switch (msg.type) {
       case 'connection_ack':
-        this.isConnected = true; 
-        this.reconnectAttempts = 0; 
-        this.updateStatus('connected', 'Connected'); 
+        this.isConnected = true;
+        this.reconnectAttempts = 0;
+        this.updateStatus('connected', 'Connected');
         // Only subscribe if NOT in history mode
         if (!this.isHistoryMode) {
-          this.subscribe(); 
+          this.subscribe();
         }
         break;
       case 'next':
@@ -459,10 +459,10 @@ class LogViewer {
   send(m) { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m)); }
 
   disconnect() {
-    if (this.ws) { 
-      this.send({ id: String(this.subscriptionId), type: 'complete' }); 
-      this.ws.close(); 
-      this.ws = null; 
+    if (this.ws) {
+      this.send({ id: String(this.subscriptionId), type: 'complete' });
+      this.ws.close();
+      this.ws = null;
     }
     this.isConnected = false;
   }
@@ -470,7 +470,7 @@ class LogViewer {
   attemptReconnect() {
     // Don't reconnect if we're in history mode
     if (this.isHistoryMode) return;
-    
+
     if (this.reconnectAttempts >= this.maxReconnectAttempts) { this.updateStatus('disconnected', 'Failed'); return; }
     this.reconnectAttempts++; const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 5);
     this.updateStatus('connecting', `Reconnecting (${this.reconnectAttempts})`);
@@ -500,7 +500,7 @@ class LogViewer {
     let html = `<div class="log-entry-header"><span class="log-entry-time">${time}</span><span class="log-entry-level ${log.level}">[${log.level}]</span><span class="log-entry-logger" title="${this.escapeHtml(log.logger)}">[${this.escapeHtml(loggerShort)}]</span><span class="log-entry-message">${this.escapeHtml(log.message)}</span></div>`;
     if (log.exception) {
       const id = 'exc-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-      html += `<div class="log-entry-exception"><div class="exception-header" data-exception-id="${id}"><span class="chevron">▼</span>⚠️ ${this.escapeHtml(log.exception.class)}: ${this.escapeHtml(log.exception.message||'No message')}</div><pre class="exception-stacktrace" id="${id}">${this.escapeHtml(log.exception.stackTrace)}</pre></div>`;
+      html += `<div class="log-entry-exception"><div class="exception-header" data-exception-id="${id}"><span class="chevron">▼</span>⚠️ ${this.escapeHtml(log.exception.class)}: ${this.escapeHtml(log.exception.message || 'No message')}</div><pre class="exception-stacktrace" id="${id}">${this.escapeHtml(log.exception.stackTrace)}</pre></div>`;
     }
     div.innerHTML = html;
     const eh = div.querySelector('.exception-header');
@@ -509,14 +509,14 @@ class LogViewer {
   }
 
   updateNodeFilter(node) {
-    if (!node) return; const sel = this.elements.filters.node; if ([...sel.options].some(o=>o.value===node)) return; const opt=document.createElement('option'); opt.value=node; opt.textContent=node; sel.appendChild(opt);
+    if (!node) return; const sel = this.elements.filters.node; if ([...sel.options].some(o => o.value === node)) return; const opt = document.createElement('option'); opt.value = node; opt.textContent = node; sel.appendChild(opt);
   }
 
   updateStatus(state, text) { this.elements.status.className = `log-viewer-status ${state}`; this.elements.statusText.textContent = text; }
 
-  clear() { this.logs=[]; this.elements.logs.innerHTML=''; this.newLogsCount=0; this.elements.badge.style.display='none'; }
+  clear() { this.logs = []; this.elements.logs.innerHTML = ''; this.newLogsCount = 0; this.elements.badge.style.display = 'none'; }
 
-  export() { const data = JSON.stringify(this.logs, null, 2); const blob = new Blob([data], { type:'application/json' }); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`system-logs-${new Date().toISOString()}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }
+  export() { const data = JSON.stringify(this.logs, null, 2); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `system-logs-${new Date().toISOString()}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }
 
   toggleHistoryMode() {
     this.isHistoryMode = !this.isHistoryMode;
@@ -578,10 +578,10 @@ class LogViewer {
 
     try {
       this.updateHistoryInfo('Loading logs...');
-      
+
       // Get limit from input field
       const limit = parseInt(this.elements.historyLimit.value) || 500;
-      
+
       // Build filter variables
       const filters = this.getCurrentFilters();
       const variables = {
@@ -610,13 +610,13 @@ class LogViewer {
 
       const client = new GraphQLDashboardClient();
       const data = await client.query(query, variables);
-      
+
       if (!append) {
         this.clear();
       }
 
       const logs = data.systemLogs || [];
-      
+
       if (logs.length === 0) {
         this.updateHistoryInfo(`No logs found for selected time range`);
         this.elements.loadMoreBtn.style.display = 'none';
@@ -625,15 +625,15 @@ class LogViewer {
 
       // Add logs in reverse order (oldest first) for better UX
       logs.reverse().forEach(log => this.addLog(log));
-      
+
       const count = logs.length;
       const oldest = logs[0]?.timestamp;
       const newest = logs[logs.length - 1]?.timestamp;
       this.updateHistoryInfo(`Loaded ${count} logs (${new Date(oldest).toLocaleString()} - ${new Date(newest).toLocaleString()})`);
-      
+
       // Show "Load More" button
       this.elements.loadMoreBtn.style.display = 'inline-block';
-      
+
     } catch (error) {
       console.error('Failed to load history:', error);
       this.updateHistoryInfo(`Error: ${error.message}`);
@@ -650,7 +650,7 @@ class LogViewer {
     const newEndTime = this.historyStartTime;
 
     const oldStartTime = this.historyStartTime;
-    
+
     try {
       await this.loadHistory(true, newStartTime, newEndTime);
       // Scroll to show the newly loaded logs
@@ -668,27 +668,27 @@ class LogViewer {
     }
   }
 
-  setFilters(f) { 
+  setFilters(f) {
     // Track if any filter actually changed
     let changed = false;
-    
-    if (f.node!==undefined && this.elements.filters.node.value !== (f.node||'')) { 
-      this.elements.filters.node.value=f.node||''; 
+
+    if (f.node !== undefined && this.elements.filters.node.value !== (f.node || '')) {
+      this.elements.filters.node.value = f.node || '';
       changed = true;
-    } 
-    if (f.loggerRegex!==undefined && this.elements.filters.loggerRegex.value !== (f.loggerRegex||'')) { 
-      this.elements.filters.loggerRegex.value=f.loggerRegex||''; 
+    }
+    if (f.loggerRegex !== undefined && this.elements.filters.loggerRegex.value !== (f.loggerRegex || '')) {
+      this.elements.filters.loggerRegex.value = f.loggerRegex || '';
       changed = true;
-    } 
-    if (f.sourceClassRegex!==undefined && this.elements.filters.sourceClassRegex.value !== (f.sourceClassRegex||'')) { 
-      this.elements.filters.sourceClassRegex.value=f.sourceClassRegex||''; 
+    }
+    if (f.sourceClassRegex !== undefined && this.elements.filters.sourceClassRegex.value !== (f.sourceClassRegex || '')) {
+      this.elements.filters.sourceClassRegex.value = f.sourceClassRegex || '';
       changed = true;
-    } 
-    if (f.messageRegex!==undefined && this.elements.filters.messageRegex.value !== (f.messageRegex||'')) { 
-      this.elements.filters.messageRegex.value=f.messageRegex||''; 
+    }
+    if (f.messageRegex !== undefined && this.elements.filters.messageRegex.value !== (f.messageRegex || '')) {
+      this.elements.filters.messageRegex.value = f.messageRegex || '';
       changed = true;
-    } 
-    if (Array.isArray(f.level)) { 
+    }
+    if (Array.isArray(f.level)) {
       const currentLevels = Object.entries(this.elements.filters.levels)
         .filter(([_, cb]) => cb.checked)
         .map(([lvl]) => lvl)
@@ -696,22 +696,22 @@ class LogViewer {
         .join(',');
       const newLevels = [...f.level].sort().join(',');
       if (currentLevels !== newLevels) {
-        Object.values(this.elements.filters.levels).forEach(cb=>cb.checked=false); 
-        f.level.forEach(l=>{ if (this.elements.filters.levels[l]) this.elements.filters.levels[l].checked=true; }); 
+        Object.values(this.elements.filters.levels).forEach(cb => cb.checked = false);
+        f.level.forEach(l => { if (this.elements.filters.levels[l]) this.elements.filters.levels[l].checked = true; });
         changed = true;
       }
-    } 
-    
+    }
+
     // Only reconnect if something actually changed AND we've already subscribed
     // If we haven't subscribed yet, the filters will be picked up on the first subscription
     if (changed && this.hasSubscribed) {
-      this.reconnectWithFilters(); 
+      this.reconnectWithFilters();
     }
   }
 
-  destroy() { this.disconnect(); const c=document.getElementById(this.containerId); if (c) c.innerHTML=''; }
+  destroy() { this.disconnect(); const c = document.getElementById(this.containerId); if (c) c.innerHTML = ''; }
 
-  escapeHtml(txt) { if (!txt) return ''; const d=document.createElement('div'); d.textContent=txt; return d.innerHTML; }
+  escapeHtml(txt) { if (!txt) return ''; const d = document.createElement('div'); d.textContent = txt; return d.innerHTML; }
 }
 
 if (typeof module !== 'undefined' && module.exports) module.exports = LogViewer;
