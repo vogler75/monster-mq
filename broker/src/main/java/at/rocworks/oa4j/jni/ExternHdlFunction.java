@@ -17,7 +17,7 @@
 */
 package at.rocworks.oa4j.jni;
 
-import at.rocworks.oa4j.base.JDebug;
+import at.rocworks.oa4j.base.JManager;
 import at.rocworks.oa4j.var.DynVar;
 import at.rocworks.oa4j.var.TextVar;
 import at.rocworks.oa4j.var.Variable;
@@ -105,7 +105,7 @@ abstract public class ExternHdlFunction implements Runnable {
         try {
             addResult(execute(function, parameter));
         } catch (Exception ex) {
-            JDebug.StackTrace(Level.SEVERE, ex);
+            JManager.stackTrace(ex);
         }
     }
 }

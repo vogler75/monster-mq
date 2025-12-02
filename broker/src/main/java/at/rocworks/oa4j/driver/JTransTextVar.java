@@ -17,12 +17,15 @@
 */
 package at.rocworks.oa4j.driver;
 
+import at.rocworks.oa4j.base.JManager;
+import at.rocworks.oa4j.jni.ErrCode;
+import at.rocworks.oa4j.jni.ErrPrio;
 import at.rocworks.oa4j.var.VariableType;
 import at.rocworks.oa4j.var.TextVar;
 import at.rocworks.oa4j.var.Variable;
-import at.rocworks.oa4j.base.JDebug;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.logging.Level;
 
 /**
@@ -71,17 +74,17 @@ public class JTransTextVar extends JTransBaseVar {
             }
             
             if (text == null) {
-                JDebug.out.log(Level.WARNING, "toPeriph: Variable has no {0} value!", new Object[]{getVariableType().toString()});
+                JManager.log(ErrPrio.PRIO_WARNING, ErrCode.UNEXPECTEDSTATE, "toPeriph: Variable has no "+getVariableType().toString()+" value! ");
                 return null;
             } else if ( text.length() > itemSize() ) {
-                JDebug.out.log(Level.WARNING, "toPeriph: Variable size is to big {0}/{1}!", new Object[]{var.getTextVar().getValue().length(), itemSize()});
+                JManager.log(ErrPrio.PRIO_WARNING, ErrCode.UNEXPECTEDSTATE, "toPeriph: Variable size is to big "+var.getTextVar().getValue().length()+"/"+itemSize()+"!");
                 return null;
             } else {                
                 val = text;
                 return toPeriph(val);
             }
         } catch ( Exception ex) {
-            JDebug.StackTrace(Level.SEVERE, ex);
+            JManager.stackTrace(ex);
             return null;
         }    
     }
@@ -91,14 +94,14 @@ public class JTransTextVar extends JTransBaseVar {
         try {
             //JDebug.out.log(Level.INFO, "toVar: data={0} dlen={1} subindex={2}", new Object[]{data, dlen, subix});
             if (data.length > itemSize()) {
-                JDebug.out.log(Level.WARNING, "toVar: data size is to big {0}/{1}!", new Object[]{data.length, itemSize()});
+                JManager.log(ErrPrio.PRIO_WARNING, ErrCode.UNEXPECTEDSTATE, "toVar: data size is to big "+data.length+"/"+itemSize()+"!");
                 return null;
             } else {
                 var.setValue(toVal(data));
                 return var;
             }
         } catch (Exception ex) {
-            JDebug.StackTrace(Level.SEVERE, ex);
+            JManager.stackTrace(ex);
             return null;
         }
     }

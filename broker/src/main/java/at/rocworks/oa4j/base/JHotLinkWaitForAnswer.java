@@ -247,7 +247,7 @@ public abstract class JHotLinkWaitForAnswer implements Runnable, Callable<Intege
                         try {
                             hotlink((JDpHLGroup) msg);
                         } catch (Exception ex) {
-                            JManager.stackTrace(ErrPrio.PRIO_SEVERE, ErrCode.UNEXPECTEDSTATE, ex);
+                            JManager.stackTrace(ex);
                         }
                     }                
             }

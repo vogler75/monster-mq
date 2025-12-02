@@ -17,12 +17,15 @@
 */
 package at.rocworks.oa4j.driver;
 
-import at.rocworks.oa4j.base.JDebug;
+import at.rocworks.oa4j.base.JManager;
+import at.rocworks.oa4j.jni.ErrCode;
+import at.rocworks.oa4j.jni.ErrPrio;
 import at.rocworks.oa4j.var.IntegerVar;
 import at.rocworks.oa4j.var.Variable;
 import at.rocworks.oa4j.var.VariableType;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.logging.Level;
 
 /**
@@ -56,14 +59,14 @@ public class JTransIntegerVar extends JTransBaseVar {
     public byte[] toPeriph(int dlen, Variable var, int subix) {
         try {
             if ( var.getIntegerVar() == null ) {
-                JDebug.out.log(Level.WARNING, "toPeriph: Variable has no {0} value!", new Object[]{getVariableType().toString()});
+                JManager.log(ErrPrio.PRIO_WARNING, ErrCode.UNEXPECTEDSTATE, "toPeriph: Variable has no "+getVariableType()+" value!");
                 return null;
             } else {
                 Integer val = var.getIntegerVar().getValue();
                 return toPeriph(val);
             }
         } catch ( Exception ex) {
-            JDebug.StackTrace(Level.SEVERE, ex);
+            JManager.stackTrace(ex);
             return null;
         }
     }   
@@ -75,7 +78,7 @@ public class JTransIntegerVar extends JTransBaseVar {
             IntegerVar var = new IntegerVar(val);
             return var;
         } catch ( Exception ex) {
-            JDebug.StackTrace(Level.SEVERE, ex);
+            JManager.stackTrace(ex);
             return null;
         }        
     }

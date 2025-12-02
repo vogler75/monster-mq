@@ -75,14 +75,14 @@ public class JManager extends Manager implements Runnable {
     private Map<String, String> initSysMsgData;
 
     public JManager setMaxEnqueueSize(int high, int low) {
-        this.MAX_ENQUEUE_SIZE_HIGH = high;
-        this.MAX_ENQUEUE_SIZE_LOW = low;
+        MAX_ENQUEUE_SIZE_HIGH = high;
+        MAX_ENQUEUE_SIZE_LOW = low;
         return this;
     }
 
     public JManager setMaxDequeueSize(int high, int low) {
-        this.MAX_DEQUEUE_SIZE_HIGH = high;
-        this.MAX_DEQUEUE_SIZE_LOW = low;
+        MAX_DEQUEUE_SIZE_HIGH = high;
+        MAX_DEQUEUE_SIZE_LOW = low;
         return this;
     }
 
@@ -146,7 +146,7 @@ public class JManager extends Manager implements Runnable {
                         
             // managerNum
             if ( args[i].equals("-num") && args.length>i+1 ) {
-                setManNum(Integer.valueOf(args[i+1]));
+                setManNum(Integer.parseInt(args[i+1]));
             }
             
             // managerType
@@ -179,9 +179,9 @@ public class JManager extends Manager implements Runnable {
             JManager.instance = this;
         } else {
             throw new IllegalStateException("There can only be one manager!");
-        }   
-        
-        apiEnabled=false;        
+        }
+
+        apiEnabled=false;
         String errmsg1="";
         String errmsg2="";
         try {
@@ -199,16 +199,14 @@ public class JManager extends Manager implements Runnable {
 
         if ( apiEnabled ) {
             // Set log file settings
-            setDebugOutput();
             if (!isV3() && !isV4()) {
                 throw new Exception("Manager Version "+apiGetVersion()+" is not V3 and not V4!");
             }
         } else {
-            setDebugConsole();
             if (!errmsg1.isEmpty())
-                JDebug.out.warning(errmsg1);
+                throw new Exception(errmsg1);
             if (!errmsg2.isEmpty())
-                JDebug.out.warning(errmsg2);                
+                throw new Exception(errmsg2);
         }
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -223,14 +221,6 @@ public class JManager extends Manager implements Runnable {
         }));
 
         return this;
-    }
-
-    public void setDebugOutput() {
-        JDebug.setOutput(getLogDir(), getManName());
-    }
-
-    public void setDebugConsole() {
-        JDebug.setConsole();
     }
 
     public String getManName() {

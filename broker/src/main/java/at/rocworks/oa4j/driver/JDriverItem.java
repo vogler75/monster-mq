@@ -17,7 +17,10 @@
 */
 package at.rocworks.oa4j.driver;
 
-import at.rocworks.oa4j.base.JDebug;
+import at.rocworks.oa4j.base.JManager;
+import at.rocworks.oa4j.jni.ErrCode;
+import at.rocworks.oa4j.jni.ErrPrio;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -115,7 +118,7 @@ public class JDriverItem implements Serializable {
             out.writeObject(this);
             return bos.toByteArray();
         } catch (IOException ex) {
-            JDebug.StackTrace(Level.SEVERE, ex);
+            JManager.stackTrace(ex);
             return null;
         }
     }
@@ -130,7 +133,7 @@ public class JDriverItem implements Serializable {
                 return null;
             }
         } catch (IOException | ClassNotFoundException ex) {
-            JDebug.StackTrace(Level.SEVERE, ex);
+            JManager.stackTrace(ex);
             return null;
         }
     }        

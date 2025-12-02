@@ -19,7 +19,6 @@ package at.rocworks.oa4j.driver;
 
 import at.rocworks.oa4j.base.JDpAttrAddrDirection;
 import at.rocworks.oa4j.jni.Driver;
-import at.rocworks.oa4j.base.JDebug;
 import at.rocworks.oa4j.var.DpIdentifierVar;
 import at.rocworks.oa4j.var.Variable;
 
@@ -117,14 +116,7 @@ public abstract class JDriver extends Driver implements Runnable {
         } catch ( java.lang.UnsatisfiedLinkError ex ) {            
             errmsg=ex.getMessage();
         }
-
-        // Set log file settings
-        JDebug.setOutput(getLogDir(), getManName());
-
-        if ( !apiEnabled ) {
-            JDebug.out.warning(errmsg);
-        } 
-    }    
+    }
             
     public String getManName() {
         return "WCCOAjavadrv"+manNum;

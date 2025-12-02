@@ -51,7 +51,6 @@ class MonsterOA(args: Array<String>) {
             JManagerLogHandler.install()
 
             // Step 2: Initialize JManager with WinCC OA
-            logger.fine("MonsterOA: Initializing JManager...")
             manager = JManager()
             manager!!.init(args).start()
 

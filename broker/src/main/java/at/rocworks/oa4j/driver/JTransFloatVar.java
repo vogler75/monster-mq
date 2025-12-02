@@ -17,10 +17,12 @@
 */
 package at.rocworks.oa4j.driver;
 
+import at.rocworks.oa4j.base.JManager;
+import at.rocworks.oa4j.jni.ErrCode;
+import at.rocworks.oa4j.jni.ErrPrio;
 import at.rocworks.oa4j.var.FloatVar;
 import at.rocworks.oa4j.var.Variable;
 import at.rocworks.oa4j.var.VariableType;
-import at.rocworks.oa4j.base.JDebug;
 import java.nio.ByteBuffer;
 import java.util.logging.Level;
 
@@ -55,14 +57,14 @@ public class JTransFloatVar extends JTransBaseVar {
     public byte[] toPeriph(int dlen, Variable var, int subix) {
         try {
             if ( var.getFloatVar()== null ) {
-                JDebug.out.log(Level.WARNING, "toPeriph: Variable has no {0} value!", new Object[]{getVariableType().toString()});
+                JManager.log(ErrPrio.PRIO_WARNING, ErrCode.UNEXPECTEDSTATE, "toPeriph: Variable has no "+getVariableType()+" value!");
                 return null;
             } else {   
                 Double val = var.getFloatVar().getValue();
                 return toPeriph(val);
             }
         } catch ( Exception ex) {
-            JDebug.StackTrace(Level.SEVERE, ex);
+            JManager.stackTrace(ex);
             return null;
         }
     }
@@ -74,7 +76,7 @@ public class JTransFloatVar extends JTransBaseVar {
             FloatVar var = new FloatVar(val);
             return var;
         } catch ( Exception ex) {
-            JDebug.StackTrace(Level.SEVERE, ex);
+            JManager.stackTrace(ex);
             return null;
         }        
     }    
