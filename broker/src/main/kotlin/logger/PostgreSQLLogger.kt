@@ -82,108 +82,89 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
             return
         }
 
+        val fields = rows.first().fields.keys.toList()
+        val allFields = if (cfg.topicNameColumn != null) {
+            fields + cfg.topicNameColumn!!
+        } else {
+            fields
+        }
+        val placeholders = allFields.joinToString(", ") { "?" }
+        val fieldNames = allFields.joinToString(", ")
+        val sql = "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders)"
+
+        // Try batch insert first (fast path)
         try {
-            // Build INSERT statement based on fields in first row + optional topic column
-            val fields = rows.first().fields.keys.toList()
-            val allFields = if (cfg.topicNameColumn != null) {
-                fields + cfg.topicNameColumn!!
-            } else {
-                fields
-            }
-            val placeholders = allFields.joinToString(", ") { "?" }
-            val fieldNames = allFields.joinToString(", ")
-
-            // Use regular INSERT - duplicate key errors will be caught and counted
-            val sql = "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders)"
-
-            logger.fine { "Writing bulk of ${rows.size} rows to table $tableName SQL: $sql" }
+            logger.fine { "Writing bulk of ${rows.size} rows to table $tableName (batch mode)" }
 
             conn.prepareStatement(sql).use { ps ->
                 rows.forEach { row ->
                     var paramIndex = 1
 
-                    // Set parameter values from fields with type-specific setters
                     fields.forEach { fieldName ->
                         val value = row.fields[fieldName]
-                        logger.fine { "Setting parameter $paramIndex to value '$value' (${value?.javaClass?.name ?: "null"})" }
-                        when (value) {
-                            null -> ps.setNull(paramIndex, java.sql.Types.NULL)
-                            is String -> ps.setString(paramIndex, value)
-                            is Int -> ps.setInt(paramIndex, value)
-                            is Long -> ps.setLong(paramIndex, value)
-                            is Double -> ps.setDouble(paramIndex, value)
-                            is Float -> ps.setFloat(paramIndex, value)
-                            is Boolean -> ps.setBoolean(paramIndex, value)
-                            is java.sql.Timestamp -> ps.setTimestamp(paramIndex, value)
-                            is java.sql.Date -> ps.setDate(paramIndex, value)
-                            is java.sql.Time -> ps.setTime(paramIndex, value)
-                            is java.math.BigDecimal -> ps.setBigDecimal(paramIndex, value)
-                            is ByteArray -> ps.setBytes(paramIndex, value)
-                            else -> ps.setObject(paramIndex, value)  // Fallback for other types
-                        }
+                        setParameterValue(ps, paramIndex, value)
                         paramIndex++
                     }
 
-                    // Add topic column if configured
                     if (cfg.topicNameColumn != null) {
                         ps.setString(paramIndex, row.topic)
-                        logger.fine { "Setting parameter $paramIndex (topic) to value '${row.topic}'" }
                     }
 
                     ps.addBatch()
                 }
 
-                // Execute batch
                 val results = ps.executeBatch()
-
-                logger.fine { "Successfully wrote ${results.size} rows to table $tableName" }
+                messagesWrittenCounter.addAndGet(rows.size.toLong())
+                logger.fine { "Batch insert succeeded: ${rows.size} rows" }
             }
+        } catch (batchError: SQLException) {
+            // Batch failed - fall back to individual inserts to salvage as many rows as possible
+            logger.warning("Batch insert failed, falling back to individual inserts: ${batchError.message}")
+            writeRowsIndividually(tableName, rows, fields, sql)
+        }
+    }
 
-        } catch (e: SQLException) {
-            // Check for duplicate key errors FIRST (PostgreSQL SQL State: 23505)
-            if (e.sqlState == "23505") {
-                // Count duplicates and silently ignore - only log at FINE level for debugging
-                duplicatesIgnoredCounter.incrementAndGet()
-                logger.fine { "Duplicate key violation detected - ignoring: ${e.message}" }
-                return  // Don't rethrow the exception
-            }
+    /**
+     * Write rows individually, allowing partial success when batch fails.
+     * Each row is attempted separately so that successful rows are inserted even if others fail.
+     */
+    private fun writeRowsIndividually(tableName: String, rows: List<BufferedRow>, fields: List<String>, sql: String) {
+        val conn = connection ?: throw SQLException("Not connected to PostgreSQL")
 
-            // Log all other errors as severe
-            logger.severe("SQL error writing to table $tableName: ${e.javaClass.name}: ${e.message}")
-            logger.severe("SQL State: ${e.sqlState}, Error Code: ${e.errorCode}")
+        var successCount = 0
+        var failureCount = 0
 
-            // Log the full exception with stack trace
-            val sw = java.io.StringWriter()
-            e.printStackTrace(java.io.PrintWriter(sw))
-            logger.severe("Stack trace:\n$sw")
+        conn.prepareStatement(sql).use { ps ->
+            rows.forEach { row ->
+                try {
+                    var paramIndex = 1
 
-            // Check for table not found errors
-            if (e.message?.contains("table", ignoreCase = true) == true ||
-                e.message?.contains("relation", ignoreCase = true) == true ||
-                e.sqlState == "42P01") {  // PostgreSQL error code for undefined_table
-                logger.severe("=".repeat(80))
-                logger.severe("ERROR: Table '$tableName' does not exist!")
-                logger.severe("You need to create the table first based on your JSON schema.")
-                logger.severe("Example SQL for your schema:")
-                logger.severe("  CREATE TABLE $tableName (")
-                rows.first().fields.forEach { (name, value) ->
-                    val type = when (value) {
-                        is String -> "TEXT"
-                        is Int -> "INTEGER"
-                        is Long -> "BIGINT"
-                        is Double -> "DOUBLE PRECISION"
-                        is Float -> "REAL"
-                        is Boolean -> "BOOLEAN"
-                        else -> "TEXT"
+                    fields.forEach { fieldName ->
+                        val value = row.fields[fieldName]
+                        setParameterValue(ps, paramIndex, value)
+                        paramIndex++
                     }
-                    logger.severe("    $name $type,")
-                }
-                logger.severe("    PRIMARY KEY (...)")
-                logger.severe("  );")
-                logger.severe("=".repeat(80))
-            }
 
-            throw e
+                    if (cfg.topicNameColumn != null) {
+                        ps.setString(paramIndex, row.topic)
+                    }
+
+                    ps.executeUpdate()
+                    successCount++
+
+                } catch (rowError: SQLException) {
+                    failureCount++
+                    logger.fine { "Row insert failed: ${rowError.sqlState} ${rowError.message}" }
+                }
+            }
+        }
+
+        messagesWrittenCounter.addAndGet(successCount.toLong())
+        logger.info("Individual insert completed for table '$tableName': $successCount/${rows.size} rows inserted, $failureCount failed")
+
+        // If all rows failed, throw an exception to trigger retry logic in base class
+        if (successCount == 0) {
+            throw SQLException("All ${rows.size} rows failed to insert (see logs for details)")
         }
     }
 

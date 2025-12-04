@@ -57,7 +57,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
     private val messagesInCounter = AtomicLong(0)
     private val messagesValidatedCounter = AtomicLong(0)
     private val messagesSkippedCounter = AtomicLong(0)
-    private val messagesWrittenCounter = AtomicLong(0)
+    protected val messagesWrittenCounter = AtomicLong(0)
     private val validationErrorsCounter = AtomicLong(0)
     private val writeErrorsCounter = AtomicLong(0)
     protected val duplicatesIgnoredCounter = AtomicLong(0)
@@ -643,15 +643,15 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
                     if (isConnectionError(e)) {
                         handleConnectionError(e)
                         hasConnectionError = true
-                        allSuccess = false
-                        return@forEach // Continue to next table but don't try to write more
+                        allSuccess = false // Mark overall operation as failed
+                        return@forEach // Stop processing further tables in this bulk due to connection issue
+                    } else {
+                        // For non-connection errors (schema/constraint violations), log as severe and skip
+                        logger.severe("Non-recoverable error writing bulk to table $tableName: ${e.javaClass.name}: ${e.message}")
+                        logger.severe("Skipping ${tableRows.size} messages for table $tableName to prevent infinite retry loop")
+                        allSuccess = false // Mark overall operation as failed
+                        // Continue to next table, but don't retry these messages
                     }
-
-                    // For non-connection errors (schema/constraint violations), log as severe and skip
-                    logger.severe("Non-recoverable error writing bulk to table $tableName: ${e.javaClass.name}: ${e.message}")
-                    logger.severe("Skipping ${tableRows.size} messages for table $tableName to prevent infinite retry loop")
-                    allSuccess = false
-                    // Continue to next table, but don't retry these messages
                 }
             }
 
@@ -719,6 +719,56 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
      * @return true if this is a connection error that should trigger retry
      */
     abstract fun isConnectionError(e: Exception): Boolean
+
+    // Helper functions for parameter and type handling
+
+    /**
+     * Sets a parameter value in a PreparedStatement with appropriate type handling
+     * @param ps The PreparedStatement to set the parameter on
+     * @param paramIndex The 1-based parameter index
+     * @param value The value to set (can be null)
+     */
+    protected fun setParameterValue(ps: java.sql.PreparedStatement, paramIndex: Int, value: Any?) {
+        when (value) {
+            null -> ps.setNull(paramIndex, java.sql.Types.NULL)
+            is String -> ps.setString(paramIndex, value)
+            is Int -> ps.setInt(paramIndex, value)
+            is Long -> ps.setLong(paramIndex, value)
+            is Double -> ps.setDouble(paramIndex, value)
+            is Float -> ps.setFloat(paramIndex, value)
+            is Boolean -> ps.setBoolean(paramIndex, value)
+            is java.sql.Timestamp -> ps.setTimestamp(paramIndex, value)
+            is java.sql.Date -> ps.setDate(paramIndex, value)
+            is java.sql.Time -> ps.setTime(paramIndex, value)
+            is java.math.BigDecimal -> ps.setBigDecimal(paramIndex, value)
+            is ByteArray -> ps.setBytes(paramIndex, value)
+            else -> ps.setObject(paramIndex, value)  // Fallback for other types
+        }
+    }
+
+    /**
+     * Converts a value to its corresponding PostgreSQL SQL type string
+     * Used for generating CREATE TABLE examples in error messages
+     * @param value The value to determine the SQL type for
+     * @return The PostgreSQL SQL type string
+     */
+    protected fun getSQLType(value: Any?): String {
+        return when (value) {
+            null -> "TEXT"
+            is String -> "TEXT"
+            is Int -> "INTEGER"
+            is Long -> "BIGINT"
+            is Double -> "DOUBLE PRECISION"
+            is Float -> "REAL"
+            is Boolean -> "BOOLEAN"
+            is java.sql.Timestamp -> "TIMESTAMP"
+            is java.sql.Date -> "DATE"
+            is java.sql.Time -> "TIME"
+            is java.math.BigDecimal -> "DECIMAL"
+            is ByteArray -> "BYTEA"
+            else -> "TEXT"
+        }
+    }
 
     // Metrics
     fun getMetrics(): Map<String, Any> {
