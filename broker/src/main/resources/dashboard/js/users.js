@@ -31,7 +31,7 @@ class UserManager {
     }
 
     isLoggedIn() {
-        const token = localStorage.getItem('monstermq_token');
+        const token = safeStorage.getItem('monstermq_token');
         if (!token) return false;
 
         // If token is 'null', authentication is disabled
@@ -51,7 +51,7 @@ class UserManager {
     }
 
     getAuthHeaders() {
-        const token = localStorage.getItem('monstermq_token');
+        const token = safeStorage.getItem('monstermq_token');
         const headers = {
             'Content-Type': 'application/json'
         };
@@ -207,9 +207,9 @@ class UserManager {
                     </td>
                     <td>
                         ${user.isAdmin ?
-                            '<span style="color: var(--monster-orange);">⚡ Admin</span>' :
-                            '<span style="color: var(--text-muted);">User</span>'
-                        }
+                    '<span style="color: var(--monster-orange);">⚡ Admin</span>' :
+                    '<span style="color: var(--text-muted);">User</span>'
+                }
                     </td>
                     <td>
                         <button class="btn btn-secondary view-acl-btn"
@@ -486,15 +486,15 @@ class UserManager {
                                         <td style="font-family: monospace; word-break: break-all;">${this.escapeHtml(rule.topicPattern)}</td>
                                         <td style="text-align: center;">
                                             ${rule.canSubscribe ?
-                                                '<span style="color: var(--monster-green);">✓</span>' :
-                                                '<span style="color: var(--text-muted);">✗</span>'
-                                            }
+                    '<span style="color: var(--monster-green);">✓</span>' :
+                    '<span style="color: var(--text-muted);">✗</span>'
+                }
                                         </td>
                                         <td style="text-align: center;">
                                             ${rule.canPublish ?
-                                                '<span style="color: var(--monster-green);">✓</span>' :
-                                                '<span style="color: var(--text-muted);">✗</span>'
-                                            }
+                    '<span style="color: var(--monster-green);">✓</span>' :
+                    '<span style="color: var(--text-muted);">✗</span>'
+                }
                                         </td>
                                         <td style="text-align: center;">${rule.priority}</td>
                                         <td style="font-size: 0.75rem;">${rule.createdAt ? new Date(rule.createdAt).toLocaleDateString() : 'N/A'}</td>

@@ -17,7 +17,7 @@ class JDBCLoggersManager {
     }
 
     isLoggedIn() {
-        const token = localStorage.getItem('monstermq_token');
+        const token = safeStorage.getItem('monstermq_token');
         if (!token) return false;
 
         // If token is 'null', authentication is disabled
@@ -141,12 +141,12 @@ class JDBCLoggersManager {
                 <td>
                     <div class="topic-filters">
                         ${logger.config.topicFilters.slice(0, 2).map(filter =>
-                            `<span class="topic-filter-tag">${this.escapeHtml(filter)}</span>`
-                        ).join('')}
+                `<span class="topic-filter-tag">${this.escapeHtml(filter)}</span>`
+            ).join('')}
                         ${logger.config.topicFilters.length > 2 ?
-                            `<span class="topic-filter-tag" style="background: var(--accent-blue); color: white;">+${logger.config.topicFilters.length - 2} more</span>` :
-                            ''
-                        }
+                    `<span class="topic-filter-tag" style="background: var(--accent-blue); color: white;">+${logger.config.topicFilters.length - 2} more</span>` :
+                    ''
+                }
                     </div>
                 </td>
                 <td><code style="font-size: 0.8rem;">${this.escapeHtml(tableName)}</code></td>
@@ -167,18 +167,18 @@ class JDBCLoggersManager {
                             </svg>
                         </a>
                         ${logger.enabled ?
-                            `<button class="btn btn-icon btn-pause" onclick="jdbcLoggersManager.toggleLogger('${this.escapeHtml(logger.name)}', false)" title="Stop logger">
+                    `<button class="btn btn-icon btn-pause" onclick="jdbcLoggersManager.toggleLogger('${this.escapeHtml(logger.name)}', false)" title="Stop logger">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                     <rect x="6" y="4" width="4" height="16"></rect>
                                     <rect x="14" y="4" width="4" height="16"></rect>
                                 </svg>
                             </button>` :
-                            `<button class="btn btn-icon btn-play" onclick="jdbcLoggersManager.toggleLogger('${this.escapeHtml(logger.name)}', true)" title="Start logger">
+                    `<button class="btn btn-icon btn-play" onclick="jdbcLoggersManager.toggleLogger('${this.escapeHtml(logger.name)}', true)" title="Start logger">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                     <polygon points="5 3 19 12 5 21 5 3"></polygon>
                                 </svg>
                             </button>`
-                        }
+                }
                         <button class="btn btn-icon btn-delete" onclick="jdbcLoggersManager.showConfirmDeleteModal('${this.escapeHtml(logger.name)}')" title="Delete logger">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>

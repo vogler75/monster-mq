@@ -4,7 +4,7 @@ class GraphQLDashboardClient {
     }
 
     async query(query, variables = {}) {
-        const token = localStorage.getItem('monstermq_token');
+        const token = safeStorage.getItem('monstermq_token');
         const headers = {
             'Content-Type': 'application/json',
         };
@@ -428,7 +428,7 @@ class GraphQLDashboardClient {
 window.graphqlClient = new GraphQLDashboardClient();
 
 // Debug function to check localStorage
-window.debugAuth = function() {
+window.debugAuth = function () {
     const token = localStorage.getItem('monstermq_token');
     const username = localStorage.getItem('monstermq_username');
     const isAdmin = localStorage.getItem('monstermq_isAdmin');

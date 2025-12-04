@@ -4,13 +4,13 @@ let servers = [];
 let clusterNodes = [];
 
 // Initialize page
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     checkAuthAndLoadData();
     setupEventListeners();
 });
 
 function checkAuthAndLoadData() {
-    const token = localStorage.getItem('monstermq_token');
+    const token = safeStorage.getItem('monstermq_token');
     if (!token) {
         window.location.href = '/pages/login.html';
         return;
@@ -39,7 +39,7 @@ function checkAuthAndLoadData() {
 
 function setupEventListeners() {
     // Modal event listeners
-    document.addEventListener('keydown', function(e) {
+    document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
             hideAddServerModal();
             hideEditServerModal();
@@ -50,7 +50,7 @@ function setupEventListeners() {
     // Form validation
     const addForm = document.getElementById('add-server-form');
     if (addForm) {
-        addForm.addEventListener('submit', function(e) {
+        addForm.addEventListener('submit', function (e) {
             e.preventDefault();
             saveServer();
         });
@@ -58,7 +58,7 @@ function setupEventListeners() {
 
     const editForm = document.getElementById('edit-server-form');
     if (editForm) {
-        editForm.addEventListener('submit', function(e) {
+        editForm.addEventListener('submit', function (e) {
             e.preventDefault();
             updateServer();
         });
@@ -195,9 +195,9 @@ function createServerRow(server) {
                         onclick="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? `startServer('${escapeHtml(server.name)}')` : `stopServer('${escapeHtml(server.name)}')`}"
                         title="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'Start Server' : 'Stop Server'}">
                     ${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ?
-                        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>' :
-                        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
-                    }
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>' :
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
+        }
                 </button>
                 <button class="btn-icon btn-cert" onclick="manageCertificates('${escapeHtml(server.name)}')" title="Manage Certificates" aria-label="Manage Certificates">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -331,7 +331,7 @@ function collectFormData() {
         name: document.getElementById('server-name').value.trim(),
         namespace: document.getElementById('server-namespace').value.trim(),
         namespaceUri: document.getElementById('server-namespace-uri').value.trim() ||
-                     `urn:monstermq:opcua:${document.getElementById('server-name').value.trim()}`,
+            `urn:monstermq:opcua:${document.getElementById('server-name').value.trim()}`,
         nodeId: document.getElementById('server-node').value,
         port: parseInt(document.getElementById('server-port').value),
         path: document.getElementById('server-path').value.trim() || 'monstermq',

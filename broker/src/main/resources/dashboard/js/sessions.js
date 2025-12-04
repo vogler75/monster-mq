@@ -37,13 +37,13 @@ class SessionManager {
         if (this.currentConnectionFilter !== '') {
             urlParams.set('connected', this.currentConnectionFilter);
         }
-        
+
         const newUrl = `${window.location.pathname}${urlParams.toString() ? '?' + urlParams.toString() : ''}`;
         window.history.replaceState({}, '', newUrl);
     }
 
     isLoggedIn() {
-        const token = localStorage.getItem('monstermq_token');
+        const token = safeStorage.getItem('monstermq_token');
         if (!token) return false;
 
         // If token is 'null', authentication is disabled
@@ -59,7 +59,7 @@ class SessionManager {
     }
 
     getAuthHeaders() {
-        const token = localStorage.getItem('monstermq_token');
+        const token = safeStorage.getItem('monstermq_token');
         const headers = {
             'Content-Type': 'application/json'
         };
@@ -129,7 +129,7 @@ class SessionManager {
     restoreFilterUI() {
         const nodeFilter = document.getElementById('node-filter');
         const connectionFilter = document.getElementById('connection-filter');
-        
+
         if (nodeFilter && this.currentNodeFilter) {
             nodeFilter.value = this.currentNodeFilter;
         }
