@@ -1,0 +1,40 @@
+Release v1.6.57
+Built from commit: f23ca8e
+Date: 2025-12-04 08:50:41
+
+Changes since v1.6.56:
+---
+f23ca8e Remove obsolete test files and update topic matcher tests
+43dbd3e Fix #70: Prevent data loss on JDBC batch insert failures
+5dc5b02 Merge branch 'fix/#67'
+e5d5a37 Add comprehensive Javadoc to JClient and JManager APIs
+957c816 Remove OA4J driver implementation classes
+d9dd53d Remove JDebug and migrate logging to JManager
+581b0f2 Fix #67: Implement safe storage wrapper for Brave browser compatibility
+b3f183f Make SSL keystore path and password configurable
+9a65ce2 Add support for long-form CLI args and improve logging
+1966e92 Reduced info log messages
+b2e51b4 Change log level from info to finest for publish logs
+9b4c85b Refactor OA bridge to support multiple operations
+d75cadd Make Oa4jBridge attributes configurable via config
+8b64839 Rename OaDatapointBridge to Oa4jBridge throughout codebase
+3eed78f Add native WinCC OA datapoint bridge for $OA/ topics
+8fe5aac Refactor logger initialization and pad logger name in logs
+5dce853 Remove unused Java source directories and log statement
+e762760 Remove Oa4jManager and related integration code
+3f4450a Improve MCP handler warning log formatting
+722d759 Remove deprecated SparkplugExtension class
+a23d24c Refine startup log messages in handlers
+d3707ff Refactor MCP handler and adjust logging levels
+c75026a Remove unused DurationParser imports
+6cd91e2 Add JManager log handler and conditional logging init
+97d166d Move duration parsing to Utils and remove DurationParser
+4fd34aa Simplify shutdown logic in PublishWorkerPool
+c68fa09 Disable config file scanning in ConfigRetriever
+daeada7 Rename MqttLogHandler to SysLogHandler
+5c1a909 Refactor logging to use Utils.getLogger and improve error handling
+89864ac Refactor MonsterOA to use generic args parameter
+82c0a3a Add MonsterOA Kotlin entry point and improve shutdown
+1554d46 Remove command-line argument validation from Monster
+3e01c12 Integrate OA4J Java sources and update Maven build
+e4915f5 Delete Untitled-1.json
