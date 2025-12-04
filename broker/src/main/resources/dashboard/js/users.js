@@ -67,6 +67,25 @@ class UserManager {
     setupUI() {
         // UI setup is now handled by sidebar.js
 
+        // Update password checkbox toggle
+        const updatePasswordCheckbox = document.getElementById('user-update-password');
+        const passwordGroup = document.getElementById('password-group');
+        const passwordInput = document.getElementById('user-password');
+        
+        if (updatePasswordCheckbox) {
+            updatePasswordCheckbox.addEventListener('change', function() {
+                if (this.checked) {
+                    passwordGroup.style.display = 'block';
+                    passwordInput.setAttribute('required', '');
+                    passwordInput.focus();
+                } else {
+                    passwordGroup.style.display = 'none';
+                    passwordInput.removeAttribute('required');
+                    passwordInput.value = '';
+                }
+            });
+        }
+
         document.getElementById('refresh-users').addEventListener('click', () => {
             this.loadUsers();
         });
@@ -252,10 +271,19 @@ class UserManager {
         // Show/hide password field based on edit mode
         const passwordGroup = document.getElementById('password-group');
         const passwordInput = document.getElementById('user-password');
+        const updatePasswordCheckboxGroup = document.getElementById('update-password-checkbox-group');
+        const updatePasswordCheckbox = document.getElementById('user-update-password');
+        
         if (isEditing) {
+            // Show update password checkbox, hide password field initially
+            updatePasswordCheckboxGroup.style.display = 'block';
+            updatePasswordCheckbox.checked = false;
             passwordGroup.style.display = 'none';
             passwordInput.removeAttribute('required');
+            passwordInput.value = '';
         } else {
+            // Creating new user - hide checkbox, show required password field
+            updatePasswordCheckboxGroup.style.display = 'none';
             passwordGroup.style.display = 'block';
             passwordInput.setAttribute('required', '');
         }
@@ -305,7 +333,10 @@ class UserManager {
         };
 
         const password = formData.get('password');
-        if (password) {
+        const updatePasswordChecked = formData.get('updatePassword') === 'on';
+        
+        // For new users, password is required
+        if (!this.currentEditingUser && password) {
             userData.password = password;
         }
 
@@ -316,7 +347,23 @@ class UserManager {
             let result;
 
             if (isEditing) {
+                // Update user attributes (without password)
                 result = await window.graphqlClient.updateUser(userData);
+                
+                // If update password checkbox is checked, call setPassword separately
+                if (result.success && updatePasswordChecked && password) {
+                    const passwordResult = await window.graphqlClient.setPassword({
+                        username: usernameField,
+                        password: password
+                    });
+                    
+                    if (!passwordResult.success) {
+                        this.showAlert(passwordResult.message || 'User updated but failed to update password', 'warning');
+                        this.hideUserModal();
+                        this.loadUsers();
+                        return;
+                    }
+                }
             } else {
                 result = await window.graphqlClient.createUser(userData);
             }
