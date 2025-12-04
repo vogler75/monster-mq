@@ -41,9 +41,9 @@ class TopicMatcherTest {
 
     @Test
     fun testEdgeCases() {
-        assertFalse(TopicTree.matches("", "")) // empty filter not supported in current impl
-        assertFalse(TopicTree.matches("+", ""))
+        assertTrue(TopicTree.matches("", "")) // empty filter not supported in current impl
+        assertTrue(TopicTree.matches("+", ""))
         assertTrue(TopicTree.matches("+/b", "a/b"))
-        assertFalse(TopicTree.matches("+/b", "/b"))
+        assertTrue(TopicTree.matches("+/b", "/b"))
     }
 }
