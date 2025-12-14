@@ -1,0 +1,63 @@
+TCP: 1883
+TPCS: 8883
+WS: 9000
+WSS: 9001
+
+QueuedMessagesEnabled: true
+AllowRootWildcardSubscription: true
+
+DefaultStoreType: SQLITE
+
+# User Management configuration
+UserManagement:
+  Enabled: false  # Set to true to enable user authentication and ACL
+  PasswordAlgorithm: bcrypt
+  CacheRefreshInterval: 60  # seconds
+  DisconnectOnUnauthorized: true
+
+# MQTT TCP Server configuration (socket-level settings)
+MqttTcpServer:
+  NoDelay: true                  # TCP_NODELAY - disable Nagle's algorithm for immediate packet transmission
+  ReceiveBufferSizeKb: 512       # Socket receive buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+  SendBufferSizeKb: 512          # Socket send buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+  MaxMessageSizeKb: 512
+
+# Queue size configuration for high-load scenarios
+Queues:
+  SubscriptionQueueSize: 50000  # Queue size for subscription add/delete operations (default: 10,000)
+  MessageQueueSize: 50000       # Queue size for message add/delete operations (default: 10,000)
+
+# Metrics configuration
+Logging:
+  Mqtt:
+    Enabled: true          # Enable MQTT log publishing to $SYS/syslogs/<node>/<level> topics
+  Memory:
+    Enabled: true         # Enable in-memory log storage (circular buffer)
+    Entries: 1000          # Maximum number of log entries to store in memory
+
+# Batches messages for delivery to clients to reduce eventBus overhead
+BulkMessaging:
+  Enabled: true              # Enable/disable bulk message batching
+  TimeoutMS: 100             # Flush batches after this many milliseconds (100ms recommended)
+  BulkSize: 1000             # Flush when batch reaches this many messages (1000 recommended)
+
+# Bulk Processing configuration (Topic grouping + Worker threads)
+BulkProcessing:
+  Enabled: true              # Enable/disable publish bulk processing
+  TimeoutMS: 50              # Flush inbound batch after this many milliseconds (50ms recommended)
+  BulkSize: 1000             # Flush when batch reaches this many messages (1000 recommended)
+  WorkerThreads: 4           # Number of parallel worker threads (recommended: 2-8)
+
+# SQLite configuration
+SQLite:
+  Path: "sqlite"
+
+# MCP Server configuration
+MCP:
+  Enabled: true
+  Port: 3000
+
+GraphQL:
+  Enabled: true
+  Port: 4000
+  Path: /graphql

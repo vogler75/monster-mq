@@ -90,7 +90,7 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
         }
         val placeholders = allFields.joinToString(", ") { "?" }
         val fieldNames = allFields.joinToString(", ")
-        val sql = "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders)"
+        val sql = "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders) ON CONFLICT DO NOTHING;"
 
         // Try batch insert first (fast path)
         try {
