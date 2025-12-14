@@ -347,6 +347,22 @@ class GraphQLDashboardClient {
         return result.user.deleteUser;
     }
 
+    async setPassword(input) {
+        const mutation = `
+            mutation SetPassword($input: SetPasswordInput!) {
+                user {
+                    setPassword(input: $input) {
+                        success
+                        message
+                    }
+                }
+            }
+        `;
+
+        const result = await this.query(mutation, { input });
+        return result.user.setPassword;
+    }
+
     // ===================== ACL RULES =====================
     async createAclRule(input) {
         const mutation = `
