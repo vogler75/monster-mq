@@ -1,0 +1,9 @@
+Release v1.6.58
+Built from commit: fe138a6
+Date: 2025-12-18 10:28:15
+
+Changes since v1.6.57:
+---
+fe138a6 Merge PR #69: Add update password function
+4c3f431 Add SQLite example config and update PostgreSQL insert
+59be4bc add update password function
