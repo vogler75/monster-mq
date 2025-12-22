@@ -1,0 +1,8 @@
+Release v1.6.59
+Built from commit: c3015d7
+Date: 2025-12-22 16:20:58
+
+Changes since v1.6.58:
+---
+c3015d7 Merge branch 'fix/#72'
+523275d Fix #72: Handle PLC4X array types in JSON serialization
