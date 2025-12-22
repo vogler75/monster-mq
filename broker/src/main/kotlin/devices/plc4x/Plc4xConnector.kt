@@ -12,6 +12,7 @@ import at.rocworks.stores.devices.Plc4xAddressMode
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import org.apache.plc4x.java.api.PlcConnection
 import org.apache.plc4x.java.api.PlcDriverManager
@@ -394,6 +395,26 @@ class Plc4xConnector : AbstractVerticle() {
         }
     }
 
+    /**
+     * Convert PLC4X array/collection types to JSON-compatible types.
+     * PLC4X returns special collection types (PlcList, etc.) that Vert.x JsonObject can't serialize.
+     */
+    private fun toJsonCompatible(value: Any): Any {
+        return when (value) {
+            is Collection<*> -> JsonArray(value.toList())
+            is BooleanArray -> JsonArray(value.toList())
+            is ByteArray -> JsonArray(value.toList())
+            is ShortArray -> JsonArray(value.toList())
+            is IntArray -> JsonArray(value.toList())
+            is LongArray -> JsonArray(value.toList())
+            is FloatArray -> JsonArray(value.toList())
+            is DoubleArray -> JsonArray(value.toList())
+            is CharArray -> JsonArray(value.toList())
+            is Array<*> -> JsonArray(value.toList())
+            else -> value
+        }
+    }
+
     private fun handleValueChange(address: Plc4xAddress, rawValue: Any) {
         try {
             // Track the last value READ from PLC for loop prevention in READ_WRITE mode
@@ -440,9 +461,12 @@ class Plc4xConnector : AbstractVerticle() {
             }
             lastRawValues[address.name] = rawValue
 
+            // Convert value to JSON-compatible type (handles PLC4X arrays/collections)
+            val jsonCompatibleValue = toJsonCompatible(transformedValue)
+
             // Create MQTT message payload
             val payload = JsonObject()
-                .put("value", transformedValue)
+                .put("value", jsonCompatibleValue)
                 .put("timestamp", Instant.now().toString())
                 .put("device", deviceConfig.name)
                 .put("address", address.name)
@@ -470,7 +494,7 @@ class Plc4xConnector : AbstractVerticle() {
             vertx.eventBus().publish(Plc4xExtension.ADDRESS_PLC4X_VALUE_PUBLISH, mqttMessage)
 
             messagesInCounter.incrementAndGet()
-            logger.fine { "Published PLC value: $mqttTopic = $transformedValue (from ${address.address})" }
+            logger.fine { "Published PLC value: $mqttTopic = $jsonCompatibleValue (from ${address.address})" }
 
         } catch (e: Exception) {
             logger.severe("Error handling value change for address ${address.name}: ${e.message}")
