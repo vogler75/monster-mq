@@ -27,7 +27,19 @@ abstract class DatabaseConnection(
                 open().onComplete { result ->
                     if (result.succeeded()) {
                         vertx.setPeriodic(5000) { // TODO: configurable
-                            if (!check()) reconnect(vertx)
+                            // Execute blocking health check on worker thread pool
+                            vertx.executeBlocking(Callable {
+                                check()
+                            }).onComplete { checkResult ->
+                                if (checkResult.succeeded()) {
+                                    if (!checkResult.result()) {
+                                        reconnect(vertx)
+                                    }
+                                } else {
+                                    logger.warning("Health check failed: ${checkResult.cause()?.message} [${Utils.getCurrentFunctionName()}]")
+                                    reconnect(vertx)
+                                }
+                            }
                         }
                         connectPromise.complete()
                     } else {
