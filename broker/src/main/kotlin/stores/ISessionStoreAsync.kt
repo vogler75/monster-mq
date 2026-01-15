@@ -31,6 +31,16 @@ interface ISessionStoreAsync {
     fun dequeueMessages(clientId: String, callback: (BrokerMessage) -> Boolean): Future<Void>
     fun removeMessages(messages: List<Pair<String, String>>): Future<Void>
 
+    // Fetch ONE pending message for queue-first delivery (returns null if none)
+    fun fetchNextPendingMessage(clientId: String): Future<BrokerMessage?>
+
+    // Status-based message tracking for QoS 1+ delivery
+    fun markMessageInFlight(clientId: String, messageUuid: String): Future<Void>
+    fun markMessagesInFlight(clientId: String, messageUuids: List<String>): Future<Void>
+    fun markMessageDelivered(clientId: String, messageUuid: String): Future<Void>
+    fun resetInFlightMessages(clientId: String): Future<Void>
+    fun purgeDeliveredMessages(): Future<Int>
+
     fun purgeQueuedMessages(): Future<Void>
     fun purgeSessions(): Future<Void>
 

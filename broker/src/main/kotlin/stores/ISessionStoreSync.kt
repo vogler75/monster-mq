@@ -35,6 +35,16 @@ interface ISessionStoreSync {
     fun dequeueMessages(clientId: String, callback: (BrokerMessage) -> Boolean)
     fun removeMessages(messages: List<Pair<String, String>>)
 
+    // Fetch ONE pending message for queue-first delivery (returns null if none)
+    fun fetchNextPendingMessage(clientId: String): BrokerMessage?
+
+    // Status-based message tracking for QoS 1+ delivery
+    fun markMessageInFlight(clientId: String, messageUuid: String)
+    fun markMessagesInFlight(clientId: String, messageUuids: List<String>)
+    fun markMessageDelivered(clientId: String, messageUuid: String)
+    fun resetInFlightMessages(clientId: String)
+    fun purgeDeliveredMessages(): Int
+
     fun purgeQueuedMessages()
     fun purgeSessions()
 

@@ -547,6 +547,33 @@ class SessionStoreCrateDB(
         }
     }
 
+    // TODO: Implement status-based tracking for CrateDB (currently stubs)
+    override fun fetchNextPendingMessage(clientId: String): BrokerMessage? {
+        logger.warning("fetchNextPendingMessage not yet implemented for CrateDB [${Utils.getCurrentFunctionName()}]")
+        return null
+    }
+
+    override fun markMessageInFlight(clientId: String, messageUuid: String) {
+        logger.warning("markMessageInFlight not yet implemented for CrateDB [${Utils.getCurrentFunctionName()}]")
+    }
+
+    override fun markMessagesInFlight(clientId: String, messageUuids: List<String>) {
+        logger.warning("markMessagesInFlight not yet implemented for CrateDB [${Utils.getCurrentFunctionName()}]")
+    }
+
+    override fun markMessageDelivered(clientId: String, messageUuid: String) {
+        logger.warning("markMessageDelivered not yet implemented for CrateDB [${Utils.getCurrentFunctionName()}]")
+    }
+
+    override fun resetInFlightMessages(clientId: String) {
+        logger.warning("resetInFlightMessages not yet implemented for CrateDB [${Utils.getCurrentFunctionName()}]")
+    }
+
+    override fun purgeDeliveredMessages(): Int {
+        logger.warning("purgeDeliveredMessages not yet implemented for CrateDB [${Utils.getCurrentFunctionName()}]")
+        return 0
+    }
+
     override fun purgeQueuedMessages() {
         val sql = "DELETE FROM $queuedMessagesTableName WHERE message_uuid NOT IN " +
                 "(SELECT message_uuid FROM $queuedMessagesClientsTableName)"

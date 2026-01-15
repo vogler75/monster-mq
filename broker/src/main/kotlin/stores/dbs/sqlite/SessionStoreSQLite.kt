@@ -442,15 +442,15 @@ class SessionStoreSQLite(
 
     override fun removeMessages(messages: List<Pair<String, String>>) {
         if (messages.isEmpty()) return
-        
+
         val deleteSql = "DELETE FROM $queuedMessagesClientsTableName WHERE client_id = ? AND message_uuid = ?"
         val batchParams = JsonArray()
-        
+
         messages.forEach { (clientId, messageUuid) ->
             val params = JsonArray().add(clientId).add(messageUuid)
             batchParams.add(params)
         }
-        
+
         sqlClient.executeBatch(deleteSql, batchParams).onComplete { result ->
             if (result.failed()) {
                 logger.warning("Error removing messages: ${result.cause()?.message}")
@@ -458,6 +458,33 @@ class SessionStoreSQLite(
                 logger.fine { "Removed ${messages.size} message mappings" }
             }
         }
+    }
+
+    // TODO: Implement status-based tracking for SQLite (currently stubs)
+    override fun fetchNextPendingMessage(clientId: String): BrokerMessage? {
+        logger.warning("fetchNextPendingMessage not yet implemented for SQLite")
+        return null
+    }
+
+    override fun markMessageInFlight(clientId: String, messageUuid: String) {
+        logger.warning("markMessageInFlight not yet implemented for SQLite")
+    }
+
+    override fun markMessagesInFlight(clientId: String, messageUuids: List<String>) {
+        logger.warning("markMessagesInFlight not yet implemented for SQLite")
+    }
+
+    override fun markMessageDelivered(clientId: String, messageUuid: String) {
+        logger.warning("markMessageDelivered not yet implemented for SQLite")
+    }
+
+    override fun resetInFlightMessages(clientId: String) {
+        logger.warning("resetInFlightMessages not yet implemented for SQLite")
+    }
+
+    override fun purgeDeliveredMessages(): Int {
+        logger.warning("purgeDeliveredMessages not yet implemented for SQLite")
+        return 0
     }
 
     override fun purgeQueuedMessages() {

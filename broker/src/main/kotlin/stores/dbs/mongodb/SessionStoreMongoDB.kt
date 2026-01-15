@@ -382,6 +382,33 @@ class SessionStoreMongoDB(
         }
     }
 
+    // TODO: Implement status-based tracking for MongoDB (currently stubs)
+    override fun fetchNextPendingMessage(clientId: String): BrokerMessage? {
+        logger.warning("fetchNextPendingMessage not yet implemented for MongoDB")
+        return null
+    }
+
+    override fun markMessageInFlight(clientId: String, messageUuid: String) {
+        logger.warning("markMessageInFlight not yet implemented for MongoDB")
+    }
+
+    override fun markMessagesInFlight(clientId: String, messageUuids: List<String>) {
+        logger.warning("markMessagesInFlight not yet implemented for MongoDB")
+    }
+
+    override fun markMessageDelivered(clientId: String, messageUuid: String) {
+        logger.warning("markMessageDelivered not yet implemented for MongoDB")
+    }
+
+    override fun resetInFlightMessages(clientId: String) {
+        logger.warning("resetInFlightMessages not yet implemented for MongoDB")
+    }
+
+    override fun purgeDeliveredMessages(): Int {
+        logger.warning("purgeDeliveredMessages not yet implemented for MongoDB")
+        return 0
+    }
+
     override fun purgeQueuedMessages() {
         try {
             val startTime = System.currentTimeMillis()
