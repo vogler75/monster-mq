@@ -1389,6 +1389,9 @@ open class SessionHandler(
     /**
      * Forward bulk of messages to online clients using existing bulk messaging system.
      * Uses queue-first for QoS 1+ messages to persistent session clients.
+     *
+     * IMPORTANT: The qos parameter is the message's QoS, not the effective QoS.
+     * Effective QoS = min(subscriptionQoS, messageQoS) and must be calculated per client.
      */
     private fun forwardBulkToOnlineClients(
         messages: List<BrokerMessage>,
@@ -1400,25 +1403,32 @@ open class SessionHandler(
             shouldPersistMessagesForClient(clientId)
         }
 
-        // For QoS 1+ persistent session clients: queue-first
+        // For persistent session clients: queue-first ONLY if effective QoS > 0
+        // Effective QoS = min(subscriptionQoS, messageQoS)
         // Triggers are sent after DB write completes (in queueWorkerThread)
-        if (qos > 0 && persistentClients.isNotEmpty()) {
-            val persistentClientIds = persistentClients.map { it.first }
-            messages.forEach { msg ->
-                val effectiveQos = if (qos < msg.qosLevel) qos else msg.qosLevel
-                val messageToQueue = if (effectiveQos < msg.qosLevel) {
-                    msg.cloneWithNewQoS(effectiveQos)
-                } else {
-                    msg
+        if (persistentClients.isNotEmpty()) {
+            // Group persistent clients by their subscription QoS to determine effective QoS
+            persistentClients.forEach { (clientId, subscriptionQos) ->
+                messages.forEach { msg ->
+                    val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
+                    if (effectiveQos > 0) {
+                        // Queue-first for QoS 1+
+                        val messageToQueue = if (effectiveQos < msg.qosLevel) {
+                            msg.cloneWithNewQoS(effectiveQos)
+                        } else {
+                            msg
+                        }
+                        enqueueMessage(messageToQueue, listOf(clientId))
+                    } else {
+                        // QoS 0: send directly
+                        sendMessageToClient(clientId, msg.cloneWithNewQoS(0))
+                    }
                 }
-                enqueueMessage(messageToQueue, persistentClientIds)
             }
-            logger.finest { "Queue-first bulk: enqueued ${messages.size} messages for ${persistentClientIds.size} persistent clients [${Utils.getCurrentFunctionName()}]" }
         }
 
-        // For QoS 0 or clean session clients: send directly
-        val directClients = if (qos == 0) clients else cleanClients
-        directClients.forEach { (clientId, subscriptionQos) ->
+        // For clean session clients: always send directly (no persistence needed)
+        cleanClients.forEach { (clientId, subscriptionQos) ->
             messages.forEach { msg ->
                 val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
                 val messageToSend = if (effectiveQos < msg.qosLevel) {
@@ -1426,7 +1436,6 @@ open class SessionHandler(
                 } else {
                     msg
                 }
-                // Use existing bulk messaging system
                 sendMessageToClient(clientId, messageToSend)
             }
         }
@@ -1434,6 +1443,10 @@ open class SessionHandler(
 
     /**
      * Handle messages for created and offline clients.
+     *
+     * IMPORTANT: The qos parameter is the message's QoS, not the effective QoS.
+     * Effective QoS = min(subscriptionQoS, messageQoS) and must be calculated per client.
+     * Only queue messages if effective QoS > 0.
      */
     private fun handleCreatedAndOfflineClients(
         messages: List<BrokerMessage>,
@@ -1444,21 +1457,39 @@ open class SessionHandler(
             clientStatus[clientId] == ClientStatus.CREATED
         }
 
-        // Created clients: queue in-flight
-        createdClients.forEach { (clientId, _) ->
+        // Created clients: queue in-flight (only if effective QoS > 0)
+        createdClients.forEach { (clientId, subscriptionQos) ->
             messages.forEach { msg ->
-                addInFlightMessage(clientId, msg)
+                val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
+                if (effectiveQos > 0) {
+                    val messageToQueue = if (effectiveQos < msg.qosLevel) {
+                        msg.cloneWithNewQoS(effectiveQos)
+                    } else {
+                        msg
+                    }
+                    addInFlightMessage(clientId, messageToQueue)
+                }
+                // QoS 0 messages for created clients are simply dropped (fire-and-forget)
             }
         }
 
-        // Offline persistent clients: queue for later delivery
+        // Offline persistent clients: queue for later delivery (only if effective QoS > 0)
         if (offlineClients.isNotEmpty()) {
             val persistentClients = offlineClients.filter { (clientId, _) ->
                 shouldPersistMessagesForClient(clientId)
             }
-            if (persistentClients.isNotEmpty()) {
+            persistentClients.forEach { (clientId, subscriptionQos) ->
                 messages.forEach { msg ->
-                    enqueueMessage(msg, persistentClients.map { it.first })
+                    val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
+                    if (effectiveQos > 0) {
+                        val messageToQueue = if (effectiveQos < msg.qosLevel) {
+                            msg.cloneWithNewQoS(effectiveQos)
+                        } else {
+                            msg
+                        }
+                        enqueueMessage(messageToQueue, listOf(clientId))
+                    }
+                    // QoS 0 messages for offline clients are simply dropped (fire-and-forget)
                 }
             }
         }

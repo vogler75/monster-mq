@@ -252,11 +252,13 @@ class MqttClient(
                         ready = true
                         sessionHandler.onlineClient(clientId)
 
-                        // For persistent sessions, send a trigger to process any queued messages
-                        // This uses the queue-first mechanism: fetch one → send → wait ACK → fetch next
+                        // For persistent sessions, reset any stale in-flight messages and send trigger
+                        // This handles the case where previous connection died with messages in-flight
                         if (!endpoint.isCleanSession) {
-                            logger.fine { "Client [$clientId] Sending initial queue trigger for persistent session [${Utils.getCurrentFunctionName()}]" }
-                            sessionHandler.sendMessageAvailableTrigger(clientId)
+                            sessionHandler.resetInFlightMessages(clientId).onComplete {
+                                logger.fine { "Client [$clientId] Reset in-flight messages and sending initial queue trigger [${Utils.getCurrentFunctionName()}]" }
+                                sessionHandler.sendMessageAvailableTrigger(clientId)
+                            }
                         }
                     }
                 }
@@ -352,11 +354,13 @@ class MqttClient(
                     ready = true
                     sessionHandler.onlineClient(clientId)
 
-                    // For persistent sessions, send a trigger to process any queued messages
-                    // This uses the queue-first mechanism: fetch one → send → wait ACK → fetch next
+                    // For persistent sessions, reset any stale in-flight messages and send trigger
+                    // This handles the case where previous connection died with messages in-flight
                     if (!endpoint.isCleanSession) {
-                        logger.fine { "Client [$clientId] Sending initial queue trigger for persistent session [${Utils.getCurrentFunctionName()}]" }
-                        sessionHandler.sendMessageAvailableTrigger(clientId)
+                        sessionHandler.resetInFlightMessages(clientId).onComplete {
+                            logger.fine { "Client [$clientId] Reset in-flight messages and sending initial queue trigger [${Utils.getCurrentFunctionName()}]" }
+                            sessionHandler.sendMessageAvailableTrigger(clientId)
+                        }
                     }
                 }
             }
@@ -398,8 +402,7 @@ class MqttClient(
             sessionHandler.delClient(clientId)
         } else {
             logger.fine { "Client [$clientId] Pause client, it is not a clean session [${Utils.getCurrentFunctionName()}]" }
-            // Reset any in-flight messages back to pending so they can be re-delivered on reconnect
-            sessionHandler.resetInFlightMessages(clientId)
+            // Note: in-flight messages will be reset when client reconnects
             sessionHandler.pauseClient(clientId)
         }
         undeployEndpoint(vertx, this.deploymentID())
