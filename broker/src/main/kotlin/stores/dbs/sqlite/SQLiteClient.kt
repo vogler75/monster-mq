@@ -104,7 +104,7 @@ class SQLiteClient(private val vertx: Vertx, private val dbPath: String) {
             .put("dbPath", dbPath)
             .put("sql", sql)
             .put("batchParams", batchParams)
-            
+
         return vertx.eventBus()
             .request<JsonObject>(SQLiteVerticle.EB_EXECUTE_BATCH, request)
             .map { message ->
@@ -116,7 +116,7 @@ class SQLiteClient(private val vertx: Vertx, private val dbPath: String) {
                 }
             }
     }
-    
+
     /**
      * Initialize database with multiple SQL statements
      */
