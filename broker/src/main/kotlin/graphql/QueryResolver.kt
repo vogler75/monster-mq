@@ -437,7 +437,7 @@ class QueryResolver(
                 }
             }
 
-            val endTime = endTimeStr?.let {
+            val endTime = endTimeStr.let {
                 try {
                     Instant.parse(it)
                 } catch (e: DateTimeParseException) {

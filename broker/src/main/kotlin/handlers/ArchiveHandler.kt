@@ -207,10 +207,9 @@ class ArchiveHandler(
                     }
                 }
 
-                @Suppress("UNCHECKED_CAST")
-                Future.all<Any>(importFutures as List<Future<Any>>).onComplete { importResult ->
+                Future.all<Any>(importFutures).onComplete { importResult ->
                     val importedCount = importFutures.mapNotNull {
-                        if (it.succeeded()) it.result() as? Int else null
+                        if (it.succeeded()) it.result() as Int else null
                     }.sum()
 
                     logger.fine("Successfully imported $importedCount archive groups from $archiveConfigFile to database")

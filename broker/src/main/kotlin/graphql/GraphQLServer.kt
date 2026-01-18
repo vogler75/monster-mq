@@ -283,8 +283,8 @@ class GraphQLServer(
                         logger.fine("OPC UA device store initialized successfully")
                         // Try to start health checks if available (for MongoDB and SQLite)
                         try {
-                            val method = store?.javaClass?.getMethod("startHealthChecks", Vertx::class.java)
-                            method?.invoke(store, vertx)
+                            val method = store.javaClass.getMethod("startHealthChecks", Vertx::class.java)
+                            method.invoke(store, vertx)
                         } catch (e: Exception) {
                             logger.finer("Health checks not available or already started for device store: ${e.message}")
                         }

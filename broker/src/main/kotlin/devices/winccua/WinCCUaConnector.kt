@@ -631,7 +631,7 @@ class WinCCUaConnector : AbstractVerticle() {
             }
         }
 
-        Future.all<Void>(setupFutures as List<Future<Void>>)
+        Future.all<Void>(setupFutures)
             .onComplete { result ->
                 if (result.succeeded()) {
                     logger.info("All subscriptions set up successfully for device ${deviceConfig.name}")

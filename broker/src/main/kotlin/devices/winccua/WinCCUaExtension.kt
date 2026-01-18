@@ -90,7 +90,7 @@ class WinCCUaExtension : AbstractVerticle() {
             vertx.undeploy(deploymentId)
         }
 
-        Future.all<Void>(undeployFutures as List<Future<Void>>)
+        Future.all<Void>(undeployFutures)
             .compose { deviceStore.close() }
             .onComplete { result ->
                 if (result.succeeded()) {

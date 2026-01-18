@@ -50,8 +50,7 @@ class Neo4jExtension : AbstractVerticle() {
 
     override fun stop(stopPromise: Promise<Void>) {
         val undeployFutures = deployedConnectors.values.map { vertx.undeploy(it) }
-        @Suppress("UNCHECKED_CAST")
-        Future.all<Void>(undeployFutures as List<Future<Void>>)
+        Future.all<Void>(undeployFutures)
             .compose { deviceStore.close() }
             .onComplete { stopPromise.complete() }
     }

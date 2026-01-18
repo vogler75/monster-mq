@@ -96,7 +96,7 @@ class Neo4jClientConfigQueries(
     }
 
     private fun deviceToMap(device: DeviceConfig): Map<String, Any?> {
-        val currentNodeId = Monster.getClusterNodeId(vertx) ?: "local"
+        val currentNodeId = Monster.getClusterNodeId(vertx)
         val config = try { Neo4jClientConfig.fromJson(device.config) } catch (e: Exception) {
             logger.severe("Failed to parse Neo4jClientConfig for ${device.name}: ${e.message}")
             // Provide minimal fallback so the UI can still show something

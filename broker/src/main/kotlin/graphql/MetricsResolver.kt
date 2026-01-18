@@ -236,7 +236,7 @@ class MetricsResolver(
             if (result.succeeded()) {
                 if (sessionNodeId != null) {
                     // Found the session on a remote node - request details via message bus
-                    val sessionDetailsAddress = EventBusAddresses.Node.sessionDetails(sessionNodeId!!, "*")
+                    val sessionDetailsAddress = EventBusAddresses.Node.sessionDetails(sessionNodeId, "*")
                     val request = JsonObject()
                     val deliveryOptions = io.vertx.core.eventbus.DeliveryOptions().addHeader("clientId", clientId)
 

@@ -734,7 +734,7 @@ class Plc4xClientConfigMutations(
     }
 
     private fun deviceToMap(device: DeviceConfig): Map<String, Any?> {
-        val currentNodeId = Monster.Companion.getClusterNodeId(vertx) ?: "local"
+        val currentNodeId = Monster.Companion.getClusterNodeId(vertx)
 
         // Parse config from JsonObject for PLC4X Client devices
         val config = Plc4xConnectionConfig.fromJsonObject(device.config)

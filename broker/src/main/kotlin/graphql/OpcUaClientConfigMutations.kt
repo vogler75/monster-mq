@@ -180,7 +180,6 @@ class OpcUaClientConfigMutations(
                         // Preserve existing keystore password if not provided in update
                         certificateConfig = requestConfig.certificateConfig.copy(
                             keystorePassword = requestConfig.certificateConfig.keystorePassword
-                                ?: existingConfig.certificateConfig.keystorePassword
                         )
                     )
                     val updatedDevice = request.toDeviceConfig().copy(
@@ -752,7 +751,7 @@ class OpcUaClientConfigMutations(
     }
 
     private fun deviceToMap(device: DeviceConfig): Map<String, Any?> {
-        val currentNodeId = Monster.Companion.getClusterNodeId(vertx) ?: "local"
+        val currentNodeId = Monster.Companion.getClusterNodeId(vertx)
 
         // Parse config from JsonObject for OPC UA Client devices
         val config = OpcUaConnectionConfig.fromJsonObject(device.config)

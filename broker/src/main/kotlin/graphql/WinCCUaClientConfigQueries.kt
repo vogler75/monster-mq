@@ -98,7 +98,7 @@ class WinCCUaClientConfigQueries(
     }
 
     private fun deviceToMap(device: DeviceConfig): Map<String, Any> {
-        val currentNodeId = Monster.getClusterNodeId(vertx) ?: "local"
+        val currentNodeId = Monster.getClusterNodeId(vertx)
 
         // Parse config from JsonObject for WinCC Unified Client devices
         val config = WinCCUaConnectionConfig.fromJsonObject(device.config)

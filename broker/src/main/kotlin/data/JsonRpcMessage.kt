@@ -31,7 +31,7 @@ data class JsonRpcRequest(
                 val method = json.getString("method") ?: return null
                 val id = json.getString("id") ?: return null
                 val paramsObj = json.getJsonObject("params")
-                val params = paramsObj?.map?.toMap() as? Map<String, Any>
+                val params = paramsObj?.map?.toMap()
 
                 JsonRpcRequest(jsonrpc, method, params, id)
             } catch (e: Exception) {

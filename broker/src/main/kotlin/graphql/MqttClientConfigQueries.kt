@@ -97,7 +97,7 @@ class MqttClientConfigQueries(
     }
 
     private fun deviceToMap(device: DeviceConfig): Map<String, Any> {
-        val currentNodeId = Monster.getClusterNodeId(vertx) ?: "local"
+        val currentNodeId = Monster.getClusterNodeId(vertx)
 
         // Parse config from JsonObject for MQTT Client devices
         val config = MqttClientConnectionConfig.fromJsonObject(device.config)

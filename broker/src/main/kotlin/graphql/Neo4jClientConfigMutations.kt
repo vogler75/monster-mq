@@ -307,7 +307,7 @@ class Neo4jClientConfigMutations(
         .put("updatedAt", device.updatedAt.toString())
 
     private fun deviceToMap(device: DeviceConfig): Map<String, Any?> {
-        val currentNodeId = Monster.getClusterNodeId(vertx) ?: "local"
+        val currentNodeId = Monster.getClusterNodeId(vertx)
         val config = try { Neo4jClientConfig.fromJson(device.config) } catch (e: Exception) {
             logger.severe("Failed to parse Neo4jClientConfig for ${device.name}: ${e.message}")
             Neo4jClientConfig()

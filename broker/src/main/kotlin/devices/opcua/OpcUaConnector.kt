@@ -224,7 +224,7 @@ class OpcUaConnector : AbstractVerticle() {
             setupAddressSubscription(address)
         }
 
-        Future.all<Void>(setupFutures as List<Future<Void>>)
+        Future.all<Void>(setupFutures)
             .onComplete { result ->
                 if (result.succeeded()) {
                     logger.info("Successfully set up ${addresses.size} address subscriptions for device ${deviceConfig.name}")
@@ -589,7 +589,7 @@ class OpcUaConnector : AbstractVerticle() {
                         createMonitoredItemForAddress(address, nodeId, browsePath)
                     }
 
-                    Future.all<Void>(createFutures as List<Future<Void>>)
+                    Future.all<Void>(createFutures)
                         .map { Void.TYPE.cast(null) }
                 }
                 .onComplete { result ->

@@ -319,7 +319,7 @@ class JDBCLoggerMutations(
         .put("updatedAt", device.updatedAt.toString())
 
     private fun deviceToMap(device: DeviceConfig): Map<String, Any?> {
-        val currentNodeId = Monster.getClusterNodeId(vertx) ?: "local"
+        val currentNodeId = Monster.getClusterNodeId(vertx)
         val config = try {
             JDBCLoggerConfig.fromJson(device.config)
         } catch (e: Exception) {

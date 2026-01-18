@@ -59,7 +59,7 @@ class JdbcManager {
             obj is Map<*, *> -> {
                 val map = mutableMapOf<String, Any?>()
                 for (entry in obj) {
-                    @Suppress("UNCHECKED_CAST") val castEntry = entry as Map.Entry<Any?, Any?>
+                    val castEntry = entry
                     map[castEntry.key.toString()] = convertToJsonSerializable(castEntry.value)
                 }
                 map

@@ -99,8 +99,7 @@ class FlowQueries(
                             flows = flows.filter { it.enabled == enabled }
                         }
 
-                        @Suppress("UNCHECKED_CAST")
-                        val flowMaps = flows.map { flowInstanceToMap(it) as Map<String, Any> }
+                        val flowMaps = flows.map { flowInstanceToMap(it) }
                         future.complete(flowMaps)
                     } else {
                         logger.severe("Error fetching flow instances: ${result.cause()?.message}")
@@ -257,7 +256,7 @@ class FlowQueries(
 
     @Suppress("UNCHECKED_CAST")
     private fun flowInstanceToMap(device: DeviceConfig): Map<String, Any> {
-        val currentNodeId = Monster.getClusterNodeId(vertx) ?: "local"
+        val currentNodeId = Monster.getClusterNodeId(vertx)
         val flowInstance = FlowInstance.fromJsonObject(device.config)
 
         return mapOf(

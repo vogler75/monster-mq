@@ -97,7 +97,7 @@ class OpcUaClientConfigQueries(
     }
 
     private fun deviceToMap(device: DeviceConfig): Map<String, Any> {
-        val currentNodeId = Monster.Companion.getClusterNodeId(vertx) ?: "local"
+        val currentNodeId = Monster.Companion.getClusterNodeId(vertx)
 
         // Parse config from JsonObject for OPC UA Client devices
         val config = OpcUaConnectionConfig.fromJsonObject(device.config)
