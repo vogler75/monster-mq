@@ -5,16 +5,45 @@ These scripts help test persistent session handling and detect message loss in M
 ## Prerequisites
 
 ```bash
-pip install paho-mqtt
+pip install paho-mqtt PyYAML
 ```
+
+## Configuration
+
+The scripts use a `config.yaml` file for configuration. The file includes comprehensive documentation for all available options:
+
+### Broker Settings
+- `broker.host` - MQTT broker hostname or IP (default: localhost)
+- `broker.port` - MQTT broker port (default: 1883)
+- `broker.keepalive` - Keep-alive interval in seconds (default: 60)
+
+### Topic and QoS
+- `topic` - MQTT topic for message exchange (default: test/sequence)
+- `qos` - Quality of Service level: 0, 1, or 2 (default: 1)
+
+### Producer Settings
+- `producer.client_id` - Unique client identifier (default: producer_test)
+- `producer.burst_count` - Messages per burst (default: 1)
+- `producer.burst_delay` - Delay between bursts in seconds (default: 0.1)
+- `producer.state_file` - File for persisting sequence state (default: .producer_state)
+
+### Consumer Settings
+- `consumer.client_id` - Unique client identifier for persistent sessions (default: consumer_test_persistent)
+- `consumer.state_file` - File for persisting sequence state (default: .consumer_state)
+
+All settings have detailed comments in the config file explaining their purpose and providing examples. Command-line arguments can override any config file setting.
 
 ## Scripts
 
 ### producer.py
 Publishes messages with increasing sequence numbers to test message delivery.
-- Sends 10 messages in rapid succession (burst)
-- Waits 100ms between bursts
-- Uses QoS 1 for guaranteed delivery
+- Sends messages in configurable bursts (default: 1 message per burst)
+- Waits 100ms between bursts (configurable)
+- Uses QoS 1 for guaranteed delivery (configurable)
+- Command-line arguments:
+  - `--qos {0,1,2}` - Override QoS level from config
+  - `--burst-count N` - Override number of messages per burst
+  - `--burst-delay SECONDS` - Override delay between bursts
 
 ### consumer.py
 Subscribes with a persistent session and detects gaps in message sequences.
@@ -23,6 +52,10 @@ Subscribes with a persistent session and detects gaps in message sequences.
 - Logs warnings if gaps are detected (indicating message loss)
 - Persists across disconnections
 - **Saves last received sequence to `.consumer_state` file** - allows resuming from correct position after script restarts
+- Command-line arguments:
+  - `--qos {0,1,2}` - Override QoS level from config
+  - `--reset` - Reset session and delete state file
+  - `--start-from N` - Override expected starting sequence number
 
 ## Testing Persistent Session Handling
 

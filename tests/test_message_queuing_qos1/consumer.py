@@ -20,16 +20,36 @@ import time
 import argparse
 import threading
 import os
+import yaml
 
-# MQTT Configuration
-BROKER_HOST = "localhost"
-BROKER_PORT = 1883
-CLIENT_ID = "consumer_test_persistent"
-TOPIC = "test/sequence"
-DEFAULT_QOS = 1  # Default QoS level
+# Load configuration from config.yaml
+def load_config():
+    """Load configuration from config.yaml file."""
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
+    try:
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError:
+        print(f"[Consumer] Warning: config.yaml not found at {config_path}, using defaults")
+        return {}
+    except Exception as e:
+        print(f"[Consumer] Warning: Error loading config.yaml: {e}, using defaults")
+        return {}
 
-# State file
-STATE_FILE = os.path.join(os.path.dirname(__file__), ".consumer_state")
+# Load configuration
+config = load_config()
+
+# MQTT Configuration from config file
+BROKER_HOST = config.get('broker', {}).get('host', 'localhost')
+BROKER_PORT = config.get('broker', {}).get('port', 1883)
+BROKER_KEEPALIVE = config.get('broker', {}).get('keepalive', 60)
+CLIENT_ID = config.get('consumer', {}).get('client_id', 'consumer_test_persistent')
+TOPIC = config.get('topic', 'test/sequence')
+DEFAULT_QOS = config.get('qos', 1)
+
+# State file from config
+STATE_FILE_NAME = config.get('consumer', {}).get('state_file', '.consumer_state')
+STATE_FILE = os.path.join(os.path.dirname(__file__), STATE_FILE_NAME)
 
 # State tracking
 expected_sequence = 0
@@ -187,7 +207,7 @@ def main():
     client.on_subscribe = on_subscribe
 
     try:
-        client.connect(BROKER_HOST, BROKER_PORT, keepalive=60)
+        client.connect(BROKER_HOST, BROKER_PORT, keepalive=BROKER_KEEPALIVE)
         client.loop_start()
 
         # Wait for CONNACK
