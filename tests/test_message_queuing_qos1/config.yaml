@@ -1,0 +1,152 @@
+# MQTT Test Configuration
+# Configuration file for producer.py and consumer.py test scripts
+# All settings can be overridden via command-line arguments
+
+# ==============================================================================
+# Broker Connection Settings
+# ==============================================================================
+broker:
+  # MQTT broker hostname or IP address
+  host: localhost
+
+  # MQTT broker port
+  # Default ports:
+  #   1883 - Standard MQTT (unencrypted)
+  #   8883 - MQTT over TLS/SSL
+  #   8083 - MQTT over WebSockets
+  port: 1883
+
+  # Keep-alive interval in seconds
+  # The client will send a ping if no other messages are sent within this period
+  # Recommended: 60-300 seconds
+  keepalive: 60
+
+# ==============================================================================
+# Topic Configuration
+# ==============================================================================
+# MQTT topic for message exchange
+# Both producer and consumer use this topic
+# Examples:
+#   test/sequence
+#   sensors/temperature
+#   data/telemetry/#
+topic: test/sequence
+
+# ==============================================================================
+# QoS (Quality of Service) Level
+# ==============================================================================
+# QoS level for both producer and consumer
+# This can be overridden per script via command-line arguments
+#
+# QoS Levels:
+#   0 = At most once delivery (fire and forget)
+#       - Fastest, no guarantees
+#       - Message may be lost
+#       - No acknowledgment
+#
+#   1 = At least once delivery (default)
+#       - Message guaranteed to arrive at least once
+#       - May receive duplicates
+#       - Requires PUBACK acknowledgment
+#
+#   2 = Exactly once delivery
+#       - Slowest, highest guarantee
+#       - Message arrives exactly once
+#       - Requires 4-way handshake (PUBLISH, PUBREC, PUBREL, PUBCOMP)
+qos: 1
+
+# ==============================================================================
+# Producer Settings
+# ==============================================================================
+producer:
+  # Client ID for the producer
+  # Must be unique among all clients connected to the broker
+  # If empty or not set, broker will assign a random ID
+  client_id: producer_test
+
+  # Number of messages to send in each burst
+  # Higher values test high-frequency message handling
+  # Examples:
+  #   1   - One message at a time (gentle load)
+  #   10  - Moderate burst (original default)
+  #   100 - Heavy burst (stress test)
+  burst_count: 1
+
+  # Delay between bursts in seconds (floating point)
+  # Time to wait after sending a burst before sending the next one
+  # Examples:
+  #   0.001 - 1ms   (very aggressive, ~1000 bursts/sec)
+  #   0.01  - 10ms  (aggressive, ~100 bursts/sec)
+  #   0.1   - 100ms (default, ~10 bursts/sec)
+  #   1.0   - 1s    (gentle, ~1 burst/sec)
+  burst_delay: 0.1
+
+  # State file to persist the last sent sequence number
+  # Allows producer to resume from the correct sequence after restart
+  # The file is created in the same directory as the script
+  # Set to null or empty string to disable state persistence
+  state_file: .producer_state
+
+# ==============================================================================
+# Consumer Settings
+# ==============================================================================
+consumer:
+  # Client ID for the consumer
+  # CRITICAL: Must remain constant for persistent sessions to work
+  # If this changes, the broker will create a new session
+  # Must be unique among all clients connected to the broker
+  client_id: consumer_test_persistent
+
+  # State file to persist the last received sequence number
+  # Allows consumer to detect gaps after script restarts
+  # The file is created in the same directory as the script
+  # Set to null or empty string to disable state persistence
+  state_file: .consumer_state
+
+# ==============================================================================
+# Advanced Configuration (for testing different scenarios)
+# ==============================================================================
+
+# Uncomment and modify these sections for advanced testing scenarios:
+
+# # Alternative configuration for high-frequency testing
+# # producer:
+# #   client_id: producer_stress_test
+# #   burst_count: 100      # Send 100 messages per burst
+# #   burst_delay: 0.01     # Wait 10ms between bursts
+# #   state_file: .producer_state_stress
+
+# # Alternative configuration for slow, steady testing
+# # producer:
+# #   client_id: producer_slow
+# #   burst_count: 1        # One message at a time
+# #   burst_delay: 1.0      # Wait 1 second between messages
+# #   state_file: .producer_state_slow
+
+# # Multiple consumer testing (use different config files or override client_id)
+# # consumer:
+# #   client_id: consumer_test_2
+# #   state_file: .consumer_state_2
+
+# ==============================================================================
+# Usage Examples
+# ==============================================================================
+#
+# 1. Use config.yaml defaults:
+#    ./producer.py
+#    ./consumer.py
+#
+# 2. Override QoS level:
+#    ./producer.py --qos 2
+#    ./consumer.py --qos 2
+#
+# 3. Override producer burst settings:
+#    ./producer.py --burst-count 10 --burst-delay 0.5
+#
+# 4. Reset consumer session:
+#    ./consumer.py --reset
+#
+# 5. Start consumer from specific sequence:
+#    ./consumer.py --start-from 100
+#
+# ==============================================================================

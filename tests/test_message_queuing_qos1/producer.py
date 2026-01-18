@@ -12,19 +12,40 @@ import sys
 import threading
 import os
 import argparse
+import yaml
 
-# MQTT Configuration
-BROKER_HOST = "localhost"
-BROKER_PORT = 1883
-TOPIC = "test/sequence"
+# Load configuration from config.yaml
+def load_config():
+    """Load configuration from config.yaml file."""
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
+    try:
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError:
+        print(f"[Producer] Warning: config.yaml not found at {config_path}, using defaults")
+        return {}
+    except Exception as e:
+        print(f"[Producer] Warning: Error loading config.yaml: {e}, using defaults")
+        return {}
 
-# Default Message Configuration
-DEFAULT_QOS = 1
-DEFAULT_BURST_COUNT = 1  # Number of messages to send in each burst
-DEFAULT_BURST_DELAY = 0.1  # Delay between bursts in seconds (100ms)
+# Load configuration
+config = load_config()
 
-# State file for persistence
-STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".producer_state")
+# MQTT Configuration from config file
+BROKER_HOST = config.get('broker', {}).get('host', 'localhost')
+BROKER_PORT = config.get('broker', {}).get('port', 1883)
+BROKER_KEEPALIVE = config.get('broker', {}).get('keepalive', 60)
+TOPIC = config.get('topic', 'test/sequence')
+
+# Default Message Configuration from config file
+DEFAULT_QOS = config.get('qos', 1)
+DEFAULT_BURST_COUNT = config.get('producer', {}).get('burst_count', 1)
+DEFAULT_BURST_DELAY = config.get('producer', {}).get('burst_delay', 0.1)
+DEFAULT_CLIENT_ID = config.get('producer', {}).get('client_id', 'producer_test')
+
+# State file for persistence from config file
+STATE_FILE_NAME = config.get('producer', {}).get('state_file', '.producer_state')
+STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), STATE_FILE_NAME)
 
 def load_sequence():
     """Load the last sequence number from state file."""
@@ -87,12 +108,12 @@ def main():
         'burst_delay': burst_delay
     }
 
-    client = mqtt.Client(client_id="producer_test", clean_session=True, userdata=userdata)
+    client = mqtt.Client(client_id=DEFAULT_CLIENT_ID, clean_session=True, userdata=userdata)
     client.on_connect = on_connect
     client.on_publish = on_publish
 
     try:
-        client.connect(BROKER_HOST, BROKER_PORT, keepalive=60)
+        client.connect(BROKER_HOST, BROKER_PORT, keepalive=BROKER_KEEPALIVE)
         client.loop_start()
 
         # Wait for CONNACK
