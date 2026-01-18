@@ -12,6 +12,7 @@ resume from the correct position after restarts.
 Usage:
     python consumer.py              # Start or resume persistent session
     python consumer.py --reset      # Reset session and start from 0
+    python consumer.py --clientid subscriber2  # Start with a different client ID
 """
 
 import paho.mqtt.client as mqtt
@@ -67,8 +68,9 @@ def on_connect(client, userdata, flags, rc):
     if rc == 0:
         session_present = flags.get('session present', False)
         qos = userdata['qos']
+        client_id = userdata['client_id']
         print(f"[Consumer] Connected to broker at {BROKER_HOST}:{BROKER_PORT}")
-        print(f"[Consumer] Client ID: {CLIENT_ID}")
+        print(f"[Consumer] Client ID: {client_id}")
         print(f"[Consumer] QoS level: {qos}")
         print(f"[Consumer] Session present: {session_present}")
         connected_event.set()
@@ -94,19 +96,19 @@ def on_subscribe(client, userdata, mid, granted_qos):
     print(f"[Consumer] Subscription confirmed with QoS: {granted_qos}")
     subscribed_event.set()
 
-def save_state():
+def save_state(state_file):
     """Save the current expected sequence to disk"""
     try:
-        with open(STATE_FILE, 'w') as f:
+        with open(state_file, 'w') as f:
             f.write(str(expected_sequence))
     except Exception as e:
         print(f"[Consumer] Warning: Failed to save state: {e}")
 
-def load_state():
+def load_state(state_file):
     """Load the last expected sequence from disk"""
-    if os.path.exists(STATE_FILE):
+    if os.path.exists(state_file):
         try:
-            with open(STATE_FILE, 'r') as f:
+            with open(state_file, 'r') as f:
                 seq = int(f.read().strip())
                 print(f"[Consumer] Loaded state from disk: expecting sequence {seq}")
                 return seq
@@ -116,6 +118,8 @@ def load_state():
 
 def on_message(client, userdata, msg):
     global expected_sequence, received_count, gap_count, last_received
+
+    state_file = userdata['state_file']
 
     try:
         sequence = int(msg.payload.decode())
@@ -127,7 +131,7 @@ def on_message(client, userdata, msg):
             # Use carriage return to overwrite the same line
             print(f"\r[Consumer] ✓ Received: {sequence} (expected {expected_sequence})    ", end='', flush=True)
             expected_sequence = sequence + 1
-            save_state()  # Persist state after each message
+            save_state(state_file)  # Persist state after each message
         elif sequence > expected_sequence:
             # Gap detected - messages were lost or not delivered
             # Print with newline to preserve error message
@@ -136,7 +140,7 @@ def on_message(client, userdata, msg):
             print(f"\n[Consumer] ⚠ WARNING: Gap detected! Received {sequence}, expected {expected_sequence}")
             print(f"[Consumer] ⚠ Missing {gap_size} message(s): {expected_sequence} to {sequence-1}")
             expected_sequence = sequence + 1
-            save_state()  # Persist state even after gap
+            save_state(state_file)  # Persist state even after gap
         else:
             # Received older message (duplicate or out of order)
             # Print with newline to preserve error message
@@ -175,31 +179,41 @@ def main():
     parser.add_argument('--start-from', type=int, help='Override expected starting sequence number')
     parser.add_argument('--qos', type=int, choices=[0, 1, 2], default=DEFAULT_QOS,
                         help=f'QoS level (0, 1, or 2, default: {DEFAULT_QOS})')
+    parser.add_argument('--clientid', type=str, default=None,
+                        help='Override client ID (allows running multiple subscribers)')
     args = parser.parse_args()
 
     qos = args.qos
-    userdata = {'qos': qos}
+
+    # Determine client ID and state file
+    client_id = args.clientid if args.clientid else CLIENT_ID
+    if args.clientid:
+        state_file = os.path.join(os.path.dirname(__file__), f'.consumer_state_{args.clientid}')
+    else:
+        state_file = STATE_FILE
+
+    userdata = {'qos': qos, 'client_id': client_id, 'state_file': state_file}
 
     # Create client with persistent session (clean_session=False) unless --reset
     clean_session = args.reset
     if clean_session:
         print(f"[Consumer] Resetting session (clean_session=True)")
         # Delete state file on reset
-        if os.path.exists(STATE_FILE):
-            os.remove(STATE_FILE)
-            print(f"[Consumer] Deleted state file")
+        if os.path.exists(state_file):
+            os.remove(state_file)
+            print(f"[Consumer] Deleted state file: {state_file}")
         expected_sequence = 0
     else:
         # Load state from disk if not resetting
-        expected_sequence = load_state()
+        expected_sequence = load_state(state_file)
 
     # Allow manual override of starting sequence
     if args.start_from is not None:
         expected_sequence = args.start_from
         print(f"[Consumer] Manually overriding sequence to start from {expected_sequence}")
-        save_state()
+        save_state(state_file)
 
-    client = mqtt.Client(client_id=CLIENT_ID, clean_session=clean_session, userdata=userdata)
+    client = mqtt.Client(client_id=client_id, clean_session=clean_session, userdata=userdata)
     client.on_connect = on_connect
     client.on_message = on_message
     client.on_disconnect = on_disconnect

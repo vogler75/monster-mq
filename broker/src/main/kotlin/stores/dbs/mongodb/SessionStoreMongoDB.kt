@@ -495,19 +495,50 @@ class SessionStoreMongoDB(
     }
 
     override fun purgeQueuedMessages() {
+        val batchSize = 5000
+        val delayBetweenBatchesMs = 100L
+        var totalDeleted = 0L
+        val startTime = System.currentTimeMillis()
+
         try {
-            val startTime = System.currentTimeMillis()
-            val unusedMessagesFilter = Document("\$expr", Document(
-                "\$not", Document(
-                    "\$in", listOf("\$message_uuid",
-                        queuedMessagesClientsCollection.distinct("message_uuid", String::class.java).into(mutableListOf())
-                    )
-                )
-            ))
-            val deleteResult = queuedMessagesCollection.deleteMany(unusedMessagesFilter)
-            val endTime = System.currentTimeMillis()
-            val duration = (endTime - startTime) / 1000.0
-            logger.info("Purging queued messages finished in $duration seconds. Deleted ${deleteResult.deletedCount} messages.")
+            // Use batched aggregation with $lookup to find orphaned messages
+            // This avoids loading all UUIDs into memory at once
+            var deleted: Long
+            do {
+                // Find orphaned message UUIDs in batches using $lookup
+                val orphanedUuids = queuedMessagesCollection.aggregate(listOf(
+                    Document("\$lookup", Document(mapOf(
+                        "from" to "queuedmessagesclients",
+                        "localField" to "message_uuid",
+                        "foreignField" to "message_uuid",
+                        "as" to "clients"
+                    ))),
+                    Document("\$match", Document("clients", Document("\$size", 0))),
+                    Document("\$limit", batchSize),
+                    Document("\$project", Document("message_uuid", 1))
+                )).map { it.getString("message_uuid") }.toList()
+
+                if (orphanedUuids.isNotEmpty()) {
+                    val result = queuedMessagesCollection.deleteMany(`in`("message_uuid", orphanedUuids))
+                    deleted = result.deletedCount
+                    totalDeleted += deleted
+
+                    logger.fine { "Purge batch: deleted $deleted orphaned messages (total: $totalDeleted)" }
+
+                    if (deleted >= batchSize) {
+                        Thread.sleep(delayBetweenBatchesMs)
+                    }
+                } else {
+                    deleted = 0
+                }
+            } while (deleted >= batchSize)
+
+            val duration = (System.currentTimeMillis() - startTime) / 1000.0
+            if (totalDeleted > 0) {
+                logger.info("Purging queued messages finished: deleted $totalDeleted in $duration seconds")
+            } else {
+                logger.fine { "Purging queued messages finished: no orphaned messages found in $duration seconds" }
+            }
         } catch (e: Exception) {
             logger.warning("Error while purging queued messages: ${e.message}")
         }
@@ -516,23 +547,35 @@ class SessionStoreMongoDB(
     override fun purgeSessions() {
         try {
             val startTime = System.currentTimeMillis()
-            sessionsCollection.deleteMany(eq("clean_session", true))
-            subscriptionsCollection.deleteMany(
-                Document("\$expr", Document(
-                    "\$not", Document(
-                        "\$in", listOf("\$client_id", sessionsCollection.distinct("client_id", String::class.java).into(mutableListOf()))
-                    )
-                ))
-            )
 
+            // Delete clean sessions
+            sessionsCollection.deleteMany(eq("clean_session", true))
+
+            // Delete orphaned subscriptions using $lookup aggregation
+            // This avoids loading all client_ids into memory
+            val orphanedClientIds = subscriptionsCollection.aggregate(listOf(
+                Document("\$lookup", Document(mapOf(
+                    "from" to "sessions",
+                    "localField" to "client_id",
+                    "foreignField" to "client_id",
+                    "as" to "session"
+                ))),
+                Document("\$match", Document("session", Document("\$size", 0))),
+                Document("\$project", Document("client_id", 1))
+            )).map { it.getString("client_id") }.toList()
+
+            if (orphanedClientIds.isNotEmpty()) {
+                subscriptionsCollection.deleteMany(`in`("client_id", orphanedClientIds))
+            }
+
+            // Mark all sessions as disconnected
             sessionsCollection.updateMany(
                 Document(),
                 Document("\$set", Document("connected", false))
             )
 
-            val endTime = System.currentTimeMillis()
-            val duration = (endTime - startTime) / 1000.0
-            logger.info("Purging sessions finished in $duration seconds.")
+            val duration = (System.currentTimeMillis() - startTime) / 1000.0
+            logger.fine { "Purging sessions finished in $duration seconds" }
         } catch (e: Exception) {
             logger.warning("Error while purging sessions: ${e.message}")
         }
@@ -554,7 +597,7 @@ class SessionStoreMongoDB(
 
     override fun countQueuedMessagesForClient(clientId: String): Long {
         return try {
-            queuedMessagesClientsCollection.countDocuments(eq("client_id", clientId))
+            queuedMessagesClientsCollection.countDocuments(and(eq("client_id", clientId), lt("status", 2)))
         } catch (e: Exception) {
             logger.warning("Error counting queued messages for client $clientId: ${e.message}")
             0L

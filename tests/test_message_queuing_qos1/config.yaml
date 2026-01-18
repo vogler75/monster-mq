@@ -70,7 +70,7 @@ producer:
   #   1   - One message at a time (gentle load)
   #   10  - Moderate burst (original default)
   #   100 - Heavy burst (stress test)
-  burst_count: 1
+  burst_count: 5
 
   # Delay between bursts in seconds (floating point)
   # Time to wait after sending a burst before sending the next one
@@ -79,7 +79,7 @@ producer:
   #   0.01  - 10ms  (aggressive, ~100 bursts/sec)
   #   0.1   - 100ms (default, ~10 bursts/sec)
   #   1.0   - 1s    (gentle, ~1 burst/sec)
-  burst_delay: 0.1
+  burst_delay: 0.2
 
   # State file to persist the last sent sequence number
   # Allows producer to resume from the correct sequence after restart

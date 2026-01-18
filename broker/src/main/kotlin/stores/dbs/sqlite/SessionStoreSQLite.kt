@@ -551,15 +551,47 @@ class SessionStoreSQLite(
     }
 
     override fun purgeQueuedMessages() {
-        val deleteSql = "DELETE FROM $queuedMessagesTableName"
-        sqlClient.executeUpdateAsync(deleteSql, JsonArray())
-        logger.fine { "Purged all queued messages" }
+        val startTime = System.currentTimeMillis()
+        // Delete only orphaned messages (not referenced by any client)
+        val deleteSql = """
+            DELETE FROM $queuedMessagesTableName
+            WHERE message_uuid NOT IN (
+                SELECT DISTINCT message_uuid FROM $queuedMessagesClientsTableName
+            )
+        """.trimIndent()
+        val deleted = sqlClient.executeUpdateSync(deleteSql, JsonArray())
+        val duration = (System.currentTimeMillis() - startTime) / 1000.0
+        if (deleted > 0) {
+            logger.info { "Purging queued messages finished: deleted $deleted orphaned messages in $duration seconds" }
+        } else {
+            logger.fine { "Purging queued messages finished: no orphaned messages found in $duration seconds" }
+        }
     }
 
     override fun purgeSessions() {
-        val deleteSql = "DELETE FROM $sessionsTableName WHERE connected = false"
-        sqlClient.executeUpdateAsync(deleteSql, JsonArray())
-        logger.fine { "Purged disconnected sessions" }
+        val startTime = System.currentTimeMillis()
+        // Delete clean sessions (consistent with PostgreSQL/CrateDB behavior)
+        sqlClient.executeUpdateSync(
+            "DELETE FROM $sessionsTableName WHERE clean_session = 1",
+            JsonArray()
+        )
+        // Delete orphaned subscriptions
+        sqlClient.executeUpdateSync(
+            """
+            DELETE FROM $subscriptionsTableName
+            WHERE client_id NOT IN (
+                SELECT client_id FROM $sessionsTableName
+            )
+            """.trimIndent(),
+            JsonArray()
+        )
+        // Mark all sessions as disconnected
+        sqlClient.executeUpdateSync(
+            "UPDATE $sessionsTableName SET connected = 0",
+            JsonArray()
+        )
+        val duration = (System.currentTimeMillis() - startTime) / 1000.0
+        logger.fine { "Purging sessions finished in $duration seconds" }
     }
     
     private fun isWildcardTopic(topicName: String): Boolean {
@@ -584,7 +616,7 @@ class SessionStoreSQLite(
     }
 
     override fun countQueuedMessagesForClient(clientId: String): Long {
-        val sql = "SELECT COUNT(*) FROM $queuedMessagesClientsTableName WHERE client_id = ?"
+        val sql = "SELECT COUNT(*) FROM $queuedMessagesClientsTableName WHERE client_id = ? AND status < 2"
         val params = JsonArray().add(clientId)
 
         return try {

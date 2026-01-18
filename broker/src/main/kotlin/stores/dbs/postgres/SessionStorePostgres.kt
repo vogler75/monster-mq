@@ -96,7 +96,8 @@ class SessionStorePostgres(
                 val createIndexesSQL = listOf(
                     "CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_topic_idx ON $subscriptionsTableName (topic);",
                     "CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_wildcard_idx ON $subscriptionsTableName (wildcard) WHERE wildcard = TRUE;",
-                    "CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_status_idx ON $queuedMessagesClientsTableName (status);"
+                    "CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_status_idx ON $queuedMessagesClientsTableName (status);",
+                    "CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_message_uuid_idx ON $queuedMessagesClientsTableName (message_uuid);"
                 )
 
                 // Execute the SQL statements
@@ -642,17 +643,49 @@ class SessionStorePostgres(
     }
 
     override fun purgeQueuedMessages() {
-        val sql = "DELETE FROM $queuedMessagesTableName WHERE message_uuid NOT IN " +
-                "(SELECT message_uuid FROM $queuedMessagesClientsTableName)"
+        val batchSize = 5000
+        val delayBetweenBatchesMs = 100L
+        var totalDeleted = 0
+        val startTime = System.currentTimeMillis()
+
+        // Use batched deletion with NOT EXISTS for better performance
+        val sql = """
+            DELETE FROM $queuedMessagesTableName
+            WHERE message_uuid IN (
+                SELECT qm.message_uuid FROM $queuedMessagesTableName qm
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM $queuedMessagesClientsTableName qmc
+                    WHERE qmc.message_uuid = qm.message_uuid
+                )
+                LIMIT ?
+            )
+        """.trimIndent()
+
         try {
-            val startTime = System.currentTimeMillis()
-            DriverManager.getConnection(url, username, password).use { connection ->
+            db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
-                    preparedStatement.executeUpdate()
-                    val endTime = System.currentTimeMillis()
-                    val duration = (endTime - startTime) / 1000.0
-                    logger.fine("Purging queued messages finished in $duration seconds [${Utils.getCurrentFunctionName()}]")
+                    var deleted: Int
+                    do {
+                        preparedStatement.setInt(1, batchSize)
+                        deleted = preparedStatement.executeUpdate()
+                        connection.commit()
+                        totalDeleted += deleted
+
+                        if (deleted > 0) {
+                            logger.fine { "Purge batch: deleted $deleted orphaned messages (total: $totalDeleted) [${Utils.getCurrentFunctionName()}]" }
+                            if (deleted == batchSize) {
+                                Thread.sleep(delayBetweenBatchesMs)
+                            }
+                        }
+                    } while (deleted == batchSize)
                 }
+            } ?: logger.warning("No database connection available for purging queued messages [${Utils.getCurrentFunctionName()}]")
+
+            val duration = (System.currentTimeMillis() - startTime) / 1000.0
+            if (totalDeleted > 0) {
+                logger.info("Purging queued messages finished: deleted $totalDeleted in $duration seconds [${Utils.getCurrentFunctionName()}]")
+            } else {
+                logger.fine("Purging queued messages finished: no orphaned messages found in $duration seconds [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
             logger.warning("Error at purging queued messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -662,22 +695,31 @@ class SessionStorePostgres(
     override fun purgeSessions() {
         try {
             val startTime = System.currentTimeMillis()
-            DriverManager.getConnection(url, username, password).use { connection ->
-                val statement = connection.createStatement()
-                statement.executeUpdate(
-                    "DELETE FROM $sessionsTableName WHERE clean_session = TRUE"
-                )
-                statement.executeUpdate(
-                    "DELETE FROM $subscriptionsTableName WHERE client_id NOT IN " +
-                            "(SELECT client_id FROM $sessionsTableName)"
-                )
-                statement.executeUpdate(
-                    "UPDATE $sessionsTableName SET connected = FALSE"
-                )
-                val endTime = System.currentTimeMillis()
-                val duration = (endTime - startTime) / 1000.0
+            db.connection?.let { connection ->
+                connection.createStatement().use { statement ->
+                    // Delete clean sessions
+                    statement.executeUpdate(
+                        "DELETE FROM $sessionsTableName WHERE clean_session = TRUE"
+                    )
+                    // Delete orphaned subscriptions using NOT EXISTS for better performance
+                    statement.executeUpdate(
+                        """
+                        DELETE FROM $subscriptionsTableName s
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM $sessionsTableName sess
+                            WHERE sess.client_id = s.client_id
+                        )
+                        """.trimIndent()
+                    )
+                    // Mark all sessions as disconnected
+                    statement.executeUpdate(
+                        "UPDATE $sessionsTableName SET connected = FALSE"
+                    )
+                }
+                connection.commit()
+                val duration = (System.currentTimeMillis() - startTime) / 1000.0
                 logger.fine("Purging sessions finished in $duration seconds [${Utils.getCurrentFunctionName()}]")
-            }
+            } ?: logger.warning("No database connection available for purging sessions [${Utils.getCurrentFunctionName()}]")
         } catch (e: SQLException) {
             logger.warning("Error at purging sessions [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
@@ -704,7 +746,7 @@ class SessionStorePostgres(
     }
 
     override fun countQueuedMessagesForClient(clientId: String): Long {
-        val sql = "SELECT COUNT(*) FROM $queuedMessagesClientsTableName WHERE client_id = ?"
+        val sql = "SELECT COUNT(*) FROM $queuedMessagesClientsTableName WHERE client_id = ? AND status < 2"
         return try {
             DriverManager.getConnection(url, username, password).use { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
