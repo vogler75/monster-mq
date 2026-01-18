@@ -59,6 +59,11 @@ class MqttClient(
     private var isProcessingQueue = false
     private var triggerPending = false
 
+    // Message cache for bulk fetching (reduces database queries)
+    private val messageCache = mutableListOf<BrokerMessage>()
+    private val messageCacheLock = Any()
+    private val MESSAGE_CACHE_SIZE = 1000
+
     private val busConsumers = mutableListOf<MessageConsumer<*>>()
     
     // Authenticated user (null if not authenticated or auth disabled)
@@ -143,17 +148,18 @@ class MqttClient(
 
     /**
      * Process the next message from the queue.
-     * Fetches one pending message, marks it in-flight, and publishes it.
+     * Uses a message cache to reduce database queries - fetches messages in bulk.
      * On PUBACK/PUBCOMP, this is called again to process the next message.
      */
     private fun processNextMessage() {
         if (!endpoint.isConnected) {
             isProcessingQueue = false
             triggerPending = false
+            clearMessageCache()
             return
         }
 
-        sessionHandler.fetchNextPendingMessage(clientId).onComplete { result ->
+        fetchNextMessageFromCacheOrDb().onComplete { result ->
             if (result.failed()) {
                 logger.warning { "Client [$clientId] Error fetching next pending message: ${result.cause()?.message} [${Utils.getCurrentFunctionName()}]" }
                 isProcessingQueue = false
@@ -174,17 +180,52 @@ class MqttClient(
                 return@onComplete
             }
 
-            // Mark in-flight and send
-            sessionHandler.markMessageInFlight(clientId, msg.messageUuid).onComplete { markResult ->
-                if (markResult.failed()) {
-                    logger.warning { "Client [$clientId] Error marking message in-flight: ${markResult.cause()?.message} [${Utils.getCurrentFunctionName()}]" }
-                }
+            // Messages are already marked in-flight during bulk fetch (fetchNextMessageFromCacheOrDb)
+            // Clone with new message ID and publish immediately
+            val msgWithId = msg.cloneWithNewMessageId(getNextMessageId())
+            logger.finest { "Client [$clientId] Publishing queued message [${msgWithId.messageId}] for topic [${msgWithId.topicName}] [${Utils.getCurrentFunctionName()}]" }
+            publishMessage(msgWithId)
+        }
+    }
 
-                // Clone with new message ID and publish
-                val msgWithId = msg.cloneWithNewMessageId(getNextMessageId())
-                logger.finest { "Client [$clientId] Publishing queued message [${msgWithId.messageId}] for topic [${msgWithId.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                publishMessage(msgWithId)
+    /**
+     * Fetch the next message from local cache, or fetch a batch from the database if cache is empty.
+     */
+    private fun fetchNextMessageFromCacheOrDb(): Future<BrokerMessage?> {
+        // Check cache first (synchronized for thread safety)
+        synchronized(messageCacheLock) {
+            if (messageCache.isNotEmpty()) {
+                return Future.succeededFuture(messageCache.removeFirst())
             }
+        }
+
+        // Cache empty - fetch a batch from database
+        return sessionHandler.fetchPendingMessages(clientId, MESSAGE_CACHE_SIZE).map { messages ->
+            if (messages.isEmpty()) {
+                null
+            } else {
+                // Mark all fetched messages as in-flight at once
+                val uuids = messages.map { it.messageUuid }
+                sessionHandler.markMessagesInFlight(clientId, uuids)
+
+                // Put remaining messages in cache (all except first)
+                synchronized(messageCacheLock) {
+                    if (messages.size > 1) {
+                        messageCache.addAll(messages.drop(1))
+                    }
+                }
+                logger.fine { "Client [$clientId] Fetched ${messages.size} messages from database, cached ${messages.size - 1} [${Utils.getCurrentFunctionName()}]" }
+                messages.first()
+            }
+        }
+    }
+
+    /**
+     * Clear the message cache (called on disconnect/reconnect).
+     */
+    private fun clearMessageCache() {
+        synchronized(messageCacheLock) {
+            messageCache.clear()
         }
     }
 
@@ -396,6 +437,7 @@ class MqttClient(
         // Reset queue processing state
         isProcessingQueue = false
         triggerPending = false
+        clearMessageCache()
 
         if (endpoint.isCleanSession) {
             logger.fine { "Client [$clientId] Remove client, it is a clean session [${Utils.getCurrentFunctionName()}]" }

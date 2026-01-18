@@ -53,6 +53,7 @@ class SessionStoreMongoDB(
             sessionsCollection.createIndex(Document("client_id", 1))
             subscriptionsCollection.createIndex(Document("client_id", 1).append("topic", 1))
             queuedMessagesCollection.createIndex(Document("client_id", 1))
+            queuedMessagesCollection.createIndex(Document("message_uuid", 1))  // For $lookup joins
             queuedMessagesClientsCollection.createIndex(Document("client_id", 1))
             queuedMessagesClientsCollection.createIndex(Document("client_id", 1).append("status", 1))
 
@@ -385,6 +386,10 @@ class SessionStoreMongoDB(
     }
 
     override fun fetchNextPendingMessage(clientId: String): BrokerMessage? {
+        return fetchPendingMessages(clientId, 1).firstOrNull()
+    }
+
+    override fun fetchPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
         return try {
             val pipeline = listOf(
                 Document("\$match", Document(mapOf("client_id" to clientId, "status" to 0))),
@@ -398,30 +403,29 @@ class SessionStoreMongoDB(
                 ),
                 Document("\$unwind", "\$message"),
                 Document("\$sort", Document("message.message_uuid", 1)),
-                Document("\$limit", 1)
+                Document("\$limit", limit)
             )
 
             val results = queuedMessagesClientsCollection.aggregate(pipeline)
-            val doc = results.firstOrNull()
-            if (doc != null) {
+            results.mapNotNull { doc ->
                 val messageDoc = doc.get("message", Document::class.java)
-                BrokerMessage(
-                    messageUuid = messageDoc.getString("message_uuid"),
-                    messageId = messageDoc.getInteger("message_id"),
-                    topicName = messageDoc.getString("topic"),
-                    payload = messageDoc.get("payload", Binary::class.java).data,
-                    qosLevel = messageDoc.getInteger("qos"),
-                    isRetain = messageDoc.getBoolean("retained"),
-                    isDup = false,
-                    isQueued = true,
-                    clientId = messageDoc.getString("client_id")
-                )
-            } else {
-                null
-            }
+                if (messageDoc != null) {
+                    BrokerMessage(
+                        messageUuid = messageDoc.getString("message_uuid"),
+                        messageId = messageDoc.getInteger("message_id"),
+                        topicName = messageDoc.getString("topic"),
+                        payload = messageDoc.get("payload", Binary::class.java).data,
+                        qosLevel = messageDoc.getInteger("qos"),
+                        isRetain = messageDoc.getBoolean("retained"),
+                        isDup = false,
+                        isQueued = true,
+                        clientId = messageDoc.getString("client_id")
+                    )
+                } else null
+            }.toList()
         } catch (e: Exception) {
-            logger.warning("Error fetching next pending message: ${e.message}")
-            null
+            logger.warning("Error fetching pending messages: ${e.message}")
+            emptyList()
         }
     }
 

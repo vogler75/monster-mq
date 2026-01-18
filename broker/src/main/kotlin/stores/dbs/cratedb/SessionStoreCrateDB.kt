@@ -104,7 +104,8 @@ class SessionStoreCrateDB(
 
                 // Create indexes
                 val createIndexesSQL = listOf(
-                    "CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_message_uuid_idx ON $queuedMessagesClientsTableName (message_uuid);"
+                    "CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_message_uuid_idx ON $queuedMessagesClientsTableName (message_uuid);",
+                    "CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_client_status_idx ON $queuedMessagesClientsTableName (client_id, status);"
                 )
 
                 // Execute the SQL statements
@@ -555,21 +556,24 @@ class SessionStoreCrateDB(
     }
 
     override fun fetchNextPendingMessage(clientId: String): BrokerMessage? {
+        return fetchPendingMessages(clientId, 1).firstOrNull()
+    }
+
+    override fun fetchPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
         val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id " +
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) " +
                   "WHERE c.client_id = ? AND c.status = 0 " +
-                  "ORDER BY m.message_uuid LIMIT 1"
+                  "ORDER BY m.message_uuid LIMIT ?"
         return try {
             db.connection?.let { connection ->
-                connection.createStatement().use { statement ->
-                    statement.execute("REFRESH TABLE $queuedMessagesTableName")
-                    statement.execute("REFRESH TABLE $queuedMessagesClientsTableName")
-                }
+                // Note: REFRESH TABLE removed for performance - CrateDB uses eventually consistent reads
                 connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, clientId)
+                    preparedStatement.setInt(2, limit)
                     val resultSet = preparedStatement.executeQuery()
-                    if (resultSet.next()) {
-                        BrokerMessage(
+                    val messages = mutableListOf<BrokerMessage>()
+                    while (resultSet.next()) {
+                        messages.add(BrokerMessage(
                             messageUuid = resultSet.getString(1),
                             messageId = resultSet.getInt(2),
                             topicName = resultSet.getString(3),
@@ -579,15 +583,14 @@ class SessionStoreCrateDB(
                             isDup = false,
                             isQueued = true,
                             clientId = resultSet.getString(7)
-                        )
-                    } else {
-                        null
+                        ))
                     }
+                    messages
                 }
-            }
+            } ?: emptyList()
         } catch (e: SQLException) {
-            logger.warning("Error fetching next pending message [${e.message}] [${Utils.getCurrentFunctionName()}]")
-            null
+            logger.warning("Error fetching pending messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            emptyList()
         }
     }
 

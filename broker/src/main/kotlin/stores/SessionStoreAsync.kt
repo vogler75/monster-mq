@@ -168,6 +168,15 @@ class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(
         return promise.future()
     }
 
+    override fun fetchPendingMessages(clientId: String, limit: Int): Future<List<BrokerMessage>> {
+        val promise = Promise.promise<List<BrokerMessage>>()
+        vertx.executeBlocking(Callable {
+            val messages = store.fetchPendingMessages(clientId, limit)
+            promise.complete(messages)
+        })
+        return promise.future()
+    }
+
     override fun markMessageInFlight(clientId: String, messageUuid: String): Future<Void> {
         val promise = Promise.promise<Void>()
         vertx.executeBlocking(Callable {

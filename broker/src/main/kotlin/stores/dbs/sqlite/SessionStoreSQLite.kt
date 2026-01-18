@@ -462,20 +462,25 @@ class SessionStoreSQLite(
     }
 
     override fun fetchNextPendingMessage(clientId: String): BrokerMessage? {
+        return fetchPendingMessages(clientId, 1).firstOrNull()
+    }
+
+    override fun fetchPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
         val sql = """SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id
                     FROM $queuedMessagesTableName m
                     JOIN $queuedMessagesClientsTableName c ON m.message_uuid = c.message_uuid
                     WHERE c.client_id = ? AND c.status = 0
                     ORDER BY c.rowid
-                    LIMIT 1"""
+                    LIMIT ?"""
 
-        val params = JsonArray().add(clientId)
+        val params = JsonArray().add(clientId).add(limit)
 
         return try {
             val results = sqlClient.executeQuerySync(sql, params)
-            if (results.size() > 0) {
-                val rowObj = results.getJsonObject(0)
-                BrokerMessage(
+            val messages = mutableListOf<BrokerMessage>()
+            for (i in 0 until results.size()) {
+                val rowObj = results.getJsonObject(i)
+                messages.add(BrokerMessage(
                     messageUuid = rowObj.getString("message_uuid"),
                     messageId = rowObj.getInteger("message_id"),
                     topicName = rowObj.getString("topic"),
@@ -485,13 +490,12 @@ class SessionStoreSQLite(
                     isDup = false,
                     isQueued = true,
                     clientId = rowObj.getString("client_id")
-                )
-            } else {
-                null
+                ))
             }
+            messages
         } catch (e: Exception) {
-            logger.warning("Error fetching next pending message: ${e.message}")
-            null
+            logger.warning("Error fetching pending messages: ${e.message}")
+            emptyList()
         }
     }
 

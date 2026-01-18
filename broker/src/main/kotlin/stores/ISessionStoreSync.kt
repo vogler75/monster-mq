@@ -38,6 +38,9 @@ interface ISessionStoreSync {
     // Fetch ONE pending message for queue-first delivery (returns null if none)
     fun fetchNextPendingMessage(clientId: String): BrokerMessage?
 
+    // Fetch multiple pending messages for bulk delivery (returns empty list if none)
+    fun fetchPendingMessages(clientId: String, limit: Int): List<BrokerMessage>
+
     // Status-based message tracking for QoS 1+ delivery
     fun markMessageInFlight(clientId: String, messageUuid: String)
     fun markMessagesInFlight(clientId: String, messageUuids: List<String>)
