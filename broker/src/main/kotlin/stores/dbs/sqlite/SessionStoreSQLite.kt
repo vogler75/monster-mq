@@ -270,10 +270,10 @@ class SessionStoreSQLite(
 
     override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
         if (subscriptions.isEmpty()) return
-        
+
         val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard) VALUES (?, ?, ?, ?) "+
                   "ON CONFLICT (client_id, topic) DO UPDATE SET qos = excluded.qos"
-        
+
         val batchParams = JsonArray()
         subscriptions.forEach { subscription ->
             val params = JsonArray()
@@ -283,7 +283,7 @@ class SessionStoreSQLite(
                 .add(isWildcardTopic(subscription.topicName))
             batchParams.add(params)
         }
-        
+
         sqlClient.executeBatch(sql, batchParams).onComplete { result ->
             if (result.failed()) {
                 logger.warning("Error adding subscriptions: ${result.cause()?.message}")
@@ -293,7 +293,7 @@ class SessionStoreSQLite(
 
     override fun delSubscriptions(subscriptions: List<MqttSubscription>) {
         if (subscriptions.isEmpty()) return
-        
+
         val sql = "DELETE FROM $subscriptionsTableName WHERE client_id = ? AND topic = ?"
         val batchParams = JsonArray()
         subscriptions.forEach { subscription ->
@@ -302,7 +302,7 @@ class SessionStoreSQLite(
                 .add(subscription.topicName)
             batchParams.add(params)
         }
-        
+
         sqlClient.executeBatch(sql, batchParams).onComplete { result ->
             if (result.failed()) {
                 logger.warning("Error deleting subscriptions: ${result.cause()?.message}")

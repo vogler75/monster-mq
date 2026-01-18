@@ -74,18 +74,17 @@ def on_connect(client, userdata, flags, rc):
         connected_event.set()
 
         if session_present:
-            # Persistent session exists - subscriptions are already active
             print(f"[Consumer] Resuming persistent session - expecting sequence from {expected_sequence}")
-            print(f"[Consumer] Using existing subscriptions (not re-subscribing)")
-            subscribed_event.set()  # Signal that we're ready (no SUBACK expected)
         else:
-            # New session - need to subscribe
             print(f"[Consumer] New session - starting from 0")
-            result, mid = client.subscribe(TOPIC, qos=qos)
-            if result == mqtt.MQTT_ERR_SUCCESS:
-                print(f"[Consumer] Subscribe request sent for topic: {TOPIC} with QoS {qos}")
-            else:
-                print(f"[Consumer] Subscribe request failed with code {result}")
+
+        # Always subscribe - this is idempotent and ensures subscriptions are in place
+        # Even with persistent sessions, re-subscribing is safe and recommended
+        result, mid = client.subscribe(TOPIC, qos=qos)
+        if result == mqtt.MQTT_ERR_SUCCESS:
+            print(f"[Consumer] Subscribe request sent for topic: {TOPIC} with QoS {qos}")
+        else:
+            print(f"[Consumer] Subscribe request failed with code {result}")
     else:
         print(f"[Consumer] Connection failed with code {rc}")
         connection_failed = True

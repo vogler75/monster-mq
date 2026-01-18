@@ -92,21 +92,6 @@ class SessionStorePostgres(
                 );
                 """.trimIndent())
 
-                // Migration: Add status column to existing queuedmessagesclients table if it doesn't exist
-                val migrationSQL = listOf(
-                    """
-                    DO ${'$'}${'$'}
-                    BEGIN
-                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                                      WHERE table_name = '$queuedMessagesClientsTableName'
-                                      AND column_name = 'status') THEN
-                            ALTER TABLE $queuedMessagesClientsTableName ADD COLUMN status INTEGER DEFAULT 0;
-                        END IF;
-                    END
-                    ${'$'}${'$'};
-                    """.trimIndent()
-                )
-
                 // Create the index on the topic column
                 val createIndexesSQL = listOf(
                     "CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_topic_idx ON $subscriptionsTableName (topic);",
@@ -118,7 +103,6 @@ class SessionStorePostgres(
                 connection.createStatement().use { statement ->
                     createTableSQL.forEach(statement::executeUpdate)
                     createIndexesSQL.forEach(statement::executeUpdate)
-                    migrationSQL.forEach(statement::execute)
                 }
                 connection.commit()
                 logger.fine("Tables are ready [${Utils.getCurrentFunctionName()}]")
