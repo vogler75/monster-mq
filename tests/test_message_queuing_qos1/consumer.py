@@ -14,6 +14,7 @@ Usage:
     python consumer.py --reset      # Reset session and start from 0
     python consumer.py --clientid subscriber2  # Start with a different client ID
     python consumer.py --newline    # Print each message on a new line with timestamp
+    python consumer.py --max-delay 100  # Warn if time between messages exceeds 100ms
 """
 
 import paho.mqtt.client as mqtt
@@ -58,7 +59,9 @@ STATE_FILE = os.path.join(os.path.dirname(__file__), STATE_FILE_NAME)
 expected_sequence = 0
 received_count = 0
 gap_count = 0
+delay_warning_count = 0
 last_received = None
+last_message_time = None
 
 # Connection state
 connected_event = threading.Event()
@@ -123,16 +126,30 @@ def get_timestamp():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
 def on_message(client, userdata, msg):
-    global expected_sequence, received_count, gap_count, last_received
+    global expected_sequence, received_count, gap_count, delay_warning_count, last_received, last_message_time
 
     state_file = userdata['state_file']
     use_newline = userdata.get('newline', False)
+    max_delay_ms = userdata.get('max_delay')
     timestamp = get_timestamp()
+    current_time = time.time()
 
     try:
         sequence = int(msg.payload.decode())
         received_count += 1
-        last_received = time.time()
+        last_received = current_time
+
+        # Check time difference between messages
+        time_diff_ms = None
+        if last_message_time is not None:
+            time_diff_ms = (current_time - last_message_time) * 1000  # Convert to milliseconds
+            if max_delay_ms is not None and time_diff_ms > max_delay_ms:
+                delay_warning_count += 1
+                if use_newline:
+                    print(f"[{timestamp}] [Consumer] ⏱ DELAY WARNING: {time_diff_ms:.1f}ms between messages (max: {max_delay_ms}ms)")
+                else:
+                    print(f"\n[Consumer] ⏱ DELAY WARNING: {time_diff_ms:.1f}ms between messages (max: {max_delay_ms}ms)")
+        last_message_time = current_time
 
         if sequence == expected_sequence:
             # Expected sequence number - all good
@@ -185,10 +202,13 @@ def print_stats():
     print(f"  Total messages received: {received_count}")
     print(f"  Next expected sequence: {expected_sequence}")
     print(f"  Gaps detected: {gap_count}")
+    print(f"  Delay warnings: {delay_warning_count}")
     if gap_count > 0:
         print(f"  ⚠ WARNING: {gap_count} gap(s) detected - possible message loss!")
     else:
         print(f"  ✓ No gaps detected - all messages received in order")
+    if delay_warning_count > 0:
+        print(f"  ⏱ {delay_warning_count} message(s) exceeded max delay threshold")
     print("="*60 + "\n")
 
 def main():
@@ -203,6 +223,8 @@ def main():
                         help='Override client ID (allows running multiple subscribers)')
     parser.add_argument('--newline', action='store_true',
                         help='Print each message on a new line with arrival timestamp')
+    parser.add_argument('--max-delay', type=int, default=None, metavar='MS',
+                        help='Warn if time between messages exceeds this many milliseconds')
     args = parser.parse_args()
 
     qos = args.qos
@@ -214,7 +236,7 @@ def main():
     else:
         state_file = STATE_FILE
 
-    userdata = {'qos': qos, 'client_id': client_id, 'state_file': state_file, 'newline': args.newline}
+    userdata = {'qos': qos, 'client_id': client_id, 'state_file': state_file, 'newline': args.newline, 'max_delay': args.max_delay}
 
     # Create client with persistent session (clean_session=False) unless --reset
     clean_session = args.reset
