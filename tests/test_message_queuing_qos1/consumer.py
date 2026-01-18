@@ -13,6 +13,7 @@ Usage:
     python consumer.py              # Start or resume persistent session
     python consumer.py --reset      # Reset session and start from 0
     python consumer.py --clientid subscriber2  # Start with a different client ID
+    python consumer.py --newline    # Print each message on a new line with timestamp
 """
 
 import paho.mqtt.client as mqtt
@@ -22,6 +23,7 @@ import argparse
 import threading
 import os
 import yaml
+from datetime import datetime
 
 # Load configuration from config.yaml
 def load_config():
@@ -116,10 +118,16 @@ def load_state(state_file):
             print(f"[Consumer] Warning: Failed to load state: {e}")
     return 0
 
+def get_timestamp():
+    """Get current timestamp in ISO format with milliseconds"""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
 def on_message(client, userdata, msg):
     global expected_sequence, received_count, gap_count, last_received
 
     state_file = userdata['state_file']
+    use_newline = userdata.get('newline', False)
+    timestamp = get_timestamp()
 
     try:
         sequence = int(msg.payload.decode())
@@ -128,8 +136,12 @@ def on_message(client, userdata, msg):
 
         if sequence == expected_sequence:
             # Expected sequence number - all good
-            # Use carriage return to overwrite the same line
-            print(f"\r[Consumer] ✓ Received: {sequence} (expected {expected_sequence})    ", end='', flush=True)
+            if use_newline:
+                # Print each message on a new line with timestamp
+                print(f"[{timestamp}] [Consumer] ✓ Received: {sequence} (expected {expected_sequence})")
+            else:
+                # Use carriage return to overwrite the same line
+                print(f"\r[Consumer] ✓ Received: {sequence} (expected {expected_sequence})    ", end='', flush=True)
             expected_sequence = sequence + 1
             save_state(state_file)  # Persist state after each message
         elif sequence > expected_sequence:
@@ -137,15 +149,23 @@ def on_message(client, userdata, msg):
             # Print with newline to preserve error message
             gap_size = sequence - expected_sequence
             gap_count += 1
-            print(f"\n[Consumer] ⚠ WARNING: Gap detected! Received {sequence}, expected {expected_sequence}")
-            print(f"[Consumer] ⚠ Missing {gap_size} message(s): {expected_sequence} to {sequence-1}")
+            if use_newline:
+                print(f"[{timestamp}] [Consumer] ⚠ WARNING: Gap detected! Received {sequence}, expected {expected_sequence}")
+                print(f"[{timestamp}] [Consumer] ⚠ Missing {gap_size} message(s): {expected_sequence} to {sequence-1}")
+            else:
+                print(f"\n[Consumer] ⚠ WARNING: Gap detected! Received {sequence}, expected {expected_sequence}")
+                print(f"[Consumer] ⚠ Missing {gap_size} message(s): {expected_sequence} to {sequence-1}")
             expected_sequence = sequence + 1
             save_state(state_file)  # Persist state even after gap
         else:
             # Received older message (duplicate or out of order)
             # Print with newline to preserve error message
-            print(f"\n[Consumer] ⚠ WARNING: Out of order! Received {sequence}, expected {expected_sequence}")
-            print(f"[Consumer] ⚠ Duplicate or delayed message")
+            if use_newline:
+                print(f"[{timestamp}] [Consumer] ⚠ WARNING: Out of order! Received {sequence}, expected {expected_sequence}")
+                print(f"[{timestamp}] [Consumer] ⚠ Duplicate or delayed message")
+            else:
+                print(f"\n[Consumer] ⚠ WARNING: Out of order! Received {sequence}, expected {expected_sequence}")
+                print(f"[Consumer] ⚠ Duplicate or delayed message")
             # Don't update expected_sequence or save state for old messages
 
     except ValueError as e:
@@ -181,6 +201,8 @@ def main():
                         help=f'QoS level (0, 1, or 2, default: {DEFAULT_QOS})')
     parser.add_argument('--clientid', type=str, default=None,
                         help='Override client ID (allows running multiple subscribers)')
+    parser.add_argument('--newline', action='store_true',
+                        help='Print each message on a new line with arrival timestamp')
     args = parser.parse_args()
 
     qos = args.qos
@@ -192,7 +214,7 @@ def main():
     else:
         state_file = STATE_FILE
 
-    userdata = {'qos': qos, 'client_id': client_id, 'state_file': state_file}
+    userdata = {'qos': qos, 'client_id': client_id, 'state_file': state_file, 'newline': args.newline}
 
     # Create client with persistent session (clean_session=False) unless --reset
     clean_session = args.reset
