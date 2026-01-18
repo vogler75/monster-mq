@@ -75,8 +75,9 @@ class SessionStoreSQLite(
             """.trimIndent())
             .add("""
             CREATE TABLE IF NOT EXISTS $queuedMessagesClientsTableName (
-                client_id TEXT,                
+                client_id TEXT,
                 message_uuid TEXT,
+                status INTEGER DEFAULT 0,
                 PRIMARY KEY (client_id, message_uuid)
             );
             """.trimIndent())
@@ -353,8 +354,8 @@ class SessionStoreSQLite(
                                 VALUES (?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT (message_uuid) DO NOTHING"""
         
-        val insertClientSql = """INSERT INTO $queuedMessagesClientsTableName (client_id, message_uuid) 
-                               VALUES (?, ?) ON CONFLICT DO NOTHING"""
+        val insertClientSql = """INSERT INTO $queuedMessagesClientsTableName (client_id, message_uuid, status)
+                               VALUES (?, ?, 0) ON CONFLICT DO NOTHING"""
         
         val messageBatch = JsonArray()
         val clientBatch = JsonArray()
@@ -460,31 +461,93 @@ class SessionStoreSQLite(
         }
     }
 
-    // TODO: Implement status-based tracking for SQLite (currently stubs)
     override fun fetchNextPendingMessage(clientId: String): BrokerMessage? {
-        logger.warning("fetchNextPendingMessage not yet implemented for SQLite")
-        return null
+        val sql = """SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id
+                    FROM $queuedMessagesTableName m
+                    JOIN $queuedMessagesClientsTableName c ON m.message_uuid = c.message_uuid
+                    WHERE c.client_id = ? AND c.status = 0
+                    ORDER BY c.rowid
+                    LIMIT 1"""
+
+        val params = JsonArray().add(clientId)
+
+        return try {
+            val results = sqlClient.executeQuerySync(sql, params)
+            if (results.size() > 0) {
+                val rowObj = results.getJsonObject(0)
+                BrokerMessage(
+                    messageUuid = rowObj.getString("message_uuid"),
+                    messageId = rowObj.getInteger("message_id"),
+                    topicName = rowObj.getString("topic"),
+                    payload = rowObj.getBinary("payload") ?: ByteArray(0),
+                    qosLevel = rowObj.getInteger("qos"),
+                    isRetain = rowObj.getBoolean("retained", false),
+                    isDup = false,
+                    isQueued = true,
+                    clientId = rowObj.getString("client_id")
+                )
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            logger.warning("Error fetching next pending message: ${e.message}")
+            null
+        }
     }
 
     override fun markMessageInFlight(clientId: String, messageUuid: String) {
-        logger.warning("markMessageInFlight not yet implemented for SQLite")
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 1 WHERE client_id = ? AND message_uuid = ? AND status = 0"
+        val params = JsonArray().add(clientId).add(messageUuid)
+        try {
+            sqlClient.executeUpdateSync(sql, params)
+        } catch (e: Exception) {
+            logger.warning("Error marking message in-flight: ${e.message}")
+        }
     }
 
     override fun markMessagesInFlight(clientId: String, messageUuids: List<String>) {
-        logger.warning("markMessagesInFlight not yet implemented for SQLite")
+        if (messageUuids.isEmpty()) return
+        // SQLite doesn't support arrays, so we use batch updates
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 1 WHERE client_id = ? AND message_uuid = ? AND status = 0"
+        val batchParams = JsonArray()
+        messageUuids.forEach { uuid ->
+            batchParams.add(JsonArray().add(clientId).add(uuid))
+        }
+        try {
+            sqlClient.executeBatch(sql, batchParams)
+        } catch (e: Exception) {
+            logger.warning("Error marking messages in-flight: ${e.message}")
+        }
     }
 
     override fun markMessageDelivered(clientId: String, messageUuid: String) {
-        logger.warning("markMessageDelivered not yet implemented for SQLite")
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 2 WHERE client_id = ? AND message_uuid = ?"
+        val params = JsonArray().add(clientId).add(messageUuid)
+        try {
+            sqlClient.executeUpdateSync(sql, params)
+        } catch (e: Exception) {
+            logger.warning("Error marking message delivered: ${e.message}")
+        }
     }
 
     override fun resetInFlightMessages(clientId: String) {
-        logger.warning("resetInFlightMessages not yet implemented for SQLite")
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 0 WHERE client_id = ? AND status = 1"
+        val params = JsonArray().add(clientId)
+        try {
+            sqlClient.executeUpdateSync(sql, params)
+        } catch (e: Exception) {
+            logger.warning("Error resetting in-flight messages: ${e.message}")
+        }
     }
 
     override fun purgeDeliveredMessages(): Int {
-        logger.warning("purgeDeliveredMessages not yet implemented for SQLite")
-        return 0
+        val sql = "DELETE FROM $queuedMessagesClientsTableName WHERE status = 2"
+        return try {
+            sqlClient.executeUpdateSync(sql, JsonArray())
+        } catch (e: Exception) {
+            logger.warning("Error purging delivered messages: ${e.message}")
+            0
+        }
     }
 
     override fun purgeQueuedMessages() {
