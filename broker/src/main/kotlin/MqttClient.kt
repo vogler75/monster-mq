@@ -55,6 +55,10 @@ class MqttClient(
     private val inFlightMessagesRcv = ConcurrentHashMap<Int, InFlightMessage>() // messageId TODO: is concurrent needed?
     private val inFlightMessagesSnd : ConcurrentLinkedDeque<InFlightMessage> = ConcurrentLinkedDeque() // TODO: is concurrent needed?
 
+    // Queue-first state machine for QoS 1+ message delivery
+    private var isProcessingQueue = false
+    private var triggerPending = false
+
     private val busConsumers = mutableListOf<MessageConsumer<*>>()
     
     // Authenticated user (null if not authenticated or auth disabled)
@@ -95,6 +99,7 @@ class MqttClient(
 
         fun getCommandAddress(clientId: String) = EventBusAddresses.Client.commands(clientId)
         fun getMessagesAddress(clientId: String) = EventBusAddresses.Client.messages(clientId)
+        fun getQueueTriggerAddress(clientId: String) = EventBusAddresses.Client.queueTrigger(clientId)
     }
 
     override fun start() {
@@ -106,6 +111,81 @@ class MqttClient(
     override fun stop() {
         logger.fine { "Client [${clientId}] Stop [${Utils.getCurrentFunctionName()}] " }
         busConsumers.forEach { it.unregister() }
+    }
+
+    /**
+     * Called when a trigger is received indicating that a message is available in the queue.
+     * Part of the queue-first delivery mechanism for QoS 1+ persistent session clients.
+     */
+    private fun onMessageAvailable() {
+        if (!ready || !endpoint.isConnected) {
+            logger.finest { "Client [$clientId] Trigger received but not ready or not connected [${Utils.getCurrentFunctionName()}]" }
+            return
+        }
+
+        if (isProcessingQueue) {
+            // Already processing - remember to check again after current batch
+            triggerPending = true
+            logger.finest { "Client [$clientId] Trigger received while processing, setting pending flag [${Utils.getCurrentFunctionName()}]" }
+            return
+        }
+
+        startQueueProcessing()
+    }
+
+    /**
+     * Start processing the message queue for this client.
+     */
+    private fun startQueueProcessing() {
+        isProcessingQueue = true
+        processNextMessage()
+    }
+
+    /**
+     * Process the next message from the queue.
+     * Fetches one pending message, marks it in-flight, and publishes it.
+     * On PUBACK/PUBCOMP, this is called again to process the next message.
+     */
+    private fun processNextMessage() {
+        if (!endpoint.isConnected) {
+            isProcessingQueue = false
+            triggerPending = false
+            return
+        }
+
+        sessionHandler.fetchNextPendingMessage(clientId).onComplete { result ->
+            if (result.failed()) {
+                logger.warning { "Client [$clientId] Error fetching next pending message: ${result.cause()?.message} [${Utils.getCurrentFunctionName()}]" }
+                isProcessingQueue = false
+                return@onComplete
+            }
+
+            val msg = result.result()
+            if (msg == null) {
+                // Queue empty
+                if (triggerPending) {
+                    triggerPending = false
+                    logger.finest { "Client [$clientId] Queue empty but trigger pending, checking again [${Utils.getCurrentFunctionName()}]" }
+                    processNextMessage()  // Try once more
+                } else {
+                    logger.finest { "Client [$clientId] Queue empty, going idle [${Utils.getCurrentFunctionName()}]" }
+                    isProcessingQueue = false  // Go idle
+                }
+                return@onComplete
+            }
+
+            // Mark in-flight and send
+            sessionHandler.markMessageInFlight(clientId, msg.messageUuid).onComplete { markResult ->
+                if (markResult.failed()) {
+                    logger.warning { "Client [$clientId] Error marking message in-flight: ${markResult.cause()?.message} [${Utils.getCurrentFunctionName()}]" }
+                }
+
+                // Clone with new message ID and publish
+                val msgWithId = msg.cloneWithNewMessageId(getNextMessageId())
+                logger.finest { "Client [$clientId] Publishing queued message [${msgWithId.messageId}] for topic [${msgWithId.topicName}] [${Utils.getCurrentFunctionName()}]" }
+                publishMessage(msgWithId)
+            }
+        }
     }
 
     fun startEndpoint() {
@@ -141,6 +221,10 @@ class MqttClient(
                 busConsumers.add(vertx.eventBus().consumer<Any>(getMessagesAddress(clientId)) { busMessage ->
                     handleBusMessage(busMessage)
                 })
+                // Queue trigger handler for queue-first delivery (QoS 1+ persistent sessions)
+                busConsumers.add(vertx.eventBus().consumer<String>(getQueueTriggerAddress(clientId)) { _ ->
+                    onMessageAvailable()
+                })
             } else {
                 logger.severe("Client [$clientId] Already deployed [${Utils.getCurrentFunctionName()}]")
             }
@@ -163,15 +247,18 @@ class MqttClient(
                 information.put("clientAddress", endpoint.remoteAddress().toString())
                 information.put("sessionExpiryInterval", endpoint.keepAliveTimeSeconds())
                 sessionHandler.setClient(clientId, endpoint.isCleanSession, information).onComplete {
-                    logger.fine { "Dequeue messages for client [$clientId] [${Utils.getCurrentFunctionName()}]" }
-                    sessionHandler.dequeueMessages(clientId) { m ->
-                        logger.finest { "Client [$clientId] Dequeued message [${m.messageId}] for topic [${m.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                        publishMessage(m.cloneWithNewMessageId(getNextMessageId())) // TODO: if qos is >0 then all messages are put in the inflight queue
-                        endpoint.isConnected // continue as long as the client is connected
-                    }.onComplete {
-                        if (endpoint.isConnected) { // if the client is still connected after the message queue
-                            ready = true
-                            sessionHandler.onlineClient(clientId)
+                    if (endpoint.isConnected) {
+                        // Now safe to mark as ready for new messages
+                        ready = true
+                        sessionHandler.onlineClient(clientId)
+
+                        // For persistent sessions, reset any stale in-flight messages and send trigger
+                        // This handles the case where previous connection died with messages in-flight
+                        if (!endpoint.isCleanSession) {
+                            sessionHandler.resetInFlightMessages(clientId).onComplete {
+                                logger.fine { "Client [$clientId] Reset in-flight messages and sending initial queue trigger [${Utils.getCurrentFunctionName()}]" }
+                                sessionHandler.sendMessageAvailableTrigger(clientId)
+                            }
                         }
                     }
                 }
@@ -262,15 +349,18 @@ class MqttClient(
             information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
             information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
             sessionHandler.setClient(clientId, endpoint.isCleanSession, information).onComplete {
-                logger.fine { "Dequeue messages for client [$clientId] [${Utils.getCurrentFunctionName()}]" }
-                sessionHandler.dequeueMessages(clientId) { m ->
-                    logger.finest { "Client [$clientId] Dequeued message [${m.messageId}] for topic [${m.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                    publishMessage(m.cloneWithNewMessageId(getNextMessageId())) // TODO: if qos is >0 then all messages are put in the inflight queue
-                    endpoint.isConnected // continue as long as the client is connected
-                }.onComplete {
-                    if (endpoint.isConnected) { // if the client is still connected after the message queue
-                        ready = true
-                        sessionHandler.onlineClient(clientId)
+                if (endpoint.isConnected) {
+                    // Now safe to mark as ready for new messages
+                    ready = true
+                    sessionHandler.onlineClient(clientId)
+
+                    // For persistent sessions, reset any stale in-flight messages and send trigger
+                    // This handles the case where previous connection died with messages in-flight
+                    if (!endpoint.isCleanSession) {
+                        sessionHandler.resetInFlightMessages(clientId).onComplete {
+                            logger.fine { "Client [$clientId] Reset in-flight messages and sending initial queue trigger [${Utils.getCurrentFunctionName()}]" }
+                            sessionHandler.sendMessageAvailableTrigger(clientId)
+                        }
                     }
                 }
             }
@@ -303,11 +393,16 @@ class MqttClient(
     }
 
     private fun stopEndpoint() {
+        // Reset queue processing state
+        isProcessingQueue = false
+        triggerPending = false
+
         if (endpoint.isCleanSession) {
             logger.fine { "Client [$clientId] Remove client, it is a clean session [${Utils.getCurrentFunctionName()}]" }
             sessionHandler.delClient(clientId)
         } else {
             logger.fine { "Client [$clientId] Pause client, it is not a clean session [${Utils.getCurrentFunctionName()}]" }
+            // Note: in-flight messages will be reset when client reconnects
             sessionHandler.pauseClient(clientId)
         }
         undeployEndpoint(vertx, this.deploymentID())
@@ -608,8 +703,10 @@ class MqttClient(
     private fun consumeMessage(busMessage: Message<BrokerMessage>) {
         if (!ready) {
             busMessage.reply(false)
+            return
         }
-        else when (busMessage.body().qosLevel) {
+
+        when (busMessage.body().qosLevel) {
             0 -> consumeMessageQoS0(busMessage)
             1 -> consumeMessageQoS1(busMessage)
             2 -> consumeMessageQoS2(busMessage)
@@ -666,7 +763,7 @@ class MqttClient(
 
     private fun publishMessageCompleted(message: BrokerMessage) {
         inFlightMessagesSnd.removeFirst()
-        if (message.isQueued) sessionHandler.removeMessage(clientId, message.messageUuid)
+        if (message.isQueued) sessionHandler.markMessageDelivered(clientId, message.messageUuid)
     }
 
     private fun consumeMessageQoS1(busMessage: Message<BrokerMessage>) {
@@ -685,8 +782,14 @@ class MqttClient(
             inFlightMessagesSnd.first().let { inFlightMessage ->
                 if (inFlightMessage.message.messageId == id) {
                     logger.finest { "Client [$clientId] Subscribe: got acknowledge id [$id] [${Utils.getCurrentFunctionName()}]" }
+                    val wasQueued = inFlightMessage.message.isQueued
                     publishMessageCompleted(inFlightMessage.message)
-                    publishMessageCheckNext()
+                    // For queue-first delivery: fetch next from DB queue
+                    if (wasQueued && isProcessingQueue) {
+                        processNextMessage()
+                    } else {
+                        publishMessageCheckNext()
+                    }
                 } else {
                     logger.warning { "Client [$clientId] Subscribe: got acknowledge id [$id] but expected [${inFlightMessage.message.messageId}] [${Utils.getCurrentFunctionName()}]" }
                 }
@@ -728,8 +831,14 @@ class MqttClient(
             inFlightMessagesSnd.first().let { inFlightMessage ->
                 if (inFlightMessage.message.messageId == id) {
                     logger.finest { "Client [$clientId] Subscribe: got complete id [$id] [${Utils.getCurrentFunctionName()}]" }
+                    val wasQueued = inFlightMessage.message.isQueued
                     publishMessageCompleted(inFlightMessage.message)
-                    publishMessageCheckNext()
+                    // For queue-first delivery: fetch next from DB queue
+                    if (wasQueued && isProcessingQueue) {
+                        processNextMessage()
+                    } else {
+                        publishMessageCheckNext()
+                    }
                 } else {
                     logger.warning { "Client [$clientId] Subscribe: got complete id [$id] but expected [${inFlightMessage.message.messageId}] [${Utils.getCurrentFunctionName()}]" }
                 }

@@ -425,7 +425,17 @@ open class SessionHandler(
         queueWorkerThread("SubAddQueue", subAddQueue, 1000, sessionStore::addSubscriptions)
         queueWorkerThread("SubDelQueue", subDelQueue, 1000, sessionStore::delSubscriptions)
 
-        queueWorkerThread("MsgAddQueue", msgAddQueue, 1000, sessionStore::enqueueMessages)
+        queueWorkerThread("MsgAddQueue", msgAddQueue, 1000) { block ->
+            val future = sessionStore.enqueueMessages(block)
+            future.onComplete {
+                // After DB write completes, send triggers to all affected clients
+                val clientIds = block.flatMap { it.second }.toSet()
+                clientIds.forEach { clientId ->
+                    sendMessageAvailableTrigger(clientId)
+                }
+            }
+            future
+        }
         queueWorkerThread("MsgDelQueue", msgDelQueue, 1000, sessionStore::removeMessages)
 
         // Only subscribe to message bus if it's Kafka (external source)
@@ -555,6 +565,20 @@ open class SessionHandler(
             val nodeId = clientNodeMapping.get(clientId) ?: Monster.getClusterNodeId(vertx)
             topicNodeMapping.addToSet(topicName, nodeId)
             logger.finest { "Loaded subscription [${topicName}] for client [${clientId}] on node [${nodeId}]" }
+        }
+
+        // Start periodic cleanup of delivered messages (every 60 seconds)
+        vertx.setPeriodic(60_000) {
+            sessionStore.purgeDeliveredMessages().onComplete { result ->
+                if (result.succeeded()) {
+                    val count = result.result()
+                    if (count > 0) {
+                        logger.fine("Purged $count delivered messages from queue [${Utils.getCurrentFunctionName()}]")
+                    }
+                } else {
+                    logger.warning("Error purging delivered messages: ${result.cause()?.message} [${Utils.getCurrentFunctionName()}]")
+                }
+            }
         }
 
         Future.all(f0, f1, f2).onComplete {
@@ -865,6 +889,29 @@ open class SessionHandler(
         } catch (e: IllegalStateException) {
             logger.severe("CRITICAL: Message delete queue overflow! Queue is full (${msgDelQueue.size}/${msgDelQueue.remainingCapacity() + msgDelQueue.size}). Message removal for client [${clientId}] msg [${messageUuid}] will be LOST. Increase 'Queues.MessageQueueSize' in config.yaml")
         }
+    }
+
+    // Status-based message tracking methods
+    fun markMessageDelivered(clientId: String, messageUuid: String) = sessionStore.markMessageDelivered(clientId, messageUuid)
+    fun resetInFlightMessages(clientId: String) = sessionStore.resetInFlightMessages(clientId)
+    fun markMessagesInFlight(clientId: String, messageUuids: List<String>) = sessionStore.markMessagesInFlight(clientId, messageUuids)
+    fun markMessageInFlight(clientId: String, messageUuid: String) = sessionStore.markMessageInFlight(clientId, messageUuid)
+    fun fetchNextPendingMessage(clientId: String) = sessionStore.fetchNextPendingMessage(clientId)
+
+    /**
+     * Send a trigger to the client indicating that a message is available in the queue.
+     * This is used for queue-first delivery of QoS 1+ messages to persistent session clients.
+     * The trigger is cluster-aware, sending to all nodes in a clustered environment.
+     */
+    fun sendMessageAvailableTrigger(clientId: String) {
+        val address = EventBusAddresses.Client.queueTrigger(clientId)
+        if (Monster.isClustered()) {
+            // Publish to all nodes - the client handler is only on one node
+            vertx.eventBus().publish(address, clientId)
+        } else {
+            vertx.eventBus().send(address, clientId)
+        }
+        logger.finest { "Sent message available trigger for client [$clientId] [${Utils.getCurrentFunctionName()}]" }
     }
 
     private fun addSubscription(subscription: MqttSubscription) {
@@ -1341,13 +1388,47 @@ open class SessionHandler(
 
     /**
      * Forward bulk of messages to online clients using existing bulk messaging system.
+     * Uses queue-first for QoS 1+ messages to persistent session clients.
+     *
+     * IMPORTANT: The qos parameter is the message's QoS, not the effective QoS.
+     * Effective QoS = min(subscriptionQoS, messageQoS) and must be calculated per client.
      */
     private fun forwardBulkToOnlineClients(
         messages: List<BrokerMessage>,
         clients: List<Pair<String, Int>>,
         qos: Int
     ) {
-        clients.forEach { (clientId, subscriptionQos) ->
+        // Separate persistent and clean session clients for queue-first logic
+        val (persistentClients, cleanClients) = clients.partition { (clientId, _) ->
+            shouldPersistMessagesForClient(clientId)
+        }
+
+        // For persistent session clients: queue-first ONLY if effective QoS > 0
+        // Effective QoS = min(subscriptionQoS, messageQoS)
+        // Triggers are sent after DB write completes (in queueWorkerThread)
+        if (persistentClients.isNotEmpty()) {
+            // Group persistent clients by their subscription QoS to determine effective QoS
+            persistentClients.forEach { (clientId, subscriptionQos) ->
+                messages.forEach { msg ->
+                    val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
+                    if (effectiveQos > 0) {
+                        // Queue-first for QoS 1+
+                        val messageToQueue = if (effectiveQos < msg.qosLevel) {
+                            msg.cloneWithNewQoS(effectiveQos)
+                        } else {
+                            msg
+                        }
+                        enqueueMessage(messageToQueue, listOf(clientId))
+                    } else {
+                        // QoS 0: send directly
+                        sendMessageToClient(clientId, msg.cloneWithNewQoS(0))
+                    }
+                }
+            }
+        }
+
+        // For clean session clients: always send directly (no persistence needed)
+        cleanClients.forEach { (clientId, subscriptionQos) ->
             messages.forEach { msg ->
                 val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
                 val messageToSend = if (effectiveQos < msg.qosLevel) {
@@ -1355,7 +1436,6 @@ open class SessionHandler(
                 } else {
                     msg
                 }
-                // Use existing bulk messaging system
                 sendMessageToClient(clientId, messageToSend)
             }
         }
@@ -1363,6 +1443,10 @@ open class SessionHandler(
 
     /**
      * Handle messages for created and offline clients.
+     *
+     * IMPORTANT: The qos parameter is the message's QoS, not the effective QoS.
+     * Effective QoS = min(subscriptionQoS, messageQoS) and must be calculated per client.
+     * Only queue messages if effective QoS > 0.
      */
     private fun handleCreatedAndOfflineClients(
         messages: List<BrokerMessage>,
@@ -1373,21 +1457,39 @@ open class SessionHandler(
             clientStatus[clientId] == ClientStatus.CREATED
         }
 
-        // Created clients: queue in-flight
-        createdClients.forEach { (clientId, _) ->
+        // Created clients: queue in-flight (only if effective QoS > 0)
+        createdClients.forEach { (clientId, subscriptionQos) ->
             messages.forEach { msg ->
-                addInFlightMessage(clientId, msg)
+                val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
+                if (effectiveQos > 0) {
+                    val messageToQueue = if (effectiveQos < msg.qosLevel) {
+                        msg.cloneWithNewQoS(effectiveQos)
+                    } else {
+                        msg
+                    }
+                    addInFlightMessage(clientId, messageToQueue)
+                }
+                // QoS 0 messages for created clients are simply dropped (fire-and-forget)
             }
         }
 
-        // Offline persistent clients: queue for later delivery
+        // Offline persistent clients: queue for later delivery (only if effective QoS > 0)
         if (offlineClients.isNotEmpty()) {
             val persistentClients = offlineClients.filter { (clientId, _) ->
                 shouldPersistMessagesForClient(clientId)
             }
-            if (persistentClients.isNotEmpty()) {
+            persistentClients.forEach { (clientId, subscriptionQos) ->
                 messages.forEach { msg ->
-                    enqueueMessage(msg, persistentClients.map { it.first })
+                    val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
+                    if (effectiveQos > 0) {
+                        val messageToQueue = if (effectiveQos < msg.qosLevel) {
+                            msg.cloneWithNewQoS(effectiveQos)
+                        } else {
+                            msg
+                        }
+                        enqueueMessage(messageToQueue, listOf(clientId))
+                    }
+                    // QoS 0 messages for offline clients are simply dropped (fire-and-forget)
                 }
             }
         }
@@ -1523,17 +1625,22 @@ open class SessionHandler(
                     }
                     logger.finest { "Online [${online.size}] Other [${others.size}] [${Utils.getCurrentFunctionName()}]" }
 
-                    // Online clients: batch async delivery with event loop yields
-                    processClientBatchAsync(online, m) { clientId, msg ->
-                        sendMessageToClient(clientId, msg).onComplete {
-                            if (it.failed() || !it.result()) {
-                                logger.warning("Message sent to online client failed [${clientId}]")
-                                // Only queue messages for clients with persistent sessions
-                                if (shouldPersistMessagesForClient(clientId)) {
-                                    enqueueMessage(msg, listOf(clientId))
-                                }
-                            }
-                        }
+                    // Separate online clients into persistent and clean session
+                    val (persistentOnline, cleanOnline) = online.partition { (clientId, _) ->
+                        shouldPersistMessagesForClient(clientId)
+                    }
+
+                    // Queue-first for persistent session online clients: queue first
+                    // Triggers are sent after DB write completes (in queueWorkerThread)
+                    if (persistentOnline.isNotEmpty()) {
+                        val persistentClientIds = persistentOnline.map { it.first }
+                        enqueueMessage(m, persistentClientIds)
+                        logger.finest { "Queue-first: enqueued message for ${persistentClientIds.size} persistent online clients [${Utils.getCurrentFunctionName()}]" }
+                    }
+
+                    // Clean session online clients: send directly (no persistence needed)
+                    processClientBatchAsync(cleanOnline, m) { clientId, msg ->
+                        sendMessageToClient(clientId, msg)
                     }
 
                     if (others.isNotEmpty()) {

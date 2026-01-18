@@ -159,6 +159,60 @@ class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(
         return promise.future()
     }
 
+    override fun fetchNextPendingMessage(clientId: String): Future<at.rocworks.data.BrokerMessage?> {
+        val promise = Promise.promise<at.rocworks.data.BrokerMessage?>()
+        vertx.executeBlocking(Callable {
+            val message = store.fetchNextPendingMessage(clientId)
+            promise.complete(message)
+        })
+        return promise.future()
+    }
+
+    override fun markMessageInFlight(clientId: String, messageUuid: String): Future<Void> {
+        val promise = Promise.promise<Void>()
+        vertx.executeBlocking(Callable {
+            store.markMessageInFlight(clientId, messageUuid)
+            promise.complete()
+        })
+        return promise.future()
+    }
+
+    override fun markMessagesInFlight(clientId: String, messageUuids: List<String>): Future<Void> {
+        val promise = Promise.promise<Void>()
+        vertx.executeBlocking(Callable {
+            store.markMessagesInFlight(clientId, messageUuids)
+            promise.complete()
+        })
+        return promise.future()
+    }
+
+    override fun markMessageDelivered(clientId: String, messageUuid: String): Future<Void> {
+        val promise = Promise.promise<Void>()
+        vertx.executeBlocking(Callable {
+            store.markMessageDelivered(clientId, messageUuid)
+            promise.complete()
+        })
+        return promise.future()
+    }
+
+    override fun resetInFlightMessages(clientId: String): Future<Void> {
+        val promise = Promise.promise<Void>()
+        vertx.executeBlocking(Callable {
+            store.resetInFlightMessages(clientId)
+            promise.complete()
+        })
+        return promise.future()
+    }
+
+    override fun purgeDeliveredMessages(): Future<Int> {
+        val promise = Promise.promise<Int>()
+        vertx.executeBlocking(Callable {
+            val count = store.purgeDeliveredMessages()
+            promise.complete(count)
+        })
+        return promise.future()
+    }
+
     override fun purgeQueuedMessages(): Future<Void> {
         val promise = Promise.promise<Void>()
         vertx.executeBlocking(Callable {

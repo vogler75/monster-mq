@@ -28,6 +28,7 @@ object EventBusAddresses {
     object Client {
         fun commands(clientId: String) = "$CLIENT_NS.cmd.$clientId"
         fun messages(clientId: String) = "$CLIENT_NS.msg.$clientId"
+        fun queueTrigger(clientId: String) = "$CLIENT_NS.queue.trigger.$clientId"
     }
 
     // Cluster Coordination (global operations for distributed state)

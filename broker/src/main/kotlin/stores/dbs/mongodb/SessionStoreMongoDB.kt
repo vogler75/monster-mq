@@ -54,6 +54,7 @@ class SessionStoreMongoDB(
             subscriptionsCollection.createIndex(Document("client_id", 1).append("topic", 1))
             queuedMessagesCollection.createIndex(Document("client_id", 1))
             queuedMessagesClientsCollection.createIndex(Document("client_id", 1))
+            queuedMessagesClientsCollection.createIndex(Document("client_id", 1).append("status", 1))
 
             logger.fine("MongoDB connection established successfully.")
             startPromise.complete()
@@ -302,7 +303,8 @@ class SessionStoreMongoDB(
                 clientIds.forEach { clientId ->
                     val clientMessageDocument = Document(mapOf(
                         "client_id" to clientId,
-                        "message_uuid" to message.messageUuid
+                        "message_uuid" to message.messageUuid,
+                        "status" to 0
                     ))
                     queuedMessagesClientsCollection.updateOne(
                         and(
@@ -379,6 +381,116 @@ class SessionStoreMongoDB(
             }
         } catch (e: Exception) {
             logger.warning("Error while removing dequeued messages: ${e.message}")
+        }
+    }
+
+    override fun fetchNextPendingMessage(clientId: String): BrokerMessage? {
+        return try {
+            val pipeline = listOf(
+                Document("\$match", Document(mapOf("client_id" to clientId, "status" to 0))),
+                Document(
+                    "\$lookup", Document(mapOf(
+                        "from" to "queuedmessages",
+                        "localField" to "message_uuid",
+                        "foreignField" to "message_uuid",
+                        "as" to "message"
+                    ))
+                ),
+                Document("\$unwind", "\$message"),
+                Document("\$sort", Document("message.message_uuid", 1)),
+                Document("\$limit", 1)
+            )
+
+            val results = queuedMessagesClientsCollection.aggregate(pipeline)
+            val doc = results.firstOrNull()
+            if (doc != null) {
+                val messageDoc = doc.get("message", Document::class.java)
+                BrokerMessage(
+                    messageUuid = messageDoc.getString("message_uuid"),
+                    messageId = messageDoc.getInteger("message_id"),
+                    topicName = messageDoc.getString("topic"),
+                    payload = messageDoc.get("payload", Binary::class.java).data,
+                    qosLevel = messageDoc.getInteger("qos"),
+                    isRetain = messageDoc.getBoolean("retained"),
+                    isDup = false,
+                    isQueued = true,
+                    clientId = messageDoc.getString("client_id")
+                )
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            logger.warning("Error fetching next pending message: ${e.message}")
+            null
+        }
+    }
+
+    override fun markMessageInFlight(clientId: String, messageUuid: String) {
+        try {
+            queuedMessagesClientsCollection.updateOne(
+                and(
+                    eq("client_id", clientId),
+                    eq("message_uuid", messageUuid),
+                    eq("status", 0)
+                ),
+                Document("\$set", Document("status", 1))
+            )
+        } catch (e: Exception) {
+            logger.warning("Error marking message in-flight: ${e.message}")
+        }
+    }
+
+    override fun markMessagesInFlight(clientId: String, messageUuids: List<String>) {
+        if (messageUuids.isEmpty()) return
+        try {
+            queuedMessagesClientsCollection.updateMany(
+                and(
+                    eq("client_id", clientId),
+                    `in`("message_uuid", messageUuids),
+                    eq("status", 0)
+                ),
+                Document("\$set", Document("status", 1))
+            )
+        } catch (e: Exception) {
+            logger.warning("Error marking messages in-flight: ${e.message}")
+        }
+    }
+
+    override fun markMessageDelivered(clientId: String, messageUuid: String) {
+        try {
+            queuedMessagesClientsCollection.updateOne(
+                and(
+                    eq("client_id", clientId),
+                    eq("message_uuid", messageUuid)
+                ),
+                Document("\$set", Document("status", 2))
+            )
+        } catch (e: Exception) {
+            logger.warning("Error marking message delivered: ${e.message}")
+        }
+    }
+
+    override fun resetInFlightMessages(clientId: String) {
+        try {
+            queuedMessagesClientsCollection.updateMany(
+                and(
+                    eq("client_id", clientId),
+                    eq("status", 1)
+                ),
+                Document("\$set", Document("status", 0))
+            )
+        } catch (e: Exception) {
+            logger.warning("Error resetting in-flight messages: ${e.message}")
+        }
+    }
+
+    override fun purgeDeliveredMessages(): Int {
+        return try {
+            val result = queuedMessagesClientsCollection.deleteMany(eq("status", 2))
+            result.deletedCount.toInt()
+        } catch (e: Exception) {
+            logger.warning("Error purging delivered messages: ${e.message}")
+            0
         }
     }
 

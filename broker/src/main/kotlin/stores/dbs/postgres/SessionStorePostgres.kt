@@ -85,22 +85,40 @@ class SessionStorePostgres(
                 );             
                 """.trimIndent(), """
                 CREATE TABLE IF NOT EXISTS $queuedMessagesClientsTableName (
-                    client_id VARCHAR(65535),                
+                    client_id VARCHAR(65535),
                     message_uuid VARCHAR(36),
+                    status INTEGER DEFAULT 0,
                     PRIMARY KEY (client_id, message_uuid)
                 );
                 """.trimIndent())
 
+                // Migration: Add status column to existing queuedmessagesclients table if it doesn't exist
+                val migrationSQL = listOf(
+                    """
+                    DO ${'$'}${'$'}
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                      WHERE table_name = '$queuedMessagesClientsTableName'
+                                      AND column_name = 'status') THEN
+                            ALTER TABLE $queuedMessagesClientsTableName ADD COLUMN status INTEGER DEFAULT 0;
+                        END IF;
+                    END
+                    ${'$'}${'$'};
+                    """.trimIndent()
+                )
+
                 // Create the index on the topic column
                 val createIndexesSQL = listOf(
                     "CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_topic_idx ON $subscriptionsTableName (topic);",
-                    "CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_wildcard_idx ON $subscriptionsTableName (wildcard) WHERE wildcard = TRUE;"
+                    "CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_wildcard_idx ON $subscriptionsTableName (wildcard) WHERE wildcard = TRUE;",
+                    "CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_status_idx ON $queuedMessagesClientsTableName (status);"
                 )
 
                 // Execute the SQL statements
                 connection.createStatement().use { statement ->
                     createTableSQL.forEach(statement::executeUpdate)
                     createIndexesSQL.forEach(statement::executeUpdate)
+                    migrationSQL.forEach(statement::execute)
                 }
                 connection.commit()
                 logger.fine("Tables are ready [${Utils.getCurrentFunctionName()}]")
@@ -469,7 +487,7 @@ class SessionStorePostgres(
     override fun dequeueMessages(clientId: String, callback: (BrokerMessage)->Boolean) {
         val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id "+
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) "+
-                  "WHERE c.client_id = ? "+
+                  "WHERE c.client_id = ? AND c.status = 0 "+
                   "ORDER BY m.message_uuid" // Time Based UUIDs
         try {
             db.connection?.let { connection ->
@@ -483,7 +501,7 @@ class SessionStorePostgres(
                         val payload = resultSet.getBytes(4)
                         val qos = resultSet.getInt(5)
                         val retained = resultSet.getBoolean(6)
-                        val clientIdPublisher = resultSet.getString(6)
+                        val clientIdPublisher = resultSet.getString(7)
                         val continueProcessing = callback(
                             BrokerMessage(
                                 messageUuid = messageUuid,
@@ -523,6 +541,119 @@ class SessionStorePostgres(
             }
         } catch (e: SQLException) {
             logger.warning("Error at removing dequeued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
+    override fun fetchNextPendingMessage(clientId: String): BrokerMessage? {
+        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id " +
+                  "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) " +
+                  "WHERE c.client_id = ? AND c.status = 0 " +
+                  "ORDER BY m.message_uuid LIMIT 1"
+        return try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, clientId)
+                    val resultSet = preparedStatement.executeQuery()
+                    if (resultSet.next()) {
+                        BrokerMessage(
+                            messageUuid = resultSet.getString(1),
+                            messageId = resultSet.getInt(2),
+                            topicName = resultSet.getString(3),
+                            payload = resultSet.getBytes(4),
+                            qosLevel = resultSet.getInt(5),
+                            isRetain = resultSet.getBoolean(6),
+                            isDup = false,
+                            isQueued = true,
+                            clientId = resultSet.getString(7)
+                        )
+                    } else {
+                        null
+                    }
+                }
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error fetching next pending message [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            null
+        }
+    }
+
+    override fun markMessageInFlight(clientId: String, messageUuid: String) {
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 1 WHERE client_id = ? AND message_uuid = ? AND status = 0"
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, clientId)
+                    preparedStatement.setString(2, messageUuid)
+                    preparedStatement.executeUpdate()
+                }
+                connection.commit()
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error marking message in-flight [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
+    override fun markMessagesInFlight(clientId: String, messageUuids: List<String>) {
+        if (messageUuids.isEmpty()) return
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 1 WHERE client_id = ? AND message_uuid = ANY (?) AND status = 0"
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, clientId)
+                    preparedStatement.setArray(2, connection.createArrayOf("text", messageUuids.toTypedArray()))
+                    preparedStatement.executeUpdate()
+                }
+                connection.commit()
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error marking messages in-flight [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
+    override fun markMessageDelivered(clientId: String, messageUuid: String) {
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 2 WHERE client_id = ? AND message_uuid = ?"
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, clientId)
+                    preparedStatement.setString(2, messageUuid)
+                    preparedStatement.executeUpdate()
+                }
+                connection.commit()
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error marking message delivered [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
+    override fun resetInFlightMessages(clientId: String) {
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 0 WHERE client_id = ? AND status = 1"
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, clientId)
+                    preparedStatement.executeUpdate()
+                }
+                connection.commit()
+            }
+        } catch (e: SQLException) {
+            logger.warning("Error resetting in-flight messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
+    override fun purgeDeliveredMessages(): Int {
+        val sql = "DELETE FROM $queuedMessagesClientsTableName WHERE status = 2"
+        return try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    val count = preparedStatement.executeUpdate()
+                    connection.commit()
+                    count
+                }
+            } ?: 0
+        } catch (e: SQLException) {
+            logger.warning("Error purging delivered messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            0
         }
     }
 
