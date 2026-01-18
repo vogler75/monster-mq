@@ -78,6 +78,7 @@ class OpcUaConnector : AbstractVerticle() {
     private var isReconnecting = false
     private var reconnectTimerId: Long? = null
     private var healthCheckTimerId: Long? = null
+    private var isStopped = false
 
     // Static address subscriptions
     private val addressSubscriptions = ConcurrentHashMap<String, AddressSubscription>() // address -> subscription
@@ -157,6 +158,7 @@ class OpcUaConnector : AbstractVerticle() {
 
     override fun stop(stopPromise: Promise<Void>) {
         logger.info("Stopping OpcUaConnector for device: ${deviceConfig.name}")
+        isStopped = true
 
         // Cancel any pending reconnection timer
         reconnectTimerId?.let { timerId ->
@@ -343,6 +345,11 @@ class OpcUaConnector : AbstractVerticle() {
     private fun connectToOpcUaServer(): Future<Void> {
         val promise = Promise.promise<Void>()
 
+        if (isStopped) {
+            promise.fail(Exception("Connector is stopped"))
+            return promise.future()
+        }
+
         if (isConnected || isReconnecting) {
             promise.complete()
             return promise.future()
@@ -352,6 +359,11 @@ class OpcUaConnector : AbstractVerticle() {
 
         thread {
             try {
+                if (isStopped) {
+                    isReconnecting = false
+                    promise.fail(Exception("Connector stopped during connection attempt"))
+                    return@thread
+                }
                 logger.info("Connecting to OPC UA server: ${opcUaConfig.endpointUrl}")
 
                 // Set up identity provider
@@ -367,6 +379,12 @@ class OpcUaConnector : AbstractVerticle() {
                 // Connect
                 val connectFuture = client!!.connect()
                 connectFuture.whenComplete { _, throwable ->
+                    if (isStopped) {
+                        isReconnecting = false
+                        client?.disconnect()
+                        promise.fail(Exception("Connector stopped during connection"))
+                        return@whenComplete
+                    }
                     if (throwable == null) {
                         isConnected = true
                         isReconnecting = false
@@ -519,6 +537,10 @@ class OpcUaConnector : AbstractVerticle() {
     }
 
     private fun scheduleReconnection() {
+        if (isStopped) {
+            logger.fine { "Skipping reconnection scheduling - connector is stopped for device ${deviceConfig.name}" }
+            return
+        }
         if (!isReconnecting) {
             // Cancel any existing reconnection timer
             reconnectTimerId?.let { timerId ->
@@ -528,6 +550,10 @@ class OpcUaConnector : AbstractVerticle() {
             // Schedule new reconnection attempt
             reconnectTimerId = vertx.setTimer(opcUaConfig.reconnectDelay) {
                 reconnectTimerId = null
+                if (isStopped) {
+                    logger.fine { "Skipping reconnection attempt - connector is stopped for device ${deviceConfig.name}" }
+                    return@setTimer
+                }
                 if (!isConnected) {
                     logger.info("Attempting to reconnect to OPC UA server for device ${deviceConfig.name}...")
                     connectToOpcUaServer()
