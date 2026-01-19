@@ -236,16 +236,11 @@ class MessageArchiveMongoDB(
 
                 // Only try JSON conversion if payloadFormat is JSON
                 if (payloadFormat == at.rocworks.stores.PayloadFormat.JSON) {
-                    val jsonValue = message.getPayloadAsJsonValue()
-                    if (jsonValue != null) {
-                        // Store as native BSON object for efficient querying
-                        when (jsonValue) {
-                            is Map<*, *> -> doc["payload"] = Document(jsonValue as Map<String, Any?>)
-                            is List<*> -> doc["payload"] = jsonValue
-                            else -> doc["payload"] = jsonValue // primitives (String, Number, Boolean)
-                        }
-                    } else {
-                        // JSON format requested but payload is not valid JSON - store as binary
+                    try {
+                        // Use MongoDB's Document.parse() directly - it will throw if not valid JSON
+                        doc["payload"] = Document.parse(String(message.payload, Charsets.UTF_8))
+                    } catch (e: Exception) {
+                        // Not valid JSON - store as binary
                         doc["payload_blob"] = message.payload
                     }
                 } else {
