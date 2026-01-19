@@ -279,7 +279,7 @@ MonsterMQ follows a modular, event-driven architecture built on Eclipse Vert.x, 
 │                                                                                 │
 │  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐   │
 │  │   GraphQL API        │  │   Web Dashboard      │  │   MCP Server         │   │
-│  │  • Queries           │  │  • Configuration     │  │  • Coming Soon       │   │
+│  │  • Queries           │  │  • Configuration     │  │  • AI Integration    │   │
 │  │  • Mutations         │  │  • Topic Browser     │  │  • GraphQL API       │   │
 │  │  • Subscriptions     │  │  • Flow Editor       │  │  • SQL Queries       │   │
 │  │  • Port 4000         │  │  • User Management   │  │                      │   │ 
@@ -343,7 +343,7 @@ For detailed documentation, see the [`doc/`](doc/) directory:
 - **[Neo4j Integration](doc/neo4j.md)** - Graph database for MQTT topic hierarchies
 - **[GraphQL API](doc/graphql.md)** - Real-time data access and management
 - **[MQTT JSON-RPC 2.0 API](doc/mqtt-api.md)** - Execute GraphQL queries/mutations over MQTT
-- **[MCP Server](doc/mcp.md)** - MCP Ready (coming soon) - AI model integration with GraphQL API and SQL queries
+- **[MCP Server](doc/mcp.md)** - AI model integration with GraphQL API and SQL queries
 - **[Workflows (Flow Engine)](doc/workflows.md)** - Visual flow-based programming and data processing
 - **[Kafka Integration](doc/kafka.md)** - Stream processing and event sourcing
 - **[MQTT Logging](doc/mqtt-logging.md)** - Real-time system logging via MQTT topics

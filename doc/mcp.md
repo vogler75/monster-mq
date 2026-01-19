@@ -29,21 +29,14 @@ ArchiveGroups:
 
 ### Connect with Claude Desktop
 
-Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+MonsterMQ's MCP server uses HTTP transport (Streamable HTTP). Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "monstermq": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-monstermq"
-      ],
-      "env": {
-        "MCP_PORT": "3000",
-        "MCP_HOST": "localhost"
-      }
+      "type": "url",
+      "url": "http://localhost:3000/mcp"
     }
   }
 }
@@ -51,12 +44,16 @@ Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_deskt
 
 ### Direct MCP Connection
 
-```bash
-# Using MCP CLI
-mcp connect http://localhost:3000
+The MCP server endpoint is available at `http://<host>:<port>/mcp`:
 
-# Using WebSocket
-wscat -c ws://localhost:3000/mcp
+- **POST /mcp** - Send JSON-RPC 2.0 requests and receive responses
+- **GET /mcp** - Server-Sent Events (SSE) stream for real-time updates
+
+```bash
+# Example: Send initialize request
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 ```
 
 ## Architecture
