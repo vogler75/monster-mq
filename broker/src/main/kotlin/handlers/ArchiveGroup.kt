@@ -489,7 +489,8 @@ class ArchiveGroup(
                     MessageArchiveMongoDB(
                         archiveName,
                         mongodb.getString("Url"),
-                        mongodb.getString("Database", "monstermq")
+                        mongodb.getString("Database", "monstermq"),
+                        payloadFormat
                     )
                 }
                 MessageArchiveType.KAFKA -> {

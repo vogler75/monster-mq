@@ -34,7 +34,8 @@ import java.util.concurrent.TimeUnit
 class MessageArchiveMongoDB(
     private val name: String,
     private val connectionString: String,
-    private val databaseName: String
+    private val databaseName: String,
+    private val payloadFormat: at.rocworks.stores.PayloadFormat = at.rocworks.stores.PayloadFormat.DEFAULT
 ): AbstractVerticle(), IMessageArchiveExtended {
 
     private val logger = Utils.getLogger(this::class.java, name)
@@ -222,7 +223,7 @@ class MessageArchiveMongoDB(
 
         try {
             val documents = messages.map { message ->
-                Document(mapOf(
+                val doc = Document(mapOf(
                     "meta" to Document(mapOf(
                         "topic" to message.topicName,
                         "client_id" to message.clientId,
@@ -230,10 +231,29 @@ class MessageArchiveMongoDB(
                         "qos" to message.qosLevel,
                         "retained" to message.isRetain
                     )),
-                    "time" to Date(message.time.toEpochMilli()),
-                    "payload_blob" to message.payload,
-                    "payload_json" to message.getPayloadAsJson()
+                    "time" to Date(message.time.toEpochMilli())
                 ))
+
+                // Only try JSON conversion if payloadFormat is JSON
+                if (payloadFormat == at.rocworks.stores.PayloadFormat.JSON) {
+                    val jsonValue = message.getPayloadAsJsonValue()
+                    if (jsonValue != null) {
+                        // Store as native BSON object for efficient querying
+                        when (jsonValue) {
+                            is Map<*, *> -> doc["payload"] = Document(jsonValue as Map<String, Any?>)
+                            is List<*> -> doc["payload"] = jsonValue
+                            else -> doc["payload"] = jsonValue // primitives (String, Number, Boolean)
+                        }
+                    } else {
+                        // JSON format requested but payload is not valid JSON - store as binary
+                        doc["payload_blob"] = message.payload
+                    }
+                } else {
+                    // DEFAULT format - store as binary only
+                    doc["payload_blob"] = message.payload
+                }
+
+                doc
             }
 
             // Batch insert with unordered for better performance
@@ -298,22 +318,35 @@ class MessageArchiveMongoDB(
                 .forEach { doc ->
                     val meta = doc.get("meta", Document::class.java)
                     val timestamp = doc.getDate("time").toInstant().toEpochMilli()
-                    
-                    // Handle Binary payload correctly
-                    val payloadBytes = when (val payloadBlob = doc.get("payload_blob")) {
-                        is Binary -> payloadBlob.data
-                        is ByteArray -> payloadBlob
-                        else -> ByteArray(0)
-                    }
-                    
+
                     val messageObj = JsonObject()
                         .put("topic", meta?.getString("topic") ?: topic)
                         .put("timestamp", timestamp)
-                        .put("payload_base64", Base64.getEncoder().encodeToString(payloadBytes))
-                        .put("payload_json", doc.getString("payload_json"))
                         .put("qos", meta?.getInteger("qos") ?: 0)
                         .put("client_id", meta?.getString("client_id") ?: "")
-                        
+
+                    // Handle both new format (payload as BSON) and legacy format (payload_blob/payload_json)
+                    val nativePayload = doc.get("payload")
+                    if (nativePayload != null) {
+                        // New format: payload stored as native BSON object
+                        val payloadJson = when (nativePayload) {
+                            is Document -> nativePayload.toJson()
+                            is List<*> -> JsonArray(nativePayload).encode()
+                            else -> nativePayload.toString()
+                        }
+                        messageObj.put("payload_json", payloadJson)
+                        messageObj.put("payload_base64", Base64.getEncoder().encodeToString(payloadJson.toByteArray()))
+                    } else {
+                        // Legacy format: payload_blob and/or payload_json
+                        val payloadBytes = when (val payloadBlob = doc.get("payload_blob")) {
+                            is Binary -> payloadBlob.data
+                            is ByteArray -> payloadBlob
+                            else -> ByteArray(0)
+                        }
+                        messageObj.put("payload_base64", Base64.getEncoder().encodeToString(payloadBytes))
+                        messageObj.put("payload_json", doc.getString("payload_json"))
+                    }
+
                     messages.add(messageObj)
                 }
             
