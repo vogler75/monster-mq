@@ -1,0 +1,277 @@
+[
+  {
+    "name": "Bulking",
+    "namespace": "default",
+    "nodeId": "*",
+    "config": {
+      "nodes": [
+        {
+          "id": "node_1761336482614",
+          "name": "function_0",
+          "type": "function",
+          "config": {
+            "script": "if (!state.bulk) {\n    state.bulk = [];\n}\n\nlet v = JSON.parse(inputs.input1.value);\nlet ts = new Date(v.TimeMS ?? Date.now());\n\nstate.bulk.push({\n  \"topic\": inputs.input1.topic, \n  \"value\": v.Value ?? null,\n  \"time\": ts.toISOString()\n});\n\n//console.log(\"Topic: \", inputs.input1.topic, \"Length: \", state.bulk.length);\n\nif (state.bulk.length == 100) {\n  outputs.send(\"output1\", JSON.stringify(state.bulk));\n  state.bulk = [];\n}"
+          },
+          "inputs": [
+            "input1"
+          ],
+          "outputs": [
+            "output1"
+          ],
+          "language": "javascript",
+          "position": {
+            "x": 221,
+            "y": 126
+          }
+        }
+      ],
+      "version": "1.0.0",
+      "connections": [],
+      "description": null
+    },
+    "enabled": true,
+    "type": "Flow-Class",
+    "createdAt": "2025-10-24T20:16:07.875704Z",
+    "updatedAt": "2025-10-25T09:59:27.326219Z"
+  },
+  {
+    "name": "Bulking1",
+    "namespace": "default",
+    "nodeId": "local",
+    "config": {
+      "variables": {},
+      "flowClassId": "Bulking",
+      "inputMappings": [
+        {
+          "type": "TOPIC",
+          "value": "Original/#",
+          "nodeInput": "node_1761336482614.input1"
+        }
+      ],
+      "outputMappings": [
+        {
+          "topic": "Bulking/Original",
+          "nodeOutput": "node_1761336482614.output1"
+        }
+      ]
+    },
+    "enabled": true,
+    "type": "Flow-Object",
+    "createdAt": "2025-10-24T20:17:52.436724Z",
+    "updatedAt": "2025-10-25T09:59:58.870340Z"
+  },
+  {
+    "name": "neo4j",
+    "namespace": "test",
+    "nodeId": "local",
+    "config": {
+      "url": "bolt://linux5:7687",
+      "password": "manager123$",
+      "username": "neo4j",
+      "batchSize": 1000,
+      "queueSize": 1000,
+      "topicFilters": [
+        "input/#"
+      ],
+      "reconnectDelayMs": 5000,
+      "maxChangeRateSeconds": 0
+    },
+    "enabled": false,
+    "type": "Neo4j-Client",
+    "createdAt": "2025-10-24T19:48:06.408071Z",
+    "updatedAt": "2025-10-24T19:48:06.408071Z"
+  },
+  {
+    "name": "plc01",
+    "namespace": "opcua/plc01",
+    "nodeId": "local",
+    "config": {
+      "password": "password1",
+      "username": "username1",
+      "addresses": [
+        {
+          "topic": "tags",
+          "address": "BrowsePath://ns=1;s=2|Tags/#",
+          "removePath": true,
+          "publishMode": "SEPARATE"
+        }
+      ],
+      "endpointUrl": "opc.tcp://192.168.1.159:4890",
+      "reconnectDelay": 5000,
+      "requestTimeout": 5000,
+      "securityPolicy": "Basic256Sha256",
+      "certificateConfig": {
+        "countryCode": "XX",
+        "securityDir": "security",
+        "localityName": "Unknown",
+        "organization": "MonsterMQ",
+        "applicationUri": "urn:MonsterMQ:Client",
+        "applicationName": "MonsterMQ@localhost",
+        "createSelfSigned": true,
+        "keystorePassword": "password",
+        "organizationalUnit": "Client",
+        "validateServerCertificate": true,
+        "autoAcceptServerCertificates": false
+      },
+      "connectionTimeout": 10000,
+      "updateEndpointUrl": true,
+      "monitoringParameters": {
+        "bufferSize": 100,
+        "discardOldest": false,
+        "samplingInterval": 0
+      },
+      "keepAliveFailuresAllowed": 3,
+      "subscriptionSamplingInterval": 0
+    },
+    "enabled": true,
+    "type": "OPCUA-Client",
+    "createdAt": "2025-10-24T19:48:06.416022Z",
+    "updatedAt": "2026-01-19T06:48:16.065866Z"
+  },
+  {
+    "name": "plc02",
+    "namespace": "opcua/plc02",
+    "nodeId": "local",
+    "config": {
+      "password": null,
+      "username": null,
+      "addresses": [
+        {
+          "topic": "dynamic",
+          "address": "BrowsePath://Objects/Dynamic/#",
+          "removePath": true,
+          "publishMode": "SEPARATE"
+        }
+      ],
+      "endpointUrl": "opc.tcp://192.168.1.4:62540/server",
+      "reconnectDelay": 5000,
+      "requestTimeout": 5000,
+      "securityPolicy": "None",
+      "certificateConfig": {
+        "countryCode": "XX",
+        "securityDir": "security",
+        "localityName": "Unknown",
+        "organization": "MonsterMQ",
+        "applicationUri": "urn:MonsterMQ:Client",
+        "applicationName": "MonsterMQ@localhost",
+        "createSelfSigned": true,
+        "keystorePassword": "password",
+        "organizationalUnit": "Client",
+        "validateServerCertificate": true,
+        "autoAcceptServerCertificates": false
+      },
+      "connectionTimeout": 10000,
+      "updateEndpointUrl": true,
+      "monitoringParameters": {
+        "bufferSize": 100,
+        "discardOldest": false,
+        "samplingInterval": 0
+      },
+      "keepAliveFailuresAllowed": 3,
+      "subscriptionSamplingInterval": 0
+    },
+    "enabled": true,
+    "type": "OPCUA-Client",
+    "createdAt": "2025-10-24T19:48:06.420046Z",
+    "updatedAt": "2026-01-19T06:48:19.373038Z"
+  },
+  {
+    "name": "winccoa-plant1",
+    "namespace": "winccoa/plant2",
+    "nodeId": "local",
+    "config": {
+      "token": null,
+      "password": null,
+      "username": null,
+      "addresses": [
+        {
+          "query": "SELECT ALERT '_alert_hdl.._last','_alert_hdl.._abbr','_alert_hdl.._prior','_alert_hdl.._text','_alert_hdl.._direction','_alert_hdl.._value','_alert_hdl.._ack_state','_alert_hdl.._ackable','_alert_hdl.._oldest_ack','_alert_hdl.._ack_oblig','_alert_hdl.._ack_time','_alert_hdl.._comment','_alert_hdl.._panel','_alert_hdl.._partner','_alert_hdl.._alert_color','_alert_hdl.._visible','_alert_hdl.._dest','_alert_hdl.._ack_user','_alert_hdl.._class','_alert_hdl.._alert_fore_color' FROM '{*}'",
+          "topic": "alerts",
+          "answer": false,
+          "retained": false,
+          "description": ""
+        },
+        {
+          "query": "SELECT '_original.._value', '_original.._stime', '_original.._status' FROM '*.**' WHERE _DPT = \"ExampleDP_Float\"",
+          "topic": "values",
+          "answer": false,
+          "retained": false,
+          "description": ""
+        },
+        {
+          "query": "SELECT '_original.._value', '_original.._stime', '_original.._status' FROM '*.**' WHERE _DPT = \"Test\"",
+          "topic": "test",
+          "answer": false,
+          "retained": false,
+          "description": ""
+        }
+      ],
+      "messageFormat": "JSON_ISO",
+      "reconnectDelay": 5000,
+      "graphqlEndpoint": "http://192.168.1.183:4000/graphql",
+      "transformConfig": {
+        "regexPattern": "(\\d)(?=\\d)",
+        "regexReplacement": "$1/",
+        "removeSystemName": true,
+        "convertDotToSlash": true,
+        "convertUnderscoreToSlash": true
+      },
+      "connectionTimeout": 10000,
+      "websocketEndpoint": "ws://192.168.1.183:4000/graphql"
+    },
+    "enabled": false,
+    "type": "WinCCOA-Client",
+    "createdAt": "2025-10-24T19:48:06.423708Z",
+    "updatedAt": "2025-12-04T07:56:32.231946Z"
+  },
+  {
+    "name": "winccua-plant1",
+    "namespace": "winccua",
+    "nodeId": "local",
+    "config": {
+      "password": "password1",
+      "username": "username1",
+      "addresses": [
+        {
+          "type": "ACTIVE_ALARMS",
+          "topic": "alerts",
+          "retained": false,
+          "description": ""
+        },
+        {
+          "type": "TAG_VALUES",
+          "topic": "pv",
+          "retained": false,
+          "description": "",
+          "nameFilters": [
+            "PV*"
+          ],
+          "includeQuality": true
+        },
+        {
+          "type": "TAG_VALUES",
+          "topic": "HMI",
+          "retained": false,
+          "description": "",
+          "nameFilters": [
+            "HMI_*"
+          ],
+          "includeQuality": true
+        }
+      ],
+      "messageFormat": "JSON_ISO",
+      "reconnectDelay": 5000,
+      "graphqlEndpoint": "http://192.168.1.159:4000/graphql",
+      "transformConfig": {
+        "convertDotToSlash": true,
+        "convertUnderscoreToSlash": false
+      },
+      "connectionTimeout": 10000,
+      "websocketEndpoint": "ws://192.168.1.159:4000/graphql"
+    },
+    "enabled": false,
+    "type": "WinCCUA-Client",
+    "createdAt": "2025-10-24T19:48:06.427666Z",
+    "updatedAt": "2025-10-26T15:39:07.222942Z"
+  }
+]
