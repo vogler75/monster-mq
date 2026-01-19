@@ -1,0 +1,114 @@
+Release v1.6.60
+Built from commit: 3647e47
+Date: 2026-01-19 18:34:17
+
+Changes since v1.6.59:
+---
+3647e47 Fix #81: Update MCP documentation - remove 'coming soon' and fix connection examples
+62229af Update Kotlin version and add device config examples
+446231c Fix MongoDB codec error by using Document.parse() for JSON payloads
+690198c Fix #80: Store JSON payloads as native BSON objects in MongoDB archive
+f54eff3 Fix Kotlin compiler warnings (unnecessary casts, elvis operators, safe calls)
+7e36874 Add max-delay warning to consumer test script
+9e681af Add --newline option to print messages with timestamps
+3b7a7a3 Optimize message queue with bulk fetch and caching
+7c3f53a Remove consumer state files from QoS1 tests
+aef0d66 Update .gitignore
+a4e12d5 Improve session purging and orphaned message cleanup logic
+b7f5c92 Merge pull request #77 from vogler75/fix/#74
+f12cda0 Merge branch 'fix/#75' - Fix persistent session test and remove migration code
+7dcdda5 Fix OPC UA client reconnection loop not stopping when disabled
+9e36db9 Fix persistent session test and remove migration code
+5acc9e7 Merge branch 'fix/#75'
+2e0da48 Merge pull request #76 from vogler75/heuristic-wright
+aaffa1a Remove Apache Kafka, CrateDB, and Hazelcast from homepage database section
+b02c03e Add YAML-based configuration for QoS 1 test scripts
+ea597c6 Implement status-based message tracking in session stores
+42278f1 Add MQTT QoS 1 persistent session test scripts
+a12974c Fix queue-first message delivery edge cases (#75)
+4ecfa4f Implement queue-first architecture for reliable QoS 1+ delivery (#75)
+a232b10 Create THIRD-PARTY-NOTICES.txt
+103bc2f Fix event loop blocking in database health checks
+25afe7f Bump version to 1.6.59
+c3015d7 Merge branch 'fix/#72'
+3f25649 Bump version to 1.6.58
+fe138a6 Merge PR #69: Add update password function
+4c3f431 Add SQLite example config and update PostgreSQL insert
+523275d Fix #72: Handle PLC4X array types in JSON serialization
+8587db5 Bump version to 1.6.57
+f23ca8e Remove obsolete test files and update topic matcher tests
+43dbd3e Fix #70: Prevent data loss on JDBC batch insert failures
+5dc5b02 Merge branch 'fix/#67'
+59be4bc add update password function
+e5d5a37 Add comprehensive Javadoc to JClient and JManager APIs
+957c816 Remove OA4J driver implementation classes
+d9dd53d Remove JDebug and migrate logging to JManager
+581b0f2 Fix #67: Implement safe storage wrapper for Brave browser compatibility
+b3f183f Make SSL keystore path and password configurable
+9a65ce2 Add support for long-form CLI args and improve logging
+1966e92 Reduced info log messages
+b2e51b4 Change log level from info to finest for publish logs
+9b4c85b Refactor OA bridge to support multiple operations
+d75cadd Make Oa4jBridge attributes configurable via config
+8b64839 Rename OaDatapointBridge to Oa4jBridge throughout codebase
+3eed78f Add native WinCC OA datapoint bridge for $OA/ topics
+8fe5aac Refactor logger initialization and pad logger name in logs
+5dce853 Remove unused Java source directories and log statement
+e762760 Remove Oa4jManager and related integration code
+3f4450a Improve MCP handler warning log formatting
+722d759 Remove deprecated SparkplugExtension class
+a23d24c Refine startup log messages in handlers
+d3707ff Refactor MCP handler and adjust logging levels
+c75026a Remove unused DurationParser imports
+6cd91e2 Add JManager log handler and conditional logging init
+97d166d Move duration parsing to Utils and remove DurationParser
+4fd34aa Simplify shutdown logic in PublishWorkerPool
+c68fa09 Disable config file scanning in ConfigRetriever
+daeada7 Rename MqttLogHandler to SysLogHandler
+5c1a909 Refactor logging to use Utils.getLogger and improve error handling
+89864ac Refactor MonsterOA to use generic args parameter
+82c0a3a Add MonsterOA Kotlin entry point and improve shutdown
+1554d46 Remove command-line argument validation from Monster
+3e01c12 Integrate OA4J Java sources and update Maven build
+e4915f5 Delete Untitled-1.json
+5deee48 Bump version to 1.6.56
+b451422 Fix ACL modal display issue - closes #59
+a8eee42 Bump version to 1.6.55
+45455f5 Refactor duplicate key handling in JDBC loggers
+0d5846f Add duplicate key handling to JDBC loggers
+55a3938 Merge branch 'fix/#58' - Add SSL certificate verification option for MQTT Client Bridge
+ff53cb6 Improve SSL handling and config parsing for MQTT client
+829a7c7 Add SSL certificate verification toggle for MQTT clients
+dabbfa0 Bump version to 1.6.54
+1a7bc2e Refactor MQTT config to use brokerUrl instead of protocol/host/port
+955f6e9 Bump version to 1.6.53
+1159d13 Merge branch 'fix/#56' - MQTT Client Bridge loop prevention and UI improvements
+d698a16 Add Edit Address functionality to MQTT Client Bridge UI
+d519d5d Add loop prevention to MQTT Client Bridge
+65ace16 Remove groupId from SparkplugBSubscription
+c10c677 Bump version to 1.6.52
+23ad7f9 Remove SparkplugMetricExpansion from config files
+f233c04 Update OPC UA data types and improve logging granularity
+c3377fd Add subscription filters to SparkplugB decoder
+0eeb283 Add cluster node selector to SparkplugB decoder form
+5ed8386 Improve decoder rule matching and update UI button styles
+bfe28e8 Refactor SparkplugB subscription to use specific message types
+93393bc Add SparkplugB Decoder UI and backend improvements
+e72b94e Add SparkplugB decoder device integration
+06efd31 Add WinCC OA integration documentation
+0e9d6f5 Bump version to 1.6.51
+98c702c Merge branch 'feature/snowflake'
+62a07ce Improve Snowflake documentation with additional JSON schema examples
+a28cea3 Add support for storing MQTT topic in JDBC loggers
+e031179 Add autoCreateTable option to JDBC Logger config
+f288899 Add automatic Snowflake table creation and improve config handling
+19b4ea1 Refactor Snowflake JDBC Logger integration and UI
+0b90c3b Add Snowflake support to JDBC Logger
+f86546f Fix issue #53: Prevent Neo4j JDBC driver from interfering with PostgreSQL logger
+66117a8 Fix issue #52: Backend defaults overwriting password
+1c44719 docs: Strengthen git/commit guidelines in CLAUDE.md
+42491cb Fix issue #52: Improve password field in JDBC logger
+dcbbf36 Update JDK to GraalVM 25 and enable native access
+ffe0764 Merge branch 'main' of github.com:vogler75/monster-mq
+cbfa86b Update on docker entrypoint.sh
+9cc862c Remove MCP SDK dependency from broker module
