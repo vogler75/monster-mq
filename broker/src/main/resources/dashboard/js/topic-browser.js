@@ -668,8 +668,488 @@ class TopicBrowser {
     }
 }
 
+/**
+ * AI Analysis functionality for Topic Browser
+ */
+class TopicBrowserAI {
+    constructor(topicBrowser) {
+        this.topicBrowser = topicBrowser;
+        this.chatHistory = [];  // Stores {role: 'user'|'assistant', content: string}
+        this.contextLoaded = false;  // Track if topic data has been sent
+        this.quickActions = [];  // Loaded from config file
+        this.defaultSystemPrompt = `You are an MQTT topic tree analyst helping users understand their IoT data.
+The data below shows MQTT topics and their current values in a hierarchical tree format using ASCII art (├── └── │).
+
+**Output format:** Use Markdown formatting in your responses:
+- Use ## headings for sections
+- Use **bold** for emphasis
+- Use \`code\` for topic names and values
+- Use bullet lists for findings
+- Use tables when comparing data
+
+When analyzing:
+- Identify naming patterns and hierarchy structure
+- Spot anomalies or unusual values
+- Recognize IoT patterns (Sparkplug, Homie, etc.)
+- Provide concise, actionable insights
+
+Topic data:`;
+
+        this.init();
+    }
+
+    async init() {
+        // Load saved system prompt or use default
+        this.systemPrompt = localStorage.getItem('monstermq_ai_system_prompt') || this.defaultSystemPrompt;
+
+        const systemPromptEl = document.getElementById('ai-system-prompt');
+        if (systemPromptEl) {
+            systemPromptEl.value = this.systemPrompt;
+        }
+
+        // Load quick actions from config file
+        await this.loadQuickActions();
+
+        // Event listeners
+        this.setupEventListeners();
+    }
+
+    /**
+     * Load quick action prompts from config file
+     */
+    async loadQuickActions() {
+        try {
+            const response = await fetch('/config/ai-prompts.json');
+            if (response.ok) {
+                const config = await response.json();
+                this.quickActions = config.quickActions || [];
+                this.renderQuickActionButtons();
+            } else {
+                console.warn('Could not load ai-prompts.json, using defaults');
+                this.useDefaultQuickActions();
+            }
+        } catch (e) {
+            console.warn('Error loading ai-prompts.json:', e.message);
+            this.useDefaultQuickActions();
+        }
+    }
+
+    /**
+     * Fallback default prompts if config file is not available
+     */
+    useDefaultQuickActions() {
+        this.quickActions = [
+            {
+                id: 'summarize',
+                label: 'Summarize',
+                title: 'Summarize the topic tree',
+                prompt: 'Provide a high-level summary of this topic tree. What kind of data is being collected? What systems or devices are represented?'
+            },
+            {
+                id: 'find-structure',
+                label: 'Find Structure',
+                title: 'Analyze naming patterns and hierarchy',
+                prompt: 'Analyze the MQTT topic tree to identify naming patterns, hierarchy structure, and potential data models.'
+            },
+            {
+                id: 'detect-anomalies',
+                label: 'Detect Anomalies',
+                title: 'Find unusual values or outliers',
+                prompt: 'Look for anomalies in this data: unusual values, potential errors, outliers, or values that seem inconsistent with their neighbors.'
+            }
+        ];
+        this.renderQuickActionButtons();
+    }
+
+    /**
+     * Dynamically render quick action buttons from config
+     */
+    renderQuickActionButtons() {
+        const container = document.getElementById('ai-quick-actions');
+        if (!container) return;
+
+        // Clear existing buttons
+        container.innerHTML = '';
+
+        // Create buttons from config
+        for (const action of this.quickActions) {
+            const button = document.createElement('button');
+            button.id = `ai-${action.id}`;
+            button.className = 'ai-action-btn';
+            button.title = action.title || action.label;
+            button.textContent = action.label;
+            button.addEventListener('click', () => this.quickAction(action.prompt));
+            container.appendChild(button);
+        }
+    }
+
+    setupEventListeners() {
+        // Toggle panel
+        const toggleBtn = document.getElementById('toggle-ai-panel');
+        const closeBtn = document.getElementById('close-ai-panel');
+
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => this.togglePanel());
+        }
+
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.togglePanel(false));
+        }
+
+        // Send button and enter key
+        const sendBtn = document.getElementById('ai-send');
+        const questionInput = document.getElementById('ai-question');
+
+        if (sendBtn) {
+            sendBtn.addEventListener('click', () => this.analyze());
+        }
+
+        if (questionInput) {
+            questionInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.analyze();
+                }
+            });
+        }
+
+        // Quick action buttons are now dynamically created in renderQuickActionButtons()
+
+        // System prompt
+        const resetPromptBtn = document.getElementById('ai-reset-prompt');
+        const systemPromptEl = document.getElementById('ai-system-prompt');
+
+        if (resetPromptBtn) {
+            resetPromptBtn.addEventListener('click', () => this.resetPrompt());
+        }
+
+        if (systemPromptEl) {
+            systemPromptEl.addEventListener('change', (e) => {
+                this.systemPrompt = e.target.value;
+                localStorage.setItem('monstermq_ai_system_prompt', this.systemPrompt);
+            });
+        }
+
+        // Clear context button
+        const clearContextBtn = document.getElementById('ai-clear-context');
+        if (clearContextBtn) {
+            clearContextBtn.addEventListener('click', () => this.clearContext());
+        }
+    }
+
+    /**
+     * Clear chat history and context - starts fresh conversation
+     */
+    clearContext() {
+        this.chatHistory = [];
+        this.contextLoaded = false;
+
+        // Clear chat history UI
+        const chatHistory = document.getElementById('ai-chat-history');
+        if (chatHistory) {
+            chatHistory.innerHTML = '';
+        }
+
+        // Reset topic count
+        const topicCountEl = document.getElementById('ai-topic-count');
+        if (topicCountEl) {
+            topicCountEl.textContent = '-';
+            topicCountEl.style.color = 'var(--monster-teal)';
+        }
+
+        // Update context indicator
+        this.updateContextIndicator();
+
+        console.log('AI context cleared - next question will reload topic data');
+    }
+
+    /**
+     * Update the visual indicator showing if context is loaded
+     */
+    updateContextIndicator() {
+        const indicator = document.getElementById('ai-context-status');
+        if (indicator) {
+            if (this.contextLoaded) {
+                indicator.textContent = '● Context loaded';
+                indicator.style.color = 'var(--monster-green)';
+                indicator.title = 'Topic data is cached. Follow-up questions will be faster.';
+            } else {
+                indicator.textContent = '○ No context';
+                indicator.style.color = 'var(--text-muted)';
+                indicator.title = 'Next question will load topic data.';
+            }
+        }
+    }
+
+    togglePanel(forceState = null) {
+        const panel = document.getElementById('ai-panel');
+        const toggleBtn = document.getElementById('toggle-ai-panel');
+        const layout = document.querySelector('.topic-browser-layout');
+
+        if (!panel || !layout) return;
+
+        const shouldShow = forceState !== null ? forceState : panel.style.display === 'none';
+
+        if (shouldShow) {
+            panel.style.display = 'flex';
+            layout.classList.add('ai-open');
+            if (toggleBtn) toggleBtn.classList.add('active');
+            this.updateContextInfo();
+        } else {
+            panel.style.display = 'none';
+            layout.classList.remove('ai-open');
+            if (toggleBtn) toggleBtn.classList.remove('active');
+        }
+    }
+
+    updateContextInfo() {
+        const topicPatternEl = document.getElementById('ai-topic-pattern');
+        const archiveGroupEl = document.getElementById('ai-archive-group');
+
+        if (topicPatternEl) {
+            topicPatternEl.textContent = this.getTopicPattern();
+        }
+
+        if (archiveGroupEl) {
+            archiveGroupEl.textContent = this.topicBrowser.selectedArchiveGroup || 'Default';
+        }
+    }
+
+    updateTopicCount(count, maxTopics) {
+        const topicCountEl = document.getElementById('ai-topic-count');
+        if (topicCountEl) {
+            if (count >= maxTopics) {
+                // Show warning color when limit reached
+                topicCountEl.textContent = `${count}+`;
+                topicCountEl.style.color = 'var(--monster-orange, #f59e0b)';
+            } else {
+                topicCountEl.textContent = count;
+                topicCountEl.style.color = 'var(--monster-teal)';
+            }
+        }
+    }
+
+    getTopicPattern() {
+        // Use selected topic + subtopics, or all topics
+        if (this.topicBrowser.selectedTopic && this.topicBrowser.selectedTopic !== 'root') {
+            return this.topicBrowser.selectedTopic + '/#';
+        }
+        return '#'; // All topics
+    }
+
+    async analyze(question = null) {
+        const questionInput = document.getElementById('ai-question');
+        const q = question || (questionInput ? questionInput.value.trim() : '');
+
+        if (!q) return;
+
+        // Add user message to chat UI
+        this.addMessage('user', q);
+
+        if (questionInput) {
+            questionInput.value = '';
+        }
+
+        // Update context info
+        this.updateContextInfo();
+
+        // Show loading
+        const loadingId = this.addMessage('assistant', 'Analyzing topics...', true);
+
+        try {
+            const maxTopics = this.getMaxTopics();
+            const result = await this.callAnalyzeAPI(q);
+            this.removeMessage(loadingId);
+
+            // Update topic count display
+            this.updateTopicCount(result.topicsAnalyzed, maxTopics);
+
+            if (result.error) {
+                this.addMessage('assistant', `Error: ${result.error}`, false, true);
+            } else {
+                // Mark context as loaded after successful first request
+                if (!this.contextLoaded) {
+                    this.contextLoaded = true;
+                    this.updateContextIndicator();
+                }
+
+                // Save messages to chat history for follow-up questions
+                // Note: Topic data is always sent to the backend, chat history provides conversation context
+                this.chatHistory.push({ role: 'user', content: q });
+                this.chatHistory.push({ role: 'assistant', content: result.response });
+
+                let statsText = '';
+                if (result.topicsAnalyzed > 0) {
+                    if (result.topicsAnalyzed >= maxTopics) {
+                        statsText = `\n\n_(Analyzed ${result.topicsAnalyzed} topics - limit reached, increase "Max" for more)_`;
+                    } else {
+                        statsText = `\n\n_(Analyzed ${result.topicsAnalyzed} topics)_`;
+                    }
+                }
+                const responseText = result.response + statsText;
+                this.addMessage('assistant', responseText);
+            }
+        } catch (err) {
+            this.removeMessage(loadingId);
+            this.addMessage('assistant', `Error: ${err.message}`, false, true);
+        }
+    }
+
+    quickAction(question) {
+        const questionInput = document.getElementById('ai-question');
+        if (questionInput) {
+            questionInput.value = question;
+        }
+        this.analyze(question);
+    }
+
+    getMaxTopics() {
+        const maxTopicsEl = document.getElementById('ai-max-topics');
+        return maxTopicsEl ? parseInt(maxTopicsEl.value, 10) : 100;
+    }
+
+    async callAnalyzeAPI(question) {
+        const query = `
+            query AnalyzeTopics($archiveGroup: String!, $topicPattern: String!, $question: String!, $systemPrompt: String, $maxTopics: Int, $chatHistory: [ChatMessage!]) {
+                genai {
+                    analyzeTopics(
+                        archiveGroup: $archiveGroup
+                        topicPattern: $topicPattern
+                        question: $question
+                        systemPrompt: $systemPrompt
+                        maxTopics: $maxTopics
+                        chatHistory: $chatHistory
+                    ) {
+                        response
+                        topicsAnalyzed
+                        model
+                        error
+                    }
+                }
+            }
+        `;
+
+        const maxTopics = this.getMaxTopics();
+        const isFollowUp = this.contextLoaded && this.chatHistory.length > 0;
+
+        const variables = {
+            archiveGroup: this.topicBrowser.selectedArchiveGroup || 'Default',
+            topicPattern: this.getTopicPattern(),
+            question: question,
+            systemPrompt: this.systemPrompt !== this.defaultSystemPrompt ? this.systemPrompt : null,
+            maxTopics: maxTopics,
+            // Only send chat history for follow-up questions (after context is loaded)
+            chatHistory: isFollowUp ? this.chatHistory : null
+        };
+
+        console.log('=== AI Analysis Request ===');
+        console.log('Is follow-up:', isFollowUp);
+        console.log('Chat history length:', this.chatHistory.length);
+
+        const result = await graphqlClient.query(query, variables);
+
+        if (!result || !result.genai || !result.genai.analyzeTopics) {
+            return { error: 'GenAI is not available. Check your configuration.' };
+        }
+
+        // Log the full LLM response for debugging
+        console.log('=== AI Analysis Response ===');
+        console.log('Topics analyzed:', result.genai.analyzeTopics.topicsAnalyzed);
+        console.log('Model:', result.genai.analyzeTopics.model);
+        console.log('Error:', result.genai.analyzeTopics.error);
+        console.log('Response length:', result.genai.analyzeTopics.response?.length || 0);
+        // Log FULL response - copy from console to see complete text
+        console.log('FULL RESPONSE START >>>');
+        console.log(result.genai.analyzeTopics.response);
+        console.log('<<< FULL RESPONSE END');
+        console.log('============================');
+
+        return result.genai.analyzeTopics;
+    }
+
+    addMessage(role, content, isLoading = false, isError = false) {
+        const id = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        const chatHistory = document.getElementById('ai-chat-history');
+
+        if (!chatHistory) return id;
+
+        // Log content being added to help debug truncation issues
+        console.log(`=== Adding ${role} message ===`);
+        console.log('Content length:', content?.length || 0);
+        console.log('Content preview (first 500 chars):', content?.substring(0, 500));
+        console.log('Content preview (last 500 chars):', content?.substring(content.length - 500));
+
+        const msgDiv = document.createElement('div');
+        msgDiv.id = id;
+        msgDiv.className = `chat-message chat-${role}`;
+
+        if (isLoading) msgDiv.classList.add('loading');
+        if (isError) msgDiv.classList.add('error');
+
+        // Use textContent for plain text to avoid any HTML parsing issues
+        // Then apply formatting
+        const formattedContent = this.formatMessage(content);
+        console.log('Formatted content length:', formattedContent?.length || 0);
+        msgDiv.innerHTML = formattedContent;
+
+        chatHistory.appendChild(msgDiv);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+
+        return id;
+    }
+
+    removeMessage(id) {
+        const msg = document.getElementById(id);
+        if (msg) {
+            msg.remove();
+        }
+    }
+
+    formatMessage(content) {
+        // Use marked.js for full markdown rendering if available
+        if (typeof marked !== 'undefined') {
+            try {
+                // Configure marked for safe rendering
+                marked.setOptions({
+                    breaks: true,      // Convert \n to <br>
+                    gfm: true,         // GitHub Flavored Markdown
+                    headerIds: false,  // Don't add IDs to headers
+                    mangle: false      // Don't mangle email addresses
+                });
+                return marked.parse(content);
+            } catch (e) {
+                console.warn('Markdown parsing failed, falling back to simple formatting:', e);
+            }
+        }
+
+        // Fallback: simple formatting if marked is not available
+        let result = content
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        result = result.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+        result = result.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+        result = result.replace(/\n/g, '<br>');
+
+        return result;
+    }
+
+    resetPrompt() {
+        this.systemPrompt = this.defaultSystemPrompt;
+        const systemPromptEl = document.getElementById('ai-system-prompt');
+        if (systemPromptEl) {
+            systemPromptEl.value = this.systemPrompt;
+        }
+        localStorage.removeItem('monstermq_ai_system_prompt');
+    }
+}
+
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize topic browser (auth check is handled internally)
-    new TopicBrowser();
+    const topicBrowser = new TopicBrowser();
+
+    // Initialize AI functionality
+    window.topicBrowserAI = new TopicBrowserAI(topicBrowser);
 });

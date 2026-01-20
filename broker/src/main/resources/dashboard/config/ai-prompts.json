@@ -1,0 +1,22 @@
+{
+  "quickActions": [
+    {
+      "id": "summarize",
+      "label": "Summarize",
+      "title": "Summarize the topic tree",
+      "prompt": "Provide a high-level summary of this topic tree. What kind of data is being collected? What systems or devices are represented?"
+    },
+    {
+      "id": "find-structure",
+      "label": "Find Structure",
+      "title": "Analyze naming patterns and hierarchy",
+      "prompt": "Analyze the MQTT topic tree to identify reusable structures and data models:\n\n1. **Topic Hierarchy Analysis:**\n   - Identify naming patterns and conventions (e.g., location/device/metric)\n   - Detect object types vs object instances (e.g., \"sensors/temperature\" is a type, \"sensors/sensor-001\" is an instance)\n   - Find common path segments that represent categories or classes\n\n2. **Payload Structure Analysis:**\n   - Examine JSON payloads to identify common schemas\n   - Find recurring field patterns across different topics\n   - Detect potential data models (e.g., all temperature sensors share {value, unit, timestamp})\n\n3. **Pattern Recognition:**\n   - Group topics by similar payload structures\n   - Identify templates or base types that multiple instances follow\n   - Suggest potential object hierarchies or inheritance patterns\n\nPlease present your findings as:\n- Identified object types/classes with their common structure\n- Object instances found for each type\n- Suggested data model or schema for reusable structures"
+    },
+    {
+      "id": "detect-anomalies",
+      "label": "Detect Anomalies",
+      "title": "Find unusual values or outliers",
+      "prompt": "Look for anomalies in this data: unusual values, potential errors, outliers, or values that seem inconsistent with their neighbors."
+    }
+  ]
+}

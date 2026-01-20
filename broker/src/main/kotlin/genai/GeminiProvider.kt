@@ -24,7 +24,7 @@ class GeminiProvider : IGenAiProvider {
     private var client: Client? = null
     private var vertx: Vertx? = null
     private var docsPath: String = "docs"
-    private var maxTokens: Int = 2048
+    private var maxTokens: Int? = null  // null = use model default (no limit)
     private var temperature: Double = 0.7
     private var initialized: Boolean = false
 
@@ -41,8 +41,9 @@ class GeminiProvider : IGenAiProvider {
             // Get optional model name
             modelName = config["model"] as? String ?: "gemini-2.5-flash"
 
-            // Get optional parameters
-            maxTokens = (config["maxTokens"] as? Number)?.toInt() ?: 2048
+            // Get optional parameters (0 or null = no limit, use model default)
+            val configMaxTokens = (config["maxTokens"] as? Number)?.toInt()
+            maxTokens = if (configMaxTokens == null || configMaxTokens <= 0) null else configMaxTokens
             temperature = (config["temperature"] as? Number)?.toDouble() ?: 0.7
             docsPath = config["docsPath"] as? String ?: "docs"
 
@@ -82,10 +83,15 @@ class GeminiProvider : IGenAiProvider {
                 logger.finer("Sending request to Gemini: ${fullPrompt.substring(0, minOf(100, fullPrompt.length))}...")
 
                 // Create generation config
-                val config = GenerateContentConfig.builder()
+                val configBuilder = GenerateContentConfig.builder()
                     .temperature(temperature.toFloat())
-                    .maxOutputTokens(maxTokens)
-                    .build()
+
+                // Only set maxOutputTokens if configured (null = use model default)
+                if (maxTokens != null) {
+                    configBuilder.maxOutputTokens(maxTokens!!)
+                }
+
+                val config = configBuilder.build()
 
                 // Call Gemini API
                 logger.fine("Calling Gemini API with model: $modelName")
