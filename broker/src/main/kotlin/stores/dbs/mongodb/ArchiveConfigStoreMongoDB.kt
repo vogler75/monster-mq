@@ -90,7 +90,6 @@ class ArchiveConfigStoreMongoDB(
                     }
                 }
 
-                logger.info("Retrieved ${results.size} archive groups from MongoDB")
                 results
             } catch (e: Exception) {
                 logger.severe("Error retrieving archive groups from MongoDB: ${e.message}")
