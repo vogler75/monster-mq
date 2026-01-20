@@ -178,43 +178,19 @@ class MessageArchiveMongoDB(
     }
 
     private fun createIndexes(targetCollection: MongoCollection<Document>) {
+        // MongoDB time-series collections automatically create a compound index on (meta, time)
+        // With our optimized structure (only 'topic' in meta), the automatic index covers:
+        // - topic + time queries (most common access pattern)
+        //
+        // Additional index on time only for pure time-range queries (e.g., purge operations)
         try {
-            // Compound index for topic + time queries (most common)
-            targetCollection.createIndex(
-                Document(mapOf(
-                    "meta.topic" to 1,
-                    "time" to -1
-                )),
-                IndexOptions().name("topic_time_idx")
-            )
-
-            // Index for time-range queries
             targetCollection.createIndex(
                 Indexes.descending("time"),
                 IndexOptions().name("time_idx")
             )
-
-            // Text index for topic pattern matching (better than regex)
-            // NOTE: Commented out because MongoDB time-series collections do not support text indexes
-            // Error: "Text indexes are not supported on time-series collections" (code 72)
-            // Topic pattern matching will fall back to regex queries which are less efficient
-            // but still functional for the archive use case
-            /*
-            targetCollection.createIndex(
-                Indexes.text("meta.topic"),
-                IndexOptions().name("topic_text_idx")
-            )
-            */
-
-            // Index for client_id queries
-            targetCollection.createIndex(
-                Indexes.ascending("meta.client_id"),
-                IndexOptions().name("client_idx")
-            )
-
-            logger.info("Created optimized indexes for collection: $collectionName")
+            logger.fine { "Created time_idx index for collection: $collectionName" }
         } catch (e: Exception) {
-            logger.warning("Error creating indexes: ${e.message}")
+            logger.warning("Error creating time index: ${e.message}")
         }
     }
 
@@ -223,15 +199,16 @@ class MessageArchiveMongoDB(
 
         try {
             val documents = messages.map { message ->
+                // Document structure optimized for time-series index:
+                // - 'meta' contains ONLY 'topic' for optimal (topic, time) index
+                // - Other fields at top level (don't affect index efficiency)
                 val doc = Document(mapOf(
-                    "meta" to Document(mapOf(
-                        "topic" to message.topicName,
-                        "client_id" to message.clientId,
-                        "message_uuid" to message.messageUuid,
-                        "qos" to message.qosLevel,
-                        "retained" to message.isRetain
-                    )),
-                    "time" to Date(message.time.toEpochMilli())
+                    "meta" to Document("topic", message.topicName),
+                    "time" to Date(message.time.toEpochMilli()),
+                    "client_id" to message.clientId,
+                    "qos" to message.qosLevel,
+                    "retained" to message.isRetain,
+                    "message_uuid" to message.messageUuid
                 ))
 
                 // Only try JSON conversion if payloadFormat is JSON
@@ -314,11 +291,12 @@ class MessageArchiveMongoDB(
                     val meta = doc.get("meta", Document::class.java)
                     val timestamp = doc.getDate("time").toInstant().toEpochMilli()
 
+                    // Read fields: new structure has qos/client_id at top level, legacy has them in meta
                     val messageObj = JsonObject()
                         .put("topic", meta?.getString("topic") ?: topic)
                         .put("timestamp", timestamp)
-                        .put("qos", meta?.getInteger("qos") ?: 0)
-                        .put("client_id", meta?.getString("client_id") ?: "")
+                        .put("qos", doc.getInteger("qos") ?: meta?.getInteger("qos") ?: 0)
+                        .put("client_id", doc.getString("client_id") ?: meta?.getString("client_id") ?: "")
 
                     // Handle both new format (payload as BSON) and legacy format (payload_blob/payload_json)
                     val nativePayload = doc.get("payload")
