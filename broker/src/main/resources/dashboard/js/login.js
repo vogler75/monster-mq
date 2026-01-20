@@ -12,6 +12,9 @@ class LoginManager {
     }
 
     init() {
+        // Clear any stale session data from previous sessions
+        sessionStorage.clear();
+
         if (this.isLoggedIn()) {
             window.location.href = '/pages/dashboard.html';
             return;

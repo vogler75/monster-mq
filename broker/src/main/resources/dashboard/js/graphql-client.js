@@ -1,7 +1,223 @@
 class GraphQLDashboardClient {
     constructor(endpoint = '/graphql') {
         this.endpoint = endpoint;
+        this.tokenCheckInterval = null;
+        this.WARNING_THRESHOLD_SECONDS = 5 * 60; // 5 minutes
+        this.CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
     }
+
+    // ===================== SESSION EXPIRY HANDLING =====================
+
+    /**
+     * Start periodic token expiration check
+     */
+    startTokenExpirationCheck() {
+        // Don't start if already running
+        if (this.tokenCheckInterval) {
+            return;
+        }
+
+        // Skip if on login page
+        if (window.location.pathname.includes('login')) {
+            return;
+        }
+
+        // Initial check after 1 second delay
+        setTimeout(() => {
+            this.checkTokenExpiration();
+        }, 1000);
+
+        // Periodic check every 30 seconds
+        this.tokenCheckInterval = setInterval(() => {
+            this.checkTokenExpiration();
+        }, this.CHECK_INTERVAL_MS);
+
+        console.log('Token expiration check started');
+    }
+
+    /**
+     * Stop the token expiration check interval
+     */
+    stopTokenExpirationCheck() {
+        if (this.tokenCheckInterval) {
+            clearInterval(this.tokenCheckInterval);
+            this.tokenCheckInterval = null;
+            console.log('Token expiration check stopped');
+        }
+    }
+
+    /**
+     * Check if the token is expired or about to expire
+     */
+    checkTokenExpiration() {
+        const token = safeStorage.getItem('monstermq_token');
+
+        // Skip if no token or auth is disabled
+        if (!token || token === 'null') {
+            return;
+        }
+
+        try {
+            // Decode JWT payload
+            const parts = token.split('.');
+            if (parts.length !== 3) {
+                return;
+            }
+
+            const payload = JSON.parse(atob(parts[1]));
+            const expiryTime = payload.exp; // Unix timestamp in seconds
+            const currentTime = Math.floor(Date.now() / 1000);
+            const remainingSeconds = expiryTime - currentTime;
+
+            console.log(`Token expiry check: ${remainingSeconds} seconds remaining`);
+
+            if (remainingSeconds <= 0) {
+                // Token has expired
+                this.handleTokenExpiration();
+            } else if (remainingSeconds <= this.WARNING_THRESHOLD_SECONDS) {
+                // Token is about to expire - show warning (only once)
+                this.showExpirationWarning(remainingSeconds);
+            }
+        } catch (e) {
+            console.warn('Failed to check token expiration:', e.message);
+        }
+    }
+
+    /**
+     * Show a warning notification before session expires
+     */
+    showExpirationWarning(remainingSeconds) {
+        // Only show warning once per session
+        if (sessionStorage.getItem('monstermq_expiry_warning_shown')) {
+            return;
+        }
+        sessionStorage.setItem('monstermq_expiry_warning_shown', 'true');
+
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = remainingSeconds % 60;
+        const timeStr = minutes > 0 ? `${minutes} minute${minutes > 1 ? 's' : ''}` : `${seconds} seconds`;
+
+        // Create toast notification
+        const toast = document.createElement('div');
+        toast.id = 'session-expiry-warning';
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff9800;
+            color: white;
+            padding: 16px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            max-width: 350px;
+            animation: slideIn 0.3s ease-out;
+        `;
+        toast.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 24px;">⚠️</span>
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 4px;">Session Expiring Soon</div>
+                    <div>Your session will expire in ${timeStr}. Please save your work.</div>
+                </div>
+            </div>
+        `;
+
+        // Add animation styles
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+        document.body.appendChild(toast);
+
+        // Auto-dismiss after 10 seconds
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease-in forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, 10000);
+    }
+
+    /**
+     * Handle expired token - show modal and redirect to login
+     */
+    handleTokenExpiration() {
+        // Stop checking
+        this.stopTokenExpirationCheck();
+
+        // Clear all auth data
+        safeStorage.removeItem('monstermq_token');
+        safeStorage.removeItem('monstermq_username');
+        safeStorage.removeItem('monstermq_isAdmin');
+        sessionStorage.clear();
+
+        // Create modal overlay
+        const modal = document.createElement('div');
+        modal.id = 'session-expired-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        `;
+
+        let countdown = 5;
+        modal.innerHTML = `
+            <div style="background: white; padding: 32px 48px; border-radius: 12px; text-align: center; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                <div style="font-size: 48px; margin-bottom: 16px;">🔒</div>
+                <h2 style="margin: 0 0 12px 0; color: #333; font-size: 24px;">Session Expired</h2>
+                <p style="color: #666; margin: 0 0 24px 0; font-size: 14px;">Your authentication session has expired. Please log in again to continue.</p>
+                <button id="session-expired-login-btn" style="
+                    background: #1976d2;
+                    color: white;
+                    border: none;
+                    padding: 12px 32px;
+                    border-radius: 6px;
+                    font-size: 16px;
+                    cursor: pointer;
+                    transition: background 0.2s;
+                ">Return to Login</button>
+                <p id="session-expired-countdown" style="color: #999; margin: 16px 0 0 0; font-size: 12px;">Redirecting in ${countdown} seconds...</p>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Button click handler
+        document.getElementById('session-expired-login-btn').addEventListener('click', () => {
+            window.location.href = '/pages/login.html';
+        });
+
+        // Auto-redirect countdown
+        const countdownEl = document.getElementById('session-expired-countdown');
+        const countdownInterval = setInterval(() => {
+            countdown--;
+            if (countdown <= 0) {
+                clearInterval(countdownInterval);
+                window.location.href = '/pages/login.html';
+            } else {
+                countdownEl.textContent = `Redirecting in ${countdown} seconds...`;
+            }
+        }, 1000);
+    }
+
+    // ===================== GRAPHQL QUERY =====================
 
     async query(query, variables = {}) {
         const token = safeStorage.getItem('monstermq_token');
@@ -47,6 +263,15 @@ class GraphQLDashboardClient {
             console.log('Status:', response.status, response.statusText);
             console.log('Headers:', Object.fromEntries(response.headers.entries()));
 
+            // Handle authentication errors (401/403)
+            if (response.status === 401 || response.status === 403) {
+                console.error('=== Authentication Error ===');
+                console.error('Status:', response.status, response.statusText);
+                console.error('============================');
+                this.handleTokenExpiration();
+                throw new Error(`Authentication failed: ${response.status} ${response.statusText}`);
+            }
+
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('=== GraphQL HTTP Error ===');
@@ -76,6 +301,17 @@ class GraphQLDashboardClient {
                     console.error(`Error ${index + 1}:`, error);
                 });
                 console.error('===========================');
+
+                // Check for authentication-related errors in GraphQL response
+                const errorMessage = result.errors[0].message.toLowerCase();
+                if (errorMessage.includes('unauthorized') ||
+                    errorMessage.includes('authentication') ||
+                    errorMessage.includes('token expired') ||
+                    errorMessage.includes('not authenticated') ||
+                    errorMessage.includes('invalid token')) {
+                    this.handleTokenExpiration();
+                }
+
                 throw new Error(result.errors[0].message);
             }
 
@@ -477,3 +713,10 @@ window.debugAuth = function () {
 // Auto-run debug on load
 console.log('GraphQL Client loaded. Run debugAuth() to check authentication status.');
 window.debugAuth();
+
+// Auto-start token expiration check when page loads (if authenticated)
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.graphqlClient) {
+        window.graphqlClient.startTokenExpirationCheck();
+    }
+});

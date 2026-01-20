@@ -291,9 +291,17 @@ class SidebarManager {
     }
 
     logout() {
+        // Stop token expiration check
+        if (window.graphqlClient) {
+            window.graphqlClient.stopTokenExpirationCheck();
+        }
+
+        // Clear all auth data
         safeStorage.removeItem('monstermq_token');
         safeStorage.removeItem('monstermq_username');
         safeStorage.removeItem('monstermq_isAdmin');
+        sessionStorage.clear();
+
         window.location.href = '/pages/login.html';
     }
 }
