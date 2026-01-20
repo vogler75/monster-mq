@@ -18,12 +18,29 @@ class SidebarManager {
     }
 
     init() {
+        this.injectFavicons();
         this.renderMenu();
         this.setupUI();
         this.restoreSidebarState();
         this.restoreSidebarScroll();
         this.setActiveNavItem();
         this.setupEventListeners();
+    }
+
+    injectFavicons() {
+        const favicons = [
+            { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+            { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32x32.png' },
+            { rel: 'icon', type: 'image/png', sizes: '16x16', href: '/favicon-16x16.png' },
+            { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' }
+        ];
+        favicons.forEach(f => {
+            if (!document.querySelector(`link[href="${f.href}"]`)) {
+                const link = document.createElement('link');
+                Object.entries(f).forEach(([k, v]) => link.setAttribute(k, v));
+                document.head.appendChild(link);
+            }
+        });
     }
 
     renderMenu() {
