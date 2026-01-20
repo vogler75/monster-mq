@@ -353,8 +353,8 @@ class GraphQLServer(
         val flowQueries = deviceStore?.let { FlowQueries(vertx, it) }
         val flowMutations = deviceStore?.let { FlowMutations(vertx, it) }
 
-        // Initialize GenAI resolver
-        val genAiResolver = genAiProvider?.let { GenAiResolver(vertx, it) }
+        // Initialize GenAI resolver (with archiveHandler for topic analysis)
+        val genAiResolver = genAiProvider?.let { GenAiResolver(vertx, it, archiveHandler) }
 
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
@@ -481,6 +481,7 @@ class GraphQLServer(
                 builder.apply {
                     genAiResolver?.let { resolver ->
                         dataFetcher("generate", resolver.generate())
+                        dataFetcher("analyzeTopics", resolver.analyzeTopics())
                     }
                 }
             }

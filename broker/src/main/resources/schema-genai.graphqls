@@ -37,6 +37,63 @@ type GenAiQuery {
     ): GenAiResponse!
 }
 
+"A single message in the chat history"
+input ChatMessage {
+    "Role of the message sender (user or assistant)"
+    role: String!
+
+    "Content of the message"
+    content: String!
+}
+
+"Result of topic analysis with metadata"
+type TopicAnalysisResponse {
+    "The AI-generated analysis"
+    response: String!
+
+    "Number of topics included in context"
+    topicsAnalyzed: Int!
+
+    "The model used"
+    model: String
+
+    "Error message if failed"
+    error: String
+}
+
+# Extend GenAiQuery with topic analysis
+extend type GenAiQuery {
+    """
+    Analyze MQTT topics using AI.
+    Collects topic values from the LastValueStore and sends them to the LLM for analysis.
+
+    On the first request (empty chatHistory), topic data is included in the prompt.
+    On subsequent requests, only the chat history is sent to continue the conversation.
+    """
+    analyzeTopics(
+        "Archive group to query"
+        archiveGroup: String!
+
+        "MQTT topic pattern (supports + and # wildcards)"
+        topicPattern: String!
+
+        "User's question about the topics"
+        question: String!
+
+        "Custom system prompt (optional)"
+        systemPrompt: String
+
+        "Max topics to include (default 100)"
+        maxTopics: Int
+
+        "Max value length before truncation (default 1000 chars)"
+        maxValueLength: Int
+
+        "Chat history from previous exchanges (optional). When provided, topic data is not re-sent."
+        chatHistory: [ChatMessage!]
+    ): TopicAnalysisResponse!
+}
+
 # Extend the root Query type with GenAI capabilities
 extend type Query {
     """
