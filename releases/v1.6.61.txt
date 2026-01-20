@@ -1,0 +1,12 @@
+Release v1.6.61
+Built from commit: a1c720c
+Date: 2026-01-20 20:54:59
+
+Changes since v1.6.60:
+---
+a1c720c Merge feature/#84: Add LLM-powered topic tree analysis to Dashboard
+269ca5d Fix #84: Add LLM-powered topic tree analysis to Dashboard
+7e128bf Add GitHub sponsor username to FUNDING.yml
+98da3fa Optimize MongoDB message archive schema and indexing
+6b94e9a Remove redundant archive group retrieval logs
+5852eed Fix #68: Add session expiry handling with warnings and auto-redirect
