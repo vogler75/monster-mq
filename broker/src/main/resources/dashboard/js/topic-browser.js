@@ -7,6 +7,8 @@ const STATE_KEYS = {
     AI_PANEL_OPEN: 'monstermq_topic_browser_ai_open',
     AI_CHAT_HISTORY: 'monstermq_topic_browser_chat_history',
     AI_CONTEXT_LOADED: 'monstermq_topic_browser_ai_context_loaded',
+    AI_CONTEXT_TOPIC: 'monstermq_topic_browser_ai_context_topic',
+    AI_CONTEXT_ARCHIVE_GROUP: 'monstermq_topic_browser_ai_context_archive_group',
     ARCHIVE_GROUP: 'monstermq_selected_archive_group',
     AI_SYSTEM_PROMPT: 'monstermq_ai_system_prompt'
 };
@@ -825,6 +827,8 @@ class TopicBrowserAI {
         this.topicBrowser = topicBrowser;
         this.chatHistory = [];  // Stores {role: 'user'|'assistant', content: string}
         this.contextLoaded = false;  // Track if topic data has been sent
+        this.contextTopic = null;  // Topic pattern used when context was loaded
+        this.contextArchiveGroup = null;  // Archive group used when context was loaded
         this.quickActions = [];  // Loaded from config file
         this.defaultSystemPrompt = null;  // Will be loaded from config file
         this.isPanelOpen = false;  // Track panel state
@@ -1015,6 +1019,8 @@ Topic data:`;
     clearContext() {
         this.chatHistory = [];
         this.contextLoaded = false;
+        this.contextTopic = null;
+        this.contextArchiveGroup = null;
 
         // Clear chat history UI
         const chatHistory = document.getElementById('ai-chat-history');
@@ -1085,11 +1091,21 @@ Topic data:`;
         const archiveGroupEl = document.getElementById('ai-archive-group');
 
         if (topicPatternEl) {
-            topicPatternEl.textContent = this.getTopicPattern();
+            // Use saved context topic if context is loaded, otherwise show current selection
+            if (this.contextLoaded && this.contextTopic) {
+                topicPatternEl.textContent = this.contextTopic;
+            } else {
+                topicPatternEl.textContent = this.getTopicPattern();
+            }
         }
 
         if (archiveGroupEl) {
-            archiveGroupEl.textContent = this.topicBrowser.selectedArchiveGroup || 'Default';
+            // Use saved context archive group if context is loaded, otherwise show current selection
+            if (this.contextLoaded && this.contextArchiveGroup) {
+                archiveGroupEl.textContent = this.contextArchiveGroup;
+            } else {
+                archiveGroupEl.textContent = this.topicBrowser.selectedArchiveGroup || 'Default';
+            }
         }
     }
 
@@ -1148,7 +1164,11 @@ Topic data:`;
                 // Mark context as loaded after successful first request
                 if (!this.contextLoaded) {
                     this.contextLoaded = true;
+                    // Save the topic pattern and archive group used for this context
+                    this.contextTopic = this.getTopicPattern();
+                    this.contextArchiveGroup = this.topicBrowser.selectedArchiveGroup || 'Default';
                     this.updateContextIndicator();
+                    this.updateContextInfo();
                 }
 
                 // Save messages to chat history for follow-up questions
@@ -1342,6 +1362,18 @@ Topic data:`;
 
             // Save context loaded state
             localStorage.setItem(STATE_KEYS.AI_CONTEXT_LOADED, this.contextLoaded ? 'true' : 'false');
+
+            // Save context topic and archive group
+            if (this.contextTopic) {
+                localStorage.setItem(STATE_KEYS.AI_CONTEXT_TOPIC, this.contextTopic);
+            } else {
+                localStorage.removeItem(STATE_KEYS.AI_CONTEXT_TOPIC);
+            }
+            if (this.contextArchiveGroup) {
+                localStorage.setItem(STATE_KEYS.AI_CONTEXT_ARCHIVE_GROUP, this.contextArchiveGroup);
+            } else {
+                localStorage.removeItem(STATE_KEYS.AI_CONTEXT_ARCHIVE_GROUP);
+            }
         } catch (e) {
             console.warn('Failed to save AI state:', e);
         }
@@ -1360,11 +1392,22 @@ Topic data:`;
                 this.rebuildChatUI();
             }
 
+            // Restore context topic and archive group
+            const savedContextTopic = localStorage.getItem(STATE_KEYS.AI_CONTEXT_TOPIC);
+            if (savedContextTopic) {
+                this.contextTopic = savedContextTopic;
+            }
+            const savedContextArchiveGroup = localStorage.getItem(STATE_KEYS.AI_CONTEXT_ARCHIVE_GROUP);
+            if (savedContextArchiveGroup) {
+                this.contextArchiveGroup = savedContextArchiveGroup;
+            }
+
             // Restore context loaded state
             const savedContextLoaded = localStorage.getItem(STATE_KEYS.AI_CONTEXT_LOADED);
             if (savedContextLoaded === 'true') {
                 this.contextLoaded = true;
                 this.updateContextIndicator();
+                this.updateContextInfo(); // Update UI with saved context info
             }
 
             // Restore panel open state (do this last so UI updates properly)
