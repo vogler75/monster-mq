@@ -343,6 +343,260 @@ class MessageArchiveMongoDB(
         return JsonArray().add("MongoDB does not support SQL queries")
     }
 
+    override fun getAggregatedHistory(
+        topics: List<String>,
+        startTime: Instant,
+        endTime: Instant,
+        intervalMinutes: Int,
+        functions: List<String>,
+        fields: List<String>
+    ): JsonObject {
+        if (topics.isEmpty()) {
+            return JsonObject()
+                .put("columns", JsonArray().add("timestamp"))
+                .put("rows", JsonArray())
+        }
+
+        logger.fine { "MongoDB getAggregatedHistory: topics=$topics, interval=${intervalMinutes}min, functions=$functions, fields=$fields" }
+
+        val result = JsonObject()
+        val columns = JsonArray().add("timestamp")
+        val rows = JsonArray()
+
+        try {
+            val activeCollection = getActiveCollection()
+            if (activeCollection == null) {
+                logger.warning("MongoDB not connected, returning empty aggregation result for [$name]")
+                return result.put("columns", columns).put("rows", rows)
+            }
+
+            // Build the aggregation pipeline
+            val pipeline = mutableListOf<Document>()
+
+            // Stage 1: Match documents by topics and time range
+            pipeline.add(Document("\$match", Document(mapOf(
+                "meta.topic" to Document("\$in", topics),
+                "time" to Document(mapOf(
+                    "\$gte" to Date.from(startTime),
+                    "\$lte" to Date.from(endTime)
+                ))
+            ))))
+
+            // Stage 2: Project the fields we need, including value extraction
+            val projectFields = mutableMapOf<String, Any>(
+                "topic" to "\$meta.topic",
+                "time" to 1
+            )
+
+            // For each field (or raw value), create a projection
+            val effectiveFields = if (fields.isEmpty()) listOf("") else fields
+            for ((fieldIndex, field) in effectiveFields.withIndex()) {
+                val valueExpr = if (field.isEmpty()) {
+                    // Try to convert payload to double - handle native BSON, payload_blob (binary), and payload_json
+                    // Priority: 1) payload (native BSON), 2) payload_blob (binary text), 3) payload_json (string)
+                    // Use $function to decode binary data as UTF-8 text
+                    Document("\$function", Document(mapOf(
+                        "body" to """
+                            function(payload, payload_blob, payload_json) {
+                                // Helper function to decode base64 to UTF-8 string
+                                function base64ToUtf8(base64) {
+                                    // Decode base64 to bytes, then to UTF-8 string
+                                    var binStr = '';
+                                    var bytes = [];
+                                    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+                                    var i = 0;
+                                    base64 = base64.replace(/[^A-Za-z0-9+/]/g, '');
+                                    while (i < base64.length) {
+                                        var enc1 = chars.indexOf(base64.charAt(i++));
+                                        var enc2 = chars.indexOf(base64.charAt(i++));
+                                        var enc3 = chars.indexOf(base64.charAt(i++));
+                                        var enc4 = chars.indexOf(base64.charAt(i++));
+                                        var chr1 = (enc1 << 2) | (enc2 >> 4);
+                                        var chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+                                        var chr3 = ((enc3 & 3) << 6) | enc4;
+                                        binStr += String.fromCharCode(chr1);
+                                        if (enc3 !== 64) binStr += String.fromCharCode(chr2);
+                                        if (enc4 !== 64) binStr += String.fromCharCode(chr3);
+                                    }
+                                    return binStr;
+                                }
+
+                                // Case 1: payload exists (native BSON - could be object with numeric fields or numeric value)
+                                if (payload !== null && payload !== undefined) {
+                                    if (typeof payload === 'number') return payload;
+                                    if (typeof payload === 'string') {
+                                        var n = parseFloat(payload);
+                                        return isNaN(n) ? null : n;
+                                    }
+                                    return null;
+                                }
+                                // Case 2: payload_blob exists (binary containing text of number)
+                                if (payload_blob !== null && payload_blob !== undefined) {
+                                    try {
+                                        // payload_blob is BinData - get base64 string and decode it
+                                        var base64Str = payload_blob.base64();
+                                        var str = base64ToUtf8(base64Str);
+                                        var n = parseFloat(str);
+                                        return isNaN(n) ? null : n;
+                                    } catch (e) {
+                                        return null;
+                                    }
+                                }
+                                // Case 3: payload_json exists (string)
+                                if (payload_json !== null && payload_json !== undefined) {
+                                    var n = parseFloat(payload_json);
+                                    return isNaN(n) ? null : n;
+                                }
+                                return null;
+                            }
+                        """.trimIndent(),
+                        "args" to listOf("\$payload", "\$payload_blob", "\$payload_json"),
+                        "lang" to "js"
+                    )))
+                } else {
+                    // Extract field from payload object - handle nested paths
+                    val pathParts = field.split(".")
+                    val fieldPath = "\$payload." + pathParts.joinToString(".")
+                    Document("\$toDouble", Document("\$ifNull", listOf(fieldPath, null)))
+                }
+                projectFields["value_$fieldIndex"] = valueExpr
+            }
+
+            pipeline.add(Document("\$project", Document(projectFields)))
+
+            // Stage 3: Group by time bucket and topic
+            // MongoDB 5.0+ supports $dateTrunc for time bucketing
+            val dateTruncUnit = when {
+                intervalMinutes >= 1440 -> "day"
+                intervalMinutes >= 60 -> "hour"
+                else -> "minute"
+            }
+            val binSize = when {
+                intervalMinutes >= 1440 -> intervalMinutes / 1440
+                intervalMinutes >= 60 -> intervalMinutes / 60
+                else -> intervalMinutes
+            }
+
+            val bucketExpr = Document("\$dateTrunc", Document(mapOf(
+                "date" to "\$time",
+                "unit" to dateTruncUnit,
+                "binSize" to binSize
+            )))
+
+            // Build accumulator expressions for each field and function
+            val groupAccumulators = mutableMapOf<String, Any>(
+                "_id" to Document(mapOf(
+                    "bucket" to bucketExpr,
+                    "topic" to "\$topic"
+                ))
+            )
+
+            val columnNames = mutableListOf<String>()
+            for ((fieldIndex, field) in effectiveFields.withIndex()) {
+                val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
+                val valueRef = "\$value_$fieldIndex"
+
+                for (func in functions) {
+                    val funcLower = func.lowercase()
+                    val accumKey = "agg_${fieldIndex}_$funcLower"
+
+                    val accumExpr = when (func.uppercase()) {
+                        "AVG" -> Document("\$avg", valueRef)
+                        "MIN" -> Document("\$min", valueRef)
+                        "MAX" -> Document("\$max", valueRef)
+                        "COUNT" -> Document("\$sum", Document("\$cond", listOf(
+                            Document("\$ne", listOf(valueRef, null)),
+                            1,
+                            0
+                        )))
+                        else -> Document("\$avg", valueRef)
+                    }
+                    groupAccumulators[accumKey] = accumExpr
+                }
+            }
+
+            pipeline.add(Document("\$group", Document(groupAccumulators)))
+
+            // Stage 4: Sort by bucket time
+            pipeline.add(Document("\$sort", Document("_id.bucket", 1)))
+
+            logger.fine { "MongoDB aggregation pipeline: $pipeline" }
+
+            val queryStart = System.currentTimeMillis()
+
+            // Execute aggregation and collect results grouped by bucket
+            val bucketData = mutableMapOf<String, MutableMap<String, Any?>>()
+
+            activeCollection.aggregate(pipeline)
+                .allowDiskUse(true)
+                .forEach { doc ->
+                    val id = doc.get("_id", Document::class.java)
+                    val bucket = id?.getDate("bucket")?.toInstant()?.toString() ?: return@forEach
+                    val topic = id.getString("topic") ?: return@forEach
+
+                    if (!bucketData.containsKey(bucket)) {
+                        bucketData[bucket] = mutableMapOf()
+                    }
+
+                    // Store aggregated values for this topic in this bucket
+                    for ((fieldIndex, field) in effectiveFields.withIndex()) {
+                        val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
+                        for (func in functions) {
+                            val funcLower = func.lowercase()
+                            val accumKey = "agg_${fieldIndex}_$funcLower"
+                            val colName = "$topic$fieldAlias" + "_$funcLower"
+                            val value = doc.get(accumKey)
+                            bucketData[bucket]!![colName] = when (value) {
+                                is Number -> value.toDouble()
+                                else -> null
+                            }
+                        }
+                    }
+                }
+
+            val queryDuration = System.currentTimeMillis() - queryStart
+            logger.fine { "MongoDB aggregation query completed in ${queryDuration}ms" }
+
+            // Build column names (after processing to know all topics)
+            for (topic in topics) {
+                for (field in effectiveFields) {
+                    val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
+                    for (func in functions) {
+                        val funcLower = func.lowercase()
+                        val colName = "$topic$fieldAlias" + "_$funcLower"
+                        columnNames.add(colName)
+                        columns.add(colName)
+                    }
+                }
+            }
+
+            // Convert bucket data to rows (sorted by timestamp)
+            bucketData.keys.sorted().forEach { bucket ->
+                val row = JsonArray()
+                row.add(bucket)
+
+                for (colName in columnNames) {
+                    val value = bucketData[bucket]?.get(colName)
+                    if (value != null) {
+                        row.add(value)
+                    } else {
+                        row.addNull()
+                    }
+                }
+                rows.add(row)
+            }
+
+        } catch (e: Exception) {
+            logger.severe("Error executing MongoDB aggregation query: ${e.message}")
+            e.printStackTrace()
+        }
+
+        result.put("columns", columns)
+        result.put("rows", rows)
+        logger.fine { "MongoDB aggregation returned ${rows.size()} rows with ${columns.size()} columns" }
+        return result
+    }
+
     /**
      * MongoDB-specific: Execute aggregation pipeline
      */

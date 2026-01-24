@@ -376,6 +376,126 @@ class QueryResolver(
         }
     }
 
+    /**
+     * Data class for aggregated query results
+     */
+    data class AggregatedResult(
+        val columns: List<String>,
+        val rows: List<List<Any?>>,
+        val interval: String,
+        val startTime: String,
+        val endTime: String,
+        val topicCount: Int,
+        val rowCount: Int
+    )
+
+    fun aggregatedMessages(): DataFetcher<CompletableFuture<AggregatedResult>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<AggregatedResult>()
+
+            // Extract arguments
+            val topics = env.getArgument<List<String>>("topics") ?: emptyList()
+            val intervalStr = env.getArgument<String>("interval") ?: "FIVE_MINUTES"
+            val startTimeStr = env.getArgument<String>("startTime")
+            val endTimeStr = env.getArgument<String>("endTime")
+            val functionsArg = env.getArgument<List<String>>("functions") ?: listOf("AVG")
+            val fields = env.getArgument<List<String>>("fields") ?: emptyList()
+            val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
+
+            // Validate required arguments
+            if (topics.isEmpty()) {
+                future.completeExceptionally(GraphQLException("At least one topic must be specified"))
+                return@DataFetcher future
+            }
+            if (startTimeStr == null || endTimeStr == null) {
+                future.completeExceptionally(GraphQLException("Both startTime and endTime are required"))
+                return@DataFetcher future
+            }
+
+            // Check subscribe permission for all topics
+            val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
+            for (topic in topics) {
+                if (!authContext.canSubscribeToTopic(userAuthContext, topic)) {
+                    future.completeExceptionally(GraphQLException("No subscribe permission for topic: $topic"))
+                    return@DataFetcher future
+                }
+            }
+
+            // Parse timestamps
+            val startTime = try {
+                Instant.parse(startTimeStr)
+            } catch (e: DateTimeParseException) {
+                future.completeExceptionally(GraphQLException("Invalid startTime format: expected ISO-8601 (e.g., 2024-01-01T00:00:00Z)"))
+                return@DataFetcher future
+            }
+
+            val endTime = try {
+                Instant.parse(endTimeStr)
+            } catch (e: DateTimeParseException) {
+                future.completeExceptionally(GraphQLException("Invalid endTime format: expected ISO-8601 (e.g., 2024-01-01T00:00:00Z)"))
+                return@DataFetcher future
+            }
+
+            // Convert interval enum to minutes
+            val intervalMinutes = when (intervalStr) {
+                "ONE_MINUTE" -> 1
+                "FIVE_MINUTES" -> 5
+                "FIFTEEN_MINUTES" -> 15
+                "ONE_HOUR" -> 60
+                "ONE_DAY" -> 1440
+                else -> 5
+            }
+
+            // Get archive store
+            val archiveStore = getCurrentArchiveGroups()[archiveGroupName]?.archiveStore as? IMessageArchiveExtended
+            if (archiveStore == null) {
+                future.completeExceptionally(GraphQLException("No extended archive store configured for archive group '$archiveGroupName'"))
+                return@DataFetcher future
+            }
+
+            // Execute aggregation query
+            try {
+                val result = archiveStore.getAggregatedHistory(
+                    topics = topics,
+                    startTime = startTime,
+                    endTime = endTime,
+                    intervalMinutes = intervalMinutes,
+                    functions = functionsArg,
+                    fields = fields
+                )
+
+                // Extract columns and rows from result
+                val columnsArray = result.getJsonArray("columns") ?: io.vertx.core.json.JsonArray()
+                val rowsArray = result.getJsonArray("rows") ?: io.vertx.core.json.JsonArray()
+
+                val columns = (0 until columnsArray.size()).map { columnsArray.getString(it) }
+                val rows = (0 until rowsArray.size()).map { rowIndex ->
+                    val rowArray = rowsArray.getJsonArray(rowIndex)
+                    (0 until rowArray.size()).map { colIndex ->
+                        rowArray.getValue(colIndex)
+                    }
+                }
+
+                future.complete(
+                    AggregatedResult(
+                        columns = columns,
+                        rows = rows,
+                        interval = intervalStr,
+                        startTime = startTimeStr,
+                        endTime = endTimeStr,
+                        topicCount = topics.size,
+                        rowCount = rows.size
+                    )
+                )
+            } catch (e: Exception) {
+                logger.severe("Error executing aggregated query: ${e.message}")
+                future.completeExceptionally(GraphQLException("Error executing aggregation: ${e.message}"))
+            }
+
+            future
+        }
+    }
+
     fun systemLogs(): DataFetcher<CompletableFuture<List<SystemLogEntry>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<SystemLogEntry>>()

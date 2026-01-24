@@ -23,6 +23,7 @@ class TopicChartManager {
         this.timeRangeMinutes = 10;
         this.endTime = new Date();
         this.archiveGroup = 'Default';
+        this.aggregationMode = 'RAW'; // RAW, ONE_MINUTE, FIVE_MINUTES, FIFTEEN_MINUTES, ONE_HOUR, ONE_DAY
         this.isLoading = false;
 
         this.init();
@@ -132,7 +133,15 @@ class TopicChartManager {
             this.refreshChart();
         });
 
+        // Aggregation mode select
+        document.getElementById('aggregation-mode-select').addEventListener('change', (e) => {
+            this.aggregationMode = e.target.value;
+            this.saveState();
+            this.refreshChart();
+        });
+
         // Navigation buttons
+        document.getElementById('btn-refresh').addEventListener('click', () => this.refreshChart());
         document.getElementById('btn-jump-back').addEventListener('click', () => this.jumpBack());
         document.getElementById('btn-step-back').addEventListener('click', () => this.stepBack());
         document.getElementById('btn-zoom-out').addEventListener('click', () => this.zoomOut());
@@ -381,26 +390,14 @@ class TopicChartManager {
 
         try {
             const startTime = new Date(this.endTime.getTime() - this.timeRangeMinutes * 60 * 1000);
-            const datasets = [];
+            let datasets = [];
 
-            for (const topicConfig of this.topics) {
-                const data = await this.fetchTopicData(topicConfig.topic, startTime, this.endTime);
-                const processedData = this.processData(data, topicConfig.field);
-
-                const label = topicConfig.field
-                    ? `${topicConfig.topic} .${topicConfig.field}`
-                    : topicConfig.topic;
-
-                datasets.push({
-                    label,
-                    data: processedData,
-                    borderColor: topicConfig.color,
-                    backgroundColor: topicConfig.color + '20',
-                    tension: 0.3,
-                    fill: false,
-                    pointRadius: processedData.length < 100 ? 3 : 1,
-                    pointHoverRadius: 5
-                });
+            if (this.aggregationMode === 'RAW') {
+                // Use raw data fetching (existing logic)
+                datasets = await this.fetchRawDatasets(startTime, this.endTime);
+            } else {
+                // Use aggregated data fetching
+                datasets = await this.fetchAggregatedDatasets(startTime, this.endTime);
             }
 
             this.chart.data.datasets = datasets;
@@ -412,6 +409,132 @@ class TopicChartManager {
             console.error('Error refreshing chart:', error);
         } finally {
             this.isLoading = false;
+        }
+    }
+
+    async fetchRawDatasets(startTime, endTime) {
+        const datasets = [];
+
+        for (const topicConfig of this.topics) {
+            const data = await this.fetchTopicData(topicConfig.topic, startTime, endTime);
+            const processedData = this.processData(data, topicConfig.field);
+
+            const label = topicConfig.field
+                ? `${topicConfig.topic} .${topicConfig.field}`
+                : topicConfig.topic;
+
+            datasets.push({
+                label,
+                data: processedData,
+                borderColor: topicConfig.color,
+                backgroundColor: topicConfig.color + '20',
+                tension: 0.3,
+                fill: false,
+                pointRadius: processedData.length < 100 ? 3 : 1,
+                pointHoverRadius: 5
+            });
+        }
+
+        return datasets;
+    }
+
+    async fetchAggregatedDatasets(startTime, endTime) {
+        const datasets = [];
+
+        // Build topic/field combinations for the query
+        const topicNames = this.topics.map(t => t.topic);
+        const fields = [...new Set(this.topics.map(t => t.field).filter(f => f))];
+
+        try {
+            const data = await this.fetchAggregatedData(topicNames, fields, startTime, endTime);
+
+            if (!data || !data.columns || !data.rows) {
+                console.warn('No aggregated data returned');
+                return datasets;
+            }
+
+            // Parse the table-based response into datasets
+            // Columns format: ["timestamp", "topic_field_avg", "topic_field_avg", ...]
+            const columns = data.columns;
+
+            // Create a dataset for each topic/field combination
+            for (const topicConfig of this.topics) {
+                // Find the column index for this topic/field
+                const topicAlias = topicConfig.topic.replace(/\//g, '_').replace(/\./g, '_');
+                const fieldAlias = topicConfig.field ? `.${topicConfig.field.replace(/\./g, '_')}` : '';
+                const colName = `${topicConfig.topic}${fieldAlias}_avg`;
+
+                const colIndex = columns.indexOf(colName);
+                if (colIndex === -1) {
+                    console.warn(`Column not found: ${colName}`);
+                    continue;
+                }
+
+                // Extract data points
+                const dataPoints = [];
+                for (const row of data.rows) {
+                    const timestamp = new Date(row[0]).getTime();
+                    const value = row[colIndex];
+                    if (value !== null && value !== undefined) {
+                        dataPoints.push({ x: timestamp, y: value });
+                    }
+                }
+
+                const label = topicConfig.field
+                    ? `${topicConfig.topic} .${topicConfig.field}`
+                    : topicConfig.topic;
+
+                datasets.push({
+                    label,
+                    data: dataPoints,
+                    borderColor: topicConfig.color,
+                    backgroundColor: topicConfig.color + '20',
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: dataPoints.length < 100 ? 3 : 1,
+                    pointHoverRadius: 5
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching aggregated data:', error);
+        }
+
+        return datasets;
+    }
+
+    async fetchAggregatedData(topics, fields, startTime, endTime) {
+        const query = `
+            query GetAggregatedMessages($topics: [String!]!, $interval: AggregationInterval!, $startTime: String!, $endTime: String!, $fields: [String!], $archiveGroup: String!) {
+                aggregatedMessages(
+                    topics: $topics
+                    interval: $interval
+                    startTime: $startTime
+                    endTime: $endTime
+                    functions: [AVG]
+                    fields: $fields
+                    archiveGroup: $archiveGroup
+                ) {
+                    columns
+                    rows
+                    rowCount
+                }
+            }
+        `;
+
+        try {
+            const response = await graphqlClient.query(query, {
+                topics: topics,
+                interval: this.aggregationMode,
+                startTime: startTime.toISOString(),
+                endTime: endTime.toISOString(),
+                fields: fields.length > 0 ? fields : null,
+                archiveGroup: this.archiveGroup
+            });
+
+            return response.aggregatedMessages || null;
+        } catch (error) {
+            console.error('Error fetching aggregated data:', error);
+            return null;
         }
     }
 
@@ -524,6 +647,7 @@ class TopicChartManager {
         safeStorage.setItem('topicChart.topics', JSON.stringify(this.topics));
         safeStorage.setItem('topicChart.timeRange', this.timeRangeMinutes.toString());
         safeStorage.setItem('topicChart.archiveGroup', this.archiveGroup);
+        safeStorage.setItem('topicChart.aggregationMode', this.aggregationMode);
     }
 
     loadState() {
@@ -543,6 +667,12 @@ class TopicChartManager {
             if (archiveGroup) {
                 this.archiveGroup = archiveGroup;
                 document.getElementById('archive-group-select').value = archiveGroup;
+            }
+
+            const aggregationMode = safeStorage.getItem('topicChart.aggregationMode');
+            if (aggregationMode) {
+                this.aggregationMode = aggregationMode;
+                document.getElementById('aggregation-mode-select').value = aggregationMode;
             }
 
             this.renderTopicsList();

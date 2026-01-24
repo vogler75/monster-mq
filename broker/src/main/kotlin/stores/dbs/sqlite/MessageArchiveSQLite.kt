@@ -259,6 +259,153 @@ class MessageArchiveSQLite(
         }
     }
 
+    override fun getAggregatedHistory(
+        topics: List<String>,
+        startTime: Instant,
+        endTime: Instant,
+        intervalMinutes: Int,
+        functions: List<String>,
+        fields: List<String>
+    ): JsonObject {
+        if (topics.isEmpty()) {
+            return JsonObject()
+                .put("columns", JsonArray().add("timestamp"))
+                .put("rows", JsonArray())
+        }
+
+        logger.fine { "SQLite getAggregatedHistory: topics=$topics, interval=${intervalMinutes}min, functions=$functions, fields=$fields" }
+
+        val result = JsonObject()
+        val columns = JsonArray().add("timestamp")
+        val rows = JsonArray()
+
+        try {
+            // Use direct JDBC connection for complex queries
+            val connection = java.sql.DriverManager.getConnection("jdbc:sqlite:$dbPath", "", "")
+
+            connection.use { conn ->
+                // Build column definitions and SELECT clauses
+                val selectClauses = mutableListOf<String>()
+                val columnNames = mutableListOf<String>()
+
+                // SQLite time bucketing using strftime
+                // strftime returns string, so we build bucket expressions
+                val bucketExpr = when (intervalMinutes) {
+                    1 -> "strftime('%Y-%m-%dT%H:%M:00Z', time)"
+                    5 -> "strftime('%Y-%m-%dT%H:', time) || printf('%02d', (CAST(strftime('%M', time) AS INTEGER) / 5) * 5) || ':00Z'"
+                    15 -> "strftime('%Y-%m-%dT%H:', time) || printf('%02d', (CAST(strftime('%M', time) AS INTEGER) / 15) * 15) || ':00Z'"
+                    60 -> "strftime('%Y-%m-%dT%H:00:00Z', time)"
+                    1440 -> "strftime('%Y-%m-%dT00:00:00Z', time)"
+                    else -> "strftime('%Y-%m-%dT%H:', time) || printf('%02d', (CAST(strftime('%M', time) AS INTEGER) / $intervalMinutes) * $intervalMinutes) || ':00Z'"
+                }
+
+                // Build aggregation expressions for each topic and field combination
+                for (topic in topics) {
+                    val effectiveFields = if (fields.isEmpty()) listOf("") else fields
+
+                    for (field in effectiveFields) {
+                        val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
+                        val valueExpr = if (field.isEmpty()) {
+                            // Raw value - try payload_json first, then decode payload_blob as UTF-8 text
+                            // COALESCE tries payload_json first, if null tries converting payload_blob (BLOB) to text
+                            // SQLite's CAST on BLOB returns the bytes as text (UTF-8)
+                            "COALESCE(CAST(payload_json AS REAL), CAST(CAST(payload_blob AS TEXT) AS REAL))"
+                        } else {
+                            // JSON field extraction - SQLite uses json_extract
+                            "CAST(json_extract(payload_json, '\$.${field.replace(".", ".")}') AS REAL)"
+                        }
+
+                        for (func in functions) {
+                            val funcLower = func.lowercase()
+                            val colName = "$topic$fieldAlias" + "_$funcLower"
+                            columnNames.add(colName)
+                            columns.add(colName)
+
+                            // SQLite aggregate with CASE WHEN for topic filtering
+                            val sqlFunc = when (func.uppercase()) {
+                                "AVG" -> "AVG"
+                                "MIN" -> "MIN"
+                                "MAX" -> "MAX"
+                                "COUNT" -> "COUNT"
+                                else -> "AVG"
+                            }
+                            selectClauses.add("$sqlFunc(CASE WHEN topic = ? THEN $valueExpr END) AS \"${colName.replace("\"", "\"\"")}\"")
+                        }
+                    }
+                }
+
+                // Build the SQL query
+                val topicPlaceholders = topics.joinToString(", ") { "?" }
+                val sql = """
+                    SELECT
+                        $bucketExpr AS bucket,
+                        ${selectClauses.joinToString(",\n                        ")}
+                    FROM $tableName
+                    WHERE topic IN ($topicPlaceholders)
+                      AND time >= ? AND time <= ?
+                    GROUP BY bucket
+                    ORDER BY bucket ASC
+                """.trimIndent()
+
+                logger.fine { "Executing SQLite aggregation SQL: $sql" }
+
+                conn.prepareStatement(sql).use { preparedStatement ->
+                    var paramIndex = 1
+
+                    // Set topic parameters for CASE WHEN expressions
+                    val effectiveFields = if (fields.isEmpty()) listOf("") else fields
+                    for (topic in topics) {
+                        for (field in effectiveFields) {
+                            for (func in functions) {
+                                preparedStatement.setString(paramIndex++, topic)
+                            }
+                        }
+                    }
+
+                    // Set topic parameters for IN clause
+                    for (topic in topics) {
+                        preparedStatement.setString(paramIndex++, topic)
+                    }
+
+                    // Set time range parameters (SQLite stores time as ISO string)
+                    preparedStatement.setString(paramIndex++, startTime.toString())
+                    preparedStatement.setString(paramIndex, endTime.toString())
+
+                    val queryStart = System.currentTimeMillis()
+                    val resultSet = preparedStatement.executeQuery()
+                    val queryDuration = System.currentTimeMillis() - queryStart
+                    logger.fine { "SQLite aggregation query completed in ${queryDuration}ms" }
+
+                    while (resultSet.next()) {
+                        val row = JsonArray()
+                        // Add timestamp
+                        val bucket = resultSet.getString("bucket")
+                        row.add(bucket)
+
+                        // Add aggregated values
+                        for (colName in columnNames) {
+                            val value = resultSet.getObject(colName)
+                            if (value == null || resultSet.wasNull()) {
+                                row.addNull()
+                            } else {
+                                row.add((value as Number).toDouble())
+                            }
+                        }
+                        rows.add(row)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.severe("Error executing SQLite aggregation query: ${e.message}")
+            e.printStackTrace()
+        }
+
+        result.put("columns", columns)
+        result.put("rows", rows)
+        logger.fine { "SQLite aggregation returned ${rows.size()} rows with ${columns.size()} columns" }
+        return result
+    }
+
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
         val startTime = System.currentTimeMillis()
         

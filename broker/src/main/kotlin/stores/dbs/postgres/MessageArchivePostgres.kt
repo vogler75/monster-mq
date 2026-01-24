@@ -296,6 +296,167 @@ class MessageArchivePostgres (
         }
     }
 
+    override fun getAggregatedHistory(
+        topics: List<String>,
+        startTime: Instant,
+        endTime: Instant,
+        intervalMinutes: Int,
+        functions: List<String>,
+        fields: List<String>
+    ): JsonObject {
+        if (topics.isEmpty()) {
+            return JsonObject()
+                .put("columns", JsonArray().add("timestamp"))
+                .put("rows", JsonArray())
+        }
+
+        logger.fine { "PostgreSQL getAggregatedHistory: topics=$topics, interval=${intervalMinutes}min, functions=$functions, fields=$fields" }
+
+        val result = JsonObject()
+        val columns = JsonArray().add("timestamp")
+        val rows = JsonArray()
+
+        try {
+            db.connection?.let { connection ->
+                // Build column definitions and SELECT clauses
+                val selectClauses = mutableListOf<String>()
+                val columnNames = mutableListOf<String>()
+
+                // Determine if we're using TimescaleDB time_bucket or standard date_trunc
+                val hasTimescaleDB = try {
+                    connection.createStatement().use { stmt ->
+                        val rs = stmt.executeQuery("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb'")
+                        rs.next()
+                    }
+                } catch (e: Exception) {
+                    false
+                }
+
+                val bucketExpr = if (hasTimescaleDB) {
+                    "time_bucket('$intervalMinutes minutes', time)"
+                } else {
+                    // For standard PostgreSQL, use date_trunc with appropriate precision
+                    when (intervalMinutes) {
+                        1 -> "date_trunc('minute', time)"
+                        60 -> "date_trunc('hour', time)"
+                        1440 -> "date_trunc('day', time)"
+                        else -> {
+                            // For 5, 15 minute intervals - truncate to interval boundary
+                            "(date_trunc('hour', time) + (EXTRACT(minute FROM time)::int / $intervalMinutes * $intervalMinutes) * interval '1 minute')"
+                        }
+                    }
+                }
+
+                // Build aggregation expressions for each topic and field combination
+                for (topic in topics) {
+                    val topicAlias = topic.replace("/", "_").replace(".", "_")
+                    val effectiveFields = if (fields.isEmpty()) listOf("") else fields
+
+                    for (field in effectiveFields) {
+                        val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
+                        val valueExpr = if (field.isEmpty()) {
+                            // Raw value - try payload_json first, then decode payload_blob as UTF-8 text
+                            // COALESCE tries payload_json first, if null tries converting payload_blob to text
+                            "COALESCE((payload_json)::NUMERIC, (convert_from(payload_blob, 'UTF8'))::NUMERIC)"
+                        } else {
+                            // JSON field extraction - handle nested paths
+                            val pathParts = field.split(".")
+                            if (pathParts.size == 1) {
+                                "(payload_json->>'$field')::NUMERIC"
+                            } else {
+                                // Nested path: payload_json->'level1'->'level2'->>'field'
+                                val jsonPath = pathParts.dropLast(1).joinToString("->") { "'$it'" }
+                                val lastField = pathParts.last()
+                                "(payload_json->$jsonPath->>'$lastField')::NUMERIC"
+                            }
+                        }
+
+                        for (func in functions) {
+                            val funcLower = func.lowercase()
+                            val colName = "$topic$fieldAlias" + "_$funcLower"
+                            columnNames.add(colName)
+                            columns.add(colName)
+
+                            // Add CASE WHEN for topic filtering within the aggregation
+                            selectClauses.add("${func.uppercase()}(CASE WHEN topic = ? THEN $valueExpr END) AS \"${colName.replace("\"", "\"\"")}\"")
+                        }
+                    }
+                }
+
+                // Build the SQL query
+                val topicPlaceholders = topics.joinToString(", ") { "?" }
+                val sql = """
+                    SELECT
+                        $bucketExpr AS bucket,
+                        ${selectClauses.joinToString(",\n                        ")}
+                    FROM $tableName
+                    WHERE topic IN ($topicPlaceholders)
+                      AND time >= ? AND time <= ?
+                    GROUP BY bucket
+                    ORDER BY bucket ASC
+                """.trimIndent()
+
+                logger.fine { "Executing aggregation SQL: $sql" }
+
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    var paramIndex = 1
+
+                    // Set topic parameters for CASE WHEN expressions
+                    val effectiveFields = if (fields.isEmpty()) listOf("") else fields
+                    for (topic in topics) {
+                        for (field in effectiveFields) {
+                            for (func in functions) {
+                                preparedStatement.setString(paramIndex++, topic)
+                            }
+                        }
+                    }
+
+                    // Set topic parameters for IN clause
+                    for (topic in topics) {
+                        preparedStatement.setString(paramIndex++, topic)
+                    }
+
+                    // Set time range parameters
+                    preparedStatement.setTimestamp(paramIndex++, Timestamp.from(startTime))
+                    preparedStatement.setTimestamp(paramIndex, Timestamp.from(endTime))
+
+                    val queryStart = System.currentTimeMillis()
+                    val resultSet = preparedStatement.executeQuery()
+                    val queryDuration = System.currentTimeMillis() - queryStart
+                    logger.fine { "PostgreSQL aggregation query completed in ${queryDuration}ms" }
+
+                    while (resultSet.next()) {
+                        val row = JsonArray()
+                        // Add timestamp
+                        val bucket = resultSet.getTimestamp("bucket")
+                        row.add(bucket?.toInstant()?.toString())
+
+                        // Add aggregated values
+                        for (colName in columnNames) {
+                            val value = resultSet.getObject(colName)
+                            if (value == null || resultSet.wasNull()) {
+                                row.addNull()
+                            } else {
+                                row.add((value as Number).toDouble())
+                            }
+                        }
+                        rows.add(row)
+                    }
+                }
+            } ?: run {
+                logger.warning("No database connection available for aggregation query")
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error executing aggregation query: ${e.message}")
+            e.printStackTrace()
+        }
+
+        result.put("columns", columns)
+        result.put("rows", rows)
+        logger.fine { "PostgreSQL aggregation returned ${rows.size()} rows with ${columns.size()} columns" }
+        return result
+    }
+
     override suspend fun createTable(): Boolean {
         return try {
             db.connection?.let { connection ->

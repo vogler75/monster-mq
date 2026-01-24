@@ -145,6 +145,17 @@
             flex: 0 0 120px !important;
         }
 
+        .add-topic-section .btn-nav {
+            flex: 0 0 auto;
+            width: 34px;
+            height: 34px;
+            font-size: 1.25rem;
+            font-weight: 400;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         .topics-list {
             display: flex;
             flex-direction: column;
@@ -660,6 +671,7 @@
             <!-- Time Controls -->
             <div class="time-controls">
                 <div class="time-controls-group">
+                    <button class="btn-nav" id="btn-refresh" title="Refresh">&#8635;</button>
                     <button class="btn-nav" id="btn-jump-back" title="Jump back">&#171;</button>
                     <button class="btn-nav" id="btn-step-back" title="Step back">&#8249;</button>
                     <button class="btn-nav" id="btn-zoom-out" title="Zoom out">-</button>
@@ -685,6 +697,17 @@
                         <option value="">Loading...</option>
                     </select>
                 </div>
+                <div class="time-controls-group">
+                    <label>Data:</label>
+                    <select class="time-range-select" id="aggregation-mode-select">
+                        <option value="RAW">Raw</option>
+                        <option value="ONE_MINUTE">1 min avg</option>
+                        <option value="FIVE_MINUTES">5 min avg</option>
+                        <option value="FIFTEEN_MINUTES">15 min avg</option>
+                        <option value="ONE_HOUR">1 hr avg</option>
+                        <option value="ONE_DAY">1 day avg</option>
+                    </select>
+                </div>
                 <div class="time-display" id="time-display">
                     <!-- Time range display -->
                 </div>
@@ -696,7 +719,12 @@
                 <div class="add-topic-section">
                     <input type="text" id="topic-input" placeholder="Enter topic path (e.g., sensors/temperature)">
                     <input type="text" id="json-field-input" class="json-field-input" placeholder="JSON field">
-                    <button class="btn btn-primary btn-small" id="btn-add-topic">Add</button>
+                    <button class="btn-nav" id="btn-add-topic" title="Add topic">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </button>
                 </div>
                 <div class="topics-list" id="topics-list">
                     <div class="empty-state">No topics added. Add a topic above or browse to select one.</div>
