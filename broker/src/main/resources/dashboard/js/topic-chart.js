@@ -151,11 +151,6 @@ class TopicChartManager {
             if (e.key === 'Enter') this.addTopicFromInput();
         });
 
-        // Browse topics button
-        document.getElementById('btn-browse-topics').addEventListener('click', () => {
-            TopicChartSidePanel.open();
-        });
-
         // Modal buttons
         document.getElementById('modal-cancel').addEventListener('click', () => this.hideJsonFieldModal());
         document.getElementById('modal-add').addEventListener('click', () => this.confirmJsonFieldModal());
