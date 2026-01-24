@@ -8,6 +8,7 @@ import at.rocworks.genai.IGenAiProvider
 import at.rocworks.handlers.ArchiveHandler
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
+import io.vertx.core.json.JsonObject
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 
@@ -24,12 +25,19 @@ class GenAiResolver(
 ) {
     private val logger: Logger = Utils.getLogger(GenAiResolver::class.java)
 
+    // System prompt for topic analysis - loaded from config or uses fallback
+    private val topicAnalysisSystemPrompt: String
+
     init {
         logger.level = Const.DEBUG_LEVEL
+        topicAnalysisSystemPrompt = loadSystemPromptFromConfig()
     }
 
-    // Default system prompt for topic analysis
-    private val topicAnalysisSystemPrompt = """
+    /**
+     * Load system prompt from ai-prompts.json config file
+     */
+    private fun loadSystemPromptFromConfig(): String {
+        val fallbackPrompt = """
 You are an MQTT topic tree analyst helping users understand their IoT data.
 The data below shows MQTT topics and their current values in a hierarchical tree format.
 
@@ -40,6 +48,12 @@ The data below shows MQTT topics and their current values in a hierarchical tree
 - Use bullet lists for findings
 - Use tables when comparing data
 
+**Important rules:**
+- NEVER reproduce the raw input data table in your response
+- Do NOT echo back the topic tree structure you received
+- Avoid long sequences of dashes (---) or other separator characters
+- Focus on analysis and insights, not data reproduction
+
 When analyzing:
 - Identify naming patterns and hierarchy structure
 - Spot anomalies or unusual values
@@ -48,6 +62,30 @@ When analyzing:
 
 Topic data:
 """.trimIndent()
+
+        return try {
+            val configPath = "dashboard/config/ai-prompts.json"
+            val stream = this::class.java.classLoader.getResourceAsStream(configPath)
+            if (stream != null) {
+                val content = stream.bufferedReader().use { it.readText() }
+                val json = JsonObject(content)
+                val prompt = json.getString("systemPrompt")
+                if (!prompt.isNullOrBlank()) {
+                    logger.info("Loaded AI system prompt from $configPath")
+                    prompt
+                } else {
+                    logger.info("No systemPrompt in $configPath, using fallback")
+                    fallbackPrompt
+                }
+            } else {
+                logger.info("Config file $configPath not found, using fallback system prompt")
+                fallbackPrompt
+            }
+        } catch (e: Exception) {
+            logger.warning("Error loading AI config: ${e.message}, using fallback system prompt")
+            fallbackPrompt
+        }
+    }
 
     /**
      * Root genai query resolver

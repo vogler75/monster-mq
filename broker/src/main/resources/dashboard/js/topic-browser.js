@@ -677,6 +677,60 @@ class TopicBrowserAI {
         this.chatHistory = [];  // Stores {role: 'user'|'assistant', content: string}
         this.contextLoaded = false;  // Track if topic data has been sent
         this.quickActions = [];  // Loaded from config file
+        this.defaultSystemPrompt = null;  // Will be loaded from config file
+
+        this.init();
+    }
+
+    async init() {
+        // Load config from file (includes system prompt and quick actions)
+        await this.loadConfig();
+
+        // Load saved system prompt or use default from config
+        this.systemPrompt = localStorage.getItem('monstermq_ai_system_prompt') || this.defaultSystemPrompt;
+
+        const systemPromptEl = document.getElementById('ai-system-prompt');
+        if (systemPromptEl) {
+            systemPromptEl.value = this.systemPrompt;
+        }
+
+        // Event listeners
+        this.setupEventListeners();
+    }
+
+    /**
+     * Load config from ai-prompts.json (system prompt and quick actions)
+     */
+    async loadConfig() {
+        try {
+            const response = await fetch('/config/ai-prompts.json');
+            if (response.ok) {
+                const config = await response.json();
+                // Load system prompt from config
+                if (config.systemPrompt) {
+                    this.defaultSystemPrompt = config.systemPrompt;
+                } else {
+                    this.useDefaultSystemPrompt();
+                }
+                // Load quick actions
+                this.quickActions = config.quickActions || [];
+                this.renderQuickActionButtons();
+            } else {
+                console.warn('Could not load ai-prompts.json, using defaults');
+                this.useDefaultSystemPrompt();
+                this.useDefaultQuickActions();
+            }
+        } catch (e) {
+            console.warn('Error loading ai-prompts.json:', e.message);
+            this.useDefaultSystemPrompt();
+            this.useDefaultQuickActions();
+        }
+    }
+
+    /**
+     * Fallback default system prompt if config file is not available
+     */
+    useDefaultSystemPrompt() {
         this.defaultSystemPrompt = `You are an MQTT topic tree analyst helping users understand their IoT data.
 The data below shows MQTT topics and their current values in a hierarchical tree format using ASCII art (├── └── │).
 
@@ -687,6 +741,12 @@ The data below shows MQTT topics and their current values in a hierarchical tree
 - Use bullet lists for findings
 - Use tables when comparing data
 
+**Important rules:**
+- NEVER reproduce the raw input data table in your response
+- Do NOT echo back the topic tree structure you received
+- Avoid long sequences of dashes (---) or other separator characters
+- Focus on analysis and insights, not data reproduction
+
 When analyzing:
 - Identify naming patterns and hierarchy structure
 - Spot anomalies or unusual values
@@ -694,44 +754,6 @@ When analyzing:
 - Provide concise, actionable insights
 
 Topic data:`;
-
-        this.init();
-    }
-
-    async init() {
-        // Load saved system prompt or use default
-        this.systemPrompt = localStorage.getItem('monstermq_ai_system_prompt') || this.defaultSystemPrompt;
-
-        const systemPromptEl = document.getElementById('ai-system-prompt');
-        if (systemPromptEl) {
-            systemPromptEl.value = this.systemPrompt;
-        }
-
-        // Load quick actions from config file
-        await this.loadQuickActions();
-
-        // Event listeners
-        this.setupEventListeners();
-    }
-
-    /**
-     * Load quick action prompts from config file
-     */
-    async loadQuickActions() {
-        try {
-            const response = await fetch('/config/ai-prompts.json');
-            if (response.ok) {
-                const config = await response.json();
-                this.quickActions = config.quickActions || [];
-                this.renderQuickActionButtons();
-            } else {
-                console.warn('Could not load ai-prompts.json, using defaults');
-                this.useDefaultQuickActions();
-            }
-        } catch (e) {
-            console.warn('Error loading ai-prompts.json:', e.message);
-            this.useDefaultQuickActions();
-        }
     }
 
     /**
