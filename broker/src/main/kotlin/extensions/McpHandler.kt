@@ -314,10 +314,14 @@ This tool helps locate specific data streams or topic hierarchies within a messa
 - Topics function as unique identifiers for data streams, messages, or monitoring points
 
 **Wildcard Patterns:**
-- Use `*` to match any characters at that level
-- `my/topic/*` - matches all direct children under `my/topic/` (e.g., `my/topic/sensor1`, `my/topic/data`)
-- `sensors/*/temperature` - matches temperature topics across all sensor locations
-- `*/status` - matches any status topic at the second level
+- Use `*` to match any sequence of characters (zero or more)
+- Use `+` to match exactly one character (single character wildcard)
+- Without wildcards, performs a **substring search** (finds topics containing the text anywhere)
+- `Meter` - matches any topic containing "Meter" (e.g., `sensors/Meter_Input`, `Meter/value`)
+- `*-Meter` - matches topics ending with "-Meter" (anchored pattern)
+- `Meter*` - matches topics starting with "Meter" (anchored pattern)
+- `sensors/*/temperature` - matches temperature topics under sensors with one level between
+- `Meter_+` - matches `Meter_A`, `Meter_B`, etc. (single char after underscore)
 - Case sensitivity is configurable (default: case-insensitive)
 
 **Namespace Filtering:**

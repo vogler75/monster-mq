@@ -483,7 +483,14 @@ class MessageStoreCrateDB(
 
     override fun findTopicsByName(name: String, ignoreCase: Boolean, namespace: String): List<String> {
         val resultTopics = mutableListOf<String>()
-        val sqlSearchPattern = name.replace("*", "%").replace("+", "_")
+        // Convert wildcards: * -> % (any chars), + -> _ (single char)
+        // If no wildcards present, wrap with % to do substring search (more intuitive)
+        val hasWildcards = name.contains("*") || name.contains("+")
+        val sqlSearchPattern = if (hasWildcards) {
+            name.replace("*", "%").replace("+", "_")
+        } else {
+            "%$name%" // No wildcards = substring search
+        }
         val sqlNamespacePattern = if (namespace.isEmpty()) "%" else "$namespace/%"
 
         val sql = """

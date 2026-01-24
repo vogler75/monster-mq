@@ -592,21 +592,57 @@ class MessageStoreMongoDB(
 
     // IMessageStoreExtended implementations
     override fun findTopicsByName(name: String, ignoreCase: Boolean, namespace: String): List<String> {
-        val filter = if (namespace.isNotEmpty()) {
-            Filters.and(
-                Filters.regex("topic", "^$namespace"),
-                if (ignoreCase) {
-                    Filters.regex("topic", name.replace("*", ".*"), "i")
-                } else {
-                    Filters.regex("topic", name.replace("*", ".*"))
+        // Convert wildcard pattern to regex:
+        // * matches any sequence of characters (becomes .* in regex)
+        // + matches single character (like MQTT single-level wildcard, becomes . in regex)
+        // If no wildcards present, do substring search (more intuitive)
+
+        val hasWildcards = name.contains("*") || name.contains("+")
+
+        // Escape special regex chars except * and +, then replace wildcards
+        val escapedName = name
+            .replace("\\", "\\\\")
+            .replace(".", "\\.")
+            .replace("^", "\\^")
+            .replace("$", "\\$")
+            .replace("?", "\\?")
+            .replace("[", "\\[")
+            .replace("]", "\\]")
+            .replace("{", "\\{")
+            .replace("}", "\\}")
+            .replace("|", "\\|")
+            .replace("(", "\\(")
+            .replace(")", "\\)")
+            .replace("*", ".*")  // * becomes .* (match any characters)
+            .replace("+", ".")   // + becomes . (match single character)
+
+        val regexPattern = buildString {
+            if (hasWildcards) {
+                // With wildcards: anchor the pattern to full topic path
+                append("^")
+                if (namespace.isNotEmpty()) {
+                    append(Regex.escape(namespace))
+                    append("/")
                 }
-            )
-        } else {
-            if (ignoreCase) {
-                Filters.regex("topic", name.replace("*", ".*"), "i")
+                append(escapedName)
+                append("$")
             } else {
-                Filters.regex("topic", name.replace("*", ".*"))
+                // No wildcards: substring search (more intuitive)
+                if (namespace.isNotEmpty()) {
+                    append("^")
+                    append(Regex.escape(namespace))
+                    append("/")
+                }
+                append(".*")
+                append(escapedName)
+                append(".*")
             }
+        }
+
+        val filter = if (ignoreCase) {
+            Filters.regex("topic", regexPattern, "i")
+        } else {
+            Filters.regex("topic", regexPattern)
         }
 
         val activeCollection = getActiveCollection() ?: run {
