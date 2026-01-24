@@ -520,8 +520,6 @@ class MessageArchiveMongoDB(
             // Stage 4: Sort by bucket time
             pipeline.add(Document("\$sort", Document("_id.bucket", 1)))
 
-            logger.fine { "MongoDB aggregation pipeline: $pipeline" }
-
             val queryStart = System.currentTimeMillis()
 
             // Execute aggregation and collect results grouped by bucket

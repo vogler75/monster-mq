@@ -1527,10 +1527,6 @@ extend type Query {
     ): [JDBCLogger!]!
 }
 
-#############################################
-# Aggregated Messages Query                  #
-#############################################
-
 # Aggregation interval buckets for time-series data
 enum AggregationInterval {
     # 1 minute buckets

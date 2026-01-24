@@ -13,6 +13,7 @@ import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
 import at.rocworks.extensions.graphql.GraphQLServer
 import at.rocworks.extensions.McpServer
+import at.rocworks.extensions.GrafanaServer
 import at.rocworks.extensions.ApiService
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
@@ -750,6 +751,18 @@ MORE INFO:
                     null
                 }
 
+                // Grafana JSON Data Source API Server
+                val grafanaConfig = configJson.getJsonObject("Grafana", JsonObject())
+                val grafanaEnabled = grafanaConfig.getBoolean("Enabled", false)
+                val grafanaPort = grafanaConfig.getInteger("Port", 3001)
+                val grafanaDefaultArchiveGroup = grafanaConfig.getString("DefaultArchiveGroup", "Default")
+                val grafanaServer = if (grafanaEnabled) {
+                    GrafanaServer("0.0.0.0", grafanaPort, archiveHandler, userManager, grafanaDefaultArchiveGroup)
+                } else {
+                    logger.fine("Grafana API server is disabled in configuration")
+                    null
+                }
+
                 // Metrics Collector and Store
                 val metricsConfig = configJson.getJsonObject("Metrics", JsonObject())
                 val metricsEnabled = metricsConfig.getBoolean("Enabled", true)
@@ -837,7 +850,8 @@ MORE INFO:
                     if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
                     if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword) else null,
                     if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword) else null,
-                    mcpServer
+                    mcpServer,
+                    grafanaServer
                 )
 
                 // Deploy all verticles

@@ -275,6 +275,29 @@
         }
       }
     },
+    "Grafana": {
+      "type": "object",
+      "description": "Grafana JSON Data Source API server configuration. Provides a compatible endpoint for the Grafana JSON Data Source plugin (simpod-json-datasource) to query time-series data.",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Enable Grafana API server",
+          "default": false
+        },
+        "Port": {
+          "type": "integer",
+          "description": "Port for Grafana API HTTP endpoint",
+          "default": 3001,
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "DefaultArchiveGroup": {
+          "type": "string",
+          "description": "Default archive group to use when not specified in query payload",
+          "default": "Default"
+        }
+      }
+    },
     "Oa4jBridge": {
       "type": "object",
       "description": "Native WinCC OA bridge configuration. Allows MQTT clients to interact with WinCC OA via !OA/<namespace>/<operation>/<name> topics. Operations: dps (dpConnect), dpt (dpTypeGet), sql (SQL query). Requires MonsterMQ to run as a WinCC OA manager (MonsterOA entry point).",
