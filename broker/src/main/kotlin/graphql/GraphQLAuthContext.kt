@@ -80,17 +80,17 @@ class GraphQLAuthContext(
         if (authContext == null) {
             // No authentication - check Anonymous user permissions
             val result = userManager.canSubscribe("Anonymous", topic)
-            logger.info("Anonymous user subscribe check for topic $topic: $result")
+            logger.fine("Anonymous user subscribe check for topic $topic: $result")
             return result
         }
-        
+
         if (authContext.isAdmin) {
-            logger.info("Admin user ${authContext.username} allowed to subscribe to $topic")
+            logger.fine("Admin user ${authContext.username} allowed to subscribe to $topic")
             return true // Admin can access everything
         }
-        
+
         val result = userManager.canSubscribe(authContext.username, topic)
-        logger.info("User ${authContext.username} subscribe check for topic $topic: $result")
+        logger.fine("User ${authContext.username} subscribe check for topic $topic: $result")
         return result
     }
 
