@@ -172,6 +172,19 @@
             background: var(--dark-bg, var(--background-primary));
             border-radius: 8px;
             border: 1px solid var(--dark-border, var(--border-color));
+            transition: opacity 0.2s;
+        }
+
+        .topic-item.disabled {
+            opacity: 0.5;
+        }
+
+        .topic-toggle {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: var(--monster-purple);
+            flex-shrink: 0;
         }
 
         .topic-color {
@@ -180,6 +193,7 @@
             border-radius: 4px;
             cursor: pointer;
             border: 1px solid rgba(255,255,255,0.2);
+            flex-shrink: 0;
         }
 
         .topic-info {
@@ -208,6 +222,7 @@
             padding: 0.25rem;
             border-radius: 4px;
             transition: all 0.2s;
+            flex-shrink: 0;
         }
 
         .topic-remove:hover {

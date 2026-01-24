@@ -322,7 +322,8 @@ class TopicChartManager {
         this.topics.push({
             topic,
             field,
-            color: availableColor
+            color: availableColor,
+            enabled: true
         });
 
         this.saveState();
@@ -343,6 +344,12 @@ class TopicChartManager {
         this.refreshChart();
     }
 
+    toggleTopic(index) {
+        this.topics[index].enabled = !this.topics[index].enabled;
+        this.saveState();
+        this.refreshChart();
+    }
+
     renderTopicsList() {
         const container = document.getElementById('topics-list');
 
@@ -352,7 +359,10 @@ class TopicChartManager {
         }
 
         container.innerHTML = this.topics.map((t, index) => `
-            <div class="topic-item">
+            <div class="topic-item${t.enabled === false ? ' disabled' : ''}">
+                <input type="checkbox" class="topic-toggle" ${t.enabled !== false ? 'checked' : ''}
+                       onchange="topicChartManager.toggleTopic(${index})"
+                       title="Show/hide on chart">
                 <input type="color" class="topic-color" value="${t.color}"
                        onchange="topicChartManager.changeTopicColor(${index}, this.value)"
                        title="Change color">
@@ -414,8 +424,9 @@ class TopicChartManager {
 
     async fetchRawDatasets(startTime, endTime) {
         const datasets = [];
+        const enabledTopics = this.topics.filter(t => t.enabled !== false);
 
-        for (const topicConfig of this.topics) {
+        for (const topicConfig of enabledTopics) {
             const data = await this.fetchTopicData(topicConfig.topic, startTime, endTime);
             const processedData = this.processData(data, topicConfig.field);
 
@@ -440,10 +451,15 @@ class TopicChartManager {
 
     async fetchAggregatedDatasets(startTime, endTime) {
         const datasets = [];
+        const enabledTopics = this.topics.filter(t => t.enabled !== false);
 
-        // Build topic/field combinations for the query
-        const topicNames = this.topics.map(t => t.topic);
-        const fields = [...new Set(this.topics.map(t => t.field).filter(f => f))];
+        if (enabledTopics.length === 0) {
+            return datasets;
+        }
+
+        // Build topic/field combinations for the query (only enabled topics)
+        const topicNames = enabledTopics.map(t => t.topic);
+        const fields = [...new Set(enabledTopics.map(t => t.field).filter(f => f))];
 
         try {
             const data = await this.fetchAggregatedData(topicNames, fields, startTime, endTime);
@@ -457,8 +473,8 @@ class TopicChartManager {
             // Columns format: ["timestamp", "topic_field_avg", "topic_field_avg", ...]
             const columns = data.columns;
 
-            // Create a dataset for each topic/field combination
-            for (const topicConfig of this.topics) {
+            // Create a dataset for each enabled topic/field combination
+            for (const topicConfig of enabledTopics) {
                 // Find the column index for this topic/field
                 const topicAlias = topicConfig.topic.replace(/\//g, '_').replace(/\./g, '_');
                 const fieldAlias = topicConfig.field ? `.${topicConfig.field.replace(/\./g, '_')}` : '';
