@@ -261,10 +261,14 @@ class MessageArchiveMongoDB(
         
         // Time range filters
         startTime?.let {
-            filters.add(Filters.gte("time", Date.from(it)))
+            val dateFrom = Date.from(it)
+            logger.fine { "MongoDB time filter: startTime=$it -> Date=$dateFrom (epoch=${dateFrom.time})" }
+            filters.add(Filters.gte("time", dateFrom))
         }
         endTime?.let {
-            filters.add(Filters.lte("time", Date.from(it)))
+            val dateTo = Date.from(it)
+            logger.fine { "MongoDB time filter: endTime=$it -> Date=$dateTo (epoch=${dateTo.time})" }
+            filters.add(Filters.lte("time", dateTo))
         }
 
         val filter = if (filters.isEmpty()) {

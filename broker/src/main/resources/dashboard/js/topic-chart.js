@@ -425,8 +425,8 @@ class TopicChartManager {
                     format: JSON
                     limit: 10000
                     archiveGroup: $archiveGroup
+                    includeTopic: false
                 ) {
-                    topic
                     payload
                     timestamp
                 }

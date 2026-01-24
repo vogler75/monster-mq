@@ -63,6 +63,8 @@ type Query {
         limit: Int = 100
         # ArchiveGroup containing the message archive to search
         archiveGroup: String = "Default"
+        # Whether to include the topic name in each result (set to false when querying single topic for efficiency)
+        includeTopic: Boolean = true
     ): [ArchivedMessage!]!
 
     # Query recent system logs from the in-memory store

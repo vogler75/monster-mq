@@ -298,6 +298,7 @@ class QueryResolver(
             val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
             val limit = env.getArgument<Int>("limit") ?: 100
             val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
+            val includeTopic = env.getArgument<Boolean>("includeTopic") ?: true
 
             // Find the specified archive group with an extended archive store
             val archiveStore = getCurrentArchiveGroups()[archiveGroupName]?.archiveStore as? IMessageArchiveExtended
@@ -360,7 +361,7 @@ class QueryResolver(
                 
                 archived.add(
                     ArchivedMessage(
-                        topic = obj.getString("topic") ?: "",
+                        topic = if (includeTopic) obj.getString("topic") ?: "" else "",
                         payload = payload,
                         format = actualFormat,
                         timestamp = obj.getLong("timestamp", 0L),

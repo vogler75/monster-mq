@@ -61,12 +61,12 @@ class SidebarManager {
                     {
                         href: '/pages/topic-browser.html',
                         icon: '<circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path>',
-                        text: 'Topics'
+                        text: 'Browser'
                     },
                     {
                         href: '/pages/topic-chart.html',
                         icon: '<path d="M3 3v18h18"></path><path d="M18 17V9"></path><path d="M13 17V5"></path><path d="M8 17v-3"></path>',
-                        text: 'Topic Chart'
+                        text: 'Visualizer'
                     }
                 ]
             },
