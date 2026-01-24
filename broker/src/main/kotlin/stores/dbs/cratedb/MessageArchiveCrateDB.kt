@@ -272,6 +272,151 @@ class MessageArchiveCrateDB (
         }
     }
 
+    override fun getAggregatedHistory(
+        topics: List<String>,
+        startTime: Instant,
+        endTime: Instant,
+        intervalMinutes: Int,
+        functions: List<String>,
+        fields: List<String>
+    ): JsonObject {
+        if (topics.isEmpty()) {
+            return JsonObject()
+                .put("columns", JsonArray().add("timestamp"))
+                .put("rows", JsonArray())
+        }
+
+        logger.fine { "CrateDB getAggregatedHistory: topics=$topics, interval=${intervalMinutes}min, functions=$functions, fields=$fields" }
+
+        val result = JsonObject()
+        val columns = JsonArray().add("timestamp")
+        val rows = JsonArray()
+
+        try {
+            db.connection?.let { connection ->
+                // Build column definitions and SELECT clauses
+                val selectClauses = mutableListOf<String>()
+                val columnNames = mutableListOf<String>()
+
+                // CrateDB uses DATE_TRUNC for time bucketing
+                // For intervals not supported by DATE_TRUNC, we calculate bucket manually
+                val bucketExpr = when (intervalMinutes) {
+                    1 -> "DATE_TRUNC('minute', time)"
+                    60 -> "DATE_TRUNC('hour', time)"
+                    1440 -> "DATE_TRUNC('day', time)"
+                    else -> {
+                        // For 5, 15 minute intervals - truncate to interval boundary
+                        // CrateDB doesn't have a direct time_bucket, so we compute it
+                        "(DATE_TRUNC('hour', time) + (FLOOR(EXTRACT(minute FROM time) / $intervalMinutes) * $intervalMinutes) * INTERVAL '1' MINUTE)"
+                    }
+                }
+
+                // Build aggregation expressions for each topic and field combination
+                for (topic in topics) {
+                    val topicAlias = topic.replace("/", "_").replace(".", "_")
+                    val effectiveFields = if (fields.isEmpty()) listOf("") else fields
+
+                    for (field in effectiveFields) {
+                        val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
+                        val valueExpr = if (field.isEmpty()) {
+                            // Raw value - try payload_obj first, then decode payload_b64 (base64 string)
+                            // CrateDB stores non-JSON as base64 encoded string in payload_b64
+                            // We need to decode the base64 and convert to double
+                            // CrateDB has encode/decode functions for base64
+                            "COALESCE(TRY_CAST(payload_obj AS DOUBLE), TRY_CAST(decode(payload_b64, 'base64') AS DOUBLE))"
+                        } else {
+                            // JSON field extraction - CrateDB uses subscript notation for OBJECT
+                            val pathParts = field.split(".")
+                            val objPath = pathParts.joinToString("") { "['$it']" }
+                            "TRY_CAST(payload_obj$objPath AS DOUBLE)"
+                        }
+
+                        for (func in functions) {
+                            val funcLower = func.lowercase()
+                            val colName = "$topic$fieldAlias" + "_$funcLower"
+                            columnNames.add(colName)
+                            columns.add(colName)
+
+                            // Add CASE WHEN for topic filtering within the aggregation
+                            selectClauses.add("${func.uppercase()}(CASE WHEN topic = ? THEN $valueExpr END) AS \"${colName.replace("\"", "\"\"")}\"")
+                        }
+                    }
+                }
+
+                // Build the SQL query
+                val topicPlaceholders = topics.joinToString(", ") { "?" }
+                val sql = """
+                    SELECT
+                        $bucketExpr AS bucket,
+                        ${selectClauses.joinToString(",\n                        ")}
+                    FROM $tableName
+                    WHERE topic IN ($topicPlaceholders)
+                      AND time >= ? AND time <= ?
+                    GROUP BY bucket
+                    ORDER BY bucket ASC
+                """.trimIndent()
+
+                logger.fine { "Executing CrateDB aggregation SQL: $sql" }
+
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    var paramIndex = 1
+
+                    // Set topic parameters for CASE WHEN expressions
+                    val effectiveFields = if (fields.isEmpty()) listOf("") else fields
+                    for (topic in topics) {
+                        for (field in effectiveFields) {
+                            for (func in functions) {
+                                preparedStatement.setString(paramIndex++, topic)
+                            }
+                        }
+                    }
+
+                    // Set topic parameters for IN clause
+                    for (topic in topics) {
+                        preparedStatement.setString(paramIndex++, topic)
+                    }
+
+                    // Set time range parameters
+                    preparedStatement.setTimestamp(paramIndex++, Timestamp.from(startTime))
+                    preparedStatement.setTimestamp(paramIndex, Timestamp.from(endTime))
+
+                    val queryStart = System.currentTimeMillis()
+                    val resultSet = preparedStatement.executeQuery()
+                    val queryDuration = System.currentTimeMillis() - queryStart
+                    logger.fine { "CrateDB aggregation query completed in ${queryDuration}ms" }
+
+                    while (resultSet.next()) {
+                        val row = JsonArray()
+                        // Add timestamp
+                        val bucket = resultSet.getTimestamp("bucket")
+                        row.add(bucket?.toInstant()?.toString())
+
+                        // Add aggregated values
+                        for (colName in columnNames) {
+                            val value = resultSet.getObject(colName)
+                            if (value == null || resultSet.wasNull()) {
+                                row.addNull()
+                            } else {
+                                row.add((value as Number).toDouble())
+                            }
+                        }
+                        rows.add(row)
+                    }
+                }
+            } ?: run {
+                logger.warning("No database connection available for aggregation query")
+            }
+        } catch (e: SQLException) {
+            logger.severe("Error executing CrateDB aggregation query: ${e.message}")
+            e.printStackTrace()
+        }
+
+        result.put("columns", columns)
+        result.put("rows", rows)
+        logger.fine { "CrateDB aggregation returned ${rows.size()} rows with ${columns.size()} columns" }
+        return result
+    }
+
     override suspend fun tableExists(): Boolean {
         return try {
             db.connection?.let { connection ->

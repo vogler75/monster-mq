@@ -67,6 +67,34 @@ type Query {
         includeTopic: Boolean = true
     ): [ArchivedMessage!]!
 
+    # Query aggregated historical data with time bucketing
+    # Returns time-series data aggregated by interval with multiple aggregation functions
+    # Useful for charting and analytics without retrieving raw data
+    # Performs database-level aggregation for efficiency
+    aggregatedMessages(
+        # List of exact topic names (no wildcards allowed)
+        # Each topic will have its own columns in the result
+        topics: [String!]!
+        # Aggregation time interval (bucket size)
+        interval: AggregationInterval!
+        # ISO 8601 start timestamp (required)
+        # Example: "2024-01-15T10:00:00Z"
+        startTime: String!
+        # ISO 8601 end timestamp (required)
+        # Example: "2024-01-15T11:00:00Z"
+        endTime: String!
+        # Aggregation functions to apply (default: [AVG])
+        # Multiple functions create multiple columns per topic/field
+        functions: [AggregationFunction!] = [AVG]
+        # Optional JSON field paths to extract from payload
+        # Applies to all topics - each field creates additional columns
+        # If empty or omitted, uses raw numeric payload value
+        # Examples: ["temperature", "pressure", "sensor.value"]
+        fields: [String!]
+        # ArchiveGroup containing the message archive to search
+        archiveGroup: String = "Default"
+    ): AggregatedResult!
+
     # Query recent system logs from the in-memory store
     # Returns system logs from the circular buffer with optional filtering
     # Time can be specified using startTime/endTime or lastMinutes
@@ -1497,4 +1525,53 @@ extend type Query {
         # Filter by cluster node ID (optional)
         node: String
     ): [JDBCLogger!]!
+}
+
+#############################################
+# Aggregated Messages Query                  #
+#############################################
+
+# Aggregation interval buckets for time-series data
+enum AggregationInterval {
+    # 1 minute buckets
+    ONE_MINUTE
+    # 5 minute buckets
+    FIVE_MINUTES
+    # 15 minute buckets
+    FIFTEEN_MINUTES
+    # 1 hour buckets
+    ONE_HOUR
+    # 1 day buckets
+    ONE_DAY
+}
+
+# Aggregation functions for numeric data
+enum AggregationFunction {
+    # Average value in bucket
+    AVG
+    # Minimum value in bucket
+    MIN
+    # Maximum value in bucket
+    MAX
+    # Count of values in bucket
+    COUNT
+}
+
+# Response type for aggregated queries - table format for efficient transfer
+type AggregatedResult {
+    # Column headers: ["timestamp", "topic1_field_avg", "topic1_field_min", ...]
+    columns: [String!]!
+    # Data rows: [[timestamp, value, value, ...], ...]
+    # Each row is an array where first element is ISO timestamp, rest are numeric values or null
+    rows: [[JSON]!]!
+    # The aggregation interval used
+    interval: AggregationInterval!
+    # Start time of the query range (ISO 8601)
+    startTime: String!
+    # End time of the query range (ISO 8601)
+    endTime: String!
+    # Number of topics queried
+    topicCount: Int!
+    # Number of data rows returned
+    rowCount: Int!
 }
