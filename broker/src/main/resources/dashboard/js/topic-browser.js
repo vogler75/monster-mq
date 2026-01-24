@@ -1,3 +1,16 @@
+// State persistence keys
+const STATE_KEYS = {
+    SELECTED_TOPIC: 'monstermq_topic_browser_selected_topic',
+    EXPANDED_NODES: 'monstermq_topic_browser_expanded_nodes',
+    SEARCH_QUERY: 'monstermq_topic_browser_search_query',
+    BROWSE_MODE: 'monstermq_topic_browser_mode',
+    AI_PANEL_OPEN: 'monstermq_topic_browser_ai_open',
+    AI_CHAT_HISTORY: 'monstermq_topic_browser_chat_history',
+    AI_CONTEXT_LOADED: 'monstermq_topic_browser_ai_context_loaded',
+    ARCHIVE_GROUP: 'monstermq_selected_archive_group',
+    AI_SYSTEM_PROMPT: 'monstermq_ai_system_prompt'
+};
+
 class TopicBrowser {
     constructor() {
         this.tree = document.getElementById('topic-tree');
@@ -9,6 +22,7 @@ class TopicBrowser {
         this.treeNodes = new Map(); // topic path -> TreeNode
         this.selectedTopic = null;
         this.selectedArchiveGroup = 'Default'; // Default archiveGroup
+        this.expandedPaths = new Set(); // Track expanded node paths for persistence
 
         this.init();
     }
@@ -54,6 +68,9 @@ class TopicBrowser {
 
         // Load initial tree structure with root node
         this.createRootNode();
+
+        // Restore state after a short delay to allow tree to load
+        setTimeout(() => this.restoreState(), 300);
     }
 
     async loadArchiveGroups() {
@@ -141,6 +158,7 @@ class TopicBrowser {
             this.browseButton.style.display = 'none';
             this.searchButton.style.display = 'inline-block';
         }
+        this.saveState(); // Persist mode change
     }
 
     browseRoot() {
@@ -336,6 +354,7 @@ class TopicBrowser {
                 childContainer.classList.add('collapsed');
                 nodeData.toggle.classList.remove('expanded');
                 nodeData.expanded = false;
+                this.trackExpandedState(topicPath, false);
             }
         } else {
             // Expand
@@ -355,6 +374,7 @@ class TopicBrowser {
 
             nodeData.toggle.classList.add('expanded');
             nodeData.expanded = true;
+            this.trackExpandedState(topicPath, true);
         }
     }
 
@@ -366,6 +386,7 @@ class TopicBrowser {
         itemElement.classList.add('selected');
 
         this.selectedTopic = topicPath;
+        this.saveState(); // Persist selected topic
 
         // Don't try to load message data for the root node
         if (topicPath === 'root') {
@@ -531,6 +552,8 @@ class TopicBrowser {
         const searchTerm = this.searchInput.value.trim();
         if (!searchTerm) return;
 
+        this.saveState(); // Persist search query
+
         try {
             this.showSearchLoading();
 
@@ -666,6 +689,132 @@ class TopicBrowser {
         li.innerHTML = `<div class="error">Error: ${message}</div>`;
         return li;
     }
+
+    // ========== State Persistence Methods ==========
+
+    /**
+     * Save the current state to localStorage
+     */
+    saveState() {
+        try {
+            // Save selected topic
+            if (this.selectedTopic) {
+                localStorage.setItem(STATE_KEYS.SELECTED_TOPIC, this.selectedTopic);
+            } else {
+                localStorage.removeItem(STATE_KEYS.SELECTED_TOPIC);
+            }
+
+            // Save expanded nodes
+            const expandedArray = Array.from(this.expandedPaths);
+            localStorage.setItem(STATE_KEYS.EXPANDED_NODES, JSON.stringify(expandedArray));
+
+            // Save search query and mode
+            if (this.searchInput) {
+                localStorage.setItem(STATE_KEYS.SEARCH_QUERY, this.searchInput.value);
+            }
+            if (this.searchMode && this.searchMode.checked) {
+                localStorage.setItem(STATE_KEYS.BROWSE_MODE, 'search');
+            } else {
+                localStorage.setItem(STATE_KEYS.BROWSE_MODE, 'browse');
+            }
+        } catch (e) {
+            console.warn('Failed to save topic browser state:', e);
+        }
+    }
+
+    /**
+     * Restore state from localStorage after tree is loaded
+     */
+    async restoreState() {
+        try {
+            // Restore browse mode
+            const savedMode = localStorage.getItem(STATE_KEYS.BROWSE_MODE);
+            if (savedMode === 'search' && this.searchMode) {
+                this.searchMode.checked = true;
+                this.switchMode('search');
+            }
+
+            // Restore search query
+            const savedQuery = localStorage.getItem(STATE_KEYS.SEARCH_QUERY);
+            if (savedQuery && this.searchInput) {
+                this.searchInput.value = savedQuery;
+            }
+
+            // Restore expanded nodes
+            const savedExpanded = localStorage.getItem(STATE_KEYS.EXPANDED_NODES);
+            if (savedExpanded) {
+                const expandedArray = JSON.parse(savedExpanded);
+                this.expandedPaths = new Set(expandedArray);
+
+                // Expand nodes in order (parent first)
+                const sortedPaths = expandedArray.sort((a, b) =>
+                    a.split('/').length - b.split('/').length
+                );
+
+                for (const path of sortedPaths) {
+                    await this.expandToPath(path);
+                }
+            }
+
+            // Restore selected topic
+            const savedTopic = localStorage.getItem(STATE_KEYS.SELECTED_TOPIC);
+            if (savedTopic) {
+                await this.restoreSelectedTopic(savedTopic);
+            }
+        } catch (e) {
+            console.warn('Failed to restore topic browser state:', e);
+        }
+    }
+
+    /**
+     * Expand the tree to show a specific path
+     */
+    async expandToPath(targetPath) {
+        const parts = targetPath.split('/');
+        let currentPath = '';
+
+        for (let i = 0; i < parts.length; i++) {
+            currentPath = i === 0 ? parts[i] : currentPath + '/' + parts[i];
+
+            const nodeData = this.treeNodes.get(currentPath);
+            if (nodeData && nodeData.hasChildren && !nodeData.expanded) {
+                await this.toggleNode(nodeData.element, currentPath);
+            }
+        }
+    }
+
+    /**
+     * Restore selection to a previously selected topic
+     */
+    async restoreSelectedTopic(topicPath) {
+        // First expand to the topic's parent path
+        const parts = topicPath.split('/');
+        if (parts.length > 1) {
+            const parentPath = parts.slice(0, -1).join('/');
+            await this.expandToPath(parentPath);
+        }
+
+        // Wait a bit for the tree to render
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Find and select the topic
+        const nodeData = this.treeNodes.get(topicPath);
+        if (nodeData && nodeData.item) {
+            this.selectTopic(topicPath, nodeData.item);
+        }
+    }
+
+    /**
+     * Track expanded state when a node is toggled
+     */
+    trackExpandedState(topicPath, isExpanded) {
+        if (isExpanded) {
+            this.expandedPaths.add(topicPath);
+        } else {
+            this.expandedPaths.delete(topicPath);
+        }
+        this.saveState();
+    }
 }
 
 /**
@@ -678,6 +827,7 @@ class TopicBrowserAI {
         this.contextLoaded = false;  // Track if topic data has been sent
         this.quickActions = [];  // Loaded from config file
         this.defaultSystemPrompt = null;  // Will be loaded from config file
+        this.isPanelOpen = false;  // Track panel state
 
         this.init();
     }
@@ -882,6 +1032,9 @@ Topic data:`;
         // Update context indicator
         this.updateContextIndicator();
 
+        // Clear persisted state
+        this.saveState();
+
         console.log('AI context cleared - next question will reload topic data');
     }
 
@@ -916,12 +1069,15 @@ Topic data:`;
             panel.style.display = 'flex';
             layout.classList.add('ai-open');
             if (toggleBtn) toggleBtn.classList.add('active');
+            this.isPanelOpen = true;
             this.updateContextInfo();
         } else {
             panel.style.display = 'none';
             layout.classList.remove('ai-open');
             if (toggleBtn) toggleBtn.classList.remove('active');
+            this.isPanelOpen = false;
         }
+        this.saveState(); // Persist panel state
     }
 
     updateContextInfo() {
@@ -999,6 +1155,7 @@ Topic data:`;
                 // Note: Topic data is always sent to the backend, chat history provides conversation context
                 this.chatHistory.push({ role: 'user', content: q });
                 this.chatHistory.push({ role: 'assistant', content: result.response });
+                this.saveState(); // Persist chat history
 
                 let statsText = '';
                 if (result.topicsAnalyzed > 0) {
@@ -1163,7 +1320,83 @@ Topic data:`;
         if (systemPromptEl) {
             systemPromptEl.value = this.systemPrompt;
         }
-        localStorage.removeItem('monstermq_ai_system_prompt');
+        localStorage.removeItem(STATE_KEYS.AI_SYSTEM_PROMPT);
+    }
+
+    // ========== State Persistence Methods ==========
+
+    /**
+     * Save AI panel state to localStorage
+     */
+    saveState() {
+        try {
+            // Save panel open state
+            localStorage.setItem(STATE_KEYS.AI_PANEL_OPEN, this.isPanelOpen ? 'true' : 'false');
+
+            // Save chat history
+            if (this.chatHistory.length > 0) {
+                localStorage.setItem(STATE_KEYS.AI_CHAT_HISTORY, JSON.stringify(this.chatHistory));
+            } else {
+                localStorage.removeItem(STATE_KEYS.AI_CHAT_HISTORY);
+            }
+
+            // Save context loaded state
+            localStorage.setItem(STATE_KEYS.AI_CONTEXT_LOADED, this.contextLoaded ? 'true' : 'false');
+        } catch (e) {
+            console.warn('Failed to save AI state:', e);
+        }
+    }
+
+    /**
+     * Restore AI panel state from localStorage
+     */
+    restoreState() {
+        try {
+            // Restore chat history
+            const savedHistory = localStorage.getItem(STATE_KEYS.AI_CHAT_HISTORY);
+            if (savedHistory) {
+                this.chatHistory = JSON.parse(savedHistory);
+                // Rebuild chat UI from history
+                this.rebuildChatUI();
+            }
+
+            // Restore context loaded state
+            const savedContextLoaded = localStorage.getItem(STATE_KEYS.AI_CONTEXT_LOADED);
+            if (savedContextLoaded === 'true') {
+                this.contextLoaded = true;
+                this.updateContextIndicator();
+            }
+
+            // Restore panel open state (do this last so UI updates properly)
+            const savedPanelOpen = localStorage.getItem(STATE_KEYS.AI_PANEL_OPEN);
+            if (savedPanelOpen === 'true') {
+                this.togglePanel(true);
+            }
+        } catch (e) {
+            console.warn('Failed to restore AI state:', e);
+        }
+    }
+
+    /**
+     * Rebuild chat UI from saved history
+     */
+    rebuildChatUI() {
+        const chatHistoryEl = document.getElementById('ai-chat-history');
+        if (!chatHistoryEl) return;
+
+        // Clear existing messages
+        chatHistoryEl.innerHTML = '';
+
+        // Rebuild from history
+        for (const msg of this.chatHistory) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `chat-message chat-${msg.role}`;
+            msgDiv.innerHTML = this.formatMessage(msg.content);
+            chatHistoryEl.appendChild(msgDiv);
+        }
+
+        // Scroll to bottom
+        chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
     }
 }
 
@@ -1174,4 +1407,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize AI functionality
     window.topicBrowserAI = new TopicBrowserAI(topicBrowser);
+
+    // Restore AI state after a short delay to ensure everything is initialized
+    setTimeout(() => {
+        if (window.topicBrowserAI) {
+            window.topicBrowserAI.restoreState();
+        }
+    }, 500);
 });

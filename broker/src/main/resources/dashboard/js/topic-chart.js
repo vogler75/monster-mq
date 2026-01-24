@@ -685,9 +685,11 @@ class TopicChartManager {
     pendingTopicFromBrowser = null;
     selectedJsonField = '';
 
-    async showJsonFieldModal(topic) {
+    async showJsonFieldModal(topic, archiveGroup = null) {
         this.pendingTopicFromBrowser = topic;
         this.selectedJsonField = '';
+        // Use provided archive group or fall back to manager's archive group
+        const queryArchiveGroup = archiveGroup || this.archiveGroup;
 
         // Update title
         document.getElementById('modal-topic-title').textContent = `Select Field: ${topic}`;
@@ -698,7 +700,7 @@ class TopicChartManager {
 
         // Fetch current value
         try {
-            const value = await this.fetchCurrentValue(topic);
+            const value = await this.fetchCurrentValue(topic, queryArchiveGroup);
 
             if (value && value.payload) {
                 try {
@@ -734,7 +736,7 @@ class TopicChartManager {
         }
     }
 
-    async fetchCurrentValue(topic) {
+    async fetchCurrentValue(topic, archiveGroup = null) {
         const query = `
             query GetCurrentValue($topic: String!, $archiveGroup: String!) {
                 currentValue(topic: $topic, archiveGroup: $archiveGroup) {
@@ -746,7 +748,7 @@ class TopicChartManager {
         `;
         const response = await graphqlClient.query(query, {
             topic: topic,
-            archiveGroup: this.archiveGroup
+            archiveGroup: archiveGroup || this.archiveGroup
         });
         return response?.currentValue;
     }
@@ -917,7 +919,7 @@ class TopicChartManager {
 }
 
 /**
- * Topic Browser Side Panel for Topic Chart
+ * Topic Browser Side Panel for Topic Visualizer
  */
 class TopicChartSidePanel {
     static instance = null;
@@ -1199,8 +1201,8 @@ class TopicChartSidePanel {
         item.addEventListener('click', (e) => {
             e.stopPropagation();
             if (hasValue) {
-                // Show modal to ask for JSON field
-                topicChartManager.showJsonFieldModal(fullPath);
+                // Show modal to ask for JSON field, passing the panel's selected archive group
+                topicChartManager.showJsonFieldModal(fullPath, this.selectedArchiveGroup);
             } else if (hasChildren) {
                 this.toggleNode(fullPath);
             }

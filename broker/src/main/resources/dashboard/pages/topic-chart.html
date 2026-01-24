@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MonsterMQ - Topic Chart</title>
+    <title>MonsterMQ - Topic Visualizer</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -657,7 +657,7 @@
     <div class="main-content" id="main-content">
         <div class="container">
             <div class="page-header">
-                <h1 class="page-title">Topic Chart</h1>
+                <h1 class="page-title">Topic Visualizer</h1>
                 <p class="page-subtitle">Visualize historical MQTT topic data as time-series charts</p>
             </div>
 
@@ -772,7 +772,7 @@
             <h3 id="modal-topic-title">Select Field</h3>
 
             <!-- Loading state -->
-            <div id="modal-loading" class="modal-loading">
+            <div id="modal-loading" class="modal-loading hidden">
                 Loading topic value...
             </div>
 
@@ -798,7 +798,7 @@
             </div>
 
             <div class="modal-actions">
-                <button class="btn btn-secondary btn-small" id="modal-use-raw">Use Raw Value</button>
+                <button class="btn btn-secondary btn-small hidden" id="modal-use-raw">Use Raw Value</button>
                 <button class="btn btn-secondary btn-small" id="modal-cancel">Cancel</button>
                 <button class="btn btn-primary btn-small" id="modal-add">Add Topic</button>
             </div>
