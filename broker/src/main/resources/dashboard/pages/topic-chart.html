@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Topic Chart</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        /* Chart Container */
+        .chart-wrapper {
+            background: var(--dark-surface, var(--background-secondary));
+            border-radius: 12px;
+            border: 1px solid var(--dark-border, var(--border-color));
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .chart-area {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+
+        .chart-area canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* Time Controls */
+        .time-controls {
+            background: var(--dark-surface, var(--background-secondary));
+            border-radius: 12px;
+            border: 1px solid var(--dark-border, var(--border-color));
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .time-controls-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .time-controls-group label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .time-controls .btn-nav {
+            background: var(--dark-bg, var(--background-primary));
+            border: 1px solid var(--dark-border, var(--border-color));
+            color: var(--text-primary);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .time-controls .btn-nav:hover {
+            background: var(--monster-purple);
+            border-color: var(--monster-purple);
+            color: white;
+        }
+
+        .time-controls .btn-nav:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .time-range-select {
+            padding: 0.5rem 1rem;
+            background: var(--dark-bg, var(--background-primary));
+            border: 1px solid var(--dark-border, var(--border-color));
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .time-display {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-left: auto;
+        }
+
+        /* Topics Panel */
+        .topics-panel {
+            background: var(--dark-surface, var(--background-secondary));
+            border-radius: 12px;
+            border: 1px solid var(--dark-border, var(--border-color));
+            padding: 1.5rem;
+        }
+
+        .topics-panel h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .add-topic-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--dark-border, var(--border-color));
+        }
+
+        .add-topic-section input {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.5rem 0.75rem;
+            background: var(--dark-bg, var(--background-primary));
+            border: 1px solid var(--dark-border, var(--border-color));
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .add-topic-section input:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+        }
+
+        .add-topic-section input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .json-field-input {
+            width: 120px !important;
+            flex: 0 0 120px !important;
+        }
+
+        .topics-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .topic-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--dark-bg, var(--background-primary));
+            border-radius: 8px;
+            border: 1px solid var(--dark-border, var(--border-color));
+        }
+
+        .topic-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .topic-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .topic-name {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            word-break: break-all;
+        }
+
+        .topic-field {
+            font-size: 0.75rem;
+            color: var(--monster-purple);
+            margin-top: 2px;
+        }
+
+        .topic-remove {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .topic-remove:hover {
+            background: rgba(239, 68, 68, 0.1);
+            color: #EF4444;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+        }
+
+        /* Topic Browser Side Panel Styles */
+        .topic-browser-side-panel {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 380px;
+            min-width: 300px;
+            max-width: 600px;
+            height: 100vh;
+            background: var(--dark-surface);
+            border-left: 1px solid var(--dark-border);
+            z-index: 1000;
+            transition: right 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -4px 0 8px rgba(0, 0, 0, 0.2);
+            resize: horizontal;
+            overflow: hidden;
+        }
+
+        .topic-browser-side-panel.open {
+            right: 0;
+        }
+
+        .topic-panel-resize-handle {
+            position: absolute;
+            left: -5px;
+            top: 0;
+            width: 10px;
+            height: 100%;
+            cursor: col-resize;
+            background: transparent;
+            z-index: 1001;
+        }
+
+        .topic-panel-resize-handle:hover {
+            background: rgba(124, 58, 237, 0.3);
+        }
+
+        body.topic-panel-open .main-content {
+            transition: margin-right 0.3s ease;
+        }
+
+        .topic-browser-floating-toggle {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%) rotate(-90deg);
+            background: var(--monster-purple);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px 8px 0 0;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            z-index: 999;
+            box-shadow: -2px -2px 8px rgba(0, 0, 0, 0.2);
+            transform-origin: center;
+        }
+
+        .topic-browser-floating-toggle:hover {
+            background: var(--monster-dark);
+            right: 15px;
+        }
+
+        .topic-browser-floating-toggle.active {
+            background: var(--monster-dark);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .topic-panel-header {
+            padding: 1rem;
+            background: var(--dark-surface-2);
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 60px;
+        }
+
+        .topic-panel-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .topic-panel-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .topic-panel-close:hover {
+            background: var(--dark-border);
+            color: var(--text-primary);
+        }
+
+        .topic-panel-archive-select {
+            margin: 0.5rem 1rem;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            font-size: 0.875rem;
+        }
+
+        .topic-panel-archive-select label {
+            color: var(--text-primary);
+            font-weight: 500;
+            min-width: 80px;
+        }
+
+        .topic-panel-archive-select select {
+            flex: 1;
+            padding: 0.5rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .topic-panel-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.5rem;
+        }
+
+        .topic-panel-tree .tree-node {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .topic-panel-tree .tree-item {
+            display: flex;
+            align-items: center;
+            padding: 0.4rem 0.5rem;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            user-select: none;
+            font-size: 0.875rem;
+        }
+
+        .topic-panel-tree .tree-item:hover {
+            background: rgba(124, 58, 237, 0.1);
+        }
+
+        .topic-panel-tree .tree-item.has-data {
+            color: var(--monster-green);
+            font-weight: 500;
+        }
+
+        .topic-panel-tree .tree-toggle {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 0.4rem;
+            border: none;
+            background: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 2px;
+            transition: all 0.2s;
+            font-size: 0.75rem;
+        }
+
+        .topic-panel-tree .tree-toggle:hover {
+            background: var(--dark-border);
+            color: var(--text-primary);
+        }
+
+        .topic-panel-tree .tree-toggle.expanded {
+            transform: rotate(90deg);
+        }
+
+        .topic-panel-tree .tree-toggle:empty {
+            visibility: hidden;
+        }
+
+        .topic-panel-tree .tree-children {
+            margin-left: 1rem;
+            border-left: 1px solid var(--dark-border);
+            padding-left: 0.4rem;
+        }
+
+        .topic-panel-tree .tree-children.collapsed {
+            display: none;
+        }
+
+        .topic-panel-tree .tree-icon {
+            margin-right: 0.4rem;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .topic-panel-tree .tree-icon.folder {
+            color: var(--monster-purple);
+        }
+
+        .topic-panel-tree .tree-icon.topic {
+            color: var(--monster-green);
+        }
+
+        /* JSON Field Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .modal-overlay.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            padding: 1.5rem;
+            max-width: 400px;
+            width: 90%;
+            border: 1px solid var(--dark-border);
+        }
+
+        .modal-content h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+        }
+
+        .modal-content p {
+            margin: 0 0 1rem 0;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .modal-content input {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            box-sizing: border-box;
+        }
+
+        .modal-content input:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+        }
+
+        /* JSON Viewer in Modal */
+        .json-viewer {
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            padding: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+
+        .json-line {
+            display: block;
+            padding: 2px 4px;
+            border-radius: 4px;
+            white-space: pre;
+        }
+
+        .json-line.clickable {
+            cursor: pointer;
+        }
+
+        .json-line.clickable:hover {
+            background: rgba(124, 58, 237, 0.2);
+        }
+
+        .json-line.selected {
+            background: rgba(124, 58, 237, 0.3);
+        }
+
+        .json-key {
+            color: #9CA3AF;
+        }
+
+        .json-string {
+            color: #34D399;
+        }
+
+        .json-number {
+            color: #60A5FA;
+        }
+
+        .json-boolean {
+            color: #F472B6;
+        }
+
+        .json-null {
+            color: #F472B6;
+        }
+
+        .field-selection {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            background: var(--dark-surface-2);
+            border-radius: 6px;
+            font-size: 0.875rem;
+        }
+
+        .field-selection-label {
+            color: var(--text-secondary);
+            margin-right: 0.5rem;
+        }
+
+        .field-selection-value {
+            color: var(--monster-purple);
+            font-weight: 500;
+            font-family: monospace;
+        }
+
+        .modal-loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 768px) {
+            .topic-browser-side-panel {
+                width: 100vw;
+                right: -100vw;
+                min-width: 100vw;
+                max-width: 100vw;
+            }
+
+            .time-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .time-controls-group {
+                justify-content: center;
+            }
+
+            .time-display {
+                margin-left: 0;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Top Bar -->
+    <div class="top-bar">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <button class="sidebar-toggle" onclick="toggleSidebar()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15,18 9,12 15,6"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">U</div>
+                <div class="user-details">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-role">Administrator</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">Topic Chart</h1>
+                <p class="page-subtitle">Visualize historical MQTT topic data as time-series charts</p>
+            </div>
+
+            <!-- Chart Area -->
+            <div class="chart-wrapper">
+                <div class="chart-area">
+                    <canvas id="topicChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Time Controls -->
+            <div class="time-controls">
+                <div class="time-controls-group">
+                    <button class="btn-nav" id="btn-jump-back" title="Jump back">&#171;</button>
+                    <button class="btn-nav" id="btn-step-back" title="Step back">&#8249;</button>
+                    <button class="btn-nav" id="btn-zoom-out" title="Zoom out">-</button>
+                    <button class="btn-nav" id="btn-zoom-in" title="Zoom in">+</button>
+                    <button class="btn-nav" id="btn-step-forward" title="Step forward">&#8250;</button>
+                    <button class="btn-nav" id="btn-jump-now" title="Jump to now">&#187;</button>
+                </div>
+                <div class="time-controls-group">
+                    <label>Range:</label>
+                    <select class="time-range-select" id="time-range-select">
+                        <option value="5">5 minutes</option>
+                        <option value="10" selected>10 minutes</option>
+                        <option value="30">30 minutes</option>
+                        <option value="60">1 hour</option>
+                        <option value="360">6 hours</option>
+                        <option value="1440">24 hours</option>
+                        <option value="10080">7 days</option>
+                    </select>
+                </div>
+                <div class="time-controls-group">
+                    <label>Archive:</label>
+                    <select class="time-range-select" id="archive-group-select">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+                <div class="time-display" id="time-display">
+                    <!-- Time range display -->
+                </div>
+            </div>
+
+            <!-- Topics Panel -->
+            <div class="topics-panel">
+                <h3>Topics</h3>
+                <div class="add-topic-section">
+                    <input type="text" id="topic-input" placeholder="Enter topic path (e.g., sensors/temperature)">
+                    <input type="text" id="json-field-input" class="json-field-input" placeholder="JSON field">
+                    <button class="btn btn-primary btn-small" id="btn-add-topic">Add</button>
+                    <button class="btn btn-secondary btn-small" id="btn-browse-topics">Browse Topics</button>
+                </div>
+                <div class="topics-list" id="topics-list">
+                    <div class="empty-state">No topics added. Add a topic above or browse to select one.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Topic Browser Toggle -->
+    <button class="topic-browser-floating-toggle" id="topic-browser-floating-toggle" onclick="TopicChartSidePanel.toggle()">
+        <svg class="toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+        </svg>
+        Topics
+    </button>
+
+    <!-- Topic Browser Side Panel -->
+    <div class="topic-browser-side-panel" id="topic-browser-panel">
+        <div class="topic-panel-resize-handle" id="topic-panel-resize-handle"></div>
+        <div class="topic-panel-header">
+            <h3 class="topic-panel-title">Topic Browser</h3>
+            <button class="topic-panel-close" onclick="TopicChartSidePanel.close()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="topic-panel-archive-select">
+            <label for="topic-panel-archive-group">Archive:</label>
+            <select id="topic-panel-archive-group">
+                <option value="">Loading...</option>
+            </select>
+        </div>
+        <div class="topic-panel-tree">
+            <ul id="topic-panel-tree-root" class="tree-node">
+                <!-- Tree will be populated here -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- JSON Field Modal -->
+    <div class="modal-overlay hidden" id="json-field-modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <h3 id="modal-topic-title">Select Field</h3>
+
+            <!-- Loading state -->
+            <div id="modal-loading" class="modal-loading">
+                Loading topic value...
+            </div>
+
+            <!-- JSON viewer (shown when payload is JSON object) -->
+            <div id="modal-json-section" class="hidden">
+                <p>Click on a numeric field to select it:</p>
+                <div id="modal-json-viewer" class="json-viewer"></div>
+                <div class="field-selection" id="modal-field-selection">
+                    <span class="field-selection-label">Selected:</span>
+                    <span class="field-selection-value" id="modal-selected-field">(none)</span>
+                </div>
+            </div>
+
+            <!-- Simple input (fallback) -->
+            <div id="modal-simple-section" class="hidden">
+                <p>Enter the JSON field path to extract:</p>
+                <input type="text" id="modal-json-field" placeholder="e.g., temperature or data.value">
+            </div>
+
+            <!-- Raw value info (shown when not JSON) -->
+            <div id="modal-raw-section" class="hidden">
+                <p>This topic contains a raw numeric value. It will be added directly.</p>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary btn-small" id="modal-use-raw">Use Raw Value</button>
+                <button class="btn btn-secondary btn-small" id="modal-cancel">Cancel</button>
+                <button class="btn btn-primary btn-small" id="modal-add">Add Topic</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/topic-chart.js"></script>
+</body>
+</html>
