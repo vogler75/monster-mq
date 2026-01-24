@@ -1,6 +1,8 @@
 package at.rocworks.extensions
 
 import at.rocworks.Utils
+import at.rocworks.auth.UserManager
+import at.rocworks.extensions.graphql.JwtService
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.IMessageStore
 
@@ -20,7 +22,8 @@ class McpServer(
     private val host: String,
     private val port: Int,
     private val retainedStore: IMessageStore,
-    private val archiveHandler: ArchiveHandler
+    private val archiveHandler: ArchiveHandler,
+    private val userManager: UserManager
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -45,6 +48,14 @@ class McpServer(
 
         val router = Router.router(vertx)
         router.route().handler(BodyHandler.create())
+
+        // Authentication handler for all MCP routes
+        router.route(MCP_PATH).handler { ctx: RoutingContext ->
+            if (!validateAuthentication(ctx)) {
+                return@handler
+            }
+            ctx.next()
+        }
 
         // Post handler for MCP requests
         router.post(MCP_PATH).handler { ctx: RoutingContext ->
@@ -171,5 +182,57 @@ class McpServer(
 
         connection.response.write("data: ${message.encode()}\n\n")
         logger.finer("Sent message to connection ${connection.connectionId}: $message")
+    }
+
+    /**
+     * Validate authentication for MCP requests.
+     * If user management is disabled, authentication is skipped.
+     * Otherwise, a valid JWT Bearer token is required.
+     */
+    private fun validateAuthentication(ctx: RoutingContext): Boolean {
+        // If user management is disabled, allow all requests
+        if (!userManager.isUserManagementEnabled()) {
+            logger.fine("User management disabled, allowing MCP request")
+            return true
+        }
+
+        // Extract Authorization header
+        val authHeader = ctx.request().getHeader("Authorization")
+        val token = JwtService.extractTokenFromHeader(authHeader)
+
+        if (token == null) {
+            logger.warning("MCP request rejected: No Authorization header")
+            ctx.response()
+                .setStatusCode(401)
+                .putHeader("Content-Type", "application/json")
+                .putHeader("WWW-Authenticate", "Bearer")
+                .end(JsonObject()
+                    .put("jsonrpc", "2.0")
+                    .put("error", JsonObject()
+                        .put("code", -32600)
+                        .put("message", "Authentication required. Provide a valid Bearer token."))
+                    .encode())
+            return false
+        }
+
+        // Validate the token
+        val username = JwtService.extractUsername(token)
+        if (username == null || JwtService.isTokenExpired(token)) {
+            logger.warning("MCP request rejected: Invalid or expired token")
+            ctx.response()
+                .setStatusCode(401)
+                .putHeader("Content-Type", "application/json")
+                .putHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"")
+                .end(JsonObject()
+                    .put("jsonrpc", "2.0")
+                    .put("error", JsonObject()
+                        .put("code", -32600)
+                        .put("message", "Invalid or expired token"))
+                    .encode())
+            return false
+        }
+
+        logger.fine("MCP request authenticated for user: $username")
+        return true
     }
 }

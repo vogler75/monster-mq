@@ -248,63 +248,15 @@ class McpHandler(
     }
 
     private fun handleListPrompts(): JsonObject {
-        // Prompts in an MCP server are named, reusable LLM interactions that define structured instructions,
-        // input schemas, and optional resource or tool context for generating model completions.
-        val promptsArray = JsonArray()
-        val codeReviewPrompt = JsonObject()
-            .put("name", "find-topics")
-            .put("description", "Find topics matching with a plain text")
-            .put("arguments", JsonArray().add(
-                    JsonObject()
-                        .put("name", "text")
-                        .put("description", "test to search for topics")
-                        .put("required", true)
-                )
-            )
-        promptsArray.add(codeReviewPrompt)
-        return JsonObject().put("prompts", promptsArray)
+        // No prompts currently implemented
+        return JsonObject().put("prompts", JsonArray())
     }
 
     private fun handleGetPrompt(params: JsonObject): Future<JsonObject> {
-        val name = params.getString("name")
-        val arguments = params.getJsonObject("arguments", JsonObject())
-
-        if (name == null) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Name parameter required"))
-        }
-
-        return when (name) {
-            /*
-            "find-topics" -> {
-                val text = arguments.getString("text", "")
-                val prompt = String.format(
-                    """
-                    Please find the topics that match the following text:
-                    ```
-                    %s
-                    ```          
-                    """.trimIndent(), text
-                )
-
-                val messages = JsonArray().add(
-                    JsonObject()
-                        .put("role", "user")
-                        .put(
-                            "content", JsonObject()
-                                .put("type", "text")
-                                .put("text", prompt)
-                        )
-                )
-
-                Future.succeededFuture(
-                    JsonObject()
-                        .put("description", "Find topic prompt")
-                        .put("messages", messages)
-                )
-            }
-            */
-            else -> Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Prompt not found: $name"))
-        }
+        val name = params.getString("name") ?: return Future.failedFuture(
+            McpException(JSONRPC_INVALID_ARGUMENT, "Name parameter required")
+        )
+        return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Prompt not found: $name"))
     }
 
     private fun handleCallToolAsync(params: JsonObject): Future<JsonObject> {
