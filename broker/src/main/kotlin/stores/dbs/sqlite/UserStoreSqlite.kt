@@ -84,6 +84,12 @@ class UserStoreSqlite(
             try {
                 connection = DriverManager.getConnection("jdbc:sqlite:$path")
                 connection?.autoCommit = false
+                // Enable WAL mode for better concurrency and set busy timeout
+                connection?.createStatement()?.use { stmt ->
+                    stmt.executeUpdate("PRAGMA journal_mode = WAL")
+                    stmt.executeUpdate("PRAGMA wal_autocheckpoint = 1000")
+                    stmt.executeUpdate("PRAGMA busy_timeout = 60000")
+                }
                 createTablesSync()
                 logger.info("SQLite user management store initialized [${Utils.getCurrentFunctionName()}]")
                 true

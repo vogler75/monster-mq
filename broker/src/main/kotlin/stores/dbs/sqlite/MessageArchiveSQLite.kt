@@ -109,7 +109,7 @@ class MessageArchiveSQLite(
             if (result.failed()) {
                 logger.warning("Error inserting batch history data: ${result.cause()?.message}")
             } else {
-                logger.fine { "Added ${messages.size} messages to archive" }
+                logger.finer { "Added ${messages.size} messages to archive" }
             }
         }
     }

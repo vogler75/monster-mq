@@ -213,7 +213,7 @@ class MessageStoreSQLite(
             if (result.failed()) {
                 logger.severe("Error inserting batch data: ${result.cause()?.message}")
             } else {
-                logger.fine { "Added ${messages.size} messages to store" }
+                logger.finer { "Added ${messages.size} messages to store" }
             }
         }
     }
