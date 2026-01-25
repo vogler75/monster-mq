@@ -197,13 +197,21 @@ class DeviceConfigStoreMongoDB(
             val now = Instant.now()
             val updatedDevice = device.copy(updatedAt = now)
 
+            // Check if document exists
+            val existingDoc = deviceConfigsCollection.find(eq("name", device.name)).first()
+
             val document = mapDeviceToDocument(updatedDevice)
 
-            deviceConfigsCollection.updateOne(
-                eq("name", device.name),
-                Document("\$set", document),
-                UpdateOptions().upsert(true)
-            )
+            if (existingDoc == null) {
+                // New document - let MongoDB generate _id
+                deviceConfigsCollection.insertOne(document)
+            } else {
+                // Update existing document
+                deviceConfigsCollection.updateOne(
+                    eq("name", device.name),
+                    Document("\$set", document)
+                )
+            }
 
             promise.complete(updatedDevice)
         } catch (e: Exception) {
@@ -419,16 +427,10 @@ class DeviceConfigStoreMongoDB(
         val promise = Promise.promise<List<Map<String, Any?>>>()
 
         try {
-            val filter = if (names.isNullOrEmpty()) {
-                Document()
-            } else {
-                Document("\$in", names)
-            }
-
             val documents = if (names.isNullOrEmpty()) {
-                deviceConfigsCollection.find().sort(Document("_id", 1)).toList()
+                deviceConfigsCollection.find().sort(Document("name", 1)).toList()
             } else {
-                deviceConfigsCollection.find(eq("_id", Document("\$in", names))).sort(Document("_id", 1)).toList()
+                deviceConfigsCollection.find(`in`("name", names)).sort(Document("name", 1)).toList()
             }
 
             val configs = documents.map { doc ->
@@ -440,7 +442,7 @@ class DeviceConfigStoreMongoDB(
                 }
 
                 mapOf(
-                    "name" to doc.getString("_id"),
+                    "name" to doc.getString("name"),
                     "namespace" to doc.getString("namespace"),
                     "nodeId" to doc.getString("node_id"),
                     "config" to configMap,
@@ -485,7 +487,6 @@ class DeviceConfigStoreMongoDB(
                     }
 
                     val document = Document()
-                        .append("_id", name)
                         .append("name", name)
                         .append("namespace", namespace)
                         .append("node_id", nodeId)
@@ -495,13 +496,18 @@ class DeviceConfigStoreMongoDB(
                         .append("created_at", Date())
                         .append("updated_at", Date())
 
-                    // Upsert
-                    val filterDoc = Document().append("_id", name)
-                    deviceConfigsCollection.replaceOne(
-                        filterDoc,
-                        document,
-                        ReplaceOptions().upsert(true)
-                    )
+                    // Check if document with this name exists
+                    val existingDoc = deviceConfigsCollection.find(eq("name", name)).first()
+                    if (existingDoc == null) {
+                        // New document - let MongoDB generate _id
+                        deviceConfigsCollection.insertOne(document)
+                    } else {
+                        // Update existing document by name
+                        deviceConfigsCollection.updateOne(
+                            eq("name", name),
+                            Document("\$set", document)
+                        )
+                    }
 
                     imported++
                 } catch (e: Exception) {
