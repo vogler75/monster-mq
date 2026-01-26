@@ -123,6 +123,7 @@ class TopicChartManager {
         document.getElementById('time-range-select').addEventListener('change', (e) => {
             this.timeRangeMinutes = parseInt(e.target.value);
             this.saveState();
+            this.updateTimeDisplay();
             this.refreshChart();
         });
 
@@ -141,7 +142,7 @@ class TopicChartManager {
         });
 
         // Navigation buttons
-        document.getElementById('btn-refresh').addEventListener('click', () => this.refreshChart());
+        document.getElementById('btn-refresh').addEventListener('click', () => this.jumpToNow());
         document.getElementById('btn-jump-back').addEventListener('click', () => this.jumpBack());
         document.getElementById('btn-step-back').addEventListener('click', () => this.stepBack());
         document.getElementById('btn-zoom-out').addEventListener('click', () => this.zoomOut());
