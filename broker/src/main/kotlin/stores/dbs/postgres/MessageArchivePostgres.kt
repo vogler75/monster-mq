@@ -427,13 +427,13 @@ class MessageArchivePostgres (
 
                     while (resultSet.next()) {
                         val row = JsonArray()
-                        // Add timestamp
-                        val bucket = resultSet.getTimestamp("bucket")
+                        // Add timestamp (column index 1)
+                        val bucket = resultSet.getTimestamp(1)
                         row.add(bucket?.toInstant()?.toString())
 
-                        // Add aggregated values
-                        for (colName in columnNames) {
-                            val value = resultSet.getObject(colName)
+                        // Add aggregated values using column indices (starting from 2)
+                        for (colIndex in 2..columnNames.size + 1) {
+                            val value = resultSet.getObject(colIndex)
                             if (value == null || resultSet.wasNull()) {
                                 row.addNull()
                             } else {
