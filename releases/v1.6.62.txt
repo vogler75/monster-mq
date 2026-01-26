@@ -1,0 +1,26 @@
+Release v1.6.62
+Built from commit: 92fbca6
+Date: 2026-01-26 11:13:20
+
+Changes since v1.6.61:
+---
+92fbca6 Update chart controls to improve time navigation
+1d78162 Refactor ResultSet access to use column indices
+05f9738 Fix SQLite database locked error and reduce log noise
+1e49fa8 Fix MongoDB device storage to use name field instead of _id for queries
+f48d527 Add Grafana JSON Data Source API integration
+a8c8093 Add enable/disable toggle for topics in chart
+3c5e582 Persist AI context topic and archive group in localStorage
+ece990f Add state persistence to topic browser and AI panel
+a09e486 Merge feature/87-aggregated-messages: Add aggregatedMessages GraphQL query
+474794f Add aggregatedMessages GraphQL query for time-bucketed data
+218373b Change logging level from info to fine in auth context
+5bbcc17 Add includeTopic option to archivedMessages query
+4bf39c8 Remove 'Browse Topics' button from topic chart UI
+ef2e526 Add Topic Chart page with time-series visualization
+afa9355 Improve topic search wildcards and substring matching
+70495a8 Add JWT authentication to MCP server
+7d866c0 Load AI system prompt from config file
+ebbe15a Move config and docs to new directories
+96556a9 Add SASL implementation plan for GitHub issue
+018d251 Add favicons and apple-touch icons to dashboard and homepage
