@@ -8,6 +8,7 @@ import at.rocworks.stores.IMessageArchive
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.IMessageStoreExtended
+import at.rocworks.stores.MessageArchiveType
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.Vertx
@@ -56,6 +57,18 @@ class McpHandler(
     private fun getArchiveGroup(name: String? = null): ArchiveGroup? {
         val groupName = name ?: DEFAULT_ARCHIVE_GROUP
         return archiveHandler.getDeployedArchiveGroups()[groupName]
+    }
+
+    /**
+     * Check if the default archive group supports SQL queries.
+     * SQL is supported by PostgreSQL, CrateDB, and SQLite but NOT by MongoDB or Kafka.
+     */
+    private fun defaultArchiveSupportsSql(): Boolean {
+        val defaultArchiveGroup = getArchiveGroup() ?: return false
+        return when (defaultArchiveGroup.getArchiveType()) {
+            MessageArchiveType.POSTGRES, MessageArchiveType.CRATEDB, MessageArchiveType.SQLITE -> true
+            MessageArchiveType.MONGODB, MessageArchiveType.KAFKA, MessageArchiveType.NONE -> false
+        }
     }
 
     private fun logStoreWarnings() {
@@ -293,6 +306,44 @@ class McpHandler(
 
     private fun registerTools() {
         // Register tools
+        registerTool(
+            AsyncTool(
+                "list-archive-groups",
+                """
+**List Archive Groups**
+
+Lists all available archive groups configured in the MonsterMQ broker. This is a discovery tool that helps you understand what data stores are available for querying historical MQTT messages.
+
+**What is an Archive Group?**
+- An archive group is a named collection of MQTT topics that are archived together
+- Each archive group has its own database backend for storing historical messages
+- Archive groups allow organizing topics by purpose, data retention needs, or access patterns
+- The "Default" archive group is typically used for general-purpose archiving
+
+**Return Value:**
+A table with the following columns:
+- `name`: The archive group name (use this value in the `archiveGroup` parameter of other tools)
+- `archiveType`: The database backend type (POSTGRES, CRATEDB, MONGODB, SQLITE, KAFKA, or NONE)
+- `lastValType`: The last value store type (MEMORY, HAZELCAST, POSTGRES, CRATEDB, MONGODB, SQLITE, or NONE)
+- `topicFilter`: The MQTT topic patterns this group archives (comma-separated)
+
+**Use Cases:**
+- Discover available archive groups before querying historical data
+- Understand which database backend is used for each archive group
+- Identify the correct archive group name to use in other tool calls
+- Check topic filters to understand what data each group contains
+
+**Best Practices:**
+- Call this tool first when working with a new MonsterMQ installation
+- Use the returned archive group names in the `archiveGroup` parameter of other tools
+- Note the database type to understand SQL compatibility (POSTGRES, CRATEDB, SQLITE support SQL; MONGODB does not)
+                """.trimIndent(),
+                JsonObject()
+                    .put("type", "object")
+                    .put("properties", JsonObject()),
+                ::listArchiveGroups
+            )
+        )
         registerTool(
             AsyncTool(
                 "find-topics-by-name",
@@ -641,13 +692,21 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
                     ::queryMessageArchive
                 )
             )
-        registerTool(
-                AsyncTool(
-                    "query-message-archive-by-sql",
-                    """
+        // Only register SQL tool if the default archive supports SQL queries (PostgreSQL, CrateDB, SQLite)
+        // MongoDB and Kafka do not support SQL queries
+        if (defaultArchiveSupportsSql()) {
+            registerTool(
+                    AsyncTool(
+                        "query-message-archive-by-sql",
+                        """
 **Query Message Archive by SQL**
 
-Execute PostgreSQL queries against historical MQTT topic data stored in the $MCP_ARCHIVE_TABLE table. This tool enables advanced analysis of time-series IoT data through SQL aggregations, statistical operations, and complex filtering across multiple topics and time periods. **IMPORTANT: You MUST use the `get-topic-value` tool first to inspect the current payload structure of your topics before using this tool.**
+Execute SQL queries against historical MQTT topic data stored in the $MCP_ARCHIVE_TABLE table. This tool enables advanced analysis of time-series IoT data through SQL aggregations, statistical operations, and complex filtering across multiple topics and time periods. **IMPORTANT: You MUST use the `get-topic-value` tool first to inspect the current payload structure of your topics before using this tool.**
+
+**Supported Databases:**
+- PostgreSQL (full support)
+- CrateDB (PostgreSQL-compatible SQL)
+- SQLite (SQLite SQL dialect)
 
 **MQTT Context:**
 - Queries the $MCP_ARCHIVE_TABLE table containing historical MQTT message data
@@ -676,9 +735,9 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 **Parameters:**
 
 **sql** (required):
-- PostgreSQL query string to execute against the $MCP_ARCHIVE_TABLE table
+- SQL query string to execute against the $MCP_ARCHIVE_TABLE table
 - Must only reference the '$MCP_ARCHIVE_TABLE' table - no other tables allowed
-- Use standard PostgreSQL syntax with aggregation functions (AVG, MIN, MAX, COUNT, SUM)
+- Use standard SQL syntax with aggregation functions (AVG, MIN, MAX, COUNT, SUM)
 - For JSON object data: use `payload_json->>'field_name'` for text or `(payload_json->>'field_name')::numeric` for numbers
 - **For plain number/string in payload_json:** use `payload_json::text::numeric` or `(payload_json#>>'{}')::numeric` to convert directly
 - Include proper WHERE clauses with time filters for performance
@@ -729,24 +788,235 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
 - **Plain number values:** `SELECT date_trunc('hour', time) as hour, AVG(payload_json::text::numeric) as avg_value FROM $MCP_ARCHIVE_TABLE WHERE topic = 'sensors/simple_value' AND time >= NOW() - INTERVAL '24 hours' GROUP BY hour ORDER BY hour`
 - Daily message counts: `SELECT date_trunc('day', time) as day, COUNT(*) as msg_count FROM $MCP_ARCHIVE_TABLE WHERE topic LIKE 'devices/%' AND time >= '2024-01-01' GROUP BY day ORDER BY day`
 - Multi-topic statistics (after identifying 'value' key): `SELECT topic, MIN((payload_json->>'value')::numeric) as min_val, MAX((payload_json->>'value')::numeric) as max_val FROM $MCP_ARCHIVE_TABLE WHERE topic IN ('sensor1', 'sensor2') AND time >= NOW() - INTERVAL '7 days' GROUP BY topic`
+                        """.trimIndent(),
+                        JsonObject()
+                            .put("type", "object")
+                            .put(
+                                "properties", JsonObject()
+                                    .put("sql", JsonObject()
+                                        .put("type", "string")
+                                        .put("description", "SQL query to execute against the message archive")
+                                    )
+                                    .put("archiveGroup", JsonObject()
+                                        .put("type", "string")
+                                        .put("description", "Optional archive group name (defaults to 'Default')")
+                                    )
+                            )
+                            .put("required", JsonArray().add("sql")),
+                        ::queryMessageArchiveBySql
+                    )
+                )
+        } else {
+            logger.info("SQL query tool not registered - default archive group does not support SQL (MongoDB/Kafka)")
+        }
+        registerTool(
+                AsyncTool(
+                    "query-aggregated-messages",
+                    """
+**Query Aggregated Messages (PREFERRED for Historical Data)**
+
+This is the **preferred and recommended tool** for querying historical MQTT topic data when you need aggregated time-series analysis. Use this tool instead of `query-message-archive` or `query-message-archive-by-sql` when analyzing trends, patterns, or performing analytics over time periods.
+
+**MANDATORY PREREQUISITE - READ THIS FIRST:**
+Before using this tool, you **MUST** call `get-topic-value` first to inspect the current payload structure:
+- **If payload is a JSON object** (e.g., `{"temperature": 23.5, "humidity": 65}`): The `fields` parameter is **MANDATORY**. You must specify which JSON fields to aggregate (e.g., `fields: ["temperature", "humidity"]`).
+- **If payload is a plain number** (e.g., `23.5` or `"42"`): Do NOT use the `fields` parameter. The tool will aggregate the raw numeric value directly.
+- **Skipping this step will result in empty or incorrect results!**
+
+**Why Use This Tool:**
+- **Performance**: Database-level aggregation is much faster than retrieving raw messages
+- **Efficiency**: Returns summarized data instead of potentially millions of raw records
+- **Charting-Ready**: Output format is optimized for time-series visualization
+- **Multi-Topic**: Query multiple topics in a single request with aligned timestamps
+- **Flexible Aggregation**: Supports AVG, MIN, MAX, COUNT functions in any combination
+
+**MQTT Context:**
+- Aggregates historical MQTT messages from the archive store
+- Performs time bucketing at the database level for efficiency
+- Ideal for trend analysis, dashboards, and analytics
+- Returns aligned time-series data suitable for charting
+
+**Parameters:**
+
+**topics** (required):
+- Array of exact MQTT topic strings to query
+- Example: `["sensors/temperature/room1", "sensors/temperature/room2"]`
+- No wildcards allowed - use exact topic names
+- Each topic creates its own columns in the result
+
+**interval** (required):
+- Time bucket size for aggregation
+- Options: `ONE_MINUTE`, `FIVE_MINUTES`, `FIFTEEN_MINUTES`, `ONE_HOUR`, `ONE_DAY`
+- Choose based on your time range: use smaller intervals for shorter periods
+- Example: Use `ONE_HOUR` for weekly data, `FIVE_MINUTES` for daily data
+
+**startTime** (required):
+- Start of the time range in ISO 8601 format
+- Example: `2024-01-15T00:00:00Z`
+- Must include timezone (use Z for UTC)
+
+**endTime** (required):
+- End of the time range in ISO 8601 format
+- Example: `2024-01-16T00:00:00Z`
+- Must be after startTime
+
+**functions** (optional, default: ["AVG"]):
+- Array of aggregation functions to apply
+- Options: `AVG`, `MIN`, `MAX`, `COUNT`
+- Multiple functions create multiple columns per topic/field
+- Example: `["AVG", "MIN", "MAX"]` gives average, minimum, and maximum
+
+**fields** (REQUIRED for JSON payloads, omit for plain numbers):
+- **MANDATORY when payload is a JSON object** - you must specify which fields to aggregate
+- Use `get-topic-value` first to discover the field names in your JSON payload
+- Example: If payload is `{"temperature": 23.5, "humidity": 65}`, use `fields: ["temperature", "humidity"]`
+- Supports nested paths: `["sensor.value", "sensor.quality"]` for `{"sensor": {"value": 42}}`
+- **Do NOT use this parameter** if payload is a plain number (e.g., `23.5`) - the tool will aggregate the raw value directly
+
+**archiveGroup** (optional, defaults to "Default"):
+- Specifies which archive group to query
+- Each archive group has its own message archive
+
+**Return Value:**
+A table with:
+- `timestamp` column: ISO 8601 timestamps for each time bucket
+- Value columns: Named as `topic_field_function` (e.g., `sensors/temp_temperature_avg`)
+- Null values indicate no data in that time bucket
+
+**Use Cases:**
+- Hourly temperature trends: topics=["sensors/temp"], interval=ONE_HOUR, functions=["AVG"]
+- Daily min/max analysis: interval=ONE_DAY, functions=["MIN", "MAX"]
+- Multi-sensor comparison: topics=["sensor1", "sensor2", "sensor3"]
+- JSON payload extraction: fields=["temperature", "humidity"] for structured payloads
+
+**Example Queries:**
+1. Last 24 hours, hourly averages:
+   - topics: ["sensors/temperature/outdoor"]
+   - interval: ONE_HOUR
+   - startTime: "2024-01-15T00:00:00Z"
+   - endTime: "2024-01-16T00:00:00Z"
+   - functions: ["AVG"]
+
+2. Weekly comparison with daily resolution:
+   - topics: ["production/line1/output", "production/line2/output"]
+   - interval: ONE_DAY
+   - startTime: "2024-01-08T00:00:00Z"
+   - endTime: "2024-01-15T00:00:00Z"
+   - functions: ["AVG", "MIN", "MAX", "COUNT"]
+
+3. JSON payload with multiple fields:
+   - topics: ["weather/station1"]
+   - interval: FIFTEEN_MINUTES
+   - startTime: "2024-01-15T00:00:00Z"
+   - endTime: "2024-01-15T06:00:00Z"
+   - fields: ["temperature", "humidity", "pressure"]
+   - functions: ["AVG"]
+
+**Best Practices:**
+- **CRITICAL: Always call `get-topic-value` FIRST** to check if payload is JSON or plain number
+- **For JSON payloads: `fields` is MANDATORY** - specify the exact field names from the JSON structure
+- **For plain number payloads: Do NOT use `fields`** - the raw value will be aggregated automatically
+- Always use this tool for trend analysis and charting instead of raw message queries
+- Choose interval based on time range: shorter ranges = smaller intervals
+- Combine multiple functions to get comprehensive statistics in one query
+- For raw message inspection, use `query-message-archive` instead
                     """.trimIndent(),
                     JsonObject()
                         .put("type", "object")
                         .put(
                             "properties", JsonObject()
-                                .put("sql", JsonObject()
+                                .put("topics", JsonObject()
+                                    .put("type", "array")
+                                    .put("items", JsonObject().put("type", "string"))
+                                    .put("description", "Array of exact topic names to query (no wildcards)")
+                                )
+                                .put("interval", JsonObject()
                                     .put("type", "string")
-                                    .put("description", "SQL query to execute against the message archive")
+                                    .put("enum", JsonArray()
+                                        .add("ONE_MINUTE")
+                                        .add("FIVE_MINUTES")
+                                        .add("FIFTEEN_MINUTES")
+                                        .add("ONE_HOUR")
+                                        .add("ONE_DAY")
+                                    )
+                                    .put("description", "Aggregation time interval (bucket size)")
+                                )
+                                .put("startTime", JsonObject()
+                                    .put("type", "string")
+                                    .put("description", "Start time in ISO 8601 format (e.g., 2024-01-15T00:00:00Z)")
+                                )
+                                .put("endTime", JsonObject()
+                                    .put("type", "string")
+                                    .put("description", "End time in ISO 8601 format (e.g., 2024-01-16T00:00:00Z)")
+                                )
+                                .put("functions", JsonObject()
+                                    .put("type", "array")
+                                    .put("items", JsonObject()
+                                        .put("type", "string")
+                                        .put("enum", JsonArray()
+                                            .add("AVG")
+                                            .add("MIN")
+                                            .add("MAX")
+                                            .add("COUNT")
+                                        )
+                                    )
+                                    .put("description", "Aggregation functions to apply (default: [AVG])")
+                                    .put("default", JsonArray().add("AVG"))
+                                )
+                                .put("fields", JsonObject()
+                                    .put("type", "array")
+                                    .put("items", JsonObject().put("type", "string"))
+                                    .put("description", "Optional JSON field paths to extract from payload (e.g., ['temperature', 'humidity'])")
                                 )
                                 .put("archiveGroup", JsonObject()
                                     .put("type", "string")
                                     .put("description", "Optional archive group name (defaults to 'Default')")
                                 )
                         )
-                        .put("required", JsonArray().add("sql")),
-                    ::queryMessageArchiveBySql
+                        .put("required", JsonArray().add("topics").add("interval").add("startTime").add("endTime")),
+                    ::queryAggregatedMessages
                 )
             )
+    }
+
+    // --------------------------------------------------------------------------------------------------------------
+
+    private fun listArchiveGroups(args: JsonObject): Future<JsonArray> {
+        logger.info("listArchiveGroups called")
+
+        val promise = Promise.promise<JsonArray>()
+        vertx.executeBlocking(Callable {
+            try {
+                val archiveGroups = archiveHandler.getDeployedArchiveGroups()
+                val result = JsonArray()
+
+                // Add header row
+                result.add(JsonArray().add("name").add("archiveType").add("lastValType").add("topicFilter"))
+
+                // Add data rows for each archive group
+                archiveGroups.values.sortedBy { it.name }.forEach { group ->
+                    val topicFilterStr = group.topicFilter.joinToString(", ")
+                    result.add(
+                        JsonArray()
+                            .add(group.name)
+                            .add(group.getArchiveType().name)
+                            .add(group.getLastValType().name)
+                            .add(topicFilterStr)
+                    )
+                }
+
+                val answer = JsonArray().add(
+                    JsonObject()
+                        .put("type", "text")
+                        .put("text", convertJsonTableToMarkdown(result))
+                )
+                promise.complete(answer)
+            } catch (e: Exception) {
+                logger.severe("Error listing archive groups: ${e.message}")
+                promise.fail(McpException(JSONRPC_INTERNAL_ERROR, "Error listing archive groups: ${e.message}"))
+            }
+        })
+        return promise.future()
     }
 
     // --------------------------------------------------------------------------------------------------------------
@@ -952,6 +1222,136 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
             }
         })
         return promise.future()
+    }
+
+    // --------------------------------------------------------------------------------------------------------------
+
+    private fun queryAggregatedMessages(args: JsonObject): Future<JsonArray> {
+        logger.info("queryAggregatedMessages called with args: $args")
+
+        // Validate required parameters
+        if (!args.containsKey("topics")) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "topics parameter required"))
+        }
+        if (!args.containsKey("interval")) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "interval parameter required"))
+        }
+        if (!args.containsKey("startTime")) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "startTime parameter required"))
+        }
+        if (!args.containsKey("endTime")) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "endTime parameter required"))
+        }
+
+        val topicsArray = args.getJsonArray("topics", JsonArray())
+        val topics = topicsArray.map { it.toString() }
+
+        if (topics.isEmpty()) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "At least one topic is required"))
+        }
+
+        val interval = args.getString("interval")
+        val intervalMinutes = when (interval) {
+            "ONE_MINUTE" -> 1
+            "FIVE_MINUTES" -> 5
+            "FIFTEEN_MINUTES" -> 15
+            "ONE_HOUR" -> 60
+            "ONE_DAY" -> 1440
+            else -> return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Invalid interval: $interval. Must be one of: ONE_MINUTE, FIVE_MINUTES, FIFTEEN_MINUTES, ONE_HOUR, ONE_DAY"))
+        }
+
+        val startTime: Instant
+        val endTime: Instant
+        try {
+            startTime = Instant.parse(args.getString("startTime"))
+            endTime = Instant.parse(args.getString("endTime"))
+        } catch (e: Exception) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Invalid timestamp format. Use ISO 8601 format (e.g., 2024-01-15T00:00:00Z)"))
+        }
+
+        val functionsArray = args.getJsonArray("functions", JsonArray().add("AVG"))
+        val functions = functionsArray.map { it.toString().uppercase() }
+
+        // Validate functions
+        val validFunctions = setOf("AVG", "MIN", "MAX", "COUNT")
+        for (func in functions) {
+            if (func !in validFunctions) {
+                return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Invalid function: $func. Must be one of: AVG, MIN, MAX, COUNT"))
+            }
+        }
+
+        val fieldsArray = args.getJsonArray("fields", JsonArray())
+        val fields = fieldsArray.map { it.toString() }
+
+        val archiveGroupName = args.getString("archiveGroup")
+
+        val promise = Promise.promise<JsonArray>()
+        vertx.executeBlocking(Callable {
+            try {
+                val archiveGroup = getArchiveGroup(archiveGroupName)
+                val messageArchive = archiveGroup?.archiveStore
+
+                if (messageArchive !is IMessageArchiveExtended) {
+                    throw McpException(JSONRPC_INVALID_ARGUMENT, "Message archive is not extended or not available for archive group '${archiveGroupName ?: DEFAULT_ARCHIVE_GROUP}'. This tool requires an extended archive group.")
+                }
+
+                val result = messageArchive.getAggregatedHistory(
+                    topics = topics,
+                    startTime = startTime,
+                    endTime = endTime,
+                    intervalMinutes = intervalMinutes,
+                    functions = functions,
+                    fields = fields
+                )
+
+                // Convert result to table format for markdown
+                val tableFormat = convertAggregatedResultToTableFormat(result)
+                val answer = JsonArray().add(
+                    JsonObject()
+                        .put("type", "text")
+                        .put("text", convertJsonTableToMarkdown(tableFormat))
+                )
+                promise.complete(answer)
+            } catch (e: McpException) {
+                logger.severe("Error querying aggregated messages: ${e.message}")
+                promise.fail(e)
+            } catch (e: Exception) {
+                logger.severe("Error querying aggregated messages: ${e.message}")
+                promise.fail(McpException(JSONRPC_INTERNAL_ERROR, "Error querying aggregated messages: ${e.message}"))
+            }
+        })
+        return promise.future()
+    }
+
+    private fun convertAggregatedResultToTableFormat(result: JsonObject): JsonArray {
+        val tableFormat = JsonArray()
+
+        val columns = result.getJsonArray("columns", JsonArray())
+        val rows = result.getJsonArray("rows", JsonArray())
+
+        if (columns.isEmpty) {
+            return tableFormat
+        }
+
+        // Add header row
+        val headerRow = JsonArray()
+        for (i in 0 until columns.size()) {
+            headerRow.add(columns.getString(i))
+        }
+        tableFormat.add(headerRow)
+
+        // Add data rows
+        for (i in 0 until rows.size()) {
+            val row = rows.getJsonArray(i)
+            val dataRow = JsonArray()
+            for (j in 0 until row.size()) {
+                val value = row.getValue(j)
+                dataRow.add(value?.toString() ?: "null")
+            }
+            tableFormat.add(dataRow)
+        }
+
+        return tableFormat
     }
 
     private fun convertHistoryToTableFormat(history: JsonArray): JsonArray {
