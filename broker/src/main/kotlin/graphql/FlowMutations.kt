@@ -147,7 +147,7 @@ class FlowMutations(
     }
 
     /**
-     * Delete a flow class
+     * Delete a flow class and all its instances (cascading delete)
      */
     fun deleteClass(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
@@ -156,19 +156,65 @@ class FlowMutations(
             try {
                 val name = env.getArgument<String>("name")!!
 
-                deviceStore.deleteDevice(name).onComplete { result ->
-                    if (result.succeeded()) {
-                        future.complete(result.result())
+                // First, find and delete all flow instances that reference this class
+                deviceStore.getAllDevices().onComplete { devicesResult ->
+                    if (devicesResult.succeeded()) {
+                        val instances = devicesResult.result()
+                            .filter { it.type == DeviceConfig.DEVICE_TYPE_FLOW_OBJECT }
+                            .filter { it.config.getString("flowClassId") == name }
 
-                        // Notify FlowEngine
-                        val notification = JsonObject()
-                            .put("operation", "delete")
-                            .put("deviceName", name)
-                            .put("deviceType", DeviceConfig.DEVICE_TYPE_FLOW_CLASS)
+                        // Delete all instances that reference this class
+                        val deleteInstanceFutures = instances.map { instance ->
+                            deviceStore.deleteDevice(instance.name).onComplete { deleteResult ->
+                                if (deleteResult.succeeded()) {
+                                    // Notify FlowEngine about instance deletion
+                                    val notification = JsonObject()
+                                        .put("operation", "delete")
+                                        .put("deviceName", instance.name)
+                                        .put("deviceType", DeviceConfig.DEVICE_TYPE_FLOW_OBJECT)
+                                    vertx.eventBus().publish("flowengine.flow.config.changed", notification)
+                                    logger.info("Deleted orphaned flow instance: ${instance.name}")
+                                }
+                            }
+                        }
 
-                        vertx.eventBus().publish("flowengine.flow.config.changed", notification)
+                        // After deleting instances, delete the class itself
+                        deviceStore.deleteDevice(name).onComplete { result ->
+                            if (result.succeeded()) {
+                                future.complete(result.result())
+
+                                // Notify FlowEngine
+                                val notification = JsonObject()
+                                    .put("operation", "delete")
+                                    .put("deviceName", name)
+                                    .put("deviceType", DeviceConfig.DEVICE_TYPE_FLOW_CLASS)
+
+                                vertx.eventBus().publish("flowengine.flow.config.changed", notification)
+
+                                if (instances.isNotEmpty()) {
+                                    logger.info("Deleted flow class '$name' and ${instances.size} associated instance(s)")
+                                }
+                            } else {
+                                future.completeExceptionally(result.cause())
+                            }
+                        }
                     } else {
-                        future.completeExceptionally(result.cause())
+                        // If we can't get devices, still try to delete the class
+                        logger.warning("Could not fetch devices to check for orphaned instances: ${devicesResult.cause()?.message}")
+                        deviceStore.deleteDevice(name).onComplete { result ->
+                            if (result.succeeded()) {
+                                future.complete(result.result())
+
+                                val notification = JsonObject()
+                                    .put("operation", "delete")
+                                    .put("deviceName", name)
+                                    .put("deviceType", DeviceConfig.DEVICE_TYPE_FLOW_CLASS)
+
+                                vertx.eventBus().publish("flowengine.flow.config.changed", notification)
+                            } else {
+                                future.completeExceptionally(result.cause())
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
