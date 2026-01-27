@@ -69,7 +69,7 @@ class GraphQLDashboardClient {
             const currentTime = Math.floor(Date.now() / 1000);
             const remainingSeconds = expiryTime - currentTime;
 
-            console.log(`Token expiry check: ${remainingSeconds} seconds remaining`);
+            // console.log(`Token expiry check: ${remainingSeconds} seconds remaining`);
 
             if (remainingSeconds <= 0) {
                 // Token has expired
