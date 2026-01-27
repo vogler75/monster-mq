@@ -68,11 +68,11 @@ class TopicBrowser {
         // Load archive groups first, then load initial tree
         await this.loadArchiveGroups();
 
-        // Load initial tree structure with root node
-        this.createRootNode();
+        // Load initial tree structure with root node and wait for it to complete
+        await this.createRootNode();
 
-        // Restore state after a short delay to allow tree to load
-        setTimeout(() => this.restoreState(), 300);
+        // Restore state after root nodes are loaded
+        await this.restoreState();
     }
 
     async loadArchiveGroups() {
@@ -163,18 +163,55 @@ class TopicBrowser {
         this.saveState(); // Persist mode change
     }
 
-    browseRoot() {
+    async browseRoot(preserveState = true) {
+        // Save expanded paths before clearing (they're already saved, just don't clear them)
+        const savedExpandedPaths = preserveState ? new Set(this.expandedPaths) : new Set();
+        const savedSelectedTopic = preserveState ? this.selectedTopic : null;
+
         // Clear current tree and reload from root
         this.tree.innerHTML = '';
         this.treeNodes.clear();
         this.selectedTopic = null;
         this.showEmptyDataViewer();
-        this.createRootNode();
+
+        // Restore expanded paths (don't clear them)
+        this.expandedPaths = savedExpandedPaths;
+
+        // Wait for root nodes to load
+        await this.createRootNode();
+
+        // Restore expanded nodes after tree loads
+        if (preserveState && (savedExpandedPaths.size > 0 || savedSelectedTopic)) {
+            await this.restoreExpandedNodes(savedSelectedTopic);
+        }
     }
 
-    createRootNode() {
+    /**
+     * Restore expanded nodes and selection after tree reload
+     */
+    async restoreExpandedNodes(selectedTopic = null) {
+        try {
+            // Expand nodes in order (parent first)
+            const sortedPaths = Array.from(this.expandedPaths).sort((a, b) =>
+                a.split('/').length - b.split('/').length
+            );
+
+            for (const path of sortedPaths) {
+                await this.expandToPath(path);
+            }
+
+            // Restore selected topic
+            if (selectedTopic) {
+                await this.restoreSelectedTopic(selectedTopic);
+            }
+        } catch (e) {
+            console.warn('Failed to restore expanded nodes:', e);
+        }
+    }
+
+    async createRootNode() {
         // Load the root level topics directly (don't create a synthetic root)
-        this.loadTopicLevel('+', this.tree, '');
+        await this.loadTopicLevel('+', this.tree, '');
     }
 
     async loadTopicLevel(pattern, container, parentPath = '') {
@@ -632,7 +669,7 @@ class TopicBrowser {
         return structure;
     }
 
-    renderTreeStructure(structure, container, parentPath) {
+    renderTreeStructure(structure, container, parentPath, autoExpand = false) {
         for (const [name, data] of structure) {
             const hasChildren = data.children.size > 0;
             const treeItem = this.createTreeItem(name, data.fullPath, data.hasValue, hasChildren);
@@ -643,13 +680,21 @@ class TopicBrowser {
                 childContainer.className = 'tree-children';
                 treeItem.appendChild(childContainer);
 
-                this.renderTreeStructure(data.children, childContainer, data.fullPath);
+                this.renderTreeStructure(data.children, childContainer, data.fullPath, autoExpand);
 
-                // Auto-expand search results
+                // Only auto-expand if explicitly requested (e.g., new search)
+                // Otherwise, respect the saved expanded state
                 const nodeData = this.treeNodes.get(data.fullPath);
                 if (nodeData) {
-                    nodeData.toggle.classList.add('expanded');
-                    nodeData.expanded = true;
+                    const shouldExpand = autoExpand || this.expandedPaths.has(data.fullPath);
+                    if (shouldExpand) {
+                        nodeData.toggle.classList.add('expanded');
+                        nodeData.expanded = true;
+                        this.expandedPaths.add(data.fullPath);
+                    } else {
+                        // Start collapsed
+                        childContainer.classList.add('collapsed');
+                    }
                 }
             }
         }
@@ -742,18 +787,20 @@ class TopicBrowser {
                 this.searchInput.value = savedQuery;
             }
 
-            // Restore expanded nodes
+            // Restore expanded nodes (only the ones user manually expanded)
             const savedExpanded = localStorage.getItem(STATE_KEYS.EXPANDED_NODES);
             if (savedExpanded) {
                 const expandedArray = JSON.parse(savedExpanded);
+                console.log('Restoring expanded paths:', expandedArray);
                 this.expandedPaths = new Set(expandedArray);
 
-                // Expand nodes in order (parent first)
+                // Expand nodes in order (parent first, shortest paths first)
                 const sortedPaths = expandedArray.sort((a, b) =>
                     a.split('/').length - b.split('/').length
                 );
 
                 for (const path of sortedPaths) {
+                    console.log('Expanding path:', path);
                     await this.expandToPath(path);
                 }
             }
@@ -761,6 +808,7 @@ class TopicBrowser {
             // Restore selected topic
             const savedTopic = localStorage.getItem(STATE_KEYS.SELECTED_TOPIC);
             if (savedTopic) {
+                console.log('Restoring selected topic:', savedTopic);
                 await this.restoreSelectedTopic(savedTopic);
             }
         } catch (e) {
@@ -812,8 +860,21 @@ class TopicBrowser {
     trackExpandedState(topicPath, isExpanded) {
         if (isExpanded) {
             this.expandedPaths.add(topicPath);
+            console.log('Node expanded:', topicPath, '| Total expanded:', this.expandedPaths.size);
         } else {
-            this.expandedPaths.delete(topicPath);
+            // When collapsing, also remove all children from expanded paths
+            // This ensures that when the user collapses a parent, the entire subtree
+            // is considered collapsed
+            const pathsToRemove = [];
+            for (const path of this.expandedPaths) {
+                if (path === topicPath || path.startsWith(topicPath + '/')) {
+                    pathsToRemove.push(path);
+                }
+            }
+            for (const path of pathsToRemove) {
+                this.expandedPaths.delete(path);
+            }
+            console.log('Node collapsed:', topicPath, '| Removed paths:', pathsToRemove, '| Total expanded:', this.expandedPaths.size);
         }
         this.saveState();
     }
