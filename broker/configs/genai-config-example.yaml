@@ -13,7 +13,7 @@ GenAI:
   # Enable GenAI integration
   Enabled: true
 
-  # AI provider: "gemini", "claude" (future), or "openai" (future)
+  # AI provider: "gemini", "azure-openai", "claude" (future), or "openai" (future)
   Provider: "gemini"
 
   # API key for the selected provider
@@ -21,9 +21,16 @@ GenAI:
   # Set your API key in environment: export GENAI_API_KEY="your-key-here"
   ApiKey: "${GENAI_API_KEY}"
 
+  # === GEMINI CONFIGURATION ===
   # Optional: Specific model to use
   # Gemini models: gemini-2.5-flash (default), gemini-1.5-pro, etc.
   Model: "gemini-2.5-flash"
+
+  # === AZURE OPENAI CONFIGURATION ===
+  # Required for azure-openai provider:
+  # Endpoint: "${AZURE_OPENAI_ENDPOINT}"  # e.g., https://your-resource.openai.azure.com/
+  # Deployment: "gpt-4o"                  # Your deployment name in Azure
+  # Model: "gpt-4o"                        # Optional: for display purposes
 
   # Optional: Maximum tokens in response (default: 2048)
   MaxTokens: 2048

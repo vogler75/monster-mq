@@ -1,0 +1,133 @@
+# Azure OpenAI Configuration Example for MonsterMQ
+# Add this section to your config.yaml to enable AI-supported JavaScript coding with Azure OpenAI
+
+# Enable GraphQL server (required for GenAI to work)
+GraphQL:
+  Enabled: true
+  Port: 4000
+  Path: /graphql
+  CorsEnabled: true
+
+# GenAI Configuration for Azure OpenAI
+GenAI:
+  # Enable GenAI integration
+  Enabled: true
+
+  # Set provider to azure-openai
+  Provider: "azure-openai"
+
+  # Azure OpenAI API key
+  # You can use environment variable substitution: ${VARIABLE_NAME}
+  # Set your API key in environment:
+  #   Windows: $env:AZURE_OPENAI_API_KEY="your-key-here"
+  #   Linux/Mac: export AZURE_OPENAI_API_KEY="your-key-here"
+  ApiKey: "${AZURE_OPENAI_API_KEY}"
+
+  # Azure OpenAI endpoint URL (REQUIRED)
+  # Get this from Azure Portal > Your Azure OpenAI Resource > Keys and Endpoint
+  # Format: https://<your-resource-name>.openai.azure.com/
+  Endpoint: "${AZURE_OPENAI_ENDPOINT}"
+
+  # Azure OpenAI deployment name (REQUIRED)
+  # This is the name you gave your model deployment in Azure OpenAI Studio
+  # NOT the model name itself (e.g., "my-gpt4o-deployment" not "gpt-4o")
+  Deployment: "gpt-4o"
+
+  # Optional: Model name for display purposes
+  # This doesn't affect which model is used (deployment determines that)
+  # Just helps in logs and UI to know what model you're using
+  Model: "gpt-4o"
+
+  # Optional: Maximum tokens in response (default: 2048)
+  MaxTokens: 2048
+
+  # Optional: Temperature for response generation (0.0-2.0, default: 0.7)
+  # Higher = more creative, Lower = more focused/deterministic
+  Temperature: 0.7
+
+  # Optional: Path to documentation directory in resources (default: "docs")
+  # Documentation files should be in src/main/resources/docs/
+  DocsPath: "docs"
+
+# ========================================
+# Azure OpenAI Setup Steps
+# ========================================
+#
+# 1. Create Azure OpenAI Resource:
+#    - Go to Azure Portal (https://portal.azure.com)
+#    - Create an "Azure OpenAI" resource
+#    - Note the endpoint URL and API key from "Keys and Endpoint" section
+#
+# 2. Deploy a Model:
+#    - Go to Azure OpenAI Studio (https://oai.azure.com)
+#    - Select your resource
+#    - Go to "Deployments" > "Create new deployment"
+#    - Choose a model (e.g., gpt-4o, gpt-4, gpt-35-turbo)
+#    - Give it a deployment name (e.g., "gpt-4o-deployment")
+#    - Note the deployment name for the config
+#
+# 3. Set Environment Variables:
+#    Windows PowerShell:
+#      $env:AZURE_OPENAI_API_KEY="your-api-key-from-azure"
+#      $env:AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+#
+#    Linux/Mac:
+#      export AZURE_OPENAI_API_KEY="your-api-key-from-azure"
+#      export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+#
+# 4. Update config.yaml with the settings above
+#
+# 5. Start MonsterMQ and test via GraphQL:
+#    See example query below
+
+# ========================================
+# Example GraphQL Query
+# ========================================
+#
+# Once configured, query the GenAI endpoint:
+#
+# query {
+#   genai {
+#     generate(
+#       prompt: "How do I subscribe to MQTT topics using JavaScript?"
+#       docs: ["workflow-reference.md"]
+#     ) {
+#       response
+#       model
+#       error
+#     }
+#   }
+# }
+#
+# With context:
+# query {
+#   genai {
+#     generate(
+#       prompt: "Generate a function to publish temperature data"
+#       context: "I'm using a DHT22 sensor that outputs JSON with temperature and humidity"
+#       docs: ["script-assistant.md"]
+#     ) {
+#       response
+#       model
+#     }
+#   }
+# }
+
+# ========================================
+# Recommended Models
+# ========================================
+#
+# - gpt-4o (GPT-4 Optimized): Best balance of speed and quality
+# - gpt-4: Highest quality, slower
+# - gpt-4-turbo: Fast with good quality
+# - gpt-35-turbo: Fastest, lower cost, good for simple tasks
+#
+# Deploy the model that fits your use case and budget.
+
+# ========================================
+# Pricing Note
+# ========================================
+#
+# Azure OpenAI charges per token (input + output).
+# Monitor usage in Azure Portal > Cost Management.
+# Set MaxTokens to control costs (default: 2048).

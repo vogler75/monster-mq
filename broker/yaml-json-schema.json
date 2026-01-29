@@ -361,16 +361,24 @@
         "Provider": {
           "type": "string",
           "description": "AI provider to use",
-          "enum": ["gemini", "claude", "openai"],
+          "enum": ["gemini", "claude", "openai", "azure-openai"],
           "default": "gemini"
         },
         "ApiKey": {
           "type": "string",
           "description": "API key for the selected provider (supports environment variable substitution like ${GENAI_API_KEY})"
         },
+        "Endpoint": {
+          "type": "string",
+          "description": "Azure OpenAI endpoint URL (required for azure-openai provider, e.g., https://your-resource.openai.azure.com/)"
+        },
+        "Deployment": {
+          "type": "string",
+          "description": "Azure OpenAI deployment name (required for azure-openai provider)"
+        },
         "Model": {
           "type": "string",
-          "description": "Optional model name to use (provider-specific, e.g., 'gemini-pro', 'claude-3-opus', 'gpt-4')"
+          "description": "Optional model name to use (provider-specific, e.g., 'gemini-pro', 'claude-3-opus', 'gpt-4', 'gpt-4o')"
         },
         "MaxTokens": {
           "type": "integer",

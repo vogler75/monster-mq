@@ -18,7 +18,8 @@ object GenAiProviderFactory {
     enum class ProviderType {
         GEMINI,
         CLAUDE,
-        OPENAI;
+        OPENAI,
+        AZURE_OPENAI;
 
         companion object {
             fun fromString(value: String?): ProviderType? {
@@ -26,6 +27,7 @@ object GenAiProviderFactory {
                     "gemini" -> GEMINI
                     "claude" -> CLAUDE
                     "openai" -> OPENAI
+                    "azure-openai", "azureopenai" -> AZURE_OPENAI
                     else -> null
                 }
             }
@@ -55,7 +57,7 @@ object GenAiProviderFactory {
             val providerTypeStr = config.getString("Provider", "gemini")
             val providerType = ProviderType.fromString(providerTypeStr)
             if (providerType == null) {
-                logger.warning("Invalid GenAI provider type: $providerTypeStr. Supported: gemini, claude, openai")
+                logger.warning("Invalid GenAI provider type: $providerTypeStr. Supported: gemini, claude, openai, azure-openai")
                 future.complete(null)
                 return future
             }
@@ -77,6 +79,10 @@ object GenAiProviderFactory {
             config.getInteger("MaxTokens")?.let { providerConfig["maxTokens"] = it }
             config.getDouble("Temperature")?.let { providerConfig["temperature"] = it }
             config.getString("DocsPath")?.let { providerConfig["docsPath"] = it }
+            
+            // Azure OpenAI specific config
+            config.getString("Endpoint")?.let { providerConfig["endpoint"] = resolveConfigValue(it) ?: it }
+            config.getString("Deployment")?.let { providerConfig["deployment"] = it }
 
             // Create provider instance
             val provider: IGenAiProvider = when (providerType) {
@@ -93,6 +99,10 @@ object GenAiProviderFactory {
                     logger.warning("OpenAI provider not yet implemented")
                     future.complete(null)
                     return future
+                }
+                ProviderType.AZURE_OPENAI -> {
+                    logger.info("Creating Azure OpenAI provider")
+                    AzureOpenAiProvider()
                 }
             }
 
