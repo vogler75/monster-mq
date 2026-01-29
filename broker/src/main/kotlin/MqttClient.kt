@@ -6,6 +6,7 @@ import at.rocworks.data.BrokerMessage
 import at.rocworks.data.BulkClientMessage
 import at.rocworks.handlers.SessionHandler
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
+import io.netty.handler.codec.mqtt.MqttProperties
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
@@ -18,6 +19,9 @@ import io.vertx.mqtt.MqttEndpoint
 import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
+import io.vertx.mqtt.messages.codes.MqttPubAckReasonCode
+import io.vertx.mqtt.messages.codes.MqttSubAckReasonCode
+import io.vertx.mqtt.messages.codes.MqttUnsubAckReasonCode
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -482,41 +486,83 @@ class MqttClient(
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
         val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
+        val protocolVersion = endpoint.protocolVersion()
 
-        val acknowledgements = mutableListOf<MqttQoS>()
+        // For MQTT v5: use reason codes; for v3.1.1: use QoS values
+        if (protocolVersion == 5) {
+            // MQTT v5.0: Use MqttSubAckReasonCode
+            val reasonCodes = mutableListOf<MqttSubAckReasonCode>()
 
-        subscribe.topicSubscriptions().forEach { subscription ->
-            val topic = subscription.topicName()
-            var allowed = true
+            subscribe.topicSubscriptions().forEach { subscription ->
+                val topic = subscription.topicName()
+                var allowed = true
+                var reasonCode: MqttSubAckReasonCode
 
-            // Root wildcard policy
-            if (topic == "#" && !Monster.allowRootWildcardSubscription()) {
-                allowed = false
-                logger.warning("Client [$clientId] Root wildcard subscription '#' rejected (AllowRootWildcardSubscription=false)")
-            }
-
-            // ACL check (only if still allowed so far and user management enabled)
-            if (allowed && userManager.isUserManagementEnabled()) {
-                if (!userManager.canSubscribe(username, topic)) {
+                // Root wildcard policy
+                if (topic == "#" && !Monster.allowRootWildcardSubscription()) {
                     allowed = false
+                    reasonCode = MqttSubAckReasonCode.TOPIC_FILTER_INVALID
+                    logger.warning("Client [$clientId] Root wildcard subscription '#' rejected (AllowRootWildcardSubscription=false)")
+                } else if (allowed && userManager.isUserManagementEnabled() && !userManager.canSubscribe(username, topic)) {
+                    // ACL check
+                    allowed = false
+                    reasonCode = MqttSubAckReasonCode.NOT_AUTHORIZED
                     logger.warning("Client [$clientId] Subscription DENIED for [$topic] - user [$username] lacks permission")
+                } else {
+                    // Subscription allowed - return granted QoS
+                    reasonCode = MqttSubAckReasonCode.qosGranted(subscription.qualityOfService())
+                }
+
+                reasonCodes.add(reasonCode)
+
+                // Forward allowed subscriptions to SessionHandler
+                if (allowed) {
+                    logger.fine { "Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()}" }
+                    sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService())
+                } else {
+                    logger.fine { "Client [$clientId] Subscription REJECTED for [$topic] - reason: $reasonCode" }
                 }
             }
 
-            // Build acknowledgement list
-            acknowledgements.add(if (allowed) subscription.qualityOfService() else MqttQoS.FAILURE)
+            // Send MQTT v5 SUBACK with reason codes
+            endpoint.subscribeAcknowledge(subscribe.messageId(), reasonCodes, MqttProperties.NO_PROPERTIES)
+        } else {
+            // MQTT v3.1.1: Use QoS values (backward compatibility)
+            val acknowledgements = mutableListOf<MqttQoS>()
 
-            // Forward allowed subscriptions to SessionHandler
-            if (allowed) {
-                logger.fine { "Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()}" }
-                sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService())
-            } else {
-                logger.fine { "Client [$clientId] Subscription REJECTED for [$topic]" }
+            subscribe.topicSubscriptions().forEach { subscription ->
+                val topic = subscription.topicName()
+                var allowed = true
+
+                // Root wildcard policy
+                if (topic == "#" && !Monster.allowRootWildcardSubscription()) {
+                    allowed = false
+                    logger.warning("Client [$clientId] Root wildcard subscription '#' rejected (AllowRootWildcardSubscription=false)")
+                }
+
+                // ACL check (only if still allowed so far and user management enabled)
+                if (allowed && userManager.isUserManagementEnabled()) {
+                    if (!userManager.canSubscribe(username, topic)) {
+                        allowed = false
+                        logger.warning("Client [$clientId] Subscription DENIED for [$topic] - user [$username] lacks permission")
+                    }
+                }
+
+                // Build acknowledgement list
+                acknowledgements.add(if (allowed) subscription.qualityOfService() else MqttQoS.FAILURE)
+
+                // Forward allowed subscriptions to SessionHandler
+                if (allowed) {
+                    logger.fine { "Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()}" }
+                    sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService())
+                } else {
+                    logger.fine { "Client [$clientId] Subscription REJECTED for [$topic]" }
+                }
             }
-        }
 
-        // Send SUBACK with per-subscription results
-        endpoint.subscribeAcknowledge(subscribe.messageId(), acknowledgements)
+            // Send MQTT v3.1.1 SUBACK with QoS values
+            endpoint.subscribeAcknowledge(subscribe.messageId(), acknowledgements)
+        }
     }
 
     private fun consumeCommand(message: Message<JsonObject>) {
@@ -544,11 +590,29 @@ class MqttClient(
     }
 
     private fun unsubscribeHandler(unsubscribe: MqttUnsubscribeMessage) {
-        unsubscribe.topics().forEach { topicName ->
-            logger.fine { "Client [$clientId] Unsubscribe for [${topicName}]} [${Utils.getCurrentFunctionName()}]" }
-            sessionHandler.unsubscribeRequest(this, topicName)
+        val protocolVersion = endpoint.protocolVersion()
+
+        if (protocolVersion == 5) {
+            // MQTT v5.0: Use reason codes for each topic
+            val reasonCodes = mutableListOf<MqttUnsubAckReasonCode>()
+
+            unsubscribe.topics().forEach { topicName ->
+                logger.fine { "Client [$clientId] Unsubscribe for [${topicName}] [${Utils.getCurrentFunctionName()}]" }
+                sessionHandler.unsubscribeRequest(this, topicName)
+                // Assuming unsubscribe is always successful (no validation in current impl)
+                reasonCodes.add(MqttUnsubAckReasonCode.SUCCESS)
+            }
+
+            // Send MQTT v5 UNSUBACK with reason codes
+            endpoint.unsubscribeAcknowledge(unsubscribe.messageId(), reasonCodes, MqttProperties.NO_PROPERTIES)
+        } else {
+            // MQTT v3.1.1: Simple acknowledgement
+            unsubscribe.topics().forEach { topicName ->
+                logger.fine { "Client [$clientId] Unsubscribe for [${topicName}] [${Utils.getCurrentFunctionName()}]" }
+                sessionHandler.unsubscribeRequest(this, topicName)
+            }
+            endpoint.unsubscribeAcknowledge(unsubscribe.messageId())
         }
-        endpoint.unsubscribeAcknowledge(unsubscribe.messageId())
     }
 
     /**
@@ -651,7 +715,13 @@ class MqttClient(
                 logger.finest { "Client [$clientId] Publish: sending acknowledge for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
                 sessionHandler.publishMessage(BrokerMessage(clientId, message))
                 // TODO: check the result of the publishMessage and send the acknowledge only if the message was delivered
-                endpoint.publishAcknowledge(message.messageId())
+                
+                // Send PUBACK with MQTT v5 reason code if protocol version is 5
+                if (endpoint.protocolVersion() == 5) {
+                    endpoint.publishAcknowledge(message.messageId(), MqttPubAckReasonCode.SUCCESS, MqttProperties.NO_PROPERTIES)
+                } else {
+                    endpoint.publishAcknowledge(message.messageId())
+                }
             }
             MqttQoS.EXACTLY_ONCE -> { // Level 2
                 logger.finest { "Client [$clientId] Publish: sending received for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
