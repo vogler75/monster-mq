@@ -1,0 +1,43 @@
+# Production configuration (config.yaml)
+TCP: 1883
+TCPS: 8883
+WS: 9000
+WSS: 9001
+
+DefaultStoreType: POSTGRES
+
+# PostgreSQL configuration
+Postgres:
+  Url: jdbc:postgresql://postgres:5432/monster
+  User: system
+  Pass: manager
+  # Schema: mqtt_broker    # Optional: custom PostgreSQL schema (defaults to 'public')
+
+Logging:
+  Mqtt:
+    Enabled: true
+  Memory:
+    Enabled: true
+    Entries: 1000
+    
+# Service endpoints
+GraphQL:
+  Enabled: true
+  Port: 4000
+  MqttApi: true         # Enable/disable MQTT API service (JSON-RPC 2.0)
+MCP:
+  Enabled: true
+  Port: 3000
+
+# Required: Must have an archive group named "Default"
+ArchiveGroups:
+  - Name: Default
+    Filter: "#"  # Archive all topics
+    Enabled: true
+    
+UserManagement:
+  Enabled: true
+  StoreType: POSTGRES           # POSTGRES, SQLITE, CRATEDB, MONGODB
+  PasswordAlgorithm: bcrypt      # Industry-standard hashing
+  CacheRefreshInterval: 60       # Seconds between cache updates
+  DisconnectOnUnauthorized: true # Disconnect on ACL violations
