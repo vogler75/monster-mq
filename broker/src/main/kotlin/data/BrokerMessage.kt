@@ -32,6 +32,28 @@ class BrokerMessage(
     val correlationData: ByteArray? = null,
     val userProperties: Map<String, String>? = null
 ): Serializable {
+    
+    init {
+        // MQTT v5.0 Phase 8: Validate UTF-8 payload if Payload Format Indicator = 1
+        if (payloadFormatIndicator == 1) {
+            try {
+                // Attempt to decode as UTF-8 - will throw if invalid
+                val decodedString = String(payload, Charsets.UTF_8)
+                // Re-encode and compare to detect invalid UTF-8 sequences
+                val reencoded = decodedString.toByteArray(Charsets.UTF_8)
+                if (!payload.contentEquals(reencoded)) {
+                    Utils.getLogger(this::class.java).warning(
+                        "Client [$clientId] Payload Format Indicator=1 (UTF-8) but payload contains invalid UTF-8 sequences"
+                    )
+                }
+            } catch (e: Exception) {
+                Utils.getLogger(this::class.java).warning(
+                    "Client [$clientId] Payload Format Indicator=1 (UTF-8) but payload is not valid UTF-8: ${e.message}"
+                )
+            }
+        }
+    }
+    
     companion object {
         fun getPayloadFromBase64(s: String): ByteArray = Base64.getDecoder().decode(s)
         
@@ -96,7 +118,29 @@ class BrokerMessage(
         message.isDup,
         false,
         clientId,
-        senderId = null,
+        senderId = clientId,  // MQTT v5: Track sender for noLocal filtering
+        time = Instant.now(),
+        // Parse MQTT v5.0 properties if present
+        messageExpiryInterval = extractProperties(message).messageExpiryInterval,
+        payloadFormatIndicator = extractProperties(message).payloadFormatIndicator,
+        contentType = extractProperties(message).contentType,
+        responseTopic = extractProperties(message).responseTopic,
+        correlationData = extractProperties(message).correlationData,
+        userProperties = extractProperties(message).userProperties
+    )
+
+    // Constructor with explicit topic name override (for Topic Alias resolution)
+    constructor(clientId: String, message: MqttPublishMessage, topicNameOverride: String): this(
+        Utils.getUuid(),
+        if (message.messageId()<0) 0 else message.messageId(),
+        topicNameOverride,  // Use override instead of message.topicName()
+        message.payload().bytes,
+        message.qosLevel().value(),
+        message.isRetain,
+        message.isDup,
+        false,
+        clientId,
+        senderId = clientId,  // MQTT v5: Track sender for noLocal filtering
         time = Instant.now(),
         // Parse MQTT v5.0 properties if present
         messageExpiryInterval = extractProperties(message).messageExpiryInterval,
@@ -172,11 +216,17 @@ class BrokerMessage(
             val properties = io.netty.handler.codec.mqtt.MqttProperties()
             
             // Add Message Expiry Interval if present
-            messageExpiryInterval?.let {
-                properties.add(io.netty.handler.codec.mqtt.MqttProperties.IntegerProperty(
-                    2, // Property ID for Message Expiry Interval
-                    it.toInt()
-                ))
+            // Per MQTT v5 spec: Update expiry interval to reflect time remaining
+            messageExpiryInterval?.let { originalInterval ->
+                val ageSeconds = (System.currentTimeMillis() - time.toEpochMilli()) / 1000
+                val remainingSeconds = (originalInterval - ageSeconds).coerceAtLeast(0)
+                if (remainingSeconds > 0) {
+                    properties.add(io.netty.handler.codec.mqtt.MqttProperties.IntegerProperty(
+                        2, // Property ID for Message Expiry Interval
+                        remainingSeconds.toInt()
+                    ))
+                }
+                // If remainingSeconds is 0 or negative, don't include property (message expired)
             }
             
             // Add Payload Format Indicator if present

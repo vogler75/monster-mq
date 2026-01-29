@@ -65,14 +65,16 @@ class SessionStoreMongoDB(
         }
     }
 
-    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int) -> Unit) {
+    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int) -> Unit) {
         try {
             val subscriptions = subscriptionsCollection.find()
             for (doc in subscriptions) {
                 val clientId = doc.getString("client_id")
                 val topic = doc.getString("topic")
                 val qos = doc.getInteger("qos")
-                callback(topic, clientId, qos)
+                val noLocal = doc.getBoolean("no_local", false)
+                val retainHandling = doc.getInteger("retain_handling", 0)
+                callback(topic, clientId, qos, noLocal, retainHandling)
             }
         } catch (e: Exception) {
             logger.warning("Error while retrieving subscriptions: ${e.message}")
@@ -235,7 +237,9 @@ class SessionStoreMongoDB(
             subscriptions.forEach { subscription ->
                 val update = Document("\$set", Document(mapOf(
                     "qos" to subscription.qos.value(),
-                    "wildcard" to Utils.isWildCardTopic(subscription.topicName)
+                    "wildcard" to Utils.isWildCardTopic(subscription.topicName),
+                    "no_local" to subscription.noLocal,
+                    "retain_handling" to subscription.retainHandling
                 )))
                 subscriptionsCollection.updateOne(
                     and(
@@ -494,6 +498,50 @@ class SessionStoreMongoDB(
             result.deletedCount.toInt()
         } catch (e: Exception) {
             logger.warning("Error purging delivered messages: ${e.message}")
+            0
+        }
+    }
+
+    override fun purgeExpiredMessages(): Int {
+        val currentTimeMillis = System.currentTimeMillis()
+        
+        return try {
+            // Find expired messages
+            val expiredMessages = queuedMessagesCollection.find(
+                and(
+                    exists("message_expiry_interval"),
+                    exists("creation_time"),
+                    gte("\$expr", Document("\$gte", listOf(
+                        Document("\$divide", listOf(
+                            Document("\$subtract", listOf(currentTimeMillis, "\$creation_time")),
+                            1000
+                        )),
+                        "\$message_expiry_interval"
+                    )))
+                )
+            ).projection(Document("message_uuid", 1))
+            
+            val expiredUuids = mutableListOf<String>()
+            expiredMessages.forEach { doc ->
+                expiredUuids.add(doc.getString("message_uuid"))
+            }
+            
+            if (expiredUuids.isEmpty()) {
+                return 0
+            }
+            
+            // Delete expired message client mappings
+            val result = queuedMessagesClientsCollection.deleteMany(
+                `in`("message_uuid", expiredUuids)
+            )
+            
+            val count = result.deletedCount.toInt()
+            if (count > 0) {
+                logger.fine { "Purged $count expired messages" }
+            }
+            count
+        } catch (e: Exception) {
+            logger.warning("Error purging expired messages: ${e.message}")
             0
         }
     }

@@ -53,7 +53,7 @@ class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(
         return promise.future()
     }
 
-    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int) -> Unit): Future<Void> {
+    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int) -> Unit): Future<Void> {
         val promise = Promise.promise<Void>()
         vertx.executeBlocking(Callable {
             store.iterateSubscriptions(callback)
@@ -217,6 +217,15 @@ class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(
         val promise = Promise.promise<Int>()
         vertx.executeBlocking(Callable {
             val count = store.purgeDeliveredMessages()
+            promise.complete(count)
+        })
+        return promise.future()
+    }
+
+    override fun purgeExpiredMessages(): Future<Int> {
+        val promise = Promise.promise<Int>()
+        vertx.executeBlocking(Callable {
+            val count = store.purgeExpiredMessages()
             promise.complete(count)
         })
         return promise.future()

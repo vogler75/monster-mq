@@ -1,6 +1,7 @@
 package at.rocworks.data
 
 import at.rocworks.Utils
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Unified subscription manager combining exact and wildcard indexes.
@@ -31,6 +32,9 @@ class SubscriptionManager {
 
     // Wildcard subscriptions: O(depth) lookup
     private val wildcardIndex = TopicIndexWildcard()
+    
+    // Track noLocal subscriptions: clientId → Set<topicPattern>
+    private val noLocalSubscriptions = ConcurrentHashMap<String, MutableSet<String>>()
 
     /**
      * Add a subscription.
@@ -39,17 +43,23 @@ class SubscriptionManager {
      * @param clientId Client identifier
      * @param topicOrPattern Topic name or pattern (e.g., "sensor/room1/temp" or "sensor/+/temp")
      * @param qos Quality of Service level (0, 1, or 2)
+     * @param noLocal MQTT v5: Don't send messages back to the publishing client
      * @return true if subscription was added, false if it already existed
      */
-    fun subscribe(clientId: String, topicOrPattern: String, qos: Int) {
+    fun subscribe(clientId: String, topicOrPattern: String, qos: Int, noLocal: Boolean = false) {
         if (topicOrPattern.contains('+') || topicOrPattern.contains('#')) {
             // Wildcard subscription
-            logger.finest { "SubscriptionManager.subscribe: wildcard pattern=[$topicOrPattern] clientId=[$clientId] qos=[$qos]" }
+            logger.finest { "SubscriptionManager.subscribe: wildcard pattern=[$topicOrPattern] clientId=[$clientId] qos=[$qos] noLocal=$noLocal" }
             wildcardIndex.add(topicOrPattern, clientId, qos)
         } else {
             // Exact subscription
-            logger.finest { "SubscriptionManager.subscribe: exact topic=[$topicOrPattern] clientId=[$clientId] qos=[$qos]" }
+            logger.finest { "SubscriptionManager.subscribe: exact topic=[$topicOrPattern] clientId=[$clientId] qos=[$qos] noLocal=$noLocal" }
             exactIndex.add(topicOrPattern, clientId, qos)
+        }
+        
+        // Track noLocal subscriptions separately
+        if (noLocal) {
+            noLocalSubscriptions.getOrPut(clientId) { ConcurrentHashMap.newKeySet() }.add(topicOrPattern)
         }
     }
 
@@ -62,15 +72,23 @@ class SubscriptionManager {
      * @return true if subscription was removed, false if it didn't exist
      */
     fun unsubscribe(clientId: String, topicOrPattern: String): Boolean {
-        if (topicOrPattern.contains('+') || topicOrPattern.contains('#')) {
+        val removed = if (topicOrPattern.contains('+') || topicOrPattern.contains('#')) {
             // Wildcard subscription
             logger.finest { "SubscriptionManager.unsubscribe: wildcard pattern=[$topicOrPattern] clientId=[$clientId]" }
-            return wildcardIndex.remove(topicOrPattern, clientId)
+            wildcardIndex.remove(topicOrPattern, clientId)
         } else {
             // Exact subscription
             logger.finest { "SubscriptionManager.unsubscribe: exact topic=[$topicOrPattern] clientId=[$clientId]" }
-            return exactIndex.remove(topicOrPattern, clientId)
+            exactIndex.remove(topicOrPattern, clientId)
         }
+        
+        // Remove from noLocal tracking
+        noLocalSubscriptions[clientId]?.remove(topicOrPattern)
+        if (noLocalSubscriptions[clientId]?.isEmpty() == true) {
+            noLocalSubscriptions.remove(clientId)
+        }
+        
+        return removed
     }
 
     /**
@@ -111,6 +129,27 @@ class SubscriptionManager {
 
         return deduped
     }
+    
+    /**
+     * Check if a client has a noLocal subscription matching the given topic.
+     * Used to filter out messages that the client itself published.
+     *
+     * @param clientId Client identifier
+     * @param publishedTopic The topic being checked
+     * @return true if client has noLocal subscription for this topic
+     */
+    fun hasNoLocalSubscription(clientId: String, publishedTopic: String): Boolean {
+        val patterns = noLocalSubscriptions[clientId]
+        if (patterns == null) return false
+        
+        return patterns.any { pattern ->
+            if (pattern.contains('+') || pattern.contains('#')) {
+                wildcardIndex.matchesPattern(publishedTopic, pattern)
+            } else {
+                pattern == publishedTopic
+            }
+        }
+    }
 
     /**
      * Check if a topic has any subscribers (exact or wildcard).
@@ -121,6 +160,22 @@ class SubscriptionManager {
      */
     fun hasSubscribers(publishedTopic: String): Boolean {
         return exactIndex.hasSubscribers(publishedTopic) || wildcardIndex.hasMatchingSubscribers(publishedTopic)
+    }
+
+    /**
+     * Check if a specific client has a subscription to a topic/pattern.
+     * Used for MQTT v5 Retain Handling option 1 (send only if new subscription).
+     *
+     * @param clientId Client identifier
+     * @param topicOrPattern Topic name or pattern
+     * @return true if client has this subscription
+     */
+    fun hasSubscription(clientId: String, topicOrPattern: String): Boolean {
+        return if (topicOrPattern.contains('+') || topicOrPattern.contains('#')) {
+            wildcardIndex.hasSubscriber(topicOrPattern, clientId)
+        } else {
+            exactIndex.hasSubscriber(topicOrPattern, clientId)
+        }
     }
 
     /**

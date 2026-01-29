@@ -176,13 +176,14 @@ open class SessionHandler(
         vertx.eventBus().consumer<MqttSubscription>(subscriptionAddAddress) { message ->
             val subscription = message.body()
             // Add to subscription manager (routes to exact or wildcard index)
-            subscriptionManager.subscribe(subscription.clientId, subscription.topicName, subscription.qos.value())
+            subscriptionManager.subscribe(subscription.clientId, subscription.topicName, subscription.qos.value(), subscription.noLocal)
 
             // Track topic subscriptions by node for targeted publishing (cluster replication)
             val nodeId = clientNodeMapping.get(subscription.clientId) ?: Monster.getClusterNodeId(vertx)
             topicNodeMapping.addToSet(subscription.topicName, nodeId)
             logger.finest { "Added topic subscription [${subscription.topicName}] for node [${nodeId}]" }
         }
+
 
         vertx.eventBus().consumer<MqttSubscription>(subscriptionDelAddress) { message ->
             val subscription = message.body()
@@ -557,14 +558,14 @@ open class SessionHandler(
         }
 
         logger.fine("Loading all subscriptions [${Utils.getCurrentFunctionName()}]")
-        val f2 = sessionStore.iterateSubscriptions { topicName, clientId, qos ->
+        val f2 = sessionStore.iterateSubscriptions { topicName, clientId, qos, noLocal, retainHandling ->
             // Add to subscription manager (routes to exact or wildcard index)
-            subscriptionManager.subscribe(clientId, topicName, qos)
+            subscriptionManager.subscribe(clientId, topicName, qos, noLocal)
 
             // Build topic-to-node mapping based on where client is located (cluster replication)
             val nodeId = clientNodeMapping.get(clientId) ?: Monster.getClusterNodeId(vertx)
             topicNodeMapping.addToSet(topicName, nodeId)
-            logger.finest { "Loaded subscription [${topicName}] for client [${clientId}] on node [${nodeId}]" }
+            logger.finest { "Loaded subscription [${topicName}] for client [${clientId}] on node [${nodeId}] noLocal=$noLocal" }
         }
 
         // Start periodic cleanup of delivered messages (every 60 seconds)
@@ -577,6 +578,20 @@ open class SessionHandler(
                     }
                 } else {
                     logger.warning("Error purging delivered messages: ${result.cause()?.message} [${Utils.getCurrentFunctionName()}]")
+                }
+            }
+        }
+
+        // Start periodic cleanup of expired messages (every 60 seconds)
+        vertx.setPeriodic(60_000) {
+            sessionStore.purgeExpiredMessages().onComplete { result ->
+                if (result.succeeded()) {
+                    val count = result.result()
+                    if (count > 0) {
+                        logger.fine("Purged $count expired messages from queue [${Utils.getCurrentFunctionName()}]")
+                    }
+                } else {
+                    logger.warning("Error purging expired messages: ${result.cause()?.message} [${Utils.getCurrentFunctionName()}]")
                 }
             }
         }
@@ -938,6 +953,28 @@ open class SessionHandler(
         val result = subscriptionManager.findAllSubscribers(topicName).toSet()
         return result
     }
+    
+    /**
+     * Find clients for a topic, filtering out those with noLocal subscription if sender matches.
+     * MQTT v5: noLocal option prevents clients from receiving messages they published themselves.
+     * 
+     * @param topicName Published topic name
+     * @param senderId Original publisher's clientId (or null if not tracked)
+     * @return Set of (clientId, subscriptionQoS) pairs, filtered for noLocal
+     */
+    private fun findClientsFiltered(topicName: String, senderId: String?): Set<Pair<String, Int>> {
+        val allClients = findClients(topicName)
+        if (senderId == null) {
+            return allClients
+        }
+        
+        // Filter out sender if they have noLocal subscription for this topic
+        val filtered = allClients.filterTo(mutableSetOf()) { (clientId, _) ->
+            val hasNoLocal = subscriptionManager.hasNoLocalSubscription(clientId, topicName)
+            clientId != senderId || !hasNoLocal
+        }
+        return filtered
+    }
 
     fun purgeSessions() = sessionStore.purgeSessions()
 
@@ -1108,12 +1145,14 @@ open class SessionHandler(
 
     //----------------------------------------------------------------------------------------------------
 
-    fun subscribeRequest(client: MqttClient, topicName: String, qos: MqttQoS) {
+    fun subscribeRequest(client: MqttClient, topicName: String, qos: MqttQoS, noLocal: Boolean = false, retainHandling: Int = 0) {
         val request = JsonObject()
             .put(Const.COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
             .put(Const.CLIENT_KEY, client.clientId)
             .put(Const.QOS_KEY, qos.value())
+            .put("noLocal", noLocal)  // MQTT v5 No Local option
+            .put("retainHandling", retainHandling)  // MQTT v5 Retain Handling option
         vertx.eventBus().request<Boolean>(commandAddress(), request)
             .onFailure { error ->
                 logger.severe("Subscribe request failed [${error}] [${Utils.getCurrentFunctionName()}]")
@@ -1142,6 +1181,8 @@ open class SessionHandler(
         val clientId = command.body().getString(Const.CLIENT_KEY)
         val topicName = command.body().getString(Const.TOPIC_KEY)
         val qos = MqttQoS.valueOf(command.body().getInteger(Const.QOS_KEY))
+        val noLocal = command.body().getBoolean("noLocal", false)  // MQTT v5 No Local flag
+        val retainHandling = command.body().getInteger("retainHandling", 0)  // MQTT v5 Retain Handling
 
         // Defensive guard: prevent adding root wildcard subscription when disabled
         if (topicName == "#" && !Monster.allowRootWildcardSubscription()) {
@@ -1150,13 +1191,29 @@ open class SessionHandler(
             return
         }
 
-        messageHandler.findRetainedMessages(topicName, 0) { message -> // TODO: max must be configurable
-            logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-            val effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
-            sendMessageToClient(clientId, effectiveMessage)
-        }.onComplete {
-            logger.finest { "Retained messages published [${it.result()}] [${Utils.getCurrentFunctionName()}]" }
-            addSubscription(MqttSubscription(clientId, topicName, qos))
+        // MQTT v5 Retain Handling:
+        // 0 = Send retained messages
+        // 1 = Send retained messages only if new subscription (not checking for now)
+        // 2 = Never send retained messages
+        val shouldSendRetained = when (retainHandling) {
+            2 -> false  // Never send retained
+            1 -> !subscriptionManager.hasSubscription(clientId, topicName)  // Send only if new subscription
+            else -> true  // Always send retained (default)
+        }
+
+        if (shouldSendRetained) {
+            messageHandler.findRetainedMessages(topicName, 0) { message -> // TODO: max must be configurable
+                logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
+                val effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
+                sendMessageToClient(clientId, effectiveMessage)
+            }.onComplete {
+                logger.finest { "Retained messages published [${it.result()}] [${Utils.getCurrentFunctionName()}]" }
+                addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling))
+                command.reply(true)
+            }
+        } else {
+            // Skip retained messages, just add subscription
+            addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling))
             command.reply(true)
         }
     }
@@ -1354,25 +1411,28 @@ open class SessionHandler(
      * Made internal so PublishWorker can call it.
      */
     internal fun processTopic(topicName: String, messages: List<BrokerMessage>) {
-        // Single subscription lookup for the entire topic - THE KEY OPTIMIZATION
-        val subscribers = findClients(topicName)
+        // Group messages by sender for noLocal filtering
+        messages.groupBy { it.senderId }.forEach { (senderId, msgsFromSender) ->
+            // Single subscription lookup with noLocal filtering
+            val subscribers = findClientsFiltered(topicName, senderId)
 
-        if (subscribers.isEmpty()) {
-            return
-        }
-
-        // Group by QoS and process all subscribers
-        messages.groupBy { it.qosLevel }.forEach { (msgQos, msgsWithQos) ->
-            // Treat clients as online if they're either explicitly ONLINE or not in clientStatus (internal clients)
-            val (onlineClients, otherClients) = subscribers.partition { (clientId, _) ->
-                clientStatus[clientId] == ClientStatus.ONLINE || clientStatus[clientId] == null
+            if (subscribers.isEmpty()) {
+                return@forEach
             }
 
-            // Send to online clients (includes internal clients not in clientStatus)
-            forwardBulkToOnlineClients(msgsWithQos, onlineClients, msgQos)
+            // Group by QoS and process all subscribers
+            msgsFromSender.groupBy { it.qosLevel }.forEach { (msgQos, msgsWithQos) ->
+                // Treat clients as online if they're either explicitly ONLINE or not in clientStatus (internal clients)
+                val (onlineClients, otherClients) = subscribers.partition { (clientId, _) ->
+                    clientStatus[clientId] == ClientStatus.ONLINE || clientStatus[clientId] == null
+                }
 
-            // Handle created and offline clients
-            handleCreatedAndOfflineClients(msgsWithQos, otherClients, msgQos)
+                // Send to online clients (includes internal clients not in clientStatus)
+                forwardBulkToOnlineClients(msgsWithQos, onlineClients, msgQos)
+
+                // Handle created and offline clients
+                handleCreatedAndOfflineClients(msgsWithQos, otherClients, msgQos)
+            }
         }
 
         // Handle remote nodes
@@ -1600,7 +1660,9 @@ open class SessionHandler(
             }
         }
 
-        findClients(message.topicName).groupBy { (clientId, subscriptionQos) ->
+        // MQTT v5: Filter out senders with noLocal subscriptions
+        val filteredClients = findClientsFiltered(message.topicName, message.senderId)
+        filteredClients.groupBy { (clientId, subscriptionQos) ->
             if (subscriptionQos < message.qosLevel) subscriptionQos else message.qosLevel // Potentially downgrade QoS
         }.forEach { (qos, clients) ->
             val m = messageWithQos(message, qos) // Potentially downgrade QoS

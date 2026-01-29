@@ -59,6 +59,8 @@ class SessionStoreSQLite(
                 topic TEXT,
                 qos INTEGER,
                 wildcard BOOLEAN,
+                no_local INTEGER DEFAULT 0,
+                retain_handling INTEGER DEFAULT 0,
                 PRIMARY KEY (client_id, topic)
             );
             """.trimIndent())
@@ -70,7 +72,9 @@ class SessionStoreSQLite(
                 payload BLOB,
                 qos INTEGER,
                 retained BOOLEAN,
-                client_id TEXT
+                client_id TEXT,
+                creation_time INTEGER,
+                message_expiry_interval INTEGER
             );             
             """.trimIndent())
             .add("""
@@ -95,8 +99,8 @@ class SessionStoreSQLite(
         }
     }
 
-    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int) -> Unit) {
-        val sql = "SELECT client_id, topic, qos FROM $subscriptionsTableName"
+    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int) -> Unit) {
+        val sql = "SELECT client_id, topic, qos, no_local, retain_handling FROM $subscriptionsTableName"
         try {
             val results = sqlClient.executeQuerySync(sql)
             results.forEach { row ->
@@ -104,7 +108,9 @@ class SessionStoreSQLite(
                 val clientId = rowObj.getString("client_id")
                 val topic = rowObj.getString("topic")
                 val qos = rowObj.getInteger("qos")
-                callback(topic, clientId, qos)
+                val noLocal = rowObj.getInteger("no_local", 0) == 1  // SQLite stores as 0/1
+                val retainHandling = rowObj.getInteger("retain_handling", 0)
+                callback(topic, clientId, qos, noLocal, retainHandling)
             }
         } catch (e: Exception) {
             logger.warning("Error fetching subscriptions: ${e.message} [iterateSubscriptions]")
@@ -271,8 +277,8 @@ class SessionStoreSQLite(
     override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
         if (subscriptions.isEmpty()) return
 
-        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard) VALUES (?, ?, ?, ?) "+
-                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = excluded.qos"
+        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard, no_local, retain_handling) VALUES (?, ?, ?, ?, ?, ?) "+
+                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = excluded.qos, no_local = excluded.no_local, retain_handling = excluded.retain_handling"
 
         val batchParams = JsonArray()
         subscriptions.forEach { subscription ->
@@ -281,6 +287,8 @@ class SessionStoreSQLite(
                 .add(subscription.topicName)
                 .add(subscription.qos.value())
                 .add(isWildcardTopic(subscription.topicName))
+                .add(if (subscription.noLocal) 1 else 0)
+                .add(subscription.retainHandling)
             batchParams.add(params)
         }
 
@@ -350,8 +358,8 @@ class SessionStoreSQLite(
         if (messages.isEmpty()) return
         
         val insertMessageSql = """INSERT INTO $queuedMessagesTableName 
-                                (message_uuid, message_id, topic, payload, qos, retained, client_id) 
-                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                                (message_uuid, message_id, topic, payload, qos, retained, client_id, creation_time, message_expiry_interval) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT (message_uuid) DO NOTHING"""
         
         val insertClientSql = """INSERT INTO $queuedMessagesClientsTableName (client_id, message_uuid, status)
@@ -370,6 +378,8 @@ class SessionStoreSQLite(
                 .add(message.qosLevel)
                 .add(message.isRetain)
                 .add(message.clientId)
+                .add(message.time.toEpochMilli())
+                .add(message.messageExpiryInterval ?: -1L)  // -1 = no expiry
             messageBatch.add(messageParams)
             
             // Insert client mappings for each client
@@ -387,7 +397,7 @@ class SessionStoreSQLite(
     }
 
     override fun dequeueMessages(clientId: String, callback: (BrokerMessage) -> Boolean) {
-        val sql = """SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id
+        val sql = """SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id, m.creation_time, m.message_expiry_interval
                     FROM $queuedMessagesTableName m
                     JOIN $queuedMessagesClientsTableName c ON m.message_uuid = c.message_uuid
                     WHERE c.client_id = ?
@@ -398,6 +408,8 @@ class SessionStoreSQLite(
         try {
             val results = sqlClient.executeQuerySync(sql, params)
             val processedUuids = mutableListOf<String>()
+            val expiredUuids = mutableListOf<String>()
+            val currentTimeMillis = System.currentTimeMillis()
 
             results.forEach { row ->
                 val rowObj = row as JsonObject
@@ -408,6 +420,21 @@ class SessionStoreSQLite(
                 val qos = rowObj.getInteger("qos")
                 val retained = rowObj.getBoolean("retained", false)
                 val originalClientId = rowObj.getString("client_id")
+                val creationTime = rowObj.getLong("creation_time")
+                val messageExpiryIntervalRaw = rowObj.getLong("message_expiry_interval", -1L)
+                // Convert -1 back to null (no expiry)
+                val messageExpiryInterval = if (messageExpiryIntervalRaw == -1L) null else messageExpiryIntervalRaw
+
+                // Check if message has expired (only if expiry interval is set, i.e. not -1/null)
+                if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                    val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                    if (ageSeconds >= messageExpiryInterval) {
+                        // Message expired - mark for deletion
+                        expiredUuids.add(messageUuid)
+                        logger.fine { "Message [$messageUuid] expired (age: ${ageSeconds}s, limit: ${messageExpiryInterval}s)" }
+                        return@forEach
+                    }
+                }
 
                 val message = BrokerMessage(
                     messageUuid = messageUuid,
@@ -418,7 +445,9 @@ class SessionStoreSQLite(
                     isRetain = retained,
                     isQueued = true,
                     clientId = originalClientId,
-                    isDup = false
+                    isDup = false,
+                    messageExpiryInterval = messageExpiryInterval,
+                    time = java.time.Instant.ofEpochMilli(creationTime ?: currentTimeMillis)
                 )
 
                 // Call callback and collect processed messages
@@ -427,14 +456,19 @@ class SessionStoreSQLite(
                 }
             }
 
-            // Remove processed messages for this client
-            if (processedUuids.isNotEmpty()) {
+            // Remove processed and expired messages for this client
+            val allToRemove = processedUuids + expiredUuids
+            if (allToRemove.isNotEmpty()) {
                 val deleteSql = "DELETE FROM $queuedMessagesClientsTableName WHERE client_id = ? AND message_uuid = ?"
                 val deleteBatch = JsonArray()
-                processedUuids.forEach { uuid ->
+                allToRemove.forEach { uuid ->
                     deleteBatch.add(JsonArray().add(clientId).add(uuid))
                 }
                 sqlClient.executeBatch(deleteSql, deleteBatch)
+                
+                if (expiredUuids.isNotEmpty()) {
+                    logger.fine { "Removed ${expiredUuids.size} expired messages for client [$clientId]" }
+                }
             }
         } catch (e: Exception) {
             logger.warning("Error dequeuing messages for client [$clientId]: ${e.message}")
@@ -466,7 +500,7 @@ class SessionStoreSQLite(
     }
 
     override fun fetchPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
-        val sql = """SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id
+        val sql = """SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id, m.creation_time, m.message_expiry_interval
                     FROM $queuedMessagesTableName m
                     JOIN $queuedMessagesClientsTableName c ON m.message_uuid = c.message_uuid
                     WHERE c.client_id = ? AND c.status = 0
@@ -478,10 +512,30 @@ class SessionStoreSQLite(
         return try {
             val results = sqlClient.executeQuerySync(sql, params)
             val messages = mutableListOf<BrokerMessage>()
+            val currentTimeMillis = System.currentTimeMillis()
+            val expiredUuids = mutableListOf<String>()
+            
             for (i in 0 until results.size()) {
                 val rowObj = results.getJsonObject(i)
+                val messageUuid = rowObj.getString("message_uuid")
+                val creationTime = rowObj.getLong("creation_time")
+                val messageExpiryIntervalRaw = rowObj.getLong("message_expiry_interval", -1L)
+                // Convert -1 back to null (no expiry)
+                val messageExpiryInterval = if (messageExpiryIntervalRaw == -1L) null else messageExpiryIntervalRaw
+                
+                // Check if message has expired (only if expiry interval is set, i.e. not -1/null)
+                if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                    val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                    if (ageSeconds >= messageExpiryInterval) {
+                        // Message expired - skip it and mark for deletion
+                        expiredUuids.add(messageUuid)
+                        logger.fine { "Message [$messageUuid] expired (age: ${ageSeconds}s, limit: ${messageExpiryInterval}s)" }
+                        continue
+                    }
+                }
+                
                 messages.add(BrokerMessage(
-                    messageUuid = rowObj.getString("message_uuid"),
+                    messageUuid = messageUuid,
                     messageId = rowObj.getInteger("message_id"),
                     topicName = rowObj.getString("topic"),
                     payload = rowObj.getBinary("payload") ?: ByteArray(0),
@@ -489,9 +543,23 @@ class SessionStoreSQLite(
                     isRetain = rowObj.getBoolean("retained", false),
                     isDup = false,
                     isQueued = true,
-                    clientId = rowObj.getString("client_id")
+                    clientId = rowObj.getString("client_id"),
+                    messageExpiryInterval = messageExpiryInterval,
+                    time = java.time.Instant.ofEpochMilli(creationTime ?: currentTimeMillis)
                 ))
             }
+            
+            // Delete expired messages
+            if (expiredUuids.isNotEmpty()) {
+                val deleteSql = "DELETE FROM $queuedMessagesClientsTableName WHERE client_id = ? AND message_uuid = ?"
+                val deleteBatch = JsonArray()
+                expiredUuids.forEach { uuid ->
+                    deleteBatch.add(JsonArray().add(clientId).add(uuid))
+                }
+                sqlClient.executeBatch(deleteSql, deleteBatch)
+                logger.fine { "Removed ${expiredUuids.size} expired messages for client [$clientId]" }
+            }
+            
             messages
         } catch (e: Exception) {
             logger.warning("Error fetching pending messages: ${e.message}")
@@ -550,6 +618,43 @@ class SessionStoreSQLite(
             sqlClient.executeUpdateSync(sql, JsonArray())
         } catch (e: Exception) {
             logger.warning("Error purging delivered messages: ${e.message}")
+            0
+        }
+    }
+
+    override fun purgeExpiredMessages(): Int {
+        val currentTimeMillis = System.currentTimeMillis()
+        
+        // Find expired messages
+        val findExpiredSql = """
+            SELECT message_uuid FROM $queuedMessagesTableName
+            WHERE message_expiry_interval IS NOT NULL
+            AND creation_time IS NOT NULL
+            AND ((? - creation_time) / 1000) >= message_expiry_interval
+        """.trimIndent()
+        
+        return try {
+            val params = JsonArray().add(currentTimeMillis)
+            val results = sqlClient.executeQuerySync(findExpiredSql, params)
+            
+            if (results.isEmpty()) {
+                return 0
+            }
+            
+            val expiredUuids = results.map { (it as JsonObject).getString("message_uuid") }
+            
+            // Delete expired message client mappings
+            val deleteClientsSql = "DELETE FROM $queuedMessagesClientsTableName WHERE message_uuid = ?"
+            val deleteBatch = JsonArray()
+            expiredUuids.forEach { uuid ->
+                deleteBatch.add(JsonArray().add(uuid))
+            }
+            sqlClient.executeBatch(deleteClientsSql, deleteBatch)
+            
+            logger.fine { "Purged ${expiredUuids.size} expired messages" }
+            expiredUuids.size
+        } catch (e: Exception) {
+            logger.warning("Error purging expired messages: ${e.message}")
             0
         }
     }
