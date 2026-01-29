@@ -54,9 +54,18 @@ class BrokerMessage(
                     val userProps = mutableMapOf<String, String>()
                     props?.listAll()?.forEach { p ->
                         if (p.propertyId() == 38) {
-                            when (val value = p.value()) {
+                            val value = p.value()
+                            when (value) {
                                 is io.netty.handler.codec.mqtt.MqttProperties.StringPair -> {
                                     userProps[value.key] = value.value
+                                }
+                                is java.util.ArrayList<*> -> {
+                                    // User Properties can be returned as ArrayList of StringPairs
+                                    value.forEach { item ->
+                                        if (item is io.netty.handler.codec.mqtt.MqttProperties.StringPair) {
+                                            userProps[item.key] = item.value
+                                        }
+                                    }
                                 }
                             }
                         }
