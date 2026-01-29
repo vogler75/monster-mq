@@ -232,14 +232,17 @@ class MqttClient(
     fun startEndpoint() {
         logger.info("Client [$clientId] Request to connect. Clean session [${endpoint.isCleanSession}] protocol [${endpoint.protocolVersion()}] [${Utils.getCurrentFunctionName()}]")
         // protocolVersion: 3=MQTTv31, 4=MQTTv311, 5=MQTTv5
-        if (endpoint.protocolVersion()==5) {
-            logger.warning("Client [$clientId] Protocol version 5 not yet supported. Closing session [${Utils.getCurrentFunctionName()}]")
-            // print all connectProperties
-            endpoint.connectProperties().listAll().forEach() { p ->
-                logger.info("Property [${p.propertyId()}] = ${p.value()}")
+        val isMqtt5 = endpoint.protocolVersion() == 5
+        
+        if (isMqtt5) {
+            logger.info("Client [$clientId] MQTT 5.0 connection accepted")
+            // Log MQTT5 connect properties
+            endpoint.connectProperties().listAll().forEach { p ->
+                logger.fine("MQTT5 Property [${p.propertyId()}] = ${p.value()}")
             }
-            rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_PROTOCOL_ERROR)
-        } else {
+        }
+        
+        run {
             endpoint.exceptionHandler(::exceptionHandler)
             endpoint.pingHandler { pingHandler() }
             endpoint.subscribeHandler(::subscribeHandler)

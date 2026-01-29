@@ -23,8 +23,14 @@ class BrokerMessage(
     val isQueued: Boolean,
     val clientId: String,
     val senderId: String? = null,  // Optional sender identification for loop prevention
-    val time: Instant = Instant.now()
-    // TODO: Properties for MQTT 5.0
+    val time: Instant = Instant.now(),
+    // MQTT 5.0 properties
+    val messageExpiryInterval: Long? = null,
+    val payloadFormatIndicator: Int? = null,  // 0=unspecified, 1=UTF-8
+    val contentType: String? = null,
+    val responseTopic: String? = null,
+    val correlationData: ByteArray? = null,
+    val userProperties: Map<String, String>? = null
 ): Serializable {
     constructor(clientId: String, message: MqttPublishMessage): this(
         Utils.getUuid(),
