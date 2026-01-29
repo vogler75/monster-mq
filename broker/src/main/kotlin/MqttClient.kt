@@ -234,12 +234,26 @@ class MqttClient(
         // protocolVersion: 3=MQTTv31, 4=MQTTv311, 5=MQTTv5
         val isMqtt5 = endpoint.protocolVersion() == 5
         
+        // Parse MQTT5 properties from CONNECT packet
+        var mqtt5SessionExpiryInterval = 0L
+        var mqtt5ReceiveMaximum = 65535
+        var mqtt5MaximumPacketSize = 268435456L
+        var mqtt5TopicAliasMaximum = 0
+        
         if (isMqtt5) {
             logger.info("Client [$clientId] MQTT 5.0 connection accepted")
-            // Log MQTT5 connect properties
-            endpoint.connectProperties().listAll().forEach { p ->
-                logger.fine("MQTT5 Property [${p.propertyId()}] = ${p.value()}")
+            // Parse MQTT5 CONNECT properties
+            val props = endpoint.connectProperties()
+            props.listAll().forEach { p ->
+                when (p.propertyId()) {
+                    17 -> mqtt5SessionExpiryInterval = (p.value() as? Number)?.toLong() ?: 0L  // Session Expiry Interval
+                    33 -> mqtt5ReceiveMaximum = (p.value() as? Number)?.toInt() ?: 65535  // Receive Maximum
+                    39 -> mqtt5MaximumPacketSize = (p.value() as? Number)?.toLong() ?: 268435456L  // Maximum Packet Size
+                    34 -> mqtt5TopicAliasMaximum = (p.value() as? Number)?.toInt() ?: 0  // Topic Alias Maximum
+                    else -> logger.fine("MQTT5 Property [${p.propertyId()}] = ${p.value()}")
+                }
             }
+            logger.info("Client [$clientId] MQTT5 properties: sessionExpiry=$mqtt5SessionExpiryInterval, receiveMax=$mqtt5ReceiveMaximum, maxPacketSize=$mqtt5MaximumPacketSize")
         }
         
         run {
@@ -277,8 +291,11 @@ class MqttClient(
             sessionHandler.setLastWill(clientId, endpoint.will())
 
             fun finishClientStartup(present: Boolean) {
-                // Accept connection
+                // Accept connection - MQTT5 CONNACK properties to be added in future phase
                 endpoint.accept(present)
+                if (isMqtt5) {
+                    logger.info("Client [$clientId] MQTT5 connection accepted (CONNACK properties implementation pending)")
+                }
 
                 // Set client to connected
                 val information = JsonObject()
@@ -289,7 +306,7 @@ class MqttClient(
                 information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
                 information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
                 information.put("clientAddress", endpoint.remoteAddress().toString())
-                information.put("sessionExpiryInterval", endpoint.keepAliveTimeSeconds())
+                information.put("sessionExpiryInterval", if (isMqtt5) mqtt5SessionExpiryInterval else endpoint.keepAliveTimeSeconds().toLong())
                 sessionHandler.setClient(clientId, endpoint.isCleanSession, information).onComplete {
                     if (endpoint.isConnected) {
                         // Now safe to mark as ready for new messages
