@@ -176,12 +176,12 @@ open class SessionHandler(
         vertx.eventBus().consumer<MqttSubscription>(subscriptionAddAddress) { message ->
             val subscription = message.body()
             // Add to subscription manager (routes to exact or wildcard index)
-            subscriptionManager.subscribe(subscription.clientId, subscription.topicName, subscription.qos.value(), subscription.noLocal)
+            subscriptionManager.subscribe(subscription.clientId, subscription.topicName, subscription.qos.value(), subscription.noLocal, subscription.retainAsPublished)
 
             // Track topic subscriptions by node for targeted publishing (cluster replication)
             val nodeId = clientNodeMapping.get(subscription.clientId) ?: Monster.getClusterNodeId(vertx)
             topicNodeMapping.addToSet(subscription.topicName, nodeId)
-            logger.finest { "Added topic subscription [${subscription.topicName}] for node [${nodeId}]" }
+            logger.finest { "Added topic subscription [${subscription.topicName}] for node [${nodeId}] retainAsPublished=${subscription.retainAsPublished}" }
         }
 
 
@@ -558,14 +558,14 @@ open class SessionHandler(
         }
 
         logger.fine("Loading all subscriptions [${Utils.getCurrentFunctionName()}]")
-        val f2 = sessionStore.iterateSubscriptions { topicName, clientId, qos, noLocal, retainHandling ->
+        val f2 = sessionStore.iterateSubscriptions { topicName, clientId, qos, noLocal, retainHandling, retainAsPublished ->
             // Add to subscription manager (routes to exact or wildcard index)
-            subscriptionManager.subscribe(clientId, topicName, qos, noLocal)
+            subscriptionManager.subscribe(clientId, topicName, qos, noLocal, retainAsPublished)
 
             // Build topic-to-node mapping based on where client is located (cluster replication)
             val nodeId = clientNodeMapping.get(clientId) ?: Monster.getClusterNodeId(vertx)
             topicNodeMapping.addToSet(topicName, nodeId)
-            logger.finest { "Loaded subscription [${topicName}] for client [${clientId}] on node [${nodeId}] noLocal=$noLocal" }
+            logger.finest { "Loaded subscription [${topicName}] for client [${clientId}] on node [${nodeId}] noLocal=$noLocal retainAsPublished=$retainAsPublished" }
         }
 
         // Start periodic cleanup of delivered messages (every 60 seconds)
@@ -1145,7 +1145,7 @@ open class SessionHandler(
 
     //----------------------------------------------------------------------------------------------------
 
-    fun subscribeRequest(client: MqttClient, topicName: String, qos: MqttQoS, noLocal: Boolean = false, retainHandling: Int = 0) {
+    fun subscribeRequest(client: MqttClient, topicName: String, qos: MqttQoS, noLocal: Boolean = false, retainHandling: Int = 0, retainAsPublished: Boolean = false) {
         val request = JsonObject()
             .put(Const.COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
@@ -1153,6 +1153,7 @@ open class SessionHandler(
             .put(Const.QOS_KEY, qos.value())
             .put("noLocal", noLocal)  // MQTT v5 No Local option
             .put("retainHandling", retainHandling)  // MQTT v5 Retain Handling option
+            .put("retainAsPublished", retainAsPublished)  // MQTT v5 Retain As Published option
         vertx.eventBus().request<Boolean>(commandAddress(), request)
             .onFailure { error ->
                 logger.severe("Subscribe request failed [${error}] [${Utils.getCurrentFunctionName()}]")
@@ -1183,6 +1184,7 @@ open class SessionHandler(
         val qos = MqttQoS.valueOf(command.body().getInteger(Const.QOS_KEY))
         val noLocal = command.body().getBoolean("noLocal", false)  // MQTT v5 No Local flag
         val retainHandling = command.body().getInteger("retainHandling", 0)  // MQTT v5 Retain Handling
+        val retainAsPublished = command.body().getBoolean("retainAsPublished", false)  // MQTT v5 Retain As Published
 
         // Defensive guard: prevent adding root wildcard subscription when disabled
         if (topicName == "#" && !Monster.allowRootWildcardSubscription()) {
@@ -1204,16 +1206,23 @@ open class SessionHandler(
         if (shouldSendRetained) {
             messageHandler.findRetainedMessages(topicName, 0) { message -> // TODO: max must be configurable
                 logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                val effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
+                var effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
+                
+                // Apply Retain As Published (RAP) logic
+                // If RAP=false, clear the retain flag when delivering retained messages
+                if (!retainAsPublished && effectiveMessage.isRetain) {
+                    effectiveMessage = effectiveMessage.cloneWithRetainFlag(false)
+                }
+                
                 sendMessageToClient(clientId, effectiveMessage)
             }.onComplete {
                 logger.finest { "Retained messages published [${it.result()}] [${Utils.getCurrentFunctionName()}]" }
-                addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling))
+                addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished))
                 command.reply(true)
             }
         } else {
             // Skip retained messages, just add subscription
-            addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling))
+            addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished))
             command.reply(true)
         }
     }
@@ -1453,6 +1462,10 @@ open class SessionHandler(
      *
      * IMPORTANT: The qos parameter is the message's QoS, not the effective QoS.
      * Effective QoS = min(subscriptionQoS, messageQoS) and must be calculated per client.
+     * 
+     * RAP (Retain As Published): Controls whether retain flag is preserved or cleared.
+     * - RAP=true: Preserve original message's retain flag
+     * - RAP=false (default): Clear retain flag (set to false)
      */
     private fun forwardBulkToOnlineClients(
         messages: List<BrokerMessage>,
@@ -1471,18 +1484,41 @@ open class SessionHandler(
             // Group persistent clients by their subscription QoS to determine effective QoS
             persistentClients.forEach { (clientId, subscriptionQos) ->
                 messages.forEach { msg ->
-                    val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
-                    if (effectiveQos > 0) {
-                        // Queue-first for QoS 1+
-                        val messageToQueue = if (effectiveQos < msg.qosLevel) {
-                            msg.cloneWithNewQoS(effectiveQos)
-                        } else {
-                            msg
+                    try {
+                        val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
+                        
+                        // Apply RAP (Retain As Published) logic
+                        val retainAsPublished = try {
+                            subscriptionManager.getRetainAsPublished(clientId, msg.topicName)
+                        } catch (e: Exception) {
+                            logger.warning("Error getting RAP for client $clientId: ${e.message}")
+                            false
                         }
-                        enqueueMessage(messageToQueue, listOf(clientId))
-                    } else {
-                        // QoS 0: send directly
-                        sendMessageToClient(clientId, msg.cloneWithNewQoS(0))
+                        val effectiveRetain = if (retainAsPublished) msg.isRetain else false
+                        
+                        if (effectiveQos > 0) {
+                            // Queue-first for QoS 1+
+                            var messageToQueue = if (effectiveQos < msg.qosLevel) {
+                                msg.cloneWithNewQoS(effectiveQos)
+                            } else {
+                                msg
+                            }
+                            // Apply RAP: clone message with adjusted retain flag if needed
+                            if (messageToQueue.isRetain != effectiveRetain) {
+                                messageToQueue = messageToQueue.cloneWithRetainFlag(effectiveRetain)
+                            }
+                            enqueueMessage(messageToQueue, listOf(clientId))
+                        } else {
+                            // QoS 0: send directly
+                            var messageToSend = msg.cloneWithNewQoS(0)
+                            // Apply RAP: adjust retain flag if needed
+                            if (messageToSend.isRetain != effectiveRetain) {
+                                messageToSend = messageToSend.cloneWithRetainFlag(effectiveRetain)
+                            }
+                            sendMessageToClient(clientId, messageToSend)
+                        }
+                    } catch (e: Exception) {
+                        logger.warning("Error forwarding message to persistent client $clientId: ${e.message}")
                     }
                 }
             }
@@ -1491,13 +1527,32 @@ open class SessionHandler(
         // For clean session clients: always send directly (no persistence needed)
         cleanClients.forEach { (clientId, subscriptionQos) ->
             messages.forEach { msg ->
-                val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
-                val messageToSend = if (effectiveQos < msg.qosLevel) {
-                    msg.cloneWithNewQoS(effectiveQos)
-                } else {
-                    msg
+                try {
+                    val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
+                    
+                    // Apply RAP (Retain As Published) logic
+                    val retainAsPublished = try {
+                        subscriptionManager.getRetainAsPublished(clientId, msg.topicName)
+                    } catch (e: Exception) {
+                        logger.warning("Error getting RAP for client $clientId: ${e.message}")
+                        false
+                    }
+                    val effectiveRetain = if (retainAsPublished) msg.isRetain else false
+                    
+                    var messageToSend = if (effectiveQos < msg.qosLevel) {
+                        msg.cloneWithNewQoS(effectiveQos)
+                    } else {
+                        msg
+                    }
+                    // Apply RAP: adjust retain flag if needed
+                    if (messageToSend.isRetain != effectiveRetain) {
+                        messageToSend = messageToSend.cloneWithRetainFlag(effectiveRetain)
+                    }
+                    sendMessageToClient(clientId, messageToSend)
+                } catch (e: Exception) {
+                    logger.severe("Error forwarding message to clean session client $clientId: ${e.message}")
+                    e.printStackTrace()
                 }
-                sendMessageToClient(clientId, messageToSend)
             }
         }
     }

@@ -15,6 +15,7 @@ class MqttSubscriptionCodec : MessageCodec<MqttSubscription, MqttSubscription> {
         buffer.appendInt(s.qos.value())
         buffer.appendByte(if (s.noLocal) 1 else 0)  // noLocal flag
         buffer.appendInt(s.retainHandling)  // retainHandling value (0, 1, or 2)
+        buffer.appendByte(if (s.retainAsPublished) 1 else 0)  // retainAsPublished flag
     }
 
     override fun decodeFromWire(pos: Int, buffer: Buffer): MqttSubscription {
@@ -32,7 +33,9 @@ class MqttSubscriptionCodec : MessageCodec<MqttSubscription, MqttSubscription> {
         val noLocal = buffer.getByte(position) == 1.toByte()  // noLocal flag
         position += 1
         val retainHandling = buffer.getInt(position)  // retainHandling value
-        return MqttSubscription(clientId, topicName, qos, noLocal, retainHandling)
+        position += 4
+        val retainAsPublished = buffer.getByte(position) == 1.toByte()  // retainAsPublished flag
+        return MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished)
     }
 
     override fun transform(s: MqttSubscription): MqttSubscription {

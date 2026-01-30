@@ -184,6 +184,18 @@ class BrokerMessage(
         messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, senderId, time,
         messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties
     )
+    
+    /**
+     * Clone message with a different retain flag.
+     * Used for MQTT v5 Retain As Published (RAP) subscription option.
+     * 
+     * @param retainFlag The new retain flag value
+     * @return Cloned message with updated retain flag
+     */
+    fun cloneWithRetainFlag(retainFlag: Boolean): BrokerMessage = BrokerMessage(
+        messageUuid, messageId, topicName, payload, qosLevel, retainFlag, isDup, isQueued, clientId, senderId, time,
+        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties
+    )
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 

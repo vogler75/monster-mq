@@ -35,6 +35,10 @@ class SubscriptionManager {
     
     // Track noLocal subscriptions: clientId → Set<topicPattern>
     private val noLocalSubscriptions = ConcurrentHashMap<String, MutableSet<String>>()
+    
+    // Track retainAsPublished subscriptions: clientId + topic → retainAsPublished flag
+    // Key format: "$clientId|$topic"
+    private val retainAsPublishedMap = ConcurrentHashMap<String, Boolean>()
 
     /**
      * Add a subscription.
@@ -44,16 +48,17 @@ class SubscriptionManager {
      * @param topicOrPattern Topic name or pattern (e.g., "sensor/room1/temp" or "sensor/+/temp")
      * @param qos Quality of Service level (0, 1, or 2)
      * @param noLocal MQTT v5: Don't send messages back to the publishing client
+     * @param retainAsPublished MQTT v5: Preserve retain flag when forwarding messages
      * @return true if subscription was added, false if it already existed
      */
-    fun subscribe(clientId: String, topicOrPattern: String, qos: Int, noLocal: Boolean = false) {
+    fun subscribe(clientId: String, topicOrPattern: String, qos: Int, noLocal: Boolean = false, retainAsPublished: Boolean = false) {
         if (topicOrPattern.contains('+') || topicOrPattern.contains('#')) {
             // Wildcard subscription
-            logger.finest { "SubscriptionManager.subscribe: wildcard pattern=[$topicOrPattern] clientId=[$clientId] qos=[$qos] noLocal=$noLocal" }
+            logger.finest { "SubscriptionManager.subscribe: wildcard pattern=[$topicOrPattern] clientId=[$clientId] qos=[$qos] noLocal=$noLocal retainAsPublished=$retainAsPublished" }
             wildcardIndex.add(topicOrPattern, clientId, qos)
         } else {
             // Exact subscription
-            logger.finest { "SubscriptionManager.subscribe: exact topic=[$topicOrPattern] clientId=[$clientId] qos=[$qos] noLocal=$noLocal" }
+            logger.finest { "SubscriptionManager.subscribe: exact topic=[$topicOrPattern] clientId=[$clientId] qos=[$qos] noLocal=$noLocal retainAsPublished=$retainAsPublished" }
             exactIndex.add(topicOrPattern, clientId, qos)
         }
         
@@ -61,6 +66,10 @@ class SubscriptionManager {
         if (noLocal) {
             noLocalSubscriptions.getOrPut(clientId) { ConcurrentHashMap.newKeySet() }.add(topicOrPattern)
         }
+        
+        // Track retainAsPublished subscriptions
+        val key = "$clientId|$topicOrPattern"
+        retainAsPublishedMap[key] = retainAsPublished
     }
 
     /**
@@ -87,6 +96,10 @@ class SubscriptionManager {
         if (noLocalSubscriptions[clientId]?.isEmpty() == true) {
             noLocalSubscriptions.remove(clientId)
         }
+        
+        // Remove from retainAsPublished tracking
+        val key = "$clientId|$topicOrPattern"
+        retainAsPublishedMap.remove(key)
         
         return removed
     }
@@ -149,6 +162,35 @@ class SubscriptionManager {
                 pattern == publishedTopic
             }
         }
+    }
+    
+    /**
+     * Get the retainAsPublished setting for a client's subscription to a topic.
+     * Used when forwarding messages to determine whether to preserve or clear the retain flag.
+     *
+     * @param clientId Client identifier
+     * @param publishedTopic The topic being published
+     * @return true if RAP is enabled for this subscription, false otherwise (default)
+     */
+    fun getRetainAsPublished(clientId: String, publishedTopic: String): Boolean {
+        // Check for exact match first (most common case)
+        val exactKey = "$clientId|$publishedTopic"
+        retainAsPublishedMap[exactKey]?.let { return it }
+        
+        // Check wildcard subscriptions - iterate through client's patterns
+        retainAsPublishedMap.entries.forEach { (key, value) ->
+            if (key.startsWith("$clientId|")) {
+                val pattern = key.substringAfter('|')
+                if (pattern.contains('+') || pattern.contains('#')) {
+                    // Use the wildcard index to check if pattern matches
+                    if (wildcardIndex.matchesPattern(publishedTopic, pattern)) {
+                        return value
+                    }
+                }
+            }
+        }
+        
+        return false  // Default: don't preserve retain flag
     }
 
     /**
@@ -214,6 +256,12 @@ class SubscriptionManager {
 
         // Remove from wildcard index
         affectedTopics.addAll(wildcardIndex.removeClient(clientId))
+        
+        // Remove from noLocal tracking
+        noLocalSubscriptions.remove(clientId)
+        
+        // Remove from retainAsPublished tracking
+        retainAsPublishedMap.keys.removeIf { it.startsWith("$clientId|") }
 
         logger.fine { "SubscriptionManager.disconnectClient: removed subscriptions from ${affectedTopics.size} topics/patterns" }
 

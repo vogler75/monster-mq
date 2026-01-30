@@ -656,6 +656,7 @@ class MqttClient(
                 val subOption = subscription.subscriptionOption()
                 val noLocal = subOption?.isNoLocal ?: false  // Don't send back messages this client published
                 val retainHandling = subOption?.retainHandling()?.value() ?: 0  // 0=send retained, 1=send if new, 2=never send
+                val retainAsPublished = subOption?.isRetainAsPublished ?: false  // Preserve original retain flag
 
                 // Root wildcard policy
                 if (topic == "#" && !Monster.allowRootWildcardSubscription()) {
@@ -676,8 +677,8 @@ class MqttClient(
 
                 // Forward allowed subscriptions to SessionHandler
                 if (allowed) {
-                    logger.fine { "Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()} noLocal=$noLocal retainHandling=$retainHandling" }
-                    sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService(), noLocal, retainHandling)
+                    logger.fine { "Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()} noLocal=$noLocal retainHandling=$retainHandling retainAsPublished=$retainAsPublished" }
+                    sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService(), noLocal, retainHandling, retainAsPublished)
                 } else {
                     logger.fine { "Client [$clientId] Subscription REJECTED for [$topic] - reason: $reasonCode" }
                 }

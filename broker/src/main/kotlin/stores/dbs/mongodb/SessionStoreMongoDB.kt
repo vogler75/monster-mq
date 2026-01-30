@@ -65,7 +65,7 @@ class SessionStoreMongoDB(
         }
     }
 
-    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int) -> Unit) {
+    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean) -> Unit) {
         try {
             val subscriptions = subscriptionsCollection.find()
             for (doc in subscriptions) {
@@ -74,7 +74,8 @@ class SessionStoreMongoDB(
                 val qos = doc.getInteger("qos")
                 val noLocal = doc.getBoolean("no_local", false)
                 val retainHandling = doc.getInteger("retain_handling", 0)
-                callback(topic, clientId, qos, noLocal, retainHandling)
+                val retainAsPublished = doc.getBoolean("retain_as_published", false)
+                callback(topic, clientId, qos, noLocal, retainHandling, retainAsPublished)
             }
         } catch (e: Exception) {
             logger.warning("Error while retrieving subscriptions: ${e.message}")
@@ -239,7 +240,8 @@ class SessionStoreMongoDB(
                     "qos" to subscription.qos.value(),
                     "wildcard" to Utils.isWildCardTopic(subscription.topicName),
                     "no_local" to subscription.noLocal,
-                    "retain_handling" to subscription.retainHandling
+                    "retain_handling" to subscription.retainHandling,
+                    "retain_as_published" to subscription.retainAsPublished
                 )))
                 subscriptionsCollection.updateOne(
                     and(

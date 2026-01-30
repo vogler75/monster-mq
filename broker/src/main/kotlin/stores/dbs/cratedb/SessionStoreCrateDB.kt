@@ -82,6 +82,7 @@ class SessionStoreCrateDB(
                     wildcard BOOLEAN,
                     no_local BOOLEAN DEFAULT false,
                     retain_handling INT DEFAULT 0,
+                    retain_as_published BOOLEAN DEFAULT false,
                     PRIMARY KEY (client_id, topic)
                 );
                 """.trimIndent(), """
@@ -129,11 +130,11 @@ class SessionStoreCrateDB(
         db.start(vertx, startPromise)
     }
 
-    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int)->Unit) {
+    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean)->Unit) {
         try {
             db.connection?.let { connection ->
                 var rows = 0
-                val sql = "SELECT client_id, topic, qos, no_local, retain_handling FROM $subscriptionsTableName "
+                val sql = "SELECT client_id, topic, qos, no_local, retain_handling, retain_as_published FROM $subscriptionsTableName "
                 connection.prepareStatement(sql).use { preparedStatement ->
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
@@ -142,7 +143,8 @@ class SessionStoreCrateDB(
                         val qos = MqttQoS.valueOf(resultSet.getInt(3))
                         val noLocal = resultSet.getBoolean(4)
                         val retainHandling = resultSet.getInt(5)
-                        callback(topic, clientId, qos.value(), noLocal, retainHandling)
+                        val retainAsPublished = resultSet.getBoolean(6)
+                        callback(topic, clientId, qos.value(), noLocal, retainHandling, retainAsPublished)
                         rows++
                     }
                 }
@@ -363,8 +365,8 @@ class SessionStoreCrateDB(
 
 
     override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
-        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard, no_local, retain_handling) VALUES (?, ?, ?, ?, ?, ?) "+
-                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = EXCLUDED.qos, no_local = EXCLUDED.no_local, retain_handling = EXCLUDED.retain_handling"
+        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard, no_local, retain_handling, retain_as_published) VALUES (?, ?, ?, ?, ?, ?, ?) "+
+                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = EXCLUDED.qos, no_local = EXCLUDED.no_local, retain_handling = EXCLUDED.retain_handling, retain_as_published = EXCLUDED.retain_as_published"
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
@@ -375,6 +377,7 @@ class SessionStoreCrateDB(
                         preparedStatement.setBoolean(4, Utils.isWildCardTopic(subscription.topicName))
                         preparedStatement.setBoolean(5, subscription.noLocal)
                         preparedStatement.setInt(6, subscription.retainHandling)
+                        preparedStatement.setBoolean(7, subscription.retainAsPublished)
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()

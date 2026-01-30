@@ -61,6 +61,7 @@ class SessionStoreSQLite(
                 wildcard BOOLEAN,
                 no_local INTEGER DEFAULT 0,
                 retain_handling INTEGER DEFAULT 0,
+                retain_as_published INTEGER DEFAULT 0,
                 PRIMARY KEY (client_id, topic)
             );
             """.trimIndent())
@@ -90,6 +91,22 @@ class SessionStoreSQLite(
 
         sqlClient.initDatabase(createTableSQL).onComplete { result ->
             if (result.succeeded()) {
+                // Migration: Add retain_as_published column if it doesn't exist
+                val checkColumnSql = "PRAGMA table_info($subscriptionsTableName)"
+                sqlClient.executeQuerySync(checkColumnSql).let { rows ->
+                    val hasColumn = rows.any { row ->
+                        (row as JsonObject).getString("name") == "retain_as_published"
+                    }
+                    if (!hasColumn) {
+                        logger.info("Migrating subscriptions table: adding retain_as_published column")
+                        try {
+                            sqlClient.executeUpdateSync("ALTER TABLE $subscriptionsTableName ADD COLUMN retain_as_published INTEGER DEFAULT 0")
+                            logger.info("Successfully added retain_as_published column")
+                        } catch (e: Exception) {
+                            logger.warning("Migration warning (may be safe to ignore if column exists): ${e.message}")
+                        }
+                    }
+                }
                 logger.info("SQLite session tables are ready [start]")
                 startPromise.complete()
             } else {
@@ -99,8 +116,8 @@ class SessionStoreSQLite(
         }
     }
 
-    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int) -> Unit) {
-        val sql = "SELECT client_id, topic, qos, no_local, retain_handling FROM $subscriptionsTableName"
+    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean) -> Unit) {
+        val sql = "SELECT client_id, topic, qos, no_local, retain_handling, retain_as_published FROM $subscriptionsTableName"
         try {
             val results = sqlClient.executeQuerySync(sql)
             results.forEach { row ->
@@ -110,7 +127,8 @@ class SessionStoreSQLite(
                 val qos = rowObj.getInteger("qos")
                 val noLocal = rowObj.getInteger("no_local", 0) == 1  // SQLite stores as 0/1
                 val retainHandling = rowObj.getInteger("retain_handling", 0)
-                callback(topic, clientId, qos, noLocal, retainHandling)
+                val retainAsPublished = rowObj.getInteger("retain_as_published", 0) == 1  // SQLite stores as 0/1
+                callback(topic, clientId, qos, noLocal, retainHandling, retainAsPublished)
             }
         } catch (e: Exception) {
             logger.warning("Error fetching subscriptions: ${e.message} [iterateSubscriptions]")
@@ -277,8 +295,8 @@ class SessionStoreSQLite(
     override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
         if (subscriptions.isEmpty()) return
 
-        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard, no_local, retain_handling) VALUES (?, ?, ?, ?, ?, ?) "+
-                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = excluded.qos, no_local = excluded.no_local, retain_handling = excluded.retain_handling"
+        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard, no_local, retain_handling, retain_as_published) VALUES (?, ?, ?, ?, ?, ?, ?) "+
+                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = excluded.qos, no_local = excluded.no_local, retain_handling = excluded.retain_handling, retain_as_published = excluded.retain_as_published"
 
         val batchParams = JsonArray()
         subscriptions.forEach { subscription ->
@@ -289,6 +307,7 @@ class SessionStoreSQLite(
                 .add(isWildcardTopic(subscription.topicName))
                 .add(if (subscription.noLocal) 1 else 0)
                 .add(subscription.retainHandling)
+                .add(if (subscription.retainAsPublished) 1 else 0)
             batchParams.add(params)
         }
 

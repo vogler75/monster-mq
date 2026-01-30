@@ -370,7 +370,7 @@ class MetricsResolver(
             // Use the session store to get subscriptions from database
             val future = java.util.concurrent.CompletableFuture<Void>()
 
-            sessionStore.iterateSubscriptions { topic, subscriptionClientId, qos, noLocal, retainHandling ->
+            sessionStore.iterateSubscriptions { topic, subscriptionClientId, qos, noLocal, retainHandling, retainAsPublished ->
                 if (subscriptionClientId == clientId) {
                     subscriptions.add(MqttSubscription(topicFilter = topic, qos = qos))
                 }
@@ -397,7 +397,7 @@ class MetricsResolver(
 
         try {
             // Use the synchronous store to get subscriptions
-            sessionStore.sync.iterateSubscriptions { topic, subscriptionClientId, qos, noLocal, retainHandling ->
+            sessionStore.sync.iterateSubscriptions { topic, subscriptionClientId, qos, noLocal, retainHandling, retainAsPublished ->
                 if (subscriptionClientId == clientId) {
                     subscriptions.add(MqttSubscription(topicFilter = topic, qos = qos))
                 }
@@ -413,7 +413,7 @@ class MetricsResolver(
         val future = CompletableFuture<List<MqttSubscription>>()
         val subscriptions = mutableListOf<MqttSubscription>()
 
-        sessionStore.iterateSubscriptions { topic, subscriptionClientId, qos, noLocal, retainHandling ->
+        sessionStore.iterateSubscriptions { topic, subscriptionClientId, qos, noLocal, retainHandling, retainAsPublished ->
             if (subscriptionClientId == clientId) {
                 subscriptions.add(MqttSubscription(topicFilter = topic, qos = qos))
             }

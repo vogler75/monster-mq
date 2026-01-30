@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test MQTT v5.0 connection acceptance (Phase 1).
+Test MQTT v5.0 connection acceptance.
 
 This test verifies that:
 1. MQTT v5.0 clients can successfully connect to the broker
@@ -58,7 +58,7 @@ def on_connect(client, userdata, flags, reason_code, properties=None):
         print(f"[CONNACK] Properties: {properties}")
         state["connack_properties"] = properties
     else:
-        print("[CONNACK] No properties returned (expected for Phase 1)")
+        print("[CONNACK] No properties returned")
     
     if reason_code == 0:
         print("[SUCCESS] ✓ MQTT v5.0 connection accepted!")
@@ -83,7 +83,7 @@ def on_disconnect(client, userdata, disconnect_flags, reason_code, properties=No
 def test_mqtt5_connection():
     """Test MQTT v5.0 connection to the broker."""
     print("=" * 70)
-    print("MQTT v5.0 Connection Test (Phase 1)")
+    print("MQTT v5.0 Connection Test")
     print("=" * 70)
     print(f"Broker: {BROKER_HOST}:{BROKER_PORT}")
     print(f"Username: {USERNAME}")
@@ -144,7 +144,7 @@ def test_mqtt5_connection():
             return False
         
         if state["connected"]:
-            print("\n[PHASE 1 VALIDATION]")
+            print("\n[VALIDATION]")
             print("  ✓ MQTT v5.0 protocol version accepted")
             print("  ✓ CONNACK received successfully")
             print("  ✓ Connection established")
@@ -154,10 +154,10 @@ def test_mqtt5_connection():
             client.disconnect()
             client.loop_stop()
             
-            print("\n[OVERALL] ✓✓✓ PHASE 1 TEST PASSED ✓✓✓")
+            print("\n[OVERALL] ✓✓✓ CONNECTION TEST PASSED ✓✓✓")
             return True
         else:
-            print("\n[OVERALL] ✗✗✗ PHASE 1 TEST FAILED ✗✗✗")
+            print("\n[OVERALL] ✗✗✗ CONNECTION TEST FAILED ✗✗✗")
             return False
             
     except Exception as e:
@@ -169,7 +169,7 @@ def test_mqtt5_connection():
 
 if __name__ == "__main__":
     print("\nStarting MQTT v5.0 connection test...")
-    print("(This test validates Phase 1: basic MQTT5 connection acceptance)\n")
+    print("(This test validates basic MQTT5 connection acceptance)\n")
     
     success = test_mqtt5_connection()
     

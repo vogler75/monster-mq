@@ -5,7 +5,15 @@ A high-performance, enterprise-grade MQTT broker with advanced data processing c
 ## 🚀 Key Features
 
 ### Core MQTT Broker
-- **Full MQTT 3.1.1 Support** - Complete protocol implementation with QoS 0, 1, 2
+- **MQTT 3.1.1 & 5.0 Support** - Full MQTT 3.1.1 support with MQTT 5.0 features in progress (80% complete)
+  - ✅ Enhanced connection properties and reason codes
+  - ✅ User properties for custom metadata
+  - ✅ Topic aliases for bandwidth optimization
+  - ✅ Message expiry interval for automatic TTL
+  - ✅ Server-side CONNACK properties (capabilities advertisement)
+  - ✅ Flow control (Receive Maximum enforcement)
+  - 🚧 Additional features (subscription options, identifiers, etc.)
+  - ⏳ Enhanced authentication
 - **High Performance** - Built on Vert.x for maximum throughput and low latency  
 - **SSL/TLS Security** - End-to-end encryption with certificate management
 - **WebSocket Support** - MQTT over WebSocket for web applications

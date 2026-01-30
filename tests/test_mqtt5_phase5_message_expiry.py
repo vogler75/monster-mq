@@ -5,6 +5,7 @@ Tests message expiry functionality for queued messages
 """
 
 import paho.mqtt.client as mqtt
+from paho.mqtt.client import CallbackAPIVersion
 from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.properties import Properties
 import time
@@ -46,7 +47,7 @@ def test_message_expiry_basic():
     print("\n=== Test 1: Basic Message Expiry ===")
     
     # Create offline subscriber (persistent session)
-    subscriber = mqtt.Client(client_id="test_phase5_sub1", protocol=mqtt.MQTTv5)
+    subscriber = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_sub1", protocol=mqtt.MQTTv5)
     subscriber.on_connect = on_connect
     subscriber.on_message = on_message
     
@@ -67,7 +68,7 @@ def test_message_expiry_basic():
     print("✓ Subscriber disconnected (offline)")
     
     # Publish message with 2-second expiry
-    publisher = mqtt.Client(client_id="test_phase5_pub1", protocol=mqtt.MQTTv5)
+    publisher = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_pub1", protocol=mqtt.MQTTv5)
     publisher.connect(BROKER_HOST, BROKER_PORT)
     publisher.loop_start()
     time.sleep(0.3)
@@ -88,7 +89,7 @@ def test_message_expiry_basic():
     
     # Reconnect subscriber - should NOT receive expired message
     received_messages.clear()
-    subscriber2 = mqtt.Client(client_id="test_phase5_sub1", protocol=mqtt.MQTTv5)
+    subscriber2 = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_sub1", protocol=mqtt.MQTTv5)
     subscriber2.on_connect = on_connect
     subscriber2.on_message = on_message
     
@@ -119,7 +120,7 @@ def test_message_expiry_delivered():
     print("\n=== Test 2: Message Delivered Before Expiry ===")
     
     # Create offline subscriber
-    subscriber = mqtt.Client(client_id="test_phase5_sub2", protocol=mqtt.MQTTv5)
+    subscriber = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_sub2", protocol=mqtt.MQTTv5)
     subscriber.on_connect = on_connect
     subscriber.on_message = on_message
     
@@ -139,7 +140,7 @@ def test_message_expiry_delivered():
     print("✓ Subscriber disconnected (offline)")
     
     # Publish message with 10-second expiry
-    publisher = mqtt.Client(client_id="test_phase5_pub2", protocol=mqtt.MQTTv5)
+    publisher = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_pub2", protocol=mqtt.MQTTv5)
     publisher.connect(BROKER_HOST, BROKER_PORT)
     publisher.loop_start()
     time.sleep(0.3)
@@ -160,7 +161,7 @@ def test_message_expiry_delivered():
     
     # Reconnect subscriber - SHOULD receive message
     received_messages.clear()
-    subscriber2 = mqtt.Client(client_id="test_phase5_sub2", protocol=mqtt.MQTTv5)
+    subscriber2 = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_sub2", protocol=mqtt.MQTTv5)
     subscriber2.on_connect = on_connect
     subscriber2.on_message = on_message
     
@@ -191,7 +192,7 @@ def test_expiry_interval_update():
     print("\n=== Test 3: Expiry Interval Update on Forward ===")
     
     # Create offline subscriber
-    subscriber = mqtt.Client(client_id="test_phase5_sub3", protocol=mqtt.MQTTv5)
+    subscriber = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_sub3", protocol=mqtt.MQTTv5)
     subscriber.on_connect = on_connect
     subscriber.on_message = on_message
     
@@ -211,7 +212,7 @@ def test_expiry_interval_update():
     print("✓ Subscriber disconnected (offline)")
     
     # Publish message with 10-second expiry
-    publisher = mqtt.Client(client_id="test_phase5_pub3", protocol=mqtt.MQTTv5)
+    publisher = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_pub3", protocol=mqtt.MQTTv5)
     publisher.connect(BROKER_HOST, BROKER_PORT)
     publisher.loop_start()
     time.sleep(0.3)
@@ -232,7 +233,7 @@ def test_expiry_interval_update():
     
     # Reconnect subscriber - should receive message with UPDATED expiry (~7 seconds)
     received_messages.clear()
-    subscriber2 = mqtt.Client(client_id="test_phase5_sub3", protocol=mqtt.MQTTv5)
+    subscriber2 = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_sub3", protocol=mqtt.MQTTv5)
     subscriber2.on_connect = on_connect
     subscriber2.on_message = on_message
     
@@ -277,7 +278,7 @@ def test_no_expiry():
     print("\n=== Test 4: Message Without Expiry ===")
     
     # Create offline subscriber
-    subscriber = mqtt.Client(client_id="test_phase5_sub4", protocol=mqtt.MQTTv5)
+    subscriber = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_sub4", protocol=mqtt.MQTTv5)
     subscriber.on_connect = on_connect
     subscriber.on_message = on_message
     
@@ -297,7 +298,7 @@ def test_no_expiry():
     print("✓ Subscriber disconnected (offline)")
     
     # Publish message WITHOUT expiry interval
-    publisher = mqtt.Client(client_id="test_phase5_pub4", protocol=mqtt.MQTTv5)
+    publisher = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_pub4", protocol=mqtt.MQTTv5)
     publisher.connect(BROKER_HOST, BROKER_PORT)
     publisher.loop_start()
     time.sleep(0.3)
@@ -315,7 +316,7 @@ def test_no_expiry():
     
     # Reconnect subscriber - should receive message (no expiry)
     received_messages.clear()
-    subscriber2 = mqtt.Client(client_id="test_phase5_sub4", protocol=mqtt.MQTTv5)
+    subscriber2 = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id="test_phase5_sub4", protocol=mqtt.MQTTv5)
     subscriber2.on_connect = on_connect
     subscriber2.on_message = on_message
     
@@ -345,7 +346,7 @@ def cleanup_sessions():
     """Clean up test sessions"""
     print("\n=== Cleanup ===")
     for i in range(1, 5):
-        client = mqtt.Client(client_id=f"test_phase5_sub{i}", protocol=mqtt.MQTTv5)
+        client = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2, client_id=f"test_phase5_sub{i}", protocol=mqtt.MQTTv5)
         try:
             conn_props = Properties(PacketTypes.CONNECT)
             conn_props.SessionExpiryInterval = 0  # Clean session
