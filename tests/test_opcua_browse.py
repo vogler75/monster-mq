@@ -12,12 +12,15 @@ import logging
 import sys
 import os
 
+# Mark all tests as async
+pytestmark = pytest.mark.asyncio
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration from environment variables with defaults
-OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4841/server")
 
 async def browse_node(client, node, indent=0):
     """Recursively browse a node and its children"""

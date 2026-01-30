@@ -16,12 +16,15 @@ import time
 import logging
 import os
 
+# Mark all async tests
+pytestmark = pytest.mark.asyncio
+
 # Enable detailed logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration from environment variables with defaults
-OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4841/server")
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME")
@@ -88,7 +91,7 @@ async def test_opcua_subscription_notifications():
             print("✅ Connected to OPC UA server")
 
             # Get the write/oee node
-            node_id = ua.NodeId("MonsterMQ/write/oee:v", 2)
+            node_id = ua.NodeId("opcua/server/write/oee:v", 2)
             node = client.get_node(node_id)
 
             # Read current value
