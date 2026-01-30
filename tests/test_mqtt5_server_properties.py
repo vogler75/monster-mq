@@ -151,7 +151,7 @@ def test_mqtt5_server_properties():
         
         if not state["connected"]:
             print(f"\n[ERROR] Connection failed or timed out (reason_code={state['reason_code']})")
-            return False
+        assert state["connected"], f"Connection failed or timed out (reason_code={state['reason_code']})"
         
         # Validate CONNACK properties
         print("\n" + "=" * 70)
@@ -159,9 +159,7 @@ def test_mqtt5_server_properties():
         print("=" * 70)
         
         props = state["connack_properties"]
-        if not props:
-            print("✗ No CONNACK properties received")
-            return False
+        assert props is not None, "No CONNACK properties received"
         
         print("✓ CONNACK properties received")
         
@@ -173,9 +171,9 @@ def test_mqtt5_server_properties():
                 print("  ✓ Session Expiry Interval: 300 (echoed back)")
             else:
                 print(f"  ⚠ Session Expiry Interval: {props.SessionExpiryInterval} (expected 300)")
-        else:
-            print("  ✗ Session Expiry Interval not present")
-            success = False
+        
+        assert hasattr(props, 'SessionExpiryInterval'), "Session Expiry Interval not present"
+        success = True
         
         # Server Keep Alive (19)
         if hasattr(props, 'ServerKeepAlive'):
@@ -190,9 +188,9 @@ def test_mqtt5_server_properties():
             else:
                 print(f"  ✗ Receive Maximum invalid: {props.ReceiveMaximum}")
                 success = False
-        else:
-            print("  ✗ Receive Maximum not present")
-            success = False
+        
+        assert hasattr(props, 'ReceiveMaximum'), "Receive Maximum not present"
+        assert props.ReceiveMaximum > 0, f"Receive Maximum invalid: {props.ReceiveMaximum}"
         
         # Maximum QoS (36)
         if hasattr(props, 'MaximumQoS'):
@@ -201,16 +199,15 @@ def test_mqtt5_server_properties():
             else:
                 print(f"  ✗ Maximum QoS invalid: {props.MaximumQoS}")
                 success = False
-        else:
-            print("  ✗ Maximum QoS not present")
-            success = False
+        
+        assert hasattr(props, 'MaximumQoS'), "Maximum QoS not present"
+        assert 0 <= props.MaximumQoS <= 2, f"Maximum QoS invalid: {props.MaximumQoS}"
         
         # Retain Available (37)
         if hasattr(props, 'RetainAvailable'):
             print(f"  ✓ Retain Available: {props.RetainAvailable}")
-        else:
-            print("  ✗ Retain Available not present")
-            success = False
+        
+        assert hasattr(props, 'RetainAvailable'), "Retain Available not present"
         
         # Maximum Packet Size (39)
         if hasattr(props, 'MaximumPacketSize'):
@@ -219,23 +216,21 @@ def test_mqtt5_server_properties():
             else:
                 print(f"  ✗ Maximum Packet Size invalid: {props.MaximumPacketSize}")
                 success = False
-        else:
-            print("  ✗ Maximum Packet Size not present")
-            success = False
+        
+        assert hasattr(props, 'MaximumPacketSize'), "Maximum Packet Size not present"
+        assert props.MaximumPacketSize > 0, f"Maximum Packet Size invalid: {props.MaximumPacketSize}"
         
         # Topic Alias Maximum (34)
         if hasattr(props, 'TopicAliasMaximum'):
             print(f"  ✓ Topic Alias Maximum: {props.TopicAliasMaximum}")
-        else:
-            print("  ✗ Topic Alias Maximum not present")
-            success = False
+        
+        assert hasattr(props, 'TopicAliasMaximum'), "Topic Alias Maximum not present"
         
         # Wildcard Subscription Available (40)
         if hasattr(props, 'WildcardSubscriptionAvailable'):
             print(f"  ✓ Wildcard Subscription Available: {props.WildcardSubscriptionAvailable}")
-        else:
-            print("  ✗ Wildcard Subscription Available not present")
-            success = False
+        
+        assert hasattr(props, 'WildcardSubscriptionAvailable'), "Wildcard Subscription Available not present"
         
         # Subscription Identifier Available (41)
         if hasattr(props, 'SubscriptionIdentifiersAvailable'):
@@ -247,21 +242,18 @@ def test_mqtt5_server_properties():
         # Shared Subscription Available (42)
         if hasattr(props, 'SharedSubscriptionAvailable'):
             print(f"  ✓ Shared Subscription Available: {props.SharedSubscriptionAvailable}")
-        else:
-            print("  ✗ Shared Subscription Available not present")
-            success = False
+        
+        assert hasattr(props, 'SharedSubscriptionAvailable'), "Shared Subscription Available not present"
         
         # Cleanup
         client.loop_stop()
         client.disconnect()
         
-        return success
-        
     except Exception as e:
         print(f"\n[ERROR] Test failed with exception: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ MQTT publish test to create OPC UA node
 import paho.mqtt.client as mqtt
 import time
 import os
+import pytest
 
 # Configuration from environment variables with defaults
 BROKER_HOST = os.getenv("MQTT_BROKER", "localhost")

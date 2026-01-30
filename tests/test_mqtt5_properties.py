@@ -140,7 +140,7 @@ def test_mqtt5_properties():
         
         if not state["subscriber_connected"]:
             print("[ERROR] Subscriber failed to connect")
-            return False
+        assert state["subscriber_connected"], "Subscriber failed to connect"
         
         time.sleep(0.5)  # Give subscription time to register
         
@@ -166,7 +166,7 @@ def test_mqtt5_properties():
         
         if not state["publisher_connected"]:
             print("[ERROR] Publisher failed to connect")
-            return False
+        assert state["publisher_connected"], "Publisher failed to connect"
         
         # Test: Publish message with MQTT v5 properties
         print("\n" + "=" * 70)
@@ -214,57 +214,45 @@ def test_mqtt5_properties():
         print("VALIDATION")
         print("=" * 70)
         
-        if not state["message_received"]:
-            print("✗ Message not received")
-            return False
+        assert state["message_received"], "Message not received"
         
         print("✓ Message received")
         
         # Check payload
-        if state["received_message"] == test_payload:
-            print("✓ Payload matches")
-        else:
-            print(f"✗ Payload mismatch: expected {test_payload}, got {state['received_message']}")
-            return False
+        assert state["received_message"] == test_payload, \
+            f"Payload mismatch: expected {test_payload}, got {state['received_message']}"
+        print("✓ Payload matches")
         
         # Check properties
         props = state["received_properties"]
-        if not props:
-            print("✗ No properties received")
-            return False
+        assert props is not None, "No properties received"
         
         print("✓ Properties received")
         
         # Validate specific properties
-        success = True
-        
         # Payload Format Indicator
         if hasattr(props, 'PayloadFormatIndicator') and props.PayloadFormatIndicator == 1:
             print("  ✓ Payload Format Indicator: 1 (UTF-8)")
         else:
             print(f"  ⚠ Payload Format Indicator not received or incorrect")
-            success = False
         
         # Content Type
         if hasattr(props, 'ContentType') and props.ContentType == "application/json":
             print("  ✓ Content Type: application/json")
         else:
             print(f"  ⚠ Content Type not received or incorrect")
-            success = False
         
         # Response Topic
         if hasattr(props, 'ResponseTopic') and props.ResponseTopic == "test/properties/response":
             print("  ✓ Response Topic: test/properties/response")
         else:
             print(f"  ⚠ Response Topic not received or incorrect")
-            success = False
         
         # Correlation Data
         if hasattr(props, 'CorrelationData') and props.CorrelationData == b"correlation-123":
             print("  ✓ Correlation Data: correlation-123")
         else:
             print(f"  ⚠ Correlation Data not received or incorrect")
-            success = False
         
         # User Properties
         if hasattr(props, 'UserProperty') and props.UserProperty:
@@ -300,17 +288,17 @@ def test_mqtt5_properties():
         if core_properties_working:
             print("\n[OVERALL] ✓✓✓ PROPERTIES TEST PASSED ✓✓✓")
             print("(Core MQTT v5 property forwarding is working)")
-            return True
         else:
             print("\n[OVERALL] ⚠⚠⚠ PROPERTIES TEST PARTIAL PASS ⚠⚠⚠")
             print("(Some properties may not be fully implemented yet)")
-            return False
+        
+        assert core_properties_working, "Core MQTT v5 properties not working correctly"
         
     except Exception as e:
         print(f"\n[EXCEPTION] ✗ Error during test: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 
 if __name__ == "__main__":

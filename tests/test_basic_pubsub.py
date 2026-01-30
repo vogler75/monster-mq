@@ -2,6 +2,7 @@
 """Simple test to verify basic MQTT publish/subscribe works"""
 import paho.mqtt.client as mqtt
 import time
+import pytest
 
 print("Testing basic MQTT functionality...")
 

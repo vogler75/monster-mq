@@ -9,6 +9,9 @@ from paho.mqtt.client import CallbackAPIVersion
 import time
 import pytest
 
+pytestmark = pytest.mark.mqtt5
+
+
 BROKER_HOST = "localhost"
 BROKER_PORT = 1883
 

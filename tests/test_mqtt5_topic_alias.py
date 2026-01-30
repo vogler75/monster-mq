@@ -163,7 +163,7 @@ def test_mqtt5_topic_alias():
         
         if not state["subscriber_connected"]:
             print("\n[ERROR] ✗ Subscriber connection timeout")
-            return False
+        assert state["subscriber_connected"], "Subscriber connection timeout"
         
         time.sleep(0.5)  # Allow subscription to complete
         
@@ -192,7 +192,7 @@ def test_mqtt5_topic_alias():
         
         if not state["publisher_connected"]:
             print("\n[ERROR] ✗ Publisher connection timeout")
-            return False
+        assert state["publisher_connected"], "Publisher connection timeout"
         
         time.sleep(0.5)  # Allow connection to stabilize
         
@@ -207,10 +207,9 @@ def test_mqtt5_topic_alias():
                 print("✓ Topic Alias feature supported (maximum >= 1)")
             else:
                 print("✗ Topic Alias not supported (maximum = 0)")
-                return False
-        else:
-            print("✗ Topic Alias Maximum not present in CONNACK")
-            return False
+        
+        assert state["topic_alias_maximum"] is not None, "Topic Alias Maximum not present in CONNACK"
+        assert state["topic_alias_maximum"] >= 1, "Topic Alias not supported (maximum = 0)"
         
         # Test 2: Establish topic alias mapping
         print("\n" + "=" * 70)
@@ -240,23 +239,18 @@ def test_mqtt5_topic_alias():
             print("✓ Publish successful (establishing alias)")
         else:
             print(f"✗ Publish failed: {result.rc}")
-            return False
+        assert result.rc == mqtt.MQTT_ERR_SUCCESS, f"Publish failed: {result.rc}"
         
         # Wait for message to be received
         time.sleep(1)
         
-        if len(state["messages_received"]) < 1:
-            print("✗ Message not received by subscriber")
-            return False
+        assert len(state["messages_received"]) >= 1, "Message not received by subscriber"
         
         msg1 = state["messages_received"][0]
-        if msg1["topic"] == topic and msg1["payload"] == payload1:
-            print(f"✓ Message 1 received correctly:")
-            print(f"  Topic: {msg1['topic']}")
-            print(f"  Payload: {msg1['payload']}")
-        else:
-            print(f"✗ Message 1 incorrect: {msg1}")
-            return False
+        assert msg1["topic"] == topic and msg1["payload"] == payload1, f"Message 1 incorrect: {msg1}"
+        print(f"✓ Message 1 received correctly:")
+        print(f"  Topic: {msg1['topic']}")
+        print(f"  Payload: {msg1['payload']}")
         
         # Test 3: Use established alias (empty topic)
         print("\n" + "=" * 70)
@@ -284,23 +278,18 @@ def test_mqtt5_topic_alias():
             print("✓ Publish successful (using alias)")
         else:
             print(f"✗ Publish failed: {result.rc}")
-            return False
+        assert result.rc == mqtt.MQTT_ERR_SUCCESS, f"Publish failed: {result.rc}"
         
         # Wait for message to be received
         time.sleep(1)
         
-        if len(state["messages_received"]) < 2:
-            print("✗ Message 2 not received by subscriber")
-            return False
+        assert len(state["messages_received"]) >= 2, "Message 2 not received by subscriber"
         
         msg2 = state["messages_received"][1]
-        if msg2["topic"] == topic and msg2["payload"] == payload2:
-            print(f"✓ Message 2 received correctly (alias resolved):")
-            print(f"  Topic: {msg2['topic']} (resolved from alias {alias_id})")
-            print(f"  Payload: {msg2['payload']}")
-        else:
-            print(f"✗ Message 2 incorrect: {msg2}")
-            return False
+        assert msg2["topic"] == topic and msg2["payload"] == payload2, f"Message 2 incorrect: {msg2}"
+        print(f"✓ Message 2 received correctly (alias resolved):")
+        print(f"  Topic: {msg2['topic']} (resolved from alias {alias_id})")
+        print(f"  Payload: {msg2['payload']}")
         
         # Test 4: Multiple aliases
         print("\n" + "=" * 70)
@@ -334,22 +323,17 @@ def test_mqtt5_topic_alias():
             print("✓ Publish successful (second alias)")
         else:
             print(f"✗ Publish failed: {result.rc}")
-            return False
+        assert result.rc == mqtt.MQTT_ERR_SUCCESS, f"Publish failed: {result.rc}"
         
         time.sleep(1)
         
-        if len(state["messages_received"]) < 3:
-            print("✗ Message 3 not received")
-            return False
+        assert len(state["messages_received"]) >= 3, "Message 3 not received"
         
         msg3 = state["messages_received"][2]
-        if msg3["topic"] == topic2 and msg3["payload"] == payload3:
-            print(f"✓ Message 3 received correctly (second alias):")
-            print(f"  Topic: {msg3['topic']}")
-            print(f"  Payload: {msg3['payload']}")
-        else:
-            print(f"✗ Message 3 incorrect: {msg3}")
-            return False
+        assert msg3["topic"] == topic2 and msg3["payload"] == payload3, f"Message 3 incorrect: {msg3}"
+        print(f"✓ Message 3 received correctly (second alias):")
+        print(f"  Topic: {msg3['topic']}")
+        print(f"  Payload: {msg3['payload']}")
         
         # Now use first alias again
         payload4 = "Message 4 - Reusing first alias"
@@ -371,22 +355,17 @@ def test_mqtt5_topic_alias():
             print("✓ Publish successful (reusing first alias)")
         else:
             print(f"✗ Publish failed: {result.rc}")
-            return False
+        assert result.rc == mqtt.MQTT_ERR_SUCCESS, f"Publish failed: {result.rc}"
         
         time.sleep(1)
         
-        if len(state["messages_received"]) < 4:
-            print("✗ Message 4 not received")
-            return False
+        assert len(state["messages_received"]) >= 4, "Message 4 not received"
         
         msg4 = state["messages_received"][3]
-        if msg4["topic"] == topic and msg4["payload"] == payload4:
-            print(f"✓ Message 4 received correctly (first alias reused):")
-            print(f"  Topic: {msg4['topic']}")
-            print(f"  Payload: {msg4['payload']}")
-        else:
-            print(f"✗ Message 4 incorrect: {msg4}")
-            return False
+        assert msg4["topic"] == topic and msg4["payload"] == payload4, f"Message 4 incorrect: {msg4}"
+        print(f"✓ Message 4 received correctly (first alias reused):")
+        print(f"  Topic: {msg4['topic']}")
+        print(f"  Payload: {msg4['payload']}")
         
         # Cleanup
         time.sleep(0.5)
@@ -418,18 +397,18 @@ def test_mqtt5_topic_alias():
             print("\n[OVERALL] ✓✓✓ TOPIC ALIAS TEST PASSED ✓✓✓")
             print(f"All {len(results)} tests passed!")
             print(f"Total messages: {len(state['messages_received'])}")
-            return True
         else:
             failed = sum(1 for v in results.values() if not v)
             print(f"\n[OVERALL] ✗✗✗ TOPIC ALIAS TEST FAILED ✗✗✗")
             print(f"{failed}/{len(results)} tests failed")
-            return False
+        
+        assert all_passed, f"{sum(1 for v in results.values() if not v)}/{len(results)} tests failed"
             
     except Exception as e:
         print(f"\n[ERROR] ✗ Exception during test: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 
 if __name__ == "__main__":

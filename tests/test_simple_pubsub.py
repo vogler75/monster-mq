@@ -1,6 +1,7 @@
 """Simple publish/subscribe test to verify broker is working"""
 import paho.mqtt.client as mqtt
 import time
+import pytest
 
 received = []
 

@@ -42,6 +42,7 @@ import os
 import tty
 import termios
 import subprocess
+import pytest
 from datetime import datetime
 from typing import List
 

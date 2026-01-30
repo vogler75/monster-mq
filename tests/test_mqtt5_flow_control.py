@@ -130,7 +130,7 @@ def test_mqtt5_flow_control():
         
         if not state["subscriber_connected"]:
             print("[ERROR] Subscriber failed to connect")
-            return False
+        assert state["subscriber_connected"], "Subscriber failed to connect"
         
         time.sleep(0.5)  # Give subscription time to register
         
@@ -163,7 +163,7 @@ def test_mqtt5_flow_control():
         
         if not state["publisher_connected"]:
             print("[ERROR] Publisher failed to connect")
-            return False
+        assert state["publisher_connected"], "Publisher failed to connect"
         
         # Test: Publish MORE messages than Receive Maximum
         NUM_MESSAGES = 15
@@ -219,14 +219,12 @@ def test_mqtt5_flow_control():
         print(f"Messages received: {received_count}")
         print(f"Receive Maximum: {RECEIVE_MAX}")
         
-        success = True
-        
         # Check that all messages were eventually received
         if received_count == NUM_MESSAGES:
             print(f"✓ All {NUM_MESSAGES} messages delivered")
         else:
             print(f"✗ Only {received_count}/{NUM_MESSAGES} messages delivered")
-            success = False
+        assert received_count == NUM_MESSAGES, f"Only {received_count}/{NUM_MESSAGES} messages delivered"
         
         # Verify messages are in order
         expected_messages = [f"message_{i+1}" for i in range(NUM_MESSAGES)]
@@ -236,7 +234,7 @@ def test_mqtt5_flow_control():
             print("✗ Messages not in correct order")
             print(f"  Expected: {expected_messages[:5]}...")
             print(f"  Received: {state['messages_received'][:5]}...")
-            success = False
+        assert state["messages_received"] == expected_messages, "Messages not in correct order"
         
         # Note: We can't directly verify that Receive Maximum was enforced during delivery
         # (would need broker instrumentation), but we can verify all messages eventually arrived
@@ -250,13 +248,11 @@ def test_mqtt5_flow_control():
         publisher.loop_stop()
         publisher.disconnect()
         
-        return success
-        
     except Exception as e:
         print(f"\n[ERROR] Test failed with exception: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ import paho.mqtt.client as mqtt
 import time
 import sys
 import os
+import pytest
 
 # Configuration from environment variables with defaults
 BROKER_HOST = os.getenv("MQTT_BROKER", "localhost")

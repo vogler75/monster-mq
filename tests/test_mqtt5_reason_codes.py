@@ -181,7 +181,7 @@ def test_mqtt5_reason_codes():
         
         if not state["connected"]:
             print("\n[TIMEOUT] ✗ No connection established")
-            return False
+        assert state["connected"], "No connection established"
         
         # Test 1: Subscribe to topics and check SUBACK reason codes
         print("\n" + "=" * 70)
@@ -209,9 +209,8 @@ def test_mqtt5_reason_codes():
                 print("[RESULT] ✓ All subscriptions granted (reason codes indicate success)")
             else:
                 print("[RESULT] ⚠ Some subscriptions failed")
-        else:
-            print("\n[RESULT] ✗ No SUBACK reason codes received")
-            return False
+        
+        assert state["suback_reason_codes"], "No SUBACK reason codes received"
         
         # Test 2: Publish QoS 1 message and check PUBACK reason code
         print("\n" + "=" * 70)
@@ -242,9 +241,8 @@ def test_mqtt5_reason_codes():
                 print("[RESULT] ✓ Publish acknowledged with SUCCESS reason code")
             else:
                 print(f"[RESULT] ⚠ Publish acknowledged with reason code: {rc}")
-        else:
-            print("\n[RESULT] ✗ No PUBACK reason code received")
-            return False
+        
+        assert state["puback_reason_code"] is not None, "No PUBACK reason code received"
         
         # Test 3: Unsubscribe and check UNSUBACK reason codes
         print("\n" + "=" * 70)
@@ -267,9 +265,8 @@ def test_mqtt5_reason_codes():
                 print("[RESULT] ✓ All unsubscriptions successful (reason code = SUCCESS)")
             else:
                 print("[RESULT] ⚠ Some unsubscriptions had non-success codes")
-        else:
-            print("\n[RESULT] ✗ No UNSUBACK reason codes received")
-            return False
+        
+        assert state["unsuback_reason_codes"], "No UNSUBACK reason codes received"
         
         # Summary
         print("\n" + "=" * 70)
@@ -285,13 +282,12 @@ def test_mqtt5_reason_codes():
         client.loop_stop()
         
         print("\n[OVERALL] ✓✓✓ REASON CODES TEST PASSED ✓✓✓")
-        return True
         
     except Exception as e:
         print(f"\n[EXCEPTION] ✗ Error during test: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 
 if __name__ == "__main__":

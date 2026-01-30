@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import paho.mqtt.client as mqtt
 import time
+import pytest
 
 # Publish retained message
 pub = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, 'tpub', protocol=mqtt.MQTTv5)

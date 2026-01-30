@@ -148,24 +148,17 @@ def test_will_delay():
     # Check immediately - should NOT have will message yet
     time.sleep(1)
     print(f"\n[CHECK] 1 second after disconnect - checking for will message...")
-    if len(messages_received) > 0:
-        print("❌ ERROR: Will message received too early (should be delayed 5 seconds)")
-        return False
-    else:
-        print("✓ Will message not received yet (correctly delayed)")
+    assert len(messages_received) == 0, "Will message received too early (should be delayed 5 seconds)"
+    print("✓ Will message not received yet (correctly delayed)")
     
     # Wait for will delay to expire
     print(f"\n[WAITING] Waiting {WILL_DELAY_SECONDS} seconds for will delay to expire...")
     time.sleep(WILL_DELAY_SECONDS + 1)  # +1 for safety margin
     
     # Check if will message received
-    if len(messages_received) == 0:
-        print("❌ ERROR: Will message not received after delay")
-        return False
+    assert len(messages_received) > 0, "Will message not received after delay"
     
-    if messages_received[0]['payload'] != WILL_MESSAGE:
-        print(f"❌ ERROR: Wrong message received: {messages_received[0]['payload']}")
-        return False
+    assert messages_received[0]['payload'] == WILL_MESSAGE, f"Wrong message received: {messages_received[0]['payload']}"
     
     # Validate timing
     if will_received_time is not None and disconnect_time is not None:
@@ -177,11 +170,9 @@ def test_will_delay():
         print(f"[TIMING] Actual delay: {delay_actual:.2f}s")
         print(f"[TIMING] Tolerance: ±{delay_tolerance}s")
         
-        if abs(delay_actual - delay_expected) > delay_tolerance:
-            print(f"❌ ERROR: Will delay timing incorrect (expected ~{delay_expected}s, got {delay_actual:.2f}s)")
-            return False
-        else:
-            print(f"✓ Will delay timing correct ({delay_actual:.2f}s)")
+        assert abs(delay_actual - delay_expected) <= delay_tolerance, \
+            f"Will delay timing incorrect (expected ~{delay_expected}s, got {delay_actual:.2f}s)"
+        print(f"✓ Will delay timing correct ({delay_actual:.2f}s)")
     
     print(f"\n✓ Will message received correctly after {WILL_DELAY_SECONDS}s delay")
     
@@ -244,19 +235,14 @@ def test_will_delay():
     time.sleep(WILL_DELAY_SECONDS + 1)
     
     # Check that will was NOT sent
-    if len(messages_received) > 0:
-        print(f"❌ ERROR: Will message sent despite reconnection (should be canceled)")
-        return False
-    else:
-        print("✓ Will message correctly canceled by reconnection")
+    assert len(messages_received) == 0, "Will message sent despite reconnection (should be canceled)"
+    print("✓ Will message correctly canceled by reconnection")
     
     # Cleanup
     publisher3.disconnect()
     publisher3.loop_stop()
     subscriber.disconnect()
     subscriber.loop_stop()
-    
-    return True
 
 if __name__ == "__main__":
     try:

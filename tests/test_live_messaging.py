@@ -2,6 +2,7 @@
 import paho.mqtt.client as mqtt
 import time
 import threading
+import pytest
 
 received = []
 ready = threading.Event()

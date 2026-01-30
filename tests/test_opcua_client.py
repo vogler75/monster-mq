@@ -6,6 +6,7 @@ to find and examine the MonsterMQ node.
 """
 
 import asyncio
+import pytest
 from asyncua import Client, ua
 import logging
 import sys

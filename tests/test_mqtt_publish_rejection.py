@@ -22,6 +22,7 @@ Notes:
 import sys
 import time
 import os
+import pytest
 from typing import Optional
 
 try:
@@ -86,7 +87,8 @@ def wait_for(condition_key: str, timeout: float) -> bool:
     return False
 
 
-def main():
+def test_mqtt_publish_rejection(broker_config):
+    """Test MQTT publish rejection for unauthorized topics"""
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
@@ -99,76 +101,71 @@ def main():
     client.connect(BROKER_HOST, BROKER_PORT, KEEPALIVE)
     client.loop_start()
 
-    # Wait for connect
-    for _ in range(50):
-        if state["connected"]:
-            break
-        time.sleep(0.1)
-    if not state["connected"]:
-        print("ERROR: Could not connect to broker")
+    try:
+        # Wait for connect
+        for _ in range(50):
+            if state["connected"]:
+                break
+            time.sleep(0.1)
+        
+        assert state["connected"], "Could not connect to broker"
+
+        # 1. Allowed publish (QoS 1)
+        print(f"Publishing allowed topic '{ALLOWED_TOPIC}' (QoS1)...")
+        (rc, mid_allowed) = client.publish(ALLOWED_TOPIC, payload="42", qos=1, retain=False)
+        assert rc == mqtt.MQTT_ERR_SUCCESS, f"publish() returned rc={rc} for allowed topic"
+        state["current_mid_allowed"] = mid_allowed
+
+        puback_received = wait_for("allowed_puback", PUBACK_TIMEOUT)
+        print(f"PUBACK for allowed publish: {'received' if puback_received else 'not received'}")
+        assert puback_received, "No PUBACK for allowed publish"
+
+        assert not state["disconnect_flag"], "Disconnected after allowed publish"
+
+        # 2. Forbidden publish (QoS 1)
+        print(f"Publishing forbidden topic '{FORBIDDEN_TOPIC}' (QoS1)...")
+        (rc2, mid_forbidden) = client.publish(FORBIDDEN_TOPIC, payload="99", qos=1, retain=False)
+        if rc2 != mqtt.MQTT_ERR_SUCCESS:
+            print(f"WARN: publish() returned rc={rc2} for forbidden topic (may indicate immediate rejection)")
+        state["current_mid_forbidden"] = mid_forbidden
+
+        # Observe outcome: watch for disconnect or PUBACK within FORBIDDEN_WAIT
+        start = time.time()
+        outcome_reported = False
+        while time.time() - start < FORBIDDEN_WAIT:
+            if state["disconnect_flag"]:
+                print("INFO: Client disconnected after forbidden publish -> Disconnect-on-unauthorized enforced")
+                outcome_reported = True
+                break
+            if state["forbidden_puback"]:
+                print("WARN: Received PUBACK for forbidden topic (ACL allows it or disconnect policy disabled)")
+                outcome_reported = True
+                break
+            time.sleep(0.05)
+
+        if not outcome_reported:
+            if state["disconnect_flag"]:
+                print("INFO: Client disconnected after forbidden publish (late in window)")
+            elif state["forbidden_puback"]:
+                print("WARN: Received PUBACK for forbidden topic (late)")
+            else:
+                print("OK: No PUBACK and no disconnect -> Silent drop behavior confirmed (policy: no disconnect)")
+
+        print("\nSummary:")
+        print(f"  Allowed publish PUBACK: {state['allowed_puback']}")
+        print(f"  Forbidden publish PUBACK: {state['forbidden_puback']}")
+        print(f"  Disconnected after forbidden publish: {state['disconnect_flag']}")
+        
+        # Verification: The test passes if allowed publish got PUBACK
+        # Forbidden behavior is informational (depends on broker config)
+        
+    finally:
+        if not state["disconnect_flag"]:
+            print("Disconnecting cleanly...")
+            client.disconnect()
+            time.sleep(0.2)
+
         client.loop_stop()
-        return 1
-
-    # 1. Allowed publish (QoS 1)
-    print(f"Publishing allowed topic '{ALLOWED_TOPIC}' (QoS1)...")
-    (rc, mid_allowed) = client.publish(ALLOWED_TOPIC, payload="42", qos=1, retain=False)
-    if rc != mqtt.MQTT_ERR_SUCCESS:
-        print(f"ERROR: publish() returned rc={rc} for allowed topic")
-    state["current_mid_allowed"] = mid_allowed
-
-    if wait_for("allowed_puback", PUBACK_TIMEOUT):
-        print("OK: Received PUBACK for allowed publish")
-    else:
-        print("WARN: No PUBACK for allowed publish (unexpected)")
-
-    if state["disconnect_flag"]:
-        print("ERROR: Disconnected after allowed publish; aborting test")
-        client.loop_stop()
-        return 1
-
-    # 2. Forbidden publish (QoS 1)
-    print(f"Publishing forbidden topic '{FORBIDDEN_TOPIC}' (QoS1)...")
-    (rc2, mid_forbidden) = client.publish(FORBIDDEN_TOPIC, payload="99", qos=1, retain=False)
-    if rc2 != mqtt.MQTT_ERR_SUCCESS:
-        print(f"ERROR: publish() returned rc={rc2} for forbidden topic (may indicate immediate rejection)")
-    state["current_mid_forbidden"] = mid_forbidden
-
-    # Observe outcome: watch for disconnect or PUBACK within FORBIDDEN_WAIT
-    start = time.time()
-    outcome_reported = False
-    while time.time() - start < FORBIDDEN_WAIT:
-        if state["disconnect_flag"]:
-            print("INFO: Client disconnected after forbidden publish -> Disconnect-on-unauthorized enforced")
-            outcome_reported = True
-            break
-        if state["forbidden_puback"]:
-            print("WARN: Received PUBACK for forbidden topic (ACL allows it or disconnect policy disabled)")
-            outcome_reported = True
-            break
-        time.sleep(0.05)
-
-    if not outcome_reported:
-        if state["disconnect_flag"]:
-            print("INFO: Client disconnected after forbidden publish (late in window)")
-        elif state["forbidden_puback"]:
-            print("WARN: Received PUBACK for forbidden topic (late)")
-        else:
-            print("OK: No PUBACK and no disconnect -> Silent drop behavior confirmed (policy: no disconnect)")
-
-    if not state["disconnect_flag"]:
-        print("Disconnecting cleanly...")
-        client.disconnect()
-        time.sleep(0.2)
-
-    client.loop_stop()
-
-    print("\nSummary:")
-    print(f"  Allowed publish PUBACK: {state['allowed_puback']}")
-    print(f"  Forbidden publish PUBACK: {state['forbidden_puback']}")
-    print(f"  Disconnected after forbidden publish: {state['disconnect_flag']}")
-
-    return 0
-
 
 if __name__ == "__main__":
-    sys.exit(main())
+    pytest.main([__file__, "-v", "--tb=short"])

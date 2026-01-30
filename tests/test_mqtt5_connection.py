@@ -1,182 +1,130 @@
 #!/usr/bin/env python3
 """
-Test MQTT v5.0 connection acceptance.
+MQTT v5.0 Connection Test (pytest compatible)
 
-This test verifies that:
-1. MQTT v5.0 clients can successfully connect to the broker
-2. The broker accepts MQTT5 protocol version (5) without rejection
-3. CONNACK is received (basic acceptance, properties implementation pending)
-
-Usage:
-- Start broker locally (host=localhost, port=1883)
-- Run: python3 tests/test_mqtt5_connection.py
-
-Requirements:
-- paho-mqtt >= 2.0.0 (for MQTT v5 support)
-  Install: pip install paho-mqtt>=2.0.0
+Tests basic MQTT v5.0 connection acceptance and CONNACK handling.
+Can be run standalone or with pytest.
 """
-
-import sys
 import time
-import os
-from typing import Optional
-
-try:
-    import paho.mqtt.client as mqtt
-    from paho.mqtt.client import MQTTv5
-    from paho.mqtt.properties import Properties
-    from paho.mqtt.packettypes import PacketTypes
-except ImportError:
-    print("ERROR: paho-mqtt >= 2.0.0 not installed.")
-    print("Install with: pip install 'paho-mqtt>=2.0.0'")
-    sys.exit(1)
-
-# Configuration
-BROKER_HOST = os.getenv("MQTT_BROKER", "localhost")
-BROKER_PORT = int(os.getenv("MQTT_PORT", "1883"))
-KEEPALIVE = 30
-
-# Credentials
-USERNAME: Optional[str] = os.getenv("MQTT_USERNAME", "Test")
-PASSWORD: Optional[str] = os.getenv("MQTT_PASSWORD", "Test")
-
-# Test state
-state = {
-    "connected": False,
-    "connection_result": None,
-    "connack_properties": None,
-    "error": None
-}
+import pytest
+import paho.mqtt.client as mqtt
+from paho.mqtt.client import CallbackAPIVersion
+from paho.mqtt.properties import Properties
+from paho.mqtt.packettypes import PacketTypes
 
 
-def on_connect(client, userdata, flags, reason_code, properties=None):
-    """Called when the broker responds to our connection request (CONNACK)."""
-    print(f"\n[CONNACK] Reason code: {reason_code}")
-    print(f"[CONNACK] Flags: {flags}")
+pytestmark = pytest.mark.mqtt5
+
+
+def test_mqtt5_basic_connection(broker_config):
+    """Test that MQTT v5.0 clients can connect successfully."""
+    connected = False
+    connack_received = False
     
-    if properties:
-        print(f"[CONNACK] Properties: {properties}")
-        state["connack_properties"] = properties
-    else:
-        print("[CONNACK] No properties returned")
+    def on_connect(client, userdata, flags, reason_code, properties):
+        nonlocal connected, connack_received
+        connack_received = True
+        connected = (reason_code == 0)
     
-    if reason_code == 0:
-        print("[SUCCESS] ✓ MQTT v5.0 connection accepted!")
-        state["connected"] = True
-        state["connection_result"] = "success"
-    else:
-        print(f"[FAILED] ✗ Connection refused with reason code: {reason_code}")
-        state["connection_result"] = f"refused_{reason_code}"
+    client = mqtt.Client(
+        callback_api_version=CallbackAPIVersion.VERSION2,
+        protocol=mqtt.MQTTv5
+    )
+    client.username_pw_set(broker_config["username"], broker_config["password"])
+    client.on_connect = on_connect
+    
+    client.connect(broker_config["host"], broker_config["port"])
+    client.loop_start()
+    
+    # Wait for connection
+    timeout = time.time() + 5
+    while not connack_received and time.time() < timeout:
+        time.sleep(0.1)
+    
+    client.loop_stop()
+    client.disconnect()
+    
+    assert connack_received, "Did not receive CONNACK"
+    assert connected, "Connection was refused"
 
 
-def on_disconnect(client, userdata, disconnect_flags, reason_code, properties=None):
-    """Called when the client disconnects."""
-    print(f"\n[DISCONNECT] Reason code: {reason_code}")
-    print(f"[DISCONNECT] Flags: {disconnect_flags}")
-    if properties:
-        print(f"[DISCONNECT] Properties: {properties}")
+def test_mqtt5_connection_with_properties(broker_config):
+    """Test MQTT v5.0 connection with CONNECT properties."""
+    connected = False
+    server_props = None
     
-    if reason_code != 0:
-        state["error"] = f"Unexpected disconnect: {reason_code}"
+    def on_connect(client, userdata, flags, reason_code, properties):
+        nonlocal connected, server_props
+        connected = (reason_code == 0)
+        server_props = properties
+    
+    client = mqtt.Client(
+        callback_api_version=CallbackAPIVersion.VERSION2,
+        client_id=f"test_props_{int(time.time())}",
+        protocol=mqtt.MQTTv5
+    )
+    client.username_pw_set(broker_config["username"], broker_config["password"])
+    client.on_connect = on_connect
+    
+    # Set CONNECT properties
+    connect_props = Properties(PacketTypes.CONNECT)
+    connect_props.SessionExpiryInterval = 300
+    connect_props.ReceiveMaximum = 100
+    connect_props.MaximumPacketSize = 1024 * 1024
+    
+    client.connect(
+        broker_config["host"],
+        broker_config["port"],
+        properties=connect_props
+    )
+    client.loop_start()
+    
+    timeout = time.time() + 5
+    while not connected and time.time() < timeout:
+        time.sleep(0.1)
+    
+    client.loop_stop()
+    client.disconnect()
+    
+    assert connected, "Connection failed"
 
 
-def test_mqtt5_connection():
-    """Test MQTT v5.0 connection to the broker."""
-    print("=" * 70)
-    print("MQTT v5.0 Connection Test")
-    print("=" * 70)
-    print(f"Broker: {BROKER_HOST}:{BROKER_PORT}")
-    print(f"Username: {USERNAME}")
-    print(f"Protocol: MQTT v5.0")
-    print()
+@pytest.mark.parametrize("session_expiry", [0, 60, 300])
+def test_mqtt5_session_expiry_intervals(broker_config, session_expiry):
+    """Test connection with various session expiry intervals."""
+    connected = False
     
-    # Create MQTT v5 client
-    client_id = f"test_mqtt5_{int(time.time())}"
-    print(f"Client ID: {client_id}")
+    def on_connect(client, userdata, flags, reason_code, properties):
+        nonlocal connected
+        connected = (reason_code == 0)
     
-    try:
-        # Create client with MQTT v5
-        client = mqtt.Client(
-            client_id=client_id,
-            protocol=MQTTv5,
-            callback_api_version=mqtt.CallbackAPIVersion.VERSION2
-        )
-        
-        # Set callbacks
-        client.on_connect = on_connect
-        client.on_disconnect = on_disconnect
-        
-        # Set credentials if provided
-        if USERNAME:
-            client.username_pw_set(USERNAME, PASSWORD)
-        
-        # Optional: Set CONNECT properties (MQTT v5 specific)
-        connect_properties = Properties(PacketTypes.CONNECT)
-        connect_properties.SessionExpiryInterval = 300  # 5 minutes
-        connect_properties.ReceiveMaximum = 100
-        connect_properties.MaximumPacketSize = 1024 * 1024  # 1 MB
-        
-        print("\n[CONNECTING] Attempting MQTT v5.0 connection...")
-        print(f"  Session Expiry Interval: 300 seconds")
-        print(f"  Receive Maximum: 100")
-        print(f"  Maximum Packet Size: 1048576 bytes")
-        
-        # Connect to broker with MQTT v5
-        client.connect(
-            host=BROKER_HOST,
-            port=BROKER_PORT,
-            keepalive=KEEPALIVE,
-            properties=connect_properties
-        )
-        
-        # Start network loop
-        client.loop_start()
-        
-        # Wait for connection result
-        timeout = 5.0
-        start = time.time()
-        while state["connection_result"] is None and (time.time() - start) < timeout:
-            time.sleep(0.1)
-        
-        # Check results
-        if state["connection_result"] is None:
-            print(f"\n[TIMEOUT] ✗ No CONNACK received within {timeout} seconds")
-            return False
-        
-        if state["connected"]:
-            print("\n[VALIDATION]")
-            print("  ✓ MQTT v5.0 protocol version accepted")
-            print("  ✓ CONNACK received successfully")
-            print("  ✓ Connection established")
-            
-            # Graceful disconnect
-            time.sleep(0.5)
-            client.disconnect()
-            client.loop_stop()
-            
-            print("\n[OVERALL] ✓✓✓ CONNECTION TEST PASSED ✓✓✓")
-            return True
-        else:
-            print("\n[OVERALL] ✗✗✗ CONNECTION TEST FAILED ✗✗✗")
-            return False
-            
-    except Exception as e:
-        print(f"\n[EXCEPTION] ✗ Error during test: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+    client = mqtt.Client(
+        callback_api_version=CallbackAPIVersion.VERSION2,
+        client_id=f"test_se_{session_expiry}_{int(time.time())}",
+        protocol=mqtt.MQTTv5
+    )
+    client.username_pw_set(broker_config["username"], broker_config["password"])
+    client.on_connect = on_connect
+    
+    connect_props = Properties(PacketTypes.CONNECT)
+    connect_props.SessionExpiryInterval = session_expiry
+    
+    client.connect(
+        broker_config["host"],
+        broker_config["port"],
+        properties=connect_props
+    )
+    client.loop_start()
+    
+    timeout = time.time() + 5
+    while not connected and time.time() < timeout:
+        time.sleep(0.1)
+    
+    client.loop_stop()
+    client.disconnect()
+    
+    assert connected, f"Failed to connect with SessionExpiryInterval={session_expiry}"
 
 
 if __name__ == "__main__":
-    print("\nStarting MQTT v5.0 connection test...")
-    print("(This test validates basic MQTT5 connection acceptance)\n")
-    
-    success = test_mqtt5_connection()
-    
-    print("\n" + "=" * 70)
-    if success:
-        print("TEST RESULT: PASS ✓")
-        sys.exit(0)
-    else:
-        print("TEST RESULT: FAIL ✗")
-        sys.exit(1)
+    pytest.main([__file__, "-v"])
