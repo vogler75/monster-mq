@@ -6,7 +6,7 @@ Tests basic MQTT v5.0 connection acceptance and CONNACK handling.
 import time
 import pytest
 import paho.mqtt.client as mqtt
-from paho.mqtt.client import CallbackAPIVersion
+from paho.mqtt.enums import CallbackAPIVersion
 from paho.mqtt.properties import Properties
 from paho.mqtt.packettypes import PacketTypes
 

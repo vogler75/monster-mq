@@ -22,7 +22,8 @@ $deleteQuery = 'mutation { opcUaServer { delete(serverName: "test-server") { suc
 $result = Invoke-GraphQL $deleteQuery
 if ($result) { Write-Host "  $($result.data.opcUaServer.delete.message)" -ForegroundColor Green }
 
-Start-Sleep -Seconds 2
+Write-Host "  Waiting 5 seconds for server to fully stop..." -ForegroundColor Gray
+Start-Sleep -Seconds 5
 
 # Step 2: Create new server
 Write-Host "`n[2/5] Creating new OPC UA server..." -ForegroundColor Yellow
