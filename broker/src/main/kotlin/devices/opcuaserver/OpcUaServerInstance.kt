@@ -166,8 +166,8 @@ class OpcUaServerInstance(
 
         // Build endpoints based on security configuration
         val endpoints = mutableSetOf<EndpointConfiguration>()
-        val hostname = InetAddress.getLocalHost().hostName
-        val bindAddress = "0.0.0.0"
+        val hostname = config.hostname ?: InetAddress.getLocalHost().hostName
+        val bindAddress = config.bindAddress ?: "0.0.0.0"
         val path = "/${config.path}"
 
         // Parse security policies from configuration

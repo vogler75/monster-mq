@@ -53,6 +53,8 @@ class OpcUaServerDetailManager {
                         enabled
                         port
                         path
+                        hostname
+                        bindAddress
                         namespaceUri
                         updateInterval
                         bufferSize
@@ -109,6 +111,8 @@ class OpcUaServerDetailManager {
         document.getElementById('server-node').value = d.nodeId;
         document.getElementById('server-port').value = d.port;
         document.getElementById('server-path').value = d.path || '';
+        document.getElementById('server-hostname').value = d.hostname || '';
+        document.getElementById('server-bind-address').value = d.bindAddress || '';
         document.getElementById('server-namespace-uri').value = d.namespaceUri || '';
         document.getElementById('server-update-interval').value = d.updateInterval;
         document.getElementById('server-buffer-size').value = d.bufferSize;
@@ -196,6 +200,8 @@ class OpcUaServerDetailManager {
             enabled: document.getElementById('server-enabled').checked,
             port: parseInt(document.getElementById('server-port').value),
             path: document.getElementById('server-path').value.trim(),
+            hostname: document.getElementById('server-hostname').value.trim() || null,
+            bindAddress: document.getElementById('server-bind-address').value.trim() || null,
             namespaceUri: document.getElementById('server-namespace-uri').value.trim(),
             updateInterval: parseInt(document.getElementById('server-update-interval').value),
             bufferSize: parseInt(document.getElementById('server-buffer-size').value),

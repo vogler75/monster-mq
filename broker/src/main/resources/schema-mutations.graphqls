@@ -510,6 +510,8 @@ type OpcUaServerInfo {
     enabled: Boolean!
     port: Int!
     path: String!
+    hostname: String
+    bindAddress: String
     namespaceIndex: Int!
     namespaceUri: String!
     addresses: [OpcUaServerAddress!]!
@@ -558,6 +560,10 @@ input OpcUaServerInput {
     port: Int = 4840
     # OPC UA server endpoint path
     path: String = "server"
+    # Override hostname used in endpoint URLs (empty = auto-detect system hostname)
+    hostname: String
+    # Network address to bind to (empty = 0.0.0.0 for all interfaces)
+    bindAddress: String
     # OPC UA namespace index (must be >= 1)
     namespaceIndex: Int = 1
     # OPC UA namespace URI
@@ -620,6 +626,10 @@ input OpcUaServerConfigInput {
     port: Int = 4840
     # OPC UA server endpoint path
     path: String = "monstermq"
+    # Override hostname used in endpoint URLs (empty = auto-detect system hostname)
+    hostname: String
+    # Network address to bind to (empty = 0.0.0.0 for all interfaces)
+    bindAddress: String
     # OPC UA namespace URI
     namespaceUri: String
     # Minimum update interval in milliseconds
