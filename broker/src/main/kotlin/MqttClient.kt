@@ -262,6 +262,8 @@ class MqttClient(
         var mqtt5ReceiveMaximum = 65535
         var mqtt5MaximumPacketSize = 268435456L
         var mqtt5TopicAliasMaximum = 0
+        var mqtt5AuthMethod: String? = null
+        var mqtt5AuthData: ByteArray? = null
         
         if (isMqtt5) {
             logger.info("Client [$clientId] MQTT 5.0 connection accepted")
@@ -272,6 +274,8 @@ class MqttClient(
                 logger.info("Client [$clientId] CONNECT Property [${p.propertyId()}] = ${p.value()}")
                 when (p.propertyId()) {
                     17 -> mqtt5SessionExpiryInterval = (p.value() as? Number)?.toLong() ?: 0L  // Session Expiry Interval
+                    21 -> mqtt5AuthMethod = p.value() as? String  // Authentication Method
+                    22 -> mqtt5AuthData = (p.value() as? ByteArray)  // Authentication Data
                     24 -> willDelayInterval = (p.value() as? Number)?.toLong() ?: 0L  // Will Delay Interval
                     33 -> mqtt5ReceiveMaximum = (p.value() as? Number)?.toInt() ?: 65535  // Receive Maximum
                     39 -> mqtt5MaximumPacketSize = (p.value() as? Number)?.toLong() ?: 268435456L  // Maximum Packet Size
@@ -280,6 +284,10 @@ class MqttClient(
                 }
             }
             logger.info("Client [$clientId] MQTT5 properties: sessionExpiry=$mqtt5SessionExpiryInterval, receiveMax=$mqtt5ReceiveMaximum, maxPacketSize=$mqtt5MaximumPacketSize, willDelay=$willDelayInterval")
+            
+            if (mqtt5AuthMethod != null) {
+                logger.info("Client [$clientId] MQTT5 enhanced authentication requested: method=$mqtt5AuthMethod, dataLength=${mqtt5AuthData?.size ?: 0}")
+            }
             
             // Store client's Receive Maximum for flow control (Phase 8)
             clientReceiveMaximum = mqtt5ReceiveMaximum
@@ -396,6 +404,12 @@ class MqttClient(
                 information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
                 information.put("clientAddress", endpoint.remoteAddress().toString())
                 information.put("sessionExpiryInterval", if (isMqtt5) mqtt5SessionExpiryInterval else endpoint.keepAliveTimeSeconds().toLong())
+                // Store MQTT v5 connection properties
+                if (isMqtt5) {
+                    information.put("ReceiveMaximum", mqtt5ReceiveMaximum)
+                    information.put("MaximumPacketSize", mqtt5MaximumPacketSize)
+                    information.put("TopicAliasMaximum", mqtt5TopicAliasMaximum)
+                }
                 sessionHandler.setClient(clientId, effectiveCleanSession, information).onComplete {
                     if (endpoint.isConnected) {
                         // Now safe to mark as ready for new messages
@@ -416,6 +430,19 @@ class MqttClient(
 
             // Authentication check
             if (userManager.isUserManagementEnabled()) {
+                // Check for MQTT v5.0 enhanced authentication first
+                if (isMqtt5 && mqtt5AuthMethod != null) {
+                    // Enhanced authentication requested
+                    logger.info("Client [$clientId] MQTT v5.0 enhanced authentication: method=$mqtt5AuthMethod")
+                    
+                    // TODO: Implement enhanced authentication flow when Vert.x MQTT adds AUTH packet support
+                    // For now, log the attempt and fall back to basic authentication
+                    logger.warning("Client [$clientId] Enhanced authentication ($mqtt5AuthMethod) not yet supported - AUTH packet handling requires Vert.x MQTT API enhancement")
+                    logger.info("Client [$clientId] Falling back to basic username/password authentication")
+                    
+                    // Fall through to basic authentication
+                }
+                
                 val username = endpoint.auth()?.username
                 val password = endpoint.auth()?.password
                 
@@ -1239,12 +1266,21 @@ class MqttClient(
 
     private fun disconnectHandler() {
         // Graceful disconnect by the client, closeHandler is also called after this
-        logger.fine { "Client [$clientId] Graceful disconnect [${endpoint.isConnected}] [${Utils.getCurrentFunctionName()}]" }
+        val protocolVersion = endpoint.protocolVersion()
+        if (protocolVersion == 5) {
+            logger.info("Client [$clientId] MQTT v5.0 DISCONNECT packet received (graceful disconnect)")
+        } else {
+            logger.fine { "Client [$clientId] MQTT v3.1.1 graceful disconnect [${endpoint.isConnected}]" }
+        }
         gracefulDisconnected = true
     }
 
     private fun closeHandler() {
-        logger.fine { "Client [$clientId] Close received [${endpoint.isConnected}] [${Utils.getCurrentFunctionName()}]" }
+        if (!gracefulDisconnected) {
+            logger.info("Client [$clientId] Unexpected close (no DISCONNECT packet received) [connected=${endpoint.isConnected}]")
+        } else {
+            logger.fine { "Client [$clientId] Close received after graceful disconnect [${endpoint.isConnected}]" }
+        }
         closeConnection()
     }
 
