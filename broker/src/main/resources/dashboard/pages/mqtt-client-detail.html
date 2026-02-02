@@ -167,6 +167,16 @@
                                 <input type="text" id="client-id" required>
                             </div>
                             <div class="form-group">
+                                <label for="client-protocol-version">Protocol Version</label>
+                                <select id="client-protocol-version" onchange="toggleMqtt5Options()">
+                                    <option value="4">MQTT v3.1.1</option>
+                                    <option value="5">MQTT v5.0</option>
+                                </select>
+                                <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                    Choose MQTT v5.0 for enhanced features (topic aliases, message expiry, etc.)
+                                </small>
+                            </div>
+                            <div class="form-group">
                                 <label for="client-username">Username</label>
                                 <input type="text" id="client-username">
                             </div>
@@ -193,6 +203,47 @@
                                 <input type="number" id="client-connection-timeout">
                             </div>
                         </div>
+
+                        <!-- MQTT v5 Connection Properties -->
+                        <div id="mqtt5-connection-properties" style="display: none;">
+                            <h4 style="margin: 1.5rem 0 1rem 0; color: var(--monster-purple); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">
+                                MQTT v5.0 Connection Properties
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-left: 0.5rem;">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                                </svg>
+                            </h4>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="client-session-expiry">Session Expiry Interval (seconds)</label>
+                                    <input type="number" id="client-session-expiry" min="0" max="4294967295" value="0">
+                                    <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                        0 = session ends on disconnect, max = 4,294,967,295 seconds (~136 years)
+                                    </small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-receive-maximum">Receive Maximum</label>
+                                    <input type="number" id="client-receive-maximum" min="1" max="65535" value="65535">
+                                    <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                        Max QoS 1/2 messages in flight (1-65,535)
+                                    </small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-max-packet-size">Maximum Packet Size (bytes)</label>
+                                    <input type="number" id="client-max-packet-size" min="1" max="268435455" value="268435455">
+                                    <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                        Max packet size (1-268,435,455 bytes)
+                                    </small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="client-topic-alias-max">Topic Alias Maximum</label>
+                                    <input type="number" id="client-topic-alias-max" min="0" max="65535" value="10">
+                                    <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                        Max topic aliases for bandwidth optimization (0-65,535)
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="form-group">
                             <div class="checkbox-group">
                                 <input type="checkbox" id="client-enabled">
@@ -310,7 +361,7 @@
                 <form id="add-address-form">
                     <div class="form-group">
                         <label for="address-mode">Mode *</label>
-                        <select id="address-mode" required>
+                        <select id="address-mode" required onchange="toggleMqtt5SubscriptionOptions(); toggleMqtt5MessageProperties();">
                             <option value="SUBSCRIBE">SUBSCRIBE (Remote → Local)</option>
                             <option value="PUBLISH">PUBLISH (Local → Remote)</option>
                         </select>
@@ -341,6 +392,81 @@
                         </select>
                         <small style="color: var(--text-muted);">Quality of Service level for MQTT messages</small>
                     </div>
+                    
+                    <!-- MQTT v5 Subscription Options (only for SUBSCRIBE mode) -->
+                    <div id="mqtt5-subscription-options" style="display: none;">
+                        <h4 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+                            MQTT v5.0 Subscription Options
+                        </h4>
+                        
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="address-no-local">
+                                <label for="address-no-local">No Local</label>
+                            </div>
+                            <small style="color: var(--text-muted);">Don't receive messages that you published to this topic (prevents message loops)</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="address-retain-handling">Retain Handling</label>
+                            <select id="address-retain-handling">
+                                <option value="0">Send retained messages (default)</option>
+                                <option value="1">Send retained only if new subscription</option>
+                                <option value="2">Never send retained messages</option>
+                            </select>
+                            <small style="color: var(--text-muted);">Controls when retained messages are delivered at subscribe time</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="address-retain-as-published">
+                                <label for="address-retain-as-published">Retain As Published (RAP)</label>
+                            </div>
+                            <small style="color: var(--text-muted);">Preserve the original retain flag when forwarding messages</small>
+                        </div>
+                    </div>
+                    
+                    <!-- MQTT v5 Message Properties (only for PUBLISH mode) -->
+                    <div id="mqtt5-message-properties" style="display: none;">
+                        <h4 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+                            MQTT v5.0 Message Properties
+                        </h4>
+                        
+                        <div class="form-group">
+                            <label for="address-message-expiry">Message Expiry Interval (seconds)</label>
+                            <input type="number" id="address-message-expiry" min="0" max="4294967295" placeholder="0 = no expiry">
+                            <small style="color: var(--text-muted);">Message expires after N seconds if not delivered (0 = no expiry)</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="address-content-type">Content Type</label>
+                            <input type="text" id="address-content-type" placeholder="application/json">
+                            <small style="color: var(--text-muted);">MIME type of the message payload</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="address-response-topic">Response Topic Pattern</label>
+                            <input type="text" id="address-response-topic" placeholder="response/client/{id}">
+                            <small style="color: var(--text-muted);">Topic for request-response pattern</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="address-payload-format">
+                                <label for="address-payload-format">Payload is UTF-8 Text</label>
+                            </div>
+                            <small style="color: var(--text-muted);">Indicates that payload is UTF-8 encoded text (enables validation)</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>User Properties</label>
+                            <small style="color: var(--text-muted); display: block; margin-bottom: 0.5rem;">Custom key-value metadata pairs</small>
+                            <div id="address-user-properties-list"></div>
+                            <button type="button" class="btn btn-secondary" onclick="addUserProperty()" style="margin-top: 0.5rem;">
+                                + Add User Property
+                            </button>
+                        </div>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -361,7 +487,7 @@
                 <form id="edit-address-form">
                     <div class="form-group">
                         <label for="edit-address-mode">Mode *</label>
-                        <select id="edit-address-mode" required>
+                        <select id="edit-address-mode" required onchange="toggleMqtt5SubscriptionOptions(); toggleMqtt5MessageProperties();">
                             <option value="SUBSCRIBE">SUBSCRIBE (Remote → Local)</option>
                             <option value="PUBLISH">PUBLISH (Local → Remote)</option>
                         </select>
@@ -391,6 +517,81 @@
                             <option value="2">QoS 2 - Exactly once</option>
                         </select>
                         <small style="color: var(--text-muted);">Quality of Service level for MQTT messages</small>
+                    </div>
+                    
+                    <!-- MQTT v5 Subscription Options (only for SUBSCRIBE mode) -->
+                    <div id="mqtt5-edit-subscription-options" style="display: none;">
+                        <h4 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+                            MQTT v5.0 Subscription Options
+                        </h4>
+                        
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="edit-address-no-local">
+                                <label for="edit-address-no-local">No Local</label>
+                            </div>
+                            <small style="color: var(--text-muted);">Don't receive messages that you published to this topic (prevents message loops)</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit-address-retain-handling">Retain Handling</label>
+                            <select id="edit-address-retain-handling">
+                                <option value="0">Send retained messages (default)</option>
+                                <option value="1">Send retained only if new subscription</option>
+                                <option value="2">Never send retained messages</option>
+                            </select>
+                            <small style="color: var(--text-muted);">Controls when retained messages are delivered at subscribe time</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="edit-address-retain-as-published">
+                                <label for="edit-address-retain-as-published">Retain As Published (RAP)</label>
+                            </div>
+                            <small style="color: var(--text-muted);">Preserve the original retain flag when forwarding messages</small>
+                        </div>
+                    </div>
+                    
+                    <!-- MQTT v5 Message Properties (only for PUBLISH mode) -->
+                    <div id="mqtt5-edit-message-properties" style="display: none;">
+                        <h4 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+                            MQTT v5.0 Message Properties
+                        </h4>
+                        
+                        <div class="form-group">
+                            <label for="edit-address-message-expiry">Message Expiry Interval (seconds)</label>
+                            <input type="number" id="edit-address-message-expiry" min="0" max="4294967295" placeholder="0 = no expiry">
+                            <small style="color: var(--text-muted);">Message expires after N seconds if not delivered (0 = no expiry)</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit-address-content-type">Content Type</label>
+                            <input type="text" id="edit-address-content-type" placeholder="application/json">
+                            <small style="color: var(--text-muted);">MIME type of the message payload</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit-address-response-topic">Response Topic Pattern</label>
+                            <input type="text" id="edit-address-response-topic" placeholder="response/client/{id}">
+                            <small style="color: var(--text-muted);">Topic for request-response pattern</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="edit-address-payload-format">
+                                <label for="edit-address-payload-format">Payload is UTF-8 Text</label>
+                            </div>
+                            <small style="color: var(--text-muted);">Indicates that payload is UTF-8 encoded text (enables validation)</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>User Properties</label>
+                            <small style="color: var(--text-muted); display: block; margin-bottom: 0.5rem;">Custom key-value metadata pairs</small>
+                            <div id="edit-address-user-properties-list"></div>
+                            <button type="button" class="btn btn-secondary" onclick="addEditUserProperty()" style="margin-top: 0.5rem;">
+                                + Add User Property
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
