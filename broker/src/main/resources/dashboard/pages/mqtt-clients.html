@@ -397,6 +397,49 @@ Add Bridge
                         <input type="number" id="client-connection-timeout" value="30000">
                     </div>
                     <div class="form-group">
+                        <label for="client-protocol-version">Protocol Version</label>
+                        <select id="client-protocol-version" onchange="toggleMqtt5ConnectionProperties()">
+                            <option value="4">MQTT v3.1.1</option>
+                            <option value="5">MQTT v5.0</option>
+                        </select>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Select MQTT protocol version for the connection</small>
+                    </div>
+                    
+                    <!-- MQTT v5.0 Connection Properties -->
+                    <div id="mqtt5-add-connection-properties" style="display: none;">
+                        <h4 style="margin: 1.5rem 0 1rem 0; color: var(--monster-purple); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">
+                            🏷️ MQTT v5.0 Connection Properties
+                        </h4>
+                        <div class="form-group">
+                            <label for="client-session-expiry">Session Expiry Interval (seconds)</label>
+                            <input type="number" id="client-session-expiry" min="0" max="4294967295" value="0">
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                0 = session ends on disconnect (default)
+                            </small>
+                        </div>
+                        <div class="form-group">
+                            <label for="client-receive-maximum">Receive Maximum</label>
+                            <input type="number" id="client-receive-maximum" min="1" max="65535" value="65535">
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                Max QoS 1/2 messages in flight (default: 65,535)
+                            </small>
+                        </div>
+                        <div class="form-group">
+                            <label for="client-max-packet-size">Maximum Packet Size (bytes)</label>
+                            <input type="number" id="client-max-packet-size" min="1" max="268435455" value="268435455">
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                Max packet size (default: 268,435,455 bytes)
+                            </small>
+                        </div>
+                        <div class="form-group">
+                            <label for="client-topic-alias-max">Topic Alias Maximum</label>
+                            <input type="number" id="client-topic-alias-max" min="0" max="65535" value="10">
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                Max topic aliases for bandwidth optimization (default: 10)
+                            </small>
+                        </div>
+                    </div>
+                    <div class="form-group">
                         <div class="checkbox-group">
                             <input type="checkbox" id="client-enabled" checked>
                             <label for="client-enabled">Enabled</label>

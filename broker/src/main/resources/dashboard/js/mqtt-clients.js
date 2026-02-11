@@ -206,6 +206,8 @@ class MqttClientManager {
             return;
         }
 
+        const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
+        
         const clientData = {
             name: document.getElementById('client-name').value.trim(),
             namespace: document.getElementById('client-namespace').value.trim(),
@@ -223,9 +225,18 @@ class MqttClientManager {
                 bufferEnabled: document.getElementById('client-buffer-enabled').checked,
                 bufferSize: parseInt(document.getElementById('client-buffer-size').value),
                 persistBuffer: document.getElementById('client-persist-buffer').checked,
-                deleteOldestMessages: document.getElementById('client-delete-oldest').checked
+                deleteOldestMessages: document.getElementById('client-delete-oldest').checked,
+                protocolVersion: protocolVersion
             }
         };
+        
+        // Add MQTT v5 properties if protocol version is 5
+        if (protocolVersion === 5) {
+            clientData.config.sessionExpiryInterval = parseInt(document.getElementById('client-session-expiry').value) || 0;
+            clientData.config.receiveMaximum = parseInt(document.getElementById('client-receive-maximum').value) || 65535;
+            clientData.config.maximumPacketSize = parseInt(document.getElementById('client-max-packet-size').value) || 268435455;
+            clientData.config.topicAliasMaximum = parseInt(document.getElementById('client-topic-alias-max').value) || 10;
+        }
 
         try {
             const mutation = `
@@ -427,6 +438,14 @@ function confirmDeleteClient() {
 
 function refreshClients() {
     mqttClientManager.refreshClients();
+}
+
+function toggleMqtt5ConnectionProperties() {
+    const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
+    const mqtt5Section = document.getElementById('mqtt5-add-connection-properties');
+    if (mqtt5Section) {
+        mqtt5Section.style.display = protocolVersion === 5 ? 'block' : 'none';
+    }
 }
 
 // Initialize when DOM is loaded

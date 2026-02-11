@@ -892,3 +892,68 @@ body::-webkit-scrollbar-track {
 body::-webkit-scrollbar-thumb {
     background: var(--dark-surface-2);
 }
+/* MQTT Protocol Version Badges */
+.protocol-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.protocol-v5 {
+    background: linear-gradient(135deg, var(--monster-purple) 0%, #9333ea 100%);
+    color: white;
+    box-shadow: 0 2px 4px rgba(124, 58, 237, 0.2);
+}
+
+.protocol-v3 {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+/* MQTT v5 Subscription Option Badges */
+.sub-option-badge {
+    display: inline-block;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    margin-right: 0.25rem;
+    white-space: nowrap;
+}
+
+.sub-no-local {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.sub-retain-handling {
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.sub-rap {
+    background: rgba(124, 58, 237, 0.15);
+    color: #c4b5fd;
+    border: 1px solid rgba(124, 58, 237, 0.3);
+}
+
+/* MQTT v5 Metric Card Highlight */
+.mqtt5-metric {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(147, 51, 234, 0.05) 100%);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+}
+
+.mqtt5-metric .metric-icon {
+    background: linear-gradient(135deg, var(--monster-purple) 0%, #9333ea 100%);
+}
+
+.mqtt5-metric .metric-title {
+    color: var(--monster-purple);
+    font-weight: 600;
+}
