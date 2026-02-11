@@ -1,0 +1,23 @@
+# MongoDB Phase 5 Test Configuration
+TCP: 1883
+WS: 9000
+
+DefaultStoreType: MONGODB
+
+# MongoDB configuration
+MongoDB:
+  ConnectionString: mongodb://monstermq:monstermq@mongodb:27017/monstermq?authSource=admin
+  Database: monstermq
+
+Logging:
+  Mqtt:
+    Enabled: true
+  Memory:
+    Enabled: true
+    Entries: 1000
+    
+# Service endpoints
+GraphQL:
+  Enabled: false
+MCP:
+  Enabled: false
