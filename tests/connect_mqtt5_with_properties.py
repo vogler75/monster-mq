@@ -1,6 +1,5 @@
 """
 MQTT v5 Connection Test with Message Properties
-Tests Phase 9 implementation: Message properties in Topic Browser and Dashboard statistics
 """
 import paho.mqtt.client as mqtt
 import time
