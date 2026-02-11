@@ -392,6 +392,7 @@ class GraphQLServer(
                     .dataFetcher("brokers", metricsResolver.brokers())
                     .dataFetcher("sessions", metricsResolver.sessions())
                     .dataFetcher("session", metricsResolver.session())
+                    .dataFetcher("mqtt5Statistics", metricsResolver.mqtt5Statistics())
                     // User management queries
                     .dataFetcher("users", userManagementResolver.users())
                     // ArchiveGroup queries

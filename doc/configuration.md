@@ -87,6 +87,40 @@ If a client exceeds the configured threshold, the broker immediately disconnects
 
 This feature uses a periodic check with zero per-message overhead, leveraging existing metrics infrastructure for efficient enforcement.
 
+## MQTT v5.0 Server Properties
+
+MonsterMQ supports MQTT v5.0 protocol features that are advertised to clients via CONNACK properties. These settings control server-side capabilities and limits:
+
+```yaml
+Mqtt:
+  ServerKeepAlive: 60                # Keep-alive interval in seconds (0 = use client value)
+  ReceiveMaximum: 100                # Max in-flight QoS 1/2 messages per client (1-65535)
+  MaximumQoS: 2                      # Highest QoS level supported (0, 1, or 2)
+  RetainAvailable: true              # Whether retained messages are supported
+  MaximumPacketSize: 268435455       # Max packet size in bytes (default: ~256 MB)
+  TopicAliasMaximum: 10              # Max topic aliases per client (0-65535)
+  WildcardSubscriptionAvailable: true     # Whether wildcard subscriptions are allowed
+  SharedSubscriptionAvailable: true       # Whether shared subscriptions are supported
+```
+
+### Property Details
+
+- **ServerKeepAlive**: Keep-alive interval the server requests from clients. Set to `0` to accept client-provided values. Default: 60 seconds.
+- **ReceiveMaximum**: Flow control limit - maximum number of unacknowledged QoS 1 and QoS 2 messages the server allows per client. Prevents overwhelming clients. Default: 100, Range: 1-65535.
+- **MaximumQoS**: Highest Quality of Service level the server supports. Set to `2` for full MQTT compliance. Default: 2.
+- **RetainAvailable**: When `true`, clients can publish retained messages. When `false`, RETAIN flag is ignored. Default: true.
+- **MaximumPacketSize**: Maximum packet size in bytes the server accepts. Packets exceeding this are rejected. Default: 268435455 (~256 MB).
+- **TopicAliasMaximum**: Number of topic aliases the server supports per client. Topic aliases reduce bandwidth by replacing long topic names with 2-byte integers. Set to `0` to disable. Default: 10, Range: 0-65535.
+- **WildcardSubscriptionAvailable**: When `true`, clients can use `+` and `#` wildcards in subscriptions. Default: true.
+- **SharedSubscriptionAvailable**: When `true`, clients can use shared subscriptions (`$share/group/topic`). Default: true.
+
+### Notes
+
+- These properties are only sent to MQTT v5.0 clients in CONNACK packets
+- MQTT v3.1.1 clients ignore these settings and use protocol defaults
+- All properties have sensible defaults and do not need to be explicitly configured
+- See [mqtt5-features.md](mqtt5-features.md) for detailed MQTT v5.0 feature documentation
+
 ## Store Selection
 
 MonsterMQ supports multiple backends for sessions, retained messages, archive groups, metrics, and user storage. Select store types with the following keys:

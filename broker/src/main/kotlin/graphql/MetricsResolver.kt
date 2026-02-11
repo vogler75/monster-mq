@@ -195,6 +195,8 @@ class MetricsResolver(
             if (clientMetrics != null && clientDetails != null) {
                 // Found locally - use async approach for subscriptions
                 getSubscriptionsForClientAsync(clientId).thenAccept { subscriptions ->
+                    // Get v5 properties from session handler
+                    val v5Props = sessionHandler.getSessionV5Properties(clientId)
                     val session = Session(
                         clientId = clientId,
                         nodeId = clientDetails.nodeId,
@@ -203,7 +205,11 @@ class MetricsResolver(
                         sessionExpiryInterval = clientDetails.sessionExpiryInterval?.toLong() ?: 0L,
                         clientAddress = clientDetails.clientAddress,
                         connected = sessionHandler.getClientStatus(clientId) == at.rocworks.handlers.SessionHandler.ClientStatus.ONLINE,
-                        information = clientDetails.information
+                        information = clientDetails.information,
+                        protocolVersion = sessionHandler.getProtocolVersion(clientId) ?: 4,
+                        receiveMaximum = v5Props?.first,
+                        maximumPacketSize = v5Props?.second,
+                        topicAliasMaximum = v5Props?.third
                     )
                     future.complete(session)
                 }.exceptionally { e ->
@@ -256,7 +262,11 @@ class MetricsResolver(
                                         sessionExpiryInterval = response.getLong("sessionExpiryInterval", 0L),
                                         clientAddress = response.getString("clientAddress"),
                                         connected = response.getBoolean("connected", sessionConnected),
-                                        information = response.getString("information")
+                                        information = response.getString("information"),
+                                        protocolVersion = response.getInteger("protocolVersion", 4),
+                                        receiveMaximum = response.getInteger("receiveMaximum"),
+                                        maximumPacketSize = response.getInteger("maximumPacketSize"),
+                                        topicAliasMaximum = response.getInteger("topicAliasMaximum")
                                     )
                                     future.complete(session)
                                 }.exceptionally { e ->
@@ -311,6 +321,15 @@ class MetricsResolver(
                     // Get subscriptions asynchronously
                     getSubscriptionsForClientAsync(clientId).thenAccept { subscriptions ->
                         try {
+                            // Get protocol version and v5 properties
+                            val v5Props = if (nodeId == Monster.getClusterNodeId(vertx)) {
+                                sessionHandler.getSessionV5Properties(clientId)
+                            } else null
+                            
+                            val protocolVersion = if (nodeId == Monster.getClusterNodeId(vertx)) {
+                                sessionHandler.getProtocolVersion(clientId) ?: 4
+                            } else 4  // Default to v3.1.1 for remote nodes (would need event bus query to get actual version)
+                            
                             val session = Session(
                                 clientId = clientId,
                                 nodeId = nodeId,
@@ -319,7 +338,11 @@ class MetricsResolver(
                                 sessionExpiryInterval = clientDetails?.sessionExpiryInterval?.toLong() ?: 0L,
                                 clientAddress = clientDetails?.clientAddress,
                                 connected = connected,
-                                information = clientDetails?.information
+                                information = clientDetails?.information,
+                                protocolVersion = protocolVersion,
+                                receiveMaximum = v5Props?.first,
+                                maximumPacketSize = v5Props?.second,
+                                topicAliasMaximum = v5Props?.third
                             )
                             sessionFuture.complete(session)
                         } catch (e: Exception) {
@@ -370,9 +393,15 @@ class MetricsResolver(
             // Use the session store to get subscriptions from database
             val future = java.util.concurrent.CompletableFuture<Void>()
 
-            sessionStore.iterateSubscriptions { topic, subscriptionClientId, qos ->
+            sessionStore.iterateSubscriptions { topic, subscriptionClientId, qos, noLocal, retainHandling, retainAsPublished ->
                 if (subscriptionClientId == clientId) {
-                    subscriptions.add(MqttSubscription(topicFilter = topic, qos = qos))
+                    subscriptions.add(MqttSubscription(
+                        topicFilter = topic,
+                        qos = qos,
+                        noLocal = noLocal,
+                        retainHandling = retainHandling,
+                        retainAsPublished = retainAsPublished
+                    ))
                 }
             }.onComplete { result ->
                 if (result.succeeded()) {
@@ -397,9 +426,15 @@ class MetricsResolver(
 
         try {
             // Use the synchronous store to get subscriptions
-            sessionStore.sync.iterateSubscriptions { topic, subscriptionClientId, qos ->
+            sessionStore.sync.iterateSubscriptions { topic, subscriptionClientId, qos, noLocal, retainHandling, retainAsPublished ->
                 if (subscriptionClientId == clientId) {
-                    subscriptions.add(MqttSubscription(topicFilter = topic, qos = qos))
+                    subscriptions.add(MqttSubscription(
+                        topicFilter = topic,
+                        qos = qos,
+                        noLocal = noLocal,
+                        retainHandling = retainHandling,
+                        retainAsPublished = retainAsPublished
+                    ))
                 }
             }
         } catch (e: Exception) {
@@ -413,9 +448,15 @@ class MetricsResolver(
         val future = CompletableFuture<List<MqttSubscription>>()
         val subscriptions = mutableListOf<MqttSubscription>()
 
-        sessionStore.iterateSubscriptions { topic, subscriptionClientId, qos ->
+        sessionStore.iterateSubscriptions { topic, subscriptionClientId, qos, noLocal, retainHandling, retainAsPublished ->
             if (subscriptionClientId == clientId) {
-                subscriptions.add(MqttSubscription(topicFilter = topic, qos = qos))
+                subscriptions.add(MqttSubscription(
+                    topicFilter = topic,
+                    qos = qos,
+                    noLocal = noLocal,
+                    retainHandling = retainHandling,
+                    retainAsPublished = retainAsPublished
+                ))
             }
         }.onComplete { result ->
             if (result.succeeded()) {
@@ -1469,4 +1510,67 @@ class MetricsResolver(
             future
         }
     }
-}
+
+    fun mqtt5Statistics(): DataFetcher<CompletableFuture<Mqtt5Statistics>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Mqtt5Statistics>()
+            
+            vertx.executeBlocking<Mqtt5Statistics>(java.util.concurrent.Callable {
+                var totalSessions = 0
+                var mqtt5Sessions = 0
+                var mqtt3Sessions = 0
+                
+                try {
+                    // Iterate all sessions to count protocol versions
+                    sessionStore.iterateAllSessions { clientId, nodeId, connected, cleanSession ->
+                        totalSessions++
+                        
+                        // Get protocol version for this client
+                        val protocolVersion = if (nodeId == Monster.getClusterNodeId(vertx)) {
+                            // Local session - get from sessionHandler
+                            sessionHandler.getProtocolVersion(clientId) ?: 4
+                        } else {
+                            // Remote session - would need to query via event bus, default to v3 for now
+                            4  // Default to v3 for remote sessions 
+                        }
+                        
+                        if (protocolVersion == 5) {
+                            mqtt5Sessions++
+                        } else {
+                            mqtt3Sessions++
+                        }
+                    }.result()
+                    
+                    val percentage = if (totalSessions > 0) {
+                        (mqtt5Sessions.toDouble() / totalSessions.toDouble()) * 100.0
+                    } else {
+                        0.0
+                    }
+                    
+                    Mqtt5Statistics(
+                        totalSessions = totalSessions,
+                        mqtt5Sessions = mqtt5Sessions,
+                        mqtt3Sessions = mqtt3Sessions,
+                        mqtt5Percentage = kotlin.math.round(percentage * 10.0) / 10.0  // Round to 1 decimal place
+                    )
+                } catch (e: Exception) {
+                    logger.warning("Error getting MQTT v5 statistics: ${e.message}")
+                    Mqtt5Statistics(
+                        totalSessions = 0,
+                        mqtt5Sessions = 0,
+                        mqtt3Sessions = 0,
+                        mqtt5Percentage = 0.0
+                    )
+                }
+            }).onComplete { result ->
+                if (result.succeeded()) {
+                    future.complete(result.result())
+                } else {
+                    logger.warning("Failed to get MQTT v5 statistics: ${result.cause()?.message}")
+                    future.complete(Mqtt5Statistics(0, 0, 0, 0.0))
+                }
+            }
+            
+            future
+        }
+    }}

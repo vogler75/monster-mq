@@ -748,6 +748,16 @@ input MqttClientConnectionConfigInput {
     deleteOldestMessages: Boolean = true
     # Whether to verify SSL certificates (default: true, disable for self-signed certificates)
     sslVerifyCertificate: Boolean = true
+    # MQTT protocol version: 4 for v3.1.1, 5 for v5.0 (default: 4)
+    protocolVersion: Int = 4
+    # Session expiry interval in seconds (MQTT v5 only, 0-4294967295, default: 0)
+    sessionExpiryInterval: Long
+    # Maximum number of QoS 1 and QoS 2 publications that the client is willing to process concurrently (MQTT v5 only, 1-65535, default: 65535)
+    receiveMaximum: Int
+    # Maximum packet size the client is willing to accept (MQTT v5 only, 1-268435455 bytes)
+    maximumPacketSize: Long
+    # Maximum number of topic aliases the client is willing to accept (MQTT v5 only, 0-65535, default: 0)
+    topicAliasMaximum: Int
 }
 
 # Input for MQTT client address mapping
@@ -762,6 +772,30 @@ input MqttClientAddressInput {
     removePath: Boolean = true
     # QoS level for MQTT messages (0, 1, or 2)
     qos: Int = 0
+    # MQTT v5 Subscription Options (only for SUBSCRIBE mode)
+    # No Local: Don't receive messages you published (prevents loops)
+    noLocal: Boolean = false
+    # Retain Handling: 0=Send retained, 1=Send retained only if new sub, 2=Never send retained
+    retainHandling: Int = 0
+    # Retain As Published: Preserve original retain flag when forwarding
+    retainAsPublished: Boolean = false
+    # MQTT v5 Message Properties (only for PUBLISH mode)
+    # Message expiry interval in seconds (0 = no expiry)
+    messageExpiryInterval: Long
+    # MIME type of the message payload
+    contentType: String
+    # Topic pattern for request-response pattern
+    responseTopicPattern: String
+    # Indicates payload is UTF-8 encoded text
+    payloadFormatIndicator: Boolean = false
+    # Custom key-value metadata pairs
+    userProperties: [UserPropertyInput!]
+}
+
+# Input for user property key-value pair
+input UserPropertyInput {
+    key: String!
+    value: String!
 }
 
 # Kafka Client Mutations - Grouped operations for Kafka client management

@@ -1,0 +1,24 @@
+# CrateDB Phase 5 Test Configuration
+TCP: 1883
+WS: 9000
+
+DefaultStoreType: CRATEDB
+
+# CrateDB configuration
+CrateDB:
+  Url: jdbc:postgresql://cratedb:5432/monstermq
+  User: crate
+  Pass: 
+
+Logging:
+  Mqtt:
+    Enabled: true
+  Memory:
+    Enabled: true
+    Entries: 1000
+    
+# Service endpoints
+GraphQL:
+  Enabled: false
+MCP:
+  Enabled: false

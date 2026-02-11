@@ -455,6 +455,10 @@ class GraphQLDashboardClient {
                     clientAddress
                     connected
                     queuedMessageCount
+                    protocolVersion
+                    receiveMaximum
+                    maximumPacketSize
+                    topicAliasMaximum
                 }
             }
         `;
@@ -477,6 +481,9 @@ class GraphQLDashboardClient {
                     subscriptions {
                         topicFilter
                         qos
+                        noLocal
+                        retainHandling
+                        retainAsPublished
                     }
                     cleanSession
                     sessionExpiryInterval
@@ -484,6 +491,10 @@ class GraphQLDashboardClient {
                     connected
                     queuedMessageCount
                     information
+                    protocolVersion
+                    receiveMaximum
+                    maximumPacketSize
+                    topicAliasMaximum
                 }
             }
         `;

@@ -138,7 +138,12 @@ class SubscriptionResolver(
                     timestamp = message.time.toEpochMilli(),
                     qos = message.qosLevel,
                     retained = message.isRetain,
-                    clientId = message.clientId
+                    clientId = message.clientId,
+                    messageExpiryInterval = message.messageExpiryInterval,
+                    contentType = message.contentType,
+                    responseTopic = message.responseTopic,
+                    payloadFormatIndicator = message.payloadFormatIndicator,
+                    userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
                 )
 
                 synchronized(this) {
@@ -244,7 +249,12 @@ class SubscriptionResolver(
                     timestamp = message.time.toEpochMilli(),
                     qos = message.qosLevel,
                     retained = message.isRetain,
-                    clientId = message.clientId
+                    clientId = message.clientId,
+                    messageExpiryInterval = message.messageExpiryInterval,
+                    contentType = message.contentType,
+                    responseTopic = message.responseTopic,
+                    payloadFormatIndicator = message.payloadFormatIndicator,
+                    userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
                 )
 
                 synchronized(this) {

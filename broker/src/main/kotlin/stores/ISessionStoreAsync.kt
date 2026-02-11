@@ -14,7 +14,7 @@ interface ISessionStoreAsync {
     fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit): Future<Void>
     fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit): Future<Void>
     fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: BrokerMessage) -> Unit): Future<Void>
-    fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int) -> Unit): Future<Void>
+    fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean) -> Unit): Future<Void>
 
     fun setClient(clientId: String, nodeId: String, cleanSession: Boolean, connected: Boolean, information: JsonObject): Future<Void>
     fun setLastWill(clientId: String, message: BrokerMessage?): Future<Void>
@@ -43,6 +43,7 @@ interface ISessionStoreAsync {
     fun markMessageDelivered(clientId: String, messageUuid: String): Future<Void>
     fun resetInFlightMessages(clientId: String): Future<Void>
     fun purgeDeliveredMessages(): Future<Int>
+    fun purgeExpiredMessages(): Future<Int>
 
     fun purgeQueuedMessages(): Future<Void>
     fun purgeSessions(): Future<Void>

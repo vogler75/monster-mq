@@ -8,12 +8,24 @@ enum class DataFormat {
     BINARY
 }
 
+// MQTT v5.0 User Property
+data class UserProperty(
+    val key: String,
+    val value: String
+)
+
 data class TopicValue(
     val topic: String,
     val payload: String,
     val format: DataFormat,
     val timestamp: Long,
-    val qos: Int
+    val qos: Int,
+    // MQTT v5.0 message properties
+    val messageExpiryInterval: Long? = null,
+    val contentType: String? = null,
+    val responseTopic: String? = null,
+    val payloadFormatIndicator: Int? = null,
+    val userProperties: List<UserProperty>? = null
 )
 
 data class RetainedMessage(
@@ -21,7 +33,13 @@ data class RetainedMessage(
     val payload: String,
     val format: DataFormat,
     val timestamp: Long,
-    val qos: Int
+    val qos: Int,
+    // MQTT v5.0 message properties
+    val messageExpiryInterval: Long? = null,
+    val contentType: String? = null,
+    val responseTopic: String? = null,
+    val payloadFormatIndicator: Int? = null,
+    val userProperties: List<UserProperty>? = null
 )
 
 data class ArchivedMessage(
@@ -30,7 +48,13 @@ data class ArchivedMessage(
     val format: DataFormat,
     val timestamp: Long,
     val qos: Int,
-    val clientId: String?
+    val clientId: String?,
+    // MQTT v5.0 message properties
+    val messageExpiryInterval: Long? = null,
+    val contentType: String? = null,
+    val responseTopic: String? = null,
+    val payloadFormatIndicator: Int? = null,
+    val userProperties: List<UserProperty>? = null
 )
 
 data class TopicUpdate(
@@ -40,7 +64,13 @@ data class TopicUpdate(
     val timestamp: Long,
     val qos: Int,
     val retained: Boolean,
-    val clientId: String?
+    val clientId: String?,
+    // MQTT v5.0 message properties
+    val messageExpiryInterval: Long? = null,
+    val contentType: String? = null,
+    val responseTopic: String? = null,
+    val payloadFormatIndicator: Int? = null,
+    val userProperties: List<UserProperty>? = null
 )
 
 data class TopicUpdateBulk(
@@ -191,6 +221,13 @@ data class SessionMetrics(
     val timestamp: String
 )
 
+data class Mqtt5Statistics(
+    val totalSessions: Int,
+    val mqtt5Sessions: Int,
+    val mqtt3Sessions: Int,
+    val mqtt5Percentage: Double
+)
+
 data class MqttClientMetrics(
     val messagesIn: Double,
     val messagesOut: Double,
@@ -259,7 +296,11 @@ data class ArchiveGroupMetrics(
 
 data class MqttSubscription(
     val topicFilter: String,
-    val qos: Int
+    val qos: Int,
+    // MQTT v5 Subscription Options
+    val noLocal: Boolean = false,
+    val retainHandling: Int = 0,  // 0=always, 1=if new, 2=never
+    val retainAsPublished: Boolean = false
 )
 
 data class Session(
@@ -270,7 +311,12 @@ data class Session(
     val sessionExpiryInterval: Long,
     val clientAddress: String?,
     val connected: Boolean,
-    val information: String?
+    val information: String?,
+    // MQTT v5 Connection Properties
+    val protocolVersion: Int = 4,  // 4 = MQTT v3.1.1, 5 = MQTT v5.0
+    val receiveMaximum: Int? = null,  // null for v3.1.1 clients
+    val maximumPacketSize: Int? = null,  // null for v3.1.1 clients
+    val topicAliasMaximum: Int? = null  // null for v3.1.1 clients
 )
 
 object PayloadConverter {

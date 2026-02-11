@@ -464,6 +464,20 @@ class MqttClientConfigMutations(
                 val localTopic = inputMap["localTopic"] as? String
                 val removePath = inputMap["removePath"] as? Boolean ?: true
                 val qos = inputMap["qos"] as? Int ?: 0
+                // MQTT v5 Subscription Options
+                val noLocal = inputMap["noLocal"] as? Boolean ?: false
+                val retainHandling = inputMap["retainHandling"] as? Int ?: 0
+                val retainAsPublished = inputMap["retainAsPublished"] as? Boolean ?: false
+                // MQTT v5 Message Properties
+                val messageExpiryInterval = (inputMap["messageExpiryInterval"] as? Number)?.toLong()
+                val contentType = inputMap["contentType"] as? String
+                val responseTopicPattern = inputMap["responseTopicPattern"] as? String
+                val payloadFormatIndicator = inputMap["payloadFormatIndicator"] as? Boolean ?: false
+                val userPropertiesList = (inputMap["userProperties"] as? List<Map<String, Any>>)?.mapNotNull { prop ->
+                    val key = prop["key"] as? String
+                    val value = prop["value"] as? String
+                    if (key != null && value != null) at.rocworks.stores.devices.UserProperty(key, value) else null
+                } ?: emptyList()
 
                 if (mode == null || remoteTopic == null || localTopic == null) {
                     future.complete(
@@ -481,7 +495,15 @@ class MqttClientConfigMutations(
                     remoteTopic = remoteTopic,
                     localTopic = localTopic,
                     removePath = removePath,
-                    qos = qos
+                    qos = qos,
+                    noLocal = noLocal,
+                    retainHandling = retainHandling,
+                    retainAsPublished = retainAsPublished,
+                    messageExpiryInterval = messageExpiryInterval,
+                    contentType = contentType,
+                    responseTopicPattern = responseTopicPattern,
+                    payloadFormatIndicator = payloadFormatIndicator,
+                    userProperties = userPropertiesList
                 )
 
                 val validationErrors = address.validate()
@@ -600,6 +622,20 @@ class MqttClientConfigMutations(
                 val localTopic = inputMap["localTopic"] as? String
                 val removePath = inputMap["removePath"] as? Boolean ?: true
                 val qos = inputMap["qos"] as? Int ?: 0
+                // MQTT v5 Subscription Options
+                val noLocal = inputMap["noLocal"] as? Boolean ?: false
+                val retainHandling = inputMap["retainHandling"] as? Int ?: 0
+                val retainAsPublished = inputMap["retainAsPublished"] as? Boolean ?: false
+                // MQTT v5 Message Properties
+                val messageExpiryInterval = (inputMap["messageExpiryInterval"] as? Number)?.toLong()
+                val contentType = inputMap["contentType"] as? String
+                val responseTopicPattern = inputMap["responseTopicPattern"] as? String
+                val payloadFormatIndicator = inputMap["payloadFormatIndicator"] as? Boolean ?: false
+                val userPropertiesList = (inputMap["userProperties"] as? List<Map<String, Any>>)?.mapNotNull { prop ->
+                    val key = prop["key"] as? String
+                    val value = prop["value"] as? String
+                    if (key != null && value != null) at.rocworks.stores.devices.UserProperty(key, value) else null
+                } ?: emptyList()
 
                 if (mode == null || newRemoteTopic == null || localTopic == null) {
                     future.complete(
@@ -617,7 +653,15 @@ class MqttClientConfigMutations(
                     remoteTopic = newRemoteTopic,
                     localTopic = localTopic,
                     removePath = removePath,
-                    qos = qos
+                    qos = qos,
+                    noLocal = noLocal,
+                    retainHandling = retainHandling,
+                    retainAsPublished = retainAsPublished,
+                    messageExpiryInterval = messageExpiryInterval,
+                    contentType = contentType,
+                    responseTopicPattern = responseTopicPattern,
+                    payloadFormatIndicator = payloadFormatIndicator,
+                    userProperties = userPropertiesList
                 )
 
                 val validationErrors = updatedAddress.validate()
@@ -855,7 +899,13 @@ class MqttClientConfigMutations(
             persistBuffer = configMap["persistBuffer"] as? Boolean ?: false,
             deleteOldestMessages = configMap["deleteOldestMessages"] as? Boolean ?: true,
             loopPrevention = configMap["loopPrevention"] as? Boolean ?: true,
-            sslVerifyCertificate = configMap["sslVerifyCertificate"] as? Boolean ?: true
+            sslVerifyCertificate = configMap["sslVerifyCertificate"] as? Boolean ?: true,
+            // MQTT v5 properties
+            protocolVersion = (configMap["protocolVersion"] as? Number)?.toInt() ?: 4,
+            sessionExpiryInterval = (configMap["sessionExpiryInterval"] as? Number)?.toLong(),
+            receiveMaximum = (configMap["receiveMaximum"] as? Number)?.toInt(),
+            maximumPacketSize = (configMap["maximumPacketSize"] as? Number)?.toLong(),
+            topicAliasMaximum = (configMap["topicAliasMaximum"] as? Number)?.toInt()
         )
 
         return DeviceConfigRequest(
@@ -903,6 +953,11 @@ class MqttClientConfigMutations(
                 "persistBuffer" to config.persistBuffer,
                 "deleteOldestMessages" to config.deleteOldestMessages,
                 "sslVerifyCertificate" to config.sslVerifyCertificate,
+                "protocolVersion" to config.protocolVersion,
+                "sessionExpiryInterval" to config.sessionExpiryInterval,
+                "receiveMaximum" to config.receiveMaximum,
+                "maximumPacketSize" to config.maximumPacketSize,
+                "topicAliasMaximum" to config.topicAliasMaximum,
                 "addresses" to config.addresses.map { address ->
                     mapOf(
                         "mode" to address.mode,

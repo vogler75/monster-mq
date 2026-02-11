@@ -1,5 +1,17 @@
 # Python test dependencies for MonsterMQ integration tests
-paho-mqtt>=1.6.1,<2.0.0
+
+# MQTT Client Library
+paho-mqtt>=2.0.0
+
+# Other Protocol Libraries
 asyncua>=1.1.3,<2.0.0
 websockets
 requests
+
+# Testing Framework
+pytest>=7.4.3
+pytest-xdist>=3.5.0      # Parallel test execution
+pytest-timeout>=2.2.0    # Test timeouts
+pytest-html>=4.1.1       # HTML reports
+pytest-cov>=4.1.0        # Coverage reports
+pytest-mock>=3.12.0      # Mocking support

@@ -49,6 +49,7 @@ import select
 import os
 import tty
 import termios
+import pytest
 from datetime import datetime
 from typing import Optional, List
 

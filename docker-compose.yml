@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-monster}
+      POSTGRES_USER: ${POSTGRES_USER:-system}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-manager}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-system} -d ${POSTGRES_DB:-monster} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  monstermq:
+    # Image name is configurable via .env or the MONSTERMQ_IMAGE env var.
+    image: "${MONSTERMQ_IMAGE:-monstermq:latest}"
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    volumes:
+      - ./config.yaml:/app/config.yaml
+    environment:
+      # These will be available to the container; the broker should read its DB config from config.yaml,
+      # but these envs are provided for convenience if the image reads env vars instead.
+      - POSTGRES_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-monster}
+      - POSTGRES_USER=${POSTGRES_USER:-system}
+      - POSTGRES_PASS=${POSTGRES_PASSWORD:-manager}
+    ports:
+      - "1883:1883"
+      - "9000:9000"
+      - "4000:4000"   # GraphQL/API
+     # - "4840:4840"   # MCP
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+  provisioner:
+    image: curlimages/curl:latest
+    # This service runs once at startup and attempts to provision users and ACLs via the broker API.
+    depends_on:
+      - monstermq
+    volumes:
+      - ./init:/docker-entrypoint-init:ro
+    entrypoint: ["/bin/sh","-c","sh /docker-entrypoint-init/provision.sh"]
+
+volumes:
+  pgdata:
