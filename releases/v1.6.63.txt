@@ -1,0 +1,11 @@
+Release v1.6.63
+Built from commit: a08b3b1
+Date: 2026-02-02 23:06:09
+
+Changes since v1.6.62:
+---
+a08b3b1 Fix #93: Add configurable hostname and bind address for OPC UA Server
+a7a3fd9 Improve topic tree state restoration and expansion logic
+7d5f383 Comment out token expiry debug log
+d3afa40 Fix #82: Cascade delete flow instances when deleting flow class
+883e18b Add archive group listing and aggregated query tools

@@ -83,6 +83,8 @@ async function loadServers() {
                     namespaceUri
                     nodeId
                     enabled
+                    hostname
+                    bindAddress
                     bufferSize
                     updateInterval
                     createdAt
@@ -335,6 +337,8 @@ function collectFormData() {
         nodeId: document.getElementById('server-node').value,
         port: parseInt(document.getElementById('server-port').value),
         path: document.getElementById('server-path').value.trim() || 'monstermq',
+        hostname: document.getElementById('server-hostname').value.trim() || null,
+        bindAddress: document.getElementById('server-bind-address').value.trim() || null,
         enabled: document.getElementById('server-enabled').checked,
         updateInterval: parseInt(document.getElementById('update-interval').value) || 1000,
         bufferSize: parseInt(document.getElementById('buffer-size').value) || 1000

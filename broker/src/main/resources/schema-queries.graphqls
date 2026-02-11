@@ -490,6 +490,10 @@ type OpcUaServer {
     port: Int!
     # OPC UA server endpoint path
     path: String!
+    # Override hostname used in endpoint URLs (null = auto-detect system hostname)
+    hostname: String
+    # Network address to bind to (null = 0.0.0.0 for all interfaces)
+    bindAddress: String
     # OPC UA namespace index
     namespaceIndex: Int!
     # OPC UA namespace URI
