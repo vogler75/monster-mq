@@ -128,7 +128,13 @@ class MqttClientConfigQueries(
                 "bufferSize" to config.bufferSize,
                 "persistBuffer" to config.persistBuffer,
                 "deleteOldestMessages" to config.deleteOldestMessages,
-                "sslVerifyCertificate" to config.sslVerifyCertificate
+                "sslVerifyCertificate" to config.sslVerifyCertificate,
+                // MQTT v5 connection properties
+                "protocolVersion" to config.protocolVersion,
+                "sessionExpiryInterval" to config.sessionExpiryInterval,
+                "receiveMaximum" to config.receiveMaximum,
+                "maximumPacketSize" to config.maximumPacketSize,
+                "topicAliasMaximum" to config.topicAliasMaximum
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),
