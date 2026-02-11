@@ -344,6 +344,7 @@ class SessionStoreMongoDB(
                 Document("\$sort", Document("message.message_uuid", 1))
             )
 
+            val currentTimeMillis = System.currentTimeMillis()
             val results = queuedMessagesClientsCollection.aggregate(pipeline)
             for (doc in results) {
                 val messageDoc = doc.get("message", Document::class.java)
@@ -354,6 +355,17 @@ class SessionStoreMongoDB(
                 val qos = messageDoc.getInteger("qos")
                 val retained = messageDoc.getBoolean("retained")
                 val clientIdPublisher = messageDoc.getString("client_id")
+                val creationTime = messageDoc.getLong("creation_time")
+                val messageExpiryInterval = messageDoc.getLong("message_expiry_interval")
+                
+                // Check if message has expired
+                if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                    val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                    if (ageSeconds >= messageExpiryInterval) {
+                        // Skip expired message
+                        continue
+                    }
+                }
 
                 val continueProcessing = callback(
                     BrokerMessage(
@@ -365,7 +377,9 @@ class SessionStoreMongoDB(
                         isRetain = retained,
                         isDup = false,
                         isQueued = true,
-                        clientId = clientIdPublisher
+                        clientId = clientIdPublisher,
+                        time = java.time.Instant.ofEpochMilli(creationTime),
+                        messageExpiryInterval = messageExpiryInterval
                     )
                 )
                 if (!continueProcessing) break
@@ -412,10 +426,23 @@ class SessionStoreMongoDB(
                 Document("\$limit", limit)
             )
 
+            val currentTimeMillis = System.currentTimeMillis()
             val results = queuedMessagesClientsCollection.aggregate(pipeline)
             results.mapNotNull { doc ->
                 val messageDoc = doc.get("message", Document::class.java)
                 if (messageDoc != null) {
+                    val creationTime = messageDoc.getLong("creation_time")
+                    val messageExpiryInterval = messageDoc.getLong("message_expiry_interval")
+                    
+                    // Check if message has expired
+                    if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                        val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                        if (ageSeconds >= messageExpiryInterval) {
+                            // Skip expired message
+                            return@mapNotNull null
+                        }
+                    }
+                    
                     BrokerMessage(
                         messageUuid = messageDoc.getString("message_uuid"),
                         messageId = messageDoc.getInteger("message_id"),
@@ -425,7 +452,9 @@ class SessionStoreMongoDB(
                         isRetain = messageDoc.getBoolean("retained"),
                         isDup = false,
                         isQueued = true,
-                        clientId = messageDoc.getString("client_id")
+                        clientId = messageDoc.getString("client_id"),
+                        time = java.time.Instant.ofEpochMilli(creationTime),
+                        messageExpiryInterval = messageExpiryInterval
                     )
                 } else null
             }.toList()

@@ -168,6 +168,14 @@ type Session {
     queuedMessageCount: Long!
     # Additional session information as JSON
     information: String
+    # MQTT protocol version (4 = v3.1.1, 5 = v5.0)
+    protocolVersion: Int
+    # MQTT v5: Receive Maximum (max number of QoS 1/2 messages in flight)
+    receiveMaximum: Int
+    # MQTT v5: Maximum Packet Size in bytes
+    maximumPacketSize: Long
+    # MQTT v5: Topic Alias Maximum (max number of topic aliases)
+    topicAliasMaximum: Int
 }
 
 # Metrics for a single session
@@ -214,4 +222,10 @@ type MqttSubscription {
     topicFilter: String!
     # The Quality of Service level
     qos: Int!
+    # MQTT v5: No Local option (don't receive own messages)
+    noLocal: Boolean
+    # MQTT v5: Retain Handling (0=always, 1=if new, 2=never)
+    retainHandling: Int
+    # MQTT v5: Retain As Published option (preserve retain flag)
+    retainAsPublished: Boolean
 }

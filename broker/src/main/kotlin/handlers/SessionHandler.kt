@@ -716,6 +716,40 @@ open class SessionHandler(
     fun getClientDetails(clientId: String): ClientDetails? = clientDetails[clientId]
 
     /**
+     * Get the MQTT protocol version for a client (4 for v3.1.1, 5 for v5.0)
+     * Returns null if client not found
+     */
+    fun getProtocolVersion(clientId: String): Int? {
+        return clientDetails[clientId]?.information?.let { jsonString ->
+            try {
+                JsonObject(jsonString).getInteger("ProtocolVersion")
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    /**
+     * Get MQTT v5 session properties for a client from clientDetails
+     * This extracts receiveMaximum, maximumPacketSize, and topicAliasMaximum
+     * Returns null values for properties not available (v3.1.1 clients or not set)
+     */
+    fun getSessionV5Properties(clientId: String): Triple<Int?, Int?, Int?>? {
+        return clientDetails[clientId]?.information?.let { jsonString ->
+            try {
+                val info = JsonObject(jsonString)
+                Triple(
+                    info.getInteger("ReceiveMaximum"),
+                    info.getInteger("MaximumPacketSize"),
+                    info.getInteger("TopicAliasMaximum")
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    /**
      * Check if a client should have persistent message storage.
      * Only clients with non-clean sessions should have messages queued.
      * Clean sessions should not persist any messages.

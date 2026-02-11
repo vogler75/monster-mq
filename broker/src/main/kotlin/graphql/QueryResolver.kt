@@ -77,7 +77,12 @@ class QueryResolver(
                             payload = payload,
                             format = actualFormat,
                             timestamp = message.time.toEpochMilli(),
-                            qos = message.qosLevel
+                            qos = message.qosLevel,
+                            messageExpiryInterval = message.messageExpiryInterval,
+                            contentType = message.contentType,
+                            responseTopic = message.responseTopic,
+                            payloadFormatIndicator = message.payloadFormatIndicator,
+                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
                         )
                     )
                 } else {
@@ -131,7 +136,12 @@ class QueryResolver(
                             payload = payload,
                             format = actualFormat,
                             timestamp = message.time.toEpochMilli(),
-                            qos = message.qosLevel
+                            qos = message.qosLevel,
+                            messageExpiryInterval = message.messageExpiryInterval,
+                            contentType = message.contentType,
+                            responseTopic = message.responseTopic,
+                            payloadFormatIndicator = message.payloadFormatIndicator,
+                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
                         )
                     )
                     count++
@@ -195,7 +205,12 @@ class QueryResolver(
                             payload = payload,
                             format = actualFormat,
                             timestamp = message.time.toEpochMilli(),
-                            qos = message.qosLevel
+                            qos = message.qosLevel,
+                            messageExpiryInterval = message.messageExpiryInterval,
+                            contentType = message.contentType,
+                            responseTopic = message.responseTopic,
+                            payloadFormatIndicator = message.payloadFormatIndicator,
+                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
                         )
                     )
                     true // stop processing
@@ -252,7 +267,12 @@ class QueryResolver(
                             payload = payload,
                             format = actualFormat,
                             timestamp = message.time.toEpochMilli(),
-                            qos = message.qosLevel
+                            qos = message.qosLevel,
+                            messageExpiryInterval = message.messageExpiryInterval,
+                            contentType = message.contentType,
+                            responseTopic = message.responseTopic,
+                            payloadFormatIndicator = message.payloadFormatIndicator,
+                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
                         )
                     )
                     count++
@@ -366,7 +386,14 @@ class QueryResolver(
                         format = actualFormat,
                         timestamp = obj.getLong("timestamp", 0L),
                         qos = obj.getInteger("qos", 0),
-                        clientId = obj.getString("client_id")
+                        clientId = obj.getString("client_id"),
+                        messageExpiryInterval = obj.getLong("message_expiry_interval"),
+                        contentType = obj.getString("content_type"),
+                        responseTopic = obj.getString("response_topic"),
+                        payloadFormatIndicator = obj.getInteger("payload_format_indicator"),
+                        userProperties = obj.getJsonObject("user_properties")?.map?.mapNotNull { (k, v) -> 
+                            if (v is String) at.rocworks.extensions.graphql.UserProperty(k, v) else null 
+                        }
                     )
                 )
             }
@@ -848,7 +875,12 @@ class QueryResolver(
                             payload = payload,
                             format = actualFormat,
                             timestamp = message.time.toEpochMilli(),
-                            qos = message.qosLevel
+                            qos = message.qosLevel,
+                            messageExpiryInterval = message.messageExpiryInterval,
+                            contentType = message.contentType,
+                            responseTopic = message.responseTopic,
+                            payloadFormatIndicator = message.payloadFormatIndicator,
+                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
                         )
                     )
                 } else {

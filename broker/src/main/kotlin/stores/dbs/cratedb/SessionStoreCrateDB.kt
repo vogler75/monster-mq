@@ -98,23 +98,26 @@ class SessionStoreCrateDB(
                 );             
                 """.trimIndent(), """
                 CREATE TABLE IF NOT EXISTS $queuedMessagesClientsTableName (
-                    client_id VARCHAR(65535),
-                    message_uuid VARCHAR(36),
-                    status INTEGER DEFAULT 0,
+                    client_id VARCHAR(65535) INDEX USING PLAIN,
+                    message_uuid VARCHAR(36) INDEX USING PLAIN,
+                    status INTEGER DEFAULT 0 INDEX USING PLAIN,
                     PRIMARY KEY (client_id, message_uuid)
                 );
                 """.trimIndent())
 
-                // Create indexes
-                val createIndexesSQL = listOf(
-                    "CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_message_uuid_idx ON $queuedMessagesClientsTableName (message_uuid);",
-                    "CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_client_status_idx ON $queuedMessagesClientsTableName (client_id, status);"
-                )
-
-                // Execute the SQL statements
+                // Execute the SQL statements (CrateDB doesn't support standalone CREATE INDEX)
                 connection.createStatement().use { statement ->
                     createTableSQL.forEach(statement::executeUpdate)
-                    createIndexesSQL.forEach(statement::executeUpdate)
+                    
+                    // Migration: Add retain_as_published column if it doesn't exist
+                    try {
+                        statement.executeUpdate("""
+                        ALTER TABLE $subscriptionsTableName ADD COLUMN IF NOT EXISTS retain_as_published BOOLEAN DEFAULT false
+                        """.trimIndent())
+                        logger.fine("Subscription migration: Added retain_as_published column")
+                    } catch (e: Exception) {
+                        logger.fine("Subscription migration: Column may already exist: ${e.message}")
+                    }
                 }
                 logger.info("Tables are ready [${Utils.getCurrentFunctionName()}]")
                 promise.complete()
@@ -496,7 +499,7 @@ class SessionStoreCrateDB(
     }
 
     override fun dequeueMessages(clientId: String, callback: (BrokerMessage)->Boolean) {
-        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id "+
+        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id, m.creation_time, m.message_expiry_interval "+
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) "+
                   "WHERE c.client_id = ? "+
                   "ORDER BY m.message_uuid" // Time Based UUIDs
@@ -509,6 +512,7 @@ class SessionStoreCrateDB(
                 connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, clientId)
                     val resultSet = preparedStatement.executeQuery()
+                    val currentTimeMillis = System.currentTimeMillis()
                     while (resultSet.next()) {
                         val messageUuid = resultSet.getString(1)
                         val messageId = resultSet.getInt(2)
@@ -516,7 +520,20 @@ class SessionStoreCrateDB(
                         val payload = BrokerMessage.getPayloadFromBase64(resultSet.getString(4))
                         val qos = resultSet.getInt(5)
                         val retained = resultSet.getBoolean(6)
-                        val clientIdPublisher = resultSet.getString(6)
+                        val clientIdPublisher = resultSet.getString(7)
+                        val creationTime = resultSet.getLong(8)
+                        val messageExpiryIntervalRaw = resultSet.getLong(9)
+                        val messageExpiryInterval = if (resultSet.wasNull()) null else messageExpiryIntervalRaw
+                        
+                        // Check if message has expired
+                        if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                            val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                            if (ageSeconds >= messageExpiryInterval) {
+                                // Skip expired message
+                                continue
+                            }
+                        }
+                        
                         val continueProcessing = callback(
                             BrokerMessage(
                                 messageUuid = messageUuid,
@@ -527,7 +544,9 @@ class SessionStoreCrateDB(
                                 isRetain = retained,
                                 isDup = false,
                                 isQueued = true,
-                                clientId = clientIdPublisher
+                                clientId = clientIdPublisher,
+                                time = java.time.Instant.ofEpochMilli(creationTime),
+                                messageExpiryInterval = messageExpiryInterval
                             )
                         )
                         if (!continueProcessing) break
@@ -569,7 +588,7 @@ class SessionStoreCrateDB(
     }
 
     override fun fetchPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
-        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id " +
+        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id, m.creation_time, m.message_expiry_interval " +
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) " +
                   "WHERE c.client_id = ? AND c.status = 0 " +
                   "ORDER BY m.message_uuid LIMIT ?"
@@ -580,18 +599,41 @@ class SessionStoreCrateDB(
                     preparedStatement.setString(1, clientId)
                     preparedStatement.setInt(2, limit)
                     val resultSet = preparedStatement.executeQuery()
+                    val currentTimeMillis = System.currentTimeMillis()
                     val messages = mutableListOf<BrokerMessage>()
                     while (resultSet.next()) {
+                        val messageUuid = resultSet.getString(1)
+                        val messageId = resultSet.getInt(2)
+                        val topic = resultSet.getString(3)
+                        val payload = BrokerMessage.getPayloadFromBase64(resultSet.getString(4))
+                        val qos = resultSet.getInt(5)
+                        val retained = resultSet.getBoolean(6)
+                        val clientIdPublisher = resultSet.getString(7)
+                        val creationTime = resultSet.getLong(8)
+                        val messageExpiryIntervalRaw = resultSet.getLong(9)
+                        val messageExpiryInterval = if (resultSet.wasNull()) null else messageExpiryIntervalRaw
+                        
+                        // Check if message has expired
+                        if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                            val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                            if (ageSeconds >= messageExpiryInterval) {
+                                // Skip expired message
+                                continue
+                            }
+                        }
+                        
                         messages.add(BrokerMessage(
-                            messageUuid = resultSet.getString(1),
-                            messageId = resultSet.getInt(2),
-                            topicName = resultSet.getString(3),
-                            payload = BrokerMessage.getPayloadFromBase64(resultSet.getString(4)),
-                            qosLevel = resultSet.getInt(5),
-                            isRetain = resultSet.getBoolean(6),
+                            messageUuid = messageUuid,
+                            messageId = messageId,
+                            topicName = topic,
+                            payload = payload,
+                            qosLevel = qos,
+                            isRetain = retained,
                             isDup = false,
                             isQueued = true,
-                            clientId = resultSet.getString(7)
+                            clientId = clientIdPublisher,
+                            time = java.time.Instant.ofEpochMilli(creationTime),
+                            messageExpiryInterval = messageExpiryInterval
                         ))
                     }
                     messages

@@ -93,22 +93,37 @@ class SessionStoreSQLite(
             if (result.succeeded()) {
                 // Migration: Add retain_as_published column if it doesn't exist
                 val checkColumnSql = "PRAGMA table_info($subscriptionsTableName)"
-                sqlClient.executeQuerySync(checkColumnSql).let { rows ->
-                    val hasColumn = rows.any { row ->
-                        (row as JsonObject).getString("name") == "retain_as_published"
-                    }
-                    if (!hasColumn) {
-                        logger.info("Migrating subscriptions table: adding retain_as_published column")
-                        try {
-                            sqlClient.executeUpdateSync("ALTER TABLE $subscriptionsTableName ADD COLUMN retain_as_published INTEGER DEFAULT 0")
-                            logger.info("Successfully added retain_as_published column")
-                        } catch (e: Exception) {
-                            logger.warning("Migration warning (may be safe to ignore if column exists): ${e.message}")
+                sqlClient.executeQuery(checkColumnSql, JsonArray()).onComplete { queryResult ->
+                    if (queryResult.succeeded()) {
+                        val rows = queryResult.result()
+                        val hasColumn = rows.any { row ->
+                            (row as JsonObject).getString("name") == "retain_as_published"
                         }
+                        if (!hasColumn) {
+                            logger.info("Migrating subscriptions table: adding retain_as_published column")
+                            sqlClient.executeUpdate(
+                                "ALTER TABLE $subscriptionsTableName ADD COLUMN retain_as_published INTEGER DEFAULT 0",
+                                JsonArray()
+                            ).onComplete { updateResult ->
+                                if (updateResult.succeeded()) {
+                                    logger.info("Successfully added retain_as_published column")
+                                } else {
+                                    logger.warning("Migration warning (may be safe to ignore if column exists): ${updateResult.cause()?.message}")
+                                }
+                                logger.info("SQLite session tables are ready [start]")
+                                startPromise.complete()
+                            }
+                        } else {
+                            logger.fine("Column retain_as_published already exists, skipping migration")
+                            logger.info("SQLite session tables are ready [start]")
+                            startPromise.complete()
+                        }
+                    } else {
+                        logger.warning("Could not check for retain_as_published column: ${queryResult.cause()?.message}")
+                        logger.info("SQLite session tables are ready [start]")
+                        startPromise.complete()
                     }
                 }
-                logger.info("SQLite session tables are ready [start]")
-                startPromise.complete()
             } else {
                 logger.severe("Failed to initialize SQLite session tables: ${result.cause()?.message}")
                 startPromise.fail(result.cause())

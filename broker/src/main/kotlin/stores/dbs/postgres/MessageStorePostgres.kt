@@ -75,12 +75,28 @@ class MessageStorePostgres(
                         retained BOOLEAN,
                         client_id VARCHAR(65535), 
                         message_uuid VARCHAR(36),
+                        creation_time BIGINT,
+                        message_expiry_interval BIGINT,
                         PRIMARY KEY (topic)
                     )
                     """.trimIndent())
                     statement.executeUpdate("""
                     CREATE INDEX IF NOT EXISTS ${tableName}_topic ON $tableName ($pkColumnsString)
                     """.trimIndent())
+                    
+                    // Migrate existing tables: Add Phase 5 columns if they don't exist
+                    try {
+                        statement.executeUpdate("""
+                        ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS creation_time BIGINT
+                        """.trimIndent())
+                        statement.executeUpdate("""
+                        ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS message_expiry_interval BIGINT
+                        """.trimIndent())
+                        logger.fine("Phase 5 migration: Added expiry columns to $tableName")
+                    } catch (e: Exception) {
+                        logger.fine("Phase 5 migration: Columns may already exist: ${e.message}")
+                    }
+                    
                     connection.commit()
                     logger.fine("Message store [$name] is ready [${Utils.getCurrentFunctionName()}]")
                     promise.complete()
@@ -153,8 +169,8 @@ class MessageStorePostgres(
 
     override fun addAll(messages: List<BrokerMessage>) {
         val sql = """INSERT INTO $tableName (topic, ${FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")}, topic_r, topic_l,
-                   time, payload_blob, payload_json, qos, retained, client_id, message_uuid) 
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::JSONB, ?, ?, ?, ?) 
+                   time, payload_blob, payload_json, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::JSONB, ?, ?, ?, ?, ?, ?) 
                    ON CONFLICT (topic) DO UPDATE 
                    SET time = EXCLUDED.time, 
                    payload_blob = EXCLUDED.payload_blob, 
@@ -162,7 +178,9 @@ class MessageStorePostgres(
                    qos = EXCLUDED.qos, 
                    retained = EXCLUDED.retained, 
                    client_id = EXCLUDED.client_id, 
-                   message_uuid = EXCLUDED.message_uuid 
+                   message_uuid = EXCLUDED.message_uuid,
+                   creation_time = EXCLUDED.creation_time,
+                   message_expiry_interval = EXCLUDED.message_expiry_interval 
                    """
 
         try {
@@ -198,6 +216,12 @@ class MessageStorePostgres(
                         preparedStatement.setBoolean(MAX_FIXED_TOPIC_LEVELS + 8, message.isRetain)
                         preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 9, message.clientId)
                         preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 10, message.messageUuid)
+                        preparedStatement.setLong(MAX_FIXED_TOPIC_LEVELS + 11, message.time.toEpochMilli())
+                        if (message.messageExpiryInterval != null) {
+                            preparedStatement.setLong(MAX_FIXED_TOPIC_LEVELS + 12, message.messageExpiryInterval!!)
+                        } else {
+                            preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 12, Types.BIGINT)
+                        }
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
@@ -252,18 +276,30 @@ class MessageStorePostgres(
                                 " AND COALESCE(ARRAY_LENGTH(topic_r, 1),0) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
                             }
                         })
-                val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid " +
+                val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid, creation_time, message_expiry_interval " +
                           "FROM $tableName WHERE $where"
                 logger.fine { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
                 connection.prepareStatement(sql).use { preparedStatement ->
                     filter.forEachIndexed { i, x -> preparedStatement.setString(i + 1, x.second) }
                     val resultSet = preparedStatement.executeQuery()
+                    val currentTimeMillis = System.currentTimeMillis()
                     while (resultSet.next()) {
                         val topic = resultSet.getString(1)
                         val payload = resultSet.getBytes(2)
                         val qos = resultSet.getInt(3)
                         val clientId = resultSet.getString(4)
                         val messageUuid = resultSet.getString(5)
+                        val creationTime = resultSet.getLong(6)
+                        val messageExpiryInterval = resultSet.getObject(7) as Long?
+                        
+                        // Phase 5: Check if message has expired
+                        if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                            val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                            if (ageSeconds >= messageExpiryInterval) {
+                                continue // Skip expired message
+                            }
+                        }
+                        
                         val message = BrokerMessage(
                             messageUuid = messageUuid,
                             messageId = 0,
@@ -273,7 +309,9 @@ class MessageStorePostgres(
                             isRetain = true,
                             isDup = false,
                             isQueued = false,
-                            clientId = clientId
+                            clientId = clientId,
+                            time = java.time.Instant.ofEpochMilli(creationTime),
+                            messageExpiryInterval = messageExpiryInterval
                         )
                         callback(message)
                     }
