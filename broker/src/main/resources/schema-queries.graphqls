@@ -246,6 +246,12 @@ type TopicValue {
     format: DataFormat!
     timestamp: Long!
     qos: Int!
+    # MQTT v5 Message Properties
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 type Topic {
@@ -261,6 +267,12 @@ type RetainedMessage {
     format: DataFormat!
     timestamp: Long!
     qos: Int!
+    # MQTT v5 Message Properties
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 type ArchivedMessage {
@@ -270,6 +282,12 @@ type ArchivedMessage {
     timestamp: Long!
     qos: Int!
     clientId: String
+    # MQTT v5 Message Properties
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 # User Management Types
@@ -675,6 +693,7 @@ enum MqttClientMode {
 
 # MQTT Client address mapping configuration
 # Defines how topics are mapped between local and remote brokers
+# MQTT Client address mapping configuration
 type MqttClientAddress {
     # Connection mode: SUBSCRIBE (remote→local) or PUBLISH (local→remote)
     mode: String!
@@ -687,6 +706,30 @@ type MqttClientAddress {
     removePath: Boolean!
     # QoS level for MQTT messages (0=At most once, 1=At least once, 2=Exactly once)
     qos: Int
+    # MQTT v5 Subscription Options (only for SUBSCRIBE mode)
+    # No Local: Don't receive messages you published (prevents loops)
+    noLocal: Boolean
+    # Retain Handling: 0=Send retained, 1=Send retained only if new sub, 2=Never send retained
+    retainHandling: Int
+    # Retain As Published: Preserve original retain flag when forwarding
+    retainAsPublished: Boolean
+    # MQTT v5 Message Properties (only for PUBLISH mode)
+    # Message expiry interval in seconds (0 = no expiry)
+    messageExpiryInterval: Long
+    # MIME type of the message payload
+    contentType: String
+    # Topic pattern for request-response pattern
+    responseTopicPattern: String
+    # Indicates payload is UTF-8 encoded text
+    payloadFormatIndicator: Boolean
+    # Custom key-value metadata pairs
+    userProperties: [UserProperty!]
+}
+
+# User property key-value pair for MQTT v5 messages
+type UserProperty {
+    key: String!
+    value: String!
 }
 
 # MQTT Client connection configuration
@@ -719,6 +762,16 @@ type MqttClientConnectionConfig {
     deleteOldestMessages: Boolean!
     # Whether to verify SSL certificates (disable for self-signed certificates)
     sslVerifyCertificate: Boolean!
+    # MQTT protocol version: 4 for v3.1.1, 5 for v5.0 (default: 4)
+    protocolVersion: Int
+    # Session expiry interval in seconds (MQTT v5 only, 0-4294967295, default: 0)
+    sessionExpiryInterval: Long
+    # Maximum number of QoS 1 and QoS 2 publications that the client is willing to process concurrently (MQTT v5 only, 1-65535, default: 65535)
+    receiveMaximum: Int
+    # Maximum packet size the client is willing to accept (MQTT v5 only, 1-268435455 bytes)
+    maximumPacketSize: Long
+    # Maximum number of topic aliases the client is willing to accept (MQTT v5 only, 0-65535, default: 0)
+    topicAliasMaximum: Int
 }
 
 # MQTT Client configuration

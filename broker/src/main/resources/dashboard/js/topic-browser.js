@@ -454,6 +454,11 @@ class TopicBrowser {
                         format
                         timestamp
                         qos
+                        messageExpiryInterval
+                        contentType
+                        responseTopic
+                        payloadFormatIndicator
+                        userProperties { key value }
                     }
                 }
             `;
@@ -475,7 +480,7 @@ class TopicBrowser {
     }
 
     displayMessageData(message) {
-        const { topic, payload, qos, format, timestamp } = message;
+        const { topic, payload, qos, format, timestamp, messageExpiryInterval, contentType, responseTopic, payloadFormatIndicator, userProperties } = message;
 
         this.dataViewer.className = 'data-viewer';
 
@@ -531,6 +536,19 @@ class TopicBrowser {
         this.dataViewer.innerHTML = '';
         this.dataViewer.appendChild(header);
         this.dataViewer.appendChild(content);
+        
+        // Add MQTT v5 properties section if any properties exist
+        const hasMqtt5Props = messageExpiryInterval || contentType || responseTopic || payloadFormatIndicator || (userProperties && userProperties.length > 0);
+        if (hasMqtt5Props) {
+            const mqtt5Section = this.createMqtt5PropertiesSection({
+                messageExpiryInterval,
+                contentType,
+                responseTopic,
+                payloadFormatIndicator,
+                userProperties
+            });
+            this.dataViewer.appendChild(mqtt5Section);
+        }
     }
 
     formatJson(obj, indent = 0) {
@@ -585,6 +603,109 @@ class TopicBrowser {
         if (bytes === 0) return '0 Bytes';
         const i = Math.floor(Math.log(bytes) / Math.log(1024));
         return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    createMqtt5PropertiesSection(properties) {
+        const section = document.createElement('div');
+        section.className = 'mqtt5-properties-section';
+        section.style.cssText = 'margin-top: 1.5rem; padding: 1rem; background: var(--dark-surface-2); border-radius: 8px; border: 1px solid var(--dark-border);';
+        
+        const header = document.createElement('div');
+        header.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; cursor: pointer;';
+        header.innerHTML = `
+            <h4 style="margin: 0; color: var(--monster-purple); font-size: 0.9rem; font-weight: 600;">
+                🏷️ MQTT v5.0 Properties
+            </h4>
+            <span class="toggle-icon" style="color: var(--text-muted); font-size: 1.2rem;">▼</span>
+        `;
+        
+        const content = document.createElement('div');
+        content.className = 'mqtt5-properties-content';
+        content.style.cssText = 'display: grid; grid-template-columns: 1fr; gap: 0.75rem;';
+        
+        // Message Expiry Interval
+        if (properties.messageExpiryInterval !== null && properties.messageExpiryInterval !== undefined) {
+            const prop = document.createElement('div');
+            prop.style.cssText = 'display: flex; justify-content: space-between; padding: 0.5rem; background: var(--dark-bg); border-radius: 6px;';
+            prop.innerHTML = `
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Message Expiry</span>
+                <span style="color: var(--text-primary); font-size: 0.85rem; font-weight: 500;">${properties.messageExpiryInterval}s</span>
+            `;
+            content.appendChild(prop);
+        }
+        
+        // Content Type
+        if (properties.contentType) {
+            const prop = document.createElement('div');
+            prop.style.cssText = 'display: flex; justify-content: space-between; padding: 0.5rem; background: var(--dark-bg); border-radius: 6px;';
+            prop.innerHTML = `
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Content Type</span>
+                <span style="color: var(--text-primary); font-size: 0.85rem; font-weight: 500;">${this.escapeHtml(properties.contentType)}</span>
+            `;
+            content.appendChild(prop);
+        }
+        
+        // Response Topic
+        if (properties.responseTopic) {
+            const prop = document.createElement('div');
+            prop.style.cssText = 'display: flex; justify-content: space-between; padding: 0.5rem; background: var(--dark-bg); border-radius: 6px;';
+            prop.innerHTML = `
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Response Topic</span>
+                <span style="color: var(--text-primary); font-size: 0.85rem; font-weight: 500;"><code>${this.escapeHtml(properties.responseTopic)}</code></span>
+            `;
+            content.appendChild(prop);
+        }
+        
+        // Payload Format Indicator
+        if (properties.payloadFormatIndicator) {
+            const prop = document.createElement('div');
+            prop.style.cssText = 'display: flex; justify-content: space-between; padding: 0.5rem; background: var(--dark-bg); border-radius: 6px;';
+            prop.innerHTML = `
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Payload Format</span>
+                <span style="color: var(--text-primary); font-size: 0.85rem; font-weight: 500;">✓ UTF-8 Text</span>
+            `;
+            content.appendChild(prop);
+        }
+        
+        // User Properties
+        if (properties.userProperties && properties.userProperties.length > 0) {
+            const userPropsDiv = document.createElement('div');
+            userPropsDiv.style.cssText = 'padding: 0.5rem; background: var(--dark-bg); border-radius: 6px;';
+            
+            const userPropsHeader = document.createElement('div');
+            userPropsHeader.style.cssText = 'color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;';
+            userPropsHeader.textContent = 'User Properties';
+            userPropsDiv.appendChild(userPropsHeader);
+            
+            const userPropsTable = document.createElement('table');
+            userPropsTable.style.cssText = 'width: 100%; border-collapse: collapse;';
+            
+            properties.userProperties.forEach(prop => {
+                const row = document.createElement('tr');
+                row.style.cssText = 'border-top: 1px solid var(--dark-border);';
+                row.innerHTML = `
+                    <td style="padding: 0.25rem 0; color: var(--text-primary); font-size: 0.8rem; font-weight: 500; width: 40%;">${this.escapeHtml(prop.key)}</td>
+                    <td style="padding: 0.25rem 0; color: var(--text-muted); font-size: 0.8rem;">${this.escapeHtml(prop.value)}</td>
+                `;
+                userPropsTable.appendChild(row);
+            });
+            
+            userPropsDiv.appendChild(userPropsTable);
+            content.appendChild(userPropsDiv);
+        }
+        
+        // Toggle functionality
+        let isExpanded = true;
+        header.addEventListener('click', () => {
+            isExpanded = !isExpanded;
+            content.style.display = isExpanded ? 'grid' : 'none';
+            header.querySelector('.toggle-icon').textContent = isExpanded ? '▼' : '▶';
+        });
+        
+        section.appendChild(header);
+        section.appendChild(content);
+        
+        return section;
     }
 
     async performSearch() {

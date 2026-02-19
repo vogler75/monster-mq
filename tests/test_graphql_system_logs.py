@@ -31,6 +31,7 @@ import sys
 import argparse
 import websockets
 import os
+import pytest
 from datetime import datetime
 
 # Configuration from environment variables with defaults

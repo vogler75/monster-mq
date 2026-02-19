@@ -1,0 +1,61 @@
+##edge-user: scope is for services running on edge device, manipulating data
+user edge-user
+topic readwrite edge/#
+topic readwrite external/#
+topic readwrite customer/#
+topic readwrite dcm/#
+topic read machine/#
+topic read UNS/#
+topic read $SYS/#
+#v1 alarmservice temp exposure (legacy)
+topic readwrite Alarms/#
+topic readwrite ConnectedClients/#
+
+##machine-user: is for machine controllers to have a space to store data into the broker
+user machine-user
+topic readwrite machine/#
+topic readwrite Marel/#
+topic read edge/#
+topic read UNS/#
+pattern readwrite edge/%c/#
+#v1 alarmservice temp exposure (legacy)
+topic readwrite Alarms/#
+topic readwrite ConnectedClients/#
+
+##uns-user: gateway from and to edge<>UNS
+user uns-user
+topic readwrite UNS/#
+topic readwrite edge/#
+topic read dcm/#
+##customer facing data
+user customer-user
+topic readwrite customer/#
+
+##external facing data, e.g. 3rd party
+user external-user
+topic readwrite external/#
+
+##root user
+user swsdev
+topic readwrite #
+topic read $SYS/#
+
+##hmi-user: interaction from broker to HMI mqtt-service
+user hmi-user
+topic read edge/+/#
+topic readwrite edge/hmi/#
+topic readwrite edge/+/desired/#
+topic readwrite edge/+/+/desired/#
+topic readwrite edge/+/+/+/desired/#
+topic readwrite edge/+/commands/#
+topic readwrite edge/+/+/commands/#
+topic readwrite edge/+/+/+/commands/#
+
+## bridges UNS between different brokers
+user bridge
+topic readwrite UNS/#
+
+# This affects access control for clients with no username
+
+# This affects all clients.
+pattern readwrite system/client/%c/#

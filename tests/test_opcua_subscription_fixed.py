@@ -8,6 +8,7 @@ This test verifies that when an OPC UA client writes to a node:
 """
 
 import asyncio
+import pytest
 from asyncua import Client, ua
 import paho.mqtt.client as mqtt
 import threading
@@ -15,12 +16,15 @@ import time
 import logging
 import os
 
+# Mark all async tests
+pytestmark = pytest.mark.asyncio
+
 # Enable detailed logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration from environment variables with defaults
-OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4840/server")
+OPCUA_URL = os.getenv("OPCUA_URL", "opc.tcp://localhost:4841/server")
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_USERNAME = os.getenv("MQTT_USERNAME")
@@ -87,7 +91,7 @@ async def test_opcua_subscription_notifications():
             print("✅ Connected to OPC UA server")
 
             # Get the write/oee node
-            node_id = ua.NodeId("MonsterMQ/write/oee:v", 2)
+            node_id = ua.NodeId("opcua/server/write/oee:v", 2)
             node = client.get_node(node_id)
 
             # Read current value
@@ -184,32 +188,18 @@ async def test_opcua_subscription_notifications():
             print(f"   ✅ MQTT publishing working: {mqtt_working}")
             print(f"   ✅ Node values updated correctly: {values_correct}")
 
-            if opcua_working and mqtt_working and values_correct:
-                print(f"\n🎉 ALL TESTS PASSED! OPC UA write handling is working correctly.")
-                print(f"   - OPC UA writes update local node values ✅")
-                print(f"   - OPC UA subscribers receive notifications ✅")
-                print(f"   - MQTT messages are published ✅")
-                return True
-            else:
-                print(f"\n❌ Some tests failed:")
-                if not opcua_working:
-                    print(f"   - OPC UA subscriptions not working properly")
-                if not mqtt_working:
-                    print(f"   - MQTT publishing not working properly")
-                if not values_correct:
-                    print(f"   - Node values not updated correctly")
-                return False
+            # Assert test results
+            assert opcua_working, f"OPC UA subscriptions not working properly (got {total_opcua} notifications, expected >= 2)"
+            assert mqtt_working, f"MQTT publishing not working properly (got {total_mqtt} messages, expected >= 2)"
+            assert values_correct, f"Node values not updated correctly (expected {test_value_2}, got {final_value})"
+            
+            print(f"\n🎉 ALL TESTS PASSED! OPC UA write handling is working correctly.")
+            print(f"   - OPC UA writes update local node values ✅")
+            print(f"   - OPC UA subscribers receive notifications ✅")
+            print(f"   - MQTT messages are published ✅")
 
-    except Exception as e:
-        print(f"❌ Test failed with error: {e}")
-        return False
     finally:
         mqtt_subscriber.stop()
 
 if __name__ == "__main__":
-    success = asyncio.run(test_opcua_subscription_notifications())
-
-    if success:
-        print("\n✅ Subscription test completed successfully!")
-    else:
-        print("\n❌ Subscription test failed!")
+    pytest.main([__file__, "-v", "--tb=short"])

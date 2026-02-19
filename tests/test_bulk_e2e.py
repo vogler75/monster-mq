@@ -25,6 +25,9 @@ Usage:
 
     # Test with slower batching (wait longer or collect more)
     python test_bulk_e2e.py --timeout 3000 --max-size 200
+    
+    # Run as pytest
+    pytest test_bulk_e2e.py -v
 """
 
 import asyncio
@@ -35,13 +38,43 @@ import websockets
 import requests
 import time
 import os
+import pytest
 from datetime import datetime
+
+# Mark all tests in this module as requiring asyncio
+pytestmark = pytest.mark.asyncio
 
 # Configuration from environment variables with defaults
 GRAPHQL_WS_URL = os.getenv("GRAPHQL_WS_URL", "ws://localhost:4000/graphqlws")
 GRAPHQL_URL = os.getenv("GRAPHQL_URL", "http://localhost:4000/graphql")
 
-class BulkSubscriptionTester:
+
+async def test_bulk_subscription_basic():
+    """Test basic bulk subscription functionality"""
+    tester = BulkSubscriptionTester(timeout_ms=500, max_size=10)
+    
+    await tester.connect()
+    await tester.initialize()
+    await tester.subscribe_to_bulk(["test/bulk/pytest/+"])
+    
+    # Publish a few test messages
+    for i in range(5):
+        topic = f"test/bulk/pytest/sensor{i % 3}"
+        payload = json.dumps({"value": i, "timestamp": datetime.now().isoformat()})
+        success = tester.publish_message(topic, payload)
+        assert success, f"Failed to publish message {i}"
+        await asyncio.sleep(0.1)
+    
+    # Listen for batches
+    await tester.listen_for_batches(duration_seconds=3)
+    
+    # Verify we received some batches
+    assert tester.batch_count > 0, "No batches received"
+    assert tester.total_messages > 0, "No messages received in batches"
+    print(f"Test passed: received {tester.batch_count} batches with {tester.total_messages} total messages")
+
+
+
     """Test bulk subscriptions with simultaneous message publishing"""
 
     def __init__(self, url=None, http_url=None,
