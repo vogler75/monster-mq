@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import asyncio
+import pytest
 from asyncua import Client
 import logging
 import time

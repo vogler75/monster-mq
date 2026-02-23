@@ -488,7 +488,7 @@ class DashboardManager {
     // Backward compatibility (legacy calls)
     formatTimestamp(isoString) { return this.formatTimestampFor(this.currentTimeframe, isoString); }
 
-    updateOverviewCards(brokers) {
+    async updateOverviewCards(brokers) {
         const clusterTotals = brokers.reduce((acc, broker) => {
             const metrics = broker.metrics && broker.metrics.length > 0 ? broker.metrics[0] : {};
             return {
@@ -517,10 +517,36 @@ class DashboardManager {
             winCCUaClientIn: 0
         });
 
+        // Fetch MQTT v5 statistics
+        let mqtt5Stats = null;
+        try {
+            const result = await window.graphqlClient.query(`
+                query {
+                    mqtt5Statistics {
+                        totalSessions
+                        mqtt5Sessions
+                        mqtt3Sessions
+                        mqtt5Percentage
+                    }
+                }
+            `);
+            mqtt5Stats = result.mqtt5Statistics;
+        } catch (error) {
+            console.error('Failed to fetch MQTT v5 statistics:', error);
+        }
+
         const overviewContainer = document.getElementById('cluster-overview');
+        const mqtt5Card = mqtt5Stats ? `
+            <div class="metric-card">
+                <div class="metric-header"><span class="metric-title">MQTT v5.0 Clients</span><div class="metric-icon">🔄</div></div>
+                <div class="metric-value">${mqtt5Stats.mqtt5Sessions} <span style="font-size: 0.7em; color: var(--text-secondary);">/ ${mqtt5Stats.totalSessions}</span></div>
+                <div class="metric-label">${mqtt5Stats.mqtt5Percentage.toFixed(1)}% Adoption</div>
+            </div>` : '';
+
         overviewContainer.innerHTML = `
             <div class="metric-card"><div class="metric-header"><span class="metric-title">Active Sessions</span><div class="metric-icon">👥</div></div><div class="metric-value">${clusterTotals.totalSessions}</div><div class="metric-label">${brokers.length} Node${brokers.length !== 1 ? 's' : ''}</div></div>
             <div class="metric-card"><div class="metric-header"><span class="metric-title">Queued Messages</span><div class="metric-icon">⏳</div></div><div class="metric-value">${this.formatNumber(clusterTotals.queuedMessages)}</div><div class="metric-label">Pending Delivery</div></div>
+            ${mqtt5Card}
             <div class="metric-card">
                 <div class="metric-header"><span class="metric-title">MQTT Messages</span><div class="metric-icon">📨</div></div>
                 <div class="metric-value"><span style="color: #22C55E;">${this.formatNumber(clusterTotals.messagesIn)}</span> / <span style="color: #6366F1;">${this.formatNumber(clusterTotals.messagesOut)}</span></div>

@@ -15,13 +15,34 @@ class MqttClientDetailManager {
         const urlParams = new URLSearchParams(window.location.search);
         this.clientName = urlParams.get('client');
 
+        console.log('[DEBUG] Initializing MQTT Client Detail page, client:', this.clientName);
+
         if (!this.clientName) {
-            this.showError('No bridge specified');
+            console.error('[DEBUG] No client name provided in URL');
+            this.showError('No bridge specified in URL. Please select a bridge from the list.');
+            // Show a basic page structure even without client name
+            document.getElementById('page-title').textContent = 'Error';
+            document.getElementById('page-subtitle').textContent = 'Invalid Request';
             return;
         }
 
-        await this.loadClusterNodes();
-        await this.loadClientData();
+        this.showLoading(true);
+        
+        try {
+            console.log('[DEBUG] Loading cluster nodes...');
+            await this.loadClusterNodes();
+            console.log('[DEBUG] Loading client data...');
+            await this.loadClientData();
+            console.log('[DEBUG] Initialization complete');
+        } catch (error) {
+            console.error('[DEBUG] Error during initialization:', error);
+            this.showError('Failed to load bridge data: ' + error.message);
+            // Update page title to show error state
+            document.getElementById('page-title').textContent = 'Error Loading Bridge';
+            document.getElementById('page-subtitle').textContent = this.clientName;
+        } finally {
+            this.showLoading(false);
+        }
     }
 
     async loadClusterNodes() {
@@ -57,7 +78,13 @@ class MqttClientDetailManager {
                         config {
                             brokerUrl username clientId cleanSession keepAlive reconnectDelay connectionTimeout
                             bufferEnabled bufferSize persistBuffer deleteOldestMessages sslVerifyCertificate
-                            addresses { mode remoteTopic localTopic removePath qos }
+                            protocolVersion sessionExpiryInterval receiveMaximum maximumPacketSize topicAliasMaximum
+                            addresses { 
+                                mode remoteTopic localTopic removePath qos 
+                                noLocal retainHandling retainAsPublished
+                                messageExpiryInterval contentType responseTopicPattern payloadFormatIndicator
+                                userProperties { key value }
+                            }
                         }
                     }
                 }
@@ -103,6 +130,18 @@ class MqttClientDetailManager {
         document.getElementById('client-keep-alive').value = cfg.keepAlive;
         document.getElementById('client-reconnect-delay').value = cfg.reconnectDelay;
         document.getElementById('client-connection-timeout').value = cfg.connectionTimeout;
+        
+        // MQTT v5 properties (default to v3.1.1 if not specified)
+        const protocolVersion = cfg.protocolVersion || 4;
+        document.getElementById('client-protocol-version').value = protocolVersion;
+        document.getElementById('client-session-expiry').value = cfg.sessionExpiryInterval || 0;
+        document.getElementById('client-receive-maximum').value = cfg.receiveMaximum || 65535;
+        document.getElementById('client-max-packet-size').value = cfg.maximumPacketSize || 268435455;
+        document.getElementById('client-topic-alias-max').value = cfg.topicAliasMaximum || 10;
+        
+        // Toggle v5 sections visibility
+        toggleMqtt5Options();
+        
         document.getElementById('client-enabled').checked = d.enabled;
         document.getElementById('client-clean-session').checked = cfg.cleanSession;
         // Default to true (secure by default) if undefined or null
@@ -160,12 +199,26 @@ class MqttClientDetailManager {
             const row = document.createElement('tr');
             const modeClass = address.mode === 'SUBSCRIBE' ? 'mode-subscribe' : 'mode-publish';
             const modeIcon = address.mode === 'SUBSCRIBE' ? '⬇️' : '⬆️';
+            
+            // Build MQTT v5 subscription options badges (only for SUBSCRIBE mode)
+            let mqtt5Badges = '';
+            if (address.mode === 'SUBSCRIBE') {
+                const hasV5Options = address.noLocal || address.retainHandling !== 0 || address.retainAsPublished;
+                if (hasV5Options) {
+                    const badges = [];
+                    if (address.noLocal) badges.push('🚫 No Local');
+                    if (address.retainHandling === 1) badges.push('📨 RH:1');
+                    if (address.retainHandling === 2) badges.push('📨 RH:2');
+                    if (address.retainAsPublished) badges.push('📌 RAP');
+                    mqtt5Badges = `<br><small style="color: var(--text-muted);">${badges.join(' ')}</small>`;
+                }
+            }
 
             row.innerHTML = `
                 <td>
                     <span class="mode-badge ${modeClass}">
                         ${modeIcon} ${address.mode}
-                    </span>
+                    </span>${mqtt5Badges}
                 </td>
                 <td><code>${this.escapeHtml(address.remoteTopic)}</code></td>
                 <td><code>${this.escapeHtml(address.localTopic)}</code></td>
@@ -204,6 +257,8 @@ class MqttClientDetailManager {
         const sslVerifyValue = document.getElementById('client-ssl-verify').checked;
         console.log('[DEBUG] SSL Verify checkbox value:', sslVerifyValue);
 
+        const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
+        
         const updateData = {
             name: document.getElementById('client-name').value.trim(),
             namespace: document.getElementById('client-namespace').value.trim(),
@@ -222,7 +277,13 @@ class MqttClientDetailManager {
                 bufferSize: parseInt(document.getElementById('client-buffer-size').value),
                 persistBuffer: document.getElementById('client-persist-buffer').checked,
                 deleteOldestMessages: document.getElementById('client-delete-oldest').checked,
-                sslVerifyCertificate: sslVerifyValue
+                sslVerifyCertificate: sslVerifyValue,
+                // MQTT v5 properties
+                protocolVersion: protocolVersion,
+                sessionExpiryInterval: protocolVersion === 5 ? parseInt(document.getElementById('client-session-expiry').value) : null,
+                receiveMaximum: protocolVersion === 5 ? parseInt(document.getElementById('client-receive-maximum').value) : null,
+                maximumPacketSize: protocolVersion === 5 ? parseInt(document.getElementById('client-max-packet-size').value) : null,
+                topicAliasMaximum: protocolVersion === 5 ? parseInt(document.getElementById('client-topic-alias-max').value) : null
             }
         };
 
@@ -306,13 +367,48 @@ class MqttClientDetailManager {
             return;
         }
 
+        const mode = document.getElementById('address-mode').value;
+        const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
+        
         const addressData = {
-            mode: document.getElementById('address-mode').value,
+            mode: mode,
             remoteTopic: document.getElementById('address-remote-topic').value.trim(),
             localTopic: document.getElementById('address-local-topic').value.trim(),
             removePath: document.getElementById('address-remove-path').checked,
             qos: parseInt(document.getElementById('address-qos').value)
         };
+        
+        // Add MQTT v5 subscription options if protocol is v5 and mode is SUBSCRIBE
+        if (protocolVersion === 5 && mode === 'SUBSCRIBE') {
+            addressData.noLocal = document.getElementById('address-no-local').checked;
+            addressData.retainHandling = parseInt(document.getElementById('address-retain-handling').value);
+            addressData.retainAsPublished = document.getElementById('address-retain-as-published').checked;
+        }
+        
+        // Add MQTT v5 message properties if protocol is v5 and mode is PUBLISH
+        if (protocolVersion === 5 && mode === 'PUBLISH') {
+            const messageExpiry = document.getElementById('address-message-expiry').value;
+            if (messageExpiry) addressData.messageExpiryInterval = parseInt(messageExpiry);
+            
+            const contentType = document.getElementById('address-content-type').value.trim();
+            if (contentType) addressData.contentType = contentType;
+            
+            const responseTopic = document.getElementById('address-response-topic').value.trim();
+            if (responseTopic) addressData.responseTopicPattern = responseTopic;
+            
+            addressData.payloadFormatIndicator = document.getElementById('address-payload-format').checked;
+            
+            // Collect user properties
+            const userProps = [];
+            document.querySelectorAll('#address-user-properties-list .user-property-row').forEach(row => {
+                const key = row.querySelector('.user-property-key').value.trim();
+                const value = row.querySelector('.user-property-value').value.trim();
+                if (key && value) {
+                    userProps.push({ key, value });
+                }
+            });
+            if (userProps.length > 0) addressData.userProperties = userProps;
+        }
 
         try {
             const mutation = `
@@ -363,9 +459,36 @@ class MqttClientDetailManager {
         document.getElementById('edit-address-local-topic').value = address.localTopic;
         document.getElementById('edit-address-remove-path').checked = address.removePath;
         document.getElementById('edit-address-qos').value = address.qos ?? 0;
+        
+        // Populate MQTT v5 subscription options
+        document.getElementById('edit-address-no-local').checked = address.noLocal ?? false;
+        document.getElementById('edit-address-retain-handling').value = address.retainHandling ?? 0;
+        document.getElementById('edit-address-retain-as-published').checked = address.retainAsPublished ?? false;
+        
+        // Populate MQTT v5 message properties
+        document.getElementById('edit-address-message-expiry').value = address.messageExpiryInterval ?? '';
+        document.getElementById('edit-address-content-type').value = address.contentType ?? '';
+        document.getElementById('edit-address-response-topic').value = address.responseTopicPattern ?? '';
+        document.getElementById('edit-address-payload-format').checked = address.payloadFormatIndicator ?? false;
+        
+        // Populate user properties
+        const userPropsList = document.getElementById('edit-address-user-properties-list');
+        userPropsList.innerHTML = '';
+        if (address.userProperties && address.userProperties.length > 0) {
+            address.userProperties.forEach(prop => {
+                addEditUserProperty();
+                const lastRow = userPropsList.lastElementChild;
+                lastRow.querySelector('.edit-user-property-key').value = prop.key;
+                lastRow.querySelector('.edit-user-property-value').value = prop.value;
+            });
+        }
 
         // Show modal
         this.showEditAddressModal();
+        
+        // Toggle visibility of subscription options and message properties based on mode and protocol version
+        toggleMqtt5SubscriptionOptions();
+        toggleMqtt5MessageProperties();
     }
 
     async updateAddress() {
@@ -375,13 +498,48 @@ class MqttClientDetailManager {
             return;
         }
 
+        const mode = document.getElementById('edit-address-mode').value;
+        const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
+        
         const updatedAddress = {
-            mode: document.getElementById('edit-address-mode').value,
+            mode: mode,
             remoteTopic: document.getElementById('edit-address-remote-topic').value.trim(),
             localTopic: document.getElementById('edit-address-local-topic').value.trim(),
             removePath: document.getElementById('edit-address-remove-path').checked,
             qos: parseInt(document.getElementById('edit-address-qos').value)
         };
+        
+        // Add MQTT v5 subscription options if protocol is v5 and mode is SUBSCRIBE
+        if (protocolVersion === 5 && mode === 'SUBSCRIBE') {
+            updatedAddress.noLocal = document.getElementById('edit-address-no-local').checked;
+            updatedAddress.retainHandling = parseInt(document.getElementById('edit-address-retain-handling').value);
+            updatedAddress.retainAsPublished = document.getElementById('edit-address-retain-as-published').checked;
+        }
+        
+        // Add MQTT v5 message properties if protocol is v5 and mode is PUBLISH
+        if (protocolVersion === 5 && mode === 'PUBLISH') {
+            const messageExpiry = document.getElementById('edit-address-message-expiry').value;
+            if (messageExpiry) updatedAddress.messageExpiryInterval = parseInt(messageExpiry);
+            
+            const contentType = document.getElementById('edit-address-content-type').value.trim();
+            if (contentType) updatedAddress.contentType = contentType;
+            
+            const responseTopic = document.getElementById('edit-address-response-topic').value.trim();
+            if (responseTopic) updatedAddress.responseTopicPattern = responseTopic;
+            
+            updatedAddress.payloadFormatIndicator = document.getElementById('edit-address-payload-format').checked;
+            
+            // Collect user properties
+            const userProps = [];
+            document.querySelectorAll('#edit-address-user-properties-list .user-property-row').forEach(row => {
+                const key = row.querySelector('.edit-user-property-key').value.trim();
+                const value = row.querySelector('.edit-user-property-value').value.trim();
+                if (key && value) {
+                    userProps.push({ key, value });
+                }
+            });
+            if (userProps.length > 0) updatedAddress.userProperties = userProps;
+        }
 
         try {
             const mutation = `
@@ -501,7 +659,12 @@ class MqttClientDetailManager {
         if (errorEl && errorText) {
             errorText.textContent = message;
             errorEl.style.display = 'flex';
-            setTimeout(() => this.hideError(), 5000);
+            // Ensure content area is visible so error message shows
+            const contentEl = document.getElementById('client-content');
+            if (contentEl) {
+                contentEl.style.display = 'block';
+            }
+            setTimeout(() => this.hideError(), 10000); // Longer timeout for errors
         }
     }
 
@@ -585,6 +748,91 @@ function hideConfirmDeleteAddressModal() {
 
 function confirmDeleteAddress() {
     mqttClientDetailManager.confirmDeleteAddress();
+}
+
+function toggleMqtt5Options() {
+    const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
+    const mqtt5Sections = document.querySelectorAll('[id^="mqtt5-"]:not([id*="subscription-options"]):not([id*="message-properties"])');
+    mqtt5Sections.forEach(section => {
+        section.style.display = protocolVersion === 5 ? 'block' : 'none';
+    });
+    // Also toggle subscription options and message properties visibility
+    toggleMqtt5SubscriptionOptions();
+    toggleMqtt5MessageProperties();
+}
+
+function toggleMqtt5SubscriptionOptions() {
+    const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
+    const addMode = document.getElementById('address-mode')?.value;
+    const editMode = document.getElementById('edit-address-mode')?.value;
+    
+    // Show subscription options only if protocol is v5 and mode is SUBSCRIBE
+    const addSubOptions = document.getElementById('mqtt5-subscription-options');
+    if (addSubOptions) {
+        addSubOptions.style.display = (protocolVersion === 5 && addMode === 'SUBSCRIBE') ? 'block' : 'none';
+    }
+    
+    const editSubOptions = document.getElementById('mqtt5-edit-subscription-options');
+    if (editSubOptions) {
+        editSubOptions.style.display = (protocolVersion === 5 && editMode === 'SUBSCRIBE') ? 'block' : 'none';
+    }
+}
+
+function toggleMqtt5MessageProperties() {
+    const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
+    const addMode = document.getElementById('address-mode')?.value;
+    const editMode = document.getElementById('edit-address-mode')?.value;
+    
+    // Show message properties only if protocol is v5 and mode is PUBLISH
+    const addMsgProps = document.getElementById('mqtt5-message-properties');
+    if (addMsgProps) {
+        addMsgProps.style.display = (protocolVersion === 5 && addMode === 'PUBLISH') ? 'block' : 'none';
+    }
+    
+    const editMsgProps = document.getElementById('mqtt5-edit-message-properties');
+    if (editMsgProps) {
+        editMsgProps.style.display = (protocolVersion === 5 && editMode === 'PUBLISH') ? 'block' : 'none';
+    }
+}
+
+// User Properties Management for Add Address Modal
+function addUserProperty() {
+    const list = document.getElementById('address-user-properties-list');
+    const index = list.children.length;
+    
+    const row = document.createElement('div');
+    row.className = 'user-property-row';
+    row.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;';
+    row.innerHTML = `
+        <input type="text" placeholder="Key" style="flex: 1;" class="user-property-key">
+        <input type="text" placeholder="Value" style="flex: 1;" class="user-property-value">
+        <button type="button" class="btn-icon btn-delete" onclick="this.parentElement.remove()" title="Remove">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+        </button>
+    `;
+    list.appendChild(row);
+}
+
+// User Properties Management for Edit Address Modal
+function addEditUserProperty() {
+    const list = document.getElementById('edit-address-user-properties-list');
+    const index = list.children.length;
+    
+    const row = document.createElement('div');
+    row.className = 'user-property-row';
+    row.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;';
+    row.innerHTML = `
+        <input type="text" placeholder="Key" style="flex: 1;" class="edit-user-property-key">
+        <input type="text" placeholder="Value" style="flex: 1;" class="edit-user-property-value">
+        <button type="button" class="btn-icon btn-delete" onclick="this.parentElement.remove()" title="Remove">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+        </button>
+    `;
+    list.appendChild(row);
 }
 
 function goBack() {

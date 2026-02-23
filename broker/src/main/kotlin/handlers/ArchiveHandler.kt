@@ -245,6 +245,13 @@ class ArchiveHandler(
     }
 
     private fun loadArchiveGroupsFromDatabase(configStoreType: String, promise: Promise<List<ArchiveGroup>>) {
+        // If ConfigStoreType is NONE, skip archive group initialization
+        if (configStoreType.uppercase() == "NONE") {
+            logger.info("ConfigStoreType is NONE, skipping archive group initialization")
+            promise.complete(emptyList())
+            return
+        }
+
         val configStore = ArchiveConfigStoreFactory.createConfigStore(configJson, configStoreType)
 
         if (configStore == null) {

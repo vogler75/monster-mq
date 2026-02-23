@@ -290,6 +290,7 @@ class SessionManager {
                     </td>
                     <td><strong>${this.escapeHtml(session.clientId)}</strong></td>
                     <td>${this.escapeHtml(session.nodeId)}</td>
+                    <td>${this.getProtocolBadge(session.protocolVersion)}</td>
                     <td>
                         <span class="status-indicator ${session.connected ? 'status-online' : 'status-offline'}">
                             <span class="status-dot"></span>
@@ -348,6 +349,7 @@ class SessionManager {
     renderSessionModal(session) {
         const metrics = session.metrics && session.metrics.length > 0 ? session.metrics[0] : { messagesIn: 0, messagesOut: 0 };
         const subscriptions = session.subscriptions || [];
+        const isV5 = session.protocolVersion === 5;
 
         document.getElementById('modal-title').textContent = `Session: ${session.clientId}`;
         document.getElementById('session-detail-content').innerHTML = `
@@ -404,6 +406,10 @@ class SessionManager {
                             <td>${this.escapeHtml(session.nodeId)}</td>
                         </tr>
                         <tr>
+                            <td style="font-weight: 600;">Protocol Version</td>
+                            <td>${this.getProtocolBadge(session.protocolVersion)}</td>
+                        </tr>
+                        <tr>
                             <td style="font-weight: 600;">Status</td>
                             <td>
                                 <span class="status-indicator ${session.connected ? 'status-online' : 'status-offline'}">
@@ -428,6 +434,31 @@ class SessionManager {
                 </table>
             </div>
 
+            ${isV5 ? `
+            <div class="data-table" style="margin-top: 1.5rem;">
+                <div style="padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); display: flex; align-items: center; gap: 0.5rem;">
+                    <h3 style="margin: 0; color: var(--text-primary);">MQTT v5 Connection Properties</h3>
+                    <span class="protocol-badge protocol-v5">v5.0</span>
+                </div>
+                <table>
+                    <tbody>
+                        <tr>
+                            <td style="font-weight: 600; width: 200px;">Receive Maximum</td>
+                            <td>${session.receiveMaximum !== null && session.receiveMaximum !== undefined ? session.receiveMaximum : 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: 600;">Maximum Packet Size</td>
+                            <td>${session.maximumPacketSize !== null && session.maximumPacketSize !== undefined ? this.formatBytes(session.maximumPacketSize) : 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: 600;">Topic Alias Maximum</td>
+                            <td>${session.topicAliasMaximum !== null && session.topicAliasMaximum !== undefined ? session.topicAliasMaximum : 'N/A'}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            ` : ''}
+
             ${session.information ? `
             <div class="data-table" style="margin-top: 1.5rem;">
                 <div style="padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
@@ -449,6 +480,7 @@ class SessionManager {
                             <tr>
                                 <th>Topic Filter</th>
                                 <th>QoS</th>
+                                ${isV5 ? '<th>Options</th>' : ''}
                             </tr>
                         </thead>
                         <tbody>
@@ -460,6 +492,7 @@ class SessionManager {
                                             QoS ${sub.qos}
                                         </span>
                                     </td>
+                                    ${isV5 ? `<td>${this.getSubscriptionOptions(sub)}</td>` : ''}
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -582,6 +615,48 @@ class SessionManager {
             console.error('Error removing sessions:', error);
             this.showError('Failed to remove sessions: ' + error.message);
         }
+    }
+
+    getProtocolBadge(protocolVersion) {
+        if (protocolVersion === 5) {
+            return '<span class="protocol-badge protocol-v5">MQTT v5.0</span>';
+        } else if (protocolVersion === 4) {
+            return '<span class="protocol-badge protocol-v3">MQTT v3.1.1</span>';
+        } else {
+            return '<span class="protocol-badge">v' + (protocolVersion || '?') + '</span>';
+        }
+    }
+
+    getSubscriptionOptions(subscription) {
+        const options = [];
+        
+        if (subscription.noLocal) {
+            options.push('<span class="sub-option-badge sub-no-local" title="No Local: Don\'t receive messages I publish">🚫 No Local</span>');
+        }
+        
+        if (subscription.retainHandling !== null && subscription.retainHandling !== undefined && subscription.retainHandling !== 0) {
+            const retainLabels = {
+                1: 'If New',
+                2: 'Never'
+            };
+            const label = retainLabels[subscription.retainHandling] || subscription.retainHandling;
+            options.push(`<span class="sub-option-badge sub-retain-handling" title="Retain Handling: ${label}">📨 Retain: ${label}</span>`);
+        }
+        
+        if (subscription.retainAsPublished) {
+            options.push('<span class="sub-option-badge sub-rap" title="Retain As Published: Preserve original retain flag">📌 RAP</span>');
+        }
+        
+        return options.length > 0 ? options.join(' ') : '<span style="color: var(--text-muted);">None</span>';
+    }
+
+    formatBytes(bytes) {
+        if (bytes >= 1048576) {
+            return (bytes / 1048576).toFixed(2) + ' MB';
+        } else if (bytes >= 1024) {
+            return (bytes / 1024).toFixed(2) + ' KB';
+        }
+        return bytes + ' bytes';
     }
 }
 

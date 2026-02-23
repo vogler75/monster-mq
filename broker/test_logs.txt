@@ -1,0 +1,190 @@
+Starting MonsterMQ...
+Loading logging.properties...
+Using default logging.properties...
+[2026-01-29 20:46:31.603][INFO   ][SQLiteVerticle                          ] SQLiteVerticle starting with WAL mode: true 
+[2026-01-29 20:46:31.643][INFO   ][SQLiteVerticle                          ] SQLiteVerticle started and listening on event bus 
+[2026-01-29 20:46:32.229][INFO   ][SessionStoreSQLite                      ] SQLite session tables are ready [start] 
+[2026-01-29 20:46:32.240][INFO   ][MessageStoreSQLite/RetainedMessages     ] SQLite Message store [RetainedMessages] is ready [start] 
+[2026-01-29 20:46:32.252][INFO   ][ArchiveConfigStoreSQLite                ] Archive config table created/verified in SQLite 
+[2026-01-29 20:46:32.260][SEVERE ][ArchiveConfigStoreSQLite                ] Getting archive group not possible without database connection! [getArchiveGroup] 
+[2026-01-29 20:46:32.284][INFO   ][UserManager                             ] User management enabled: false 
+[2026-01-29 20:46:32.334][INFO   ][ArchiveConfigStoreSQLite                ] Archive group 'Default' saved successfully to SQLite 
+[2026-01-29 20:46:32.360][INFO   ][DeviceConfigStoreSQLite                 ] DeviceConfigStoreSQLite initialized successfully 
+[2026-01-29 20:46:32.772][INFO   ][Monster                                 ] Log handler installed successfully at INFO level (MQTT: true, Memory: true) 
+[2026-01-29 20:46:32.788][INFO   ][UserStoreSqlite                         ] User management tables created [createTablesSync] 
+[2026-01-29 20:46:32.789][INFO   ][UserStoreSqlite                         ] SQLite user management store initialized [init$lambda$0] 
+[2026-01-29 20:46:32.797][INFO   ][DeviceConfigStoreSQLite                 ] DeviceConfigStoreSQLite initialized successfully 
+[2026-01-29 20:46:32.804][INFO   ][DeviceConfigStoreSQLite                 ] DeviceConfigStoreSQLite initialized successfully 
+[2026-01-29 20:46:32.812][INFO   ][DeviceConfigStoreSQLite                 ] DeviceConfigStoreSQLite initialized successfully 
+[2026-01-29 20:46:32.819][INFO   ][DeviceConfigStoreSQLite                 ] DeviceConfigStoreSQLite initialized successfully 
+[2026-01-29 20:46:32.828][INFO   ][DeviceConfigStoreSQLite                 ] DeviceConfigStoreSQLite initialized successfully 
+[2026-01-29 20:46:32.835][INFO   ][DeviceConfigStoreSQLite                 ] DeviceConfigStoreSQLite initialized successfully 
+[2026-01-29 20:46:32.845][INFO   ][DeviceConfigStoreSQLite                 ] DeviceConfigStoreSQLite initialized successfully 
+[2026-01-29 20:46:32.852][INFO   ][DeviceConfigStoreSQLite                 ] DeviceConfigStoreSQLite initialized successfully 
+[2026-01-29 20:46:32.858][INFO   ][DeviceConfigStoreSQLite                 ] DeviceConfigStoreSQLite initialized successfully 
+[2026-01-29 20:46:32.866][INFO   ][DeviceConfigStoreSQLite                 ] DeviceConfigStoreSQLite initialized successfully 
+[2026-01-29 20:46:32.873][INFO   ][MetricsStoreSQLite/metrics              ] SQLite MetricsStore [metrics] initialized successfully 
+[2026-01-29 20:46:32.873][INFO   ][MetricsHandler                          ] Purging metrics older than 2026-01-28T19:46:32.873168700Z (retention: 24h) 
+[2026-01-29 20:46:32.877][INFO   ][MetricsHandler                          ] MetricsCollector started with 10s (10000ms) interval, retention: 24h 
+[2026-01-29 20:46:32.879][INFO   ][MetricsHandler                          ] Successfully purged 0 old metric records 
+[2026-01-29 20:46:32.889][INFO   ][McpHandler                              ] SQL query tool not registered - default archive group does not support SQL (MongoDB/Kafka) 
+[2026-01-29 20:46:32.891][WARNING][McpHandler                              ] Default archive group 'Default' is not available - some tools may not work 
+[2026-01-29 20:46:32.963][INFO   ][McpServer                               ] MCP Server started on port 3000 with path /mcp 
+[2026-01-29 20:46:32.964][INFO   ][MqttServer                              ] MQTT Server is listening on port [9000] [WS ][   ] 
+[2026-01-29 20:46:32.967][INFO   ][MqttServer                              ] MQTT Server is listening on port [1883] [TCP][   ] 
+[2026-01-29 20:46:33.079][INFO   ][MqttServer                              ] MQTT Server is listening on port [9001] [WS ][TLS] 
+[2026-01-29 20:46:33.115][INFO   ][ApiService                              ] API Service started successfully 
+[2026-01-29 20:46:33.116][INFO   ][Monster                                 ] The Monster is ready. 
+[2026-01-29 20:46:33.959][INFO   ][GraphQLServer                           ] GraphQL server started successfully on port 4000 with path /graphql and /graphqlws 
+[2026-01-29 20:46:34.212][INFO   ][MqttClient                              ] Client [mqtt-explorer-92c27be4] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:34.214][INFO   ][MqttClient                              ] Client [mqtt-explorer-92c27be4] MQTT 5.0 connection accepted 
+[DEBUG] Client [mqtt-explorer-92c27be4] CONNECT properties count: 0
+[2026-01-29 20:46:34.219][INFO   ][MqttClient                              ] Client [mqtt-explorer-92c27be4] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:34.231][INFO   ][MqttClient                              ] Client [mqtt-explorer-92c27be4] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:34.326][INFO   ][MqttClient                              ] Client [test_phase5_sub1] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:34.327][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub1] CONNECT properties count: 1
+[DEBUG] Property ID 17: 0 (type: Integer)
+[2026-01-29 20:46:34.327][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:34.331][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:34.634][INFO   ][MqttClient                              ] Client [test_phase5_sub1] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:34.638][INFO   ][MqttClient                              ] Client [test_phase5_sub2] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:34.639][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub2] CONNECT properties count: 1
+[DEBUG] Property ID 17: 0 (type: Integer)
+[2026-01-29 20:46:34.639][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:34.641][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:34.930][INFO   ][MqttClient                              ] Client [test_phase5_sub2] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:34.949][INFO   ][MqttClient                              ] Client [test_phase5_sub3] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:34.949][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub3] CONNECT properties count: 1
+[DEBUG] Property ID 17: 0 (type: Integer)
+[2026-01-29 20:46:34.950][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:34.952][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:35.251][INFO   ][MqttClient                              ] Client [test_phase5_sub3] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:35.253][INFO   ][MqttClient                              ] Client [test_phase5_sub4] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:35.253][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub4] CONNECT properties count: 1
+[DEBUG] Property ID 17: 0 (type: Integer)
+[2026-01-29 20:46:35.253][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:35.257][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:35.554][INFO   ][MqttClient                              ] Client [test_phase5_sub4] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:37.557][INFO   ][MqttClient                              ] Client [test_phase5_sub1] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:37.558][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub1] CONNECT properties count: 1
+[DEBUG] Property ID 17: 300 (type: Integer)
+[2026-01-29 20:46:37.558][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT5 properties: sessionExpiry=300, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:37.560][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:38.558][INFO   ][MqttClient                              ] Client [test_phase5_sub1] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:38.560][INFO   ][MqttClient                              ] Client [test_phase5_pub1] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:38.562][INFO   ][MqttClient                              ] Client [test_phase5_pub1] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_pub1] CONNECT properties count: 0
+[2026-01-29 20:46:38.562][INFO   ][MqttClient                              ] Client [test_phase5_pub1] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:38.564][INFO   ][MqttClient                              ] Client [test_phase5_pub1] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:39.163][INFO   ][MqttClient                              ] Client [test_phase5_pub1] Close connection [false] [closeConnection] 
+[DEBUG] Enqueue: uuid=1f0fd4b3-a2c1-6b50-bc6b-35d04d8f8e7b, topic=test/phase5/expiry, time=1769715998864, expiry=2
+[2026-01-29 20:46:42.166][INFO   ][MqttClient                              ] Client [test_phase5_sub1] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:42.166][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub1] CONNECT properties count: 1
+[DEBUG] Property ID 17: 300 (type: Integer)
+[2026-01-29 20:46:42.166][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT5 properties: sessionExpiry=300, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:42.168][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT5 connection accepted with Topic Alias Maximum=10 
+[DEBUG] FetchPending: messageUuid=1f0fd4b3-a2c1-6b50-bc6b-35d04d8f8e7b, creationTime=1769715998864, messageExpiryInterval=2
+[DEBUG] Expiry check: ageSeconds=3, limit=2, expired=true
+[2026-01-29 20:46:44.166][INFO   ][MqttClient                              ] Client [test_phase5_sub1] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:44.169][INFO   ][MqttClient                              ] Client [test_phase5_sub2] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:44.170][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub2] CONNECT properties count: 1
+[DEBUG] Property ID 17: 300 (type: Integer)
+[2026-01-29 20:46:44.170][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT5 properties: sessionExpiry=300, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:44.172][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:45.172][INFO   ][MqttClient                              ] Client [test_phase5_sub2] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:45.174][INFO   ][MqttClient                              ] Client [test_phase5_pub2] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:45.175][INFO   ][MqttClient                              ] Client [test_phase5_pub2] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_pub2] CONNECT properties count: 0
+[2026-01-29 20:46:45.175][INFO   ][MqttClient                              ] Client [test_phase5_pub2] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:45.176][INFO   ][MqttClient                              ] Client [test_phase5_pub2] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:45.777][INFO   ][MqttClient                              ] Client [test_phase5_pub2] Close connection [false] [closeConnection] 
+[DEBUG] Enqueue: uuid=1f0fd4b3-e1c6-6871-bc6b-35d04d8f8e7b, topic=test/phase5/valid, time=1769716005475, expiry=10
+[2026-01-29 20:46:47.780][INFO   ][MqttClient                              ] Client [test_phase5_sub2] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:47.780][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub2] CONNECT properties count: 1
+[DEBUG] Property ID 17: 300 (type: Integer)
+[2026-01-29 20:46:47.780][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT5 properties: sessionExpiry=300, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:47.783][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT5 connection accepted with Topic Alias Maximum=10 
+[DEBUG] FetchPending: messageUuid=1f0fd4b3-e1c6-6871-bc6b-35d04d8f8e7b, creationTime=1769716005475, messageExpiryInterval=10
+[DEBUG] Expiry check: ageSeconds=2, limit=10, expired=false
+[2026-01-29 20:46:49.781][INFO   ][MqttClient                              ] Client [test_phase5_sub2] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:49.785][INFO   ][MqttClient                              ] Client [test_phase5_sub3] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:49.785][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub3] CONNECT properties count: 1
+[DEBUG] Property ID 17: 300 (type: Integer)
+[2026-01-29 20:46:49.786][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT5 properties: sessionExpiry=300, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:49.787][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:50.786][INFO   ][MqttClient                              ] Client [test_phase5_sub3] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:50.789][INFO   ][MqttClient                              ] Client [test_phase5_pub3] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:50.790][INFO   ][MqttClient                              ] Client [test_phase5_pub3] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_pub3] CONNECT properties count: 0
+[2026-01-29 20:46:50.790][INFO   ][MqttClient                              ] Client [test_phase5_pub3] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:50.792][INFO   ][MqttClient                              ] Client [test_phase5_pub3] MQTT5 connection accepted with Topic Alias Maximum=10 
+[DEBUG] Enqueue: uuid=1f0fd4b4-1755-678b-bc6b-35d04d8f8e7b, topic=test/phase5/update, time=1769716011090, expiry=10
+[2026-01-29 20:46:51.391][INFO   ][MqttClient                              ] Client [test_phase5_pub3] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:54.393][INFO   ][MqttClient                              ] Client [test_phase5_sub3] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:54.394][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub3] CONNECT properties count: 1
+[DEBUG] Property ID 17: 300 (type: Integer)
+[2026-01-29 20:46:54.394][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT5 properties: sessionExpiry=300, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:54.396][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT5 connection accepted with Topic Alias Maximum=10 
+[DEBUG] FetchPending: messageUuid=1f0fd4b4-1755-678b-bc6b-35d04d8f8e7b, creationTime=1769716011090, messageExpiryInterval=10
+[DEBUG] Expiry check: ageSeconds=3, limit=10, expired=false
+[2026-01-29 20:46:56.394][INFO   ][MqttClient                              ] Client [test_phase5_sub3] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:56.397][INFO   ][MqttClient                              ] Client [test_phase5_sub4] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:56.398][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub4] CONNECT properties count: 1
+[DEBUG] Property ID 17: 300 (type: Integer)
+[2026-01-29 20:46:56.398][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT5 properties: sessionExpiry=300, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:56.399][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:57.400][INFO   ][MqttClient                              ] Client [test_phase5_sub4] Close connection [false] [closeConnection] 
+[2026-01-29 20:46:57.403][INFO   ][MqttClient                              ] Client [test_phase5_pub4] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:46:57.403][INFO   ][MqttClient                              ] Client [test_phase5_pub4] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_pub4] CONNECT properties count: 0
+[2026-01-29 20:46:57.404][INFO   ][MqttClient                              ] Client [test_phase5_pub4] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:46:57.406][INFO   ][MqttClient                              ] Client [test_phase5_pub4] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:46:58.005][INFO   ][MqttClient                              ] Client [test_phase5_pub4] Close connection [false] [closeConnection] 
+[DEBUG] Enqueue: uuid=1f0fd4b4-565a-64ae-bc6b-35d04d8f8e7b, topic=test/phase5/noexpiry, time=1769716017703, expiry=null
+[2026-01-29 20:47:01.020][INFO   ][MqttClient                              ] Client [test_phase5_sub4] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:47:01.022][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub4] CONNECT properties count: 1
+[DEBUG] Property ID 17: 300 (type: Integer)
+[2026-01-29 20:47:01.022][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT5 properties: sessionExpiry=300, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:47:01.023][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT5 connection accepted with Topic Alias Maximum=10 
+[DEBUG] FetchPending: messageUuid=1f0fd4b4-565a-64ae-bc6b-35d04d8f8e7b, creationTime=1769716017703, messageExpiryInterval=null
+[2026-01-29 20:47:03.022][INFO   ][MqttClient                              ] Client [test_phase5_sub4] Close connection [false] [closeConnection] 
+[2026-01-29 20:47:03.025][INFO   ][MqttClient                              ] Client [test_phase5_sub1] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:47:03.025][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub1] CONNECT properties count: 1
+[DEBUG] Property ID 17: 0 (type: Integer)
+[2026-01-29 20:47:03.026][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:47:03.028][INFO   ][MqttClient                              ] Client [test_phase5_sub1] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:47:03.326][INFO   ][MqttClient                              ] Client [test_phase5_sub1] Close connection [false] [closeConnection] 
+[2026-01-29 20:47:03.328][INFO   ][MqttClient                              ] Client [test_phase5_sub2] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:47:03.328][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub2] CONNECT properties count: 1
+[DEBUG] Property ID 17: 0 (type: Integer)
+[2026-01-29 20:47:03.328][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:47:03.329][INFO   ][MqttClient                              ] Client [test_phase5_sub2] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:47:03.629][INFO   ][MqttClient                              ] Client [test_phase5_sub2] Close connection [false] [closeConnection] 
+[2026-01-29 20:47:03.648][INFO   ][MqttClient                              ] Client [test_phase5_sub3] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:47:03.648][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub3] CONNECT properties count: 1
+[DEBUG] Property ID 17: 0 (type: Integer)
+[2026-01-29 20:47:03.649][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:47:03.650][INFO   ][MqttClient                              ] Client [test_phase5_sub3] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:47:03.950][INFO   ][MqttClient                              ] Client [test_phase5_sub3] Close connection [false] [closeConnection] 
+[2026-01-29 20:47:03.976][INFO   ][MqttClient                              ] Client [test_phase5_sub4] Request to connect. Clean session [true] protocol [5] [startEndpoint] 
+[2026-01-29 20:47:03.976][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT 5.0 connection accepted 
+[DEBUG] Client [test_phase5_sub4] CONNECT properties count: 1
+[DEBUG] Property ID 17: 0 (type: Integer)
+[2026-01-29 20:47:03.977][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT5 properties: sessionExpiry=0, receiveMax=65535, maxPacketSize=268435456 
+[2026-01-29 20:47:03.979][INFO   ][MqttClient                              ] Client [test_phase5_sub4] MQTT5 connection accepted with Topic Alias Maximum=10 
+[2026-01-29 20:47:04.277][INFO   ][MqttClient                              ] Client [test_phase5_sub4] Close connection [false] [closeConnection] 

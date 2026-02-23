@@ -31,6 +31,7 @@ import time
 import sys
 import os
 import argparse
+import pytest
 from datetime import datetime
 
 # Configuration from environment variables with defaults
@@ -319,3 +320,22 @@ Examples:
 
 if __name__ == "__main__":
     main()
+
+
+# Pytest test functions
+def test_graphql_publisher_init():
+    """Test GraphQLPublisher initialization"""
+    publisher = GraphQLPublisher()
+    assert publisher.url == GRAPHQL_URL
+    assert publisher.message_count == 0
+
+
+def test_graphql_publisher_batch():
+    """Test batch publishing (method exists and callable)"""
+    publisher = GraphQLPublisher()
+    assert hasattr(publisher, 'publish_batch')
+    assert callable(publisher.publish_batch)
+    
+    # Test with empty list
+    count = publisher.publish_batch([])
+    assert count == 0

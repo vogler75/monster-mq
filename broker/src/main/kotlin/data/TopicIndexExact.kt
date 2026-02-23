@@ -91,6 +91,18 @@ class TopicIndexExact {
     }
 
     /**
+     * Check if a specific client has a subscription to a topic.
+     *
+     * @param topic Topic name
+     * @param clientId Client identifier
+     * @return true if client has this subscription
+     */
+    fun hasSubscriber(topic: String, clientId: String): Boolean {
+        val subscribers = index[topic] ?: return false
+        return subscribers.any { it.first == clientId }
+    }
+
+    /**
      * Get the count of unique topics with subscribers.
      */
     fun topicCount(): Int = index.size

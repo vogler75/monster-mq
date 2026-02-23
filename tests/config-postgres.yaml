@@ -1,0 +1,33 @@
+TCP: 1883
+WS: 9000
+
+QueuedMessagesEnabled: true
+AllowRootWildcardSubscription: true
+
+DefaultStoreType: POSTGRES
+ConfigStoreType: POSTGRES
+
+# PostgreSQL connection configuration
+Postgres:
+  Url: jdbc:postgresql://postgres:5432/monstermq
+  User: monstermq
+  Pass: monstermq
+
+# User Management configuration
+UserManagement:
+  Enabled: false
+
+# Logging
+Logging:
+  Mqtt:
+    Enabled: true
+  Memory:
+    Enabled: true
+    Entries: 1000
+
+# GraphQL API server
+GraphQL:
+  Enabled: false
+
+MCP:
+  Enabled: false

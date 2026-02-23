@@ -29,3 +29,5 @@ replay_pid*
 ### VS Code ###
 .vscode/
 gateway
+*.pyc
+.aitk/
