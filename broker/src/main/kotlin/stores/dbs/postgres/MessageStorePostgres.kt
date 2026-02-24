@@ -218,7 +218,7 @@ class MessageStorePostgres(
                         preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 10, message.messageUuid)
                         preparedStatement.setLong(MAX_FIXED_TOPIC_LEVELS + 11, message.time.toEpochMilli())
                         if (message.messageExpiryInterval != null) {
-                            preparedStatement.setLong(MAX_FIXED_TOPIC_LEVELS + 12, message.messageExpiryInterval!!)
+                            preparedStatement.setLong(MAX_FIXED_TOPIC_LEVELS + 12, message.messageExpiryInterval)
                         } else {
                             preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 12, Types.BIGINT)
                         }

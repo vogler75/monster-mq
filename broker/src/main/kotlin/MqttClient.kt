@@ -269,18 +269,37 @@ class MqttClient(
             logger.info("Client [$clientId] MQTT 5.0 connection accepted")
             // Parse MQTT5 CONNECT properties
             val props = endpoint.connectProperties()
-            logger.info("Client [$clientId] CONNECT properties count: ${props.listAll().size}")
+            val mqtt5PropertyNames = mapOf(
+                17 to "SessionExpiryInterval",
+                21 to "AuthenticationMethod",
+                22 to "AuthenticationData",
+                23 to "RequestProblemInformation",
+                24 to "WillDelayInterval",
+                25 to "RequestResponseInformation",
+                33 to "ReceiveMaximum",
+                34 to "TopicAliasMaximum",
+                38 to "UserProperty",
+                39 to "MaximumPacketSize"
+            )
             props.listAll().forEach { p ->
-                logger.info("Client [$clientId] CONNECT Property [${p.propertyId()}] = ${p.value()}")
+                val name = mqtt5PropertyNames[p.propertyId()] ?: "Property[${p.propertyId()}]"
+                val value = p.value()
+                val valueStr = when (value) {
+                    is io.netty.handler.codec.mqtt.MqttProperties.StringPair -> "${value.key}=${value.value}"
+                    is List<*> -> value.joinToString(", ") { item ->
+                        if (item is io.netty.handler.codec.mqtt.MqttProperties.StringPair) "${item.key}=${item.value}" else item.toString()
+                    }
+                    else -> value.toString()
+                }
+                logger.fine("Client [$clientId] CONNECT $name: $valueStr")
                 when (p.propertyId()) {
-                    17 -> mqtt5SessionExpiryInterval = (p.value() as? Number)?.toLong() ?: 0L  // Session Expiry Interval
-                    21 -> mqtt5AuthMethod = p.value() as? String  // Authentication Method
-                    22 -> mqtt5AuthData = (p.value() as? ByteArray)  // Authentication Data
-                    24 -> willDelayInterval = (p.value() as? Number)?.toLong() ?: 0L  // Will Delay Interval
-                    33 -> mqtt5ReceiveMaximum = (p.value() as? Number)?.toInt() ?: 65535  // Receive Maximum
-                    39 -> mqtt5MaximumPacketSize = (p.value() as? Number)?.toLong() ?: 268435456L  // Maximum Packet Size
-                    34 -> mqtt5TopicAliasMaximum = (p.value() as? Number)?.toInt() ?: 0  // Topic Alias Maximum
-                    else -> logger.fine("MQTT5 Property [${p.propertyId()}] = ${p.value()}")
+                    17 -> mqtt5SessionExpiryInterval = (value as? Number)?.toLong() ?: 0L
+                    21 -> mqtt5AuthMethod = value as? String
+                    22 -> mqtt5AuthData = value as? ByteArray
+                    24 -> willDelayInterval = (value as? Number)?.toLong() ?: 0L
+                    33 -> mqtt5ReceiveMaximum = (value as? Number)?.toInt() ?: 65535
+                    39 -> mqtt5MaximumPacketSize = (value as? Number)?.toLong() ?: 268435456L
+                    34 -> mqtt5TopicAliasMaximum = (value as? Number)?.toInt() ?: 0
                 }
             }
             logger.info("Client [$clientId] MQTT5 properties: sessionExpiry=$mqtt5SessionExpiryInterval, receiveMax=$mqtt5ReceiveMaximum, maxPacketSize=$mqtt5MaximumPacketSize, willDelay=$willDelayInterval")

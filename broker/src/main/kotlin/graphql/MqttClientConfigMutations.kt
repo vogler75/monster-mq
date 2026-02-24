@@ -473,6 +473,7 @@ class MqttClientConfigMutations(
                 val contentType = inputMap["contentType"] as? String
                 val responseTopicPattern = inputMap["responseTopicPattern"] as? String
                 val payloadFormatIndicator = inputMap["payloadFormatIndicator"] as? Boolean ?: false
+                @Suppress("UNCHECKED_CAST")
                 val userPropertiesList = (inputMap["userProperties"] as? List<Map<String, Any>>)?.mapNotNull { prop ->
                     val key = prop["key"] as? String
                     val value = prop["value"] as? String
@@ -631,6 +632,7 @@ class MqttClientConfigMutations(
                 val contentType = inputMap["contentType"] as? String
                 val responseTopicPattern = inputMap["responseTopicPattern"] as? String
                 val payloadFormatIndicator = inputMap["payloadFormatIndicator"] as? Boolean ?: false
+                @Suppress("UNCHECKED_CAST")
                 val userPropertiesList = (inputMap["userProperties"] as? List<Map<String, Any>>)?.mapNotNull { prop ->
                     val key = prop["key"] as? String
                     val value = prop["value"] as? String

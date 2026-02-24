@@ -40,7 +40,7 @@ done
 # If -build option is specified, run Maven build first
 if [ "$BUILD_FIRST" = true ]; then
     echo "Building MonsterMQ..."
-    mvn clean package
+    mvn package
     if [ $? -ne 0 ]; then
         echo "Build failed!"
         exit 1
