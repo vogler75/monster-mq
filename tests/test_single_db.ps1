@@ -116,7 +116,7 @@ try {
     Pop-Location
     Push-Location $testsDir
     
-    python test_mqtt5_phase5_message_expiry.py
+    python test_mqtt5_message_expiry.py
     $testResult = $LASTEXITCODE
     
     Pop-Location

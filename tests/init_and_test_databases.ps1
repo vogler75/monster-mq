@@ -131,7 +131,7 @@ try {
         Write-Info "Running Phase 5 test..."
         Push-Location $testsDir
         try {
-            $testOutput = python test_mqtt5_phase5_message_expiry.py 2>&1 | Out-String
+            $testOutput = python test_mqtt5_message_expiry.py 2>&1 | Out-String
             if ($LASTEXITCODE -eq 0) {
                 Write-OK "SQLite test PASSED"
                 $results.SQLite.Success = $true
@@ -184,7 +184,7 @@ try {
         Write-Info "Running Phase 5 test..."
         Push-Location $testsDir
         try {
-            $testOutput = python test_mqtt5_phase5_message_expiry.py 2>&1 | Out-String
+            $testOutput = python test_mqtt5_message_expiry.py 2>&1 | Out-String
             if ($LASTEXITCODE -eq 0) {
                 Write-OK "PostgreSQL test PASSED"
                 $results.PostgreSQL.Success = $true
@@ -236,7 +236,7 @@ try {
         Write-Info "Running Phase 5 test..."
         Push-Location $testsDir
         try {
-            $testOutput = python test_mqtt5_phase5_message_expiry.py 2>&1 | Out-String
+            $testOutput = python test_mqtt5_message_expiry.py 2>&1 | Out-String
             if ($LASTEXITCODE -eq 0) {
                 Write-OK "CrateDB test PASSED"
                 $results.CrateDB.Success = $true
@@ -288,7 +288,7 @@ try {
         Write-Info "Running Phase 5 test..."
         Push-Location $testsDir
         try {
-            $testOutput = python test_mqtt5_phase5_message_expiry.py 2>&1 | Out-String
+            $testOutput = python test_mqtt5_message_expiry.py 2>&1 | Out-String
             if ($LASTEXITCODE -eq 0) {
                 Write-OK "MongoDB test PASSED"
                 $results.MongoDB.Success = $true

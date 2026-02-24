@@ -104,7 +104,7 @@ cd broker
 .\run.bat
 # In another terminal:
 cd tests
-python test_mqtt5_phase5_message_expiry.py
+python test_mqtt5_message_expiry.py
 ```
 
 ```bash
@@ -114,7 +114,7 @@ cd broker
 ./run.sh
 # In another terminal:
 cd tests
-python3 test_mqtt5_phase5_message_expiry.py
+python3 test_mqtt5_message_expiry.py
 ```
 
 ## Database Connection Details

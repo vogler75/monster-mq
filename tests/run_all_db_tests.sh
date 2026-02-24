@@ -14,7 +14,7 @@ set -e
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BROKER_DIR="$PROJECT_ROOT/broker"
 TESTS_DIR="$PROJECT_ROOT/tests"
-TEST_SCRIPT="${TEST_SCRIPT:-test_mqtt5_phase5_message_expiry.py}"
+TEST_SCRIPT="${TEST_SCRIPT:-test_mqtt5_message_expiry.py}"
 SKIP_DOCKER_START=${SKIP_DOCKER_START:-false}
 KEEP_DATABASES=${KEEP_DATABASES:-false}
 

@@ -13,7 +13,7 @@
 param(
     [switch]$SkipDockerStart,
     [switch]$KeepDatabases,
-    [string]$TestScript = "test_mqtt5_phase5_message_expiry.py"
+    [string]$TestScript = "test_mqtt5_message_expiry.py"
 )
 
 $ErrorActionPreference = "Stop"

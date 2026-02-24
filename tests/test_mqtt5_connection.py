@@ -1,14 +1,12 @@
-#!/usr/bin/env python3
 """
-MQTT v5.0 Connection Test (pytest compatible)
+Pytest version: MQTT v5.0 Connection Test
 
 Tests basic MQTT v5.0 connection acceptance and CONNACK handling.
-Can be run standalone or with pytest.
 """
 import time
 import pytest
 import paho.mqtt.client as mqtt
-from paho.mqtt.client import CallbackAPIVersion
+from paho.mqtt.enums import CallbackAPIVersion
 from paho.mqtt.properties import Properties
 from paho.mqtt.packettypes import PacketTypes
 
@@ -87,9 +85,11 @@ def test_mqtt5_connection_with_properties(broker_config):
     client.disconnect()
     
     assert connected, "Connection failed"
+    # Server properties may or may not be present depending on implementation
+    # Just verify we got a successful connection
 
 
-@pytest.mark.parametrize("session_expiry", [0, 60, 300])
+@pytest.mark.parametrize("session_expiry", [0, 60, 300, 3600])
 def test_mqtt5_session_expiry_intervals(broker_config, session_expiry):
     """Test connection with various session expiry intervals."""
     connected = False
