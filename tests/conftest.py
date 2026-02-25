@@ -75,13 +75,12 @@ def connected_client(mqtt_client, broker_config):
 
 @pytest.fixture
 def clean_topic():
-    """Provides a unique topic name and cleans up retained messages after test."""
+    """Registers a topic name and clears its retained message after the test."""
     topics = []
     
     def _make_topic(base_name):
-        topic = f"{base_name}/{int(time.time() * 1000)}"
-        topics.append(topic)
-        return topic
+        topics.append(base_name)
+        return base_name
     
     yield _make_topic
     
