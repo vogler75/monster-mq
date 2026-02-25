@@ -50,13 +50,25 @@ def mqtt_client():
 
 @pytest.fixture
 def connected_client(mqtt_client, broker_config):
-    """Provides a connected MQTT v5 client with loop started."""
+    """Provides a connected MQTT v5 client with loop started, waiting for CONNACK."""
+    connected = False
+
+    def on_connect(client, userdata, flags, reason_code, properties):
+        nonlocal connected
+        connected = (reason_code == 0)
+
+    mqtt_client.on_connect = on_connect
     mqtt_client.connect(broker_config["host"], broker_config["port"])
     mqtt_client.loop_start()
-    time.sleep(0.3)  # Give connection time to establish
-    
+
+    # Wait for CONNACK before yielding
+    start = time.time()
+    while not connected and (time.time() - start) < 5.0:
+        time.sleep(0.05)
+    assert connected, "connected_client fixture: CONNACK not received within 5s"
+
     yield mqtt_client
-    
+
     mqtt_client.loop_stop()
     mqtt_client.disconnect()
 
@@ -81,13 +93,23 @@ def clean_topic():
         )
         if USERNAME:
             cleanup_client.username_pw_set(USERNAME, PASSWORD)
+        cleanup_connected = False
+
+        def _on_connect(client, userdata, flags, reason_code, properties):
+            nonlocal cleanup_connected
+            cleanup_connected = (reason_code == 0)
+
+        cleanup_client.on_connect = _on_connect
         try:
             cleanup_client.connect(BROKER_HOST, BROKER_PORT)
             cleanup_client.loop_start()
-            time.sleep(0.2)
-            for topic in topics:
-                cleanup_client.publish(topic, "", retain=True)
-            time.sleep(0.2)
+            start = time.time()
+            while not cleanup_connected and (time.time() - start) < 5.0:
+                time.sleep(0.05)
+            if cleanup_connected:
+                for topic in topics:
+                    cleanup_client.publish(topic, "", retain=True)
+                time.sleep(0.2)
             cleanup_client.loop_stop()
             cleanup_client.disconnect()
         except:
@@ -106,13 +128,18 @@ class MessageCollector:
         """Connection callback."""
         self.connected = (reason_code == 0)
     
-    def on_subscribe(self, client, userdata, mid, reason_code_list, properties):
+    def on_subscribe(self, client, userdata, mid, reason_code_list, properties=None):
         """Subscribe callback."""
+        def _is_success(rc):
+            # ReasonCode objects: value < 128 means success (Granted QoS 0/1/2)
+            # Plain int 0 also means success (MQTTv3 style)
+            if hasattr(rc, 'value'):
+                return rc.value < 128
+            return rc == 0
         if isinstance(reason_code_list, list):
-            self.subscribed = all(rc == 0 for rc in reason_code_list)
+            self.subscribed = all(_is_success(rc) for rc in reason_code_list)
         else:
-            # Single reason code
-            self.subscribed = (reason_code_list == 0)
+            self.subscribed = _is_success(reason_code_list)
     
     def on_message(self, client, userdata, msg):
         """Message callback."""

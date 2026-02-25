@@ -74,6 +74,257 @@ When MQTT messages are published, OPC UA subscribers receive immediate notificat
 2. **OPC UA Node Updated** → `MonsterMQ/sensors/temp1` value becomes `24.5`
 3. **Subscriptions Notified** → All OPC UA clients subscribed to the node receive the update
 
+## Step-by-step Setup
+
+### Step 1: Create an OPC UA Server
+
+```graphql
+mutation {
+  opcUaServer {
+    create(config: {
+      name: "test-server"
+      namespace: "opcua/server"
+      nodeId: "*"
+      enabled: true
+      port: 4840
+      path: "server"
+      namespaceUri: "urn:MonsterMQ:OpcUaServer"
+    }) {
+      success
+      message
+      server {
+        name
+        port
+        enabled
+      }
+    }
+  }
+}
+```
+
+### Step 2: Add Address Mappings
+
+Map MQTT topics to OPC UA nodes:
+
+```graphql
+# Text data (read/write)
+mutation {
+  opcUaServer {
+    addAddress(serverName: "test-server", address: {
+      mqttTopic: "write/#"
+      browseName: "write"
+      dataType: TEXT
+      accessLevel: READ_WRITE
+    }) { success message }
+  }
+}
+
+# Numeric data (read/write)
+mutation {
+  opcUaServer {
+    addAddress(serverName: "test-server", address: {
+      mqttTopic: "float/#"
+      browseName: "float"
+      dataType: NUMERIC
+      accessLevel: READ_WRITE
+      unit: "units"
+    }) { success message }
+  }
+}
+
+# Read-only sensor data
+mutation {
+  opcUaServer {
+    addAddress(serverName: "test-server", address: {
+      mqttTopic: "sensors/#"
+      browseName: "sensors"
+      dataType: NUMERIC
+      accessLevel: READ_ONLY
+    }) { success message }
+  }
+}
+```
+
+### Step 3: Restart After Adding Mappings
+
+After adding address mappings to a running server, restart it to apply the changes:
+
+```graphql
+mutation { opcUaServer { stop(serverName: "test-server") { success message } } }
+mutation { opcUaServer { start(serverName: "test-server") { success message } } }
+```
+
+Check broker logs for:
+```
+[INFO] Setting up X configured nodes for OPC UA server 'test-server'
+```
+
+### Step 4: Create OPC UA Nodes via MQTT
+
+OPC UA nodes are created dynamically when MQTT messages are published to mapped topics:
+
+```python
+import paho.mqtt.client as mqtt
+import time
+
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+client.username_pw_set("admin", "public")
+client.connect("localhost", 1883)
+client.loop_start()
+
+time.sleep(1)
+client.publish("write/oee", "100").wait_for_publish()
+client.publish("float/temperature", "23.5").wait_for_publish()
+
+time.sleep(1)
+client.loop_stop()
+client.disconnect()
+```
+
+Or using mosquitto CLI:
+```bash
+mosquitto_pub -h localhost -p 1883 -u admin -P public -t "write/oee" -m "100"
+mosquitto_pub -h localhost -p 1883 -u admin -P public -t "float/temperature" -m "23.5"
+```
+
+### Step 5: Connect an OPC UA Client
+
+**Endpoint:** `opc.tcp://localhost:4840/server`
+
+**Node ID format:**
+- Variable nodes: `ns=2;s=<topic>:v` (e.g. `ns=2;s=write/oee:v`)
+- Folder nodes: `ns=2;s=<topic>:o` (e.g. `ns=2;s=write:o`)
+
+**Node path structure:**
+```
+Objects/
+  opcua/
+    server/
+      write/
+        oee  (value: "100")
+      float/
+        temperature  (value: 23.5)
+```
+
+**Python OPC UA client example:**
+```python
+from asyncua import Client
+import asyncio
+
+async def main():
+    async with Client(url="opc.tcp://localhost:4840/server") as client:
+        node = client.get_node("ns=2;s=write/oee:v")
+        print(f"Current value: {await node.read_value()}")
+        await node.write_value("999")
+        print(f"New value: {await node.read_value()}")
+
+asyncio.run(main())
+```
+
+## Management Commands
+
+### Query server status
+
+```graphql
+query {
+  opcUaServer(name: "test-server") {
+    name
+    enabled
+    port
+    path
+    status
+    addresses {
+      mqttTopic
+      browseName
+      dataType
+      accessLevel
+    }
+  }
+}
+```
+
+### List all servers
+
+```graphql
+query {
+  opcUaServers {
+    name
+    enabled
+    port
+    status
+  }
+}
+```
+
+### Update server configuration
+
+```graphql
+mutation {
+  opcUaServer {
+    update(name: "test-server", input: {
+      namespace: "opcua/server"
+      nodeId: "*"
+      enabled: true
+      port: 4841
+      path: "monstermq"
+    }) { success message }
+  }
+}
+```
+
+### Remove an address mapping
+
+```graphql
+mutation {
+  opcUaServer {
+    removeAddress(serverName: "test-server", mqttTopic: "write/#") { success message }
+  }
+}
+```
+
+### Enable/disable a server
+
+```graphql
+mutation {
+  opcUaServer {
+    toggle(name: "test-server", enabled: false) { success message }
+  }
+}
+```
+
+### Delete a server
+
+```graphql
+mutation {
+  opcUaServer {
+    delete(serverName: "test-server") { success message }
+  }
+}
+```
+
+## Troubleshooting
+
+### Server not starting
+
+Check broker logs for:
+```
+[INFO] Starting OPC UA Server 'test-server' on port 4840
+[INFO] OPC UA Server 'test-server' started successfully on port 4840
+```
+
+### Nodes not appearing
+
+1. Ensure MQTT messages have been published to mapped topics — nodes are created lazily on first message.
+2. Check topic patterns match (e.g. `write/#` matches `write/oee`).
+3. Verify namespace index is `2` in node IDs.
+4. Use an OPC UA browser to explore the actual node structure.
+
+### Connection timeout
+
+- Verify port 4840 is not blocked by a firewall.
+- Check server is running: `query { opcUaServer(name: "test-server") { status } }`
+- Test endpoint: `opc.tcp://localhost:4840/server`
+
 ## GraphQL Entrypoints
 
 The CLI only wires the following resolvers at the moment:
