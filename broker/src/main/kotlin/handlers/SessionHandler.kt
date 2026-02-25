@@ -1242,11 +1242,9 @@ open class SessionHandler(
                 logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
                 var effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
                 
-                // Apply Retain As Published (RAP) logic
-                // If RAP=false, clear the retain flag when delivering retained messages
-                if (!retainAsPublished && effectiveMessage.isRetain) {
-                    effectiveMessage = effectiveMessage.cloneWithRetainFlag(false)
-                }
+                // MQTT 3.1.1 §3.3.1.3 / MQTT 5.0 §3.3.1.3: retain flag MUST be 1 on retained messages
+                // delivered at subscription time. The stored message already has isRetain=true, so no
+                // adjustment is needed here. RAP only affects the live-message forwarding path.
                 
                 sendMessageToClient(clientId, effectiveMessage)
             }.onComplete {
@@ -1764,11 +1762,20 @@ open class SessionHandler(
 
             logger.finest { "Processing [${localClients.size}] local clients out of [${clients.size}] total clients [${Utils.getCurrentFunctionName()}]" }
 
+            // Helper: apply RAP (Retain As Published) logic for live message forwarding.
+            // MQTT 3.1.1 §3.3.1.3 / MQTT 5.0 §3.3.1.3: retain flag MUST be 0 for live delivery
+            // unless the subscriber has RAP=true (MQTT 5.0 only).
+            fun messageForClient(clientId: String, msg: BrokerMessage): BrokerMessage {
+                if (!msg.isRetain) return msg
+                val rap = try { subscriptionManager.getRetainAsPublished(clientId, msg.topicName) } catch (e: Exception) { false }
+                return if (rap) msg else msg.cloneWithRetainFlag(false)
+            }
+
             when (qos) {
                 0 -> {
                     // QoS 0: Batch deliver with event loop yields to prevent blocking
                     processClientBatchAsync(localClients, m) { clientId, msg ->
-                        sendMessageToClient(clientId, msg)
+                        sendMessageToClient(clientId, messageForClient(clientId, msg))
                     }
                 }
                 1, 2 -> {
@@ -1785,14 +1792,15 @@ open class SessionHandler(
                     // Queue-first for persistent session online clients: queue first
                     // Triggers are sent after DB write completes (in queueWorkerThread)
                     if (persistentOnline.isNotEmpty()) {
-                        val persistentClientIds = persistentOnline.map { it.first }
-                        enqueueMessage(m, persistentClientIds)
-                        logger.finest { "Queue-first: enqueued message for ${persistentClientIds.size} persistent online clients [${Utils.getCurrentFunctionName()}]" }
+                        persistentOnline.forEach { (clientId, _) ->
+                            enqueueMessage(messageForClient(clientId, m), listOf(clientId))
+                        }
+                        logger.finest { "Queue-first: enqueued message for ${persistentOnline.size} persistent online clients [${Utils.getCurrentFunctionName()}]" }
                     }
 
                     // Clean session online clients: send directly (no persistence needed)
                     processClientBatchAsync(cleanOnline, m) { clientId, msg ->
-                        sendMessageToClient(clientId, msg)
+                        sendMessageToClient(clientId, messageForClient(clientId, msg))
                     }
 
                     if (others.isNotEmpty()) {
@@ -1801,15 +1809,15 @@ open class SessionHandler(
                         }
                         logger.finest { "Created [${created.size}] Offline [${offline.size}] [${Utils.getCurrentFunctionName()}]" }
                         created.forEach { (clientId, _) ->
-                            addInFlightMessage(clientId, m)
+                            addInFlightMessage(clientId, messageForClient(clientId, m))
                         }
                         if (offline.isNotEmpty()) {
                             // Only queue messages for clients with persistent sessions
                             val persistentClients = offline.filter { (clientId, _) ->
                                 shouldPersistMessagesForClient(clientId)
                             }
-                            if (persistentClients.isNotEmpty()) {
-                                enqueueMessage(m, persistentClients.map { it.first })
+                            persistentClients.forEach { (clientId, _) ->
+                                enqueueMessage(messageForClient(clientId, m), listOf(clientId))
                             }
                         }
                     }
