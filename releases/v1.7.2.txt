@@ -1,0 +1,44 @@
+Release v1.7.2
+Built from commit: 59641fd
+Date: 2026-02-27 18:13:20
+
+Changes since v1.7.1:
+---
+59641fd Merge branch 'release/v1.7' of github.com:vogler75/monster-mq into release/v1.7
+de5d741 Fix MongoDB $expr filter in purgeExpiredMessages
+e1877a8 Bump version to 1.7.1
+5b279fa Update version.txt
+c40c425 Rework RAP tests to correctly distinguish live vs subscription-time delivery
+93e874c Fix MQTT 3.1.1 retain flag handling for live and subscription-time delivery
+b8aa211 Delete test_mqtt5_retain_as_published.py
+94957b8 Rework of tests
+28c856b Remove duplicate MQTT5 test files and update references
+b243a8d Improve MQTT5 CONNECT property logging and fix compiler warnings
+d54b190 Delete test_output.txt
+4695c4d Removed not needed files
+18d2812 Merge branch 'temp-pr94' into fix/#94
+f5d681b Delete cesmii_i3x_api_interface.md
+635cc8b Create issue for CESMII I3X API interface implementation
+4c7f73f Merge branch 'main' into 4-implement-mqtt5-support
+8befea2 remove logfiles from git
+069ca6c chore: remove temporary console output files and update test
+82c0ce9 feat(phase9): add MQTT v5 web dashboard UI integration
+67c6d9c feat(phase9): add MQTT v5 GraphQL API and database storage support
+1c299ce docs: update MQTT v5 documentation to reflect 98% completion
+7e6d7bf docs: update MQTT v5 implementation plan with Phase 9 completion
+cf8e57e fix: MQTT v5 bridge connection properties persistence and dynamic updates
+20bf21c Add Phase 6 completion summary documentation
+48ae83f Phase 6 Complete: Enhanced Authentication (SCRAM-SHA-256)
+fc242b4 Fix UI issues: remove MQTT v5 adoption metric and ensure protocol selector in bridge edit page
+4ed2d61 update and fixed some tests
+da6f91a Fix OPC UA subscription tests and consolidate MQTT tests
+e11918b Convert all Python tests to pytest format with full coverage
+b4b17a1 Complete MQTT v5 implementation: RAP subscription option + test suite updates
+5078eba feat(mqtt5): implement retain handling subscription option (Phase 8)
+cb158c2 MQTT v5.0 Implementation - Phases 1-7 Complete
+740e634 Fix User Properties parsing - handle ArrayList of StringPair
+6f89518 Phase 3: MQTT v5 PUBLISH properties - parse, store, forward
+4d35dfc Phase 2 complete: MQTT v5.0 reason codes in ACK packets
+42b145a Phase 1 complete: MQTT5 connection acceptance with property parsing
+ffe8b90 Phase 1: Enable MQTT 5.0 basic connection support
+bb32cc3 Add infrastructure setup and documentation
