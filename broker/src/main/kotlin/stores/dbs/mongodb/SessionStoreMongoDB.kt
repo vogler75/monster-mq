@@ -542,7 +542,7 @@ class SessionStoreMongoDB(
                 and(
                     exists("message_expiry_interval"),
                     exists("creation_time"),
-                    gte("\$expr", Document("\$gte", listOf(
+                    Document("\$expr", Document("\$gte", listOf(
                         Document("\$divide", listOf(
                             Document("\$subtract", listOf(currentTimeMillis, "\$creation_time")),
                             1000
