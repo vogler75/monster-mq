@@ -180,6 +180,13 @@
             <version>${vertx.version}</version>
         </dependency>
 
+        <!-- NATS.io Java client for NATS/JetStream bridge -->
+        <dependency>
+            <groupId>io.nats</groupId>
+            <artifactId>jnats</artifactId>
+            <version>2.20.4</version>
+        </dependency>
+
         <!-- Eclipse Paho MQTT Client for connecting to remote MQTT brokers -->
         <dependency>
             <groupId>org.eclipse.paho</groupId>

@@ -119,6 +119,11 @@ class SidebarManager {
                         text: 'Kafka Clients'
                     },
                     {
+                        href: '/pages/nats-clients.html',
+                        icon: '<circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M3 12h6M15 12h6"/><path d="M5.6 5.6l4.2 4.2M14.2 14.2l4.2 4.2"/><path d="M5.6 18.4l4.2-4.2M14.2 9.8l4.2-4.2"/>',
+                        text: 'NATS Clients'
+                    },
+                    {
                         href: '/pages/winccoa-clients.html',
                         icon: '<rect x="4" y="4" width="16" height="16" rx="2" fill="none"></rect><text x="12" y="17" text-anchor="middle" font-size="14" font-weight="bold" fill="currentColor" font-family="Arial, sans-serif">S</text>',
                         text: 'WinCC OA Clients'

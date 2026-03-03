@@ -928,6 +928,12 @@ MORE INFO:
                         vertx.deployVerticle(kafkaClientExtension, kafkaDeploymentOptions)
                     }
                     .compose {
+                        // NATS Client Bridge Extension
+                        val natsClientExtension = at.rocworks.devices.natsclient.NatsClientExtension()
+                        val natsDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(natsClientExtension, natsDeploymentOptions)
+                    }
+                    .compose {
                         // WinCC OA Client Extension (GraphQL-based)
                         val winCCOaExtension = WinCCOaExtension()
                         val winCCOaDeploymentOptions = DeploymentOptions().setConfig(configJson)
