@@ -298,6 +298,24 @@
         }
       }
     },
+    "I3x": {
+      "type": "object",
+      "description": "CESMII I3X (Industrial Information Interoperability eXchange) REST API server. Exposes MQTT topics, current values, historical data and publish capabilities through the standardized I3X manufacturing API.",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Enable I3X API server",
+          "default": false
+        },
+        "Port": {
+          "type": "integer",
+          "description": "Port for I3X API HTTP endpoint",
+          "default": 3002,
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
     "Oa4jBridge": {
       "type": "object",
       "description": "Native WinCC OA bridge configuration. Allows MQTT clients to interact with WinCC OA via !OA/<namespace>/<operation>/<name> topics. Operations: dps (dpConnect), dpt (dpTypeGet), sql (SQL query). Requires MonsterMQ to run as a WinCC OA manager (MonsterOA entry point).",
