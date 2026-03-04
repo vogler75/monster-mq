@@ -30,10 +30,9 @@ import java.util.concurrent.ConcurrentHashMap
  * capabilities through a standardized manufacturing API.
  *
  * Concept mapping:
- * - Namespace   → Archive Group
- * - ObjectType  → "MqttTopic" (static type)
- * - Object      → MQTT topic (elementId = topic path)
- * - Value       → Current value from lastValStore (VQT format)
+ * - ObjectType  → "MqttTopic" (single static type)
+ * - Object      → MQTT topic level (elementId = {group}/{topic}, linked via parentId)
+ * - Value       → Current value from lastValStore (VQT format; JSON payloads = properties)
  * - History     → Historical records from archiveStore (VQT format)
  *
  * @see https://www.i3x.dev/
@@ -51,20 +50,20 @@ class I3xServer(
 
     private data class I3xSubscription(
         val id: String,
+        val created: Instant = Instant.now(),
         val topics: MutableList<String> = mutableListOf(),
-        val pendingQueue: ArrayDeque<JsonObject> = ArrayDeque()
+        val pendingQueue: ArrayDeque<JsonObject> = ArrayDeque(),
+        var maxDepth: Int = 1
     )
 
     private val subscriptions = ConcurrentHashMap<String, I3xSubscription>()
 
     private val NS_PREFIX = "urn:monstermq:archivegroup"
-    private val REL_TYPE_ID = "urn:monstermq:reltype:parent"
+    private val REL_TYPE_PARENT = "urn:monstermq:reltype:parent"
 
     private fun typeId(groupName: String) = "$NS_PREFIX:$groupName:type:MqttTopic"
-    private fun namespaceUri(groupName: String) = "$NS_PREFIX:$groupName"
 
     // elementId encodes the archive group as a prefix: "{groupName}/{mqttTopic}"
-    // Archive group names must not contain '/' (they are simple config names like "Default")
     private fun parseElementId(elementId: String): Pair<String, String>? {
         val slashIdx = elementId.indexOf('/')
         if (slashIdx < 0) return null
@@ -77,6 +76,25 @@ class I3xServer(
         val suffix = ":type:MqttTopic"
         if (!tid.startsWith(prefix) || !tid.endsWith(suffix)) return null
         return tid.removePrefix(prefix).removeSuffix(suffix)
+    }
+
+    private fun parentIdFromTopic(groupName: String, topicName: String): String {
+        val lastSlash = topicName.lastIndexOf('/')
+        return if (lastSlash > 0) "$groupName/${topicName.substring(0, lastSlash)}" else "/"
+    }
+
+    /**
+     * Check if a candidate topic is within the allowed depth from a base topic.
+     * I3X maxDepth semantics: 0 = infinite, 1 = exact match only, N = N-1 levels of children.
+     */
+    private fun topicMatchesDepth(baseTopic: String, candidateTopic: String, maxDepth: Int): Boolean {
+        if (maxDepth == 0) return true
+        if (candidateTopic == baseTopic) return true
+        if (maxDepth == 1) return false
+        val prefix = "$baseTopic/"
+        if (!candidateTopic.startsWith(prefix)) return false
+        val levels = candidateTopic.removePrefix(prefix).count { it == '/' } + 1
+        return levels <= maxDepth - 1
     }
 
     override fun start(startPromise: Promise<Void>) {
@@ -100,6 +118,8 @@ class I3xServer(
         router.route().handler(BodyHandler.create())
 
         router.route("/*").handler { ctx ->
+            val body = if (ctx.request().method().name() == "POST") ctx.body()?.asString()?.take(200) else ""
+            logger.info("I3X ${ctx.request().method()} ${ctx.request().uri()} $body")
             if (!validateAuthentication(ctx)) return@handler
             ctx.next()
         }
@@ -109,6 +129,7 @@ class I3xServer(
         router.get("/objecttypes").handler(::handleObjectTypes)
         router.post("/objecttypes/query").handler(::handleObjectTypesQuery)
         router.get("/relationshiptypes").handler(::handleRelationshipTypes)
+        router.post("/relationshiptypes/query").handler(::handleRelationshipTypesQuery)
         router.get("/objects").handler(::handleObjects)
         router.post("/objects/list").handler(::handleObjectsList)
         router.post("/objects/related").handler(::handleObjectsRelated)
@@ -144,14 +165,20 @@ class I3xServer(
             }
     }
 
+    override fun stop() {
+        for (sub in subscriptions.values) {
+            sessionHandler.unregisterMessageListener("i3x-${sub.id}")
+        }
+        subscriptions.clear()
+    }
+
     // --- Helpers ---
 
     private fun mqttTopicType(groupName: String) = JsonObject()
         .put("elementId", typeId(groupName))
         .put("displayName", "MQTT Topic")
         .put("description", "An MQTT topic with a value payload")
-        .put("namespaceUri", namespaceUri(groupName))
-        .put("definition", JsonObject()
+        .put("schema", JsonObject()
             .put("type", "object")
             .put("properties", JsonObject()
                 .put("value", JsonObject().put("type", "any").put("description", "Topic payload value"))
@@ -159,17 +186,77 @@ class I3xServer(
             .encode())
         .put("variables", JsonArray())
 
-    private fun topicToObject(groupName: String, topicName: String) = JsonObject()
-        .put("elementId", "$groupName/$topicName")
-        .put("displayName", topicName)
-        .put("typeId", typeId(groupName))
+    private fun buildObjectJson(
+        groupName: String,
+        topicName: String,
+        parentId: String,
+        isComposition: Boolean,
+        includeMetadata: Boolean
+    ): JsonObject {
+        val displayName = topicName.substringAfterLast("/")
+        val obj = JsonObject()
+            .put("elementId", "$groupName/$topicName")
+            .put("displayName", displayName)
+            .put("typeId", typeId(groupName))
+            .put("parentId", parentId)
+            .put("isComposition", isComposition)
+            .put("namespaceUri", "$NS_PREFIX:$groupName")
+        if (includeMetadata) {
+            obj.put("relationships", JsonArray().add(
+                JsonObject()
+                    .put("relationshipTypeId", REL_TYPE_PARENT)
+                    .put("targetElementId", parentId)
+            ))
+        }
+        return obj
+    }
+
+    /**
+     * Expand stored topic names into the full set of topic levels including intermediates.
+     * E.g., topic "a/b/c" produces ["a", "a/b", "a/b/c"].
+     */
+    private fun expandAllTopicLevels(storeTopics: Collection<String>): Set<String> {
+        val allTopics = mutableSetOf<String>()
+        for (topic in storeTopics) {
+            val parts = topic.split("/")
+            for (j in 1..parts.size) {
+                allTopics.add(parts.subList(0, j).joinToString("/"))
+            }
+        }
+        return allTopics
+    }
+
+    /**
+     * Compute which topics have children in the full expanded set.
+     */
+    private fun computeHasChildrenSet(allTopics: Set<String>): Set<String> {
+        val hasChildren = mutableSetOf<String>()
+        for (topic in allTopics) {
+            val parent = topic.substringBeforeLast("/", "")
+            if (parent.isNotEmpty()) hasChildren.add(parent)
+        }
+        return hasChildren
+    }
 
     private fun messageToVqt(message: BrokerMessage): JsonObject {
         val payloadStr = String(message.payload, Charsets.UTF_8)
-        val value: Any = try { JsonObject(payloadStr) } catch (e: Exception) {
-            payloadStr.toDoubleOrNull() ?: payloadStr
+        val value: Any = try { JsonObject(payloadStr) } catch (_: Exception) {
+            try { JsonArray(payloadStr) } catch (_: Exception) {
+                payloadStr.toDoubleOrNull() ?: payloadStr
+            }
         }
-        return JsonObject().put("v", value).put("q", 1).put("t", message.time.toString())
+        return JsonObject()
+            .put("value", value)
+            .put("quality", "GOOD")
+            .put("timestamp", message.time.toString())
+    }
+
+    private fun extractPayloadString(record: JsonObject): String? {
+        return record.getString("payload_json")
+            ?: record.getString("payload")
+            ?: record.getString("payload_base64")?.let { b64 ->
+                try { String(Base64.getDecoder().decode(b64)) } catch (e: Exception) { null }
+            }
     }
 
     private fun ok(ctx: RoutingContext, body: JsonObject) {
@@ -192,7 +279,7 @@ class I3xServer(
     private fun handleNamespaces(ctx: RoutingContext) {
         val result = JsonArray()
         archiveHandler.getDeployedArchiveGroups().keys.forEach { name ->
-            result.add(JsonObject().put("uri", namespaceUri(name)).put("displayName", name))
+            result.add(JsonObject().put("uri", "$NS_PREFIX:$name").put("displayName", name))
         }
         ok(ctx, result)
     }
@@ -225,14 +312,30 @@ class I3xServer(
     private fun handleRelationshipTypes(ctx: RoutingContext) {
         ok(ctx, JsonArray().add(
             JsonObject()
-                .put("elementId", REL_TYPE_ID)
+                .put("elementId", REL_TYPE_PARENT)
                 .put("displayName", "parent")
                 .put("description", "MQTT topic path hierarchy")
         ))
     }
 
+    private fun handleRelationshipTypesQuery(ctx: RoutingContext) {
+        val body = ctx.body().asJsonObject() ?: JsonObject()
+        val elementIds = body.getJsonArray("elementIds") ?: JsonArray()
+        val result = JsonArray()
+        for (i in 0 until elementIds.size()) {
+            if (elementIds.getString(i) == REL_TYPE_PARENT) {
+                result.add(JsonObject()
+                    .put("elementId", REL_TYPE_PARENT)
+                    .put("displayName", "parent")
+                    .put("description", "MQTT topic path hierarchy"))
+            }
+        }
+        ok(ctx, result)
+    }
+
     private fun handleObjects(ctx: RoutingContext) {
         val typeIdParam = ctx.queryParam("typeId").firstOrNull()
+        val includeMetadata = ctx.queryParam("includeMetadata").firstOrNull()?.toBooleanStrictOrNull() ?: false
         val groups = archiveHandler.getDeployedArchiveGroups()
         val result = JsonArray()
         val groupsToQuery = if (typeIdParam != null) {
@@ -242,11 +345,24 @@ class I3xServer(
         } else {
             groups
         }
+        // Return only root objects (first topic level per group).
+        // The browser navigates children via POST /objects/related.
         for ((groupName, archiveGroup) in groupsToQuery) {
             val lastValStore = archiveGroup.lastValStore ?: continue
-            lastValStore.findMatchingMessages("#") { message ->
-                result.add(topicToObject(groupName, message.topicName))
-                result.size() < 10000
+
+            // Collect distinct first-level topic segments
+            val rootSegments = mutableSetOf<String>()
+            lastValStore.findMatchingMessages("#") { msg ->
+                rootSegments.add(msg.topicName.substringBefore("/"))
+                rootSegments.size < 10000
+            }
+
+            for (root in rootSegments.sorted()) {
+                // A root is a composition if any topic goes deeper
+                val hasChildren = rootSegments.isNotEmpty() // always true if we got here
+                result.add(buildObjectJson(
+                    groupName, root, "/", true, includeMetadata
+                ))
             }
         }
         ok(ctx, result)
@@ -255,13 +371,31 @@ class I3xServer(
     private fun handleObjectsList(ctx: RoutingContext) {
         val body = ctx.body().asJsonObject() ?: JsonObject()
         val elementIds = body.getJsonArray("elementIds") ?: JsonArray()
+        val includeMetadata = body.getBoolean("includeMetadata", false)
         val groups = archiveHandler.getDeployedArchiveGroups()
         val result = JsonArray()
         for (i in 0 until elementIds.size()) {
-            val (groupName, topicName) = parseElementId(elementIds.getString(i) ?: continue) ?: continue
+            val fullId = elementIds.getString(i) ?: continue
+            val (groupName, topicName) = parseElementId(fullId) ?: continue
             val lastValStore = groups[groupName]?.lastValStore ?: continue
-            val msg = lastValStore[topicName]
-            if (msg != null) result.add(topicToObject(groupName, msg.topicName))
+
+            // Check if this topic exists directly or as an intermediate level
+            var exists = lastValStore[topicName] != null
+            var hasChildren = false
+            lastValStore.findMatchingMessages("$topicName/#") { m ->
+                if (m.topicName != topicName) { hasChildren = true; exists = true; false } else true
+            }
+            if (!exists) {
+                // Also check if topic exists as prefix of any stored topic
+                lastValStore.findMatchingMessages("$topicName/+") { m ->
+                    exists = true; hasChildren = true; false
+                }
+            }
+            if (!exists) continue
+            result.add(buildObjectJson(
+                groupName, topicName, parentIdFromTopic(groupName, topicName),
+                hasChildren, includeMetadata
+            ))
         }
         ok(ctx, result)
     }
@@ -269,16 +403,50 @@ class I3xServer(
     private fun handleObjectsRelated(ctx: RoutingContext) {
         val body = ctx.body().asJsonObject() ?: JsonObject()
         val elementIds = body.getJsonArray("elementIds") ?: JsonArray()
+        val includeMetadata = body.getBoolean("includeMetadata", false)
+        val relationshipType = body.getString("relationshiptype")
         val groups = archiveHandler.getDeployedArchiveGroups()
         val result = JsonArray()
+
+        // If a specific relationship type is requested and it's not ours, return empty
+        if (relationshipType != null && relationshipType != REL_TYPE_PARENT) {
+            ok(ctx, result)
+            return
+        }
+
         for (i in 0 until elementIds.size()) {
-            val (groupName, parentTopic) = parseElementId(elementIds.getString(i) ?: continue) ?: continue
+            val fullId = elementIds.getString(i) ?: continue
+            val (groupName, parentTopic) = parseElementId(fullId) ?: continue
             val lastValStore = groups[groupName]?.lastValStore ?: continue
-            val prefix = if (parentTopic.endsWith("/")) parentTopic else "$parentTopic/"
-            lastValStore.findMatchingMessages("$parentTopic/#") { message ->
-                val rest = message.topicName.removePrefix(prefix)
-                if (!rest.contains("/")) result.add(topicToObject(groupName, message.topicName))
+
+            // Collect all descendant topics from the store
+            val storeDescendants = mutableSetOf<String>()
+            lastValStore.findMatchingMessages("$parentTopic/#") { msg ->
+                if (msg.topicName != parentTopic) storeDescendants.add(msg.topicName)
                 true
+            }
+
+            // Expand to include intermediate levels between parent and leaf topics
+            val allDescendants = mutableSetOf<String>()
+            val prefix = "$parentTopic/"
+            for (desc in storeDescendants) {
+                val suffix = desc.removePrefix(prefix)
+                val parts = suffix.split("/")
+                for (j in 1..parts.size) {
+                    allDescendants.add("$parentTopic/${parts.subList(0, j).joinToString("/")}")
+                }
+            }
+
+            // Direct children: one level below parent
+            for (childTopic in allDescendants.sorted()) {
+                if (!childTopic.startsWith(prefix)) continue
+                if (childTopic.removePrefix(prefix).contains("/")) continue
+
+                val hasSubChildren = allDescendants.any { it.startsWith("$childTopic/") }
+
+                result.add(buildObjectJson(
+                    groupName, childTopic, fullId, hasSubChildren, includeMetadata
+                ))
             }
         }
         ok(ctx, result)
@@ -289,28 +457,30 @@ class I3xServer(
     private fun handleObjectsValue(ctx: RoutingContext) {
         val body = ctx.body().asJsonObject() ?: JsonObject()
         val elementIds = body.getJsonArray("elementIds") ?: JsonArray()
-        val maxDepth = body.getInteger("maxDepth", 0)
+        val maxDepth = body.getInteger("maxDepth") ?: 1 // I3X spec: 0=infinite, 1=exact(default)
         val groups = archiveHandler.getDeployedArchiveGroups()
-        val result = JsonArray()
+        val result = JsonObject()
 
         for (i in 0 until elementIds.size()) {
             val elementId = elementIds.getString(i) ?: continue
             val (groupName, topicName) = parseElementId(elementId) ?: continue
             val lastValStore = groups[groupName]?.lastValStore ?: continue
 
-            if (maxDepth == 0) {
+            if (maxDepth == 1) {
                 val msg = lastValStore[topicName]
                 if (msg != null) {
-                    result.add(JsonObject()
-                        .put("elementId", elementId)
-                        .put("value", JsonObject().put("data", JsonArray().add(messageToVqt(msg)))))
+                    result.put(elementId, JsonObject().put("data", JsonArray().add(messageToVqt(msg))))
                 }
             } else {
-                val pattern = if (topicName.endsWith("#")) topicName else "$topicName/#"
-                lastValStore.findMatchingMessages(pattern) { msg ->
-                    result.add(JsonObject()
-                        .put("elementId", "$groupName/${msg.topicName}")
-                        .put("value", JsonObject().put("data", JsonArray().add(messageToVqt(msg)))))
+                val selfMsg = lastValStore[topicName]
+                if (selfMsg != null) {
+                    result.put(elementId, JsonObject().put("data", JsonArray().add(messageToVqt(selfMsg))))
+                }
+                lastValStore.findMatchingMessages("$topicName/#") { msg ->
+                    if (msg.topicName != topicName && topicMatchesDepth(topicName, msg.topicName, maxDepth)) {
+                        val childId = "$groupName/${msg.topicName}"
+                        result.put(childId, JsonObject().put("data", JsonArray().add(messageToVqt(msg))))
+                    }
                     true
                 }
             }
@@ -324,40 +494,49 @@ class I3xServer(
         val startTime = body.getString("startTime")?.let { parseInstant(it) }
         val endTime = body.getString("endTime")?.let { parseInstant(it) }
         val limit = body.getInteger("limit", 1000)
+        val maxDepth = body.getInteger("maxDepth") ?: 1
         val groups = archiveHandler.getDeployedArchiveGroups()
-        val result = JsonArray()
+        val result = JsonObject()
 
         for (i in 0 until elementIds.size()) {
             val elementId = elementIds.getString(i) ?: continue
             val (groupName, topicName) = parseElementId(elementId) ?: continue
-            val archiveStore = groups[groupName]?.archiveStore as? IMessageArchiveExtended ?: run {
-                logger.warning("I3X history: no archiveStore for archive group '$groupName'")
-                continue
-            }
-            try {
-                val history = archiveStore.getHistory(topicName, startTime, endTime, limit)
-                val data = JsonArray()
-                for (j in 0 until history.size()) {
-                    val record = history.getJsonObject(j)
-                    val timestampMs = record.getLong("timestamp") ?: continue
-                    val payloadStr = record.getString("payload_json")
-                        ?: record.getString("payload")
-                        ?: record.getString("payload_base64")?.let { b64 ->
-                            try { String(Base64.getDecoder().decode(b64)) } catch (e: Exception) { null }
-                        } ?: continue
-                    val value: Any = try { JsonObject(payloadStr) } catch (e: Exception) {
-                        payloadStr.toDoubleOrNull() ?: payloadStr
+
+            val topicsToQuery = mutableListOf<Pair<String, String>>() // (elementId, mqttTopic)
+            topicsToQuery.add(elementId to topicName)
+            if (maxDepth != 1) {
+                val lastValStore = groups[groupName]?.lastValStore
+                lastValStore?.findMatchingMessages("$topicName/#") { msg ->
+                    if (msg.topicName != topicName && topicMatchesDepth(topicName, msg.topicName, maxDepth)) {
+                        topicsToQuery.add("$groupName/${msg.topicName}" to msg.topicName)
                     }
-                    data.add(JsonObject()
-                        .put("v", value)
-                        .put("q", 1)
-                        .put("t", Instant.ofEpochMilli(timestampMs).toString()))
+                    true
                 }
-                result.add(JsonObject()
-                    .put("elementId", elementId)
-                    .put("value", JsonObject().put("data", data)))
-            } catch (e: Exception) {
-                logger.warning("I3X history error for '$elementId': ${e.message}")
+            }
+
+            for ((eid, mqttTopic) in topicsToQuery) {
+                val archiveStore = groups[groupName]?.archiveStore as? IMessageArchiveExtended ?: continue
+                try {
+                    val history = archiveStore.getHistory(mqttTopic, startTime, endTime, limit)
+                    val data = JsonArray()
+                    for (j in 0 until history.size()) {
+                        val record = history.getJsonObject(j)
+                        val timestampMs = record.getLong("timestamp") ?: continue
+                        val payloadStr = extractPayloadString(record) ?: continue
+                        val value: Any = try { JsonObject(payloadStr) } catch (_: Exception) {
+                            try { JsonArray(payloadStr) } catch (_: Exception) {
+                                payloadStr.toDoubleOrNull() ?: payloadStr
+                            }
+                        }
+                        data.add(JsonObject()
+                            .put("value", value)
+                            .put("quality", "GOOD")
+                            .put("timestamp", Instant.ofEpochMilli(timestampMs).toString()))
+                    }
+                    result.put(eid, JsonObject().put("data", data))
+                } catch (e: Exception) {
+                    logger.warning("I3X history error for '$eid': ${e.message}")
+                }
             }
         }
         ok(ctx, result)
@@ -397,35 +576,53 @@ class I3xServer(
 
     private fun handleListSubscriptions(ctx: RoutingContext) {
         val result = JsonArray()
-        subscriptions.values.forEach { result.add(subscriptionSummary(it)) }
-        ok(ctx, JsonObject().put("subscriptions", result))
+        subscriptions.values.forEach {
+            result.add(JsonObject()
+                .put("subscriptionId", it.id)
+                .put("created", it.created.toString()))
+        }
+        ok(ctx, JsonObject().put("subscriptionIds", result))
     }
 
     private fun handleCreateSubscription(ctx: RoutingContext) {
         val id = UUID.randomUUID().toString()
-        subscriptions[id] = I3xSubscription(id)
-        ok(ctx, JsonObject().put("subscriptionId", id).put("message", "Subscription created"))
+        val sub = I3xSubscription(id)
+        subscriptions[id] = sub
+        ok(ctx, JsonObject()
+            .put("subscriptionId", id)
+            .put("created", sub.created.toString()))
     }
 
     private fun handleGetSubscription(ctx: RoutingContext) {
         val sub = subscriptions[ctx.pathParam("id")]
             ?: return err(ctx, 404, "Subscription not found")
-        ok(ctx, subscriptionSummary(sub).put("registeredTopics", JsonArray(sub.topics)))
+        ok(ctx, JsonObject()
+            .put("subscriptionId", sub.id)
+            .put("created", sub.created.toString())
+            .put("registeredTopics", JsonArray(sub.topics)))
     }
 
     private fun handleDeleteSubscription(ctx: RoutingContext) {
-        subscriptions.remove(ctx.pathParam("id"))
+        val id = ctx.pathParam("id")
+        val sub = subscriptions.remove(id)
+        if (sub != null) {
+            sessionHandler.unregisterMessageListener("i3x-$id")
+        }
         ok(ctx, JsonObject().put("message", "Subscription deleted"))
     }
 
     private fun handleRegisterTopics(ctx: RoutingContext) {
         val sub = subscriptions[ctx.pathParam("id")]
             ?: return err(ctx, 404, "Subscription not found")
-        val elementIds = ctx.body().asJsonObject()?.getJsonArray("elementIds") ?: JsonArray()
+        val body = ctx.body().asJsonObject() ?: JsonObject()
+        val elementIds = body.getJsonArray("elementIds") ?: JsonArray()
+        val maxDepth = body.getInteger("maxDepth") ?: 1
+        sub.maxDepth = maxDepth
         for (i in 0 until elementIds.size()) {
-            val topic = elementIds.getString(i) ?: continue
-            if (!sub.topics.contains(topic)) sub.topics.add(topic)
+            val eid = elementIds.getString(i) ?: continue
+            if (!sub.topics.contains(eid)) sub.topics.add(eid)
         }
+        rewireMessageListener(sub)
         ok(ctx, JsonObject().put("message", "Topics registered"))
     }
 
@@ -434,13 +631,59 @@ class I3xServer(
             ?: return err(ctx, 404, "Subscription not found")
         val elementIds = ctx.body().asJsonObject()?.getJsonArray("elementIds") ?: JsonArray()
         for (i in 0 until elementIds.size()) sub.topics.remove(elementIds.getString(i))
+        rewireMessageListener(sub)
         ok(ctx, JsonObject().put("message", "Topics unregistered"))
+    }
+
+    /**
+     * Wire or re-wire the message listener for a subscription.
+     * Uses SessionHandler.registerMessageListener() (same pattern as GraphQL subscriptions)
+     * to receive real-time MQTT messages matching the registered elementIds.
+     */
+    private fun rewireMessageListener(sub: I3xSubscription) {
+        val listenerId = "i3x-${sub.id}"
+        sessionHandler.unregisterMessageListener(listenerId)
+
+        if (sub.topics.isEmpty()) return
+
+        // Build MQTT topic filters from elementIds
+        val topicFilters = mutableListOf<String>()
+        val groupsByTopic = mutableMapOf<String, String>() // mqttTopic -> groupName
+        for (eid in sub.topics) {
+            val (groupName, topicName) = parseElementId(eid) ?: continue
+            if (!topicFilters.contains(topicName)) topicFilters.add(topicName)
+            groupsByTopic[topicName] = groupName
+            if (sub.maxDepth != 1) {
+                val wildcard = "$topicName/#"
+                if (!topicFilters.contains(wildcard)) topicFilters.add(wildcard)
+            }
+        }
+
+        if (topicFilters.isEmpty()) return
+
+        sessionHandler.registerMessageListener(listenerId, topicFilters) { message ->
+            // Resolve group name from the message topic
+            val groupName = groupsByTopic[message.topicName]
+                ?: groupsByTopic.entries.firstOrNull { message.topicName.startsWith("${it.key}/") }?.value
+                ?: return@registerMessageListener
+
+            val elementId = "$groupName/${message.topicName}"
+            val event = JsonObject()
+                .put("elementId", elementId)
+                .put("data", JsonObject().put("data", JsonArray().add(messageToVqt(message))))
+
+            // Publish to event bus for SSE streaming
+            vertx.eventBus().publish("mq.i3x.sub.${sub.id}", event)
+
+            // Also queue for sync endpoint
+            sub.pendingQueue.addLast(event)
+            while (sub.pendingQueue.size > 10000) sub.pendingQueue.removeFirst()
+        }
     }
 
     /**
      * SSE stream endpoint — opens a Server-Sent Events stream for real-time updates.
      * Messages are routed via the internal Vert.X event bus address "mq.i3x.sub.<id>".
-     * To receive messages, publish BrokerMessages to that address from within the broker.
      */
     private fun handleStream(ctx: RoutingContext) {
         val id = ctx.pathParam("id")
@@ -476,15 +719,21 @@ class I3xServer(
     private fun handleSync(ctx: RoutingContext) {
         val sub = subscriptions[ctx.pathParam("id")]
             ?: return err(ctx, 404, "Subscription not found")
-        val result = JsonArray()
-        while (sub.pendingQueue.isNotEmpty()) result.add(sub.pendingQueue.removeFirst())
+
+        // Group pending messages by elementId and aggregate VQTs
+        val result = JsonObject()
+        while (sub.pendingQueue.isNotEmpty()) {
+            val event = sub.pendingQueue.removeFirst()
+            val eid = event.getString("elementId") ?: continue
+            val data = event.getJsonObject("data") ?: continue
+            val arr = result.getJsonObject(eid)?.getJsonArray("data")
+                ?: JsonArray().also { result.put(eid, JsonObject().put("data", it)) }
+            for (j in 0 until (data.getJsonArray("data")?.size() ?: 0)) {
+                arr.add(data.getJsonArray("data").getValue(j))
+            }
+        }
         ok(ctx, result)
     }
-
-    private fun subscriptionSummary(sub: I3xSubscription) = JsonObject()
-        .put("subscriptionId", sub.id)
-        .put("topicCount", sub.topics.size)
-        .put("pendingMessages", sub.pendingQueue.size)
 
     // --- Authentication (mirrors GrafanaServer) ---
 
