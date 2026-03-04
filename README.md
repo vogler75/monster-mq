@@ -17,7 +17,8 @@ A high-performance, enterprise-grade MQTT broker with advanced data processing c
   - ✅ Web dashboard UI integration (protocol badges, v5 statistics, message properties)
   - 🚧 Subscription identifiers (pending)
   - ⏳ Will Delay Interval (waiting for Vert.x API support)
-- **High Performance** - Built on Vert.x for maximum throughput and low latency  
+- **Native NATS Protocol** - Accept standard NATS clients (`nats` CLI, `nats.go`, `nats.py`, `nats.rs`) directly on a configurable port with automatic MQTT topic translation
+- **High Performance** - Built on Vert.x for maximum throughput and low latency
 - **SSL/TLS Security** - End-to-end encryption with certificate management
 - **WebSocket Support** - MQTT over WebSocket for web applications
 - **Clustering** - Multi-node deployment with Hazelcast clustering and automatic failover
@@ -149,7 +150,7 @@ Modern, responsive web interface for complete system management:
 
 ```bash
 # Pull from Docker Hub
-docker run -p 1883:1883 -p 4840:4840 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
+docker run -p 1883:1883 -p 4222:4222 -p 4840:4840 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
 
 # Or with PostgreSQL and full docker-compose
 docker-compose up -d
@@ -179,6 +180,7 @@ TCP: 1883
 TCPS: 8883
 WS: 9000
 WSS: 9001
+NATS: 4222     # Native NATS protocol (0 = disabled)
 
 DefaultStoreType: POSTGRES
 
@@ -236,17 +238,17 @@ MonsterMQ follows a modular, event-driven architecture built on Eclipse Vert.x, 
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                                Client Layer                                     │
 │                                                                                 │
-│  MQTT Clients    OPC UA Devices    WinCC Systems    PLC4X    AI/Analytics       │
-│  IoT Devices     Industrial PLCs   SCADA Systems    Modbus   MCP Clients        │
+│  MQTT Clients    NATS Clients      OPC UA Devices   PLC4X    AI/Analytics       │
+│  IoT Devices     Industrial PLCs   WinCC/SCADA      Modbus   MCP Clients        │
 └────────────────────────────────┬────────────────────────────────────────────────┘
                                  │
 ┌────────────────────────────────▼────────────────────────────────────────────────┐
 │                             Protocol Layer                                      │
 │                                                                                 │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐.   │
-│  │ MQTT 3.1.1/5│  │  OPC UA     │  │  GraphQL    │  │  Device Integration  │    │
-│  │ TCP / TLS   │  │  Server     │  │  WebSocket  │  │  WinCC / PLC4X       │    │
-│  │ WebSocket   │  │  Client     │  │  Queries    │  │  Neo4j / Kafka       │    │
+│  │ MQTT 3.1.1/5│  │  NATS       │  │  GraphQL    │  │  Device Integration  │    │
+│  │ TCP / TLS   │  │  Protocol   │  │  WebSocket  │  │  OPC UA / PLC4X      │    │
+│  │ WebSocket   │  │  Server     │  │  Queries    │  │  WinCC / Neo4j       │    │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └──────────────────────┘    │
 └────────────────────────────────┬────────────────────────────────────────────────┘
                                  │
@@ -308,6 +310,7 @@ MonsterMQ follows a modular, event-driven architecture built on Eclipse Vert.x, 
 
 #### 1. **Protocol & Transport Layer**
 - **MQTT 3.1.1** - Full protocol compliance with QoS 0, 1, 2
+- **NATS Protocol** - Native NATS server for standard NATS clients with automatic topic/subject translation
 - **Multiple Transports** - TCP, TLS, WebSocket, WebSocket Secure
 - **Authentication** - Username/password, certificates, token-based
 - **Access Control** - Topic-based ACL with pattern matching
@@ -362,6 +365,7 @@ For detailed documentation, see the [`doc/`](doc/) directory:
 - **[MQTT JSON-RPC 2.0 API](doc/mqtt-api.md)** - Execute GraphQL queries/mutations over MQTT
 - **[MCP Server](doc/mcp.md)** - AI model integration with GraphQL API and SQL queries
 - **[Workflows (Flow Engine)](doc/workflows.md)** - Visual flow-based programming and data processing
+- **[NATS Integration](doc/nats.md)** - Native NATS protocol server and NATS Client Bridge
 - **[Kafka Integration](doc/kafka.md)** - Stream processing and event sourcing
 - **[MQTT Logging](doc/mqtt-logging.md)** - Real-time system logging via MQTT topics
 - **[Security](doc/security.md)** - TLS, certificates, and best practices
@@ -376,7 +380,7 @@ Available at: **[rocworks/monstermq:latest](https://hub.docker.com/r/rocworks/mo
 docker pull rocworks/monstermq:latest
 
 # Run with custom configuration
-docker run -p 1883:1883 -p 4840:4840 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
+docker run -p 1883:1883 -p 4222:4222 -p 4840:4840 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
 
 # Docker Compose with PostgreSQL
 
@@ -391,6 +395,7 @@ services:
       - "8883:8883"    # MQTT TLS
       - "9000:9000"    # WebSocket
       - "9001:9001"    # WebSocket TLS
+      - "4222:4222"    # NATS Protocol
       - "4840:4840"    # OPC UA Server
       - "4000:4000"    # GraphQL API
     volumes:
@@ -446,6 +451,7 @@ GraphQL:
 | MQTT TLS | 8883 | MQTT over TLS/SSL |
 | WebSocket | 9000 | MQTT over WebSocket |
 | WebSocket TLS | 9001 | MQTT over secure WebSocket |
+| **NATS** | **4222** | **Native NATS protocol server** |
 | **OPC UA Server** | **4840** | **Industrial protocol with MQTT bridge** |
 | GraphQL API | 4000 | Management and real-time data |
 
@@ -458,6 +464,24 @@ mosquitto_pub -h localhost -p 1883 -t "sensors/temp1" -m "23.5"
 
 # Subscribe to topics
 mosquitto_sub -h localhost -p 1883 -t "sensors/#"
+```
+
+### NATS Operations
+```bash
+# Subscribe to subjects (topics are automatically translated: . <-> /, * <-> +, > <-> #)
+nats sub "sensors.>" --server nats://localhost:4222
+
+# Publish a message
+nats pub "sensors.temp1" "23.5" --server nats://localhost:4222
+```
+
+### Cross-Protocol (MQTT + NATS)
+```bash
+# Terminal 1: MQTT subscriber receives messages from NATS publishers
+mosquitto_sub -h localhost -p 1883 -t "sensors/#"
+
+# Terminal 2: NATS publisher — message arrives at the MQTT subscriber above
+nats pub "sensors.temp1" "hello from NATS" --server nats://localhost:4222
 ```
 
 ### GraphQL Queries

@@ -639,6 +639,8 @@ MORE INFO:
         val useTcp = configJson.getInteger("TCP", 1883)
         val useWs = configJson.getInteger("WS", 0)
 
+        val useNats = configJson.getInteger("NATS", 0)
+
         val useTcpSsl = configJson.getInteger("TCPS", 0)
         val useWsSsl = configJson.getInteger("WSS", 0)
 
@@ -655,7 +657,7 @@ MORE INFO:
         val sendBufferSize = tcpServerConfig.getInteger("SendBufferSizeKb", 512) * 1024
 
         val queuedMessagesEnabled = configJson.getBoolean("QueuedMessagesEnabled", true)
-        logger.fine("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] QME [$queuedMessagesEnabled]")
+        logger.fine("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] NATS [$useNats] QME [$queuedMessagesEnabled]")
         logger.fine("TCP Server Config: MaxMessageSize [${maxMessageSize / 1024}KB] NoDelay [$tcpNoDelay] ReceiveBufferSize [${receiveBufferSize / 1024}KB] SendBufferSize [${sendBufferSize / 1024}KB]")
 
         val retainedStoreType = MessageStoreType.valueOf(Monster.getRetainedStoreType(configJson))
@@ -850,6 +852,7 @@ MORE INFO:
                     if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
                     if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword) else null,
                     if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword) else null,
+                    if (useNats>0) NatsServer(useNats, sessionHandler, userManager) else null,
                     mcpServer,
                     grafanaServer
                 )

@@ -1,4 +1,79 @@
-# NATS Client Bridge
+# NATS Integration
+
+MonsterMQ provides two complementary ways to work with NATS:
+
+1. **Native NATS Protocol Server** — Accept standard NATS clients directly on the broker (inbound)
+2. **NATS Client Bridge** — Connect to external NATS servers for bidirectional message forwarding (outbound)
+
+---
+
+## Native NATS Protocol Server
+
+MonsterMQ can accept native NATS client connections on a configurable TCP port. Standard NATS clients (`nats` CLI, `nats.go`, `nats.py`, `nats.rs`) connect directly to MonsterMQ and publish/subscribe as if it were a NATS server — messages are transparently routed through the broker's MQTT topic tree.
+
+### Configuration
+
+Add a `NATS` port to your `config.yaml` (set to `0` to disable):
+
+```yaml
+TCP: 1883
+NATS: 4222
+```
+
+### Topic Translation
+
+NATS subjects are automatically translated to MQTT topics and vice versa:
+
+| NATS | MQTT | Description |
+|------|------|-------------|
+| `.` | `/` | Path separator |
+| `*` | `+` | Single-level wildcard |
+| `>` | `#` | Multi-level wildcard |
+
+**Examples:**
+
+| NATS subject | MQTT topic |
+|---|---|
+| `sensors.temperature.room1` | `sensors/temperature/room1` |
+| `sensors.>` | `sensors/#` |
+| `sensors.*.temperature` | `sensors/+/temperature` |
+
+### Supported Commands
+
+| Command | Description |
+|---------|-------------|
+| `CONNECT` | Authenticate (respects `auth_required` based on UserManager) |
+| `PUB` | Publish a message (binary-safe payload) |
+| `SUB` | Subscribe to a subject (with wildcards) |
+| `UNSUB` | Unsubscribe |
+| `PING` / `PONG` | Keep-alive |
+
+### Limitations
+
+- **QoS 0 only** — NATS core is fire-and-forget; no JetStream support in the protocol server
+- **No session persistence** — Clean session on every connect; all subscriptions are removed on disconnect
+- **No TLS** — Use the NATS Client Bridge with `nats+tls://` for encrypted connections to external NATS servers
+
+### Authentication
+
+When UserManager is enabled, NATS clients must provide `user` and `pass` in the `CONNECT` JSON payload. ACL rules are enforced for both publish and subscribe operations using the translated MQTT topic.
+
+### Quick Test
+
+```bash
+# Terminal 1: Subscribe via NATS
+nats sub "test.>" --server nats://localhost:4222
+
+# Terminal 2: Publish via NATS
+nats pub "test.hello" "world" --server nats://localhost:4222
+
+# Cross-protocol: MQTT subscriber receives NATS messages
+mosquitto_sub -t "test/#"
+```
+
+---
+
+## NATS Client Bridge
 
 MonsterMQ provides a bidirectional NATS Client bridge that lets any number of MQTT topics flow into and out of a NATS server. Each bridge device is a first-class managed entity: it is stored in the database, can be started/stopped independently, and is created and administered through the GraphQL API or the dashboard UI.
 

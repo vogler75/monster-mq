@@ -21,6 +21,11 @@
       "default": 0,
       "description": "WS port for SSL connection"
     },
+    "NATS": {
+      "type": "integer",
+      "default": 0,
+      "description": "NATS protocol port (0=disabled)"
+    },
     "NodeName": {
       "type": "string",
       "description": "Custom node name for cluster identification (defaults to hostname if not set)"
