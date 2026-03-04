@@ -1529,6 +1529,8 @@ input NatsClientAddressInput {
     qos: Int = 0
     # Auto-translate / ↔ . and # ↔ > and + ↔ * (default true)
     autoConvert: Boolean = true
+    # Strip topic prefix before wildcard and prepend target prefix (default true)
+    removePath: Boolean = true
 }
 
 input NatsClientConfigInput {

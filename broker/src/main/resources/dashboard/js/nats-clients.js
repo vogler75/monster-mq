@@ -42,7 +42,7 @@ class NatsClientManager {
                 query GetNatsClients {
                     natsClients {
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
-                        config { servers authType useJetStream addresses { mode natsSubject mqttTopic qos autoConvert } }
+                        config { servers authType useJetStream addresses { mode natsSubject mqttTopic qos autoConvert removePath } }
                         metrics { messagesIn messagesOut }
                     }
                 }

@@ -20,7 +20,8 @@ data class NatsClientAddress(
     val natsSubject: String,     // NATS subject (supports wildcards: * and >)
     val mqttTopic: String,       // Local MQTT topic (supports wildcards: + and #)
     val qos: Int = 0,
-    val autoConvert: Boolean = true  // Auto-translate / ↔ ., # ↔ >, + ↔ * when true
+    val autoConvert: Boolean = true,  // Auto-translate / ↔ ., # ↔ >, + ↔ * when true
+    val removePath: Boolean = true    // Strip topic prefix before wildcard and prepend target prefix
 ) {
     companion object {
         const val MODE_SUBSCRIBE = "SUBSCRIBE"
@@ -31,7 +32,8 @@ data class NatsClientAddress(
             natsSubject = json.getString("natsSubject"),
             mqttTopic = json.getString("mqttTopic"),
             qos = json.getInteger("qos", 0),
-            autoConvert = json.getBoolean("autoConvert", true)
+            autoConvert = json.getBoolean("autoConvert", true),
+            removePath = json.getBoolean("removePath", true)
         )
     }
 
@@ -41,6 +43,7 @@ data class NatsClientAddress(
         .put("mqttTopic", mqttTopic)
         .put("qos", qos)
         .put("autoConvert", autoConvert)
+        .put("removePath", removePath)
 
     fun validate(): List<String> {
         val errors = mutableListOf<String>()
@@ -57,15 +60,78 @@ data class NatsClientAddress(
 
     // ── Topic/subject translation helpers ──────────────────────────────────
 
-    /** Convert an MQTT topic string to a NATS subject string. */
-    fun mqttToNatsSubject(mqttTopic: String): String = if (autoConvert)
-        mqttTopic.replace('/', '.').replace("#", ">").replace("+", "*")
-    else mqttTopic
+    /**
+     * Convert an incoming MQTT topic to a NATS subject.
+     *
+     * When [removePath] is true and the configured [mqttTopic] contains wildcards,
+     * the base path (everything before the first wildcard) is stripped from the
+     * incoming topic and the configured [natsSubject] is prepended.
+     *
+     * Example: mqttTopic="test/#", natsSubject="abc", removePath=true
+     *   incoming "test/a/b" → "abc.a.b"
+     */
+    fun mqttToNatsSubject(incomingMqttTopic: String): String {
+        if (!autoConvert) return incomingMqttTopic
 
-    /** Convert a NATS subject string to an MQTT topic string. */
-    fun natsToMqttTopic(natsSubject: String): String = if (autoConvert)
-        natsSubject.replace('.', '/').replace(">", "#").replace("*", "+")
-    else natsSubject
+        val mqttHasWildcard = mqttTopic.contains('#') || mqttTopic.contains('+')
+
+        if (removePath && mqttHasWildcard) {
+            val wildcardIdx = mqttTopic.indexOfFirst { it == '#' || it == '+' }
+            val basePath = mqttTopic.substring(0, wildcardIdx).trimEnd('/')
+            val suffix = if (basePath.isNotEmpty() && incomingMqttTopic.startsWith(basePath)) {
+                incomingMqttTopic.substring(basePath.length).trimStart('/')
+            } else if (basePath.isEmpty()) {
+                incomingMqttTopic
+            } else {
+                incomingMqttTopic
+            }
+            val natsBase = natsSubject.replace(Regex("[*>].*"), "").trimEnd('.')
+            val natsSuffix = sanitizeNats(suffix.replace('/', '.'))
+            return if (natsBase.isNotEmpty() && natsSuffix.isNotEmpty()) "$natsBase.$natsSuffix"
+            else if (natsBase.isNotEmpty()) natsBase
+            else natsSuffix
+        }
+
+        return sanitizeNats(incomingMqttTopic.replace('/', '.').replace("#", ">").replace("+", "*"))
+    }
+
+    /**
+     * Convert a NATS subject to an MQTT topic.
+     *
+     * When [removePath] is true and the configured [natsSubject] contains wildcards,
+     * the base path is stripped and the configured [mqttTopic] prefix is prepended.
+     *
+     * Example: natsSubject="abc.>", mqttTopic="test/#", removePath=true
+     *   incoming "abc.a.b" → "test/a/b"
+     */
+    fun natsToMqttTopic(incomingNatsSubject: String): String {
+        if (!autoConvert) return incomingNatsSubject
+
+        val natsHasWildcard = natsSubject.contains('*') || natsSubject.contains('>')
+
+        if (removePath && natsHasWildcard) {
+            val wildcardIdx = natsSubject.indexOfFirst { it == '*' || it == '>' }
+            val basePath = natsSubject.substring(0, wildcardIdx).trimEnd('.')
+            val suffix = if (basePath.isNotEmpty() && incomingNatsSubject.startsWith(basePath)) {
+                incomingNatsSubject.substring(basePath.length).trimStart('.')
+            } else if (basePath.isEmpty()) {
+                incomingNatsSubject
+            } else {
+                incomingNatsSubject
+            }
+            val mqttBase = mqttTopic.replace(Regex("[+#].*"), "").trimEnd('/')
+            val mqttSuffix = suffix.replace('.', '/')
+            return if (mqttBase.isNotEmpty() && mqttSuffix.isNotEmpty()) "$mqttBase/$mqttSuffix"
+            else if (mqttBase.isNotEmpty()) mqttBase
+            else mqttSuffix
+        }
+
+        return incomingNatsSubject.replace('.', '/').replace(">", "#").replace("*", "+")
+    }
+
+    /** Sanitize a NATS subject: spaces to underscores, collapse empty segments, trim dots. */
+    private fun sanitizeNats(subject: String): String =
+        subject.replace(' ', '_').replace(Regex("\\.{2,}"), ".").trim('.')
 }
 
 /**

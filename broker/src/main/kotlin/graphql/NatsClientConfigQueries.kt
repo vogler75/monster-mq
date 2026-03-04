@@ -102,7 +102,8 @@ class NatsClientConfigQueries(
                 "natsSubject" to addr.natsSubject,
                 "mqttTopic" to addr.mqttTopic,
                 "qos" to addr.qos,
-                "autoConvert" to addr.autoConvert
+                "autoConvert" to addr.autoConvert,
+                "removePath" to addr.removePath
             )
         }
 

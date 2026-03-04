@@ -1,5 +1,6 @@
 package at.rocworks.devices.natsclient
 
+import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
@@ -35,7 +36,7 @@ import java.util.logging.Logger
  *   each SUBSCRIBE address and republishes arriving messages to the local MQTT broker.
  */
 class NatsClientConnector : AbstractVerticle() {
-    private val logger: Logger = Utils.getLogger(this::class.java)
+    private val logger: Logger = Utils.getLogger(this::class.java).also { it.level = Const.DEBUG_LEVEL }
 
     private lateinit var device: DeviceConfig
     private lateinit var cfg: NatsClientConfig
@@ -317,6 +318,8 @@ class NatsClientConnector : AbstractVerticle() {
     }
 
     private fun handleOutboundMessage(msg: BrokerMessage) {
+        logger.finer { "Outbound message for '${device.name}': topic='${msg.topicName}' sender='${msg.senderId}' client='${msg.clientId}'" }
+
         // Loop prevention: skip messages we published ourselves
         if (msg.senderId == internalClientId || msg.clientId == internalClientId) return
 

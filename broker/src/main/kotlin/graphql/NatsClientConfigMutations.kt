@@ -389,7 +389,8 @@ class NatsClientConfigMutations(
         natsSubject = map["natsSubject"] as? String ?: "",
         mqttTopic = map["mqttTopic"] as? String ?: "",
         qos = (map["qos"] as? Number)?.toInt() ?: 0,
-        autoConvert = map["autoConvert"] as? Boolean ?: true
+        autoConvert = map["autoConvert"] as? Boolean ?: true,
+        removePath = map["removePath"] as? Boolean ?: true
     )
 
     private fun notifyChange(operation: String, device: DeviceConfig) {

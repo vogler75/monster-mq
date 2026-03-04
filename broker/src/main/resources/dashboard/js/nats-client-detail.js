@@ -65,7 +65,7 @@ class NatsClientDetailManager {
                             servers authType username useJetStream streamName consumerDurableName
                             connectTimeoutMs reconnectDelayMs maxReconnectAttempts
                             addresses {
-                                mode natsSubject mqttTopic qos autoConvert
+                                mode natsSubject mqttTopic qos autoConvert removePath
                             }
                         }
                         metrics { messagesIn messagesOut timestamp }
@@ -155,7 +155,7 @@ class NatsClientDetailManager {
         const tbody = document.getElementById('addresses-table-body');
         if (!tbody) return;
         if (this.addresses.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--text-muted);">No address mappings configured.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--text-muted);">No address mappings configured.</td></tr>';
             return;
         }
         tbody.innerHTML = this.addresses.map((addr, idx) => `
@@ -165,6 +165,7 @@ class NatsClientDetailManager {
                 <td><code style="font-size:0.85rem;">${this.escapeHtml(addr.mqttTopic || '')}</code></td>
                 <td>${addr.qos}</td>
                 <td>${addr.autoConvert ? '✓' : '—'}</td>
+                <td>${addr.removePath ? '✓' : '—'}</td>
                 <td><div class="action-buttons">
                     <button class="btn-icon" title="Edit" onclick="natsDetailManager.showEditAddressModal(${idx})" style="color:var(--monster-purple);">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
@@ -186,6 +187,7 @@ class NatsClientDetailManager {
         document.getElementById('addr-mqtt-topic').value = '';
         document.getElementById('addr-qos').value = '0';
         document.getElementById('addr-auto-convert').checked = true;
+        document.getElementById('addr-remove-path').checked = true;
         document.getElementById('add-address-form').reset && document.getElementById('add-address-form').reset();
         document.getElementById('add-address-modal').style.display = 'flex';
     }
@@ -201,6 +203,7 @@ class NatsClientDetailManager {
         document.getElementById('addr-mqtt-topic').value = addr.mqttTopic || '';
         document.getElementById('addr-qos').value = String(addr.qos ?? 0);
         document.getElementById('addr-auto-convert').checked = addr.autoConvert !== false;
+        document.getElementById('addr-remove-path').checked = addr.removePath !== false;
         document.getElementById('add-address-modal').style.display = 'flex';
     }
 
@@ -224,7 +227,8 @@ class NatsClientDetailManager {
             natsSubject,
             mqttTopic,
             qos: parseInt(document.getElementById('addr-qos').value),
-            autoConvert: document.getElementById('addr-auto-convert').checked
+            autoConvert: document.getElementById('addr-auto-convert').checked,
+            removePath: document.getElementById('addr-remove-path').checked
         };
 
         try {

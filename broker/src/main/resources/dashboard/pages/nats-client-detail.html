@@ -259,11 +259,12 @@
                             <th>MQTT Topic</th>
                             <th>QoS</th>
                             <th>Auto-Convert</th>
+                            <th>Remove Path</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="addresses-table-body">
-                        <tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--text-muted);">No address mappings configured.</td></tr>
+                        <tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--text-muted);">No address mappings configured.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -316,6 +317,12 @@
                     <div class="checkbox-group">
                         <input type="checkbox" id="addr-auto-convert" checked>
                         <label for="addr-auto-convert">Auto-convert separators (/ ↔ ., # ↔ >, + ↔ *)</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="addr-remove-path" checked>
+                        <label for="addr-remove-path">Remove path (strip prefix before wildcard, prepend target prefix)</label>
                     </div>
                 </div>
             </form>
