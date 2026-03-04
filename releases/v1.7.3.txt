@@ -1,0 +1,12 @@
+Release v1.7.3
+Built from commit: 68aff7b
+Date: 2026-03-04 18:13:14
+
+Changes since v1.7.2:
+---
+68aff7b fix: wire NATS client live metrics fetcher in GraphQL
+b301aa3 feat: add removePath option to NATS bridge for topic prefix mapping
+a2ee8f2 Merge PR #98: NATS Client Bridge — Bidirectional MQTT <-> NATS
+0b23bf7 docs: update README for NATS bridge
+df32249 remove summary file from past implementation
+a90bbc5 feat: add NATS Client bridge with bidirectional MQTT<->NATS support
