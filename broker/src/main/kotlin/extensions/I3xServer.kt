@@ -668,9 +668,9 @@ class I3xServer(
                 ?: return@registerMessageListener
 
             val elementId = "$groupName/${message.topicName}"
+            // Each event is {elementId: {data: [VQT]}} — keyed by elementId
             val event = JsonObject()
-                .put("elementId", elementId)
-                .put("data", JsonObject().put("data", JsonArray().add(messageToVqt(message))))
+                .put(elementId, JsonObject().put("data", JsonArray().add(messageToVqt(message))))
 
             // Publish to event bus for SSE streaming
             vertx.eventBus().publish("mq.i3x.sub.${sub.id}", event)
@@ -697,7 +697,8 @@ class I3xServer(
 
         val busAddress = "mq.i3x.sub.$id"
         val consumer = vertx.eventBus().consumer<JsonObject>(busAddress) { msg ->
-            if (!response.ended()) response.write("data: ${msg.body().encode()}\n\n")
+            // Wrap in array: [{elementId: {data: [VQT]}}]
+            if (!response.ended()) response.write("data: ${JsonArray().add(msg.body()).encode()}\n\n")
         }
 
         val timerId = vertx.setPeriodic(30_000L) {
@@ -712,7 +713,7 @@ class I3xServer(
 
         // Flush any pending queued messages immediately
         while (sub.pendingQueue.isNotEmpty()) {
-            response.write("data: ${sub.pendingQueue.removeFirst().encode()}\n\n")
+            response.write("data: ${JsonArray().add(sub.pendingQueue.removeFirst()).encode()}\n\n")
         }
     }
 
@@ -721,16 +722,20 @@ class I3xServer(
             ?: return err(ctx, 404, "Subscription not found")
 
         // Group pending messages by elementId and aggregate VQTs
-        val result = JsonObject()
+        // Return array: [{elementId: {data: [VQT]}}, ...]
+        val grouped = LinkedHashMap<String, JsonArray>()
         while (sub.pendingQueue.isNotEmpty()) {
             val event = sub.pendingQueue.removeFirst()
-            val eid = event.getString("elementId") ?: continue
-            val data = event.getJsonObject("data") ?: continue
-            val arr = result.getJsonObject(eid)?.getJsonArray("data")
-                ?: JsonArray().also { result.put(eid, JsonObject().put("data", it)) }
-            for (j in 0 until (data.getJsonArray("data")?.size() ?: 0)) {
-                arr.add(data.getJsonArray("data").getValue(j))
+            for (key in event.fieldNames()) {
+                val vqts = event.getJsonObject(key)?.getJsonArray("data") ?: continue
+                val arr = grouped.getOrPut(key) { JsonArray() }
+                for (j in 0 until vqts.size()) arr.add(vqts.getValue(j))
             }
+        }
+
+        val result = JsonArray()
+        for ((eid, data) in grouped) {
+            result.add(JsonObject().put(eid, JsonObject().put("data", data)))
         }
         ok(ctx, result)
     }
