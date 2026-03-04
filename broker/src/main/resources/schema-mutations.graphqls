@@ -1479,3 +1479,95 @@ input JDBCLoggerInput {
     # Connection and validation configuration
     config: JDBCLoggerConfigInput!
 }
+
+#############################################
+# NATS Client Mutations                    #
+#############################################
+
+type NatsClientMutations {
+    # Create a new NATS client bridge
+    create(input: NatsClientInput!): NatsClientResult!
+    # Update an existing NATS client bridge configuration
+    update(name: String!, input: NatsClientInput!): NatsClientResult!
+    # Delete a NATS client bridge permanently
+    delete(name: String!): Boolean!
+    # Start (enable) a NATS client bridge
+    start(name: String!): NatsClientResult!
+    # Stop (disable) a NATS client bridge
+    stop(name: String!): NatsClientResult!
+    # Toggle the enabled state of a NATS client bridge
+    toggle(name: String!, enabled: Boolean!): NatsClientResult!
+    # Reassign a NATS client bridge to a different cluster node
+    reassign(name: String!, nodeId: String!): NatsClientResult!
+    # Add an address entry (SUBSCRIBE or PUBLISH mapping)
+    addAddress(deviceName: String!, input: NatsClientAddressInput!): NatsClientResult!
+    # Update an existing address entry by natsSubject
+    updateAddress(deviceName: String!, natsSubject: String!, input: NatsClientAddressInput!): NatsClientResult!
+    # Delete an address entry by natsSubject
+    deleteAddress(deviceName: String!, natsSubject: String!): NatsClientResult!
+}
+
+extend type Mutation {
+    # Access NATS client bridge management operations
+    natsClient: NatsClientMutations!
+}
+
+type NatsClientResult {
+    success: Boolean!
+    client: NatsClient
+    errors: [String!]!
+}
+
+input NatsClientAddressInput {
+    # SUBSCRIBE = NATS→MQTT, PUBLISH = MQTT→NATS
+    mode: NatsClientMode!
+    # NATS subject (wildcards: * single-token, > multi-token)
+    natsSubject: String!
+    # Local MQTT topic
+    mqttTopic: String!
+    # QoS level (0, 1, or 2)
+    qos: Int = 0
+    # Auto-translate / ↔ . and # ↔ > and + ↔ * (default true)
+    autoConvert: Boolean = true
+    # Strip topic prefix before wildcard and prepend target prefix (default true)
+    removePath: Boolean = true
+}
+
+input NatsClientConfigInput {
+    # NATS server URL list (e.g. ["nats://localhost:4222"])
+    servers: [String!] = ["nats://localhost:4222"]
+    # Authentication type
+    authType: NatsAuthType = ANONYMOUS
+    # Username (required for USERNAME_PASSWORD)
+    username: String
+    # Password (required for USERNAME_PASSWORD)
+    password: String
+    # Token (required for TOKEN)
+    token: String
+    # Path to CA certificate file (TLS)
+    tlsCaCertPath: String
+    # Verify server TLS certificate
+    tlsVerify: Boolean = true
+    # Connection timeout in ms
+    connectTimeoutMs: Long = 5000
+    # Reconnect delay in ms
+    reconnectDelayMs: Long = 5000
+    # Max reconnect attempts (-1 = unlimited)
+    maxReconnectAttempts: Int = -1
+    # Enable JetStream
+    useJetStream: Boolean = false
+    # JetStream stream name (required when useJetStream = true)
+    streamName: String
+    # Durable consumer name for JetStream
+    consumerDurableName: String
+    # Address mappings (can be supplied at create time)
+    addresses: [NatsClientAddressInput!] = []
+}
+
+input NatsClientInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean = true
+    config: NatsClientConfigInput!
+}
