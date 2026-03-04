@@ -904,6 +904,13 @@ class GraphQLServer(
                     .dataFetcher("metrics", metricsResolver.jdbcLoggerMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.jdbcLoggerMetricsHistory())
             }
+            .type("NatsClient") { builder ->
+                builder.apply {
+                    natsClientQueries?.let { resolver ->
+                        dataFetcher("metrics", resolver.natsClientMetrics())
+                    }
+                }
+            }
             .type("SparkplugBDecoder") { builder ->
                 builder.apply {
                     sparkplugBDecoderQueries?.let { queries ->

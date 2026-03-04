@@ -2,11 +2,14 @@ package at.rocworks.graphql
 
 import at.rocworks.Monster
 import at.rocworks.Utils
+import at.rocworks.bus.EventBusAddresses
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.devices.NatsClientConfig
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
+import io.vertx.core.json.JsonObject
+import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 
@@ -86,6 +89,47 @@ class NatsClientConfigQueries(
             future
         }
     }
+
+    /**
+     * GraphQL type-level fetcher for `NatsClient.metrics`.
+     * Fetches live metrics from the connector via the EventBus.
+     */
+    fun natsClientMetrics(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Map<String, Any>>>()
+            val natsClient = env.getSource<Map<String, Any>>()
+            val deviceName = natsClient?.get("name") as? String
+
+            if (deviceName == null) {
+                future.complete(listOf(emptyMetrics()))
+                return@DataFetcher future
+            }
+
+            val addr = EventBusAddresses.NatsBridge.connectorMetrics(deviceName)
+            vertx.eventBus().request<JsonObject>(addr, JsonObject()).onComplete { result ->
+                if (result.succeeded()) {
+                    val body = result.result().body()
+                    future.complete(listOf(mapOf(
+                        "messagesIn" to body.getDouble("messagesInRate", 0.0),
+                        "messagesOut" to body.getDouble("messagesOutRate", 0.0),
+                        "errors" to body.getDouble("errors", 0.0),
+                        "timestamp" to Instant.now().toString()
+                    )))
+                } else {
+                    future.complete(listOf(emptyMetrics()))
+                }
+            }
+
+            future
+        }
+    }
+
+    private fun emptyMetrics(): Map<String, Any> = mapOf(
+        "messagesIn" to 0.0,
+        "messagesOut" to 0.0,
+        "errors" to 0.0,
+        "timestamp" to Instant.now().toString()
+    )
 
     internal fun deviceToMap(device: DeviceConfig): Map<String, Any?> {
         val currentNodeId = Monster.getClusterNodeId(vertx)
