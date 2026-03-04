@@ -98,6 +98,14 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // NATS Client Bridge (bidirectional MQTT <-> NATS)
+    object NatsBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.nats"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // WinCC OA Client (WinCC OA -> MQTT via GraphQL)
     object WinCCOaBridge {
         private const val BRIDGE_NS = "$BASE.bridge.winccoa"

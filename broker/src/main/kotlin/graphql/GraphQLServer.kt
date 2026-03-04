@@ -32,6 +32,8 @@ import at.rocworks.graphql.Neo4jClientConfigQueries
 import at.rocworks.graphql.Neo4jClientConfigMutations
 import at.rocworks.graphql.JDBCLoggerQueries
 import at.rocworks.graphql.JDBCLoggerMutations
+import at.rocworks.graphql.NatsClientConfigQueries
+import at.rocworks.graphql.NatsClientConfigMutations
 import at.rocworks.graphql.SparkplugBDecoderQueries
 import at.rocworks.graphql.SparkplugBDecoderMutations
 import at.rocworks.graphql.FlowQueries
@@ -353,6 +355,10 @@ class GraphQLServer(
         val flowQueries = deviceStore?.let { FlowQueries(vertx, it) }
         val flowMutations = deviceStore?.let { FlowMutations(vertx, it) }
 
+        // Initialize NATS Client resolvers
+        val natsClientQueries = deviceStore?.let { NatsClientConfigQueries(vertx, it) }
+        val natsClientMutations = deviceStore?.let { NatsClientConfigMutations(vertx, it) }
+
         // Initialize GenAI resolver (with archiveHandler for topic analysis)
         val genAiResolver = genAiProvider?.let { GenAiResolver(vertx, it, archiveHandler) }
 
@@ -425,6 +431,12 @@ class GraphQLServer(
                     .apply {
                         kafkaClientQueries?.let { resolver ->
                             dataFetcher("kafkaClients", resolver.kafkaClients())
+                        }
+                    }
+                    // NATS Client queries
+                    .apply {
+                        natsClientQueries?.let { resolver ->
+                            dataFetcher("natsClients", resolver.natsClients())
                         }
                     }
                     // WinCC OA Client queries
@@ -538,6 +550,13 @@ class GraphQLServer(
                             dataFetcher("kafkaClient") { _ -> emptyMap<String, Any>() }
                         }
                     }
+                    // NATS Client mutations - grouped under natsClient
+                    .apply {
+                        natsClientMutations?.let { _ ->
+                            // Return an empty object - actual resolvers are on NatsClientMutations type
+                            dataFetcher("natsClient") { _ -> emptyMap<String, Any>() }
+                        }
+                    }
                     // WinCC OA Client mutations - grouped under winCCOaDevice
                     .apply {
                         winCCOaClientMutations?.let { _ ->
@@ -616,6 +635,23 @@ class GraphQLServer(
                         dataFetcher("stop", resolver.stopKafkaClient())
                         dataFetcher("toggle", resolver.toggleKafkaClient())
                         dataFetcher("reassign", resolver.reassignKafkaClient())
+                    }
+                }
+            }
+            // Register NATS Client Mutations type
+            .type("NatsClientMutations") { builder ->
+                builder.apply {
+                    natsClientMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createNatsClient())
+                        dataFetcher("update", resolver.updateNatsClient())
+                        dataFetcher("delete", resolver.deleteNatsClient())
+                        dataFetcher("start", resolver.startNatsClient())
+                        dataFetcher("stop", resolver.stopNatsClient())
+                        dataFetcher("toggle", resolver.toggleNatsClient())
+                        dataFetcher("reassign", resolver.reassignNatsClient())
+                        dataFetcher("addAddress", resolver.addNatsClientAddress())
+                        dataFetcher("updateAddress", resolver.updateNatsClientAddress())
+                        dataFetcher("deleteAddress", resolver.deleteNatsClientAddress())
                     }
                 }
             }

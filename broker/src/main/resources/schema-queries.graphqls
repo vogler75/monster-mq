@@ -892,6 +892,108 @@ extend type Query {
 }
 
 #############################################
+# NATS Client Configuration                #
+#############################################
+
+"""
+NATS Client Bridge enables bidirectional messaging between MonsterMQ and a NATS server.
+
+Outbound (MQTT → NATS): Subscribes to local MQTT topics and publishes payloads to NATS subjects.
+Inbound  (NATS → MQTT): Subscribes to NATS subjects and republishes messages as local MQTT messages.
+
+Features:
+- Core NATS pub/sub and JetStream persistent streams
+- Anonymous, username/password, token, and TLS authentication
+- Automatic topic/subject separator translation (/ ↔ ., # ↔ >, + ↔ *)
+- Per-address wildcard conversion toggle (autoConvert)
+- Configurable reconnect behaviour
+"""
+
+enum NatsClientMode {
+    # Bring messages IN from NATS to the local MQTT broker (NATS → MQTT)
+    SUBSCRIBE
+    # Push messages OUT from the local MQTT broker to NATS (MQTT → NATS)
+    PUBLISH
+}
+
+enum NatsAuthType {
+    ANONYMOUS
+    USERNAME_PASSWORD
+    TOKEN
+    TLS
+}
+
+type NatsClientAddress {
+    # Direction: SUBSCRIBE (NATS→MQTT) or PUBLISH (MQTT→NATS)
+    mode: NatsClientMode!
+    # NATS subject pattern (supports * and > wildcards)
+    natsSubject: String!
+    # Local MQTT topic pattern (supports + and # wildcards)
+    mqttTopic: String!
+    # QoS level to use when publishing to the local MQTT broker (inbound only)
+    qos: Int!
+    # When true, automatically translate / ↔ . and # ↔ > and + ↔ * between MQTT and NATS
+    autoConvert: Boolean!
+}
+
+type NatsClientConfig {
+    # NATS server URLs, e.g. ["nats://localhost:4222"]
+    servers: [String!]!
+    # Authentication type
+    authType: NatsAuthType!
+    # Username (USERNAME_PASSWORD auth)
+    username: String
+    # Path to CA certificate file (TLS auth)
+    tlsCaCertPath: String
+    # Verify TLS server certificate
+    tlsVerify: Boolean!
+    # Connection timeout in milliseconds
+    connectTimeoutMs: Long!
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelayMs: Long!
+    # Maximum reconnection attempts (-1 = unlimited)
+    maxReconnectAttempts: Int!
+    # Enable JetStream for persistent messaging
+    useJetStream: Boolean!
+    # JetStream stream name (required when useJetStream = true)
+    streamName: String
+    # Durable consumer name for JetStream (enables at-least-once delivery)
+    consumerDurableName: String
+    # List of address mappings (subscribe / publish)
+    addresses: [NatsClientAddress!]!
+}
+
+type NatsClientMetrics {
+    messagesIn: Float!
+    messagesOut: Float!
+    errors: Float!
+    timestamp: String!
+}
+
+type NatsClient {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    config: NatsClientConfig!
+    enabled: Boolean!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    metrics: [NatsClientMetrics!]!
+}
+
+# Extend Queries for NATS clients
+extend type Query {
+    # Get NATS client bridge configurations across the entire cluster
+    natsClients(
+        # Filter by specific client name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [NatsClient!]!
+}
+
+#############################################
 # WinCC OA Client Configuration            #
 #############################################
 

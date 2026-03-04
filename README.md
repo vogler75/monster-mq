@@ -92,6 +92,12 @@ For detailed Snowflake setup, see [SNOWFLAKE.md](broker/SNOWFLAKE.md).
 - **Topic Mapping** - Flexible topic transformation and routing
 - **Failover Support** - Automatic reconnection and buffering
 
+#### NATS Client Bridge
+- **Bidirectional Bridging** - Forward MQTT topics to NATS subjects and subscribe NATS subjects back into MQTT ([details](doc/nats.md))
+- **Core NATS & JetStream** - At-most-once and at-least-once delivery with durable consumers
+- **Authentication** - Anonymous, Username/Password, Token, and TLS
+- **Auto Topic Translation** - Automatic separator and wildcard conversion between MQTT (`/`, `+`, `#`) and NATS (`.`, `*`, `>`)
+
 #### PLC4X Integration
 - **Multi-Protocol Support** - Connect to Siemens, Allen-Bradley, Modbus, and more
 - **Direct PLC Access** - Read/write PLC variables without gateways
