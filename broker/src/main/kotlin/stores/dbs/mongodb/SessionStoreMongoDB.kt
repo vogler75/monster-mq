@@ -299,7 +299,9 @@ class SessionStoreMongoDB(
                     "payload" to Binary(message.payload),
                     "qos" to message.qosLevel,
                     "retained" to message.isRetain,
-                    "client_id" to message.clientId
+                    "client_id" to message.clientId,
+                    "creation_time" to message.time.toEpochMilli(),
+                    "message_expiry_interval" to message.messageExpiryInterval
                 ))
                 queuedMessagesCollection.updateOne(
                     eq("message_uuid", message.messageUuid),
@@ -355,7 +357,7 @@ class SessionStoreMongoDB(
                 val qos = messageDoc.getInteger("qos")
                 val retained = messageDoc.getBoolean("retained")
                 val clientIdPublisher = messageDoc.getString("client_id")
-                val creationTime = messageDoc.getLong("creation_time")
+                val creationTime = messageDoc.getLong("creation_time") ?: currentTimeMillis
                 val messageExpiryInterval = messageDoc.getLong("message_expiry_interval")
                 
                 // Check if message has expired
@@ -431,7 +433,7 @@ class SessionStoreMongoDB(
             results.mapNotNull { doc ->
                 val messageDoc = doc.get("message", Document::class.java)
                 if (messageDoc != null) {
-                    val creationTime = messageDoc.getLong("creation_time")
+                    val creationTime = messageDoc.getLong("creation_time") ?: currentTimeMillis
                     val messageExpiryInterval = messageDoc.getLong("message_expiry_interval")
                     
                     // Check if message has expired
