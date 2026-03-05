@@ -14,6 +14,8 @@ class LoginManager {
     init() {
         // Clear any stale session data from previous sessions
         sessionStorage.clear();
+        // Clear guest flag — arriving at login page means the user wants to sign in
+        safeStorage.removeItem('monstermq_guest');
 
         if (this.isLoggedIn()) {
             window.location.href = '/pages/dashboard.html';
@@ -24,6 +26,15 @@ class LoginManager {
         this.checkUserManagementEnabled();
 
         this.form.addEventListener('submit', (e) => this.handleLogin(e));
+
+        // Wire up the guest link
+        const guestLink = document.getElementById('guest-link');
+        if (guestLink) {
+            guestLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.enterGuestMode();
+            });
+        }
     }
 
     async checkUserManagementEnabled() {
@@ -38,6 +49,7 @@ class LoginManager {
                         query GetBroker {
                             broker {
                                 userManagementEnabled
+                                anonymousEnabled
                             }
                         }
                     `
@@ -46,12 +58,18 @@ class LoginManager {
 
             const result = await response.json();
             const userManagementEnabled = result.data?.broker?.userManagementEnabled ?? false;
+            const anonymousEnabled = result.data?.broker?.anonymousEnabled ?? false;
 
             if (!userManagementEnabled) {
                 // User management is disabled, auto-login with empty credentials
                 console.log('User management is disabled, auto-logging in...');
                 this.autoLoginDisabled();
+            } else if (anonymousEnabled) {
+                // Anonymous user is enabled — show the guest access option
+                const guestAccess = document.getElementById('guest-access');
+                if (guestAccess) guestAccess.style.display = 'block';
             }
+            // If userManagementEnabled=true and anonymousEnabled=false, hide guest access (default)
         } catch (error) {
             console.error('Error checking user management status:', error);
             // Continue with normal login flow if there's an error
@@ -73,17 +91,25 @@ class LoginManager {
         }, 500);
     }
 
+    enterGuestMode() {
+        // Store guest flag — no token, read-only mode
+        safeStorage.removeItem('monstermq_token');
+        safeStorage.removeItem('monstermq_username');
+        safeStorage.removeItem('monstermq_isAdmin');
+        safeStorage.setItem('monstermq_guest', 'true');
+        safeStorage.setItem('monstermq_userManagementEnabled', 'true');
+        window.location.href = '/pages/dashboard.html';
+    }
+
     isLoggedIn() {
         const token = safeStorage.getItem('monstermq_token');
+        // On the login page, guest mode is NOT considered logged in —
+        // the user is here to sign in, so let them through.
         if (!token) return false;
-
-        // If token is 'null', authentication is disabled
         if (token === 'null') return true;
-
         try {
             const decoded = JSON.parse(atob(token.split('.')[1]));
-            const now = Date.now() / 1000;
-            return decoded.exp > now;
+            return decoded.exp > Date.now() / 1000;
         } catch {
             return false;
         }
@@ -171,6 +197,9 @@ class LoginManager {
             const result = graphqlResult.data?.login || {};
 
             if (result.success) {
+                // Clear guest flag on real login
+                safeStorage.removeItem('monstermq_guest');
+
                 // Handle case where authentication is disabled (token is null)
                 const token = result.token || 'null';
                 safeStorage.setItem('monstermq_token', token);

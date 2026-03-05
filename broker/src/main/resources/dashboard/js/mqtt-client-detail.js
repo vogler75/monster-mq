@@ -227,6 +227,7 @@ class MqttClientDetailManager {
                 <td>
                     <div class="action-buttons">
                         <button class="btn-icon btn-edit"
+                               
                                 onclick="mqttClientDetailManager.editAddress('${this.escapeHtml(address.remoteTopic)}')"
                                 title="Edit Address">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -234,6 +235,7 @@ class MqttClientDetailManager {
                             </svg>
                         </button>
                         <button class="btn-icon btn-delete"
+                               
                                 onclick="mqttClientDetailManager.deleteAddress('${this.escapeHtml(address.remoteTopic)}')"
                                 title="Delete Address">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -812,16 +814,7 @@ function addUserProperty() {
             </svg>
         </button>
     `;
-    list.appendChild(row);
-}
 
-// User Properties Management for Edit Address Modal
-function addEditUserProperty() {
-    const list = document.getElementById('edit-address-user-properties-list');
-    const index = list.children.length;
-    
-    const row = document.createElement('div');
-    row.className = 'user-property-row';
     row.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;';
     row.innerHTML = `
         <input type="text" placeholder="Key" style="flex: 1;" class="edit-user-property-key">

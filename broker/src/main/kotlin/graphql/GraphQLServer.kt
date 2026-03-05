@@ -41,6 +41,7 @@ import at.rocworks.graphql.FlowMutations
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
+import graphql.GraphQLException
 import graphql.scalars.ExtendedScalars
 import graphql.schema.idl.RuntimeWiring
 import graphql.schema.idl.SchemaGenerator
@@ -507,103 +508,150 @@ class GraphQLServer(
                     // Publishing (requires token + ACL check)
                     .dataFetcher("publish", mutationResolver.publish())
                     .dataFetcher("publishBatch", mutationResolver.publishBatch())
-                    // User management mutations - grouped under user
-                    .dataFetcher("user") { _ -> emptyMap<String, Any>() }
-                    // Queued messages management (requires admin token)
+                     // User management mutations - grouped under user
+                    .dataFetcher("user") { env ->
+                        val result = authContext.validateFieldAccess(env)
+                        if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                        emptyMap<String, Any>()
+                    }
+                     // Queued messages management (requires admin token)
                     .dataFetcher("purgeQueuedMessages", mutationResolver.purgeQueuedMessages())
                     // Device mutations
                     .dataFetcher("importDevices", mutationResolver.importDevices())
                     // Session management mutations - grouped under session
-                    .dataFetcher("session") { _ -> emptyMap<String, Any>() }
-                    // Archive Group mutations - grouped under archiveGroup
+                    .dataFetcher("session") { env ->
+                        val result = authContext.validateFieldAccess(env)
+                        if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                        emptyMap<String, Any>()
+                    }
+                     // Archive Group mutations - grouped under archiveGroup
                     .apply {
                         archiveGroupResolver?.let { _ ->
-                            // Return an empty object - actual resolvers are on ArchiveGroupMutations type
-                            dataFetcher("archiveGroup") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("archiveGroup") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // OPC UA Device mutations - grouped under opcUaDevice
                     .apply {
                         opcUaMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on OpcUaDeviceMutations type
-                            dataFetcher("opcUaDevice") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("opcUaDevice") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // OPC UA Server mutations - grouped under opcUaServer
                     .apply {
                         opcUaServerMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on OpcUaServerMutations type
-                            dataFetcher("opcUaServer") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("opcUaServer") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // MQTT Client mutations - grouped under mqttClient
                     .apply {
                         mqttClientMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on MqttClientMutations type
-                            dataFetcher("mqttClient") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("mqttClient") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // Kafka Client mutations - grouped under kafkaClient
                     .apply {
                         kafkaClientMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on KafkaClientMutations type
-                            dataFetcher("kafkaClient") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("kafkaClient") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // NATS Client mutations - grouped under natsClient
                     .apply {
                         natsClientMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on NatsClientMutations type
-                            dataFetcher("natsClient") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("natsClient") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // WinCC OA Client mutations - grouped under winCCOaDevice
                     .apply {
                         winCCOaClientMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on WinCCOaDeviceMutations type
-                            dataFetcher("winCCOaDevice") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("winCCOaDevice") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // WinCC Unified Client mutations - grouped under winCCUaDevice
                     .apply {
                         winCCUaClientMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on WinCCUaDeviceMutations type
-                            dataFetcher("winCCUaDevice") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("winCCUaDevice") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // PLC4X Client mutations - grouped under plc4xDevice
                     .apply {
                         plc4xClientMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on Plc4xDeviceMutations type
-                            dataFetcher("plc4xDevice") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("plc4xDevice") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // Neo4j Client mutations - grouped under neo4jClient
                     .apply {
                         neo4jClientMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on Neo4jClientMutations type
-                            dataFetcher("neo4jClient") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("neo4jClient") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // JDBC Logger mutations - grouped under jdbcLogger
                     .apply {
                         jdbcLoggerMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on JDBCLoggerMutations type
-                            dataFetcher("jdbcLogger") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("jdbcLogger") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // SparkplugB Decoder mutations - grouped under sparkplugBDecoder
                     .apply {
                         sparkplugBDecoderMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on SparkplugBDecoderMutations type
-                            dataFetcher("sparkplugBDecoder") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("sparkplugBDecoder") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
                     // Flow Engine mutations - grouped under flow
                     .apply {
                         flowMutations?.let { _ ->
-                            // Return an empty object - actual resolvers are on FlowMutations type
-                            dataFetcher("flow") { _ -> emptyMap<String, Any>() }
+                            dataFetcher("flow") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
                         }
                     }
             }
@@ -834,6 +882,12 @@ class GraphQLServer(
                 builder
                     .dataFetcher("userManagementEnabled") { env ->
                         java.util.concurrent.CompletableFuture.completedFuture(userManager.isUserManagementEnabled())
+                    }
+                    .dataFetcher("anonymousEnabled") { env ->
+                        java.util.concurrent.CompletableFuture.completedFuture(
+                            userManager.isUserManagementEnabled() &&
+                            (userManager.getUser(at.rocworks.Const.ANONYMOUS_USER)?.enabled == true)
+                        )
                     }
                     .dataFetcher("isLeader") { env ->
                         val future = java.util.concurrent.CompletableFuture<Boolean>()

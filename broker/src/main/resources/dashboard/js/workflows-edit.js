@@ -162,11 +162,11 @@ const FlowEdit = (() => {
       existingRestartBtn.remove();
     }
     if (editing) {
-      const restartBtn = document.createElement('button');
-      restartBtn.className = 'btn btn-secondary btn-small restart-instances-btn';
-      restartBtn.textContent = 'Restart All Instances';
-      restartBtn.style.whiteSpace = 'nowrap';
-      restartBtn.onclick = () => FlowEdit.restartAllInstances();
+       const restartBtn = document.createElement('button');
+       restartBtn.className = 'btn btn-secondary btn-small restart-instances-btn';
+       restartBtn.textContent = 'Restart All Instances';
+       restartBtn.style.whiteSpace = 'nowrap';
+       restartBtn.onclick = () => FlowEdit.restartAllInstances();
       // Insert right after save button (before delete button if it exists)
       const deleteBtn = qs('#delete-button');
       if (deleteBtn) {

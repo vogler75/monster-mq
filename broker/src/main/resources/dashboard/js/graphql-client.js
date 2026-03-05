@@ -52,8 +52,8 @@ class GraphQLDashboardClient {
     checkTokenExpiration() {
         const token = safeStorage.getItem('monstermq_token');
 
-        // Skip if no token or auth is disabled
-        if (!token || token === 'null') {
+        // Skip if no token or auth is disabled or guest mode
+        if (!token || token === 'null' || this.isGuestMode()) {
             return;
         }
 
@@ -217,7 +217,54 @@ class GraphQLDashboardClient {
         }, 1000);
     }
 
-    // ===================== GRAPHQL QUERY =====================
+    /**
+     * Check if the current session is in guest (read-only) mode
+     */
+    isGuestMode() {
+        const token = safeStorage.getItem('monstermq_token');
+        return !token && safeStorage.getItem('monstermq_guest') === 'true';
+    }
+
+    /**
+     * Show a non-redirecting toast for auth errors in guest mode
+     */
+    showAuthToast(message) {
+        // Remove existing toast if any
+        const existing = document.getElementById('auth-error-toast');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.id = 'auth-error-toast';
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #7C3AED;
+            color: white;
+            padding: 14px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+            z-index: 10002;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            max-width: 360px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        `;
+        toast.innerHTML = `
+            <span style="font-size:20px;">🔒</span>
+            <div>
+                <div style="font-weight:600;margin-bottom:2px;">Login required</div>
+                <div style="opacity:0.9;">${message} <a href="/pages/login.html" style="color:#A78BFA;text-decoration:underline;">Sign in</a></div>
+            </div>
+            <button onclick="this.parentElement.remove()" style="background:none;border:none;color:white;cursor:pointer;margin-left:auto;font-size:18px;line-height:1;">&times;</button>
+        `;
+        document.body.appendChild(toast);
+
+        setTimeout(() => { if (toast.parentElement) toast.remove(); }, 6000);
+    }
+
 
     async query(query, variables = {}) {
         const token = safeStorage.getItem('monstermq_token');
@@ -268,7 +315,11 @@ class GraphQLDashboardClient {
                 console.error('=== Authentication Error ===');
                 console.error('Status:', response.status, response.statusText);
                 console.error('============================');
-                this.handleTokenExpiration();
+                if (this.isGuestMode()) {
+                    this.showAuthToast('This action requires you to be logged in.');
+                } else {
+                    this.handleTokenExpiration();
+                }
                 throw new Error(`Authentication failed: ${response.status} ${response.statusText}`);
             }
 
@@ -304,12 +355,25 @@ class GraphQLDashboardClient {
 
                 // Check for authentication-related errors in GraphQL response
                 const errorMessage = result.errors[0].message.toLowerCase();
-                if (errorMessage.includes('unauthorized') ||
+                const isAuthError = errorMessage.includes('unauthorized') ||
                     errorMessage.includes('authentication') ||
                     errorMessage.includes('token expired') ||
                     errorMessage.includes('not authenticated') ||
-                    errorMessage.includes('invalid token')) {
-                    this.handleTokenExpiration();
+                    errorMessage.includes('invalid token') ||
+                    errorMessage.includes('login required') ||
+                    errorMessage.includes('admin privileges required') ||
+                    errorMessage.includes('authentication required');
+
+                if (isAuthError) {
+                    if (this.isGuestMode()) {
+                        // In guest mode: show toast, do NOT redirect
+                        const isAdminError = errorMessage.includes('admin privileges');
+                        this.showAuthToast(isAdminError
+                            ? 'This action requires admin privileges. Please sign in with an admin account.'
+                            : 'This action requires you to be logged in.');
+                    } else {
+                        this.handleTokenExpiration();
+                    }
                 }
 
                 throw new Error(result.errors[0].message);

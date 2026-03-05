@@ -107,6 +107,9 @@ type Broker {
     version: String!
     # Whether user management is enabled for this broker
     userManagementEnabled: Boolean!
+    # Whether the Anonymous user is enabled (allows unauthenticated access)
+    # Only meaningful when userManagementEnabled is true
+    anonymousEnabled: Boolean!
     # Whether this broker node is the cluster leader
     # In single-node setups, always returns true
     # In clustered setups, returns true only for the designated leader node

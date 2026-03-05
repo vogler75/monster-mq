@@ -957,3 +957,11 @@ body::-webkit-scrollbar-thumb {
     color: var(--monster-purple);
     font-weight: 600;
 }
+
+/* =============================
+   Read-only / Guest Mode
+   Hide all write-action controls when body has .read-only-mode
+   ============================= */
+.read-only-mode [data-requires-auth] {
+    display: none !important;
+}

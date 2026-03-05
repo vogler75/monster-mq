@@ -172,7 +172,8 @@ class SidebarManager {
 
         let html = '';
         menuConfig.forEach(section => {
-            html += `<div class="nav-section">`;
+            const sectionId = section.section === 'System' ? ' id="nav-section-system"' : '';
+            html += `<div class="nav-section"${sectionId}>`;
             html += `<div class="nav-section-title">${section.section}</div>`;
             section.items.forEach(item => {
                 if (item.isUserItem) {
@@ -208,7 +209,37 @@ class SidebarManager {
     setupUI() {
         // Check authentication and show/hide admin features
         const isAdmin = safeStorage.getItem('monstermq_isAdmin') === 'true';
-        const userManagementEnabled = safeStorage.getItem('monstermq_userManagementEnabled') === 'true';
+        const token = safeStorage.getItem('monstermq_token');
+        const isGuest = !token && safeStorage.getItem('monstermq_guest') === 'true';
+
+        // A real JWT token means user management is enabled and user is logged in.
+        // The stored 'monstermq_userManagementEnabled' key may be stale; derive the truth
+        // from whether we actually have a JWT (not 'null' and not absent).
+        const hasRealToken = token && token !== 'null';
+        const userManagementEnabled = hasRealToken ||
+            safeStorage.getItem('monstermq_userManagementEnabled') === 'true';
+
+        // Guest mode: add read-only class to body and inject banner
+        if (isGuest) {
+            document.body.classList.add('read-only-mode');
+            this._injectGuestBanner();
+        }
+
+        // Update user info display in sidebar footer
+        const userNameEl = document.getElementById('user-name');
+        const userAvatarEl = document.getElementById('user-avatar');
+        const userRoleEl = document.querySelector('.user-role');
+
+        if (isGuest) {
+            if (userNameEl) userNameEl.textContent = 'Anonymous';
+            if (userAvatarEl) userAvatarEl.textContent = 'A';
+            if (userRoleEl) userRoleEl.textContent = 'Read-only';
+        } else {
+            const username = safeStorage.getItem('monstermq_username') || 'User';
+            if (userNameEl) userNameEl.textContent = username;
+            if (userAvatarEl) userAvatarEl.textContent = username.charAt(0).toUpperCase();
+            if (userRoleEl) userRoleEl.textContent = isAdmin ? 'Administrator' : 'User';
+        }
 
         // Show Users menu for admins (regardless of user management enabled status)
         const usersNavLink = document.getElementById('users-nav-link');
@@ -216,20 +247,50 @@ class SidebarManager {
             usersNavLink.style.display = 'flex';
         }
 
+        // Hide the System section title when the user has no admin items below it.
+        // Admins see Users + Logout; everyone else sees at most Logout (or nothing),
+        // so the "SYSTEM" heading is meaningless for non-admins.
+        const systemSection = document.getElementById('nav-section-system');
+        if (systemSection && !isAdmin) {
+            const sectionTitle = systemSection.querySelector('.nav-section-title');
+            if (sectionTitle) sectionTitle.style.display = 'none';
+        }
+
         // Set up logout functionality on user menu item
         const userMenuItem = document.getElementById('user-menu-item');
         if (userMenuItem) {
-            if (userManagementEnabled) {
-                // Show logout only if user management is enabled
+            if (userManagementEnabled && !isGuest) {
+                // Show logout only if logged in with user management enabled
                 userMenuItem.style.display = 'flex';
                 userMenuItem.addEventListener('click', () => {
                     this.logout();
                 });
             } else {
-                // Hide logout if user management is disabled
+                // Hide logout for guests and when user management is disabled
                 userMenuItem.style.display = 'none';
             }
         }
+    }
+
+    _injectGuestBanner() {
+        // Add a subtle "Read-only" banner at the bottom of the sidebar
+        const sidebar = document.getElementById('sidebar');
+        if (!sidebar) return;
+
+        const banner = document.createElement('div');
+        banner.id = 'guest-mode-banner';
+        banner.style.cssText = `
+            padding: 0.75rem 1rem;
+            border-top: 1px solid var(--dark-border);
+            background: var(--dark-surface);
+            flex-shrink: 0;
+            text-align: center;
+        `;
+        banner.innerHTML = `
+            <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.35rem;text-transform:uppercase;letter-spacing:0.05em;">Read-only mode</div>
+            <a href="/pages/login.html" style="font-size:0.8rem;color:var(--monster-light);text-decoration:none;font-weight:500;">Sign in for full access</a>
+        `;
+        sidebar.appendChild(banner);
     }
 
     restoreSidebarState() {
@@ -323,10 +384,11 @@ class SidebarManager {
             window.graphqlClient.stopTokenExpirationCheck();
         }
 
-        // Clear all auth data
+        // Clear all auth data (including guest flag)
         safeStorage.removeItem('monstermq_token');
         safeStorage.removeItem('monstermq_username');
         safeStorage.removeItem('monstermq_isAdmin');
+        safeStorage.removeItem('monstermq_guest');
         sessionStorage.clear();
 
         window.location.href = '/pages/login.html';

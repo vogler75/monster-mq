@@ -43,19 +43,7 @@ class SessionManager {
     }
 
     isLoggedIn() {
-        const token = safeStorage.getItem('monstermq_token');
-        if (!token) return false;
-
-        // If token is 'null', authentication is disabled
-        if (token === 'null') return true;
-
-        try {
-            const decoded = JSON.parse(atob(token.split('.')[1]));
-            const now = Date.now() / 1000;
-            return decoded.exp > now;
-        } catch {
-            return false;
-        }
+        return window.isLoggedIn();
     }
 
     getAuthHeaders() {

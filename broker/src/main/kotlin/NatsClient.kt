@@ -136,8 +136,16 @@ class NatsClient(
         val pass = json.getString("pass", "")
 
         if (user.isEmpty()) {
-            writeError("Authorization Violation")
-            socket.close()
+            // No credentials: allow only if the Anonymous user is enabled
+            val anonymousUser = userManager.getUser("Anonymous")
+            if (anonymousUser != null && anonymousUser.enabled) {
+                authenticated = true
+                username = "Anonymous"
+                if (verbose) writeLine("+OK")
+            } else {
+                writeError("Authorization Violation")
+                socket.close()
+            }
             return
         }
 

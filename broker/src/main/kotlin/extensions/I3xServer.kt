@@ -747,6 +747,12 @@ class I3xServer(
 
         val authHeader = ctx.request().getHeader("Authorization")
         if (authHeader == null) {
+            // No credentials: allow only if the Anonymous user is enabled
+            val anonymousUser = userManager.getUser("Anonymous")
+            if (anonymousUser != null && anonymousUser.enabled) {
+                ctx.put("i3x_username", "Anonymous")
+                return true
+            }
             ctx.response().setStatusCode(401)
                 .putHeader("Content-Type", "application/json")
                 .putHeader("WWW-Authenticate", "Basic realm=\"MonsterMQ I3X API\"")
@@ -757,7 +763,10 @@ class I3xServer(
         if (authHeader.startsWith("Bearer ", ignoreCase = true)) {
             val token = authHeader.substring(7)
             val username = JwtService.extractUsername(token)
-            if (username != null && !JwtService.isTokenExpired(token)) return true
+            if (username != null && !JwtService.isTokenExpired(token)) {
+                ctx.put("i3x_username", username)
+                return true
+            }
             ctx.response().setStatusCode(401)
                 .putHeader("Content-Type", "application/json")
                 .putHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"")
@@ -772,6 +781,7 @@ class I3xServer(
                 if (parts.size == 2) {
                     userManager.authenticate(parts[0], parts[1]).onComplete { result ->
                         if (result.succeeded() && result.result()?.enabled == true) {
+                            ctx.put("i3x_username", parts[0])
                             ctx.next()
                         } else {
                             ctx.response().setStatusCode(401)

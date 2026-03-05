@@ -187,14 +187,7 @@ class MutationResolver(
             // Check authorization - requires admin privileges
             val authResult = authContext.validateFieldAccess(env)
             if (!authResult.allowed) {
-                future.complete(
-                    PurgeResult(
-                        success = false,
-                        message = authResult.errorMessage ?: "Admin privileges required",
-                        deletedCount = 0L
-                    )
-                )
-                return@DataFetcher future
+                throw GraphQLException(authResult.errorMessage ?: "Unauthorized")
             }
 
             try {
@@ -287,6 +280,12 @@ class MutationResolver(
     fun importDevices(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+
+            // Check authorization - requires admin privileges
+            val authResult = authContext.validateFieldAccess(env)
+            if (!authResult.allowed) {
+                throw GraphQLException(authResult.errorMessage ?: "Unauthorized")
+            }
 
             if (deviceStore == null) {
                 future.completeExceptionally(GraphQLException("Device store is not available"))

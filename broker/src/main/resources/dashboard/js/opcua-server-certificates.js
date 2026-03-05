@@ -13,25 +13,9 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function checkAuthAndLoadData() {
-    const token = safeStorage.getItem('monstermq_token');
-    if (!token) {
+    if (!window.isLoggedIn()) {
         window.location.href = '/pages/login.html';
         return;
-    }
-
-    // If token is not 'null', check if it's expired
-    if (token !== 'null') {
-        try {
-            const decoded = JSON.parse(atob(token.split('.')[1]));
-            const now = Date.now() / 1000;
-            if (decoded.exp <= now) {
-                window.location.href = '/pages/login.html';
-                return;
-            }
-        } catch {
-            window.location.href = '/pages/login.html';
-            return;
-        }
     }
 
     // UI setup is now handled by sidebar.js

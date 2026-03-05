@@ -465,7 +465,7 @@ class MqttClient(
                 val username = endpoint.auth()?.username
                 val password = endpoint.auth()?.password
                 
-                if (username == null || password == null) {
+                if (username.isNullOrEmpty()) {
                     // No credentials provided - treat as anonymous user
                     logger.info("Client [$clientId] No credentials provided, using anonymous access")
                     
@@ -477,40 +477,24 @@ class MqttClient(
                             }
                         } catch (e: Exception) {
                             logger.warning("Client [$clientId] Error getting Anonymous user: ${e.message}")
-                            // Create a default Anonymous user if retrieval fails
-                            at.rocworks.data.User(
-                                username = at.rocworks.Const.ANONYMOUS_USER,
-                                passwordHash = "",
-                                enabled = true,
-                                canSubscribe = true,
-                                canPublish = true,
-                                isAdmin = false
-                            )
+                            null
                         }
                     }).onComplete { result ->
-                        if (result.succeeded() && result.result() != null) {
-                            authenticatedUser = result.result()
+                        val anonymousUser = result.result()
+                        if (anonymousUser != null && anonymousUser.enabled) {
+                            authenticatedUser = anonymousUser
                             logger.fine { "Client [$clientId] Using Anonymous user for unauthenticated access" }
                             proceedWithConnection()
                         } else {
-                            // If we can't get the Anonymous user, create a default one
-                            authenticatedUser = at.rocworks.data.User(
-                                username = at.rocworks.Const.ANONYMOUS_USER,
-                                passwordHash = "",
-                                enabled = true,
-                                canSubscribe = true,
-                                canPublish = true,
-                                isAdmin = false
-                            )
-                            logger.warning("Client [$clientId] Using default Anonymous user (could not retrieve from store)")
-                            proceedWithConnection()
+                            logger.warning("Client [$clientId] Anonymous user is disabled or not found - rejecting connection")
+                            rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_NOT_AUTHORIZED)
                         }
                     }
                     return
                 }
                 
                 // Now authenticate() returns Future<User?>, so we handle it directly
-                userManager.authenticate(username, password).onComplete { authResult ->
+                userManager.authenticate(username, password ?: "").onComplete { authResult ->
                     if (authResult.succeeded() && authResult.result() != null) {
                         authenticatedUser = authResult.result()
                         logger.info("Client [$clientId] Authentication successful for user [$username]")

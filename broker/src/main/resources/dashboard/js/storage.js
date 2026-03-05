@@ -76,3 +76,28 @@ class StorageManager {
 
 // Expose a global instance
 window.safeStorage = new StorageManager();
+
+/**
+ * Shared auth check used by all dashboard pages.
+ * Returns true if the user has a valid JWT, auth is disabled (token === 'null'),
+ * or they are in guest (read-only) mode.
+ */
+window.isLoggedIn = function() {
+    const token = safeStorage.getItem('monstermq_token');
+
+    // Guest mode: no token but guest flag set — allow through (read-only)
+    if (!token) {
+        return safeStorage.getItem('monstermq_guest') === 'true';
+    }
+
+    // Auth disabled
+    if (token === 'null') return true;
+
+    // Validate JWT expiry
+    try {
+        const decoded = JSON.parse(atob(token.split('.')[1]));
+        return decoded.exp > Date.now() / 1000;
+    } catch {
+        return false;
+    }
+};
