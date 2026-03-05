@@ -121,7 +121,7 @@ class I3xServer(
 
         router.route("$basePath/*").handler { ctx ->
             val body = if (ctx.request().method().name() == "POST") ctx.body()?.asString()?.take(200) else ""
-            logger.info("I3X ${ctx.request().method()} ${ctx.request().uri()} $body")
+            logger.fine("I3X ${ctx.request().method()} ${ctx.request().uri()} $body")
             if (!validateAuthentication(ctx)) return@handler
             ctx.next()
         }
