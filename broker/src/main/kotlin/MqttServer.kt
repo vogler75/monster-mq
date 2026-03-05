@@ -5,6 +5,8 @@ import at.rocworks.handlers.SessionHandler
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.net.JksOptions
+import io.vertx.core.net.KeyCertOptions
+import io.vertx.core.net.PfxOptions
 
 import io.vertx.mqtt.MqttServer
 import io.vertx.mqtt.MqttServerOptions
@@ -20,15 +22,14 @@ class MqttServer(
     private val sessionHandler: SessionHandler,
     private val userManager: UserManager,
     private val keyStorePath: String = "server-keystore.jks",
-    private val keyStorePassword: String = "password"
+    private val keyStorePassword: String = "password",
+    private val keyStoreType: String = "JKS"
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
     private val options = MqttServerOptions().let { it ->
         it.isSsl = ssl
-        it.keyCertOptions = JksOptions()
-            .setPath(keyStorePath)
-            .setPassword(keyStorePassword)
+        it.keyCertOptions = buildKeyCertOptions(keyStorePath, keyStorePassword, keyStoreType)
         it.isUseWebSocket = this.useWebSocket
         it.maxMessageSize = this.maxMessageSize
         it.isTcpNoDelay = this.tcpNoDelay      // Disable Nagle's algorithm - send packets immediately, don't coalesce
@@ -62,6 +63,14 @@ class MqttServer(
             .onFailure { error ->
                 logger.severe("Error starting MQTT Server: ${error.message} [${Utils.getCurrentFunctionName()}]")
                 startPromise.fail(error)
+            }
+    }
+
+    companion object {
+        fun buildKeyCertOptions(path: String, password: String, type: String): KeyCertOptions =
+            when (type.uppercase()) {
+                "PKCS12", "PFX", "P12" -> PfxOptions().setPath(path).setPassword(password)
+                else -> JksOptions().setPath(path).setPassword(password)
             }
     }
 }

@@ -105,6 +105,12 @@
           "type": "string",
           "description": "Password for the keystore file",
           "default": "password"
+        },
+        "KeyStoreType": {
+          "type": "string",
+          "enum": ["JKS", "PKCS12", "PFX", "P12"],
+          "description": "Keystore format. JKS (Java KeyStore, default) or PKCS12/PFX/P12 (universal format).",
+          "default": "JKS"
         }
       }
     },

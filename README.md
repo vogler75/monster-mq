@@ -19,7 +19,7 @@ A high-performance, enterprise-grade MQTT broker with advanced data processing c
   - ⏳ Will Delay Interval (waiting for Vert.x API support)
 - **Native NATS Protocol** - Accept standard NATS clients (`nats` CLI, `nats.go`, `nats.py`, `nats.rs`) directly on a configurable port with automatic MQTT topic translation
 - **High Performance** - Built on Vert.x for maximum throughput and low latency
-- **SSL/TLS Security** - End-to-end encryption with certificate management
+- **SSL/TLS Security** - End-to-end encryption with JKS or PKCS12/PFX certificate support
 - **WebSocket Support** - MQTT over WebSocket for web applications
 - **Clustering** - Multi-node deployment with Hazelcast clustering and automatic failover
 - **Retained Messages** - Persistent message storage for new subscribers
@@ -192,6 +192,12 @@ TCPS: 8883
 WS: 9000
 WSS: 9001
 NATS: 4222     # Native NATS protocol (0 = disabled)
+
+# SSL/TLS configuration
+SSL:
+  KeyStorePath: "security/server-keystore.jks"  # .jks or .p12/.pfx
+  KeyStorePassword: "changeit"
+  KeyStoreType: "JKS"                           # JKS (default) or PKCS12 / PFX / P12
 
 DefaultStoreType: POSTGRES
 

@@ -649,6 +649,7 @@ MORE INFO:
         val sslConfig = configJson.getJsonObject("SSL", JsonObject())
         val keyStorePath = sslConfig.getString("KeyStorePath", "server-keystore.jks")
         val keyStorePassword = sslConfig.getString("KeyStorePassword", "password")
+        val keyStoreType = sslConfig.getString("KeyStoreType", "JKS")
 
         // Load TCP server configuration
         val tcpServerConfig = configJson.getJsonObject("MqttTcpServer", JsonObject())
@@ -862,8 +863,8 @@ MORE INFO:
                 val servers = listOfNotNull(
                     if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
                     if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
-                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword) else null,
-                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword) else null,
+                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword, keyStoreType) else null,
+                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword, keyStoreType) else null,
                     if (useNats>0) NatsServer(useNats, sessionHandler, userManager) else null,
                     mcpServer,
                     grafanaServer,
