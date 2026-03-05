@@ -5,6 +5,7 @@ import at.rocworks.handlers.SessionHandler
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.net.JksOptions
+import io.vertx.core.net.KeyCertOptions
 import io.vertx.core.net.PfxOptions
 
 import io.vertx.mqtt.MqttServer
@@ -28,14 +29,7 @@ class MqttServer(
 
     private val options = MqttServerOptions().let { it ->
         it.isSsl = ssl
-        it.keyCertOptions = when (keyStoreType.uppercase()) {
-            "PKCS12", "PFX", "P12" -> PfxOptions()
-                .setPath(keyStorePath)
-                .setPassword(keyStorePassword)
-            else -> JksOptions()
-                .setPath(keyStorePath)
-                .setPassword(keyStorePassword)
-        }
+        it.keyCertOptions = buildKeyCertOptions(keyStorePath, keyStorePassword, keyStoreType)
         it.isUseWebSocket = this.useWebSocket
         it.maxMessageSize = this.maxMessageSize
         it.isTcpNoDelay = this.tcpNoDelay      // Disable Nagle's algorithm - send packets immediately, don't coalesce
@@ -69,6 +63,14 @@ class MqttServer(
             .onFailure { error ->
                 logger.severe("Error starting MQTT Server: ${error.message} [${Utils.getCurrentFunctionName()}]")
                 startPromise.fail(error)
+            }
+    }
+
+    companion object {
+        fun buildKeyCertOptions(path: String, password: String, type: String): KeyCertOptions =
+            when (type.uppercase()) {
+                "PKCS12", "PFX", "P12" -> PfxOptions().setPath(path).setPassword(password)
+                else -> JksOptions().setPath(path).setPassword(password)
             }
     }
 }
