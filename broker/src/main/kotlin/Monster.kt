@@ -14,6 +14,7 @@ import at.rocworks.data.MqttSubscriptionCodec
 import at.rocworks.extensions.graphql.GraphQLServer
 import at.rocworks.extensions.McpServer
 import at.rocworks.extensions.GrafanaServer
+import at.rocworks.extensions.I3xServer
 import at.rocworks.extensions.ApiService
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
@@ -766,6 +767,17 @@ MORE INFO:
                     null
                 }
 
+                // CESMII I3X API Server
+                val i3xConfig = configJson.getJsonObject("I3x", JsonObject())
+                val i3xEnabled = i3xConfig.getBoolean("Enabled", false)
+                val i3xPort = i3xConfig.getInteger("Port", 3002)
+                val i3xServer = if (i3xEnabled) {
+                    I3xServer("0.0.0.0", i3xPort, archiveHandler, sessionHandler, userManager)
+                } else {
+                    logger.fine("I3X API server is disabled in configuration")
+                    null
+                }
+
                 // Metrics Collector and Store
                 val metricsConfig = configJson.getJsonObject("Metrics", JsonObject())
                 val metricsEnabled = metricsConfig.getBoolean("Enabled", true)
@@ -855,7 +867,8 @@ MORE INFO:
                     if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword, keyStoreType) else null,
                     if (useNats>0) NatsServer(useNats, sessionHandler, userManager) else null,
                     mcpServer,
-                    grafanaServer
+                    grafanaServer,
+                    i3xServer
                 )
 
                 // Deploy all verticles

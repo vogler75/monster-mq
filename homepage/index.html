@@ -45,9 +45,11 @@
                 <div class="feature-badge">✓ MQTT 3.1.1</div>
                 <div class="feature-badge">✓ Multi-Database</div>
                 <div class="feature-badge">✓ OPC UA</div>
+                <div class="feature-badge">✓ NATS</div>
                 <div class="feature-badge">✓ Workflows</div>
                 <div class="feature-badge">✓ Dashboard</div>
                 <div class="feature-badge">✓ Clustering</div>
+                <div class="feature-badge">✓ I3X API</div>
                 <div class="feature-badge">✓ MCP Ready</div>
             </div>
         </div>
@@ -88,14 +90,49 @@
                     <p>Modern SCADA integration via GraphQL/WebSocket for Siemens WinCC Unified. Real-time tag value subscriptions with flexible name filters and wildcards. Stream active alarms and alerts with complete alarm details including state, priority, and timestamps. Optional OPC UA quality information for tag values including quality codes and status flags.</p>
                 </div>
                 <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Native NATS Protocol</h3>
+                    <p>Accept standard NATS clients directly on a configurable port. Automatic topic translation between MQTT separators (<code>/</code>, <code>+</code>, <code>#</code>) and NATS (<code>.</code>, <code>*</code>, <code>&gt;</code>). Supports Core NATS and JetStream with authentication options including anonymous, username/password, token, and TLS.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔗</div>
+                    <h3>NATS Client Bridge</h3>
+                    <p>Bidirectional bridging between MQTT and external NATS servers. Forward MQTT topics to NATS subjects and subscribe NATS subjects back into MQTT. Supports Core NATS at-most-once and JetStream at-least-once delivery with durable consumers.</p>
+                </div>
+                <div class="feature-card">
                     <div class="feature-icon">🔗</div>
                     <h3>MQTT to MQTT Bridge</h3>
-                    <p>Built-in MQTT bridge functionality enables bidirectional message flow between brokers. Forward messages to remote brokers with topic filters and transformations, or consume messages from external MQTT brokers. Perfect for building hierarchical broker architectures and connecting distributed systems without external tools.</p>
+                    <p>Built-in MQTT bridge functionality enables bidirectional message flow between brokers. Forward messages to remote brokers with topic filters and transformations, or consume messages from external MQTT brokers. Perfect for building hierarchical broker architectures and connecting distributed systems.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📨</div>
+                    <h3>Kafka Integration</h3>
+                    <p>Stream MQTT messages to Apache Kafka topics for event sourcing, stream processing, and long-term data retention. Bidirectional bridging enables consuming Kafka topics back into MQTT for seamless integration with data pipelines.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔧</div>
+                    <h3>PLC4X Integration</h3>
+                    <p>Connect directly to industrial PLCs using Apache PLC4X. Multi-protocol support for Siemens S7, Allen-Bradley, Modbus, and more. Read and write PLC variables without gateways, bridging operational technology directly to MQTT.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🕸️</div>
+                    <h3>Neo4j Graph Database</h3>
+                    <p>Automatically convert MQTT topic hierarchies into graph structures. Enable path-based queries, relationship analysis, and hierarchical visualization of device connections with configurable message rate limiting.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>SparkplugB Decoder</h3>
+                    <p>Decode SparkplugB protocol messages and expand compressed payloads into individual MQTT topics. Enables standard MQTT clients and archives to work with SparkplugB devices without specialized libraries.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">🔀</div>
                     <h3>Workflows (Flow Engine)</h3>
                     <p>Visual flow-based programming with JavaScript runtime. Create data processing pipelines with drag-and-drop nodes. Transform, filter, and aggregate MQTT messages in real-time with reusable flow templates and instance-specific configuration.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔌</div>
+                    <h3>I3X API (CESMII)</h3>
+                    <p>CESMII-compatible I3X REST API exposes MQTT topics as industrial object instances with parent-child hierarchies. Access real-time values, historical data, and Server-Sent Event subscriptions. JSON payloads are automatically decomposed into child property objects.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">📊</div>

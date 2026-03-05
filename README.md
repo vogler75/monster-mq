@@ -134,6 +134,17 @@ Visual flow-based data processing inspired by Node-RED:
 - **Error Handling** - Robust error capture and reporting
 - **Performance Monitoring** - Execution metrics and debugging
 
+### I3X API (CESMII) 🏭
+Industrial Information Interoperability eXchange (I3X) REST API for standardized industrial data access:
+
+- **Object Hierarchy** - MQTT topic tree exposed as I3X object instances with parent-child relationships
+- **Real-time Values** - Current values via VQT (Value, Quality, Timestamp) format
+- **Historical Data** - Time-range queries against message archives
+- **SSE Subscriptions** - Server-Sent Events for real-time streaming of topic changes
+- **JSON Properties** - JSON payloads automatically decomposed into child property objects
+- **Namespace Mapping** - Archive groups mapped to I3X namespaces
+- **CESMII Compatible** - Works with I3X Browser and other I3X-compliant clients
+
 ### Web Dashboard 🖥️
 Modern, responsive web interface for complete system management:
 
@@ -150,7 +161,7 @@ Modern, responsive web interface for complete system management:
 
 ```bash
 # Pull from Docker Hub
-docker run -p 1883:1883 -p 4222:4222 -p 4840:4840 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
+docker run -p 1883:1883 -p 4222:4222 -p 4840:4840 -p 3000:3000 -p 3002:3002 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
 
 # Or with PostgreSQL and full docker-compose
 docker-compose up -d
@@ -206,6 +217,11 @@ Logging:
 GraphQL:
   Enabled: true
   Port: 4000
+
+# I3X API (CESMII Industrial Data)
+I3x:
+  Enabled: true
+  Port: 3002
 ```
 
 #### PostgreSQL Multi-Schema Setup
@@ -302,13 +318,13 @@ MonsterMQ follows a modular, event-driven architecture built on Eclipse Vert.x, 
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                         Management & Monitoring                                 │
 │                                                                                 │
-│  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐   │
-│  │   GraphQL API        │  │   Web Dashboard      │  │   MCP Server         │   │
-│  │  • Queries           │  │  • Configuration     │  │  • AI Integration    │   │
-│  │  • Mutations         │  │  • Topic Browser     │  │  • GraphQL API       │   │
-│  │  • Subscriptions     │  │  • Flow Editor       │  │  • SQL Queries       │   │
-│  │  • Port 4000         │  │  • User Management   │  │                      │   │ 
-│  └──────────────────────┘  └──────────────────────┘  └──────────────────────┘   │
+│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐  │
+│  │  GraphQL API   │  │ Web Dashboard  │  │  MCP Server    │  │  I3X API       │  │
+│  │  • Queries     │  │ • Config       │  │ • AI Integr.   │  │ • CESMII       │  │
+│  │  • Mutations   │  │ • Browser      │  │ • GraphQL API  │  │ • Objects      │  │
+│  │  • Subscript.  │  │ • Flow Editor  │  │ • SQL Queries  │  │ • Values/Hist  │  │
+│  │  • Port 4000   │  │ • User Mgmt   │  │                │  │ • Port 3002    │  │
+│  └────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -342,7 +358,8 @@ MonsterMQ follows a modular, event-driven architecture built on Eclipse Vert.x, 
 
 #### 5. **Integration & APIs**
 - **GraphQL API** - Real-time queries, mutations, and subscriptions
-- **Web Dashboard** - Modern React-based management interface  
+- **I3X API** - CESMII-compatible REST API for industrial data access with SSE streaming
+- **Web Dashboard** - Modern React-based management interface
 - **OPC UA Server** - Industrial protocol bridge with certificate management
 - **Device Clients** - WinCC OA, PLC4X, Neo4j, Kafka integration
 
@@ -371,6 +388,7 @@ For detailed documentation, see the [`doc/`](doc/) directory:
 - **[MQTT JSON-RPC 2.0 API](doc/mqtt-api.md)** - Execute GraphQL queries/mutations over MQTT
 - **[MCP Server](doc/mcp.md)** - AI model integration with GraphQL API and SQL queries
 - **[Workflows (Flow Engine)](doc/workflows.md)** - Visual flow-based programming and data processing
+- **[I3X API (CESMII)](doc/i3x.md)** - Industrial data access via I3X REST API with SSE subscriptions
 - **[NATS Integration](doc/nats.md)** - Native NATS protocol server and NATS Client Bridge
 - **[Kafka Integration](doc/kafka.md)** - Stream processing and event sourcing
 - **[MQTT Logging](doc/mqtt-logging.md)** - Real-time system logging via MQTT topics
@@ -386,7 +404,7 @@ Available at: **[rocworks/monstermq:latest](https://hub.docker.com/r/rocworks/mo
 docker pull rocworks/monstermq:latest
 
 # Run with custom configuration
-docker run -p 1883:1883 -p 4222:4222 -p 4840:4840 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
+docker run -p 1883:1883 -p 4222:4222 -p 4840:4840 -p 3000:3000 -p 3002:3002 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
 
 # Docker Compose with PostgreSQL
 
@@ -403,6 +421,7 @@ services:
       - "9001:9001"    # WebSocket TLS
       - "4222:4222"    # NATS Protocol
       - "4840:4840"    # OPC UA Server
+      - "3002:3002"    # I3X API
       - "4000:4000"    # GraphQL API
     volumes:
       - ./log:/app/log
@@ -444,6 +463,10 @@ Postgres:
 GraphQL:
   Enabled: true
   Port: 4000
+
+I3x:
+  Enabled: true
+  Port: 3002
 ```
 
 > docker-compose up -d
@@ -460,6 +483,7 @@ GraphQL:
 | **NATS** | **4222** | **Native NATS protocol server** |
 | **OPC UA Server** | **4840** | **Industrial protocol with MQTT bridge** |
 | GraphQL API | 4000 | Management and real-time data |
+| **I3X API** | **3002** | **CESMII industrial data API (REST + SSE)** |
 
 ## 🧪 Example Usage
 
