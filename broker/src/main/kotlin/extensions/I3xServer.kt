@@ -117,7 +117,9 @@ class I3xServer(
 
         router.route().handler(BodyHandler.create())
 
-        router.route("/*").handler { ctx ->
+        val basePath = "/i3x"
+
+        router.route("$basePath/*").handler { ctx ->
             val body = if (ctx.request().method().name() == "POST") ctx.body()?.asString()?.take(200) else ""
             logger.info("I3X ${ctx.request().method()} ${ctx.request().uri()} $body")
             if (!validateAuthentication(ctx)) return@handler
@@ -125,32 +127,32 @@ class I3xServer(
         }
 
         // Explore endpoints
-        router.get("/namespaces").handler(::handleNamespaces)
-        router.get("/objecttypes").handler(::handleObjectTypes)
-        router.post("/objecttypes/query").handler(::handleObjectTypesQuery)
-        router.get("/relationshiptypes").handler(::handleRelationshipTypes)
-        router.post("/relationshiptypes/query").handler(::handleRelationshipTypesQuery)
-        router.get("/objects").handler(::handleObjects)
-        router.post("/objects/list").handler(::handleObjectsList)
-        router.post("/objects/related").handler(::handleObjectsRelated)
+        router.get("$basePath/namespaces").handler(::handleNamespaces)
+        router.get("$basePath/objecttypes").handler(::handleObjectTypes)
+        router.post("$basePath/objecttypes/query").handler(::handleObjectTypesQuery)
+        router.get("$basePath/relationshiptypes").handler(::handleRelationshipTypes)
+        router.post("$basePath/relationshiptypes/query").handler(::handleRelationshipTypesQuery)
+        router.get("$basePath/objects").handler(::handleObjects)
+        router.post("$basePath/objects/list").handler(::handleObjectsList)
+        router.post("$basePath/objects/related").handler(::handleObjectsRelated)
 
         // Query endpoints
-        router.post("/objects/value").handler(::handleObjectsValue)
-        router.post("/objects/history").handler(::handleObjectsHistory)
+        router.post("$basePath/objects/value").handler(::handleObjectsValue)
+        router.post("$basePath/objects/history").handler(::handleObjectsHistory)
 
         // Update endpoints — elementId may contain slashes, so extract from raw path
-        router.putWithRegex("/objects/(.+)/value").handler(::handleUpdateValue)
-        router.putWithRegex("/objects/(.+)/history").handler(::handleUpdateHistory)
+        router.putWithRegex("$basePath/objects/(.+)/value").handler(::handleUpdateValue)
+        router.putWithRegex("$basePath/objects/(.+)/history").handler(::handleUpdateHistory)
 
         // Subscribe endpoints
-        router.get("/subscriptions").handler(::handleListSubscriptions)
-        router.post("/subscriptions").handler(::handleCreateSubscription)
-        router.get("/subscriptions/:id").handler(::handleGetSubscription)
-        router.delete("/subscriptions/:id").handler(::handleDeleteSubscription)
-        router.post("/subscriptions/:id/register").handler(::handleRegisterTopics)
-        router.post("/subscriptions/:id/unregister").handler(::handleUnregisterTopics)
-        router.get("/subscriptions/:id/stream").handler(::handleStream)
-        router.post("/subscriptions/:id/sync").handler(::handleSync)
+        router.get("$basePath/subscriptions").handler(::handleListSubscriptions)
+        router.post("$basePath/subscriptions").handler(::handleCreateSubscription)
+        router.get("$basePath/subscriptions/:id").handler(::handleGetSubscription)
+        router.delete("$basePath/subscriptions/:id").handler(::handleDeleteSubscription)
+        router.post("$basePath/subscriptions/:id/register").handler(::handleRegisterTopics)
+        router.post("$basePath/subscriptions/:id/unregister").handler(::handleUnregisterTopics)
+        router.get("$basePath/subscriptions/:id/stream").handler(::handleStream)
+        router.post("$basePath/subscriptions/:id/sync").handler(::handleSync)
 
         vertx.createHttpServer(HttpServerOptions().setPort(port).setHost(host))
             .requestHandler(router)
@@ -545,8 +547,8 @@ class I3xServer(
     // --- Update Handlers ---
 
     private fun handleUpdateValue(ctx: RoutingContext) {
-        val rawPath = ctx.request().path() // /objects/<elementId>/value
-        val elementId = rawPath.removePrefix("/objects/").removeSuffix("/value")
+        val rawPath = ctx.request().path() // /i3x/objects/<elementId>/value
+        val elementId = rawPath.removePrefix("/i3x/objects/").removeSuffix("/value")
         if (elementId.isEmpty()) {
             err(ctx, 400, "Missing elementId")
             return
