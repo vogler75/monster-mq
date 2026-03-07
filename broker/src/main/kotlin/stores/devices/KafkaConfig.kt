@@ -13,8 +13,6 @@ data class KafkaClientConfig(
     val groupId: String = "monstermq-subscriber",
     val payloadFormat: String = PayloadFormat.DEFAULT,
     val extraConsumerConfig: Map<String, String> = emptyMap(),
-    val pollIntervalMs: Long = 500,
-    val maxPollRecords: Int = 100,
     val reconnectDelayMs: Long = 5000,
     val destinationTopicPrefix: String? = null
 ) {
@@ -38,8 +36,6 @@ data class KafkaClientConfig(
                 groupId = obj.getString("groupId", "monstermq-subscriber"),
                 payloadFormat = obj.getString("payloadFormat", PayloadFormat.DEFAULT) ?: PayloadFormat.DEFAULT,
                 extraConsumerConfig = obj.getJsonObject("extraConsumerConfig", JsonObject()).let { ec -> ec.fieldNames().associateWith { k -> ec.getValue(k).toString() } },
-                pollIntervalMs = obj.getLong("pollIntervalMs", 500),
-                maxPollRecords = obj.getInteger("maxPollRecords", 100),
                 reconnectDelayMs = obj.getLong("reconnectDelayMs", 5000),
                 destinationTopicPrefix = normalizedPrefix
             )
@@ -48,8 +44,6 @@ data class KafkaClientConfig(
 
     fun validate(): List<String> {
         val errors = mutableListOf<String>()
-        if (pollIntervalMs < 50) errors.add("pollIntervalMs should be >=50")
-        if (maxPollRecords < 1) errors.add("maxPollRecords must be >=1")
         if (reconnectDelayMs < 500) errors.add("reconnectDelayMs should be >=500")
         if (destinationTopicPrefix != null) {
             if (destinationTopicPrefix.contains('+') || destinationTopicPrefix.contains('#')) {

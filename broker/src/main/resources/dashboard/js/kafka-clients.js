@@ -46,7 +46,7 @@ class KafkaClientManager {
                 query GetKafkaClients {
                     kafkaClients { 
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
-                        config { groupId bootstrapServers destinationTopicPrefix pollIntervalMs maxPollRecords reconnectDelayMs }
+                        config { groupId bootstrapServers destinationTopicPrefix reconnectDelayMs }
                         metrics { messagesIn messagesOut }
                     }
                 }
@@ -123,8 +123,7 @@ class KafkaClientManager {
                 groupId: document.getElementById('kafka-client-group-id').value.trim() || null,
                 bootstrapServers: document.getElementById('kafka-client-bootstrap').value.trim(),
                 destinationTopicPrefix: (function(){ const v=document.getElementById('kafka-client-destination-prefix').value.trim(); return v.length>0? v : null; })(),
-                pollIntervalMs: parseInt(document.getElementById('kafka-client-poll-interval').value),
-                maxPollRecords: parseInt(document.getElementById('kafka-client-max-poll').value),
+                payloadFormat: document.getElementById('kafka-client-payload-format').value,
                 reconnectDelayMs: parseInt(document.getElementById('kafka-client-reconnect-delay').value)
             }
         };

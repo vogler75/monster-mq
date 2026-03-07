@@ -59,7 +59,7 @@ class KafkaClientDetailManager {
                 query GetKafkaClients($name: String!) {
                     kafkaClients(name: $name) {
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
-                        config { bootstrapServers groupId payloadFormat destinationTopicPrefix extraConsumerConfig pollIntervalMs maxPollRecords reconnectDelayMs }
+                        config { bootstrapServers groupId payloadFormat destinationTopicPrefix extraConsumerConfig reconnectDelayMs }
                         metrics { messagesIn messagesOut timestamp }
                     }
                 }
@@ -95,8 +95,6 @@ class KafkaClientDetailManager {
         document.getElementById('client-group-id').value = cfg.groupId;
         document.getElementById('client-payload-format').value = cfg.payloadFormat;
         document.getElementById('client-destination-prefix').value = cfg.destinationTopicPrefix || '';
-        document.getElementById('client-poll-interval').value = cfg.pollIntervalMs;
-        document.getElementById('client-max-poll').value = cfg.maxPollRecords;
         document.getElementById('client-reconnect-delay').value = cfg.reconnectDelayMs;
         document.getElementById('client-enabled').checked = d.enabled;
 
@@ -184,8 +182,6 @@ class KafkaClientDetailManager {
                 destinationTopicPrefix: (function(){ const v=document.getElementById('client-destination-prefix').value.trim(); return v.length>0? v : null; })(),
                 payloadFormat: document.getElementById('client-payload-format').value,
                 extraConsumerConfig: extraConfig,
-                pollIntervalMs: parseInt(document.getElementById('client-poll-interval').value),
-                maxPollRecords: parseInt(document.getElementById('client-max-poll').value),
                 reconnectDelayMs: parseInt(document.getElementById('client-reconnect-delay').value)
             }
         };

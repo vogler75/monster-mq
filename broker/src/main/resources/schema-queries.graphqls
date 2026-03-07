@@ -838,10 +838,6 @@ type KafkaClientConfig {
 
     # Additional arbitrary Kafka consumer properties
     extraConsumerConfig: JSON
-    # Poll interval in milliseconds
-    pollIntervalMs: Long!
-    # Max records per poll
-    maxPollRecords: Int!
     # Reconnect delay to Kafka in milliseconds
     reconnectDelayMs: Long!
     # Optional prefix applied to all published MQTT topics.

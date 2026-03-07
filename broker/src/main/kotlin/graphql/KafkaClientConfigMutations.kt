@@ -258,8 +258,6 @@ class KafkaClientConfigMutations(
             groupId = configMap["groupId"] as? String ?: "monstermq-subscriber",
             payloadFormat = configMap["payloadFormat"] as? String ?: PayloadFormat.DEFAULT,
             extraConsumerConfig = (configMap["extraConsumerConfig"] as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value.toString() } ?: emptyMap(),
-            pollIntervalMs = (configMap["pollIntervalMs"] as? Number)?.toLong() ?: 500L,
-            maxPollRecords = (configMap["maxPollRecords"] as? Number)?.toInt() ?: 100,
             reconnectDelayMs = (configMap["reconnectDelayMs"] as? Number)?.toLong() ?: 5000L,
             destinationTopicPrefix = (configMap["destinationTopicPrefix"] as? String)?.takeIf { it.isNotBlank() }
         )
@@ -310,8 +308,6 @@ class KafkaClientConfigMutations(
                 "groupId" to config.groupId,
                 "payloadFormat" to config.payloadFormat,
                 "extraConsumerConfig" to config.extraConsumerConfig,
-                "pollIntervalMs" to config.pollIntervalMs,
-                "maxPollRecords" to config.maxPollRecords,
                 "reconnectDelayMs" to config.reconnectDelayMs,
                 "destinationTopicPrefix" to config.destinationTopicPrefix
             ),

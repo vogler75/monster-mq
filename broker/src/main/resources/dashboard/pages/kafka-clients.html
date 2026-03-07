@@ -215,12 +215,13 @@
                         <input type="text" id="kafka-client-bootstrap" required placeholder="host1:9092,host2:9092">
                     </div>
                     <div class="form-group">
-                        <label for="kafka-client-poll-interval">Poll Interval (ms)</label>
-                        <input type="number" id="kafka-client-poll-interval" value="1000">
-                    </div>
-                    <div class="form-group">
-                        <label for="kafka-client-max-poll">Max Poll Records</label>
-                        <input type="number" id="kafka-client-max-poll" value="500">
+                        <label for="kafka-client-payload-format">Payload Format</label>
+                        <select id="kafka-client-payload-format">
+                            <option value="DEFAULT">DEFAULT</option>
+                            <option value="JSON">JSON</option>
+                            <option value="TEXT">TEXT</option>
+                            <option value="BINARY">BINARY</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="kafka-client-reconnect-delay">Reconnect Delay (ms)</label>
