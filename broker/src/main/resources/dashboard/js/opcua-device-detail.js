@@ -11,67 +11,42 @@ class OpcUaDeviceDetailManager {
     }
 
     async init() {
-        console.log('Initializing OPC UA Device Detail Manager...');
-
-        // Check if authentication is required by testing a simple query
-        try {
-            const testQuery = `query { clusterNodes { nodeId } }`;
-            await this.client.query(testQuery);
-            console.log('Authentication check passed or not required');
-        } catch (error) {
-            // Only redirect to login if we get an authentication error
-            if (error.message && (error.message.includes('Unauthorized') || error.message.includes('Authentication'))) {
-                window.location.href = '/pages/login.html';
-                return;
-            }
-            // For other errors, continue - authentication might be disabled
-            console.log('Authentication appears to be disabled, continuing...');
-        }
-
-        // UI setup is now handled by sidebar.js
-
-        // Get device name from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         this.deviceName = urlParams.get('device');
+        this.isNew = urlParams.get('new') === 'true';
+
+        if (this.isNew) {
+            await this.loadClusterNodes();
+            this.showNewDeviceForm();
+            return;
+        }
 
         if (!this.deviceName) {
             this.showError('No device specified');
             return;
         }
 
-        // Load data
         await this.loadClusterNodes();
         await this.loadDevice();
     }
 
     async loadClusterNodes() {
         try {
-            const query = `
-                query GetBrokers {
-                    brokers {
-                        nodeId
-                        isCurrent
-                    }
-                }
-            `;
-
+            const query = `query GetBrokers { brokers { nodeId isCurrent } }`;
             const result = await this.client.query(query);
             this.clusterNodes = result.brokers || [];
-
-            // Populate node selector in form
             const nodeSelect = document.getElementById('device-node');
             if (nodeSelect) {
                 nodeSelect.innerHTML = '<option value="">Select Node...</option>';
                 this.clusterNodes.forEach(node => {
-                    const option = document.createElement('option');
-                    option.value = node.nodeId;
-                    option.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
-                    nodeSelect.appendChild(option);
+                    const opt = document.createElement('option');
+                    opt.value = node.nodeId;
+                    opt.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
+                    nodeSelect.appendChild(opt);
                 });
             }
-
-        } catch (error) {
-            console.error('Error loading cluster nodes:', error);
+        } catch (e) {
+            console.error('Error loading cluster nodes', e);
         }
     }
 
@@ -201,6 +176,57 @@ class OpcUaDeviceDetailManager {
         document.getElementById('device-content').style.display = 'block';
     }
 
+    showNewDeviceForm() {
+        document.getElementById('device-title').textContent = 'Add OPC UA Client';
+        document.getElementById('device-subtitle').textContent = 'Create a new OPC UA device connection';
+
+        // Enable name field
+        document.getElementById('device-name').value = '';
+        document.getElementById('device-name').disabled = false;
+        document.getElementById('device-namespace').value = '';
+        document.getElementById('device-endpoint').value = '';
+        document.getElementById('device-security').value = 'None';
+        document.getElementById('device-update-endpoint').checked = false;
+        document.getElementById('device-username').value = '';
+        document.getElementById('device-enabled').checked = true;
+
+        // Set connection defaults
+        document.getElementById('config-sampling').value = '0';
+        document.getElementById('config-keepalive').value = '3';
+        document.getElementById('config-reconnect').value = '5000';
+        document.getElementById('config-connection-timeout').value = '5000';
+        document.getElementById('config-request-timeout').value = '5000';
+        document.getElementById('config-buffer-size').value = '10';
+        document.getElementById('config-monitoring-sampling').value = '0';
+        document.getElementById('config-discard-oldest').checked = true;
+
+        // Set certificate defaults
+        document.getElementById('cert-security-dir').value = 'security';
+        document.getElementById('cert-application-name').value = 'MonsterMQ OPC UA Client';
+        document.getElementById('cert-application-uri').value = '';
+        document.getElementById('cert-organization').value = '';
+        document.getElementById('cert-organizational-unit').value = '';
+        document.getElementById('cert-locality').value = '';
+        document.getElementById('cert-country').value = '';
+        document.getElementById('cert-create-self-signed').checked = true;
+        document.getElementById('cert-validate-server').checked = false;
+        document.getElementById('cert-auto-accept').checked = true;
+
+        // Hide status badge and addresses section
+        const statusBadge = document.getElementById('device-status-badge');
+        if (statusBadge) statusBadge.style.display = 'none';
+        const addressesSection = document.querySelector('.addresses-section');
+        if (addressesSection) addressesSection.style.display = 'none';
+        const createdRow = document.getElementById('device-created-row');
+        if (createdRow) createdRow.style.display = 'none';
+
+        // Update save button label
+        const saveBtn = document.getElementById('save-device-btn');
+        if (saveBtn) saveBtn.innerHTML = saveBtn.innerHTML.replace('Save Device', 'Create Device');
+
+        document.getElementById('device-content').style.display = 'block';
+    }
+
     renderAddresses() {
         const tbody = document.getElementById('addresses-table-body');
         const noAddresses = document.getElementById('no-addresses');
@@ -216,7 +242,7 @@ class OpcUaDeviceDetailManager {
             return;
         }
 
-        addressesTable.style.display = 'table';
+        addressesTable.style.display = 'block';
         noAddresses.style.display = 'none';
 
         this.device.config.addresses.forEach(address => {
@@ -405,6 +431,34 @@ class OpcUaDeviceDetailManager {
                 }
             }
         };
+
+        if (this.isNew) {
+            try {
+                const mutation = `
+                    mutation AddOpcUaDevice($input: OpcUaDeviceInput!) {
+                        opcUaDevice {
+                            add(input: $input) {
+                                success
+                                errors
+                                device { name }
+                            }
+                        }
+                    }
+                `;
+                const result = await this.client.query(mutation, { input: deviceData });
+                if (result.opcUaDevice.add.success) {
+                    this.showSuccess(`Device "${deviceData.name}" created successfully`);
+                    setTimeout(() => { window.location.href = '/pages/opcua-devices.html'; }, 800);
+                } else {
+                    const errors = result.opcUaDevice.add.errors || ['Unknown error'];
+                    this.showError('Failed to create device: ' + errors.join(', '));
+                }
+            } catch (error) {
+                console.error('Error creating device:', error);
+                this.showError('Failed to create device: ' + error.message);
+            }
+            return;
+        }
 
         try {
             const mutation = `

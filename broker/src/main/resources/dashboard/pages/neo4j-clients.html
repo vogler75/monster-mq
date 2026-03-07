@@ -142,10 +142,10 @@
                                 <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                             </svg>
                         </button>
-                        <button class="btn btn-primary" onclick="showAddNeo4jClientModal()">
+                        <a href="/pages/neo4j-client-detail.html?new=true" class="btn btn-primary">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                             Add Client
-                        </button>
+                        </a>
                     </div>
                 </div>
                 <table>
@@ -175,76 +175,6 @@
                     <span class="error-icon">⚠️</span>
                     <span class="error-text"></span>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Add Neo4j Client Modal -->
-    <div id="add-neo4j-client-modal" class="modal" style="display:none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Add Neo4j Client</h3>
-                <button class="modal-close" onclick="hideAddNeo4jClientModal()">×</button>
-            </div>
-            <div class="modal-body">
-                <form id="add-neo4j-client-form">
-                    <div class="form-group">
-                        <label for="neo4j-client-name">Client Name *</label>
-                        <input type="text" id="neo4j-client-name" required placeholder="e.g., neo4j-client-1">
-                    </div>
-                    <div class="form-group">
-                        <label for="neo4j-client-namespace">Namespace *</label>
-                        <input type="text" id="neo4j-client-namespace" required placeholder="e.g., graph/telemetry">
-                        <span class="json-hint" style="font-size:0.7rem;color:var(--text-muted);display:block;margin-top:0.25rem;">The MQTT topic namespace prefix for this client.</span>
-                    </div>
-                    <div class="form-group">
-                        <label for="neo4j-client-node">Cluster Node *</label>
-                        <select id="neo4j-client-node" required>
-                            <option value="">Select Node...</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="neo4j-client-url">Neo4j URL *</label>
-                        <input type="text" id="neo4j-client-url" required placeholder="bolt://localhost:7687" value="bolt://localhost:7687">
-                    </div>
-                    <div class="form-group">
-                        <label for="neo4j-client-username">Username *</label>
-                        <input type="text" id="neo4j-client-username" required placeholder="neo4j" value="neo4j">
-                    </div>
-                    <div class="form-group">
-                        <label for="neo4j-client-password">Password *</label>
-                        <input type="password" id="neo4j-client-password" required placeholder="password">
-                    </div>
-                    <div class="form-group">
-                        <label for="neo4j-client-topic-filters">Topic Filters</label>
-                        <textarea id="neo4j-client-topic-filters" placeholder="Enter topic filters, one per line (e.g., sensors/+/temperature)">#</textarea>
-                        <span class="json-hint" style="font-size:0.7rem;color:var(--text-muted);display:block;margin-top:0.25rem;">MQTT topic filters to subscribe to. Use # for all topics, or specify patterns like sensors/+/temp.</span>
-                    </div>
-                    <div class="form-group">
-                        <label for="neo4j-client-queue-size">Queue Size</label>
-                        <input type="number" id="neo4j-client-queue-size" value="10000" min="100" max="100000">
-                        <span class="json-hint" style="font-size:0.7rem;color:var(--text-muted);display:block;margin-top:0.25rem;">Maximum number of messages to buffer.</span>
-                    </div>
-                    <div class="form-group">
-                        <label for="neo4j-client-batch-size">Batch Size</label>
-                        <input type="number" id="neo4j-client-batch-size" value="100" min="1" max="1000">
-                        <span class="json-hint" style="font-size:0.7rem;color:var(--text-muted);display:block;margin-top:0.25rem;">Number of messages to write in each batch.</span>
-                    </div>
-                    <div class="form-group">
-                        <label for="neo4j-client-reconnect-delay">Reconnect Delay (ms)</label>
-                        <input type="number" id="neo4j-client-reconnect-delay" value="5000" min="1000" max="60000">
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="neo4j-client-enabled" checked>
-                            <label for="neo4j-client-enabled">Enabled</label>
-                        </div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="hideAddNeo4jClientModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary" onclick="addNeo4jClient()">Add Client</button>
             </div>
         </div>
     </div>

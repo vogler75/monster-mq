@@ -301,12 +301,12 @@
                                 <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                             </svg>
                         </button>
-                        <button class="btn btn-primary" onclick="showAddClientModal()">
+                        <a href="/pages/mqtt-client-detail.html?new=true" class="btn btn-primary">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                             </svg>
-Add Bridge
-                        </button>
+                            Add Bridge
+                        </a>
                     </div>
                 </div>
                 <table>
@@ -338,154 +338,6 @@ Add Bridge
                     <span class="error-icon">⚠️</span>
                     <span class="error-text"></span>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Add Bridge Modal -->
-    <div id="add-client-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Add MQTT Bridge</h3>
-                <button class="modal-close" onclick="hideAddClientModal()">×</button>
-            </div>
-            <div class="modal-body">
-                <form id="add-client-form">
-                    <div class="form-group">
-                        <label for="client-name">Bridge Name *</label>
-                        <input type="text" id="client-name" required placeholder="e.g., remote-broker-1">
-                    </div>
-                    <div class="form-group">
-                        <label for="client-namespace">Namespace *</label>
-                        <input type="text" id="client-namespace" required placeholder="e.g., mqtt/remote1">
-                    </div>
-                    <div class="form-group">
-                        <label for="client-broker-url">Broker URL *</label>
-                        <input type="text" id="client-broker-url" required placeholder="e.g., ssl://broker.example.com:8883">
-                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
-                            Examples: tcp://host:1883, ssl://host:8883, wss://host:443/mqtt
-                        </small>
-                    </div>
-                    <div class="form-group">
-                        <label for="client-id">Client ID *</label>
-                        <input type="text" id="client-id" required placeholder="monstermq-client" value="monstermq-client">
-                    </div>
-                    <div class="form-group">
-                        <label for="client-username">Username</label>
-                        <input type="text" id="client-username" placeholder="Optional">
-                    </div>
-                    <div class="form-group">
-                        <label for="client-password">Password</label>
-                        <input type="password" id="client-password" placeholder="Optional">
-                    </div>
-                    <div class="form-group">
-                        <label for="client-node">Cluster Node *</label>
-                        <select id="client-node" required>
-                            <option value="">Select Node...</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="client-keep-alive">Keep Alive (seconds)</label>
-                        <input type="number" id="client-keep-alive" value="60">
-                    </div>
-                    <div class="form-group">
-                        <label for="client-reconnect-delay">Reconnect Delay (ms)</label>
-                        <input type="number" id="client-reconnect-delay" value="5000">
-                    </div>
-                    <div class="form-group">
-                        <label for="client-connection-timeout">Connection Timeout (ms)</label>
-                        <input type="number" id="client-connection-timeout" value="30000">
-                    </div>
-                    <div class="form-group">
-                        <label for="client-protocol-version">Protocol Version</label>
-                        <select id="client-protocol-version" onchange="toggleMqtt5ConnectionProperties()">
-                            <option value="4">MQTT v3.1.1</option>
-                            <option value="5">MQTT v5.0</option>
-                        </select>
-                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Select MQTT protocol version for the connection</small>
-                    </div>
-                    
-                    <!-- MQTT v5.0 Connection Properties -->
-                    <div id="mqtt5-add-connection-properties" style="display: none;">
-                        <h4 style="margin: 1.5rem 0 1rem 0; color: var(--monster-purple); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">
-                            🏷️ MQTT v5.0 Connection Properties
-                        </h4>
-                        <div class="form-group">
-                            <label for="client-session-expiry">Session Expiry Interval (seconds)</label>
-                            <input type="number" id="client-session-expiry" min="0" max="4294967295" value="0">
-                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
-                                0 = session ends on disconnect (default)
-                            </small>
-                        </div>
-                        <div class="form-group">
-                            <label for="client-receive-maximum">Receive Maximum</label>
-                            <input type="number" id="client-receive-maximum" min="1" max="65535" value="65535">
-                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
-                                Max QoS 1/2 messages in flight (default: 65,535)
-                            </small>
-                        </div>
-                        <div class="form-group">
-                            <label for="client-max-packet-size">Maximum Packet Size (bytes)</label>
-                            <input type="number" id="client-max-packet-size" min="1" max="268435455" value="268435455">
-                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
-                                Max packet size (default: 268,435,455 bytes)
-                            </small>
-                        </div>
-                        <div class="form-group">
-                            <label for="client-topic-alias-max">Topic Alias Maximum</label>
-                            <input type="number" id="client-topic-alias-max" min="0" max="65535" value="10">
-                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
-                                Max topic aliases for bandwidth optimization (default: 10)
-                            </small>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="client-enabled" checked>
-                            <label for="client-enabled">Enabled</label>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="client-clean-session" checked>
-                            <label for="client-clean-session">Clean Session</label>
-                        </div>
-                    </div>
-
-                    <!-- Disconnected Buffer Configuration -->
-                    <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Disconnected Buffer</h4>
-
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="client-buffer-enabled">
-                            <label for="client-buffer-enabled">Enable Message Buffering</label>
-                        </div>
-                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Buffer messages when connection to remote broker is lost</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="client-buffer-size">Buffer Size (messages)</label>
-                        <input type="number" id="client-buffer-size" value="5000" min="1" max="100000">
-                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Maximum number of messages to buffer (1-100,000)</small>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="client-persist-buffer">
-                            <label for="client-persist-buffer">Persist Buffer to Disk</label>
-                        </div>
-                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Save buffer to disk (unchecked = memory only)</small>
-                    </div>
-                    <div class="form-group">
-                        <div class="checkbox-group">
-                            <input type="checkbox" id="client-delete-oldest" checked>
-                            <label for="client-delete-oldest">Delete Oldest Messages When Full</label>
-                        </div>
-                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">FIFO mode (unchecked = reject new messages when buffer is full)</small>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="hideAddClientModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary" onclick="addClient()">Add Bridge</button>
             </div>
         </div>
     </div>

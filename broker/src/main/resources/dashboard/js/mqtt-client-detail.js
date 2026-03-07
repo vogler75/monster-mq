@@ -14,35 +14,79 @@ class MqttClientDetailManager {
     async init() {
         const urlParams = new URLSearchParams(window.location.search);
         this.clientName = urlParams.get('client');
+        this.isNew = urlParams.get('new') === 'true';
 
-        console.log('[DEBUG] Initializing MQTT Client Detail page, client:', this.clientName);
+        if (this.isNew) {
+            await this.loadClusterNodes();
+            this.showNewClientForm();
+            return;
+        }
 
         if (!this.clientName) {
-            console.error('[DEBUG] No client name provided in URL');
             this.showError('No bridge specified in URL. Please select a bridge from the list.');
-            // Show a basic page structure even without client name
             document.getElementById('page-title').textContent = 'Error';
             document.getElementById('page-subtitle').textContent = 'Invalid Request';
             return;
         }
 
         this.showLoading(true);
-        
         try {
-            console.log('[DEBUG] Loading cluster nodes...');
             await this.loadClusterNodes();
-            console.log('[DEBUG] Loading client data...');
             await this.loadClientData();
-            console.log('[DEBUG] Initialization complete');
         } catch (error) {
-            console.error('[DEBUG] Error during initialization:', error);
             this.showError('Failed to load bridge data: ' + error.message);
-            // Update page title to show error state
             document.getElementById('page-title').textContent = 'Error Loading Bridge';
             document.getElementById('page-subtitle').textContent = this.clientName;
         } finally {
             this.showLoading(false);
         }
+    }
+
+    showNewClientForm() {
+        document.getElementById('page-title').textContent = 'Add MQTT Bridge';
+        document.getElementById('page-subtitle').textContent = 'Create a new MQTT broker connection';
+
+        // Set defaults
+        document.getElementById('client-name').value = '';
+        document.getElementById('client-name').disabled = false;
+        document.getElementById('client-namespace').value = '';
+        document.getElementById('client-broker-url').value = '';
+        document.getElementById('client-id').value = 'monstermq-client';
+        document.getElementById('client-username').value = '';
+        document.getElementById('client-password').value = '';
+        document.getElementById('client-keep-alive').value = '60';
+        document.getElementById('client-reconnect-delay').value = '5000';
+        document.getElementById('client-connection-timeout').value = '30000';
+        document.getElementById('client-protocol-version').value = '4';
+        document.getElementById('client-session-expiry').value = '0';
+        document.getElementById('client-receive-maximum').value = '65535';
+        document.getElementById('client-max-packet-size').value = '268435455';
+        document.getElementById('client-topic-alias-max').value = '10';
+        document.getElementById('client-enabled').checked = true;
+        document.getElementById('client-clean-session').checked = true;
+        document.getElementById('client-ssl-verify').checked = true;
+        document.getElementById('client-buffer-enabled').checked = false;
+        document.getElementById('client-buffer-size').value = '5000';
+        document.getElementById('client-persist-buffer').checked = false;
+        document.getElementById('client-delete-oldest').checked = true;
+
+        // Update save button label
+        const saveBtn = document.getElementById('save-client-btn');
+        if (saveBtn) saveBtn.innerHTML = saveBtn.innerHTML.replace('Save Client', 'Create Client');
+
+        // Hide toggle/timestamps section
+        const toggleBtn = document.getElementById('toggle-client-btn');
+        if (toggleBtn) toggleBtn.style.display = 'none';
+
+        // Hide address mappings section (not available until created)
+        const addressSection = document.querySelector('.section-card:not(#client-content)');
+        if (addressSection) addressSection.style.display = 'none';
+
+        // Show form
+        document.getElementById('client-content').style.display = 'block';
+
+        // Hide timestamps
+        const timestampsSection = document.querySelector('[style*="border-top"]');
     }
 
     async loadClusterNodes() {
@@ -249,19 +293,9 @@ class MqttClientDetailManager {
         });
     }
 
-    async saveClient() {
-        const form = document.getElementById('client-form');
-        if (!form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
-
-        const sslVerifyValue = document.getElementById('client-ssl-verify').checked;
-        console.log('[DEBUG] SSL Verify checkbox value:', sslVerifyValue);
-
+    collectFormData() {
         const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
-        
-        const updateData = {
+        return {
             name: document.getElementById('client-name').value.trim(),
             namespace: document.getElementById('client-namespace').value.trim(),
             nodeId: document.getElementById('client-node').value,
@@ -279,8 +313,7 @@ class MqttClientDetailManager {
                 bufferSize: parseInt(document.getElementById('client-buffer-size').value),
                 persistBuffer: document.getElementById('client-persist-buffer').checked,
                 deleteOldestMessages: document.getElementById('client-delete-oldest').checked,
-                sslVerifyCertificate: sslVerifyValue,
-                // MQTT v5 properties
+                sslVerifyCertificate: document.getElementById('client-ssl-verify').checked,
                 protocolVersion: protocolVersion,
                 sessionExpiryInterval: protocolVersion === 5 ? parseInt(document.getElementById('client-session-expiry').value) : null,
                 receiveMaximum: protocolVersion === 5 ? parseInt(document.getElementById('client-receive-maximum').value) : null,
@@ -288,8 +321,43 @@ class MqttClientDetailManager {
                 topicAliasMaximum: protocolVersion === 5 ? parseInt(document.getElementById('client-topic-alias-max').value) : null
             }
         };
+    }
 
-        console.log('[DEBUG] Update data being sent:', JSON.stringify(updateData, null, 2));
+    async saveClient() {
+        const form = document.getElementById('client-form');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        const data = this.collectFormData();
+
+        if (this.isNew) {
+            try {
+                const mutation = `
+                    mutation CreateMqttClient($input: MqttClientInput!) {
+                        mqttClient {
+                            create(input: $input) {
+                                success
+                                errors
+                                client { name }
+                            }
+                        }
+                    }
+                `;
+                const result = await this.client.query(mutation, { input: data });
+                if (result.mqttClient.create.success) {
+                    this.showSuccess(`Bridge "${data.name}" created successfully`);
+                    setTimeout(() => { window.location.href = '/pages/mqtt-clients.html'; }, 800);
+                } else {
+                    const errors = result.mqttClient.create.errors || ['Unknown error'];
+                    this.showError('Failed to create bridge: ' + errors.join(', '));
+                }
+            } catch (error) {
+                this.showError('Failed to create bridge: ' + error.message);
+            }
+            return;
+        }
 
         try {
             const mutation = `
@@ -298,30 +366,20 @@ class MqttClientDetailManager {
                         update(name: $name, input: $input) {
                             success
                             errors
-                            client {
-                                name
-                            }
+                            client { name }
                         }
                     }
                 }
             `;
-
-            const result = await this.client.query(mutation, {
-                name: this.clientName,
-                input: updateData
-            });
-
+            const result = await this.client.query(mutation, { name: this.clientName, input: data });
             if (result.mqttClient.update.success) {
-                console.log('[DEBUG] Update successful, reloading data...');
                 await this.loadClientData();
                 this.showSuccess('Bridge updated successfully');
             } else {
                 const errors = result.mqttClient.update.errors || ['Unknown error'];
                 this.showError('Failed to update bridge: ' + errors.join(', '));
             }
-
         } catch (error) {
-            console.error('Error updating client:', error);
             this.showError('Failed to update bridge: ' + error.message);
         }
     }

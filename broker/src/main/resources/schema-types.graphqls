@@ -98,6 +98,43 @@ type BrokerMetrics {
  }
 
 
+# Full broker configuration as loaded from config.yaml
+type BrokerConfig {
+    nodeId: String!
+    version: String!
+    clustered: Boolean!
+    # MQTT listener ports (0 = disabled)
+    tcpPort: Int!
+    wsPort: Int!
+    tcpsPort: Int!
+    wssPort: Int!
+    natsPort: Int!
+    # Storage backends
+    sessionStoreType: String!
+    retainedStoreType: String!
+    configStoreType: String!
+    # User management
+    userManagementEnabled: Boolean!
+    anonymousEnabled: Boolean!
+    # Extensions
+    mcpEnabled: Boolean!
+    mcpPort: Int!
+    grafanaEnabled: Boolean!
+    grafanaPort: Int!
+    i3xEnabled: Boolean!
+    i3xPort: Int!
+    # GraphQL / HTTP API
+    graphqlEnabled: Boolean!
+    graphqlPort: Int!
+    mqttApiEnabled: Boolean!
+    # Metrics
+    metricsEnabled: Boolean!
+    # GenAI
+    genAiEnabled: Boolean!
+    genAiProvider: String!
+    genAiModel: String!
+}
+
 # Represents a broker node in the MonsterMQ cluster
 # Each broker node runs independently and can handle MQTT clients, message processing, and data storage
 type Broker {

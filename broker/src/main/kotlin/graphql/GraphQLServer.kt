@@ -305,7 +305,7 @@ class GraphQLServer(
 
         // Initialize resolvers after device store is ready
         val queryResolver = QueryResolver(vertx, retainedStore, archiveHandler, authContext, deviceStore)
-        val metricsResolver = MetricsResolver(vertx, sessionStore, sessionHandler, metricsStore)
+        val metricsResolver = MetricsResolver(vertx, sessionStore, sessionHandler, metricsStore, config, userManager)
         val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, sessionStore, sessionHandler, authContext, deviceStore)
         val subscriptionResolver = SubscriptionResolver(vertx)
         val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
@@ -395,6 +395,7 @@ class GraphQLServer(
                     // Device config queries
                     .dataFetcher("getDevices", queryResolver.getDevices())
                     // Metrics queries
+                    .dataFetcher("brokerConfig", metricsResolver.brokerConfig())
                     .dataFetcher("broker", metricsResolver.broker())
                     .dataFetcher("brokers", metricsResolver.brokers())
                     .dataFetcher("sessions", metricsResolver.sessions())

@@ -21,6 +21,7 @@ class SessionManager {
         this.setupUI();
         this.setupChart();
         this.loadSessions();
+        this.checkClusterMode();
     }
 
     loadFiltersFromURL() {
@@ -131,6 +132,18 @@ class SessionManager {
         localStorage.removeItem('monstermq_username');
         localStorage.removeItem('monstermq_isAdmin');
         window.location.href = '/';
+    }
+
+    async checkClusterMode() {
+        try {
+            const result = await window.graphqlClient.query(`query { brokerConfig { clustered } }`);
+            if (!result?.brokerConfig?.clustered) {
+                const container = document.getElementById('distribution-chart-container');
+                if (container) container.style.display = 'none';
+            }
+        } catch (e) {
+            // ignore - chart stays visible by default
+        }
     }
 
     setupChart() {

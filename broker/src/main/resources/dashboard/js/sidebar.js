@@ -154,6 +154,11 @@ class SidebarManager {
                 section: 'System',
                 items: [
                     {
+                        href: '/pages/broker-config.html',
+                        icon: '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>',
+                        text: 'Configuration'
+                    },
+                    {
                         href: '/pages/users.html',
                         icon: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
                         text: 'Users',
@@ -247,14 +252,7 @@ class SidebarManager {
             usersNavLink.style.display = 'flex';
         }
 
-        // Hide the System section title when the user has no admin items below it.
-        // Admins see Users + Logout; everyone else sees at most Logout (or nothing),
-        // so the "SYSTEM" heading is meaningless for non-admins.
-        const systemSection = document.getElementById('nav-section-system');
-        if (systemSection && !isAdmin) {
-            const sectionTitle = systemSection.querySelector('.nav-section-title');
-            if (sectionTitle) sectionTitle.style.display = 'none';
-        }
+        // System section is always visible because it contains the Configuration page.
 
         // Set up logout functionality on user menu item
         const userMenuItem = document.getElementById('user-menu-item');

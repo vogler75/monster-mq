@@ -13,6 +13,14 @@ class KafkaClientDetailManager {
     async init() {
         const urlParams = new URLSearchParams(window.location.search);
         this.clientName = urlParams.get('client');
+        this.isNew = urlParams.get('new') === 'true';
+
+        if (this.isNew) {
+            await this.loadClusterNodes();
+            this.showNewClientForm();
+            return;
+        }
+
         if (!this.clientName) {
             this.showError('No Kafka client specified');
             return;
@@ -22,6 +30,38 @@ class KafkaClientDetailManager {
         // Periodic metrics refresh
         this.metricsTimer = setInterval(() => this.refreshMetrics(), 10000);
         window.addEventListener('beforeunload', () => this.cleanup());
+    }
+
+    showNewClientForm() {
+        document.getElementById('page-title').textContent = 'Add Kafka Client';
+        document.getElementById('page-subtitle').textContent = 'Create a new Kafka consumer/producer client';
+
+        // Set defaults
+        document.getElementById('client-name').value = '';
+        document.getElementById('client-name').disabled = false;
+        document.getElementById('client-namespace').value = '';
+        document.getElementById('client-bootstrap').value = '';
+        document.getElementById('client-group-id').value = '';
+        document.getElementById('client-payload-format').value = 'DEFAULT';
+        document.getElementById('client-destination-prefix').value = '';
+        document.getElementById('client-topic-key-regex').value = '';
+        document.getElementById('client-topic-key-replacement').value = '';
+        document.getElementById('client-reconnect-delay').value = '5000';
+        document.getElementById('client-enabled').checked = true;
+        document.getElementById('client-extra').value = '';
+
+        // Update save button
+        const saveBtn = document.getElementById('save-client-btn');
+        if (saveBtn) saveBtn.innerHTML = saveBtn.innerHTML.replace('Save Client', 'Create Client');
+
+        // Hide toggle/delete buttons
+        const toggleBtn = document.getElementById('toggle-client-btn');
+        if (toggleBtn) toggleBtn.style.display = 'none';
+        const deleteBtn = document.getElementById('delete-client-btn');
+        if (deleteBtn) deleteBtn.style.display = 'none';
+
+        // Show form
+        document.getElementById('client-content').style.display = 'block';
     }
 
     cleanup() {
@@ -159,21 +199,16 @@ class KafkaClientDetailManager {
         }
     }
 
-    async saveClient() {
-        const form = document.getElementById('client-form');
-        if (!form.checkValidity()) { form.reportValidity(); return; }
-
-        // Build input
+    collectFormData() {
         let extraConfigText = document.getElementById('client-extra').value.trim();
         let extraConfig = null;
         if (extraConfigText.length > 0) {
-            try { extraConfig = JSON.parse(extraConfigText); } catch (e) { this.showError('Invalid JSON in Extra Consumer Config: ' + e.message); return; }
+            try { extraConfig = JSON.parse(extraConfigText); } catch (e) { return { error: 'Invalid JSON in Extra Consumer Config: ' + e.message }; }
             if (extraConfig === null || Array.isArray(extraConfig) || typeof extraConfig !== 'object') {
-                this.showError('Extra Consumer Config must be a JSON object'); return;
+                return { error: 'Extra Consumer Config must be a JSON object' };
             }
         }
-
-        const updatedInput = {
+        return {
             name: document.getElementById('client-name').value.trim(),
             namespace: document.getElementById('client-namespace').value.trim(),
             nodeId: document.getElementById('client-node').value,
@@ -189,26 +224,47 @@ class KafkaClientDetailManager {
                 reconnectDelayMs: parseInt(document.getElementById('client-reconnect-delay').value)
             }
         };
+    }
+
+    async saveClient() {
+        const form = document.getElementById('client-form');
+        if (!form.checkValidity()) { form.reportValidity(); return; }
+
+        const data = this.collectFormData();
+        if (data.error) { this.showError(data.error); return; }
+
+        if (this.isNew) {
+            try {
+                const mutation = `mutation CreateKafkaClient($input: KafkaClientInput!) { kafkaClient { create(input: $input) { success errors client { name } } } }`;
+                const result = await this.client.query(mutation, { input: data });
+                if (result.kafkaClient.create.success) {
+                    this.showSuccess(`Kafka client "${data.name}" created successfully`);
+                    setTimeout(() => { window.location.href = '/pages/kafka-clients.html'; }, 800);
+                } else {
+                    const errors = result.kafkaClient.create.errors || ['Unknown error'];
+                    this.showError('Failed to create Kafka client: ' + errors.join(', '));
+                }
+            } catch (e) {
+                this.showError('Failed to create Kafka client: ' + e.message);
+            }
+            return;
+        }
 
         const prevNodeId = this.clientData ? this.clientData.nodeId : null;
-
         try {
             const mutation = `mutation UpdateKafkaClient($name: String!, $input: KafkaClientInput!) { kafkaClient { update(name: $name, input: $input) { success errors client { name } } } }`;
-            const result = await this.client.query(mutation, { name: this.clientName, input: updatedInput });
+            const result = await this.client.query(mutation, { name: this.clientName, input: data });
             if (result.kafkaClient.update.success) {
-                // Handle potential rename
-                const newName = updatedInput.name;
+                const newName = data.name;
                 if (newName !== this.clientName) {
                     this.clientName = newName;
                     const url = new URL(window.location.href);
                     url.searchParams.set('client', newName);
                     window.history.replaceState({}, '', url.toString());
                 }
-                // Reload data first
                 await this.loadClientData();
-                // If node changed, explicitly call reassign mutation for proper event semantics
-                if (prevNodeId && updatedInput.nodeId && updatedInput.nodeId !== prevNodeId) {
-                    await this.reassignClient(updatedInput.nodeId);
+                if (prevNodeId && data.nodeId && data.nodeId !== prevNodeId) {
+                    await this.reassignClient(data.nodeId);
                 }
                 this.showSuccess('Kafka client updated successfully');
             } else {
@@ -216,7 +272,6 @@ class KafkaClientDetailManager {
                 this.showError('Failed to update Kafka client: ' + errors.join(', '));
             }
         } catch (e) {
-            console.error('Error updating Kafka client', e);
             this.showError('Failed to update Kafka client: ' + e.message);
         }
     }

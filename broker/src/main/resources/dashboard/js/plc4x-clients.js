@@ -10,48 +10,8 @@ class Plc4xClientManager {
     }
 
     async init() {
-        console.log('Initializing PLC4X Client Manager...');
-
-        // Since user management is disabled, skip authentication check
-        console.log('Initializing without authentication check (user management disabled)');
-
-        // Load initial data
-        await this.loadClusterNodes();
         await this.loadClients();
-
-        // Set up periodic refresh
-        setInterval(() => this.loadClients(), 30000); // Refresh every 30 seconds
-    }
-
-    async loadClusterNodes() {
-        try {
-            const query = `
-                query GetBrokers {
-                    brokers {
-                        nodeId
-                        isCurrent
-                    }
-                }
-            `;
-
-            const result = await this.client.query(query);
-            this.clusterNodes = result.brokers || [];
-
-            // Populate node selector in the add client form
-            const nodeSelect = document.getElementById('client-node');
-            if (nodeSelect) {
-                nodeSelect.innerHTML = '<option value="">Select Node...</option>';
-                this.clusterNodes.forEach(node => {
-                    const option = document.createElement('option');
-                    option.value = node.nodeId;
-                    option.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
-                    nodeSelect.appendChild(option);
-                });
-            }
-
-        } catch (error) {
-            console.error('Error loading cluster nodes:', error);
-        }
+        setInterval(() => this.loadClients(), 30000);
     }
 
     async loadClients() {
@@ -96,8 +56,6 @@ class Plc4xClientManager {
             `;
 
             const result = await this.client.query(query);
-            console.log('Load clients result:', result);
-
             if (!result) {
                 throw new Error('Invalid response structure: missing result');
             }
@@ -263,61 +221,6 @@ class Plc4xClientManager {
         }
     }
 
-    async addClient() {
-        const form = document.getElementById('add-client-form');
-        if (!form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
-
-        const clientData = {
-            name: document.getElementById('client-name').value.trim(),
-            namespace: document.getElementById('client-namespace').value.trim(),
-            nodeId: document.getElementById('client-node').value,
-            enabled: document.getElementById('client-enabled').checked,
-            config: {
-                protocol: document.getElementById('client-protocol').value,
-                connectionString: document.getElementById('client-connection-string').value.trim(),
-                pollingInterval: parseInt(document.getElementById('polling-interval').value) || 1000,
-                reconnectDelay: parseInt(document.getElementById('reconnect-delay').value) || 5000,
-                enabled: document.getElementById('client-enabled').checked,
-                addresses: []
-            }
-        };
-
-        try {
-            const mutation = `
-                mutation AddPlc4xClient($input: Plc4xClientInput!) {
-                    plc4xDevice {
-                        create(input: $input) {
-                            success
-                            errors
-                            client {
-                                name
-                                enabled
-                            }
-                        }
-                    }
-                }
-            `;
-
-            const result = await this.client.query(mutation, { input: clientData });
-
-            if (result.plc4xDevice.create.success) {
-                this.hideAddClientModal();
-                await this.loadClients();
-                this.showSuccess(`Client "${clientData.name}" added successfully`);
-            } else {
-                const errors = result.plc4xDevice.create.errors || ['Unknown error'];
-                this.showError('Failed to add client: ' + errors.join(', '));
-            }
-
-        } catch (error) {
-            console.error('Error adding client:', error);
-            this.showError('Failed to add client: ' + error.message);
-        }
-    }
-
     async toggleClient(clientName, enabled) {
         try {
             const mutation = `
@@ -393,19 +296,6 @@ class Plc4xClientManager {
     }
 
     // UI Helper Methods
-    showAddClientModal() {
-        document.getElementById('add-client-modal').style.display = 'flex';
-        // Reset form
-        document.getElementById('add-client-form').reset();
-        document.getElementById('client-enabled').checked = true;
-        document.getElementById('polling-interval').value = '1000';
-        document.getElementById('reconnect-delay').value = '5000';
-    }
-
-    hideAddClientModal() {
-        document.getElementById('add-client-modal').style.display = 'none';
-    }
-
     showConfirmDeleteModal() {
         document.getElementById('confirm-delete-modal').style.display = 'flex';
     }
@@ -467,18 +357,6 @@ class Plc4xClientManager {
 }
 
 // Global functions for onclick handlers
-function showAddClientModal() {
-    plc4xManager.showAddClientModal();
-}
-
-function hideAddClientModal() {
-    plc4xManager.hideAddClientModal();
-}
-
-function addClient() {
-    plc4xManager.addClient();
-}
-
 function hideConfirmDeleteModal() {
     plc4xManager.hideConfirmDeleteModal();
 }
@@ -499,11 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Handle modal clicks (close when clicking outside)
 document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('modal')) {
-        if (e.target.id === 'add-client-modal') {
-            plc4xManager.hideAddClientModal();
-        } else if (e.target.id === 'confirm-delete-modal') {
-            plc4xManager.hideConfirmDeleteModal();
-        }
+    if (e.target.classList.contains('modal') && e.target.id === 'confirm-delete-modal') {
+        plc4xManager.hideConfirmDeleteModal();
     }
 });

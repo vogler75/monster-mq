@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Configuration</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .section-card { background:var(--dark-surface); border-radius:12px; border:1px solid var(--dark-border); margin-bottom:2rem; box-shadow:var(--card-shadow); }
+        .section-header { display:flex; align-items:center; gap:0.75rem; padding:1.25rem 1.5rem; background:var(--dark-bg); border-bottom:1px solid var(--dark-border); border-radius:12px 12px 0 0; }
+        .section-header h2 { margin:0; color:var(--text-primary); font-size:1.1rem; font-weight:600; }
+        .section-icon { font-size:1.25rem; }
+        .section-content { padding:1.5rem; }
+        .config-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:1rem; }
+        .config-item { display:flex; flex-direction:column; padding:1rem 1.25rem; background:var(--dark-bg); border-radius:8px; border:1px solid var(--dark-border); gap:0.4rem; }
+        .config-item .label { font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600; }
+        .config-item .value { color:var(--text-primary); font-weight:600; font-size:0.95rem; display:flex; align-items:center; gap:0.5rem; }
+        .config-item .value.monospace { font-family:'Courier New', monospace; font-size:0.85rem; color:var(--monster-teal); }
+        .badge { display:inline-flex; align-items:center; gap:0.3rem; padding:0.25rem 0.7rem; border-radius:20px; font-size:0.75rem; font-weight:600; text-transform:uppercase; }
+        .badge-enabled { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3); }
+        .badge-disabled { background:rgba(239,68,68,0.15); color:var(--monster-red); border:1px solid rgba(239,68,68,0.3); }
+        .badge-port { background:rgba(124,58,237,0.15); color:var(--monster-light); border:1px solid rgba(124,58,237,0.3); }
+        .badge-info { background:rgba(59,130,246,0.15); color:#93c5fd; border:1px solid rgba(59,130,246,0.3); }
+        .port-disabled { color:var(--text-muted); font-size:0.85rem; font-style:italic; }
+        @media (max-width:768px) { .config-grid { grid-template-columns:1fr 1fr; } }
+        @media (max-width:480px) { .config-grid { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <button class="sidebar-toggle" onclick="toggleSidebar()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15,18 9,12 15,6"></polyline>
+                </svg>
+            </button>
+        </div>
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">U</div>
+                <div class="user-details">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-role">Administrator</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">Broker Configuration</h1>
+                <p class="page-subtitle">Runtime configuration loaded from config.yaml</p>
+            </div>
+
+            <div id="config-content" style="display:none;">
+
+                <!-- Node & Cluster -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <span class="section-icon">🖥️</span>
+                        <h2>Node &amp; Cluster</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">Node ID</span>
+                                <span class="value monospace" id="cfg-node-id">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Version</span>
+                                <span class="value" id="cfg-version">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Clustering</span>
+                                <span class="value" id="cfg-clustered">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MQTT Ports -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <span class="section-icon">📡</span>
+                        <h2>MQTT Listeners</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">TCP (MQTT)</span>
+                                <span class="value" id="cfg-tcp-port">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">TCP TLS (MQTTS)</span>
+                                <span class="value" id="cfg-tcps-port">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">WebSocket (WS)</span>
+                                <span class="value" id="cfg-ws-port">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">WebSocket TLS (WSS)</span>
+                                <span class="value" id="cfg-wss-port">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Storage -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <span class="section-icon">🗄️</span>
+                        <h2>Storage Backends</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">Session Store</span>
+                                <span class="value" id="cfg-session-store">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Retained Message Store</span>
+                                <span class="value" id="cfg-retained-store">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Device Config Store</span>
+                                <span class="value" id="cfg-config-store">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- User Management -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <span class="section-icon">👤</span>
+                        <h2>User Management</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">User Management</span>
+                                <span class="value" id="cfg-user-mgmt">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Anonymous Access</span>
+                                <span class="value" id="cfg-anonymous">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GenAI -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <span class="section-icon">🤖</span>
+                        <h2>GenAI Integration</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">GenAI</span>
+                                <span class="value" id="cfg-genai">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Provider</span>
+                                <span class="value" id="cfg-genai-provider">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Model</span>
+                                <span class="value monospace" id="cfg-genai-model">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Extensions -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <span class="section-icon">🔌</span>
+                        <h2>Extensions &amp; APIs</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">GraphQL / Dashboard</span>
+                                <span class="value" id="cfg-graphql">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">MQTT REST API</span>
+                                <span class="value" id="cfg-mqtt-api">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">MCP Server (AI)</span>
+                                <span class="value" id="cfg-mcp">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Grafana Integration</span>
+                                <span class="value" id="cfg-grafana">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">I3X API (CESMII)</span>
+                                <span class="value" id="cfg-i3x">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">NATS Extension</span>
+                                <span class="value" id="cfg-nats-port">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Metrics Collection</span>
+                                <span class="value" id="cfg-metrics">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display:none;">
+                <div class="loading-spinner"></div>
+                <span>Loading configuration...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display:none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/broker-config.js"></script>
+</body>
+</html>

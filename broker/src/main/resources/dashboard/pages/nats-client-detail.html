@@ -94,8 +94,8 @@
                     <p class="page-subtitle" id="page-subtitle"></p>
                 </div>
                 <div class="page-header-actions">
-                    <button class="btn btn-secondary" onclick="goBack()">← Back to NATS Clients</button>
-                    <button class="btn btn-primary" onclick="saveClient()">
+                    <button class="btn btn-secondary" onclick="goBack()">← Back to Clients</button>
+                    <button class="btn btn-primary" onclick="saveClient()" id="save-client-btn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
                         Save Client
                     </button>
@@ -109,7 +109,7 @@
                 <div class="section-title"><h2>Connection Configuration</h2></div>
                 <div style="display:flex;align-items:center;gap:0.75rem;">
                     <span class="status-badge status-enabled" id="client-status">ENABLED</span>
-                    <button class="btn btn-secondary" style="padding:0.4rem 0.9rem;font-size:0.7rem;" onclick="showDeleteModal()">Delete</button>
+                    <button class="btn btn-secondary" style="padding:0.4rem 0.9rem;font-size:0.7rem;" onclick="showDeleteModal()" id="delete-client-btn">Delete</button>
                 </div>
             </div>
             <div class="section-content">
@@ -220,7 +220,7 @@
                     </div>
                 </form>
 
-                <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--dark-border);">
+                <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--dark-border);" id="timestamps-row">
                     <h3 style="color:var(--text-primary);margin-bottom:1rem;">Timestamps</h3>
                     <div class="info-grid">
                         <div class="info-item"><div class="info-label">Created At</div><div class="info-value" id="client-created-at">-</div></div>

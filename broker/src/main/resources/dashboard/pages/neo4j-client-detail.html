@@ -109,7 +109,7 @@
                 <div class="section-title"><h2>Client Configuration</h2></div>
                 <div style="display:flex; align-items:center; gap:0.75rem;">
                     <span class="status-badge status-enabled" id="client-status">ENABLED</span>
-                    <button class="btn btn-secondary" style="padding:0.4rem 0.9rem; font-size:0.7rem;" onclick="showDeleteModal()">Delete</button>
+                    <button class="btn btn-secondary" id="delete-client-btn" style="padding:0.4rem 0.9rem; font-size:0.7rem;" onclick="showDeleteModal()">Delete</button>
                 </div>
             </div>
             <div class="section-content">
@@ -173,7 +173,7 @@
                         </div>
                     </div>
 
-                    <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px solid var(--dark-border);">
+                    <div id="timestamps-row" style="margin-top:2rem; padding-top:1.5rem; border-top:1px solid var(--dark-border);">
                         <h3 style="color:var(--text-primary); margin-bottom:1rem;">Timestamps</h3>
                         <div class="info-grid">
                             <div class="info-item"><div class="info-label">Created At</div><div class="info-value" id="client-created-at">-</div></div>

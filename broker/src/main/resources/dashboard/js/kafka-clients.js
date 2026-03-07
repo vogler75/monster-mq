@@ -11,31 +11,8 @@ class KafkaClientManager {
 
     async init() {
         console.log('Initializing Kafka Client Manager...');
-        await this.loadClusterNodes();
         await this.loadClients();
         setInterval(() => this.loadClients(), 30000);
-    }
-
-    async loadClusterNodes() {
-        try {
-            const query = `
-                query GetBrokers { brokers { nodeId isCurrent } }
-            `;
-            const result = await this.client.query(query);
-            this.clusterNodes = result.brokers || [];
-            const nodeSelect = document.getElementById('kafka-client-node');
-            if (nodeSelect) {
-                nodeSelect.innerHTML = '<option value="">Select Node...</option>';
-                this.clusterNodes.forEach(node => {
-                    const option = document.createElement('option');
-                    option.value = node.nodeId;
-                    option.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
-                    nodeSelect.appendChild(option);
-                });
-            }
-        } catch (e) {
-            console.error('Error loading cluster nodes', e);
-        }
     }
 
     async loadClients() {
@@ -111,47 +88,6 @@ class KafkaClientManager {
         });
     }
 
-    async addClient() {
-        const form = document.getElementById('add-kafka-client-form');
-        if (!form.checkValidity()) { form.reportValidity(); return; }
-        const clientData = {
-            name: document.getElementById('kafka-client-name').value.trim(),
-            namespace: document.getElementById('kafka-client-namespace').value.trim(),
-            nodeId: document.getElementById('kafka-client-node').value,
-            enabled: document.getElementById('kafka-client-enabled').checked,
-            config: {
-                groupId: document.getElementById('kafka-client-group-id').value.trim() || null,
-                bootstrapServers: document.getElementById('kafka-client-bootstrap').value.trim(),
-                destinationTopicPrefix: (function(){ const v=document.getElementById('kafka-client-destination-prefix').value.trim(); return v.length>0? v : null; })(),
-                topicKeyRegex: (function(){ const v=document.getElementById('kafka-client-topic-key-regex').value.trim(); return v.length>0? v : null; })(),
-                topicKeyReplacement: (function(){ const v=document.getElementById('kafka-client-topic-key-replacement').value.trim(); return v.length>0? v : null; })(),
-                payloadFormat: document.getElementById('kafka-client-payload-format').value,
-                reconnectDelayMs: parseInt(document.getElementById('kafka-client-reconnect-delay').value)
-            }
-        };
-        try {
-            const mutation = `
-                mutation CreateKafkaClient($input: KafkaClientInput!) {
-                    kafkaClient {
-                        create(input: $input) { success errors client { name enabled } }
-                    }
-                }
-            `;
-            const result = await this.client.query(mutation, { input: clientData });
-            if (result.kafkaClient.create.success) {
-                this.hideAddClientModal();
-                await this.loadClients();
-                this.showSuccess(`Kafka client "${clientData.name}" added successfully`);
-            } else {
-                const errors = result.kafkaClient.create.errors || ['Unknown error'];
-                this.showError('Failed to add Kafka client: ' + errors.join(', '));
-            }
-        } catch (e) {
-            console.error('Error adding Kafka client:', e);
-            this.showError('Failed to add Kafka client: ' + e.message);
-        }
-    }
-
     async toggleClient(clientName, enabled) {
         try {
             const mutation = `
@@ -205,8 +141,6 @@ class KafkaClientManager {
     }
 
     // UI helpers
-    showAddClientModal() { document.getElementById('add-kafka-client-modal').style.display = 'flex'; document.getElementById('add-kafka-client-form').reset(); document.getElementById('kafka-client-enabled').checked = true; const input=document.getElementById('kafka-client-destination-prefix'); if(input) input.value=''; }
-    hideAddClientModal() { document.getElementById('add-kafka-client-modal').style.display = 'none'; }
     showConfirmDeleteModal() { document.getElementById('confirm-delete-kafka-client-modal').style.display = 'flex'; }
     hideConfirmDeleteModal() { document.getElementById('confirm-delete-kafka-client-modal').style.display = 'none'; }
 
@@ -220,9 +154,6 @@ class KafkaClientManager {
 }
 
 // Global wrappers
-function showAddKafkaClientModal() { kafkaClientManager.showAddClientModal(); }
-function hideAddKafkaClientModal() { kafkaClientManager.hideAddClientModal(); }
-function addKafkaClient() { kafkaClientManager.addClient(); }
 function refreshKafkaClients() { kafkaClientManager.refreshClients(); }
 function hideConfirmDeleteKafkaClientModal() { kafkaClientManager.hideConfirmDeleteModal(); }
 function confirmDeleteKafkaClient() { kafkaClientManager.confirmDeleteClient(); }
@@ -231,4 +162,4 @@ function confirmDeleteKafkaClient() { kafkaClientManager.confirmDeleteClient(); 
 let kafkaClientManager;
 document.addEventListener('DOMContentLoaded', () => { kafkaClientManager = new KafkaClientManager(); });
 
-document.addEventListener('click', e => { if (e.target.classList.contains('modal')) { if (e.target.id === 'add-kafka-client-modal') kafkaClientManager.hideAddClientModal(); else if (e.target.id === 'confirm-delete-kafka-client-modal') kafkaClientManager.hideConfirmDeleteModal(); }});
+document.addEventListener('click', e => { if (e.target.classList.contains('modal')) { if (e.target.id === 'confirm-delete-kafka-client-modal') kafkaClientManager.hideConfirmDeleteModal(); }});

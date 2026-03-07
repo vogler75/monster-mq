@@ -13,1120 +13,393 @@
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        /* Enhanced OPC UA Device Detail Page Styles */
-
-        /* Two-column grid layout for device info */
-        .device-info-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2rem;
-            margin-bottom: 2rem;
-        }
-
-        /* Section Cards */
-        .section-card {
-            background: var(--dark-surface);
-            border-radius: 12px;
-            border: 1px solid var(--dark-border);
-            overflow: hidden;
-            box-shadow: var(--card-shadow);
-            transition: all 0.3s ease;
-        }
-
-        .section-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
-        }
-
-        .section-card.full-width {
-            grid-column: 1 / -1;
-        }
-
-        /* Section Headers */
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.5rem;
-            background: var(--dark-bg);
-            border-bottom: 1px solid var(--dark-border);
-        }
-
-        .section-title {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .section-icon {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            background: var(--gradient-primary);
-            color: white;
-        }
-
-        .section-title h2 {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-
-        .section-content {
-            padding: 1.5rem;
-        }
-
-        /* Info List Layout */
-        .info-list {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        .info-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.75rem;
-            background: var(--dark-bg);
-            border-radius: 8px;
-            border: 1px solid var(--dark-border);
-            transition: all 0.2s ease;
-        }
-
-        .info-item:hover {
-            border-color: var(--monster-purple);
-            background: rgba(124, 58, 237, 0.05);
-        }
-
-        .info-label {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: var(--text-secondary);
-            font-weight: 500;
-            font-size: 0.875rem;
-        }
-
-        .info-label svg {
-            color: var(--monster-purple);
-            opacity: 0.7;
-        }
-
-        .info-value {
-            color: var(--text-primary);
-            font-weight: 600;
-            text-align: right;
-            max-width: 60%;
-            word-break: break-all;
-        }
-
-        .info-value.endpoint-url {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            background: rgba(124, 58, 237, 0.1);
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            border: 1px solid rgba(124, 58, 237, 0.2);
-        }
-
-        /* Status Badge Improvements */
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border: 1px solid;
-        }
-
-        .status-enabled {
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--monster-green);
-            border-color: rgba(16, 185, 129, 0.3);
-        }
-
-        .status-disabled {
-            background: rgba(239, 68, 68, 0.15);
-            color: var(--monster-red);
-            border-color: rgba(239, 68, 68, 0.3);
-        }
-
-        /* Data Table Enhancements */
-        .data-table {
-            background: transparent;
-            border: none;
-            border-radius: 0;
-            box-shadow: none;
-        }
-
-        .data-table table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--dark-bg);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        .data-table thead th {
-            background: var(--dark-surface-2);
-            padding: 1rem;
-            text-align: left;
-            font-weight: 600;
-            color: var(--text-primary);
-            border-bottom: 1px solid var(--dark-border);
-        }
-
-        .data-table tbody td {
-            padding: 1.5rem 1rem;
-            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
-            vertical-align: middle;
-            height: 80px;
-        }
-
-        .data-table tbody tr:hover {
-            background: rgba(71, 85, 105, 0.1);
-        }
-
-        .data-table tbody tr:last-child td {
-            border-bottom: none;
-        }
-
-        /* Addresses Section Full Width */
-        .full-width {
-            width: 100%;
-            max-width: none;
-        }
-
-        .full-width .data-table {
-            width: 100%;
-        }
-
-        .full-width .data-table table {
-            width: 100%;
-            table-layout: fixed;
-        }
-
-        /* Table Column Widths */
-        .data-table th:nth-child(1),
-        .data-table td:nth-child(1) {
-            width: 45%;
-            max-width: 0;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-
-        .data-table th:nth-child(2),
-        .data-table td:nth-child(2) {
-            width: 20%;
-        }
-
-        .data-table th:nth-child(3),
-        .data-table td:nth-child(3) {
-            width: 15%;
-        }
-
-        .data-table th:nth-child(4),
-        .data-table td:nth-child(4) {
-            width: 12%;
-        }
-
-        .data-table th:nth-child(5),
-        .data-table td:nth-child(5) {
-            width: 8%;
-        }
-
-        /* Modal Styles */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            padding: 2rem;
-            box-sizing: border-box;
-        }
-
-        .modal-content {
-            background: var(--dark-surface);
-            border-radius: 12px;
-            border: 1px solid var(--dark-border);
-            max-width: 600px;
-            width: 100%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-        }
-
-        .large-modal {
-            max-width: 800px;
-        }
-
-        .modal-header {
-            padding: 1.5rem 2rem;
-            border-bottom: 1px solid var(--dark-border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .modal-header h3 {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0.25rem;
-            line-height: 1;
-            transition: color 0.2s ease;
-        }
-
-        .modal-close:hover {
-            color: var(--text-primary);
-        }
-
-        .modal-body {
-            padding: 2rem;
-        }
-
-        .modal-footer {
-            padding: 1.5rem 2rem;
-            border-top: 1px solid var(--dark-border);
-            display: flex;
-            justify-content: flex-end;
-            gap: 1rem;
-        }
-
-        /* Enhanced Form Styles for Modals */
-        .modal .form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        .modal .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text-primary);
-            font-weight: 600;
-            font-size: 0.875rem;
-        }
-
-        .modal .form-control,
-        .modal input[type="text"],
-        .modal input[type="password"],
-        .modal select {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            background: var(--dark-bg);
-            border: 1px solid var(--dark-border);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-            transition: all 0.2s ease;
-            box-sizing: border-box;
-        }
-
-        .modal .form-control:focus,
-        .modal input[type="text"]:focus,
-        .modal input[type="password"]:focus,
-        .modal select:focus {
-            outline: none;
-            border-color: var(--monster-purple);
-            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-        }
-
-        .modal .form-control::placeholder,
-        .modal input::placeholder {
-            color: var(--text-muted);
-        }
-
-        /* Checkbox Styling */
-        .modal input[type="checkbox"] {
-            margin-right: 0.5rem;
-            accent-color: var(--monster-purple);
-            transform: scale(1.1);
-        }
-
-        .modal .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .modal .checkbox-group label {
-            margin-bottom: 0;
-            font-weight: 500;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        /* Two Column Layout for Forms */
-        .modal .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .modal .form-row.single {
-            grid-template-columns: 1fr;
-        }
-
-        /* Button Improvements in Modals */
-        .modal .btn {
-            padding: 0.75rem 2rem;
-            font-weight: 600;
-            border-radius: 8px;
-            transition: all 0.2s ease;
-        }
-
-        .modal .btn-primary {
-            background: linear-gradient(135deg, var(--monster-purple), var(--monster-teal));
-            border: none;
-            color: white;
-        }
-
-        .modal .btn-primary:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
-        }
-
-        .modal .btn-secondary {
-            background: var(--dark-surface-2);
-            border: 1px solid var(--dark-border);
-            color: var(--text-primary);
-        }
-
-        .modal .btn-secondary:hover {
-            background: var(--dark-bg);
-            border-color: var(--monster-purple);
-        }
-
-        /* Button Improvements */
-        .btn.btn-secondary {
-            min-width: 160px;
-            white-space: nowrap;
-        }
-
-        /* No Data State */
-        .no-data {
-            padding: 0;
-            background: transparent;
-            border: none;
-        }
-
-        .no-data-content {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 3rem;
-            text-align: center;
-            background: var(--dark-bg);
-            border-radius: 8px;
-            border: 2px dashed var(--dark-border);
-        }
-
-        .no-data-content svg {
-            margin-bottom: 1rem;
-            color: var(--text-muted);
-        }
-
-        .no-data-content h3 {
-            margin: 0 0 0.5rem 0;
-            color: var(--text-primary);
-            font-size: 1.125rem;
-            font-weight: 600;
-        }
-
-        .no-data-content p {
-            margin: 0;
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-        }
-
-        /* Button Enhancements */
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            border: none;
-            cursor: pointer;
-            text-decoration: none;
-        }
-
-        .btn svg {
-            flex-shrink: 0;
-        }
-
-        .btn-primary {
-            background: var(--gradient-primary);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3);
-        }
-
-        .btn-secondary {
-            background: var(--dark-surface-2);
-            color: var(--text-primary);
-            border: 1px solid var(--dark-border);
-        }
-
-        .btn-secondary:hover {
-            background: var(--dark-border);
-            transform: translateY(-1px);
-        }
-
-        /* Page Header Enhancements */
-        .page-header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-
-        .page-header-actions {
-            display: flex;
-            gap: 0.75rem;
-            align-items: center;
-        }
-
-        /* Loading and Error States */
-        .loading-indicator {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 3rem;
-            text-align: center;
-        }
-
-        .loading-spinner {
-            width: 32px;
-            height: 32px;
-            border: 3px solid var(--dark-border);
-            border-top: 3px solid var(--monster-purple);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 1rem;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Responsive Design */
-        @media (max-width: 1024px) {
-            .device-info-grid {
-                grid-template-columns: 1fr;
-                gap: 1.5rem;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .section-header {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 1rem;
-            }
-
-            .section-title {
-                justify-content: center;
-            }
-
-            .info-item {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 0.5rem;
-            }
-
-            .info-value {
-                text-align: left;
-                max-width: 100%;
-            }
-
-            .page-header-content {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .page-header-actions {
-                justify-content: center;
-            }
-
-            .data-table table {
-                font-size: 0.875rem;
-            }
-
-            .data-table thead th,
-            .data-table tbody td {
-                padding: 0.75rem 0.5rem;
-            }
-        }
-
-        /* Action buttons for addresses table */
-        .btn-action {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 32px;
-            height: 32px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            background: var(--dark-surface-2);
-            border: 1px solid var(--dark-border);
-        }
-
-        .btn-action:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-        }
-
-        .btn-delete {
-            color: var(--monster-red);
-        }
-
-        .btn-delete:hover {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: var(--monster-red);
-            color: #f87171;
-        }
-
-        /* Form Styles for Inline Editing */
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text-primary);
-            font-weight: 600;
-            font-size: 0.875rem;
-        }
-
-        .form-control,
-        input[type="text"],
-        input[type="password"],
-        input[type="number"],
-        select {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            background: var(--dark-bg);
-            border: 1px solid var(--dark-border);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-            transition: all 0.2s ease;
-            box-sizing: border-box;
-        }
-
-        .form-control:focus,
-        input:focus,
-        select:focus {
-            outline: none;
-            border-color: var(--monster-purple);
-            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-        }
-
-        .form-control:disabled,
-        input:disabled {
-            background: var(--dark-surface-2);
-            cursor: not-allowed;
-            opacity: 0.6;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            accent-color: var(--monster-purple);
-            transform: scale(1.1);
-            cursor: pointer;
-        }
-
-        .checkbox-group label {
-            margin-bottom: 0 !important;
-            font-weight: 500;
-            cursor: pointer;
-        }
-
-        .form-hint {
-            display: block;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin-top: 0.25rem;
-        }
+         .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); margin-bottom: 2rem; box-shadow: var(--card-shadow);}
+         .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);}
+         .section-title h2 { margin:0; color: var(--text-primary); font-size:1.25rem; font-weight:600;}
+         .section-content { padding:1.5rem;}
+         .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem;}
+         .status-badge { display:inline-flex; padding:0.4rem 0.8rem; border-radius:20px; font-size:0.7rem; font-weight:600; text-transform:uppercase;}
+         .status-enabled { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3);}
+         .status-disabled { background:rgba(239,68,68,0.15); color:var(--monster-red); border:1px solid rgba(239,68,68,0.3);}
+         .page-header-content { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;}
+         .page-header-actions { display:flex; gap:0.75rem; align-items:center;}
+         .btn { display:inline-flex; align-items:center; gap:0.5rem; padding:0.75rem 1.5rem; border-radius:8px; font-weight:600; transition:all 0.2s ease; border:none; cursor:pointer; text-decoration:none;}
+         .btn-primary { background:linear-gradient(135deg, var(--monster-purple), var(--monster-teal)); color:white;}
+         .btn-secondary { background:var(--dark-surface-2); border:1px solid var(--dark-border); color:var(--text-primary);}
+         .btn.btn-secondary { min-width:180px; white-space:nowrap;}
+         .btn-danger { background:var(--monster-red); color:white;}
+         .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; justify-content:center; align-items:center; z-index:9999; padding:2rem;}
+         .modal-content { background:var(--dark-surface); border-radius:12px; border:1px solid var(--dark-border); max-width:600px; width:100%; max-height:90vh; overflow-y:auto;}
+         .modal-header { padding:1.5rem 2rem; border-bottom:1px solid var(--dark-border); display:flex; justify-content:space-between; align-items:center;}
+         .modal-header h3 { margin:0; color:var(--text-primary);}
+         .modal-close { background:none; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer;}
+         .modal-body { padding:2rem;}
+         .modal-footer { padding:1.5rem 2rem; border-top:1px solid var(--dark-border); display:flex; justify-content:flex-end; gap:1rem;}
+         .form-group { margin-bottom:1.5rem;}
+         .form-group label { display:block; margin-bottom:0.5rem; color:var(--text-primary); font-weight:600;}
+         .form-control, input[type=text], input[type=password], input[type=number], select { width:100%; padding:0.75rem 1rem; background:var(--dark-bg); border:1px solid var(--dark-border); border-radius:8px; color:var(--text-primary); box-sizing:border-box; font-family:inherit; font-size:0.9rem;}
+         .form-control:focus, input:focus, select:focus { outline:none; border-color:var(--monster-purple);}
+         .form-control:disabled, input:disabled { background:var(--dark-surface-2); opacity:0.6; cursor:not-allowed;}
+         .checkbox-group { display:flex; align-items:center; gap:0.5rem;}
+         .checkbox-group input[type=checkbox] { accent-color:var(--monster-purple);}
+         .form-hint { color:var(--text-muted); font-size:0.7rem; margin-top:0.4rem; display:block;}
+         .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem;}
+         .info-item { display:flex; flex-direction:column; padding:1rem; background:var(--dark-bg); border-radius:8px; border:1px solid var(--dark-border);}
+         .info-label { font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:0.5rem;}
+         .info-value { color:var(--text-primary); font-weight:600;}
+         table { width:100%; border-collapse:collapse;}
+         thead th { background:var(--dark-surface-2); padding:0.75rem 1rem; text-align:left; font-weight:600; color:var(--text-primary); border-bottom:1px solid var(--dark-border);}
+         tbody td { padding:1rem; border-bottom:1px solid rgba(71,85,105,0.3); vertical-align:middle;}
+         tbody tr:last-child td { border-bottom:none;}
+         tbody tr:hover { background:rgba(71,85,105,0.1);}
+         .no-data { text-align:center; color:var(--text-muted); padding:2rem;}
+         @media (max-width: 1000px) { .form-grid, .info-grid { grid-template-columns:1fr; } }
     </style>
 </head>
 <body>
-    <!-- Mobile Top Bar -->
-    <div class="top-bar">
+<div class="top-bar">
+    <div class="sidebar-brand">
+        <img src="/assets/logo.png" alt="MonsterMQ Logo">
+        <span class="brand-name">MonsterMQ</span>
+    </div>
+    <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+</div>
+
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
         <div class="sidebar-brand">
             <img src="/assets/logo.png" alt="MonsterMQ Logo">
             <span class="brand-name">MonsterMQ</span>
         </div>
-        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <line x1="3" y1="12" x2="21" y2="12"></line>
-                <line x1="3" y1="18" x2="21" y2="18"></line>
+        <button class="sidebar-toggle" onclick="toggleSidebar()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15,18 9,12 15,6"></polyline>
             </svg>
         </button>
     </div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+</aside>
 
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <div class="sidebar-brand">
-                <img src="/assets/logo.png" alt="MonsterMQ Logo">
-                <span class="brand-name">MonsterMQ</span>
-            </div>
-            <button class="sidebar-toggle" onclick="toggleSidebar()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="15,18 9,12 15,6"></polyline>
-                </svg>
-            </button>
-        </div>
-
-        <nav class="sidebar-nav" id="sidebar-nav"></nav>
-
-        <div class="sidebar-footer">
-            <div class="user-info">
-                <div class="user-avatar" id="user-avatar">
-                    U
+<div class="main-content" id="main-content">
+    <div class="container">
+        <div class="page-header">
+            <div class="page-header-content">
+                <div>
+                    <h1 class="page-title" id="device-title">OPC UA Device</h1>
+                    <p class="page-subtitle" id="device-subtitle"></p>
                 </div>
-                <div class="user-details">
-                    <div class="user-name" id="user-name">User</div>
-                    <div class="user-role">Administrator</div>
+                <div class="page-header-actions">
+                    <button class="btn btn-secondary" onclick="goBack()">← Back to Clients</button>
+                    <button class="btn btn-primary" onclick="saveDevice()" id="save-device-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                        </svg>
+                        Save Device
+                    </button>
                 </div>
             </div>
         </div>
-    </aside>
 
-    <div class="main-content" id="main-content">
-        <div class="container">
-            <div class="page-header">
-                <div class="page-header-content">
-                    <div>
-                        <h1 class="page-title" id="device-title">OPC UA Device</h1>
-                        <p class="page-subtitle" id="device-subtitle">Device configuration and address management</p>
-                    </div>
-                    <div class="page-header-actions">
-                        <button class="btn btn-secondary" onclick="goBack()">Back to Clients</button>
-                        <button class="btn btn-primary" onclick="saveDevice()" id="save-device-btn">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
-                            </svg>
-                            Save Device
-                        </button>
-                    </div>
-                </div>
+        <div id="loading-indicator" class="loading-indicator" style="display:none;">
+            <div class="loading-spinner"></div>
+            <span>Loading...</span>
+        </div>
+
+        <div id="error-message" class="error-message" style="display:none;">
+            <div class="error-content">
+                <span class="error-icon">⚠️</span>
+                <span class="error-text"></span>
             </div>
+        </div>
 
-            <div id="loading-indicator" class="loading-indicator" style="display: none;">
-                <div class="loading-spinner"></div>
-                <span>Loading device details...</span>
+        <div class="section-card" id="device-content" style="display:none;">
+            <div class="section-header">
+                <div class="section-title"><h2>Device Configuration</h2></div>
+                <span class="status-badge status-enabled" id="device-status-badge">ENABLED</span>
             </div>
-
-            <div id="device-content" style="display: none;">
-                <!-- Two Column Layout for Device Info -->
-                <div class="device-info-grid">
-                    <!-- Device Information Section -->
-                    <div class="section-card">
-                        <div class="section-header">
-                            <div class="section-title">
-                                <div class="section-icon">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                                    </svg>
-                                </div>
-                                <h2>Device Information</h2>
-                            </div>
-                            <div class="device-status" id="device-status">
-                                <span class="status-badge" id="device-status-badge">Unknown</span>
-                            </div>
+            <div class="section-content">
+                <form id="device-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="device-name">Device Name *</label>
+                            <input type="text" id="device-name" required disabled>
                         </div>
-                        <div class="section-content">
-                            <form id="device-form">
-                                <div class="form-group">
-                                    <label for="device-name">Device Name *</label>
-                                    <input type="text" id="device-name" required disabled>
-                                </div>
-                                <div class="form-group">
-                                    <label for="device-namespace">Namespace *</label>
-                                    <input type="text" id="device-namespace" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="device-endpoint">Endpoint URL *</label>
-                                    <input type="text" id="device-endpoint" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="device-security">Security Policy</label>
-                                    <select id="device-security">
-                                        <option value="None">None</option>
-                                        <option value="Basic256Sha256">Basic256Sha256</option>
-                                        <option value="Basic256">Basic256</option>
-                                        <option value="Basic128Rsa15">Basic128Rsa15</option>
-                                        <option value="Aes256_Sha256_RsaPss">Aes256_Sha256_RsaPss</option>
-                                        <option value="Aes128_Sha256_RsaOaep">Aes128_Sha256_RsaOaep</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="device-node">Cluster Node *</label>
-                                    <select id="device-node" required>
-                                        <option value="">Select Node...</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <div class="checkbox-group">
-                                        <input type="checkbox" id="device-update-endpoint">
-                                        <label for="device-update-endpoint">Update Endpoint URL</label>
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label for="device-username">Username</label>
-                                    <input type="text" id="device-username">
-                                </div>
-                                <div class="form-group">
-                                    <div class="checkbox-group">
-                                        <input type="checkbox" id="device-update-password">
-                                        <label for="device-update-password">Update Password</label>
-                                    </div>
-                                    <div id="password-field-group" style="display: none; margin-top: 0.5rem;">
-                                        <input type="password" id="device-password" placeholder="Enter new password">
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <div class="checkbox-group">
-                                        <input type="checkbox" id="device-enabled">
-                                        <label for="device-enabled">Enabled</label>
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label>Created</label>
-                                    <div style="padding: 0.75rem 1rem; background: var(--dark-surface-2); border-radius: 8px; color: var(--text-muted); font-size: 0.875rem;" id="device-created">-</div>
-                                </div>
-                            </form>
+                        <div class="form-group">
+                            <label for="device-namespace">Namespace *</label>
+                            <input type="text" id="device-namespace" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="device-endpoint">Endpoint URL *</label>
+                            <input type="text" id="device-endpoint" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="device-security">Security Policy</label>
+                            <select id="device-security">
+                                <option value="None">None</option>
+                                <option value="Basic256Sha256">Basic256Sha256</option>
+                                <option value="Basic256">Basic256</option>
+                                <option value="Basic128Rsa15">Basic128Rsa15</option>
+                                <option value="Aes256_Sha256_RsaPss">Aes256_Sha256_RsaPss</option>
+                                <option value="Aes128_Sha256_RsaOaep">Aes128_Sha256_RsaOaep</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="device-node">Cluster Node *</label>
+                            <select id="device-node" required><option value="">Select Node...</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="device-username">Username</label>
+                            <input type="text" id="device-username">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="device-update-endpoint">
+                            <label for="device-update-endpoint">Update Endpoint URL</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="device-update-password">
+                            <label for="device-update-password">Update Password</label>
+                        </div>
+                        <div id="password-field-group" style="display:none; margin-top:0.5rem;">
+                            <input type="password" id="device-password" placeholder="Enter new password">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="device-enabled">
+                            <label for="device-enabled">Enabled</label>
                         </div>
                     </div>
 
-                    <!-- Connection Configuration Section -->
-                    <div class="section-card">
-                        <div class="section-header">
-                            <div class="section-title">
-                                <div class="section-icon">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM13 17h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-                                    </svg>
-                                </div>
-                                <h2>Connection Settings</h2>
-                            </div>
-                        </div>
-                        <div class="section-content">
+                    <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px solid var(--dark-border);">
+                        <h3 style="color:var(--text-primary); margin-bottom:1rem;">Connection Settings</h3>
+                        <div class="form-grid">
                             <div class="form-group">
                                 <label for="config-sampling">Subscription Sampling Interval (ms)</label>
-                                <input type="number" id="config-sampling" step="0.1" placeholder="0">
+                                <input type="number" id="config-sampling" step="0.1">
                             </div>
                             <div class="form-group">
                                 <label for="config-keepalive">Keep Alive Failures Allowed</label>
-                                <input type="number" id="config-keepalive" placeholder="3">
+                                <input type="number" id="config-keepalive">
                             </div>
                             <div class="form-group">
                                 <label for="config-reconnect">Reconnect Delay (ms)</label>
-                                <input type="number" id="config-reconnect" placeholder="5000">
+                                <input type="number" id="config-reconnect">
                             </div>
                             <div class="form-group">
                                 <label for="config-connection-timeout">Connection Timeout (ms)</label>
-                                <input type="number" id="config-connection-timeout" placeholder="10000">
+                                <input type="number" id="config-connection-timeout">
                             </div>
                             <div class="form-group">
                                 <label for="config-request-timeout">Request Timeout (ms)</label>
-                                <input type="number" id="config-request-timeout" placeholder="5000">
+                                <input type="number" id="config-request-timeout">
                             </div>
                             <div class="form-group">
                                 <label for="config-buffer-size">Monitoring Buffer Size</label>
-                                <input type="number" id="config-buffer-size" placeholder="100">
+                                <input type="number" id="config-buffer-size">
                             </div>
                             <div class="form-group">
                                 <label for="config-monitoring-sampling">Monitoring Sampling Interval (ms)</label>
-                                <input type="number" id="config-monitoring-sampling" step="0.1" placeholder="0">
+                                <input type="number" id="config-monitoring-sampling" step="0.1">
                             </div>
-                            <div class="form-group">
-                                <div class="checkbox-group">
-                                    <input type="checkbox" id="config-discard-oldest">
-                                    <label for="config-discard-oldest">Discard Oldest When Buffer Full</label>
-                                </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="config-discard-oldest">
+                                <label for="config-discard-oldest">Discard Oldest When Buffer Full</label>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Certificate Configuration Section -->
-                    <div class="section-card">
-                        <div class="section-header">
-                            <div class="section-title">
-                                <div class="section-icon">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-                                    </svg>
-                                </div>
-                                <h2>Certificate Settings</h2>
-                            </div>
-                        </div>
-                        <div class="section-content">
+                    <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px solid var(--dark-border);">
+                        <h3 style="color:var(--text-primary); margin-bottom:1rem;">Certificate Settings</h3>
+                        <div class="form-grid">
                             <div class="form-group">
                                 <label for="cert-security-dir">Security Directory</label>
                                 <input type="text" id="cert-security-dir" placeholder="security">
                             </div>
                             <div class="form-group">
                                 <label for="cert-application-name">Application Name</label>
-                                <input type="text" id="cert-application-name" placeholder="MonsterMQ@localhost">
+                                <input type="text" id="cert-application-name">
                             </div>
                             <div class="form-group">
                                 <label for="cert-application-uri">Application URI</label>
-                                <input type="text" id="cert-application-uri" placeholder="urn:MonsterMQ:Client">
+                                <input type="text" id="cert-application-uri">
                             </div>
                             <div class="form-group">
                                 <label for="cert-organization">Organization</label>
-                                <input type="text" id="cert-organization" placeholder="MonsterMQ">
+                                <input type="text" id="cert-organization">
                             </div>
                             <div class="form-group">
                                 <label for="cert-organizational-unit">Organizational Unit</label>
-                                <input type="text" id="cert-organizational-unit" placeholder="Client">
+                                <input type="text" id="cert-organizational-unit">
                             </div>
                             <div class="form-group">
                                 <label for="cert-locality">Locality Name</label>
-                                <input type="text" id="cert-locality" placeholder="Unknown">
+                                <input type="text" id="cert-locality">
                             </div>
                             <div class="form-group">
                                 <label for="cert-country">Country Code</label>
-                                <input type="text" id="cert-country" placeholder="XX" maxlength="2">
+                                <input type="text" id="cert-country" maxlength="2">
                             </div>
-                            <div class="form-group">
-                                <div class="checkbox-group">
-                                    <input type="checkbox" id="cert-update-keystore-password">
-                                    <label for="cert-update-keystore-password">Update Keystore Password</label>
-                                </div>
-                                <div id="keystore-password-field-group" style="display: none; margin-top: 0.5rem;">
-                                    <input type="password" id="cert-keystore-password" placeholder="Enter new keystore password">
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <div class="checkbox-group">
-                                    <input type="checkbox" id="cert-create-self-signed">
-                                    <label for="cert-create-self-signed">Create Self-Signed Certificates</label>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <div class="checkbox-group">
-                                    <input type="checkbox" id="cert-validate-server">
-                                    <label for="cert-validate-server">Validate Server Certificates</label>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <div class="checkbox-group">
-                                    <input type="checkbox" id="cert-auto-accept">
-                                    <label for="cert-auto-accept">Auto-Accept Server Certificates</label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Addresses Section - Full Width -->
-                <div class="section-card full-width">
-                    <div class="section-header">
-                        <div class="section-title">
-                            <div class="section-icon">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                                    <polyline points="9,22 9,12 15,12 15,22"/>
-                                </svg>
-                            </div>
-                            <h2>OPC UA Addresses</h2>
-                        </div>
-                        <div class="section-actions">
-                            <button class="btn btn-primary" onclick="showAddAddressModal()">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                                </svg>
-                                Add Address
-                            </button>
-                        </div>
-                    </div>
-                    <div class="section-content">
-                        <div id="addresses-container">
-                            <div id="addresses-table" class="data-table">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Address</th>
-                                            <th>Topic</th>
-                                            <th>Publish Mode</th>
-                                            <th>Remove Path</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="addresses-table-body">
-                                        <!-- Address rows will be populated here -->
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div id="no-addresses" class="no-data" style="display: none;">
-                                <div class="no-data-content">
-                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
-                                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                                        <polyline points="9,22 9,12 15,12 15,22"/>
-                                    </svg>
-                                    <h3>No addresses configured</h3>
-                                    <p>Click "Add Address" to start monitoring OPC UA nodes</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="error-message" class="error-message" style="display: none;">
-                <div class="error-content">
-                    <span class="error-icon">⚠️</span>
-                    <span class="error-text"></span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Add Address Modal -->
-    <div id="add-address-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Add OPC UA Address</h3>
-                <button class="modal-close" onclick="hideAddAddressModal()">×</button>
-            </div>
-            <div class="modal-body">
-                <form id="add-address-form">
-                    <div class="form-group">
-                        <label for="address-address">Address *</label>
-                        <input type="text" id="address-address" required
-                               placeholder="e.g., BrowsePath://Objects/Factory/# or NodeId://ns=2;i=16">
-                        <small class="form-hint">Use BrowsePath:// for hierarchical browsing or NodeId:// for specific nodes</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="address-topic">Topic *</label>
-                        <input type="text" id="address-topic" required
-                               placeholder="e.g., factory/values or machine/status">
-                        <small class="form-hint">MQTT topic where values will be published</small>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="address-publish-mode">Publish Mode</label>
-                            <select id="address-publish-mode">
-                                <option value="SEPARATE">Separate (each node gets own topic)</option>
-                                <option value="SINGLE">Single (all values on one topic)</option>
-                            </select>
                         </div>
                         <div class="form-group">
-                            <label for="address-remove-path">
-                                <input type="checkbox" id="address-remove-path" checked>
-                                Remove Base Path
-                            </label>
-                            <small class="form-hint">Remove base path before first wildcard from topic</small>
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="cert-create-self-signed">
+                                <label for="cert-create-self-signed">Create Self-Signed Certificates</label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="cert-validate-server">
+                                <label for="cert-validate-server">Validate Server Certificates</label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="cert-auto-accept">
+                                <label for="cert-auto-accept">Auto-Accept Server Certificates</label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="cert-update-keystore-password">
+                                <label for="cert-update-keystore-password">Update Keystore Password</label>
+                            </div>
+                            <div id="keystore-password-field-group" style="display:none; margin-top:0.5rem;">
+                                <input type="password" id="cert-keystore-password" placeholder="Enter new keystore password">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px solid var(--dark-border);" id="device-created-row">
+                        <h3 style="color:var(--text-primary); margin-bottom:1rem;">Timestamps</h3>
+                        <div class="info-grid">
+                            <div class="info-item"><div class="info-label">Created</div><div class="info-value" id="device-created">-</div></div>
                         </div>
                     </div>
                 </form>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary" onclick="addAddress()">Add Address</button>
+        </div>
+
+        <div class="section-card addresses-section">
+            <div class="section-header">
+                <div class="section-title"><h2>OPC UA Addresses</h2></div>
+                <button class="btn btn-primary" onclick="showAddAddressModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    Add Address
+                </button>
+            </div>
+            <div class="section-content">
+                <div id="addresses-table" style="display:none;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Address</th>
+                                <th>Topic</th>
+                                <th>Publish Mode</th>
+                                <th>Remove Path</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="addresses-table-body"></tbody>
+                    </table>
+                </div>
+                <div id="no-addresses" class="no-data">No addresses configured. Click "Add Address" to start monitoring OPC UA nodes.</div>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Confirm Delete Address Modal -->
-    <div id="confirm-delete-address-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Confirm Delete</h3>
-                <button class="modal-close" onclick="hideConfirmDeleteAddressModal()">×</button>
-            </div>
-            <div class="modal-body">
-                <p>Are you sure you want to delete the address "<span id="delete-address-name"></span>"?</p>
-                <p>This action cannot be undone.</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteAddressModal()">Cancel</button>
-                <button type="button" class="btn btn-danger" onclick="confirmDeleteAddress()">Delete</button>
-            </div>
+<!-- Add Address Modal -->
+<div id="add-address-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add OPC UA Address</h3>
+            <button class="modal-close" onclick="hideAddAddressModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <form id="add-address-form">
+                <div class="form-group">
+                    <label for="address-address">Address *</label>
+                    <input type="text" id="address-address" required placeholder="e.g., BrowsePath://Objects/Factory/# or NodeId://ns=2;i=16">
+                    <span class="form-hint">Use BrowsePath:// for hierarchical browsing or NodeId:// for specific nodes</span>
+                </div>
+                <div class="form-group">
+                    <label for="address-topic">Topic *</label>
+                    <input type="text" id="address-topic" required placeholder="e.g., factory/values">
+                    <span class="form-hint">MQTT topic where values will be published</span>
+                </div>
+                <div class="form-group">
+                    <label for="address-publish-mode">Publish Mode</label>
+                    <select id="address-publish-mode">
+                        <option value="SEPARATE">Separate (each node gets own topic)</option>
+                        <option value="SINGLE">Single (all values on one topic)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="address-remove-path" checked>
+                        <label for="address-remove-path">Remove Base Path</label>
+                    </div>
+                    <span class="form-hint">Remove base path before first wildcard from topic</span>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="addAddress()">Add Address</button>
         </div>
     </div>
+</div>
 
-    <script src="/js/opcua-device-detail.js"></script>
-    <script>
-        // Add event listeners for password toggles
-        document.addEventListener('DOMContentLoaded', function() {
-            // Toggle password field visibility
-            const updatePasswordCheckbox = document.getElementById('device-update-password');
-            const passwordFieldGroup = document.getElementById('password-field-group');
+<!-- Confirm Delete Address Modal -->
+<div id="confirm-delete-address-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Confirm Delete</h3>
+            <button class="modal-close" onclick="hideConfirmDeleteAddressModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to delete the address "<span id="delete-address-name"></span>"?</p>
+            <p>This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteAddressModal()">Cancel</button>
+            <button type="button" class="btn btn-danger" onclick="confirmDeleteAddress()">Delete</button>
+        </div>
+    </div>
+</div>
 
-            if (updatePasswordCheckbox) {
-                updatePasswordCheckbox.addEventListener('change', function() {
-                    passwordFieldGroup.style.display = this.checked ? 'block' : 'none';
-                    if (!this.checked) {
-                        document.getElementById('device-password').value = '';
-                    }
-                });
-            }
-
-            // Toggle keystore password field visibility
-            const updateKeystorePasswordCheckbox = document.getElementById('cert-update-keystore-password');
-            const keystorePasswordFieldGroup = document.getElementById('keystore-password-field-group');
-
-            if (updateKeystorePasswordCheckbox) {
-                updateKeystorePasswordCheckbox.addEventListener('change', function() {
-                    keystorePasswordFieldGroup.style.display = this.checked ? 'block' : 'none';
-                    if (!this.checked) {
-                        document.getElementById('cert-keystore-password').value = '';
-                    }
-                });
-            }
-        });
-    </script>
+<script src="/js/opcua-device-detail.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const updatePasswordCheckbox = document.getElementById('device-update-password');
+        const passwordFieldGroup = document.getElementById('password-field-group');
+        if (updatePasswordCheckbox) {
+            updatePasswordCheckbox.addEventListener('change', function() {
+                passwordFieldGroup.style.display = this.checked ? 'block' : 'none';
+                if (!this.checked) document.getElementById('device-password').value = '';
+            });
+        }
+        const updateKeystorePasswordCheckbox = document.getElementById('cert-update-keystore-password');
+        const keystorePasswordFieldGroup = document.getElementById('keystore-password-field-group');
+        if (updateKeystorePasswordCheckbox) {
+            updateKeystorePasswordCheckbox.addEventListener('change', function() {
+                keystorePasswordFieldGroup.style.display = this.checked ? 'block' : 'none';
+                if (!this.checked) document.getElementById('cert-keystore-password').value = '';
+            });
+        }
+    });
+</script>
 </body>
 </html>

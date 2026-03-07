@@ -12,41 +12,9 @@ class MqttClientManager {
     async init() {
         console.log('Initializing MQTT Bridge Manager...');
         // Load initial data
-        await this.loadClusterNodes();
         await this.loadClients();
         // Set up periodic refresh
         setInterval(() => this.loadClients(), 30000); // Refresh every 30 seconds
-    }
-
-    async loadClusterNodes() {
-        try {
-            const query = `
-                query GetBrokers {
-                    brokers {
-                        nodeId
-                        isCurrent
-                    }
-                }
-            `;
-
-            const result = await this.client.query(query);
-            this.clusterNodes = result.brokers || [];
-
-            // Populate node selector in the add client form
-            const nodeSelect = document.getElementById('client-node');
-            if (nodeSelect) {
-                nodeSelect.innerHTML = '<option value="">Select Node...</option>';
-                this.clusterNodes.forEach(node => {
-                    const option = document.createElement('option');
-                    option.value = node.nodeId;
-                    option.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
-                    nodeSelect.appendChild(option);
-                });
-            }
-
-        } catch (error) {
-            console.error('Error loading cluster nodes:', error);
-        }
     }
 
     async loadClients() {
@@ -199,78 +167,6 @@ class MqttClientManager {
         });
     }
 
-    async addClient() {
-        const form = document.getElementById('add-client-form');
-        if (!form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
-
-        const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
-        
-        const clientData = {
-            name: document.getElementById('client-name').value.trim(),
-            namespace: document.getElementById('client-namespace').value.trim(),
-            nodeId: document.getElementById('client-node').value,
-            enabled: document.getElementById('client-enabled').checked,
-            config: {
-                brokerUrl: document.getElementById('client-broker-url').value.trim(),
-                username: document.getElementById('client-username').value.trim() || null,
-                password: document.getElementById('client-password').value || null,
-                clientId: document.getElementById('client-id').value.trim(),
-                cleanSession: document.getElementById('client-clean-session').checked,
-                keepAlive: parseInt(document.getElementById('client-keep-alive').value),
-                reconnectDelay: parseInt(document.getElementById('client-reconnect-delay').value),
-                connectionTimeout: parseInt(document.getElementById('client-connection-timeout').value),
-                bufferEnabled: document.getElementById('client-buffer-enabled').checked,
-                bufferSize: parseInt(document.getElementById('client-buffer-size').value),
-                persistBuffer: document.getElementById('client-persist-buffer').checked,
-                deleteOldestMessages: document.getElementById('client-delete-oldest').checked,
-                protocolVersion: protocolVersion
-            }
-        };
-        
-        // Add MQTT v5 properties if protocol version is 5
-        if (protocolVersion === 5) {
-            clientData.config.sessionExpiryInterval = parseInt(document.getElementById('client-session-expiry').value) || 0;
-            clientData.config.receiveMaximum = parseInt(document.getElementById('client-receive-maximum').value) || 65535;
-            clientData.config.maximumPacketSize = parseInt(document.getElementById('client-max-packet-size').value) || 268435455;
-            clientData.config.topicAliasMaximum = parseInt(document.getElementById('client-topic-alias-max').value) || 10;
-        }
-
-        try {
-            const mutation = `
-                mutation CreateMqttClient($input: MqttClientInput!) {
-                    mqttClient {
-                        create(input: $input) {
-                            success
-                            errors
-                            client {
-                                name
-                                enabled
-                            }
-                        }
-                    }
-                }
-            `;
-
-            const result = await this.client.query(mutation, { input: clientData });
-
-            if (result.mqttClient.create.success) {
-                this.hideAddClientModal();
-                await this.loadClients();
-                this.showSuccess(`Bridge \"${clientData.name}\" added successfully`);
-            } else {
-                const errors = result.mqttClient.create.errors || ['Unknown error'];
-                this.showError('Failed to add bridge: ' + errors.join(', '));
-            }
-
-        } catch (error) {
-            console.error('Error adding client:', error);
-            this.showError('Failed to add bridge: ' + error.message);
-        }
-    }
-
     async toggleClient(clientName, enabled) {
         try {
             const mutation = `
@@ -345,17 +241,6 @@ class MqttClientManager {
     }
 
     // UI Helper Methods
-    showAddClientModal() {
-        document.getElementById('add-client-modal').style.display = 'flex';
-        document.getElementById('add-client-form').reset();
-        document.getElementById('client-enabled').checked = true;
-        document.getElementById('client-clean-session').checked = true;
-    }
-
-    hideAddClientModal() {
-        document.getElementById('add-client-modal').style.display = 'none';
-    }
-
     showConfirmDeleteModal() {
         document.getElementById('confirm-delete-modal').style.display = 'flex';
     }
@@ -416,18 +301,6 @@ class MqttClientManager {
 }
 
 // Global functions for onclick handlers
-function showAddClientModal() {
-    mqttClientManager.showAddClientModal();
-}
-
-function hideAddClientModal() {
-    mqttClientManager.hideAddClientModal();
-}
-
-function addClient() {
-    mqttClientManager.addClient();
-}
-
 function hideConfirmDeleteModal() {
     mqttClientManager.hideConfirmDeleteModal();
 }
@@ -440,14 +313,6 @@ function refreshClients() {
     mqttClientManager.refreshClients();
 }
 
-function toggleMqtt5ConnectionProperties() {
-    const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
-    const mqtt5Section = document.getElementById('mqtt5-add-connection-properties');
-    if (mqtt5Section) {
-        mqtt5Section.style.display = protocolVersion === 5 ? 'block' : 'none';
-    }
-}
-
 // Initialize when DOM is loaded
 let mqttClientManager;
 document.addEventListener('DOMContentLoaded', () => {
@@ -457,9 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Handle modal clicks
 document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal')) {
-        if (e.target.id === 'add-client-modal') {
-            mqttClientManager.hideAddClientModal();
-        } else if (e.target.id === 'confirm-delete-modal') {
+        if (e.target.id === 'confirm-delete-modal') {
             mqttClientManager.hideConfirmDeleteModal();
         }
     }

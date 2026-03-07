@@ -17,7 +17,9 @@ class MetricsResolver(
     private val vertx: Vertx,
     private val sessionStore: ISessionStoreAsync,
     private val sessionHandler: at.rocworks.handlers.SessionHandler,
-    private val metricsStore: IMetricsStore?
+    private val metricsStore: IMetricsStore?,
+    private val config: io.vertx.core.json.JsonObject = io.vertx.core.json.JsonObject(),
+    private val userManager: at.rocworks.auth.UserManager? = null
 ) {
     companion object {
         private val logger: Logger = Utils.getLogger(MetricsResolver::class.java)
@@ -1573,4 +1575,70 @@ class MetricsResolver(
             
             future
         }
-    }}
+    }
+
+    data class BrokerConfig(
+        val nodeId: String,
+        val version: String,
+        val clustered: Boolean,
+        val tcpPort: Int,
+        val wsPort: Int,
+        val tcpsPort: Int,
+        val wssPort: Int,
+        val natsPort: Int,
+        val sessionStoreType: String,
+        val retainedStoreType: String,
+        val configStoreType: String,
+        val userManagementEnabled: Boolean,
+        val anonymousEnabled: Boolean,
+        val mcpEnabled: Boolean,
+        val mcpPort: Int,
+        val grafanaEnabled: Boolean,
+        val grafanaPort: Int,
+        val i3xEnabled: Boolean,
+        val i3xPort: Int,
+        val graphqlEnabled: Boolean,
+        val graphqlPort: Int,
+        val mqttApiEnabled: Boolean,
+        val metricsEnabled: Boolean,
+        val genAiEnabled: Boolean,
+        val genAiProvider: String,
+        val genAiModel: String
+    )
+
+    fun brokerConfig(): DataFetcher<BrokerConfig> {
+        return DataFetcher {
+            val nodeId = Monster.getClusterNodeId(vertx)
+            BrokerConfig(
+                nodeId = nodeId,
+                version = Version.getVersion(),
+                clustered = Monster.isClustered(),
+                tcpPort = config.getInteger("TCP", 1883),
+                wsPort = config.getInteger("WS", 0),
+                tcpsPort = config.getInteger("TCPS", 0),
+                wssPort = config.getInteger("WSS", 0),
+                natsPort = config.getInteger("NATS", 0),
+                sessionStoreType = Monster.getSessionStoreType(config),
+                retainedStoreType = Monster.getRetainedStoreType(config),
+                configStoreType = Monster.getConfigStoreType(config),
+                userManagementEnabled = userManager?.isUserManagementEnabled() ?: false,
+                anonymousEnabled = config.getJsonObject("UserManagement", io.vertx.core.json.JsonObject())
+                    .getJsonObject("AnonymousUser", io.vertx.core.json.JsonObject())
+                    .getBoolean("Enabled", true),
+                mcpEnabled = config.getJsonObject("MCP", io.vertx.core.json.JsonObject()).getBoolean("Enabled", true),
+                mcpPort = config.getJsonObject("MCP", io.vertx.core.json.JsonObject()).getInteger("Port", 3000),
+                grafanaEnabled = config.getJsonObject("Grafana", io.vertx.core.json.JsonObject()).getBoolean("Enabled", false),
+                grafanaPort = config.getJsonObject("Grafana", io.vertx.core.json.JsonObject()).getInteger("Port", 3001),
+                i3xEnabled = config.getJsonObject("I3x", io.vertx.core.json.JsonObject()).getBoolean("Enabled", false),
+                i3xPort = config.getJsonObject("I3x", io.vertx.core.json.JsonObject()).getInteger("Port", 3002),
+                graphqlEnabled = config.getJsonObject("GraphQL", io.vertx.core.json.JsonObject()).getBoolean("Enabled", true),
+                graphqlPort = config.getJsonObject("GraphQL", io.vertx.core.json.JsonObject()).getInteger("Port", 4000),
+                mqttApiEnabled = config.getJsonObject("GraphQL", io.vertx.core.json.JsonObject()).getBoolean("MqttApi", true),
+                metricsEnabled = config.getJsonObject("Metrics", io.vertx.core.json.JsonObject()).getBoolean("Enabled", true),
+                genAiEnabled = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getBoolean("Enabled", false),
+                genAiProvider = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getString("Provider", ""),
+                genAiModel = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getString("Model", "")
+            )
+        }
+    }
+}

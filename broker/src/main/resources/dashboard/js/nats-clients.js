@@ -10,28 +10,8 @@ class NatsClientManager {
     }
 
     async init() {
-        await this.loadClusterNodes();
         await this.loadClients();
         setInterval(() => this.loadClients(), 30000);
-    }
-
-    async loadClusterNodes() {
-        try {
-            const result = await this.client.query(`query { brokers { nodeId isCurrent } }`);
-            this.clusterNodes = result.brokers || [];
-            const nodeSelect = document.getElementById('nats-client-node');
-            if (nodeSelect) {
-                nodeSelect.innerHTML = '<option value="">Select Node...</option>';
-                this.clusterNodes.forEach(node => {
-                    const opt = document.createElement('option');
-                    opt.value = node.nodeId;
-                    opt.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
-                    nodeSelect.appendChild(opt);
-                });
-            }
-        } catch (e) {
-            console.error('Error loading cluster nodes', e);
-        }
     }
 
     async loadClients() {
@@ -116,64 +96,6 @@ class NatsClientManager {
         });
     }
 
-    onAuthTypeChange(value) {
-        ['nats-auth-fields-userpass', 'nats-auth-fields-token', 'nats-auth-fields-tls'].forEach(id => {
-            document.getElementById(id).style.display = 'none';
-        });
-        if (value === 'USERNAME_PASSWORD') document.getElementById('nats-auth-fields-userpass').style.display = 'block';
-        else if (value === 'TOKEN')         document.getElementById('nats-auth-fields-token').style.display = 'block';
-        else if (value === 'TLS')           document.getElementById('nats-auth-fields-tls').style.display = 'block';
-    }
-
-    async addClient() {
-        const form = document.getElementById('add-nats-client-form');
-        if (!form.checkValidity()) { form.reportValidity(); return; }
-
-        const authType = document.getElementById('nats-client-auth-type').value;
-        const serversRaw = document.getElementById('nats-client-servers').value.trim();
-        const servers = serversRaw.split(',').map(s => s.trim()).filter(Boolean);
-
-        const clientData = {
-            name: document.getElementById('nats-client-name').value.trim(),
-            namespace: document.getElementById('nats-client-namespace').value.trim(),
-            nodeId: document.getElementById('nats-client-node').value,
-            enabled: document.getElementById('nats-client-enabled').checked,
-            config: {
-                servers,
-                authType,
-                username:     authType === 'USERNAME_PASSWORD' ? document.getElementById('nats-client-username').value.trim() || null : null,
-                password:     authType === 'USERNAME_PASSWORD' ? document.getElementById('nats-client-password').value || null : null,
-                token:        authType === 'TOKEN'             ? document.getElementById('nats-client-token').value || null : null,
-                tlsCaCertPath:authType === 'TLS'               ? document.getElementById('nats-client-tls-ca').value.trim() || null : null,
-                tlsVerify:    authType === 'TLS' ? document.getElementById('nats-client-tls-verify').checked : true,
-                useJetStream: document.getElementById('nats-client-jetstream').checked,
-                reconnectDelayMs: parseInt(document.getElementById('nats-client-reconnect-delay').value),
-                addresses: []
-            }
-        };
-
-        try {
-            const mutation = `
-                mutation CreateNatsClient($input: NatsClientInput!) {
-                    natsClient { create(input: $input) { success errors client { name } } }
-                }
-            `;
-            const result = await this.client.query(mutation, { input: clientData });
-            if (result.natsClient.create.success) {
-                this.hideAddClientModal();
-                await this.loadClients();
-                this.showSuccess(`NATS client "${clientData.name}" added successfully`);
-                // Navigate to detail page for address setup
-                setTimeout(() => this.viewClient(clientData.name), 500);
-            } else {
-                this.showError('Failed to add NATS client: ' + (result.natsClient.create.errors || []).join(', '));
-            }
-        } catch (e) {
-            console.error('Error adding NATS client:', e);
-            this.showError('Failed to add NATS client: ' + e.message);
-        }
-    }
-
     async toggleClient(clientName, enabled) {
         try {
             const mutation = `
@@ -222,15 +144,6 @@ class NatsClientManager {
     }
 
     // Modal helpers
-    showAddClientModal() {
-        document.getElementById('add-nats-client-modal').style.display = 'flex';
-        document.getElementById('add-nats-client-form').reset();
-        document.getElementById('nats-client-enabled').checked = true;
-        ['nats-auth-fields-userpass', 'nats-auth-fields-token', 'nats-auth-fields-tls'].forEach(id => {
-            document.getElementById(id).style.display = 'none';
-        });
-    }
-    hideAddClientModal() { document.getElementById('add-nats-client-modal').style.display = 'none'; }
     showConfirmDeleteModal() { document.getElementById('confirm-delete-nats-client-modal').style.display = 'flex'; }
     hideConfirmDeleteModal() { document.getElementById('confirm-delete-nats-client-modal').style.display = 'none'; }
 
@@ -243,9 +156,6 @@ class NatsClientManager {
 }
 
 // Global wrappers
-function showAddNatsClientModal()           { natsClientManager.showAddClientModal(); }
-function hideAddNatsClientModal()           { natsClientManager.hideAddClientModal(); }
-function addNatsClient()                    { natsClientManager.addClient(); }
 function refreshNatsClients()               { natsClientManager.refreshClients(); }
 function hideConfirmDeleteNatsClientModal() { natsClientManager.hideConfirmDeleteModal(); }
 function confirmDeleteNatsClient()          { natsClientManager.confirmDeleteClient(); }
@@ -253,7 +163,5 @@ function confirmDeleteNatsClient()          { natsClientManager.confirmDeleteCli
 let natsClientManager;
 document.addEventListener('DOMContentLoaded', () => { natsClientManager = new NatsClientManager(); });
 document.addEventListener('click', e => {
-    if (!e.target.classList.contains('modal')) return;
-    if (e.target.id === 'add-nats-client-modal') natsClientManager.hideAddClientModal();
-    else if (e.target.id === 'confirm-delete-nats-client-modal') natsClientManager.hideConfirmDeleteModal();
+    if (e.target.classList.contains('modal') && e.target.id === 'confirm-delete-nats-client-modal') natsClientManager.hideConfirmDeleteModal();
 });

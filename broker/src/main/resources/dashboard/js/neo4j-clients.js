@@ -10,32 +10,8 @@ class Neo4jClientManager {
     }
 
     async init() {
-        console.log('Initializing Neo4j Client Manager...');
-        await this.loadClusterNodes();
         await this.loadClients();
         setInterval(() => this.loadClients(), 30000);
-    }
-
-    async loadClusterNodes() {
-        try {
-            const query = `
-                query GetBrokers { brokers { nodeId isCurrent } }
-            `;
-            const result = await this.client.query(query);
-            this.clusterNodes = result.brokers || [];
-            const nodeSelect = document.getElementById('neo4j-client-node');
-            if (nodeSelect) {
-                nodeSelect.innerHTML = '<option value="">Select Node...</option>';
-                this.clusterNodes.forEach(node => {
-                    const option = document.createElement('option');
-                    option.value = node.nodeId;
-                    option.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
-                    nodeSelect.appendChild(option);
-                });
-            }
-        } catch (e) {
-            console.error('Error loading cluster nodes', e);
-        }
     }
 
     async loadClients() {
@@ -119,56 +95,6 @@ class Neo4jClientManager {
         });
     }
 
-    async addClient() {
-        const form = document.getElementById('add-neo4j-client-form');
-        if (!form.checkValidity()) { form.reportValidity(); return; }
-
-        // Parse topic filters from textarea
-        const topicFiltersText = document.getElementById('neo4j-client-topic-filters').value.trim();
-        const topicFilters = topicFiltersText
-            .split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0);
-
-        const clientData = {
-            name: document.getElementById('neo4j-client-name').value.trim(),
-            namespace: document.getElementById('neo4j-client-namespace').value.trim(),
-            nodeId: document.getElementById('neo4j-client-node').value,
-            enabled: document.getElementById('neo4j-client-enabled').checked,
-            config: {
-                url: document.getElementById('neo4j-client-url').value.trim(),
-                username: document.getElementById('neo4j-client-username').value.trim(),
-                password: document.getElementById('neo4j-client-password').value,
-                topicFilters: topicFilters,
-                queueSize: parseInt(document.getElementById('neo4j-client-queue-size').value),
-                batchSize: parseInt(document.getElementById('neo4j-client-batch-size').value),
-                reconnectDelayMs: parseInt(document.getElementById('neo4j-client-reconnect-delay').value)
-            }
-        };
-
-        try {
-            const mutation = `
-                mutation CreateNeo4jClient($input: Neo4jClientInput!) {
-                    neo4jClient {
-                        create(input: $input) { success errors client { name enabled } }
-                    }
-                }
-            `;
-            const result = await this.client.query(mutation, { input: clientData });
-            if (result.neo4jClient.create.success) {
-                this.hideAddClientModal();
-                await this.loadClients();
-                this.showSuccess(`Neo4j client "${clientData.name}" added successfully`);
-            } else {
-                const errors = result.neo4jClient.create.errors || ['Unknown error'];
-                this.showError('Failed to add Neo4j client: ' + errors.join(', '));
-            }
-        } catch (e) {
-            console.error('Error adding Neo4j client:', e);
-            this.showError('Failed to add Neo4j client: ' + e.message);
-        }
-    }
-
     async toggleClient(clientName, enabled) {
         try {
             const mutation = `
@@ -222,18 +148,6 @@ class Neo4jClientManager {
     }
 
     // UI helpers
-    showAddClientModal() {
-        document.getElementById('add-neo4j-client-modal').style.display = 'flex';
-        document.getElementById('add-neo4j-client-form').reset();
-        document.getElementById('neo4j-client-enabled').checked = true;
-        document.getElementById('neo4j-client-url').value = 'bolt://localhost:7687';
-        document.getElementById('neo4j-client-username').value = 'neo4j';
-        document.getElementById('neo4j-client-topic-filters').value = '#';
-        document.getElementById('neo4j-client-queue-size').value = '10000';
-        document.getElementById('neo4j-client-batch-size').value = '100';
-        document.getElementById('neo4j-client-reconnect-delay').value = '5000';
-    }
-    hideAddClientModal() { document.getElementById('add-neo4j-client-modal').style.display = 'none'; }
     showConfirmDeleteModal() { document.getElementById('confirm-delete-neo4j-client-modal').style.display = 'flex'; }
     hideConfirmDeleteModal() { document.getElementById('confirm-delete-neo4j-client-modal').style.display = 'none'; }
 
@@ -247,9 +161,6 @@ class Neo4jClientManager {
 }
 
 // Global wrappers
-function showAddNeo4jClientModal() { neo4jClientManager.showAddClientModal(); }
-function hideAddNeo4jClientModal() { neo4jClientManager.hideAddClientModal(); }
-function addNeo4jClient() { neo4jClientManager.addClient(); }
 function refreshNeo4jClients() { neo4jClientManager.refreshClients(); }
 function hideConfirmDeleteNeo4jClientModal() { neo4jClientManager.hideConfirmDeleteModal(); }
 function confirmDeleteNeo4jClient() { neo4jClientManager.confirmDeleteClient(); }
@@ -258,4 +169,4 @@ function confirmDeleteNeo4jClient() { neo4jClientManager.confirmDeleteClient(); 
 let neo4jClientManager;
 document.addEventListener('DOMContentLoaded', () => { neo4jClientManager = new Neo4jClientManager(); });
 
-document.addEventListener('click', e => { if (e.target.classList.contains('modal')) { if (e.target.id === 'add-neo4j-client-modal') neo4jClientManager.hideAddClientModal(); else if (e.target.id === 'confirm-delete-neo4j-client-modal') neo4jClientManager.hideConfirmDeleteModal(); }});
+document.addEventListener('click', e => { if (e.target.classList.contains('modal') && e.target.id === 'confirm-delete-neo4j-client-modal') neo4jClientManager.hideConfirmDeleteModal(); });

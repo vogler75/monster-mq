@@ -16,6 +16,14 @@ class NatsClientDetailManager {
     async init() {
         const urlParams = new URLSearchParams(window.location.search);
         this.clientName = urlParams.get('client');
+        this.isNew = urlParams.get('new') === 'true';
+
+        if (this.isNew) {
+            await this.loadClusterNodes();
+            this.showNewClientForm();
+            return;
+        }
+
         if (!this.clientName) {
             this.showError('No NATS client specified');
             return;
@@ -85,6 +93,47 @@ class NatsClientDetailManager {
         } finally {
             this.showLoading(false);
         }
+    }
+
+    showNewClientForm() {
+        document.getElementById('page-title').textContent = 'Add NATS Client';
+        document.getElementById('page-subtitle').textContent = 'Create a new NATS consumer/producer client';
+
+        document.getElementById('client-name').value = '';
+        document.getElementById('client-name').disabled = false;
+        document.getElementById('client-namespace').value = '';
+        document.getElementById('client-servers').value = 'nats://localhost:4222';
+        document.getElementById('client-auth-type').value = 'ANONYMOUS';
+        document.getElementById('client-username').value = '';
+        document.getElementById('client-password').value = '';
+        document.getElementById('client-token').value = '';
+        document.getElementById('client-tls-ca').value = '';
+        document.getElementById('client-jetstream').checked = false;
+        document.getElementById('client-stream-name').value = '';
+        document.getElementById('client-durable-name').value = '';
+        document.getElementById('client-connect-timeout').value = '5000';
+        document.getElementById('client-reconnect-delay').value = '5000';
+        document.getElementById('client-max-reconnects').value = '-1';
+        document.getElementById('client-enabled').checked = true;
+
+        this.onAuthTypeChange('ANONYMOUS');
+        this.onJetStreamChange(false);
+
+        const toggleBtn = document.getElementById('toggle-client-btn');
+        if (toggleBtn) toggleBtn.style.display = 'none';
+        const deleteBtn = document.getElementById('delete-client-btn');
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        const addressesSection = document.getElementById('addresses-section');
+        if (addressesSection) addressesSection.style.display = 'none';
+        const metricsSection = document.getElementById('metrics-section');
+        if (metricsSection) metricsSection.style.display = 'none';
+        const timestampsRow = document.getElementById('timestamps-row');
+        if (timestampsRow) timestampsRow.style.display = 'none';
+
+        const saveBtn = document.getElementById('save-client-btn');
+        if (saveBtn) saveBtn.innerHTML = saveBtn.innerHTML.replace('Save Client', 'Create Client');
+
+        document.getElementById('client-content').style.display = 'block';
     }
 
     renderClientInfo() {
@@ -326,14 +375,9 @@ class NatsClientDetailManager {
 
     // ─── Save / Toggle / Delete ───────────────────────────────────────────────
 
-    async saveClient() {
-        const form = document.getElementById('client-form');
-        if (!form.checkValidity()) { form.reportValidity(); return; }
-
+    collectFormData() {
         const authType = document.getElementById('client-auth-type').value;
-        const serversRaw = document.getElementById('client-servers').value.trim();
-        const servers = serversRaw.split(',').map(s => s.trim()).filter(s => s.length > 0);
-
+        const servers = document.getElementById('client-servers').value.trim().split(',').map(s => s.trim()).filter(s => s.length > 0);
         const configInput = {
             servers,
             authType,
@@ -342,7 +386,6 @@ class NatsClientDetailManager {
             connectTimeoutMs: parseInt(document.getElementById('client-connect-timeout').value) || 5000,
             maxReconnectAttempts: parseInt(document.getElementById('client-max-reconnects').value),
         };
-
         if (authType === 'USERNAME_PASSWORD') {
             configInput.username = document.getElementById('client-username').value.trim();
             const pwd = document.getElementById('client-password').value;
@@ -354,31 +397,57 @@ class NatsClientDetailManager {
             const ca = document.getElementById('client-tls-ca').value.trim();
             if (ca) configInput.tlsCaCertPath = ca;
         }
-
         if (configInput.useJetStream) {
             configInput.streamName = document.getElementById('client-stream-name').value.trim();
             configInput.consumerDurableName = document.getElementById('client-durable-name').value.trim();
         }
-
-        const updatedInput = {
+        return {
             name: document.getElementById('client-name').value.trim(),
             namespace: document.getElementById('client-namespace').value.trim(),
             nodeId: document.getElementById('client-node').value,
             enabled: document.getElementById('client-enabled').checked,
             config: configInput
         };
+    }
+
+    async saveClient() {
+        const form = document.getElementById('client-form');
+        if (!form.checkValidity()) { form.reportValidity(); return; }
+
+        const data = this.collectFormData();
+
+        if (this.isNew) {
+            try {
+                const mutation = `
+                    mutation CreateNatsClient($input: NatsClientInput!) {
+                        natsClient { create(input: $input) { success errors client { name } } }
+                    }
+                `;
+                const result = await this.client.query(mutation, { input: data });
+                if (result.natsClient.create.success) {
+                    this.showSuccess(`NATS client "${data.name}" created successfully`);
+                    setTimeout(() => { window.location.href = '/pages/nats-clients.html'; }, 800);
+                } else {
+                    const errors = result.natsClient.create.errors || ['Unknown error'];
+                    this.showError('Failed to create NATS client: ' + errors.join(', '));
+                }
+            } catch (e) {
+                console.error('Error creating NATS client', e);
+                this.showError('Failed to create NATS client: ' + e.message);
+            }
+            return;
+        }
 
         const prevNodeId = this.clientData ? this.clientData.nodeId : null;
-
         try {
             const mutation = `
                 mutation UpdateNatsClient($name: String!, $input: NatsClientInput!) {
                     natsClient { update(name: $name, input: $input) { success errors client { name } } }
                 }
             `;
-            const result = await this.client.query(mutation, { name: this.clientName, input: updatedInput });
+            const result = await this.client.query(mutation, { name: this.clientName, input: data });
             if (result.natsClient.update.success) {
-                const newName = updatedInput.name;
+                const newName = data.name;
                 if (newName !== this.clientName) {
                     this.clientName = newName;
                     const url = new URL(window.location.href);
@@ -386,8 +455,8 @@ class NatsClientDetailManager {
                     window.history.replaceState({}, '', url.toString());
                 }
                 await this.loadClientData();
-                if (prevNodeId && updatedInput.nodeId && updatedInput.nodeId !== prevNodeId) {
-                    await this.reassignClient(updatedInput.nodeId);
+                if (prevNodeId && data.nodeId && data.nodeId !== prevNodeId) {
+                    await this.reassignClient(data.nodeId);
                 }
                 this.showSuccess('NATS client updated successfully');
             } else {

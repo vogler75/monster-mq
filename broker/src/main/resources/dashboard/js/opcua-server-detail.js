@@ -12,6 +12,14 @@ class OpcUaServerDetailManager {
     async init() {
         const urlParams = new URLSearchParams(window.location.search);
         this.serverName = urlParams.get('server');
+        this.isNew = urlParams.get('new') === 'true';
+
+        if (this.isNew) {
+            await this.loadClusterNodes();
+            this.showNewServerForm();
+            return;
+        }
+
         if (!this.serverName) {
             this.showError('No OPC UA server specified');
             return;
@@ -143,6 +151,43 @@ class OpcUaServerDetailManager {
         document.getElementById('server-content').style.display = 'block';
     }
 
+    showNewServerForm() {
+        document.getElementById('page-title').textContent = 'Add OPC UA Server';
+        document.getElementById('page-subtitle').textContent = 'Create a new OPC UA server';
+
+        document.getElementById('server-name').value = '';
+        document.getElementById('server-name').disabled = false;
+        document.getElementById('server-namespace').value = '';
+        document.getElementById('server-port').value = '4840';
+        document.getElementById('server-path').value = 'monstermq';
+        document.getElementById('server-hostname').value = '';
+        document.getElementById('server-bind-address').value = '';
+        document.getElementById('server-namespace-uri').value = '';
+        document.getElementById('server-update-interval').value = '1000';
+        document.getElementById('server-buffer-size').value = '1000';
+        document.getElementById('server-enabled').checked = true;
+
+        // Hide status badge, toggle/delete buttons, addresses section, timestamps
+        const statusBadge = document.getElementById('server-status');
+        if (statusBadge) statusBadge.style.display = 'none';
+        const toggleBtn = document.getElementById('toggle-server-btn');
+        if (toggleBtn) toggleBtn.style.display = 'none';
+        const deleteBtn = document.getElementById('delete-server-btn');
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        const addressesSection = document.querySelector('.addresses-section');
+        if (addressesSection) addressesSection.style.display = 'none';
+        const statusSection = document.querySelector('.server-status-section');
+        if (statusSection) statusSection.style.display = 'none';
+        const timestampsRow = document.getElementById('server-timestamps-row');
+        if (timestampsRow) timestampsRow.style.display = 'none';
+
+        // Update save button
+        const saveBtn = document.getElementById('save-server-btn');
+        if (saveBtn) saveBtn.innerHTML = saveBtn.innerHTML.replace('Save Server', 'Create Server');
+
+        document.getElementById('server-content').style.display = 'block';
+    }
+
     renderAddresses() {
         if (!this.serverData || !this.serverData.addresses) return;
         const addresses = this.serverData.addresses;
@@ -193,7 +238,7 @@ class OpcUaServerDetailManager {
             return;
         }
 
-        const updatedInput = {
+        const serverInput = {
             name: document.getElementById('server-name').value.trim(),
             namespace: document.getElementById('server-namespace').value.trim(),
             nodeId: document.getElementById('server-node').value,
@@ -202,12 +247,38 @@ class OpcUaServerDetailManager {
             path: document.getElementById('server-path').value.trim(),
             hostname: document.getElementById('server-hostname').value.trim() || null,
             bindAddress: document.getElementById('server-bind-address').value.trim() || null,
-            namespaceUri: document.getElementById('server-namespace-uri').value.trim(),
+            namespaceUri: document.getElementById('server-namespace-uri').value.trim() || null,
             updateInterval: parseInt(document.getElementById('server-update-interval').value),
-            bufferSize: parseInt(document.getElementById('server-buffer-size').value),
-            addresses: this.serverData?.addresses || []
+            bufferSize: parseInt(document.getElementById('server-buffer-size').value)
         };
 
+        if (this.isNew) {
+            try {
+                const mutation = `
+                    mutation CreateOpcUaServer($config: OpcUaServerConfigInput!) {
+                        opcUaServer {
+                            create(config: $config) {
+                                success
+                                message
+                            }
+                        }
+                    }
+                `;
+                const result = await this.client.query(mutation, { config: serverInput });
+                if (result.opcUaServer.create.success) {
+                    this.showSuccess(`OPC UA server "${serverInput.name}" created successfully`);
+                    setTimeout(() => { window.location.href = '/pages/opcua-servers.html'; }, 800);
+                } else {
+                    this.showError('Failed to create OPC UA server: ' + (result.opcUaServer.create.message || 'Unknown error'));
+                }
+            } catch (e) {
+                console.error('Error creating OPC UA server', e);
+                this.showError('Failed to create OPC UA server: ' + e.message);
+            }
+            return;
+        }
+
+        const updatedInput = { ...serverInput, addresses: this.serverData?.addresses || [] };
         const prevNodeId = this.serverData ? this.serverData.nodeId : null;
 
         try {

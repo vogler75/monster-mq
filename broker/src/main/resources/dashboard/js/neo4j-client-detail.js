@@ -13,6 +13,12 @@ class Neo4jClientDetailManager {
     async init() {
         const urlParams = new URLSearchParams(window.location.search);
         this.clientName = urlParams.get('client');
+        this.isNew = urlParams.get('new') === 'true';
+        if (this.isNew) {
+            await this.loadClusterNodes();
+            this.showNewClientForm();
+            return;
+        }
         if (!this.clientName) {
             this.showError('No Neo4j client specified');
             return;
@@ -22,6 +28,20 @@ class Neo4jClientDetailManager {
         // Periodic metrics refresh
         this.metricsTimer = setInterval(() => this.refreshMetrics(), 10000);
         window.addEventListener('beforeunload', () => this.cleanup());
+    }
+
+    showNewClientForm() {
+        document.getElementById('page-title').textContent = 'New Neo4j Client';
+        document.getElementById('page-subtitle').textContent = 'Create a new Neo4j graph database client';
+        document.getElementById('client-topic-filters').value = '#';
+        document.getElementById('client-enabled').checked = true;
+        const deleteBtn = document.getElementById('delete-client-btn');
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        const metricsSection = document.getElementById('metrics-section');
+        if (metricsSection) metricsSection.style.display = 'none';
+        const timestampsRow = document.getElementById('timestamps-row');
+        if (timestampsRow) timestampsRow.style.display = 'none';
+        document.getElementById('client-content').style.display = 'block';
     }
 
     cleanup() {
@@ -165,22 +185,11 @@ class Neo4jClientDetailManager {
         }
     }
 
-    async saveClient() {
-        const form = document.getElementById('client-form');
-        if (!form.checkValidity()) { form.reportValidity(); return; }
-
-        // Parse topic filters from textarea
+    collectFormData() {
         const topicFiltersText = document.getElementById('client-topic-filters').value.trim();
-        const topicFilters = topicFiltersText
-            .split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0);
-
-        // Handle password - only include if changed
-        const passwordField = document.getElementById('client-password');
-        const password = passwordField.value.trim();
-
-        const updatedInput = {
+        const topicFilters = topicFiltersText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const password = document.getElementById('client-password').value.trim();
+        return {
             name: document.getElementById('client-name').value.trim(),
             namespace: document.getElementById('client-namespace').value.trim(),
             nodeId: document.getElementById('client-node').value,
@@ -189,16 +198,46 @@ class Neo4jClientDetailManager {
                 url: document.getElementById('client-url').value.trim(),
                 username: document.getElementById('client-username').value.trim(),
                 password: password.length > 0 ? password : this.clientData?.config?.password || '',
-                topicFilters: topicFilters,
+                topicFilters,
                 queueSize: parseInt(document.getElementById('client-queue-size').value),
                 batchSize: parseInt(document.getElementById('client-batch-size').value),
                 reconnectDelayMs: parseInt(document.getElementById('client-reconnect-delay').value),
                 maxChangeRateSeconds: parseInt(document.getElementById('client-max-change-rate').value)
             }
         };
+    }
+
+    async saveClient() {
+        const form = document.getElementById('client-form');
+        if (!form.checkValidity()) { form.reportValidity(); return; }
+
+        const input = this.collectFormData();
+
+        if (this.isNew) {
+            try {
+                const mutation = `
+                    mutation CreateNeo4jClient($input: Neo4jClientInput!) {
+                        neo4jClient {
+                            create(input: $input) { success errors client { name } }
+                        }
+                    }
+                `;
+                const result = await this.client.query(mutation, { input });
+                if (result.neo4jClient.create.success) {
+                    this.showSuccess('Neo4j client created successfully');
+                    setTimeout(() => { window.location.href = `/pages/neo4j-client-detail.html?client=${encodeURIComponent(input.name)}`; }, 800);
+                } else {
+                    const errors = result.neo4jClient.create.errors || ['Unknown error'];
+                    this.showError('Failed to create Neo4j client: ' + errors.join(', '));
+                }
+            } catch (e) {
+                console.error('Error creating Neo4j client', e);
+                this.showError('Failed to create Neo4j client: ' + e.message);
+            }
+            return;
+        }
 
         const prevNodeId = this.clientData ? this.clientData.nodeId : null;
-
         try {
             const mutation = `
                 mutation UpdateNeo4jClient($name: String!, $input: Neo4jClientInput!) {
@@ -207,10 +246,10 @@ class Neo4jClientDetailManager {
                     }
                 }
             `;
-            const result = await this.client.query(mutation, { name: this.clientName, input: updatedInput });
+            const result = await this.client.query(mutation, { name: this.clientName, input });
             if (result.neo4jClient.update.success) {
                 // Handle potential rename
-                const newName = updatedInput.name;
+                const newName = input.name;
                 if (newName !== this.clientName) {
                     this.clientName = newName;
                     const url = new URL(window.location.href);
@@ -220,8 +259,8 @@ class Neo4jClientDetailManager {
                 // Reload data first
                 await this.loadClientData();
                 // If node changed, explicitly call reassign mutation for proper event semantics
-                if (prevNodeId && updatedInput.nodeId && updatedInput.nodeId !== prevNodeId) {
-                    await this.reassignClient(updatedInput.nodeId);
+                if (prevNodeId && input.nodeId && input.nodeId !== prevNodeId) {
+                    await this.reassignClient(input.nodeId);
                 }
                 this.showSuccess('Neo4j client updated successfully');
             } else {

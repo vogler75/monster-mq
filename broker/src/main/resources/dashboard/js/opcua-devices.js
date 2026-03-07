@@ -18,42 +18,10 @@ class OpcUaDeviceManager {
         // UI setup is now handled by sidebar.js
 
         // Load initial data
-        await this.loadClusterNodes();
         await this.loadDevices();
 
         // Set up periodic refresh
         setInterval(() => this.loadDevices(), 30000); // Refresh every 30 seconds
-    }
-
-    async loadClusterNodes() {
-        try {
-            const query = `
-                query GetBrokers {
-                    brokers {
-                        nodeId
-                        isCurrent
-                    }
-                }
-            `;
-
-            const result = await this.client.query(query);
-            this.clusterNodes = result.brokers || [];
-
-            // Populate node selector in the add device form
-            const nodeSelect = document.getElementById('device-node');
-            if (nodeSelect) {
-                nodeSelect.innerHTML = '<option value="">Select Node...</option>';
-                this.clusterNodes.forEach(node => {
-                    const option = document.createElement('option');
-                    option.value = node.nodeId;
-                    option.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
-                    nodeSelect.appendChild(option);
-                });
-            }
-
-        } catch (error) {
-            console.error('Error loading cluster nodes:', error);
-        }
     }
 
     async loadDevices() {
@@ -214,83 +182,6 @@ class OpcUaDeviceManager {
         });
     }
 
-    async addDevice() {
-        const form = document.getElementById('add-device-form');
-        if (!form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
-
-        const deviceData = {
-            name: document.getElementById('device-name').value.trim(),
-            namespace: document.getElementById('device-namespace').value.trim(),
-            nodeId: document.getElementById('device-node').value,
-            enabled: document.getElementById('device-enabled').checked,
-            config: {
-                endpointUrl: document.getElementById('device-endpoint').value.trim(),
-                updateEndpointUrl: document.getElementById('device-update-endpoint').checked,
-                securityPolicy: document.getElementById('device-security').value,
-                username: document.getElementById('device-username').value.trim() || null,
-                password: document.getElementById('device-password').value || null,
-                subscriptionSamplingInterval: parseFloat(document.getElementById('subscription-sampling').value),
-                keepAliveFailuresAllowed: parseInt(document.getElementById('keep-alive-failures').value),
-                reconnectDelay: parseInt(document.getElementById('reconnect-delay').value),
-                connectionTimeout: parseInt(document.getElementById('connection-timeout').value),
-                requestTimeout: parseInt(document.getElementById('request-timeout').value),
-                monitoringParameters: {
-                    bufferSize: parseInt(document.getElementById('monitoring-buffer-size').value),
-                    samplingInterval: parseFloat(document.getElementById('monitoring-sampling').value),
-                    discardOldest: document.getElementById('monitoring-discard-oldest').checked
-                },
-                certificateConfig: {
-                    securityDir: document.getElementById('cert-security-dir').value.trim(),
-                    applicationName: document.getElementById('cert-application-name').value.trim(),
-                    applicationUri: document.getElementById('cert-application-uri').value.trim(),
-                    organization: document.getElementById('cert-organization').value.trim(),
-                    organizationalUnit: document.getElementById('cert-organizational-unit').value.trim(),
-                    localityName: document.getElementById('cert-locality').value.trim(),
-                    countryCode: document.getElementById('cert-country').value.trim(),
-                    createSelfSigned: document.getElementById('cert-create-self-signed').checked,
-                    keystorePassword: document.getElementById('cert-keystore-password').value || null,
-                    validateServerCertificate: document.getElementById('cert-validate-server-certificate').checked,
-                    autoAcceptServerCertificates: document.getElementById('cert-auto-accept-server-certificates').checked
-                }
-            }
-        };
-
-        try {
-            const mutation = `
-                mutation AddOpcUaDevice($input: OpcUaDeviceInput!) {
-                    opcUaDevice {
-                        add(input: $input) {
-                            success
-                            errors
-                            device {
-                                name
-                                enabled
-                            }
-                        }
-                    }
-                }
-            `;
-
-            const result = await this.client.query(mutation, { input: deviceData });
-
-            if (result.opcUaDevice.add.success) {
-                this.hideAddDeviceModal();
-                await this.loadDevices();
-                this.showSuccess(`Device "${deviceData.name}" added successfully`);
-            } else {
-                const errors = result.opcUaDevice.add.errors || ['Unknown error'];
-                this.showError('Failed to add device: ' + errors.join(', '));
-            }
-
-        } catch (error) {
-            console.error('Error adding device:', error);
-            this.showError('Failed to add device: ' + error.message);
-        }
-    }
-
     async toggleDevice(deviceName, enabled) {
         try {
             const mutation = `
@@ -366,18 +257,6 @@ class OpcUaDeviceManager {
     }
 
     // UI Helper Methods
-    showAddDeviceModal() {
-        document.getElementById('add-device-modal').style.display = 'flex';
-        // Reset form
-        document.getElementById('add-device-form').reset();
-        document.getElementById('device-enabled').checked = true;
-        document.getElementById('device-update-endpoint').checked = true;
-    }
-
-    hideAddDeviceModal() {
-        document.getElementById('add-device-modal').style.display = 'none';
-    }
-
     showConfirmDeleteModal() {
         document.getElementById('confirm-delete-modal').style.display = 'flex';
     }
@@ -439,18 +318,6 @@ class OpcUaDeviceManager {
 }
 
 // Global functions for onclick handlers
-function showAddDeviceModal() {
-    opcuaManager.showAddDeviceModal();
-}
-
-function hideAddDeviceModal() {
-    opcuaManager.hideAddDeviceModal();
-}
-
-function addDevice() {
-    opcuaManager.addDevice();
-}
-
 function hideConfirmDeleteModal() {
     opcuaManager.hideConfirmDeleteModal();
 }
@@ -472,9 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Handle modal clicks (close when clicking outside)
 document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal')) {
-        if (e.target.id === 'add-device-modal') {
-            opcuaManager.hideAddDeviceModal();
-        } else if (e.target.id === 'confirm-delete-modal') {
+        if (e.target.id === 'confirm-delete-modal') {
             opcuaManager.hideConfirmDeleteModal();
         }
     }

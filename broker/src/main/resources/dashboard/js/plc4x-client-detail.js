@@ -12,12 +12,6 @@ class Plc4xClientDetailManager {
     }
 
     async init() {
-        console.log('Initializing PLC4X Client Detail Manager...');
-
-        // Since user management is disabled, skip authentication check
-        console.log('Initializing without authentication check (user management disabled)');
-
-        // Get client name from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         this.clientName = urlParams.get('client');
         this.isNewMode = urlParams.get('new') === 'true';

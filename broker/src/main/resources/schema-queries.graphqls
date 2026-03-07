@@ -154,6 +154,10 @@ type Query {
         archiveGroup: String = "Default"
     ): [Topic!]!
 
+    # Get the full broker configuration as loaded from config.yaml
+    # Exposes enabled features, ports, storage backends, and extension settings
+    brokerConfig: BrokerConfig!
+
     # Get broker node information and metrics for monitoring cluster health
     # Returns current metrics, session counts, and node status information
     broker(

@@ -13,122 +13,35 @@
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        .table-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.5rem;
-            background: var(--dark-bg);
-            border-bottom: 1px solid var(--dark-border);
-            border-radius: 12px 12px 0 0;
-        }
-        .table-title h2 {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-        .table-actions {
-            display: flex;
-            gap: 0.75rem;
-            align-items: center;
-        }
-        .btn-icon {
-            padding: 0.6rem;
-            min-width: auto;
-            width: auto;
-        }
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            border: none;
-            cursor: pointer;
-            text-decoration: none;
-        }
-        .action-buttons {
-            display: flex;
-            gap: 0.5rem;
-            justify-content: center;
-            align-items: center;
-        }
+        .table-header { display:flex; justify-content:space-between; align-items:center; padding:1.5rem; background:var(--dark-bg); border-bottom:1px solid var(--dark-border); border-radius:12px 12px 0 0; }
+        .table-title h2 { margin:0; color:var(--text-primary); font-size:1.25rem; font-weight:600; }
+        .table-actions { display:flex; gap:0.75rem; align-items:center; }
+        .btn-icon { padding:0; }
+        .btn { display:inline-flex; align-items:center; gap:0.5rem; border-radius:8px; font-weight:500; transition:all 0.2s ease; border:none; cursor:pointer; text-decoration:none; }
+        .action-buttons { display:flex; gap:0.5rem; justify-content:center; align-items:center; }
         .btn-view { color: var(--monster-purple); }
-        .btn-view:hover {
-            background: rgba(124, 58, 237, 0.1);
-            border-color: var(--monster-purple);
-        }
+        .btn-view:hover { background: rgba(124,58,237,0.1); }
         .btn-play { color: var(--monster-green); }
-        .btn-play:hover {
-            background: rgba(16, 185, 129, 0.1);
-            border-color: var(--monster-green);
-        }
+        .btn-play:hover { background: rgba(16,185,129,0.1); }
         .btn-pause { color: var(--monster-orange); }
-        .btn-pause:hover {
-            background: rgba(249, 115, 22, 0.1);
-            border-color: var(--monster-orange);
-        }
-        .btn-delete { color: var(--monster-red); }
-        .btn-delete:hover {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: var(--monster-red);
-        }
-        .data-table {
-            background: var(--dark-surface);
-            border-radius: 12px;
-            border: 1px solid var(--dark-border);
-            overflow-x: auto;
-            box-shadow: var(--card-shadow);
-        }
-        .data-table table {
-            margin: 0;
-            border-radius: 0;
-            border: none;
-            background: transparent;
-        }
-        .data-table thead th {
-            background: var(--dark-surface-2);
-            padding: 1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            border-bottom: 1px solid var(--dark-border);
-        }
-        .data-table tbody td {
-            padding: 1rem;
-            vertical-align: middle;
-            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
-        }
-        .data-table tbody tr:hover {
-            background: rgba(71, 85, 105, 0.1);
-        }
-        .status-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 12px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .status-badge.enabled {
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--monster-green);
-        }
-        .status-badge.disabled {
-            background: rgba(239, 68, 68, 0.1);
-            color: var(--monster-red);
-        }
-        .metric-value {
-            font-family: 'Courier New', monospace;
-            color: var(--monster-cyan);
-            font-weight: 600;
-        }
-        .rule-count {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-        }
+        .btn-pause:hover { background: rgba(249,115,22,0.1); }
+        .data-table { background:var(--dark-surface); border-radius:12px; border:1px solid var(--dark-border); overflow-x:auto; box-shadow:var(--card-shadow); }
+        .data-table table { margin:0; border-radius:0; border:none; background:transparent; }
+        .data-table thead th { background:var(--dark-surface-2); padding:1rem; font-weight:600; color:var(--text-primary); border-bottom:1px solid var(--dark-border); }
+        .data-table tbody td { padding:1rem; vertical-align:middle; border-bottom:1px solid rgba(71,85,105,0.3); }
+        .data-table tbody tr:hover { background:rgba(71,85,105,0.1); }
+        .status-badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.4rem 0.8rem; border-radius:20px; font-size:0.75rem; font-weight:600; text-transform:uppercase; }
+        .status-enabled { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3); }
+        .status-disabled { background:rgba(239,68,68,0.15); color:var(--monster-red); border:1px solid rgba(239,68,68,0.3); }
+        .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; justify-content:center; align-items:center; z-index:9999; padding:2rem; }
+        .modal-content { background:var(--dark-surface); border-radius:12px; border:1px solid var(--dark-border); max-width:600px; width:100%; }
+        .modal-header { padding:1.5rem 2rem; border-bottom:1px solid var(--dark-border); display:flex; justify-content:space-between; align-items:center; }
+        .modal-header h3 { margin:0; color:var(--text-primary); }
+        .modal-close { background:none; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer; }
+        .modal-body { padding:2rem; }
+        .modal-footer { padding:1.5rem 2rem; border-top:1px solid var(--dark-border); display:flex; justify-content:flex-end; gap:1rem; }
+        .metric-value-table { font-family:'Courier New', monospace; color:var(--monster-teal); font-weight:600; }
+        .rule-count { color:var(--text-secondary); font-size:0.875rem; }
     </style>
 </head>
 <body>
@@ -153,42 +66,87 @@
                 <span class="brand-name">MonsterMQ</span>
             </div>
             <button class="sidebar-toggle" onclick="toggleSidebar()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="15,18 9,12 15,6"></polyline>
                 </svg>
             </button>
         </div>
         <nav class="sidebar-nav" id="sidebar-nav"></nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">U</div>
+                <div class="user-details">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-role">Administrator</div>
+                </div>
+            </div>
+        </div>
     </aside>
 
     <div class="main-content" id="main-content">
         <div class="container">
-            <div class="data-table">
-                <div class="table-header">
-                    <div class="table-title">
-                        <h2>⚡ SparkplugB Decoders</h2>
+            <div class="page-header">
+                <h1 class="page-title">SparkplugB Decoder Management</h1>
+                <p class="page-subtitle">Configure and manage SparkplugB message decoders</p>
+            </div>
+
+            <div class="metrics-grid" style="margin-bottom: 2rem;">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Decoders</span>
+                        <div class="metric-icon">⚡</div>
                     </div>
+                    <div class="metric-value" id="total-decoders">0</div>
+                    <div class="metric-label">Configured Decoders</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Enabled Decoders</span>
+                        <div class="metric-icon">🟢</div>
+                    </div>
+                    <div class="metric-value" id="enabled-decoders">0</div>
+                    <div class="metric-label">Active Decoders</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Local Decoders</span>
+                        <div class="metric-icon">📍</div>
+                    </div>
+                    <div class="metric-value" id="local-decoders">0</div>
+                    <div class="metric-label">On Current Node</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Rules</span>
+                        <div class="metric-icon">📋</div>
+                    </div>
+                    <div class="metric-value" id="total-rules">0</div>
+                    <div class="metric-label">Decoding Rules</div>
+                </div>
+            </div>
+
+            <div id="decoders-table" class="data-table">
+                <div class="table-header">
+                    <div class="table-title"><h2>SparkplugB Decoders</h2></div>
                     <div class="table-actions">
-                        <button class="btn btn-icon" onclick="loadDecoders()" title="Refresh">
-                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        <button class="btn btn-secondary btn-icon" onclick="loadDecoders()" title="Refresh decoders">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                             </svg>
                         </button>
-                        <button class="btn btn-primary" onclick="createDecoder()">
-                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                            </svg>
+                        <a href="/pages/sparkplugb-decoder-detail.html" class="btn btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                             Create Decoder
-                        </button>
+                        </a>
                     </div>
                 </div>
-
                 <table>
                     <thead>
                         <tr>
                             <th>Name</th>
                             <th>Namespace</th>
                             <th>Source</th>
+                            <th>Node Assignment</th>
                             <th>Rules</th>
                             <th>Status</th>
                             <th>Messages In</th>
@@ -197,14 +155,38 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="decodersTableBody">
-                        <tr>
-                            <td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                                Loading decoders...
-                            </td>
-                        </tr>
-                    </tbody>
+                    <tbody id="decodersTableBody"></tbody>
                 </table>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display:none;">
+                <div class="loading-spinner"></div>
+                <span>Loading SparkplugB decoders...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display:none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="confirm-delete-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideConfirmDeleteModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the decoder "<span id="delete-decoder-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteDecoder()">Delete</button>
             </div>
         </div>
     </div>
