@@ -27,6 +27,10 @@ class BrokerConfigManager {
                         graphqlEnabled graphqlPort mqttApiEnabled
                         metricsEnabled
                         genAiEnabled genAiProvider genAiModel
+                        postgresUrl postgresUser
+                        crateDbUrl crateDbUser
+                        mongoDbUrl mongoDbDatabase
+                        sqlitePath
                     }
                 }
             `;
@@ -96,7 +100,57 @@ class BrokerConfigManager {
         this.setText('cfg-genai-provider', cfg.genAiEnabled && cfg.genAiProvider ? cfg.genAiProvider : '-');
         this.setText('cfg-genai-model', cfg.genAiEnabled && cfg.genAiModel ? cfg.genAiModel : '-');
 
+        // Databases
+        this.renderDatabases(cfg);
+
         document.getElementById('config-content').style.display = 'block';
+    }
+
+    renderDatabases(cfg) {
+        const dbs = [];
+        if (cfg.postgresUrl) {
+            dbs.push({ name: 'PostgreSQL', icon: '🐘', items: [
+                { label: 'URL', value: cfg.postgresUrl, mono: true },
+                { label: 'User', value: cfg.postgresUser, mono: true },
+            ]});
+        }
+        if (cfg.crateDbUrl) {
+            dbs.push({ name: 'CrateDB', icon: '📦', items: [
+                { label: 'URL', value: cfg.crateDbUrl, mono: true },
+                { label: 'User', value: cfg.crateDbUser, mono: true },
+            ]});
+        }
+        if (cfg.mongoDbUrl) {
+            dbs.push({ name: 'MongoDB', icon: '🍃', items: [
+                { label: 'URL', value: cfg.mongoDbUrl, mono: true },
+                { label: 'Database', value: cfg.mongoDbDatabase, mono: true },
+            ]});
+        }
+        if (cfg.sqlitePath) {
+            dbs.push({ name: 'SQLite', icon: '💾', items: [
+                { label: 'Path', value: cfg.sqlitePath, mono: true },
+            ]});
+        }
+        const container = document.getElementById('cfg-db-list');
+        if (!container) return;
+        if (dbs.length === 0) {
+            container.innerHTML = '<span style="color:var(--text-muted);font-size:0.9rem;">No databases configured</span>';
+            return;
+        }
+        container.innerHTML = dbs.map(db => `
+            <div style="margin-bottom:1.25rem;">
+                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+                    <span style="font-size:1rem;">${db.icon}</span>
+                    <span style="font-size:0.85rem;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em;">${db.name}</span>
+                </div>
+                <div class="config-grid">
+                    ${db.items.map(it => `
+                        <div class="config-item" style="${it.label === 'URL' || it.label === 'Path' ? 'grid-column:1/-1;' : ''}">
+                            <span class="label">${it.label}</span>
+                            <span class="value${it.mono ? ' monospace' : ''}" style="word-break:break-all;">${it.value || '-'}</span>
+                        </div>`).join('')}
+                </div>
+            </div>`).join('');
     }
 
     badge(type, text) {

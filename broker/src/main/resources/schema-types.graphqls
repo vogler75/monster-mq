@@ -133,6 +133,14 @@ type BrokerConfig {
     genAiEnabled: Boolean!
     genAiProvider: String!
     genAiModel: String!
+    # Database connections (passwords omitted)
+    postgresUrl: String!
+    postgresUser: String!
+    crateDbUrl: String!
+    crateDbUser: String!
+    mongoDbUrl: String!
+    mongoDbDatabase: String!
+    sqlitePath: String!
 }
 
 # Represents a broker node in the MonsterMQ cluster

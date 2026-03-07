@@ -1577,6 +1577,11 @@ class MetricsResolver(
         }
     }
 
+    private fun sanitizeUrl(url: String): String {
+        // Remove password from URLs like mongodb://user:pass@host or scheme://user:pass@host
+        return url.replace(Regex("(://[^:@/]+):([^@/]+)@"), "$1@")
+    }
+
     data class BrokerConfig(
         val nodeId: String,
         val version: String,
@@ -1603,7 +1608,14 @@ class MetricsResolver(
         val metricsEnabled: Boolean,
         val genAiEnabled: Boolean,
         val genAiProvider: String,
-        val genAiModel: String
+        val genAiModel: String,
+        val postgresUrl: String,
+        val postgresUser: String,
+        val crateDbUrl: String,
+        val crateDbUser: String,
+        val mongoDbUrl: String,
+        val mongoDbDatabase: String,
+        val sqlitePath: String
     )
 
     fun brokerConfig(): DataFetcher<BrokerConfig> {
@@ -1637,7 +1649,14 @@ class MetricsResolver(
                 metricsEnabled = config.getJsonObject("Metrics", io.vertx.core.json.JsonObject()).getBoolean("Enabled", true),
                 genAiEnabled = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getBoolean("Enabled", false),
                 genAiProvider = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getString("Provider", ""),
-                genAiModel = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getString("Model", "")
+                genAiModel = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getString("Model", ""),
+                postgresUrl = config.getJsonObject("Postgres", io.vertx.core.json.JsonObject()).getString("Url", ""),
+                postgresUser = config.getJsonObject("Postgres", io.vertx.core.json.JsonObject()).getString("User", ""),
+                crateDbUrl = config.getJsonObject("CrateDB", io.vertx.core.json.JsonObject()).getString("Url", ""),
+                crateDbUser = config.getJsonObject("CrateDB", io.vertx.core.json.JsonObject()).getString("User", ""),
+                mongoDbUrl = sanitizeUrl(config.getJsonObject("MongoDB", io.vertx.core.json.JsonObject()).getString("Url", "")),
+                mongoDbDatabase = config.getJsonObject("MongoDB", io.vertx.core.json.JsonObject()).getString("Database", ""),
+                sqlitePath = config.getJsonObject("SQLite", io.vertx.core.json.JsonObject()).getString("Path", "")
             )
         }
     }
