@@ -645,11 +645,14 @@ class PrometheusServer(
 
     private fun validateAuthentication(ctx: RoutingContext): Boolean {
         if (!userManager.isUserManagementEnabled()) return true
-        if (userManager.isAnonymousEnabled()) return true
 
         val authHeader = ctx.request().getHeader("Authorization")
 
         if (authHeader == null) {
+            if (userManager.isAnonymousEnabled()) {
+                logger.fine("Prometheus API allowed for Anonymous user")
+                return true
+            }
             ctx.response().setStatusCode(401)
                 .putHeader("Content-Type", "application/json")
                 .putHeader("WWW-Authenticate", "Basic realm=\"MonsterMQ Prometheus\"")

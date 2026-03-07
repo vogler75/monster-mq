@@ -749,9 +749,7 @@ class I3xServer(
 
         val authHeader = ctx.request().getHeader("Authorization")
         if (authHeader == null) {
-            // No credentials: allow only if the Anonymous user is enabled
-            val anonymousUser = userManager.getUser("Anonymous")
-            if (anonymousUser != null && anonymousUser.enabled) {
+            if (userManager.isAnonymousEnabled()) {
                 ctx.put("i3x_username", "Anonymous")
                 return true
             }

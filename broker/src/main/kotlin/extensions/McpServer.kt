@@ -201,6 +201,10 @@ class McpServer(
         val token = JwtService.extractTokenFromHeader(authHeader)
 
         if (token == null) {
+            if (userManager.isAnonymousEnabled()) {
+                logger.fine("MCP request allowed for Anonymous user")
+                return true
+            }
             logger.warning("MCP request rejected: No Authorization header")
             ctx.response()
                 .setStatusCode(401)
