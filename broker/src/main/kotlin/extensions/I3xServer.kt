@@ -742,7 +742,7 @@ class I3xServer(
         ok(ctx, result)
     }
 
-    // --- Authentication (mirrors GrafanaServer) ---
+    // --- Authentication ---
 
     private fun validateAuthentication(ctx: RoutingContext): Boolean {
         if (!userManager.isUserManagementEnabled()) return true

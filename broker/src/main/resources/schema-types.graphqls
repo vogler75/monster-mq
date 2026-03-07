@@ -119,8 +119,8 @@ type BrokerConfig {
     # Extensions
     mcpEnabled: Boolean!
     mcpPort: Int!
-    grafanaEnabled: Boolean!
-    grafanaPort: Int!
+    prometheusEnabled: Boolean!
+    prometheusPort: Int!
     i3xEnabled: Boolean!
     i3xPort: Int!
     # GraphQL / HTTP API

@@ -117,6 +117,11 @@ class UserManager(
      * Check if user management is enabled
      */
     fun isUserManagementEnabled(): Boolean = isEnabled
+
+    fun isAnonymousEnabled(): Boolean =
+        config.getJsonObject("UserManagement", JsonObject())
+            .getJsonObject("AnonymousUser", JsonObject())
+            .getBoolean("Enabled", true)
     
     /**
      * Authenticate user with username and password

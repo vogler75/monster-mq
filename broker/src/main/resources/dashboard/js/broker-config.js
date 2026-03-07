@@ -22,7 +22,7 @@ class BrokerConfigManager {
                         sessionStoreType retainedStoreType configStoreType
                         userManagementEnabled anonymousEnabled
                         mcpEnabled mcpPort
-                        grafanaEnabled grafanaPort
+                        prometheusEnabled prometheusPort
                         i3xEnabled i3xPort
                         graphqlEnabled graphqlPort mqttApiEnabled
                         metricsEnabled
@@ -79,8 +79,8 @@ class BrokerConfigManager {
         this.setEl('cfg-mcp', cfg.mcpEnabled
             ? `${this.badge('enabled', 'Enabled')} ${this.portLabel(cfg.mcpPort)}`
             : this.badge('disabled', 'Disabled'));
-        this.setEl('cfg-grafana', cfg.grafanaEnabled
-            ? `${this.badge('enabled', 'Enabled')} ${this.portLabel(cfg.grafanaPort)}`
+        this.setEl('cfg-prometheus', cfg.prometheusEnabled
+            ? `${this.badge('enabled', 'Enabled')} ${this.portLabel(cfg.prometheusPort)}`
             : this.badge('disabled', 'Disabled'));
         this.setEl('cfg-i3x', cfg.i3xEnabled
             ? `${this.badge('enabled', 'Enabled')} ${this.portLabel(cfg.i3xPort)}`

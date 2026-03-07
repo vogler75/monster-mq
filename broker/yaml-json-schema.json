@@ -286,26 +286,21 @@
         }
       }
     },
-    "Grafana": {
+    "Prometheus": {
       "type": "object",
-      "description": "Grafana JSON Data Source API server configuration. Provides a compatible endpoint for the Grafana JSON Data Source plugin (simpod-json-datasource) to query time-series data.",
+      "description": "Prometheus-compatible metrics server. Exposes broker metrics and topic values in Prometheus text format (/metrics) and implements a subset of the Prometheus HTTP API (/api/v1/query_range, etc.) for Grafana integration.",
       "properties": {
         "Enabled": {
           "type": "boolean",
-          "description": "Enable Grafana API server",
+          "description": "Enable Prometheus metrics server",
           "default": false
         },
         "Port": {
           "type": "integer",
-          "description": "Port for Grafana API HTTP endpoint",
+          "description": "Port for Prometheus HTTP endpoint",
           "default": 3001,
           "minimum": 1,
           "maximum": 65535
-        },
-        "DefaultArchiveGroup": {
-          "type": "string",
-          "description": "Default archive group to use when not specified in query payload",
-          "default": "Default"
         }
       }
     },
