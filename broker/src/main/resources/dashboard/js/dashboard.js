@@ -27,7 +27,6 @@ class DashboardManager {
         this.setupCharts();
         this.setupArchiveGroupsControls();
         this.loadInitialDataWithHistory();
-        this.loadFeatureBadges();
         this.startPolling();
     }
 
@@ -264,35 +263,6 @@ class DashboardManager {
                 this.archiveLiveUpdatesEnabled = e.target.checked;
                 console.log('Archive live updates', this.archiveLiveUpdatesEnabled ? 'enabled' : 'disabled');
             });
-        }
-    }
-
-    async loadFeatureBadges() {
-        try {
-            const result = await window.graphqlClient.query(`
-                query { brokerConfig { prometheusEnabled prometheusPort mcpEnabled } }
-            `);
-            const cfg = result?.brokerConfig;
-            if (!cfg) return;
-            const container = document.getElementById('feature-badges');
-            if (!container) return;
-            if (cfg.prometheusEnabled) {
-                const a = document.createElement('a');
-                a.href = `http://${location.hostname}:${cfg.prometheusPort}/metrics`;
-                a.target = '_blank';
-                a.rel = 'noopener';
-                a.style.cssText = 'background: #e6522c; color: #fff; font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 4px; text-decoration: none;';
-                a.textContent = `Prometheus :${cfg.prometheusPort}`;
-                container.appendChild(a);
-            }
-            if (cfg.mcpEnabled) {
-                const span = document.createElement('span');
-                span.style.cssText = 'background: var(--monster-primary); color: #fff; font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 4px;';
-                span.textContent = 'MCP Server (AI)';
-                container.appendChild(span);
-            }
-        } catch (e) {
-            console.warn('Could not load feature badges:', e);
         }
     }
 
