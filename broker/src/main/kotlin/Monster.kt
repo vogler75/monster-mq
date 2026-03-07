@@ -755,16 +755,10 @@ MORE INFO:
                     null
                 }
 
-                // Prometheus-compatible metrics server
+                // Prometheus-compatible metrics server (instantiated after metricsStore below)
                 val prometheusConfig = configJson.getJsonObject("Prometheus", JsonObject())
                 val prometheusEnabled = prometheusConfig.getBoolean("Enabled", false)
                 val prometheusPort = prometheusConfig.getInteger("Port", 3001)
-                val prometheusServer = if (prometheusEnabled) {
-                    PrometheusServer("0.0.0.0", prometheusPort, archiveHandler, userManager)
-                } else {
-                    logger.fine("Prometheus server is disabled in configuration")
-                    null
-                }
 
                 // CESMII I3X API Server
                 val i3xConfig = configJson.getJsonObject("I3x", JsonObject())
@@ -805,6 +799,14 @@ MORE INFO:
                 } else {
                     logger.fine("Metrics collection is disabled in configuration")
                     null to null
+                }
+
+                // Prometheus Server (needs metricsStore for historical broker metrics)
+                val prometheusServer = if (prometheusEnabled) {
+                    PrometheusServer("0.0.0.0", prometheusPort, archiveHandler, userManager, metricsStore)
+                } else {
+                    logger.fine("Prometheus server is disabled in configuration")
+                    null
                 }
 
                 // GenAI Provider
