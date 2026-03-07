@@ -201,6 +201,16 @@
                         <span class="json-hint" style="font-size:0.7rem;color:var(--text-muted);display:block;margin-top:0.25rem;">Optional; must not contain + or #; trailing / added automatically.</span>
                     </div>
                     <div class="form-group">
+                        <label for="kafka-client-topic-key-regex">Topic Key Regex</label>
+                        <input type="text" id="kafka-client-topic-key-regex" placeholder="\\.">
+                        <span class="json-hint" style="font-size:0.7rem;color:var(--text-muted);display:block;margin-top:0.25rem;">Optional regex to match in the Kafka key. Example: \. with replacement / turns PV.Watt.Act into PV/Watt/Act</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="kafka-client-topic-key-replacement">Topic Key Replacement</label>
+                        <input type="text" id="kafka-client-topic-key-replacement" placeholder="/">
+                        <span class="json-hint" style="font-size:0.7rem;color:var(--text-muted);display:block;margin-top:0.25rem;">Replacement string for each regex match in the Kafka key.</span>
+                    </div>
+                    <div class="form-group">
                         <label for="kafka-client-node">Cluster Node *</label>
                         <select id="kafka-client-node" required>
                             <option value="">Select Node...</option>

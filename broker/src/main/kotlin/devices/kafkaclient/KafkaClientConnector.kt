@@ -114,7 +114,7 @@ class KafkaClientConnector : AbstractVerticle() {
                             PayloadFormat.TEXT -> (value as? String)?.toByteArray(Charsets.UTF_8) ?: run { messagesDropped.incrementAndGet(); return@handler }
                             else -> ByteArray(0)
                         }
-                        val topic = applyDestinationPrefix(key)
+                        val topic = applyDestinationPrefix(applyTopicKeyRegex(key))
                         publishPlain(topic, payloadBytes)
                     }
                     PayloadFormat.DEFAULT, PayloadFormat.JSON -> {
@@ -241,6 +241,12 @@ class KafkaClientConnector : AbstractVerticle() {
             errors.incrementAndGet()
             logger.log(Level.WARNING, "Failed to publish message: ${e.message}", e)
         }
+    }
+
+    private fun applyTopicKeyRegex(key: String): String {
+        val pattern = cfg.topicKeyRegex ?: return key
+        val replacement = cfg.topicKeyReplacement ?: return key
+        return Regex(pattern).replace(key, replacement)
     }
 
     private fun applyDestinationPrefix(topic: String): String {

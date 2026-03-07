@@ -123,6 +123,8 @@ class KafkaClientManager {
                 groupId: document.getElementById('kafka-client-group-id').value.trim() || null,
                 bootstrapServers: document.getElementById('kafka-client-bootstrap').value.trim(),
                 destinationTopicPrefix: (function(){ const v=document.getElementById('kafka-client-destination-prefix').value.trim(); return v.length>0? v : null; })(),
+                topicKeyRegex: (function(){ const v=document.getElementById('kafka-client-topic-key-regex').value.trim(); return v.length>0? v : null; })(),
+                topicKeyReplacement: (function(){ const v=document.getElementById('kafka-client-topic-key-replacement').value.trim(); return v.length>0? v : null; })(),
                 payloadFormat: document.getElementById('kafka-client-payload-format').value,
                 reconnectDelayMs: parseInt(document.getElementById('kafka-client-reconnect-delay').value)
             }

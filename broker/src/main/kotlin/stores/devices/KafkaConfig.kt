@@ -14,7 +14,9 @@ data class KafkaClientConfig(
     val payloadFormat: String = PayloadFormat.DEFAULT,
     val extraConsumerConfig: Map<String, String> = emptyMap(),
     val reconnectDelayMs: Long = 5000,
-    val destinationTopicPrefix: String? = null
+    val destinationTopicPrefix: String? = null,
+    val topicKeyRegex: String? = null,
+    val topicKeyReplacement: String? = null
 ) {
     companion object {
         fun fromJson(obj: JsonObject): KafkaClientConfig {
@@ -31,13 +33,18 @@ data class KafkaClientConfig(
                 }
                 if (raw.endsWith('/')) raw else "$raw/"
             }
+            val topicKeyRegex = (obj.getString("TopicKeyRegex") ?: obj.getString("topicKeyRegex"))?.takeIf { it.isNotBlank() }
+            val topicKeyReplacement = obj.getString("TopicKeyReplacement") ?: obj.getString("topicKeyReplacement")
+
             return KafkaClientConfig(
                 bootstrapServers = obj.getString("bootstrapServers", "localhost:9092"),
                 groupId = obj.getString("groupId", "monstermq-subscriber"),
                 payloadFormat = obj.getString("payloadFormat", PayloadFormat.DEFAULT) ?: PayloadFormat.DEFAULT,
                 extraConsumerConfig = obj.getJsonObject("extraConsumerConfig", JsonObject()).let { ec -> ec.fieldNames().associateWith { k -> ec.getValue(k).toString() } },
                 reconnectDelayMs = obj.getLong("reconnectDelayMs", 5000),
-                destinationTopicPrefix = normalizedPrefix
+                destinationTopicPrefix = normalizedPrefix,
+                topicKeyRegex = topicKeyRegex,
+                topicKeyReplacement = topicKeyReplacement
             )
         }
     }

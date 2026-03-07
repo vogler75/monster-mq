@@ -847,6 +847,10 @@ type KafkaClientConfig {
     # - Must not contain MQTT wildcards '+' or '#'
     # - Legacy keyTopicPrefix input still accepted for backward compatibility
     destinationTopicPrefix: String
+    # Regex pattern applied to the Kafka record key to transform it into an MQTT topic name
+    topicKeyRegex: String
+    # Replacement string used with topicKeyRegex (e.g. "/" to convert dots to slashes)
+    topicKeyReplacement: String
     # NOTE: Kafka topic is now derived from the device namespace
 }
 

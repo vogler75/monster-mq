@@ -59,7 +59,7 @@ class KafkaClientDetailManager {
                 query GetKafkaClients($name: String!) {
                     kafkaClients(name: $name) {
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
-                        config { bootstrapServers groupId payloadFormat destinationTopicPrefix extraConsumerConfig reconnectDelayMs }
+                        config { bootstrapServers groupId payloadFormat destinationTopicPrefix topicKeyRegex topicKeyReplacement extraConsumerConfig reconnectDelayMs }
                         metrics { messagesIn messagesOut timestamp }
                     }
                 }
@@ -95,6 +95,8 @@ class KafkaClientDetailManager {
         document.getElementById('client-group-id').value = cfg.groupId;
         document.getElementById('client-payload-format').value = cfg.payloadFormat;
         document.getElementById('client-destination-prefix').value = cfg.destinationTopicPrefix || '';
+        document.getElementById('client-topic-key-regex').value = cfg.topicKeyRegex || '';
+        document.getElementById('client-topic-key-replacement').value = cfg.topicKeyReplacement || '';
         document.getElementById('client-reconnect-delay').value = cfg.reconnectDelayMs;
         document.getElementById('client-enabled').checked = d.enabled;
 
@@ -180,6 +182,8 @@ class KafkaClientDetailManager {
                 bootstrapServers: document.getElementById('client-bootstrap').value.trim(),
                 groupId: document.getElementById('client-group-id').value.trim(),
                 destinationTopicPrefix: (function(){ const v=document.getElementById('client-destination-prefix').value.trim(); return v.length>0? v : null; })(),
+                topicKeyRegex: (function(){ const v=document.getElementById('client-topic-key-regex').value.trim(); return v.length>0? v : null; })(),
+                topicKeyReplacement: (function(){ const v=document.getElementById('client-topic-key-replacement').value.trim(); return v.length>0? v : null; })(),
                 payloadFormat: document.getElementById('client-payload-format').value,
                 extraConsumerConfig: extraConfig,
                 reconnectDelayMs: parseInt(document.getElementById('client-reconnect-delay').value)

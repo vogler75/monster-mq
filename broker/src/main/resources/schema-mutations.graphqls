@@ -860,6 +860,10 @@ input KafkaClientConfigInput {
     reconnectDelayMs: Long = 5000
     # Optional prefix applied to all published MQTT topics (see KafkaClientConfig.destinationTopicPrefix)
     destinationTopicPrefix: String
+    # Regex pattern applied to the Kafka record key to transform it into an MQTT topic name
+    topicKeyRegex: String
+    # Replacement string used with topicKeyRegex (e.g. "/" to convert dots to slashes)
+    topicKeyReplacement: String
     # NOTE: Kafka topic is now derived from the device namespace
 }
 
