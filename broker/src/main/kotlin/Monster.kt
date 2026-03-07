@@ -802,8 +802,9 @@ MORE INFO:
                 }
 
                 // Prometheus Server (needs metricsStore for historical broker metrics)
+                val prometheusRawQueryLimit = prometheusConfig.getInteger("RawQueryLimit", 10000)
                 val prometheusServer = if (prometheusEnabled) {
-                    PrometheusServer("0.0.0.0", prometheusPort, archiveHandler, userManager, metricsStore)
+                    PrometheusServer("0.0.0.0", prometheusPort, archiveHandler, userManager, metricsStore, prometheusRawQueryLimit)
                 } else {
                     logger.fine("Prometheus server is disabled in configuration")
                     null

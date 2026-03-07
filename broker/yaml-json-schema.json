@@ -301,6 +301,12 @@
           "default": 3001,
           "minimum": 1,
           "maximum": 65535
+        },
+        "RawQueryLimit": {
+          "type": "integer",
+          "description": "Maximum number of raw records returned for sub-minute step queries (step < 60s). Does not apply to aggregated queries (step >= 60s), which use getAggregatedHistory with no row limit.",
+          "default": 10000,
+          "minimum": 1
         }
       }
     },

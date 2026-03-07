@@ -39,7 +39,8 @@ class PrometheusServer(
     private val port: Int,
     private val archiveHandler: ArchiveHandler,
     private val userManager: UserManager,
-    private val metricsStore: IMetricsStore? = null
+    private val metricsStore: IMetricsStore? = null,
+    private val rawQueryLimit: Int = 10000
 ) : AbstractVerticle() {
 
     private val logger = Utils.getLogger(this::class.java)
@@ -423,47 +424,75 @@ class PrometheusServer(
 
         val result = JsonArray()
 
-        // When no explicit function is specified, default to AVG aggregation at the snapped interval.
-        // This avoids fetching all raw records and doing in-memory downsampling.
-        val aggFunction = parsed.function ?: "AVG"
-        val fields = if (field.isEmpty()) emptyList() else listOf(field)
-        logger.fine("query_range: aggregated query — calling getAggregatedHistory interval=${intervalMinutes}min function=$aggFunction")
-        val aggResult = archiveStore.getAggregatedHistory(
-            topics = listOf(topic),
-            startTime = startTime,
-            endTime = endTime,
-            intervalMinutes = intervalMinutes,
-            functions = listOf(aggFunction),
-            fields = fields
-        )
+        if (stepSeconds < 60 && parsed.function == null) {
+            // Sub-minute step with no explicit function: return raw records up to the configured limit
+            logger.fine("query_range: raw query — step=${stepSeconds}s < 60s, calling getHistory limit=$rawQueryLimit")
+            val historyData = archiveStore.getHistory(
+                topic = topic,
+                startTime = startTime,
+                endTime = endTime,
+                limit = rawQueryLimit
+            )
+            logger.fine("query_range: raw result — ${historyData.size()} records")
 
-        val columns = aggResult.getJsonArray("columns") ?: JsonArray()
-        val rows = aggResult.getJsonArray("rows") ?: JsonArray()
-        logger.fine("query_range: aggregated result — ${rows.size()} rows, columns=$columns")
-
-        val fieldSuffix = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
-        val colName = "$topic${fieldSuffix}_${aggFunction.lowercase()}"
-        val colIndex = findColumnIndex(columns, colName)
-
-        if (colIndex < 0) {
-            logger.warning("query_range: column '$colName' not found in result columns=$columns")
-        } else {
-            val values = JsonArray()
-            for (i in 0 until rows.size()) {
-                val row = rows.getJsonArray(i) ?: continue
-                val tsStr = row.getString(0) ?: continue
-                val v = row.getValue(colIndex) ?: continue
-                try {
-                    val epochSeconds = Instant.parse(tsStr).epochSecond
-                    val numV = when (v) {
-                        is Number -> v.toDouble()
-                        else -> continue
-                    }
-                    values.add(JsonArray().add(epochSeconds).add(numV.toString()))
-                } catch (e: Exception) { /* skip invalid rows */ }
+            val raw = mutableListOf<Pair<Long, Double>>()
+            for (i in 0 until historyData.size()) {
+                val record = historyData.getJsonObject(i) ?: continue
+                val timestampMs = record.getLong("timestamp") ?: continue
+                val payloadStr = record.getString("payload_json")
+                    ?: record.getString("payload")
+                    ?: record.getString("payload_base64")?.let { b64 ->
+                        try { String(Base64.getDecoder().decode(b64)) } catch (e: Exception) { null }
+                    } ?: continue
+                val numVal = extractNumericValue(payloadStr, field) ?: continue
+                raw.add(timestampMs / 1000 to numVal)
             }
-            logger.fine("query_range: returning ${values.size()} aggregated data points")
+
+            val values = downsampleByStep(raw, startTime.epochSecond, endTime.epochSecond, stepSeconds)
+            logger.fine("query_range: returning ${values.size()} data points (step=${stepSeconds}s, raw=${raw.size})")
             result.add(buildTopicSeriesEntry(topic, groupName, field, values))
+        } else {
+            // step >= 60s or explicit function: use getAggregatedHistory (default to AVG)
+            val aggFunction = parsed.function ?: "AVG"
+            val fields = if (field.isEmpty()) emptyList() else listOf(field)
+            logger.fine("query_range: aggregated query — calling getAggregatedHistory interval=${intervalMinutes}min function=$aggFunction")
+            val aggResult = archiveStore.getAggregatedHistory(
+                topics = listOf(topic),
+                startTime = startTime,
+                endTime = endTime,
+                intervalMinutes = intervalMinutes,
+                functions = listOf(aggFunction),
+                fields = fields
+            )
+
+            val columns = aggResult.getJsonArray("columns") ?: JsonArray()
+            val rows = aggResult.getJsonArray("rows") ?: JsonArray()
+            logger.fine("query_range: aggregated result — ${rows.size()} rows, columns=$columns")
+
+            val fieldSuffix = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
+            val colName = "$topic${fieldSuffix}_${aggFunction.lowercase()}"
+            val colIndex = findColumnIndex(columns, colName)
+
+            if (colIndex < 0) {
+                logger.warning("query_range: column '$colName' not found in result columns=$columns")
+            } else {
+                val values = JsonArray()
+                for (i in 0 until rows.size()) {
+                    val row = rows.getJsonArray(i) ?: continue
+                    val tsStr = row.getString(0) ?: continue
+                    val v = row.getValue(colIndex) ?: continue
+                    try {
+                        val epochSeconds = Instant.parse(tsStr).epochSecond
+                        val numV = when (v) {
+                            is Number -> v.toDouble()
+                            else -> continue
+                        }
+                        values.add(JsonArray().add(epochSeconds).add(numV.toString()))
+                    } catch (e: Exception) { /* skip invalid rows */ }
+                }
+                logger.fine("query_range: returning ${values.size()} aggregated data points")
+                result.add(buildTopicSeriesEntry(topic, groupName, field, values))
+            }
         }
 
         sendRangeResult(ctx, result)
