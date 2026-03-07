@@ -359,6 +359,8 @@ class PrometheusServer(
         val endStr = getParam(ctx, "end")
         val stepStr = getParam(ctx, "step").ifEmpty { "60" }
 
+        logger.info("query_range: query='$queryStr' start=$startStr end=$endStr step=$stepStr")
+
         if (queryStr.isEmpty()) {
             sendRangeResult(ctx, JsonArray())
             return
@@ -367,14 +369,14 @@ class PrometheusServer(
         val startTime = parsePrometheusTime(startStr) ?: Instant.now().minusSeconds(3600)
         val endTime = parsePrometheusTime(endStr) ?: Instant.now()
         val stepSeconds = stepStr.toDoubleOrNull()?.toLong() ?: 60L
-        val stepMinutes = (stepSeconds / 60).coerceAtLeast(1).toInt()
+        val intervalMinutes = snapToValidIntervalMinutes(stepSeconds)
 
         val parsed = parsePromQL(queryStr)
         val topic = parsed.labels["topic"] ?: ""
         val archiveGroupName = parsed.labels["archive_group"] ?: "Default"
         val field = parsed.labels["field"] ?: ""
 
-        logger.info("query_range: topic='$topic' archiveGroup='$archiveGroupName' field='$field' function=${parsed.function} step=${stepMinutes}min range=$startStr..$endStr")
+        logger.info("query_range: topic='$topic' archiveGroup='$archiveGroupName' field='$field' function=${parsed.function ?: "raw"} interval=${intervalMinutes}min")
 
         if (topic.isEmpty()) {
             logger.info("query_range: no topic label in query, returning empty")
@@ -393,22 +395,27 @@ class PrometheusServer(
 
         if (parsed.function != null) {
             val fields = if (field.isEmpty()) emptyList() else listOf(field)
+            logger.info("query_range: aggregated query — calling getAggregatedHistory interval=${intervalMinutes}min function=${parsed.function}")
             val aggResult = archiveStore.getAggregatedHistory(
                 topics = listOf(topic),
                 startTime = startTime,
                 endTime = endTime,
-                intervalMinutes = stepMinutes,
+                intervalMinutes = intervalMinutes,
                 functions = listOf(parsed.function),
                 fields = fields
             )
 
             val columns = aggResult.getJsonArray("columns") ?: JsonArray()
             val rows = aggResult.getJsonArray("rows") ?: JsonArray()
+            logger.info("query_range: aggregated result — ${rows.size()} rows, columns=$columns")
+
             val fieldSuffix = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
             val colName = "$topic${fieldSuffix}_${parsed.function.lowercase()}"
             val colIndex = findColumnIndex(columns, colName)
 
-            if (colIndex >= 0) {
+            if (colIndex < 0) {
+                logger.warning("query_range: column '$colName' not found in result columns=$columns")
+            } else {
                 val values = JsonArray()
                 for (i in 0 until rows.size()) {
                     val row = rows.getJsonArray(i) ?: continue
@@ -423,15 +430,18 @@ class PrometheusServer(
                         values.add(JsonArray().add(epochSeconds).add(numV.toString()))
                     } catch (e: Exception) { /* skip invalid rows */ }
                 }
+                logger.info("query_range: returning ${values.size()} aggregated data points")
                 result.add(buildSeriesEntry(topic, archiveGroupName, field, values))
             }
         } else {
+            logger.info("query_range: raw query — calling getHistory")
             val historyData = archiveStore.getHistory(
                 topic = topic,
                 startTime = startTime,
                 endTime = endTime,
                 limit = 10000
             )
+            logger.info("query_range: raw result — ${historyData.size()} records")
 
             val values = JsonArray()
             for (i in 0 until historyData.size()) {
@@ -446,6 +456,7 @@ class PrometheusServer(
                 val numVal = extractNumericValue(payloadStr, field) ?: continue
                 values.add(JsonArray().add(timestampMs / 1000).add(numVal.toString()))
             }
+            logger.info("query_range: returning ${values.size()} raw data points")
             result.add(buildSeriesEntry(topic, archiveGroupName, field, values))
         }
 
@@ -455,6 +466,8 @@ class PrometheusServer(
     private fun handleQuery(ctx: RoutingContext) {
         val queryStr = getParam(ctx, "query")
         val now = Instant.now().epochSecond
+
+        logger.info("query: query='$queryStr'")
 
         if (queryStr.isEmpty()) {
             sendVectorResult(ctx, JsonArray())
@@ -630,6 +643,21 @@ class PrometheusServer(
         }
 
         return ParsedQuery(metric, labels, function, window)
+    }
+
+    /**
+     * Snap a step (in seconds) to the nearest supported aggregation interval in minutes.
+     * getAggregatedHistory supports: 1, 5, 15, 60, 1440 minutes.
+     */
+    private fun snapToValidIntervalMinutes(stepSeconds: Long): Int {
+        val minutes = (stepSeconds / 60).coerceAtLeast(1)
+        return when {
+            minutes < 5    -> 1
+            minutes < 15   -> 5
+            minutes < 60   -> 15
+            minutes < 1440 -> 60
+            else           -> 1440
+        }
     }
 
     private fun parsePrometheusTime(s: String): Instant? {
