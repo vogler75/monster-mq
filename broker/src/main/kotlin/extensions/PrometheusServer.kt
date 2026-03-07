@@ -1,6 +1,7 @@
 package at.rocworks.extensions
 
 import at.rocworks.Monster
+import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 import at.rocworks.bus.EventBusAddresses
@@ -43,7 +44,7 @@ class PrometheusServer(
     private val rawQueryLimit: Int = 10000
 ) : AbstractVerticle() {
 
-    private val logger = Utils.getLogger(this::class.java)
+    private val logger = Utils.getLogger(this::class.java).also { it.level = Const.DEBUG_LEVEL }
 
     companion object {
         private val METRIC_NAMES = listOf("topics", "metrics")

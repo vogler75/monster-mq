@@ -1,5 +1,6 @@
 package at.rocworks.extensions
 
+import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 import at.rocworks.data.BrokerMessage
@@ -46,7 +47,7 @@ class I3xServer(
     private val userManager: UserManager,
 ) : AbstractVerticle() {
 
-    private val logger = Utils.getLogger(this::class.java)
+    private val logger = Utils.getLogger(this::class.java).also { it.level = Const.DEBUG_LEVEL }
 
     private data class I3xSubscription(
         val id: String,

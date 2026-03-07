@@ -22,7 +22,7 @@ class McpHandler(
     private val retainedStore: IMessageStore,
     private val archiveHandler: ArchiveHandler
 ) {
-    private val logger = Utils.getLogger(this::class.java)
+    private val logger = Utils.getLogger(this::class.java).also { it.level = Const.DEBUG_LEVEL }
 
     private val tools: MutableMap<String, AsyncTool> = HashMap<String, AsyncTool>()
 
