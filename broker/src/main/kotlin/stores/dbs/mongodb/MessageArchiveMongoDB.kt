@@ -374,78 +374,68 @@ class MessageArchiveMongoDB(
             val pipeline = mutableListOf<Document>()
 
             // Stage 1: Match documents by topics and time range
-            pipeline.add(Document("\$match", Document(mapOf(
-                "meta.topic" to Document("\$in", topics),
-                "time" to Document(mapOf(
-                    "\$gte" to Date.from(startTime),
-                    "\$lte" to Date.from(endTime)
-                ))
-            ))))
+            // Use $eq for single topic (faster than $in), $in for multiple
+            val topicMatch = if (topics.size == 1)
+                Document("meta.topic", topics[0])
+            else
+                Document("meta.topic", Document("\$in", topics))
+            pipeline.add(Document("\$match", topicMatch + Document("time", Document(mapOf(
+                "\$gte" to Date.from(startTime),
+                "\$lte" to Date.from(endTime)
+            )))))
 
-            // Stage 2: Project the fields we need, including value extraction
-            val projectFields = mutableMapOf<String, Any>(
-                "topic" to "\$meta.topic",
-                "time" to 1
+            val effectiveFields = if (fields.isEmpty()) listOf("") else fields
+
+            // Stage 2: Group by time bucket and topic, with value expressions inlined.
+            // Skipping a separate $project stage avoids processing every document twice.
+            val dateTruncUnit = when {
+                intervalMinutes >= 1440 -> "day"
+                intervalMinutes >= 60   -> "hour"
+                else                   -> "minute"
+            }
+            val binSize = when {
+                intervalMinutes >= 1440 -> intervalMinutes / 1440
+                intervalMinutes >= 60   -> intervalMinutes / 60
+                else                   -> intervalMinutes
+            }
+            val bucketExpr = Document("\$dateTrunc", Document(mapOf(
+                "date" to "\$time",
+                "unit" to dateTruncUnit,
+                "binSize" to binSize
+            )))
+
+            val groupAccumulators = mutableMapOf<String, Any>(
+                "_id" to Document(mapOf(
+                    "bucket" to bucketExpr,
+                    "topic"  to "\$meta.topic"   // reference directly, no $project alias needed
+                ))
             )
 
-            // For each field (or raw value), create a projection
-            val effectiveFields = if (fields.isEmpty()) listOf("") else fields
+            val columnNames = mutableListOf<String>()
             for ((fieldIndex, field) in effectiveFields.withIndex()) {
-                val valueExpr = if (field.isEmpty()) {
-                    // Try to convert payload to double - handle native BSON, payload_blob (binary), and payload_json
-                    // Priority: 1) payload (native BSON), 2) payload_blob (binary text), 3) payload_json (string)
-                    // Use $function to decode binary data as UTF-8 text
+                val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
+
+                // Build the value expression inline — JSON field path only ($function removed)
+                val valueExpr: Any = if (field.isEmpty()) {
+                    // Plain numeric payload stored as payload_blob — requires JS to decode binary
                     Document("\$function", Document(mapOf(
                         "body" to """
                             function(payload, payload_blob, payload_json) {
-                                // Helper function to decode base64 to UTF-8 string
-                                function base64ToUtf8(base64) {
-                                    // Decode base64 to bytes, then to UTF-8 string
-                                    var binStr = '';
-                                    var bytes = [];
-                                    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-                                    var i = 0;
-                                    base64 = base64.replace(/[^A-Za-z0-9+/]/g, '');
-                                    while (i < base64.length) {
-                                        var enc1 = chars.indexOf(base64.charAt(i++));
-                                        var enc2 = chars.indexOf(base64.charAt(i++));
-                                        var enc3 = chars.indexOf(base64.charAt(i++));
-                                        var enc4 = chars.indexOf(base64.charAt(i++));
-                                        var chr1 = (enc1 << 2) | (enc2 >> 4);
-                                        var chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
-                                        var chr3 = ((enc3 & 3) << 6) | enc4;
-                                        binStr += String.fromCharCode(chr1);
-                                        if (enc3 !== 64) binStr += String.fromCharCode(chr2);
-                                        if (enc4 !== 64) binStr += String.fromCharCode(chr3);
-                                    }
-                                    return binStr;
-                                }
-
-                                // Case 1: payload exists (native BSON - could be object with numeric fields or numeric value)
                                 if (payload !== null && payload !== undefined) {
                                     if (typeof payload === 'number') return payload;
-                                    if (typeof payload === 'string') {
-                                        var n = parseFloat(payload);
-                                        return isNaN(n) ? null : n;
-                                    }
+                                    if (typeof payload === 'string') { var n = parseFloat(payload); return isNaN(n) ? null : n; }
                                     return null;
                                 }
-                                // Case 2: payload_blob exists (binary containing text of number)
                                 if (payload_blob !== null && payload_blob !== undefined) {
                                     try {
-                                        // payload_blob is BinData - get base64 string and decode it
-                                        var base64Str = payload_blob.base64();
-                                        var str = base64ToUtf8(base64Str);
-                                        var n = parseFloat(str);
+                                        var base64 = payload_blob.base64();
+                                        var bin = atob(base64);
+                                        var n = parseFloat(bin);
                                         return isNaN(n) ? null : n;
-                                    } catch (e) {
-                                        return null;
-                                    }
+                                    } catch(e) { return null; }
                                 }
-                                // Case 3: payload_json exists (string)
                                 if (payload_json !== null && payload_json !== undefined) {
-                                    var n = parseFloat(payload_json);
-                                    return isNaN(n) ? null : n;
+                                    var n = parseFloat(payload_json); return isNaN(n) ? null : n;
                                 }
                                 return null;
                             }
@@ -454,62 +444,21 @@ class MessageArchiveMongoDB(
                         "lang" to "js"
                     )))
                 } else {
-                    // Extract field from payload object - handle nested paths
-                    val pathParts = field.split(".")
-                    val fieldPath = "\$payload." + pathParts.joinToString(".")
-                    Document("\$toDouble", Document("\$ifNull", listOf(fieldPath, null)))
+                    // JSON field — pure native MQL, inlined directly into the accumulator
+                    Document("\$toDouble", "\$payload.${field.split(".").joinToString(".")}")
                 }
-                projectFields["value_$fieldIndex"] = valueExpr
-            }
-
-            pipeline.add(Document("\$project", Document(projectFields)))
-
-            // Stage 3: Group by time bucket and topic
-            // MongoDB 5.0+ supports $dateTrunc for time bucketing
-            val dateTruncUnit = when {
-                intervalMinutes >= 1440 -> "day"
-                intervalMinutes >= 60 -> "hour"
-                else -> "minute"
-            }
-            val binSize = when {
-                intervalMinutes >= 1440 -> intervalMinutes / 1440
-                intervalMinutes >= 60 -> intervalMinutes / 60
-                else -> intervalMinutes
-            }
-
-            val bucketExpr = Document("\$dateTrunc", Document(mapOf(
-                "date" to "\$time",
-                "unit" to dateTruncUnit,
-                "binSize" to binSize
-            )))
-
-            // Build accumulator expressions for each field and function
-            val groupAccumulators = mutableMapOf<String, Any>(
-                "_id" to Document(mapOf(
-                    "bucket" to bucketExpr,
-                    "topic" to "\$topic"
-                ))
-            )
-
-            val columnNames = mutableListOf<String>()
-            for ((fieldIndex, field) in effectiveFields.withIndex()) {
-                val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
-                val valueRef = "\$value_$fieldIndex"
 
                 for (func in functions) {
                     val funcLower = func.lowercase()
                     val accumKey = "agg_${fieldIndex}_$funcLower"
-
                     val accumExpr = when (func.uppercase()) {
-                        "AVG" -> Document("\$avg", valueRef)
-                        "MIN" -> Document("\$min", valueRef)
-                        "MAX" -> Document("\$max", valueRef)
+                        "AVG"   -> Document("\$avg", valueExpr)
+                        "MIN"   -> Document("\$min", valueExpr)
+                        "MAX"   -> Document("\$max", valueExpr)
                         "COUNT" -> Document("\$sum", Document("\$cond", listOf(
-                            Document("\$ne", listOf(valueRef, null)),
-                            1,
-                            0
+                            Document("\$ne", listOf(valueExpr, null)), 1, 0
                         )))
-                        else -> Document("\$avg", valueRef)
+                        else    -> Document("\$avg", valueExpr)
                     }
                     groupAccumulators[accumKey] = accumExpr
                 }
