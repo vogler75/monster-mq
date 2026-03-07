@@ -105,7 +105,7 @@ class PrometheusServer(
             .requestHandler(router)
             .listen()
             .onSuccess { server ->
-                logger.info("Prometheus Server started on port ${server.actualPort()}")
+                logger.fine("Prometheus Server started on port ${server.actualPort()}")
                 startPromise.complete()
             }
             .onFailure { error ->
@@ -231,7 +231,7 @@ class PrometheusServer(
             .filter { (name, _) -> groupFilter == null || name == groupFilter }
 
         val groups = groupsToScan()
-        logger.info("label/${ctx.pathParam("name")}/values: group=${groupFilter ?: "(all)"} topic=${topicFilter ?: "(all)"} scanning groups=${groups.keys}")
+        logger.fine("label/${ctx.pathParam("name")}/values: group=${groupFilter ?: "(all)"} topic=${topicFilter ?: "(all)"} scanning groups=${groups.keys}")
 
         when (val labelName = ctx.pathParam("name")) {
             "__name__" -> {
@@ -249,7 +249,7 @@ class PrometheusServer(
                             topics.add(message.topicName)
                             topics.size < 5000
                         }
-                        logger.info("label/topic/values: group='$groupName' → ${topics.size} topics found")
+                        logger.fine("label/topic/values: group='$groupName' → ${topics.size} topics found")
                     }
                 }
                 ctx.response().setStatusCode(200)
@@ -258,16 +258,16 @@ class PrometheusServer(
             }
             "group" -> {
                 val allGroups = archiveHandler.getDeployedArchiveGroups().keys.sorted()
-                logger.info("label/group/values: returning ${allGroups.size} groups: $allGroups")
+                logger.fine("label/group/values: returning ${allGroups.size} groups: $allGroups")
                 ctx.response().setStatusCode(200)
                     .putHeader("Content-Type", "application/json")
                     .end(JsonObject().put("status", "success").put("data", JsonArray(allGroups)).encode())
             }
             "field" -> {
                 if (topicFilter == null)
-                    logger.info("label/field/values: no topic filter in match[] — returning fields from all topics in groups=${groups.keys}")
+                    logger.fine("label/field/values: no topic filter in match[] — returning fields from all topics in groups=${groups.keys}")
                 else
-                    logger.info("label/field/values: topic='$topicFilter' group=${groupFilter ?: "(all)"}")
+                    logger.fine("label/field/values: topic='$topicFilter' group=${groupFilter ?: "(all)"}")
                 val fields = mutableSetOf<String>()
                 groups.forEach { (groupName, group) ->
                     group.lastValStore?.findMatchingMessages(topicFilter ?: "#") { message ->
@@ -284,27 +284,27 @@ class PrometheusServer(
                         }
                         fields.size < 1000
                     }
-                    logger.info("label/field/values: group='$groupName' → fields so far: $fields")
+                    logger.fine("label/field/values: group='$groupName' → fields so far: $fields")
                 }
                 ctx.response().setStatusCode(200)
                     .putHeader("Content-Type", "application/json")
                     .end(JsonObject().put("status", "success").put("data", JsonArray(fields.sorted())).encode())
             }
             "metric" -> {
-                logger.info("label/metric/values: returning ${BROKER_METRIC_LABELS.size} broker metric labels")
+                logger.fine("label/metric/values: returning ${BROKER_METRIC_LABELS.size} broker metric labels")
                 ctx.response().setStatusCode(200)
                     .putHeader("Content-Type", "application/json")
                     .end(JsonObject().put("status", "success").put("data", JsonArray(BROKER_METRIC_LABELS)).encode())
             }
             "node" -> {
                 val nodeIds = Monster.getClusterNodeIds(vertx).sorted()
-                logger.info("label/node/values: returning ${nodeIds.size} nodes: $nodeIds")
+                logger.fine("label/node/values: returning ${nodeIds.size} nodes: $nodeIds")
                 ctx.response().setStatusCode(200)
                     .putHeader("Content-Type", "application/json")
                     .end(JsonObject().put("status", "success").put("data", JsonArray(nodeIds)).encode())
             }
             else -> {
-                logger.info("label/$labelName/values: unknown label, returning empty")
+                logger.fine("label/$labelName/values: unknown label, returning empty")
                 ctx.response().setStatusCode(200)
                     .putHeader("Content-Type", "application/json")
                     .end(JsonObject().put("status", "success").put("data", JsonArray()).encode())
@@ -319,7 +319,7 @@ class PrometheusServer(
         val topicFilter = matchLabels["topic"]
         val metricName = matchLabels["__name__"]
 
-        logger.info("series: __name__=${metricName ?: "(all)"} group=${groupFilter ?: "(all)"} topic=${topicFilter ?: "(all)"}")
+        logger.fine("series: __name__=${metricName ?: "(all)"} group=${groupFilter ?: "(all)"} topic=${topicFilter ?: "(all)"}")
         val data = JsonArray()
 
         // Topic value series
@@ -381,7 +381,7 @@ class PrometheusServer(
         val endStr = getParam(ctx, "end")
         val stepStr = getParam(ctx, "step").ifEmpty { "60" }
 
-        logger.info("query_range: query='$queryStr' start=$startStr end=$endStr step=$stepStr")
+        logger.fine("query_range: query='$queryStr' start=$startStr end=$endStr step=$stepStr")
 
         if (queryStr.isEmpty()) {
             sendRangeResult(ctx, JsonArray())
@@ -406,10 +406,10 @@ class PrometheusServer(
         val groupName = parsed.labels["group"] ?: "Default"
         val field = parsed.labels["field"] ?: ""
 
-        logger.info("query_range: topic='$topic' group='$groupName' field='$field' function=${parsed.function ?: "raw"} interval=${intervalMinutes}min")
+        logger.fine("query_range: topic='$topic' group='$groupName' field='$field' function=${parsed.function ?: "raw"} interval=${intervalMinutes}min")
 
         if (topic.isEmpty()) {
-            logger.info("query_range: no topic label in query, returning empty")
+            logger.fine("query_range: no topic label in query, returning empty")
             sendRangeResult(ctx, JsonArray())
             return
         }
@@ -425,7 +425,7 @@ class PrometheusServer(
 
         if (parsed.function != null) {
             val fields = if (field.isEmpty()) emptyList() else listOf(field)
-            logger.info("query_range: aggregated query — calling getAggregatedHistory interval=${intervalMinutes}min function=${parsed.function}")
+            logger.fine("query_range: aggregated query — calling getAggregatedHistory interval=${intervalMinutes}min function=${parsed.function}")
             val aggResult = archiveStore.getAggregatedHistory(
                 topics = listOf(topic),
                 startTime = startTime,
@@ -437,7 +437,7 @@ class PrometheusServer(
 
             val columns = aggResult.getJsonArray("columns") ?: JsonArray()
             val rows = aggResult.getJsonArray("rows") ?: JsonArray()
-            logger.info("query_range: aggregated result — ${rows.size()} rows, columns=$columns")
+            logger.fine("query_range: aggregated result — ${rows.size()} rows, columns=$columns")
 
             val fieldSuffix = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
             val colName = "$topic${fieldSuffix}_${parsed.function.lowercase()}"
@@ -460,18 +460,18 @@ class PrometheusServer(
                         values.add(JsonArray().add(epochSeconds).add(numV.toString()))
                     } catch (e: Exception) { /* skip invalid rows */ }
                 }
-                logger.info("query_range: returning ${values.size()} aggregated data points")
+                logger.fine("query_range: returning ${values.size()} aggregated data points")
                 result.add(buildTopicSeriesEntry(topic, groupName, field, values))
             }
         } else {
-            logger.info("query_range: raw query — calling getHistory")
+            logger.fine("query_range: raw query — calling getHistory")
             val historyData = archiveStore.getHistory(
                 topic = topic,
                 startTime = startTime,
                 endTime = endTime,
-                limit = 10000
+                limit = Int.MAX_VALUE
             )
-            logger.info("query_range: raw result — ${historyData.size()} records")
+            logger.fine("query_range: raw result — ${historyData.size()} records")
 
             val raw = mutableListOf<Pair<Long, Double>>()
             for (i in 0 until historyData.size()) {
@@ -487,7 +487,7 @@ class PrometheusServer(
             }
 
             val values = downsampleByStep(raw, startTime.epochSecond, endTime.epochSecond, stepSeconds)
-            logger.info("query_range: returning ${values.size()} data points (step=${stepSeconds}s, raw=${raw.size})")
+            logger.fine("query_range: returning ${values.size()} data points (step=${stepSeconds}s, raw=${raw.size})")
             result.add(buildTopicSeriesEntry(topic, groupName, field, values))
         }
 
@@ -505,7 +505,7 @@ class PrometheusServer(
         val nodeFilter = parsed.labels["node"]
         val nodeIds = Monster.getClusterNodeIds(vertx).filter { nodeFilter == null || it == nodeFilter }
 
-        logger.info("query_range/metric: metric='$metricLabel' node=${nodeFilter ?: "(all)"} nodes=$nodeIds")
+        logger.fine("query_range/metric: metric='$metricLabel' node=${nodeFilter ?: "(all)"} nodes=$nodeIds")
 
         if (nodeIds.isEmpty()) {
             sendRangeResult(ctx, JsonArray())
@@ -531,7 +531,7 @@ class PrometheusServer(
                             ts.epochSecond to v
                         }
                         val values = downsampleByStep(raw, startTime.epochSecond, endTime.epochSecond, stepSeconds)
-                        logger.info("query_range/metric: node='$nodeId' metric='$metricLabel' → ${history.size} history points → ${values.size()} result points")
+                        logger.fine("query_range/metric: node='$nodeId' metric='$metricLabel' → ${history.size} history points → ${values.size()} result points")
                         result.add(buildMetricSeriesEntry(nodeId, metricLabel, values))
                     } else {
                         logger.warning("query_range/metric: failed to get history for node '$nodeId': ${ar.cause()?.message}")
@@ -547,7 +547,7 @@ class PrometheusServer(
         val queryStr = getParam(ctx, "query")
         val now = Instant.now().epochSecond
 
-        logger.info("query: query='$queryStr'")
+        logger.fine("query: query='$queryStr'")
 
         if (queryStr.isEmpty()) {
             sendVectorResult(ctx, JsonArray())
@@ -562,7 +562,7 @@ class PrometheusServer(
             val nodeFilter = parsed.labels["node"]
             val nodeIds = Monster.getClusterNodeIds(vertx).filter { nodeFilter == null || it == nodeFilter }
 
-            logger.info("query/metric: metric='$metricLabel' node=${nodeFilter ?: "(all)"} nodes=$nodeIds")
+            logger.fine("query/metric: metric='$metricLabel' node=${nodeFilter ?: "(all)"} nodes=$nodeIds")
 
             if (nodeIds.isEmpty()) {
                 sendVectorResult(ctx, JsonArray())
