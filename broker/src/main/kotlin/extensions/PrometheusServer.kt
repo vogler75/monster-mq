@@ -443,7 +443,7 @@ class PrometheusServer(
             )
             logger.info("query_range: raw result — ${historyData.size()} records")
 
-            val values = JsonArray()
+            val raw = mutableListOf<Pair<Long, Double>>() // epochSeconds -> value
             for (i in 0 until historyData.size()) {
                 val record = historyData.getJsonObject(i) ?: continue
                 val timestampMs = record.getLong("timestamp") ?: continue
@@ -452,11 +452,12 @@ class PrometheusServer(
                     ?: record.getString("payload_base64")?.let { b64 ->
                         try { String(Base64.getDecoder().decode(b64)) } catch (e: Exception) { null }
                     } ?: continue
-
                 val numVal = extractNumericValue(payloadStr, field) ?: continue
-                values.add(JsonArray().add(timestampMs / 1000).add(numVal.toString()))
+                raw.add(timestampMs / 1000 to numVal)
             }
-            logger.info("query_range: returning ${values.size()} raw data points")
+
+            val values = downsampleByStep(raw, startTime.epochSecond, endTime.epochSecond, stepSeconds)
+            logger.info("query_range: returning ${values.size()} data points (step=${stepSeconds}s, raw=${raw.size})")
             result.add(buildSeriesEntry(topic, archiveGroupName, field, values))
         }
 
@@ -658,6 +659,35 @@ class PrometheusServer(
             minutes < 1440 -> 60
             else           -> 1440
         }
+    }
+
+    /**
+     * Bucket raw (epochSeconds, value) pairs into step-sized intervals and return
+     * the average per bucket. Each bucket is aligned to multiples of stepSeconds.
+     * Buckets with no data are omitted.
+     */
+    private fun downsampleByStep(
+        raw: List<Pair<Long, Double>>,
+        startEpoch: Long,
+        endEpoch: Long,
+        stepSeconds: Long
+    ): JsonArray {
+        val step = stepSeconds.coerceAtLeast(1)
+        // Group values by bucket index
+        val buckets = mutableMapOf<Long, MutableList<Double>>()
+        for ((ts, v) in raw) {
+            val bucket = (ts - startEpoch) / step
+            buckets.getOrPut(bucket) { mutableListOf() }.add(v)
+        }
+        val values = JsonArray()
+        buckets.entries.sortedBy { it.key }.forEach { (bucket, vals) ->
+            val ts = startEpoch + bucket * step
+            if (ts <= endEpoch) {
+                val avg = vals.average()
+                values.add(JsonArray().add(ts).add(avg.toString()))
+            }
+        }
+        return values
     }
 
     private fun parsePrometheusTime(s: String): Instant? {
