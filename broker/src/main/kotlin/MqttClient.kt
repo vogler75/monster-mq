@@ -936,7 +936,7 @@ class MqttClient(
         val schemaPolicyCache = TopicSchemaPolicyCache.getInstance()
         if (schemaPolicyCache != null) {
             val nsEntry = schemaPolicyCache.matchNamespace(topicName)
-            logger.fine { "Client [$clientId] Schema check for [$topicName]: ${if (nsEntry != null) "matched namespace '${nsEntry.namespaceName}'" else "no matching namespace"}" }
+            logger.finer { "Client [$clientId] Schema check for [$topicName]: ${if (nsEntry != null) "matched namespace '${nsEntry.namespaceName}'" else "no matching namespace"}" }
             if (nsEntry != null) {
                 val payload = String(message.payload().bytes, Charsets.UTF_8)
                 val result = nsEntry.validator.validate(payload)
