@@ -171,6 +171,12 @@ object EventBusAddresses {
         fun groupBufferSize(groupName: String) = "$ARCHIVE_NS.buffer.$groupName"
     }
 
+    // Schema Policy (Topic Schema Governance)
+    object SchemaPolicy {
+        private const val NS = "$BASE.schema"
+        const val RELOAD = "$NS.reload"
+    }
+
     // System Operations
     object System {
         // Can be used for system-wide broadcasts, health checks, etc.

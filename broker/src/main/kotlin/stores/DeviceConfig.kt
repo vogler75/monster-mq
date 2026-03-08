@@ -32,6 +32,8 @@ data class DeviceConfig(
         const val DEVICE_TYPE_SPARKPLUGB_DECODER = "SparkplugB-Decoder"
         const val DEVICE_TYPE_FLOW_CLASS = "Flow-Class"
         const val DEVICE_TYPE_FLOW_OBJECT = "Flow-Object"
+        const val DEVICE_TYPE_TOPIC_SCHEMA_POLICY = "TopicSchema-Policy"
+        const val DEVICE_TYPE_TOPIC_NAMESPACE = "TopicNamespace"
 
         fun fromJsonObject(json: JsonObject): DeviceConfig {
             return DeviceConfig(

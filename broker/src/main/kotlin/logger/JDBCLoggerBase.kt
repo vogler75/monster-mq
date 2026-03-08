@@ -8,15 +8,13 @@ import at.rocworks.data.BrokerMessage
 import at.rocworks.logger.queue.ILoggerQueue
 import at.rocworks.logger.queue.LoggerQueueDisk
 import at.rocworks.logger.queue.LoggerQueueMemory
+import at.rocworks.schema.JsonSchemaValidator
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.JDBCLoggerConfig
 import com.jayway.jsonpath.JsonPath
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
-import org.everit.json.schema.Schema
-import org.everit.json.schema.ValidationException
-import org.everit.json.schema.loader.SchemaLoader
 import org.json.JSONObject
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
@@ -40,8 +38,8 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
     protected lateinit var device: DeviceConfig
     protected lateinit var cfg: JDBCLoggerConfig
 
-    // JSON Schema validator
-    private lateinit var jsonSchemaValidator: Schema
+    // JSON Schema validator (shared class)
+    private lateinit var jsonSchemaValidator: JsonSchemaValidator
 
     // JSONPath for dynamic table name extraction
     private var tableNameJsonPath: JsonPath? = null
@@ -172,11 +170,7 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
 
     private fun initializeJsonSchemaValidator() {
         try {
-            val schemaJson = JSONObject(cfg.jsonSchema.encode())
-            val schemaLoader = SchemaLoader.builder()
-                .schemaJson(schemaJson)
-                .build()
-            jsonSchemaValidator = schemaLoader.load().build()
+            jsonSchemaValidator = JsonSchemaValidator(cfg.jsonSchema)
             logger.info("JSON Schema validator initialized")
         } catch (e: Exception) {
             throw IllegalArgumentException("Failed to load JSON Schema: ${e.message}", e)
@@ -311,11 +305,10 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
             // When mapping is used, the schema defines target columns, not source structure
             val hasMapping = cfg.jsonSchema.getJsonObject("mapping") != null
             if (!hasMapping) {
-                try {
-                    jsonSchemaValidator.validate(payloadJson)
-                } catch (e: ValidationException) {
+                val result = jsonSchemaValidator.validate(payloadJson)
+                if (!result.valid) {
                     validationErrorsCounter.incrementAndGet()
-                    logger.warning("Schema validation failed for topic ${message.topicName}: ${e.message}")
+                    logger.warning("Schema validation failed for topic ${message.topicName}: ${result.errorDetail}")
                     return
                 }
             } else {

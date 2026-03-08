@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Topic Schema Policy Detail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .policy-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
+        .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); overflow: hidden; box-shadow: var(--card-shadow); transition: all 0.3s ease; }
+        .section-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4); }
+        .section-card.full-width { grid-column: 1 / -1; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); }
+        .section-title { display: flex; align-items: center; gap: 0.75rem; }
+        .section-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--gradient-primary); color: white; }
+        .section-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .section-body { padding: 1.5rem; }
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .form-control, input[type="text"], input[type="number"], select, textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+        }
+
+        .form-control:focus, input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+
+        .form-control:disabled, input:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .form-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            accent-color: var(--monster-purple);
+            cursor: pointer;
+            width: auto;
+        }
+
+        .checkbox-group label {
+            margin-bottom: 0;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        /* JSON Schema editor */
+        .schema-editor {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            min-height: 300px;
+            resize: vertical;
+            line-height: 1.5;
+            tab-size: 2;
+        }
+
+        /* Test panel */
+        .test-panel {
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .test-payload-editor {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            min-height: 120px;
+            resize: vertical;
+            line-height: 1.5;
+            tab-size: 2;
+        }
+
+        .test-results {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .test-results.valid {
+            display: block;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--monster-green);
+        }
+
+        .test-results.invalid {
+            display: block;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--monster-red);
+        }
+
+        .test-results h4 {
+            margin: 0 0 0.5rem 0;
+            font-size: 0.875rem;
+        }
+
+        .test-results ul {
+            margin: 0;
+            padding-left: 1.25rem;
+            font-size: 0.8rem;
+        }
+
+        .test-results ul li {
+            margin-bottom: 0.25rem;
+        }
+
+        /* Action bar */
+        .action-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .action-bar-left {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .action-bar-right {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .btn svg {
+            flex-shrink: 0;
+        }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .modal-content {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.25rem;
+            line-height: 1;
+            transition: color 0.2s ease;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 2rem;
+        }
+
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .policy-info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .action-bar {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: stretch;
+            }
+
+            .action-bar-left, .action-bar-right {
+                justify-content: center;
+            }
+
+            .modal {
+                padding: 1rem;
+            }
+
+            .modal-content {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Top Bar -->
+    <div class="top-bar">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <button class="sidebar-toggle" onclick="toggleSidebar()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15,18 9,12 15,6"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">
+                    U
+                </div>
+                <div class="user-details">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-role">Administrator</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title" id="policy-title">Create Topic Schema Policy</h1>
+                <p class="page-subtitle" id="policy-subtitle">Configure a new schema definition</p>
+            </div>
+
+            <div class="action-bar">
+                <div class="action-bar-left">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15,18 9,12 15,6"></polyline>
+                        </svg>
+                        Back to Policies
+                    </button>
+                </div>
+                <div class="action-bar-right">
+                    <button class="btn btn-danger" id="delete-policy-btn" onclick="showDeleteModal()" style="display: none;">
+                        Delete Policy
+                    </button>
+                    <button class="btn btn-primary" id="save-policy-btn" onclick="savePolicy()">
+                        Create Policy
+                    </button>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading policy...</span>
+            </div>
+
+            <div id="policy-content" style="display: block;">
+                <div class="policy-info-grid">
+                    <!-- Basic Information -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+                                    </svg>
+                                </div>
+                                <h2>Basic Information</h2>
+                            </div>
+                        </div>
+                        <div class="section-body">
+                            <div class="form-group">
+                                <label for="policy-name">Policy Name *</label>
+                                <input type="text" id="policy-name" placeholder="e.g., sensor-data-schema">
+                                <div class="form-hint">Unique identifier for this schema definition</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="policy-description">Description</label>
+                                <input type="text" id="policy-description" placeholder="Describe what this schema validates">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="policy-version">Version</label>
+                                <input type="text" id="policy-version" placeholder="e.g., 1.0.0" value="1.0.0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Payload Configuration -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                                    </svg>
+                                </div>
+                                <h2>Payload Configuration</h2>
+                            </div>
+                        </div>
+                        <div class="section-body">
+                            <div class="form-group">
+                                <label for="policy-payload-type">Payload Type</label>
+                                <select id="policy-payload-type">
+                                    <option value="JSON" selected>JSON</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="policy-content-type">Content Type</label>
+                                <input type="text" id="policy-content-type" placeholder="e.g., application/json" value="application/json">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- JSON Schema Editor -->
+                    <div class="section-card full-width">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
+                                    </svg>
+                                </div>
+                                <h2>JSON Schema</h2>
+                            </div>
+                        </div>
+                        <div class="section-body">
+                            <div class="form-group">
+                                <label for="policy-json-schema">Schema Definition *</label>
+                                <textarea id="policy-json-schema" class="schema-editor" placeholder='{"type":"object","properties":{},"required":[]}'></textarea>
+                                <div class="form-hint">JSON Schema (Draft 2020-12) used to validate message payloads</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Test Panel -->
+                    <div class="section-card full-width">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                                    </svg>
+                                </div>
+                                <h2>Test Validation</h2>
+                            </div>
+                        </div>
+                        <div class="section-body">
+                            <div class="test-panel">
+                                <div class="form-group">
+                                    <label for="test-payload">Test Payload</label>
+                                    <textarea id="test-payload" class="test-payload-editor" placeholder='{"temperature": 22.5, "unit": "celsius"}'></textarea>
+                                    <div class="form-hint">Enter a JSON payload to validate against the schema</div>
+                                </div>
+                                <button class="btn btn-secondary" onclick="validatePayload()">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    Validate
+                                </button>
+                                <div id="test-results" class="test-results">
+                                    <h4 id="test-results-title"></h4>
+                                    <div id="test-results-body"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">&#9888;&#65039;</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="delete-policy-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the policy "<span id="delete-policy-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideDeleteModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeletePolicy()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/topic-schema-policy-detail.js"></script>
+</body>
+</html>

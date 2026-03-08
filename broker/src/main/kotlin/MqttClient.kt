@@ -4,6 +4,7 @@ import at.rocworks.bus.EventBusAddresses
 import at.rocworks.auth.UserManager
 import at.rocworks.data.BrokerMessage
 import at.rocworks.data.BulkClientMessage
+import at.rocworks.schema.TopicSchemaPolicyCache
 import at.rocworks.handlers.SessionHandler
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
 import io.netty.handler.codec.mqtt.MqttProperties
@@ -930,6 +931,31 @@ class MqttClient(
         }
         
         logger.finest { "Client [$clientId] Publish ALLOWED for [$topicName] - user [$username]" }
+
+        // Validate against Topic Schema Namespace (if any)
+        val schemaPolicyCache = TopicSchemaPolicyCache.getInstance()
+        if (schemaPolicyCache != null) {
+            val nsEntry = schemaPolicyCache.matchNamespace(topicName)
+            logger.fine { "Client [$clientId] Schema check for [$topicName]: ${if (nsEntry != null) "matched namespace '${nsEntry.namespaceName}'" else "no matching namespace"}" }
+            if (nsEntry != null) {
+                val payload = String(message.payload().bytes, Charsets.UTF_8)
+                val result = nsEntry.validator.validate(payload)
+                if (!result.valid) {
+                    when (result.errorCategory) {
+                        "PARSE_ERROR" -> schemaPolicyCache.parseErrorCount.incrementAndGet()
+                        "SCHEMA_ERROR" -> schemaPolicyCache.schemaErrorCount.incrementAndGet()
+                    }
+                    schemaPolicyCache.rejectedCount.incrementAndGet()
+                    logger.warning("Client [$clientId] Publish REJECTED by namespace '${nsEntry.namespaceName}' (schema '${nsEntry.schemaPolicyName}') for [$topicName]: ${result.errorDetail}")
+                    // For MQTT v5, send PUBACK with error reason code
+                    if (endpoint.protocolVersion() == 5 && message.qosLevel() == MqttQoS.AT_LEAST_ONCE) {
+                        endpoint.publishAcknowledge(message.messageId(), MqttPubAckReasonCode.PAYLOAD_FORMAT_INVALID, MqttProperties.NO_PROPERTIES)
+                    }
+                    return
+                }
+                schemaPolicyCache.validatedCount.incrementAndGet()
+            }
+        }
 
         // Handle QoS levels
         when (message.qosLevel()) {

@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Topic Namespace Detail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .namespace-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
+        .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); overflow: hidden; box-shadow: var(--card-shadow); transition: all 0.3s ease; }
+        .section-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4); }
+        .section-card.full-width { grid-column: 1 / -1; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); }
+        .section-title { display: flex; align-items: center; gap: 0.75rem; }
+        .section-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--gradient-primary); color: white; }
+        .section-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .section-body { padding: 1.5rem; }
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .form-control, input[type="text"], input[type="number"], select, textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+        }
+
+        .form-control:focus, input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+
+        .form-control:disabled, input:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .form-hint {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            accent-color: var(--monster-purple);
+            cursor: pointer;
+            width: auto;
+        }
+
+        .checkbox-group label {
+            margin-bottom: 0;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        /* Action bar */
+        .action-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .action-bar-left {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .action-bar-right {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .btn svg {
+            flex-shrink: 0;
+        }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .modal-content {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.25rem;
+            line-height: 1;
+            transition: color 0.2s ease;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 2rem;
+        }
+
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .namespace-info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .action-bar {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: stretch;
+            }
+
+            .action-bar-left, .action-bar-right {
+                justify-content: center;
+            }
+
+            .modal {
+                padding: 1rem;
+            }
+
+            .modal-content {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Mobile Top Bar -->
+    <div class="top-bar">
+        <div class="sidebar-brand">
+            <img src="/assets/logo.png" alt="MonsterMQ Logo">
+            <span class="brand-name">MonsterMQ</span>
+        </div>
+        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-brand">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <span class="brand-name">MonsterMQ</span>
+            </div>
+            <button class="sidebar-toggle" onclick="toggleSidebar()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15,18 9,12 15,6"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">
+                    U
+                </div>
+                <div class="user-details">
+                    <div class="user-name" id="user-name">User</div>
+                    <div class="user-role">Administrator</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title" id="namespace-title">Create Topic Namespace</h1>
+                <p class="page-subtitle" id="namespace-subtitle">Bind a topic filter to a schema policy</p>
+            </div>
+
+            <div class="action-bar">
+                <div class="action-bar-left">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15,18 9,12 15,6"></polyline>
+                        </svg>
+                        Back to Namespaces
+                    </button>
+                </div>
+                <div class="action-bar-right">
+                    <button class="btn btn-danger" id="delete-namespace-btn" onclick="showDeleteModal()" style="display: none;">
+                        Delete Namespace
+                    </button>
+                    <button class="btn btn-primary" id="save-namespace-btn" onclick="saveNamespace()">
+                        Create Namespace
+                    </button>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading namespace...</span>
+            </div>
+
+            <div id="namespace-content" style="display: block;">
+                <div class="namespace-info-grid">
+                    <!-- Basic Information -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+                                    </svg>
+                                </div>
+                                <h2>Basic Information</h2>
+                            </div>
+                        </div>
+                        <div class="section-body">
+                            <div class="form-group">
+                                <label for="namespace-name">Namespace Name *</label>
+                                <input type="text" id="namespace-name" placeholder="e.g., sensor-data-enforcement">
+                                <div class="form-hint">Unique identifier for this namespace</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="namespace-description">Description</label>
+                                <textarea id="namespace-description" rows="3" placeholder="Describe this namespace binding"></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="namespace-tags">Tags</label>
+                                <input type="text" id="namespace-tags" placeholder="e.g., iot, production, sensors">
+                                <div class="form-hint">Comma-separated list of tags</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Binding Configuration -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <div class="section-title">
+                                <div class="section-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                                    </svg>
+                                </div>
+                                <h2>Binding Configuration</h2>
+                            </div>
+                        </div>
+                        <div class="section-body">
+                            <div class="form-group">
+                                <label for="namespace-topic-filter">Topic Filter *</label>
+                                <input type="text" id="namespace-topic-filter" placeholder="e.g., sensors/+/data">
+                                <div class="form-hint">MQTT topic filter pattern (supports + and # wildcards)</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="namespace-schema-policy">Schema Policy *</label>
+                                <select id="namespace-schema-policy">
+                                    <option value="">-- Select a schema policy --</option>
+                                </select>
+                                <div class="form-hint">The schema definition to enforce on matching topics</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="namespace-enforcement-mode">Enforcement Mode</label>
+                                <select id="namespace-enforcement-mode">
+                                    <option value="REJECT" selected>REJECT</option>
+                                </select>
+                                <div class="form-hint">REJECT blocks messages that fail validation</div>
+                            </div>
+
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="namespace-enabled" checked>
+                                    <label for="namespace-enabled">Enabled</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">&#9888;&#65039;</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="delete-namespace-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideDeleteModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the namespace "<span id="delete-namespace-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideDeleteModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteNamespace()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/topic-namespace-detail.js"></script>
+</body>
+</html>

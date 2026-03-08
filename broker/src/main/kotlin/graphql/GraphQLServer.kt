@@ -38,6 +38,9 @@ import at.rocworks.graphql.SparkplugBDecoderQueries
 import at.rocworks.graphql.SparkplugBDecoderMutations
 import at.rocworks.graphql.FlowQueries
 import at.rocworks.graphql.FlowMutations
+import at.rocworks.graphql.TopicSchemaQueries
+import at.rocworks.graphql.TopicSchemaMutations
+import at.rocworks.schema.TopicSchemaPolicyCache
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.Monster
 import graphql.GraphQL
@@ -242,7 +245,8 @@ class GraphQLServer(
             "schema-subscriptions.graphqls", // Subscription type definitions
             "schema-flows.graphqls",       // Flow Engine types and operations
             "schema-sparkplugb-decoder.graphqls", // SparkplugB Decoder device types and operations
-            "schema-genai.graphqls"        // GenAI integration
+            "schema-genai.graphqls",       // GenAI integration
+            "schema-topic-schema.graphqls" // Topic Schema Governance
         )
 
         return schemaFiles.joinToString("\n") { filename ->
@@ -359,6 +363,17 @@ class GraphQLServer(
         // Initialize NATS Client resolvers
         val natsClientQueries = deviceStore?.let { NatsClientConfigQueries(vertx, it) }
         val natsClientMutations = deviceStore?.let { NatsClientConfigMutations(vertx, it) }
+
+        // Initialize Topic Schema Governance resolvers
+        // Reuse the singleton cache initialized in Monster.kt, or create if not yet available
+        val topicSchemaPolicyCache = TopicSchemaPolicyCache.getInstance()
+            ?: deviceStore?.let { TopicSchemaPolicyCache(vertx, it).also { cache -> cache.start() } }
+        val topicSchemaQueries = if (deviceStore != null && topicSchemaPolicyCache != null) {
+            TopicSchemaQueries(deviceStore, topicSchemaPolicyCache)
+        } else null
+        val topicSchemaMutations = if (deviceStore != null && topicSchemaPolicyCache != null) {
+            TopicSchemaMutations(deviceStore, topicSchemaPolicyCache)
+        } else null
 
         // Initialize GenAI resolver (with archiveHandler for topic analysis)
         val genAiResolver = genAiProvider?.let { GenAiResolver(vertx, it, archiveHandler) }
@@ -489,6 +504,17 @@ class GraphQLServer(
                     .apply {
                         genAiResolver?.let { resolver ->
                             dataFetcher("genai", resolver.genai())
+                        }
+                    }
+                    // Topic Schema Governance queries
+                    .apply {
+                        topicSchemaQueries?.let { resolver ->
+                            dataFetcher("topicSchemaPolicies", resolver.topicSchemaPolicies())
+                            dataFetcher("topicSchemaPolicy", resolver.topicSchemaPolicy())
+                            dataFetcher("topicSchemaValidate", resolver.topicSchemaValidate())
+                            dataFetcher("topicNamespaces", resolver.topicNamespaces())
+                            dataFetcher("topicNamespace", resolver.topicNamespace())
+                            dataFetcher("topicNamespaceMatch", resolver.topicNamespaceMatch())
                         }
                     }
             }
@@ -649,6 +675,26 @@ class GraphQLServer(
                     .apply {
                         flowMutations?.let { _ ->
                             dataFetcher("flow") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
+                    // Topic Schema Policy mutations - grouped under topicSchemaPolicy
+                    .apply {
+                        topicSchemaMutations?.let { _ ->
+                            dataFetcher("topicSchemaPolicy") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
+                    // Topic Namespace mutations - grouped under topicNamespace
+                    .apply {
+                        topicSchemaMutations?.let { _ ->
+                            dataFetcher("topicNamespace") { env ->
                                 val result = authContext.validateFieldAccess(env)
                                 if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
                                 emptyMap<String, Any>()
@@ -838,6 +884,27 @@ class GraphQLServer(
                         dataFetcher("disableInstance", resolver.disableInstance())
                         dataFetcher("reassignInstance", resolver.reassignInstance())
                         dataFetcher("testNode", resolver.testNode())
+                    }
+                }
+            }
+            // Register Topic Schema Policy Mutations type
+            .type("TopicSchemaPolicyMutations") { builder ->
+                builder.apply {
+                    topicSchemaMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createPolicy())
+                        dataFetcher("update", resolver.updatePolicy())
+                        dataFetcher("delete", resolver.deletePolicy())
+                    }
+                }
+            }
+            // Register Topic Namespace Mutations type
+            .type("TopicNamespaceMutations") { builder ->
+                builder.apply {
+                    topicSchemaMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createNamespace())
+                        dataFetcher("update", resolver.updateNamespace())
+                        dataFetcher("delete", resolver.deleteNamespace())
+                        dataFetcher("toggle", resolver.toggleNamespace())
                     }
                 }
             }
