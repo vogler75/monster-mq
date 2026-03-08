@@ -1,0 +1,14 @@
+Release v1.7.8
+Built from commit: 0cccacf
+Date: 2026-03-08 21:08:08
+
+Changes since v1.7.7:
+---
+0cccacf Add JSON Schema feature to homepage
+bc8978d Start cache without null check; tighten cast
+cf170c1 feat: add Topic Schema Governance for MQTT publish validation (#112)
+c1df8d5 Plans for gh issues
+1843b2f Update MQTT REST API label to MQTT API (GraphQL)
+e4abcf8 feat(dashboard): show database connections on broker-config page
+a718658 perf(mongodb): optimize getAggregatedHistory pipeline — eliminate $project stage
+9c9e5e0 fix: apply Const.DEBUG_LEVEL to loggers in PrometheusServer, McpServer, McpHandler, I3xServer
