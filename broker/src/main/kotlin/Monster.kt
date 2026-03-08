@@ -725,9 +725,7 @@ MORE INFO:
                                 logger.warning("Failed to initialize device config store: ${result.cause()?.message}")
                             } else {
                                 // Start Topic Schema Policy Cache after store is ready
-                                if (store != null) {
-                                    at.rocworks.schema.TopicSchemaPolicyCache(vertx, store).start()
-                                }
+                                at.rocworks.schema.TopicSchemaPolicyCache(vertx, store).start()
                             }
                         }
                         store

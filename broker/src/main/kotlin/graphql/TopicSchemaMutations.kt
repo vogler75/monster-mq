@@ -352,12 +352,11 @@ class TopicSchemaMutations(
         if (name.isBlank()) errors.add("name cannot be blank")
         if (!name.matches(Regex("^[a-zA-Z0-9_-]+$"))) errors.add("name can only contain letters, numbers, underscores, and hyphens")
 
-        @Suppress("UNCHECKED_CAST")
         val jsonSchemaRaw = input["jsonSchema"]
         if (jsonSchemaRaw != null) {
             try {
                 val schemaObj = when (jsonSchemaRaw) {
-                    is Map<*, *> -> JsonObject(jsonSchemaRaw as Map<String, Any>)
+                    is Map<*, *> -> JsonObject(@Suppress("UNCHECKED_CAST") (jsonSchemaRaw as Map<String, Any>))
                     is JsonObject -> jsonSchemaRaw
                     else -> throw IllegalArgumentException("jsonSchema must be a JSON object")
                 }
