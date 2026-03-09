@@ -213,9 +213,7 @@ class MqttClientConnector : AbstractVerticle() {
                 }
 
                 override fun messageArrived(topic: String, message: PahoMqttMessage) {
-                    vertx.runOnContext {
-                        handleRemoteMessageArrived(topic, message)
-                    }
+                    // Per-subscription IMqttMessageListener handles routing; this is a no-op fallback
                 }
 
                 override fun deliveryComplete(token: IMqttDeliveryToken?) {
@@ -329,6 +327,10 @@ class MqttClientConnector : AbstractVerticle() {
                             logger.severe("Failed to subscribe to remote topic $topic: ${exception?.message}")
                         }
                     }
+                }, IMqttMessageListener { receivedTopic, message ->
+                    vertx.runOnContext {
+                        publishRemoteMessageLocally(receivedTopic, message, address)
+                    }
                 })
             }
         } catch (e: Exception) {
@@ -381,25 +383,9 @@ class MqttClientConnector : AbstractVerticle() {
         }
     }
 
-    private fun handleRemoteMessageArrived(topic: String, message: PahoMqttMessage) {
+    private fun publishRemoteMessageLocally(topic: String, message: PahoMqttMessage, address: MqttClientAddress) {
         try {
-            logger.fine { "Received message from remote broker on topic: $topic" }
-
-            // Find matching subscribe address
-            val matchingAddress = subscribedAddresses.values.find { address ->
-                MqttTopicTransformer.matchesRemotePattern(topic, address.remoteTopic)
-            }
-
-            if (matchingAddress == null) {
-                logger.fine { "No matching address for remote topic: $topic" }
-                return
-            }
-
-            // Transform topic from remote to local
-            val localTopic = MqttTopicTransformer.remoteToLocal(topic, matchingAddress)
-
-            // Create BrokerMessage for local broker
-            // Set sender to our clientId to prevent loop (won't be delivered back to us)
+            val localTopic = MqttTopicTransformer.remoteToLocal(topic, address)
             val clientId = "mqttclient-${deviceConfig.name}"
             val localMessage = BrokerMessage(
                 messageId = 0,
@@ -412,8 +398,6 @@ class MqttClientConnector : AbstractVerticle() {
                 clientId = clientId,
                 senderId = clientId
             )
-
-            // Publish to local MQTT through SessionHandler to ensure proper archiving
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
                 sessionHandler.publishMessage(localMessage)
@@ -422,7 +406,6 @@ class MqttClientConnector : AbstractVerticle() {
             } else {
                 logger.warning("SessionHandler not available for message publishing")
             }
-
         } catch (e: Exception) {
             logger.severe("Error handling remote message: ${e.message}")
         }
