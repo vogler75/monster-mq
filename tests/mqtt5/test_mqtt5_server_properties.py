@@ -193,15 +193,20 @@ def test_mqtt5_server_properties():
         assert props.ReceiveMaximum > 0, f"Receive Maximum invalid: {props.ReceiveMaximum}"
         
         # Maximum QoS (36)
+        # Per MQTT 5.0 §3.2.2.3.4: valid values are 0 or 1 only. Value 2 is a protocol error.
+        # When absent, the client may use QoS 2 — so absence is the correct signal for full QoS support.
         if hasattr(props, 'MaximumQoS'):
-            if props.MaximumQoS >= 0 and props.MaximumQoS <= 2:
-                print(f"  ✓ Maximum QoS: {props.MaximumQoS}")
+            if 0 <= props.MaximumQoS <= 1:
+                print(f"  ✓ Maximum QoS: {props.MaximumQoS} (broker restricts to QoS {props.MaximumQoS})")
             else:
-                print(f"  ✗ Maximum QoS invalid: {props.MaximumQoS}")
+                print(f"  ✗ Maximum QoS invalid: {props.MaximumQoS} (must be 0 or 1, or absent for QoS 2)")
                 success = False
-        
-        assert hasattr(props, 'MaximumQoS'), "Maximum QoS not present"
-        assert 0 <= props.MaximumQoS <= 2, f"Maximum QoS invalid: {props.MaximumQoS}"
+            assert 0 <= props.MaximumQoS <= 1, (
+                f"Protocol error: Maximum QoS must be 0 or 1 (got {props.MaximumQoS}). "
+                "Value 2 is illegal; omit the property to indicate QoS 2 support."
+            )
+        else:
+            print("  ✓ Maximum QoS: absent (QoS 2 supported, per MQTT 5.0 §3.2.2.3.4)")
         
         # Retain Available (37)
         if hasattr(props, 'RetainAvailable'):
