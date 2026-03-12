@@ -386,8 +386,8 @@ class MqttClient(
                     // Receive Maximum (33) - Server's limit for outstanding QoS 1/2 messages
                     connackProps.add(MqttProperties.IntegerProperty(33, 100))
                     
-                    // Maximum QoS (36) - Server supports QoS 0, 1, and 2
-                    connackProps.add(MqttProperties.IntegerProperty(36, 2))
+                    // Maximum QoS (36) - Omitted: per MQTT 5.0 §3.2.2.3.4, valid values are 0 or 1 only.
+                    // When absent, the client may use QoS 2. Including value 2 is a protocol error.
                     
                     // Retain Available (37) - Server supports retained messages
                     connackProps.add(MqttProperties.IntegerProperty(37, 1))  // 1 = available
@@ -555,8 +555,8 @@ class MqttClient(
                 // Receive Maximum (33) - Server's limit for outstanding QoS 1/2 messages
                 connackProps.add(MqttProperties.IntegerProperty(33, 100))
                 
-                // Maximum QoS (36) - Server supports QoS 0, 1, and 2
-                connackProps.add(MqttProperties.IntegerProperty(36, 2))
+                // Maximum QoS (36) - Omitted: per MQTT 5.0 §3.2.2.3.4, valid values are 0 or 1 only.
+                // When absent, the client may use QoS 2. Including value 2 is a protocol error.
                 
                 // Retain Available (37) - Server supports retained messages
                 connackProps.add(MqttProperties.IntegerProperty(37, 1))  // 1 = available
