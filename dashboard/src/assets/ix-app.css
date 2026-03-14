@@ -20,8 +20,9 @@ ix-application {
   box-sizing: border-box;
 }
 
-/* Shorten sidebar so the log viewer bar (36px) doesn't cover the bottom items */
+/* Shorten sidebar so the log viewer bar (36px collapsed) doesn't cover the bottom items.
+   The header is ~48px, so total offset from top is handled by ix-application layout. */
 ix-menu {
-  height: calc(100vh - 36px) !important;
+  max-height: calc(100% - 36px) !important;
 }
 

@@ -365,7 +365,21 @@ class LogViewer {
   }
 
   updateLogViewerMargin() {
-    // no-op: log viewer spans full width, menu height is shortened via CSS
+    if (!this.elements.root) return;
+    // Position log viewer to start after the sidebar
+    const menu = document.querySelector('ix-menu');
+    if (menu) {
+      const setLeft = () => {
+        const w = menu.getBoundingClientRect().width;
+        if (w > 0) this.elements.root.style.left = w + 'px';
+      };
+      setLeft();
+      // Also update when menu expands/collapses
+      if (!this._menuObserver) {
+        this._menuObserver = new ResizeObserver(setLeft);
+        this._menuObserver.observe(menu);
+      }
+    }
   }
 
   getCurrentFilters() {
