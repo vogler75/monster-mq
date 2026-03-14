@@ -82,7 +82,7 @@ class SidebarManager {
             },
             {
                 section: 'System',
-                sectionIcon: 'cogwheel',
+                sectionIcon: 'maintenance',
                 items: [
                     { href: '/pages/broker-config.html', icon: 'cogwheel', text: 'Configuration' },
                     { href: '/pages/users.html', icon: 'user-settings', text: 'Users', id: 'users-nav-link', adminOnly: true },
@@ -244,7 +244,7 @@ class SidebarManager {
 
     async _loadPage(href, pushState) {
         try {
-            const response = await fetch(href);
+            const response = await fetch(href, { cache: 'no-store' });
             if (!response.ok) {
                 window.location.href = href; // fallback to full navigation
                 return;
@@ -263,7 +263,7 @@ class SidebarManager {
             // Extract page-specific <style> blocks from <head>
             const newStyles = doc.querySelectorAll('head style');
 
-            // Extract page-specific scripts (the ones after main-content, not shared ones)
+            // Extract page-specific scripts (skip shared, CDN, and module scripts)
             const sharedScripts = new Set([
                 '/js/storage.js', '/js/graphql-client.js', '/js/sidebar.js',
                 '/js/log-viewer.js', '/js/ix-init.js'
@@ -271,9 +271,15 @@ class SidebarManager {
             const newScripts = [];
             doc.querySelectorAll('head script[src], body script[src]').forEach(s => {
                 const src = s.getAttribute('src');
-                if (src && !sharedScripts.has(src) && !src.includes('cdn.jsdelivr') && !src.startsWith('http')) {
-                    newScripts.push(src);
-                }
+                if (!src) return;
+                // Skip module scripts (ix-init.js, Vite HMR client)
+                if (s.getAttribute('type') === 'module') return;
+                // Skip CDN scripts
+                if (src.includes('cdn.jsdelivr') || src.startsWith('http')) return;
+                // Strip query params for shared script matching
+                const srcPath = src.split('?')[0];
+                if (sharedScripts.has(srcPath)) return;
+                newScripts.push(srcPath);
             });
 
             // Also collect CDN scripts needed by the page (e.g., Chart.js)
@@ -323,13 +329,6 @@ class SidebarManager {
                 document.head.appendChild(s);
             });
 
-            // Suppress errors from stale in-flight async callbacks during transition
-            const _origError = console.error;
-            const suppressHandler = (e) => { e.preventDefault(); };
-            console.error = function() {};
-            window.addEventListener('error', suppressHandler);
-            window.addEventListener('unhandledrejection', suppressHandler);
-
             // Clean up previous page FIRST (stop intervals before swapping DOM)
             this._cleanupPage();
 
@@ -376,17 +375,7 @@ class SidebarManager {
                 await this._loadPageScript(src);
             }
 
-            // Restore error reporting after new page is loaded
-            setTimeout(() => {
-                console.error = _origError;
-                window.removeEventListener('error', suppressHandler);
-                window.removeEventListener('unhandledrejection', suppressHandler);
-            }, 500);
-
         } catch (error) {
-            console.error = _origError;
-            window.removeEventListener('error', suppressHandler);
-            window.removeEventListener('unhandledrejection', suppressHandler);
             console.error('Client navigation failed, falling back:', error);
             window.location.href = href;
         }
@@ -406,30 +395,44 @@ class SidebarManager {
 
     async _loadPageScript(src) {
         try {
-            const resp = await fetch(src);
+            const resp = await fetch(src, { cache: 'no-store' });
             if (!resp.ok) return;
-            const code = await resp.text();
+            let code = await resp.text();
 
-            // Patch addEventListener BEFORE executing the script so DOMContentLoaded
-            // callbacks fire immediately. Do NOT wrap in IIFE — page scripts use
-            // top-level let/const/function that inline onclick handlers need in global scope.
-            const origAdd = document.addEventListener;
-            document.addEventListener = function(type, fn, opts) {
-                if (type === 'DOMContentLoaded') {
-                    try { fn(); } catch(e) { console.error(e); }
-                    return;
-                }
-                return origAdd.call(document, type, fn, opts);
-            };
+            // Inside the IIFE, only let/const/class need conversion.
+            // function and async function declarations are fine in sloppy mode
+            // (they hoist and duplicates just overwrite).
+            code = code.replace(/^class\s+(\w+)/gm, 'var $1 = class $1');
+            code = code.replace(/^(let |const )/gm, 'var ');
 
-            try {
-                const script = document.createElement('script');
-                script.textContent = code;
-                document.body.appendChild(script);
-                script.remove();
-            } finally {
-                document.addEventListener = origAdd;
-            }
+            // Collect all top-level identifiers for window export
+            const topLevelNames = new Set();
+            code.replace(/^var\s+(\w+)/gm, (_, n) => { topLevelNames.add(n); });
+            code.replace(/^(?:async\s+)?function\s+(\w+)/gm, (_, n) => { topLevelNames.add(n); });
+
+            // Wrap in IIFE for clean scope, then export to window for inline onclick
+            const exports = [...topLevelNames].map(n => `window.${n} = typeof ${n} !== 'undefined' ? ${n} : undefined;`).join('\n');
+
+            const wrapped = `(function() {
+  var _origAddEL = document.addEventListener;
+  var _dclCallbacks = [];
+  document.addEventListener = function(type, fn, opts) {
+    if (type === 'DOMContentLoaded') { _dclCallbacks.push(fn); return; }
+    return _origAddEL.call(document, type, fn, opts);
+  };
+  try {
+${code}
+${exports}
+  _dclCallbacks.forEach(function(fn) { try { fn(); } catch(e) { console.error(e); } });
+  } finally {
+    document.addEventListener = _origAddEL;
+  }
+})();`;
+
+            const script = document.createElement('script');
+            script.textContent = wrapped;
+            document.body.appendChild(script);
+            script.remove();
         } catch (e) {
             console.warn('Failed to load page script:', src, e);
         }
