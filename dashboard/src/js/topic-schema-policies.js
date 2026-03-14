@@ -59,7 +59,8 @@ class TopicSchemaPoliciesManager {
     }
 
     updateMetrics() {
-        document.getElementById('total-policies').textContent = this.policies.length;
+        const el = document.getElementById('total-policies');
+        if (el) el.textContent = this.policies.length;
     }
 
     renderPolicies() {
