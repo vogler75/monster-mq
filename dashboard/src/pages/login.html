@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Login</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <style>
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 2rem;
+            box-sizing: border-box;
+            background: var(--theme-color-1);
+        }
+        .login-card {
+            background: var(--theme-color-2);
+            border: 1px solid var(--theme-color-soft-bdr);
+            border-radius: 12px;
+            padding: 3rem;
+            max-width: 420px;
+            width: 100%;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .login-header img {
+            height: 60px;
+            margin-bottom: 1rem;
+        }
+        .login-header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--theme-color-std-text);
+            margin-bottom: 0.5rem;
+        }
+        .login-header p {
+            color: var(--theme-color-soft-text);
+            font-size: 0.875rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--theme-color-std-text);
+            font-weight: 500;
+        }
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--theme-color-1);
+            border: 1px solid var(--theme-color-soft-bdr);
+            border-radius: 8px;
+            color: var(--theme-color-std-text);
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        .form-control:focus {
+            outline: none;
+            border-color: var(--theme-color-primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <h1>Welcome Back</h1>
+                <p>Sign in to access your MonsterMQ dashboard</p>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" class="form-control" placeholder="Enter username or leave empty if auth is disabled">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" class="form-control" placeholder="Enter password or leave empty if auth is disabled">
+                </div>
+
+                <ix-button type="submit" id="login-btn" style="width: 100%;">
+                    <span id="login-text">Sign In</span>
+                    <ix-spinner id="login-spinner" size="small" style="display: none;"></ix-spinner>
+                </ix-button>
+            </form>
+
+            <div id="guest-access" style="display: none; text-align: center; margin-top: 1.5rem;">
+                <div style="color: var(--theme-color-soft-text); font-size: 0.8rem; margin-bottom: 0.75rem;">— or —</div>
+                <a id="guest-link" href="#" style="color: var(--theme-color-primary); font-size: 0.875rem; text-decoration: none;">
+                    View dashboard (read-only)
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/storage.js"></script>
+    <script src="/js/login.js"></script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Archives</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-enabled {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--monster-green);
+        }
+
+        .status-disabled {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--monster-red);
+        }
+
+        .status-indicator {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .topic-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            max-width: 200px;
+        }
+
+        .topic-filter-tag {
+            background: var(--dark-surface-2);
+            color: var(--text-secondary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .action-buttons { display:flex; gap:0.5rem; flex-wrap:wrap; }
+
+        .connection-indicators {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .connection-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .connection-dot.connected {
+            background-color: var(--monster-green);
+            box-shadow: 0 0 4px rgba(16, 185, 129, 0.5);
+        }
+
+        .connection-dot.disconnected {
+            background-color: var(--monster-red);
+            box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
+        }
+
+        .connection-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            border-radius: 12px 12px 0 0;
+        }
+        .table-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .table-actions { display: flex; gap: 0.75rem; align-items: center; }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded>
+    </ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">Archive Management</h1>
+                <p class="page-subtitle">Manage MQTT message archiving configurations</p>
+            </div>
+
+            <div class="data-table">
+                <div class="table-header">
+                    <div class="table-title">
+                        <h2>Archive Groups</h2>
+                    </div>
+                    <div class="table-actions">
+                        <a href="/pages/archive-group-detail.html?new=true" class="btn btn-primary">+ Create Archive Group</a>
+                        <button id="refresh-archives" class="btn btn-secondary" onclick="archiveGroupsManager.loadArchiveGroups()">
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Topic Filters</th>
+                            <th>Stores (LV/AR)</th>
+                            <th>Payload Format</th>
+                            <th>Retained Only</th>
+                            <th>Out / Buffer</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="archive-groups-tbody">
+                        <tr>
+                            <td colspan="8" style="text-align: center; padding: 2rem;">
+                                Loading archive groups...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/archive-groups.js"></script>
+    </ix-application>
+</body>
+</html>

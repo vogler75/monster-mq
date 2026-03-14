@@ -23,20 +23,28 @@ java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt [-clu
 ./run.sh [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
 ```
 
-#### Dashboard Development Mode
+#### Dashboard Development Mode (Legacy)
 When making changes to HTML/CSS/JavaScript dashboard files, you can run the broker with the `-dashboardPath` option to avoid rebuilding:
 ```bash
 cd broker
 ./run.sh -dashboardPath src/main/resources/dashboard [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
 ```
 
-This allows you to:
-- Edit `.html` files in `src/main/resources/dashboard/pages/`
-- Edit `.css` files in `src/main/resources/dashboard/assets/`
-- Edit `.js` files in `src/main/resources/dashboard/js/`
-- Refresh the browser to see changes immediately without rebuilding the project
+#### New iX Dashboard (dashboard/)
+The new dashboard using Siemens iX lives in `dashboard/` and is built with Vite. It outputs to `dashboard/dist/`.
 
-This significantly speeds up dashboard development iterations.
+```bash
+cd dashboard
+npm install
+npm run dev          # Vite dev server on http://localhost:5173, proxies /graphql to :4000
+npm run build        # Outputs to dashboard/dist/
+```
+
+To serve the built iX dashboard from the broker:
+```bash
+cd broker
+./run.sh -dashboardPath ../dashboard/dist [-cluster]
+```
 
 ### Running Tests
 
@@ -143,16 +151,24 @@ For device integration guidance, see `plans/DEVICE_INTEGRATION.md`.
 
 ### Web Dashboard
 
-The dashboard is a vanilla HTML/CSS/JS web interface (no frameworks):
+**Legacy dashboard** (vanilla HTML/CSS/JS, currently active):
+- `broker/src/main/resources/dashboard/` — Served by Vert.x `StaticHandler`
 
-- `broker/src/main/resources/dashboard/` - Dashboard root
-  - `assets/monster-theme.css` - Global dark theme (CSS variables)
-  - `js/storage.js` - localStorage wrapper
-  - `js/graphql-client.js` - `GraphQLDashboardClient` class
-  - `js/sidebar.js` - `SidebarManager` with menu config (add new pages here)
-  - `js/log-viewer.js` - Global log viewer component
-  - `pages/` - HTML pages (one per view)
-  - `js/` - Page-specific JavaScript
+**New iX dashboard** (Siemens iX design system, in development):
+- `dashboard/` - Vite project root
+  - `package.json` - Dependencies: `@siemens/ix`, `@siemens/ix-icons`, `@siemens/ix-echarts`, `echarts`, `vite`
+  - `vite.config.js` - Build config, outputs to `dashboard/dist/`
+  - `src/` - Dashboard source files
+    - `js/ix-init.js` - iX component registration + `classic-dark` theme (ES module)
+    - `js/sidebar.js` - `SidebarManager` using `ix-menu` + `ix-menu-category` + `ix-menu-item` (add new pages here)
+    - `js/storage.js` - localStorage wrapper
+    - `js/graphql-client.js` - `GraphQLDashboardClient` class
+    - `js/log-viewer.js` - Global log viewer component
+    - `assets/monster-theme.css` - Remaining custom styles (being progressively reduced)
+    - `assets/ix-app.css` - iX layout overrides
+    - `pages/` - HTML pages (one per view), use `<ix-application>` + `<ix-menu>` shell
+    - `js/` - Page-specific JavaScript
+  - `dist/` - Build output (gitignored, serve via `-dashboardPath ../dashboard/dist`)
 
 ### HTTP Services and Ports
 
