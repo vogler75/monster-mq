@@ -17,6 +17,10 @@
     --gradient-primary: linear-gradient(135deg, #7C3AED 0%, #10B981 100%);
     --gradient-secondary: linear-gradient(135deg, #5B21B6 0%, #14B8A6 100%);
     --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    --accent-green: var(--monster-green);
+    --accent-red: var(--monster-red);
+    --background-secondary: var(--dark-surface-2);
+    --background-hover: rgba(124, 58, 237, 0.05);
 }
 
 * {
@@ -772,8 +776,35 @@ body {
     background: var(--dark-surface);
     border: 1px solid var(--dark-border);
     border-radius: 12px;
-    overflow: hidden;
+    overflow-x: auto;
     box-shadow: var(--card-shadow);
+}
+
+.table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    background: var(--dark-bg);
+    border-bottom: 1px solid var(--dark-border);
+    border-radius: 12px 12px 0 0;
+}
+
+.table-header .table-title h2 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.table-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.table-actions .btn {
+    width: auto;
 }
 
 .data-table table {

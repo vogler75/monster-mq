@@ -1,9 +1,6 @@
 class ArchiveGroupsManager {
     constructor() {
-        this.isEditing = false;
-        this.editingName = null;
         this.archiveGroups = [];
-
         this.init();
     }
 
@@ -12,59 +9,11 @@ class ArchiveGroupsManager {
             window.location.href = '/pages/login.html';
             return;
         }
-
-        this.setupUI();
-        this.setupEventListeners();
         this.loadArchiveGroups();
     }
 
     isLoggedIn() {
         return window.isLoggedIn();
-    }
-
-    setupUI() {
-        // UI setup is now handled by sidebar.js
-    }
-
-    setupEventListeners() {
-        // Modal close on outside click
-        window.onclick = (event) => {
-            const modal = document.getElementById('archiveGroupModal');
-            if (event.target === modal) {
-                this.closeModal();
-            }
-        };
-
-        // Form submission
-        document.getElementById('archiveGroupForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.saveArchiveGroup();
-        });
-
-        // Update lastValRetention help text based on LastValType selection
-        const lastValTypeSelect = document.getElementById('lastValType');
-        if (lastValTypeSelect) {
-            lastValTypeSelect.addEventListener('change', (e) => {
-                this.updateLastValRetentionHelp(e.target.value);
-            });
-        }
-    }
-
-    updateLastValRetentionHelp(lastValType) {
-        const helpDiv = document.querySelector('label[for="lastValRetention"] + input + .help-text') ||
-            document.querySelector('[for="lastValRetention"]').parentElement.querySelector('.help-text');
-
-        if (!helpDiv) return;
-
-        if (lastValType === 'MEMORY') {
-            helpDiv.textContent = 'Size-based format required for MEMORY store (e.g., 50k, 100000k = number of entries)';
-        } else if (lastValType === 'NONE') {
-            helpDiv.textContent = 'No retention needed for NONE store';
-        } else if (['POSTGRES', 'CRATEDB', 'MONGODB', 'SQLITE', 'HAZELCAST'].includes(lastValType)) {
-            helpDiv.textContent = 'Time-based format (e.g., 7d, 24h, 60m, 1y)';
-        } else {
-            helpDiv.textContent = 'Size-based (MEMORY): 50k, 100000k | Time-based (others): 7d, 24h, 60m';
-        }
     }
 
     async loadArchiveGroups() {
@@ -219,10 +168,9 @@ class ArchiveGroupsManager {
                                 Enable
                             </button>`
                 }
-                        <button class="btn-action btn-edit"
-                                onclick="archiveGroupsManager.editArchiveGroup('${this.escapeHtml(group.name)}')">
+                        <a href="/pages/archive-group-detail.html?name=${encodeURIComponent(group.name)}" class="btn-action btn-edit">
                             Edit
-                        </button>
+                        </a>
                         <button class="btn-action btn-delete"
                                 onclick="archiveGroupsManager.deleteArchiveGroup('${this.escapeHtml(group.name)}')"
                                 ${group.enabled ? 'disabled title="Disable the archive group first to delete"' : ''}>
@@ -293,187 +241,6 @@ class ArchiveGroupsManager {
         }
     }
 
-    openCreateModal() {
-        this.isEditing = false;
-        this.editingName = null;
-
-        document.getElementById('modalTitle').textContent = 'Create Archive Group';
-        document.getElementById('archiveGroupForm').reset();
-        document.getElementById('name').disabled = false;
-
-        document.getElementById('archiveGroupModal').style.display = 'block';
-    }
-
-    async editArchiveGroup(name) {
-        this.isEditing = true;
-        this.editingName = name;
-
-        // Find the archive group
-        const group = this.archiveGroups.find(g => g.name === name);
-        if (!group) {
-            this.showError('Archive group not found');
-            return;
-        }
-
-        document.getElementById('modalTitle').textContent = 'Edit Archive Group';
-
-        // Populate form
-        document.getElementById('name').value = group.name;
-        document.getElementById('name').disabled = true; // Can't change name
-        document.getElementById('topicFilter').value = group.topicFilter.join('\n');
-        document.getElementById('lastValType').value = group.lastValType;
-        document.getElementById('archiveType').value = group.archiveType;
-        document.getElementById('payloadFormat').value = group.payloadFormat || 'DEFAULT';
-        document.getElementById('retainedOnly').checked = group.retainedOnly;
-        document.getElementById('lastValRetention').value = group.lastValRetention || '';
-        document.getElementById('archiveRetention').value = group.archiveRetention || '';
-        document.getElementById('purgeInterval').value = group.purgeInterval || '';
-
-        document.getElementById('archiveGroupModal').style.display = 'block';
-    }
-
-    closeModal() {
-        document.getElementById('archiveGroupModal').style.display = 'none';
-        document.getElementById('archiveGroupForm').reset();
-        this.isEditing = false;
-        this.editingName = null;
-    }
-
-    async saveArchiveGroup() {
-        // Get values directly from DOM elements instead of using FormData
-        const name = document.getElementById('name').value.trim();
-        const topicFilterText = document.getElementById('topicFilter').value.trim();
-        const lastValType = document.getElementById('lastValType').value;
-        const archiveType = document.getElementById('archiveType').value;
-        const retainedOnly = document.getElementById('retainedOnly').checked;
-        const payloadFormat = document.getElementById('payloadFormat').value;
-        const lastValRetention = document.getElementById('lastValRetention').value.trim();
-        const archiveRetention = document.getElementById('archiveRetention').value.trim();
-        const purgeInterval = document.getElementById('purgeInterval').value.trim();
-
-
-        if (!name || !topicFilterText || !lastValType || !archiveType) {
-            this.showError('Please fill in all required fields');
-            return;
-        }
-
-        // Validate lastValRetention format with MEMORY store
-        if (lastValType === 'MEMORY' && lastValRetention) {
-            // Check if retention is time-based (ends with d, h, m, s, w, M, y)
-            if (/^[0-9]+(d|h|m|s|w|M|y)$/.test(lastValRetention)) {
-                this.showError(
-                    `MEMORY store does not support time-based retention ("${lastValRetention}").\n\n` +
-                    `Use size-based format instead, e.g., "50k" or "100000k" (number of entries).\n\n` +
-                    `Or switch to a persistent store (POSTGRES, CRATEDB, MONGODB, SQLITE) to use time-based retention.`
-                );
-                return;
-            }
-            // Check if it's size-based (ends with k)
-            if (!lastValRetention.endsWith('k')) {
-                this.showError(
-                    `MEMORY store requires size-based retention format.\n\n` +
-                    `Use format like "50k" or "100000k" where k = 1,000 entries.\n\n` +
-                    `Examples:\n` +
-                    `- 50k = keep last 50,000 entries\n` +
-                    `- 100k = keep last 100,000 entries`
-                );
-                return;
-            }
-        }
-
-        // Parse topic filters
-        const topicFilter = topicFilterText.split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0);
-
-        if (topicFilter.length === 0) {
-            this.showError('At least one topic filter is required');
-            return;
-        }
-
-        try {
-            const input = {
-                name,
-                topicFilter,
-                lastValType,
-                archiveType,
-                payloadFormat,
-                retainedOnly
-            };
-
-            // Always include retention fields when editing (could be empty to clear them)
-            if (this.isEditing) {
-                input.lastValRetention = lastValRetention || null;
-                input.archiveRetention = archiveRetention || null;
-                input.purgeInterval = purgeInterval || null;
-            } else {
-                // Only include retention fields if they have values when creating
-                if (lastValRetention) input.lastValRetention = lastValRetention;
-                if (archiveRetention) input.archiveRetention = archiveRetention;
-                if (purgeInterval) input.purgeInterval = purgeInterval;
-            }
-
-
-            let result;
-            if (this.isEditing) {
-                // For update, use the original name to identify the archive group
-                const updateInput = {
-                    name: this.editingName, // Original name to identify the archive group
-                    topicFilter: input.topicFilter,
-                    lastValType: input.lastValType,
-                    archiveType: input.archiveType,
-                    retainedOnly: input.retainedOnly,
-                    payloadFormat: input.payloadFormat,
-                    lastValRetention: input.lastValRetention,
-                    archiveRetention: input.archiveRetention,
-                    purgeInterval: input.purgeInterval
-                };
-
-
-                result = await window.graphqlClient.query(`
-                    mutation UpdateArchiveGroup($input: UpdateArchiveGroupInput!) {
-                        archiveGroup {
-                            update(input: $input) {
-                                success
-                                message
-                            }
-                        }
-                    }
-                `, { input: updateInput });
-
-                if (result.archiveGroup.update.success) {
-                    console.log('Archive group updated successfully');
-                    this.closeModal();
-                    await this.loadArchiveGroups();
-                } else {
-                    this.showError(result.archiveGroup.update.message || 'Failed to update archive group');
-                }
-            } else {
-                result = await window.graphqlClient.query(`
-                    mutation CreateArchiveGroup($input: CreateArchiveGroupInput!) {
-                        archiveGroup {
-                            create(input: $input) {
-                                success
-                                message
-                            }
-                        }
-                    }
-                `, { input });
-
-                if (result.archiveGroup.create.success) {
-                    console.log('Archive group created successfully');
-                    this.closeModal();
-                    await this.loadArchiveGroups();
-                } else {
-                    this.showError(result.archiveGroup.create.message || 'Failed to create archive group');
-                }
-            }
-        } catch (error) {
-            console.error('Error saving archive group:', error);
-            this.showError('Failed to save archive group: ' + error.message);
-        }
-    }
-
     showError(message) {
         // Simple error display - could be enhanced with a proper notification system
         alert('Error: ' + message);
@@ -489,11 +256,6 @@ class ArchiveGroupsManager {
             .replace(/'/g, "&#039;");
     }
 }
-
-// Global functions for onclick handlers
-window.openCreateModal = () => archiveGroupsManager.openCreateModal();
-window.closeModal = () => archiveGroupsManager.closeModal();
-window.saveArchiveGroup = () => archiveGroupsManager.saveArchiveGroup();
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
