@@ -96,6 +96,23 @@ class SidebarManager {
         const ixMenu = document.querySelector('ix-menu');
         if (!ixMenu) return;
 
+        // Add application header with logo and name
+        const ixApp = document.querySelector('ix-application');
+        if (ixApp && !ixApp.querySelector('ix-application-header')) {
+            const header = document.createElement('ix-application-header');
+            header.setAttribute('name', 'MonsterMQ');
+            header.setAttribute('slot', 'application-header');
+            const logo = document.createElement('img');
+            logo.src = '/assets/logo.png';
+            logo.alt = 'MonsterMQ';
+            logo.style.height = '32px';
+            logo.style.width = '32px';
+            logo.style.borderRadius = '4px';
+            logo.slot = 'logo';
+            header.appendChild(logo);
+            ixApp.prepend(header);
+        }
+
         const menuConfig = this.getMenuConfig();
 
         menuConfig.forEach(section => {
