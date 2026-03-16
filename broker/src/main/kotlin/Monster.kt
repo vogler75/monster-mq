@@ -811,7 +811,7 @@ MORE INFO:
 
                 // Dashboard config
                 val dashboardConfig = configJson.getJsonObject("Dashboard", JsonObject())
-                val dashboardEnabled = dashboardConfig.getBoolean("Enabled", false)
+                val dashboardEnabled = dashboardConfig.getBoolean("Enabled", true)
                 val dashboardPath: String? = if (dashboardEnabled) {
                     dashboardConfig.getString("Path", "")
                 } else null

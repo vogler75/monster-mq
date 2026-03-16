@@ -358,7 +358,7 @@
         "Enabled": {
           "type": "boolean",
           "description": "Enable serving the web dashboard",
-          "default": false
+          "default": true
         },
         "Path": {
           "type": "string",

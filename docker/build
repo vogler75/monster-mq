@@ -61,6 +61,7 @@ if [ "$DOCKER_ONLY" = false ]; then
     npm run build
     rm -rf ../broker/src/main/resources/dashboard
     cp -r dist ../broker/src/main/resources/dashboard
+    rm -f ../broker/src/main/resources/dashboard/config/brokers.json
     cd ../docker
 
     echo -e "${YELLOW}Running mvn package in broker directory...${NC}"
