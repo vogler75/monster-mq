@@ -1405,7 +1405,7 @@ Topic data:`;
             archiveGroup: this.topicBrowser.selectedArchiveGroup || 'Default',
             topicPattern: this.getTopicPattern(),
             question: question,
-            systemPrompt: this.systemPrompt !== this.defaultSystemPrompt ? this.systemPrompt : null,
+            systemPrompt: this.systemPrompt,
             maxTopics: maxTopics,
             // Only send chat history for follow-up questions (after context is loaded)
             chatHistory: isFollowUp ? this.chatHistory : null
