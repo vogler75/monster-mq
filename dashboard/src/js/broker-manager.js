@@ -22,13 +22,20 @@ class BrokerManager {
     }
 
     async _loadConfig() {
+        // Always add a "Local" broker that uses relative URLs (same origin)
+        var localBroker = { name: 'Local', host: '', port: 0, tls: false, default: true };
         try {
             var resp = await fetch('/config/brokers.json', { cache: 'no-store' });
             if (resp.ok) {
-                this.configBrokers = await resp.json();
+                var remote = await resp.json();
+                // Filter out any "Local" entries from config — the auto-injected one takes precedence
+                this.configBrokers = [localBroker].concat(remote.filter(function(b) { return b.name !== 'Local'; }));
+            } else {
+                this.configBrokers = [localBroker];
             }
         } catch (e) {
             console.warn('BrokerManager: could not load brokers.json', e);
+            this.configBrokers = [localBroker];
         }
         this.loaded = true;
     }

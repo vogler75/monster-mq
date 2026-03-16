@@ -67,52 +67,52 @@ class LogViewer {
     }
     container.innerHTML = `
       <style>
-        .log-viewer { position: fixed; bottom:0; left:0; right:0; background:#1e1e1e; color:#d4d4d4; font-family:Consolas,Monaco,'Courier New',monospace; font-size:12px; border-top:2px solid #007acc; box-shadow:0 -2px 10px rgba(0,0,0,.3); z-index:9999; display:flex; flex-direction:column; transition:height .25s ease, left .3s ease; backdrop-filter:blur(4px);}
+        .log-viewer { position: fixed; bottom:0; left:0; right:0; background:var(--theme-color-1, #0f1619); color:var(--theme-color-std-text, #f0f6fc); font-family:Consolas,Monaco,'Courier New',monospace; font-size:12px; border-top:2px solid var(--theme-color-primary, #0cc); box-shadow:0 -2px 10px rgba(0,0,0,.3); z-index:9999; display:flex; flex-direction:column; transition:height .25s ease, left .3s ease; backdrop-filter:blur(4px);}
         .log-viewer.expanded { height: var(--log-viewer-height, 400px); }
         .log-viewer.collapsed { height:36px !important; }
-        .log-viewer-header { display:flex; align-items:center; padding:6px 10px; background:#2d2d2d; border-bottom:1px solid #3e3e3e; cursor:pointer; user-select:none; }
+        .log-viewer-header { display:flex; align-items:center; padding:6px 10px; background:var(--theme-color-2, #18262d); border-bottom:1px solid var(--theme-color-soft-bdr, rgba(211,236,248,.4)); cursor:pointer; user-select:none; }
         .log-viewer-title { flex:1; font-weight:bold; display:flex; align-items:center; gap:8px; }
         .log-viewer-title .chevron { transition: transform .25s ease; font-size:14px; }
         .log-viewer.collapsed .chevron { transform:rotate(-90deg); }
-        .log-viewer-badge { background:#007acc; color:#fff; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:bold; }
+        .log-viewer-badge { background:var(--theme-color-primary, #0cc); color:var(--theme-color-primary--contrast, #000); padding:2px 8px; border-radius:10px; font-size:11px; font-weight:bold; }
         .log-viewer-status { margin-right:10px; display:flex; align-items:center; gap:6px; font-size:11px; }
-        .log-viewer-status-dot { width:8px; height:8px; border-radius:50%; background:#6c757d; }
-        .log-viewer-status.connected .log-viewer-status-dot { background:#28a745; box-shadow:0 0 6px #28a745; }
-        .log-viewer-status.disconnected .log-viewer-status-dot { background:#dc3545; }
-        .log-viewer-status.connecting .log-viewer-status-dot { background:#ffc107; animation:pulse 1s infinite; }
+        .log-viewer-status-dot { width:8px; height:8px; border-radius:50%; background:var(--theme-color-soft-text, #617d91); }
+        .log-viewer-status.connected .log-viewer-status-dot { background:var(--theme-color-success, #28a745); box-shadow:0 0 6px var(--theme-color-success, #28a745); }
+        .log-viewer-status.disconnected .log-viewer-status-dot { background:var(--theme-color-alarm, #dc3545); }
+        .log-viewer-status.connecting .log-viewer-status-dot { background:var(--theme-color-warning, #ffc107); animation:pulse 1s infinite; }
         @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.5;} }
         .log-viewer-actions { display:flex; gap:6px; }
-        .log-viewer-btn { background:#3e3e3e; border:1px solid #555; color:#d4d4d4; padding:3px 10px; border-radius:3px; cursor:pointer; font-size:11px; }
-        .log-viewer-btn:hover { background:#505050; }
-        .log-viewer-btn.active { background:#007acc; border-color:#007acc; color:#fff; font-weight:bold; }
-        .log-viewer-resize-handle { height:6px; cursor:ns-resize; background:linear-gradient(90deg,#007acc,#004f80); border-top:1px solid #004f80; }
-        .log-viewer-resize-handle:hover { background:linear-gradient(90deg,#0090ff,#006ba8); }
-        .log-viewer-filters { padding:6px 10px; background:#252526; border-bottom:1px solid #3e3e3e; display:flex; gap:12px; flex-wrap:wrap; }
+        .log-viewer-btn { background:var(--theme-color-3, #223240); border:1px solid var(--theme-color-soft-bdr, rgba(211,236,248,.4)); color:var(--theme-color-std-text, #f0f6fc); padding:3px 10px; border-radius:3px; cursor:pointer; font-size:11px; }
+        .log-viewer-btn:hover { background:var(--theme-color-ghost--hover, #2a3d4d); }
+        .log-viewer-btn.active { background:var(--theme-color-primary, #0cc); border-color:var(--theme-color-primary, #0cc); color:var(--theme-color-primary--contrast, #000); font-weight:bold; }
+        .log-viewer-resize-handle { height:6px; cursor:ns-resize; background:var(--theme-color-primary, #0cc); border-top:1px solid var(--theme-color-soft-bdr, rgba(211,236,248,.4)); opacity:0.6; }
+        .log-viewer-resize-handle:hover { opacity:1; }
+        .log-viewer-filters { padding:6px 10px; background:var(--theme-color-2, #18262d); border-bottom:1px solid var(--theme-color-soft-bdr, rgba(211,236,248,.4)); display:flex; gap:12px; flex-wrap:wrap; }
         .log-viewer-filter { display:flex; align-items:center; gap:6px; }
-        .log-viewer-filter label { font-size:11px; color:#999; }
-        .log-viewer-filter input[type=text], .log-viewer-filter select { background:#3c3c3c; border:1px solid #555; color:#d4d4d4; padding:4px 6px; border-radius:3px; font-size:11px; }
-        .log-viewer-filter input[type=text]:focus { outline:none; border-color:#007acc; }
+        .log-viewer-filter label { font-size:11px; color:var(--theme-color-soft-text, #617d91); }
+        .log-viewer-filter input[type=text], .log-viewer-filter select { background:var(--theme-color-1, #0f1619); border:1px solid var(--theme-color-soft-bdr, rgba(211,236,248,.4)); color:var(--theme-color-std-text, #f0f6fc); padding:4px 6px; border-radius:3px; font-size:11px; }
+        .log-viewer-filter input[type=text]:focus { outline:none; border-color:var(--theme-color-primary, #0cc); }
         .log-viewer-level-checkboxes { display:flex; gap:10px; }
-        .log-viewer-content { flex:1; overflow-y:auto; padding:6px 8px; background:#1e1e1e; }
+        .log-viewer-content { flex:1; overflow-y:auto; padding:6px 8px; background:var(--theme-color-1, #0f1619); }
         .log-viewer-logs { display:flex; flex-direction:column; gap:2px; }
         .log-entry { padding:4px 8px; border-left:3px solid transparent; }
-        .log-entry:hover { background:#2d2d30; }
-        .log-entry.level-INFO { border-left-color:#007acc; }
-        .log-entry.level-WARNING { border-left-color:#ff9800; }
-        .log-entry.level-SEVERE { border-left-color:#f44336; }
+        .log-entry:hover { background:var(--theme-color-2, #18262d); }
+        .log-entry.level-INFO { border-left-color:var(--theme-color-primary, #0cc); }
+        .log-entry.level-WARNING { border-left-color:var(--theme-color-warning, #ff9800); }
+        .log-entry.level-SEVERE { border-left-color:var(--theme-color-alarm, #f44336); }
         .log-entry-header { display:flex; gap:8px; font-size:12px; }
-        .log-entry-time { color:#6a9955; min-width:80px; }
+        .log-entry-time { color:var(--theme-color-success, #6a9955); min-width:80px; }
         .log-entry-level { font-weight:bold; min-width:70px; }
-        .log-entry-level.INFO { color:#4fc3f7; }
-        .log-entry-level.WARNING { color:#ffb74d; }
-        .log-entry-level.SEVERE { color:#ef5350; }
-        .log-entry-logger { color:#9cdcfe; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .log-entry-message { color:#d4d4d4; flex:1; word-wrap:break-word; }
-        .log-entry-exception { margin-top:6px; padding:6px; background:#2d2d2d; border-left:3px solid #f44336; border-radius:3px; }
-        .exception-header { color:#ef5350; font-weight:bold; margin-bottom:4px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px; }
+        .log-entry-level.INFO { color:var(--theme-color-primary, #4fc3f7); }
+        .log-entry-level.WARNING { color:var(--theme-color-warning, #ffb74d); }
+        .log-entry-level.SEVERE { color:var(--theme-color-alarm, #ef5350); }
+        .log-entry-logger { color:var(--theme-color-soft-text, #97bdd4); max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .log-entry-message { color:var(--theme-color-std-text, #f0f6fc); flex:1; word-wrap:break-word; }
+        .log-entry-exception { margin-top:6px; padding:6px; background:var(--theme-color-2, #18262d); border-left:3px solid var(--theme-color-alarm, #f44336); border-radius:3px; }
+        .exception-header { color:var(--theme-color-alarm, #ef5350); font-weight:bold; margin-bottom:4px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px; }
         .exception-header .chevron { transition: transform .2s ease; font-size:12px; }
         .exception-header.collapsed .chevron { transform:rotate(-90deg); }
-        .exception-stacktrace { margin:6px 0 0 0; padding:6px; background:#1e1e1e; border-radius:3px; font-size:11px; color:#ce9178; white-space:pre-wrap; word-wrap:break-word; max-height:200px; overflow-y:auto; }
+        .exception-stacktrace { margin:6px 0 0 0; padding:6px; background:var(--theme-color-1, #0f1619); border-radius:3px; font-size:11px; color:var(--theme-color-warning, #ce9178); white-space:pre-wrap; word-wrap:break-word; max-height:200px; overflow-y:auto; }
         .exception-stacktrace.collapsed { display:none; }
       </style>
       <div class="log-viewer ${this.isCollapsed ? 'collapsed' : 'expanded'}" style="--log-viewer-height:${this.currentHeight}px;">
@@ -134,13 +134,13 @@ class LogViewer {
           </div>
         </div>
         <div class="log-viewer-resize-handle" title="Drag to resize"></div>
-        <div class="log-viewer-history-controls" style="display:none; padding:8px 10px; background:#252526; border-bottom:1px solid #3e3e3e; gap:8px; flex-wrap:wrap; align-items:center;">
+        <div class="log-viewer-history-controls" style="display:none; padding:8px 10px; background:var(--theme-color-2, #18262d); border-bottom:1px solid var(--theme-color-soft-bdr, rgba(211,236,248,.4)); gap:8px; flex-wrap:wrap; align-items:center;">
           <div class="log-viewer-filter" style="margin-right:10px;">
-            <label style="font-weight:bold; color:#4fc3f7;">History Mode</label>
+            <label style="font-weight:bold; color:var(--theme-color-primary, #0cc);">History Mode</label>
           </div>
           <div class="log-viewer-filter">
             <label>Quick:</label>
-            <select data-history="quick" style="background:#3c3c3c; border:1px solid #555; color:#d4d4d4; padding:4px 8px; border-radius:3px; font-size:11px;">
+            <select data-history="quick" style="background:var(--theme-color-1, #0f1619); border:1px solid var(--theme-color-soft-bdr, rgba(211,236,248,.4)); color:var(--theme-color-std-text, #f0f6fc); padding:4px 8px; border-radius:3px; font-size:11px;">
               <option value="5">Last 5 min</option>
               <option value="15">Last 15 min</option>
               <option value="30" selected>Last 30 min</option>
@@ -153,17 +153,17 @@ class LogViewer {
           </div>
           <div class="log-viewer-filter log-viewer-custom-range" style="display:none; gap:6px;">
             <label>From:</label>
-            <input type="datetime-local" data-history="start" style="background:#3c3c3c; border:1px solid #555; color:#d4d4d4; padding:4px 6px; border-radius:3px; font-size:11px;">
+            <input type="datetime-local" data-history="start" style="background:var(--theme-color-1, #0f1619); border:1px solid var(--theme-color-soft-bdr, rgba(211,236,248,.4)); color:var(--theme-color-std-text, #f0f6fc); padding:4px 6px; border-radius:3px; font-size:11px;">
             <label>To:</label>
-            <input type="datetime-local" data-history="end" style="background:#3c3c3c; border:1px solid #555; color:#d4d4d4; padding:4px 6px; border-radius:3px; font-size:11px;">
+            <input type="datetime-local" data-history="end" style="background:var(--theme-color-1, #0f1619); border:1px solid var(--theme-color-soft-bdr, rgba(211,236,248,.4)); color:var(--theme-color-std-text, #f0f6fc); padding:4px 6px; border-radius:3px; font-size:11px;">
           </div>
           <div class="log-viewer-filter">
             <label>Limit:</label>
-            <input type="number" data-history="limit" value="500" min="10" max="10000" step="50" style="background:#3c3c3c; border:1px solid #555; color:#d4d4d4; padding:4px 6px; border-radius:3px; font-size:11px; width:80px;" title="Maximum number of log entries to load">
+            <input type="number" data-history="limit" value="500" min="10" max="10000" step="50" style="background:var(--theme-color-1, #0f1619); border:1px solid var(--theme-color-soft-bdr, rgba(211,236,248,.4)); color:var(--theme-color-std-text, #f0f6fc); padding:4px 6px; border-radius:3px; font-size:11px; width:80px;" title="Maximum number of log entries to load">
           </div>
-          <button class="log-viewer-btn" data-action="load-history" style="background:#007acc; border-color:#005a9e;">Load Logs</button>
+          <button class="log-viewer-btn" data-action="load-history" style="background:var(--theme-color-primary, #0cc); border-color:var(--theme-color-primary, #0cc); color:var(--theme-color-primary--contrast, #000);">Load Logs</button>
           <button class="log-viewer-btn" data-action="load-more" style="display:none;">⬆ Load 5 min Earlier</button>
-          <span class="log-viewer-history-info" style="margin-left:auto; font-size:11px; color:#999;"></span>
+          <span class="log-viewer-history-info" style="margin-left:auto; font-size:11px; color:var(--theme-color-soft-text, #617d91);"></span>
         </div>
         <div class="log-viewer-filters">
           <div class="log-viewer-filter">

@@ -58,6 +58,8 @@ import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.ext.web.handler.graphql.GraphQLHandler
 import io.vertx.ext.web.handler.graphql.GraphQLHandlerOptions
 import io.vertx.ext.web.handler.graphql.ws.GraphQLWSHandler
+import io.vertx.ext.web.handler.StaticHandler
+import io.vertx.ext.web.handler.FileSystemAccess
 import java.util.logging.Logger
 
 class GraphQLServer(
@@ -73,7 +75,8 @@ class GraphQLServer(
     private val metricsStore: IMetricsStore?,
     private val archiveHandler: ArchiveHandler?,
     private val sharedDeviceConfigStore: IDeviceConfigStore? = null,
-    private val genAiProvider: at.rocworks.genai.IGenAiProvider? = null
+    private val genAiProvider: at.rocworks.genai.IGenAiProvider? = null,
+    private val dashboardPath: String? = null
 ) {
     companion object {
         private val logger: Logger = Utils.getLogger(GraphQLServer::class.java)
@@ -191,6 +194,33 @@ class GraphQLServer(
             ctx.response()
                 .putHeader("content-type", "application/json")
                 .end(JsonObject().put("status", "healthy").encode())
+        }
+
+        // Dashboard static file serving
+        if (dashboardPath != null) {
+            val staticHandler = if (dashboardPath.isNotEmpty()) {
+                // Dev mode: serve from filesystem path
+                logger.info("Dashboard serving from filesystem: $dashboardPath")
+                StaticHandler.create(FileSystemAccess.ROOT, dashboardPath)
+                    .setIndexPage("index.html")
+                    .setCachingEnabled(false)
+            } else {
+                // Production: serve from classpath resources
+                logger.info("Dashboard serving from classpath resources")
+                StaticHandler.create("dashboard")
+                    .setIndexPage("index.html")
+                    .setCachingEnabled(true)
+            }
+            router.route("/*").handler(staticHandler)
+            // Suppress broken pipe errors from browsers closing connections early
+            router.route("/*").failureHandler { ctx ->
+                val cause = ctx.failure()
+                if (cause is java.io.IOException && cause.message?.contains("Broken pipe") == true) {
+                    logger.fine("Client disconnected (broken pipe)")
+                } else {
+                    ctx.next()
+                }
+            }
         }
 
         // Create HTTP server

@@ -1,12 +1,5 @@
 [
   {
-    "name": "Local",
-    "host": "localhost",
-    "port": 4000,
-    "tls": false,
-    "default": true
-  },
-  {
     "name": "Linux5",
     "host": "linux5",
     "port": 4000,

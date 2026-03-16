@@ -46,6 +46,18 @@ function buildProxyConfig() {
   } catch (e) {
     console.warn('Could not read brokers.json:', e.message);
   }
+  // Local broker: proxy /graphql and /graphqlws to localhost:4000
+  proxy['/graphql'] = {
+    target: 'http://localhost:4000',
+    changeOrigin: true,
+    secure: false
+  };
+  proxy['/graphqlws'] = {
+    target: 'ws://localhost:4000',
+    changeOrigin: true,
+    secure: false,
+    ws: true
+  };
   return proxy;
 }
 
@@ -62,7 +74,13 @@ export default defineConfig({
       output: {
         entryFileNames: 'js/[name].js',
         chunkFileNames: 'js/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]'
+        assetFileNames: (assetInfo) => {
+          // Give the main CSS a stable name so index.html can reference it
+          if (assetInfo.names && assetInfo.names.includes('ix-init.css')) {
+            return 'assets/ix-init.css';
+          }
+          return 'assets/[name]-[hash][extname]';
+        }
       }
     }
   },

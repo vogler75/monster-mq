@@ -351,6 +351,22 @@
         }
       }
     },
+    "Dashboard": {
+      "type": "object",
+      "description": "Web dashboard configuration (served from the GraphQL HTTP port)",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Enable serving the web dashboard",
+          "default": false
+        },
+        "Path": {
+          "type": "string",
+          "description": "Filesystem path to dashboard files (for development). Leave empty to serve from classpath.",
+          "default": ""
+        }
+      }
+    },
     "GraphQL": {
       "type": "object",
       "description": "GraphQL server configuration",

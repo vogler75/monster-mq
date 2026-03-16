@@ -809,6 +809,13 @@ MORE INFO:
                     null
                 }
 
+                // Dashboard config
+                val dashboardConfig = configJson.getJsonObject("Dashboard", JsonObject())
+                val dashboardEnabled = dashboardConfig.getBoolean("Enabled", false)
+                val dashboardPath: String? = if (dashboardEnabled) {
+                    dashboardConfig.getString("Path", "")
+                } else null
+
                 // GraphQL Server
                 val graphQLConfig = configJson.getJsonObject("GraphQL", JsonObject())
                 val graphQLEnabled = graphQLConfig.getBoolean("Enabled", true)
@@ -828,7 +835,8 @@ MORE INFO:
                         metricsStore,
                         this.archiveHandler,
                         deviceConfigStore,
-                        genAiProvider
+                        genAiProvider,
+                        dashboardPath
                     )
                 } else {
                     logger.fine("GraphQL server is disabled in configuration")

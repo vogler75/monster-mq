@@ -54,6 +54,15 @@ fi
 
 # Build the broker with Maven (unless -d flag is set)
 if [ "$DOCKER_ONLY" = false ]; then
+    # Build dashboard and copy to broker resources
+    echo -e "${YELLOW}Building dashboard...${NC}"
+    cd ../dashboard
+    npm ci
+    npm run build
+    rm -rf ../broker/src/main/resources/dashboard
+    cp -r dist ../broker/src/main/resources/dashboard
+    cd ../docker
+
     echo -e "${YELLOW}Running mvn package in broker directory...${NC}"
     cd ../broker
     mvn package
