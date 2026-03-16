@@ -55,7 +55,7 @@ class TopicSchemaMutations(
                     val device = DeviceConfig(
                         name = name,
                         namespace = "schema",
-                        nodeId = "",
+                        nodeId = "*",
                         config = config,
                         enabled = true,
                         type = DeviceConfig.DEVICE_TYPE_TOPIC_SCHEMA_POLICY
@@ -110,7 +110,7 @@ class TopicSchemaMutations(
                     val updatedDevice = DeviceConfig(
                         name = input["name"] as? String ?: name,
                         namespace = "schema",
-                        nodeId = existing.nodeId,
+                        nodeId = "*",
                         config = config,
                         enabled = true,
                         type = DeviceConfig.DEVICE_TYPE_TOPIC_SCHEMA_POLICY,
@@ -203,7 +203,7 @@ class TopicSchemaMutations(
                         val device = DeviceConfig(
                             name = name,
                             namespace = topicFilter,
-                            nodeId = "",
+                            nodeId = "*",
                             config = config,
                             enabled = input["enabled"] as? Boolean ?: true,
                             type = DeviceConfig.DEVICE_TYPE_TOPIC_NAMESPACE
@@ -274,7 +274,7 @@ class TopicSchemaMutations(
                         val updatedDevice = DeviceConfig(
                             name = input["name"] as? String ?: name,
                             namespace = topicFilter,
-                            nodeId = existing.nodeId,
+                            nodeId = "*",
                             config = config,
                             enabled = input["enabled"] as? Boolean ?: existing.enabled,
                             type = DeviceConfig.DEVICE_TYPE_TOPIC_NAMESPACE,
