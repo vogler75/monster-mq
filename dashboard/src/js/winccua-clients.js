@@ -178,11 +178,7 @@ class WinCCUaClientManager {
                         ${client.config.addresses.length}
                     </div>
                 </td>
-                <td>
-                    <div class="metric-value" style="color: var(--monster-green); font-weight: 500;">
-                        ${messagesIn}
-                    </div>
-                </td>
+                <td>${messagesIn}</td>
                 <td>
                     <div class="action-buttons">
                         <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit Client" onclick="winCCUaClientManager.editClient('${this.escapeAttr(client.name)}')"></ix-icon-button>
