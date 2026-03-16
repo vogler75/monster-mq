@@ -1014,58 +1014,6 @@
     </div>
 
     <script src="/js/winccoa-client-detail.js"></script>
-    <script>
-        // Query examples data
-        const QUERY_EXAMPLES = [
-            "SELECT '_original.._value', '_original.._stime', '_original.._status' FROM '*.**' WHERE _DPT = \"ExampleDP_Float\"",
-            "SELECT ALERT '_alert_hdl.._last','_alert_hdl.._abbr','_alert_hdl.._prior','_alert_hdl.._text','_alert_hdl.._direction','_alert_hdl.._value','_alert_hdl.._ack_state','_alert_hdl.._ackable','_alert_hdl.._oldest_ack','_alert_hdl.._ack_oblig','_alert_hdl.._ack_time','_alert_hdl.._comment','_alert_hdl.._panel','_alert_hdl.._partner','_alert_hdl.._alert_color','_alert_hdl.._visible','_alert_hdl.._dest','_alert_hdl.._ack_user','_alert_hdl.._class','_alert_hdl.._alert_fore_color' FROM '{*}'"
-        ];
-
-        // Show query examples modal
-        function showQueryExamplesModal() {
-            document.getElementById('query-examples-modal').style.display = 'flex';
-        }
-
-        // Hide query examples modal
-        function hideQueryExamplesModal() {
-            document.getElementById('query-examples-modal').style.display = 'none';
-        }
-
-        // Copy query example to clipboard
-        function copyQueryExample(index) {
-            const query = QUERY_EXAMPLES[index];
-            navigator.clipboard.writeText(query).then(() => {
-                // Update button text temporarily
-                const buttons = document.querySelectorAll('#query-examples-modal .btn-secondary');
-                const button = buttons[index];
-                const originalText = button.textContent;
-                button.textContent = 'Copied!';
-                button.style.background = 'var(--monster-green)';
-                button.style.color = 'white';
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.style.background = '';
-                    button.style.color = '';
-                }, 2000);
-            }).catch(err => {
-                console.error('Failed to copy query:', err);
-                alert('Failed to copy query to clipboard');
-            });
-        }
-
-        // Handle modal clicks (close when clicking outside)
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal')) {
-                if (e.target.id === 'add-query-modal') {
-                    clientDetailManager.hideAddQueryModal();
-                } else if (e.target.id === 'confirm-delete-query-modal') {
-                    clientDetailManager.hideConfirmDeleteQueryModal();
-                } else if (e.target.id === 'query-examples-modal') {
-                    hideQueryExamplesModal();
-                }
-            }
-        });
-    </script>
     </ix-application>
 </body>
 </html>

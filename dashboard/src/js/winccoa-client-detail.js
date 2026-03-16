@@ -686,8 +686,54 @@ function goBack() {
     clientDetailManager.goBack();
 }
 
+// Query examples data
+var QUERY_EXAMPLES = [
+    "SELECT '_original.._value', '_original.._stime', '_original.._status' FROM '*.**' WHERE _DPT = \"ExampleDP_Float\"",
+    "SELECT ALERT '_alert_hdl.._last','_alert_hdl.._abbr','_alert_hdl.._prior','_alert_hdl.._text','_alert_hdl.._direction','_alert_hdl.._value','_alert_hdl.._ack_state','_alert_hdl.._ackable','_alert_hdl.._oldest_ack','_alert_hdl.._ack_oblig','_alert_hdl.._ack_time','_alert_hdl.._comment','_alert_hdl.._panel','_alert_hdl.._partner','_alert_hdl.._alert_color','_alert_hdl.._visible','_alert_hdl.._dest','_alert_hdl.._ack_user','_alert_hdl.._class','_alert_hdl.._alert_fore_color' FROM '{*}'"
+];
+
+function showQueryExamplesModal() {
+    document.getElementById('query-examples-modal').style.display = 'flex';
+}
+
+function hideQueryExamplesModal() {
+    document.getElementById('query-examples-modal').style.display = 'none';
+}
+
+function copyQueryExample(index) {
+    var query = QUERY_EXAMPLES[index];
+    navigator.clipboard.writeText(query).then(function() {
+        var buttons = document.querySelectorAll('#query-examples-modal .btn-secondary');
+        var button = buttons[index];
+        var originalText = button.textContent;
+        button.textContent = 'Copied!';
+        button.style.background = 'var(--monster-green)';
+        button.style.color = 'white';
+        setTimeout(function() {
+            button.textContent = originalText;
+            button.style.background = '';
+            button.style.color = '';
+        }, 2000);
+    }).catch(function(err) {
+        console.error('Failed to copy query:', err);
+    });
+}
+
+// Handle modal clicks (close when clicking outside)
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('modal')) {
+        if (e.target.id === 'add-query-modal' && window.clientDetailManager) {
+            window.clientDetailManager.hideAddQueryModal();
+        } else if (e.target.id === 'confirm-delete-query-modal' && window.clientDetailManager) {
+            window.clientDetailManager.hideConfirmDeleteQueryModal();
+        } else if (e.target.id === 'query-examples-modal') {
+            hideQueryExamplesModal();
+        }
+    }
+});
+
 // Initialize when DOM is loaded
-let clientDetailManager;
-document.addEventListener('DOMContentLoaded', () => {
+var clientDetailManager;
+document.addEventListener('DOMContentLoaded', function() {
     clientDetailManager = new WinCCOaClientDetailManager();
 });
