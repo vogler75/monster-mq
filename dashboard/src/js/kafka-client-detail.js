@@ -57,7 +57,7 @@ class KafkaClientDetailManager {
         // Hide toggle/delete buttons
         const toggleBtn = document.getElementById('toggle-client-btn');
         if (toggleBtn) toggleBtn.style.display = 'none';
-        const deleteBtn = document.getElementById('delete-client-btn');
+        const deleteBtn = document.getElementById('delete-btn');
         if (deleteBtn) deleteBtn.style.display = 'none';
 
         // Show form

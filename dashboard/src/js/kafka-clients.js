@@ -72,9 +72,9 @@ class KafkaClientManager {
                 <td>${(client.metrics && client.metrics.length>0 ? Math.round(client.metrics[0].messagesOut) : 0)}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit Client" onclick="kafkaClientManager.viewClient('${client.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="primary" ghost size="16" title="${client.enabled ? 'Disable Client' : 'Enable Client'}" onclick="kafkaClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Client" onclick="kafkaClientManager.deleteClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit Client" onclick="kafkaClientManager.viewClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24" title="${client.enabled ? 'Disable Client' : 'Enable Client'}" onclick="kafkaClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Client" onclick="kafkaClientManager.deleteClient('${client.name}')"></ix-icon-button>
                     </div>
                 </td>
             `;

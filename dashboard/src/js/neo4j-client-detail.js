@@ -35,7 +35,7 @@ class Neo4jClientDetailManager {
         document.getElementById('page-subtitle').textContent = 'Create a new Neo4j graph database client';
         document.getElementById('client-topic-filters').value = '#';
         document.getElementById('client-enabled').checked = true;
-        const deleteBtn = document.getElementById('delete-client-btn');
+        const deleteBtn = document.getElementById('delete-btn');
         if (deleteBtn) deleteBtn.style.display = 'none';
         const metricsSection = document.getElementById('metrics-section');
         if (metricsSection) metricsSection.style.display = 'none';

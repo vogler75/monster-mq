@@ -121,7 +121,7 @@ class NatsClientDetailManager {
 
         const toggleBtn = document.getElementById('toggle-client-btn');
         if (toggleBtn) toggleBtn.style.display = 'none';
-        const deleteBtn = document.getElementById('delete-client-btn');
+        const deleteBtn = document.getElementById('delete-btn');
         if (deleteBtn) deleteBtn.style.display = 'none';
         const addressesSection = document.getElementById('addresses-section');
         if (addressesSection) addressesSection.style.display = 'none';
@@ -216,12 +216,8 @@ class NatsClientDetailManager {
                 <td>${addr.autoConvert ? '✓' : '—'}</td>
                 <td>${addr.removePath ? '✓' : '—'}</td>
                 <td><div class="action-buttons">
-                     <button class="btn-icon" title="Edit" onclick="natsDetailManager.showEditAddressModal(${idx})" style="color:var(--monster-purple);">
-                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                     </button>
-                     <button class="btn-icon btn-delete" title="Delete" onclick="natsDetailManager.removeAddress(${idx})">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                    </button>
+                    <ix-icon-button icon="pen" variant="primary" ghost size="16" title="Edit" onclick="natsDetailManager.showEditAddressModal(${idx})"></ix-icon-button>
+                    <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete" onclick="natsDetailManager.removeAddress(${idx})"></ix-icon-button>
                 </div></td>
             </tr>
         `).join('');

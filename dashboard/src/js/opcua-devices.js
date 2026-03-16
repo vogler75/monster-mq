@@ -156,9 +156,9 @@ class OpcUaDeviceManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit Device" onclick="opcuaManager.viewDevice('${device.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${device.enabled ? 'pause' : 'play'}" variant="primary" ghost size="16" title="${device.enabled ? 'Disable Device' : 'Enable Device'}" onclick="opcuaManager.toggleDevice('${device.name}', ${!device.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Device" onclick="opcuaManager.deleteDevice('${device.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit Device" onclick="opcuaManager.viewDevice('${device.name}')"></ix-icon-button>
+                        <ix-icon-button icon="${device.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24" title="${device.enabled ? 'Disable Device' : 'Enable Device'}" onclick="opcuaManager.toggleDevice('${device.name}', ${!device.enabled})"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Device" onclick="opcuaManager.deleteDevice('${device.name}')"></ix-icon-button>
                     </div>
                 </td>
             `;

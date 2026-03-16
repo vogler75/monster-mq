@@ -185,9 +185,9 @@ class WinCCUaClientManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit Client" onclick="winCCUaClientManager.editClient('${this.escapeAttr(client.name)}')"></ix-icon-button>
-                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="primary" ghost size="16" title="${client.enabled ? 'Stop Client' : 'Start Client'}" onclick="winCCUaClientManager.toggleClient('${this.escapeAttr(client.name)}', ${!client.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Client" onclick="winCCUaClientManager.deleteClient('${this.escapeAttr(client.name)}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit Client" onclick="winCCUaClientManager.editClient('${this.escapeAttr(client.name)}')"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24" title="${client.enabled ? 'Stop Client' : 'Start Client'}" onclick="winCCUaClientManager.toggleClient('${this.escapeAttr(client.name)}', ${!client.enabled})"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Client" onclick="winCCUaClientManager.deleteClient('${this.escapeAttr(client.name)}')"></ix-icon-button>
                     </div>
                 </td>
             `;

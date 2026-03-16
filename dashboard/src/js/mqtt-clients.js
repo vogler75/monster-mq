@@ -141,9 +141,9 @@ class MqttClientManager {
                 <td>${(client.metrics && client.metrics.length>0 ? Math.round(client.metrics[0].messagesOut) : 0)}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit Bridge" onclick="mqttClientManager.viewClient('${client.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="primary" ghost size="16" title="${client.enabled ? 'Stop Bridge' : 'Start Bridge'}" onclick="mqttClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Bridge" onclick="mqttClientManager.deleteClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit Bridge" onclick="mqttClientManager.viewClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24" title="${client.enabled ? 'Stop Bridge' : 'Start Bridge'}" onclick="mqttClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Bridge" onclick="mqttClientManager.deleteClient('${client.name}')"></ix-icon-button>
                     </div>
                 </td>
             `;

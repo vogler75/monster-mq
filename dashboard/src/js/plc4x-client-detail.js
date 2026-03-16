@@ -55,8 +55,11 @@ class Plc4xClientDetailManager {
         // Update save button text
         const saveButton = document.getElementById('save-client-btn');
         if (saveButton) {
-            saveButton.textContent = 'Create Client';
+            saveButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg> Create Client';
         }
+
+        const deleteBtn = document.getElementById('delete-btn');
+        if (deleteBtn) deleteBtn.style.display = 'none';
     }
 
     async loadClusterNodes() {
@@ -249,11 +252,7 @@ class Plc4xClientDetailManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn btn-sm btn-danger"
-                                onclick="clientDetailManager.deleteAddress('${this.escapeHtml(address.address)}')"
-                                title="Delete Address">
-                            🗑️
-                        </button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Address" onclick="clientDetailManager.deleteAddress('${this.escapeHtml(address.address)}')"></ix-icon-button>
                     </div>
                 </td>
             `;
@@ -595,6 +594,30 @@ class Plc4xClientDetailManager {
         }
     }
 
+    async deleteClient() {
+        try {
+            const mutation = `mutation DeletePlc4xDevice($name: String!) { plc4xDevice { delete(name: $name) } }`;
+            const result = await this.client.query(mutation, { name: this.clientName });
+            if (result.plc4xDevice.delete) {
+                this.showSuccess('PLC4X client deleted');
+                setTimeout(() => { window.spaLocation.href = '/pages/plc4x-clients.html'; }, 800);
+            } else {
+                this.showError('Failed to delete PLC4X client');
+            }
+        } catch (e) {
+            console.error('Delete error', e);
+            this.showError('Failed to delete PLC4X client: ' + e.message);
+        }
+    }
+
+    showDeleteModal() {
+        const span = document.getElementById('delete-client-name');
+        if (span && this.clientData) span.textContent = this.clientData.name || this.clientName;
+        document.getElementById('delete-client-modal').style.display = 'flex';
+    }
+    hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
+    confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
+
     goBack() {
         window.spaLocation.href = '/pages/plc4x-clients.html';
     }
@@ -629,6 +652,10 @@ function goBack() {
     clientDetailManager.goBack();
 }
 
+function showDeleteModal() { clientDetailManager.showDeleteModal(); }
+function hideDeleteModal() { clientDetailManager.hideDeleteModal(); }
+function confirmDeleteClient() { clientDetailManager.confirmDeleteClient(); }
+
 // Initialize when DOM is loaded
 let clientDetailManager;
 document.addEventListener('DOMContentLoaded', () => {
@@ -642,6 +669,8 @@ document.addEventListener('click', (e) => {
             clientDetailManager.hideAddAddressModal();
         } else if (e.target.id === 'confirm-delete-address-modal') {
             clientDetailManager.hideConfirmDeleteAddressModal();
+        } else if (e.target.id === 'delete-client-modal') {
+            clientDetailManager.hideDeleteModal();
         }
     }
 });

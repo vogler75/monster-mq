@@ -231,9 +231,9 @@ class UserManager {
                     <td>${user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}</td>
                     <td>
                         <div style="display: flex; gap: 0.5rem;">
-                            <ix-icon-button icon="highlight" variant="primary" ghost size="16" class="edit-user-btn" title="Edit"
+                            <ix-icon-button icon="highlight" variant="primary" ghost size="24" class="edit-user-btn" title="Edit"
                                     data-username="${this.escapeHtml(user.username)}"></ix-icon-button>
-                            <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete delete-user-btn" title="Delete"
+                            <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete delete-user-btn" title="Delete"
                                     data-username="${this.escapeHtml(user.username)}"></ix-icon-button>
                         </div>
                     </td>

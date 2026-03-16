@@ -79,9 +79,9 @@ class Neo4jClientManager {
                 <td>${metrics ? metrics.pathQueueSize : 0}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit Client" onclick="neo4jClientManager.viewClient('${client.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="primary" ghost size="16" title="${client.enabled ? 'Disable Client' : 'Enable Client'}" onclick="neo4jClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Client" onclick="neo4jClientManager.deleteClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit Client" onclick="neo4jClientManager.viewClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24" title="${client.enabled ? 'Disable Client' : 'Enable Client'}" onclick="neo4jClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Client" onclick="neo4jClientManager.deleteClient('${client.name}')"></ix-icon-button>
                     </div>
                 </td>
             `;

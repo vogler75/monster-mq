@@ -172,7 +172,7 @@ class OpcUaServerDetailManager {
         if (statusBadge) statusBadge.style.display = 'none';
         const toggleBtn = document.getElementById('toggle-server-btn');
         if (toggleBtn) toggleBtn.style.display = 'none';
-        const deleteBtn = document.getElementById('delete-server-btn');
+        const deleteBtn = document.getElementById('delete-btn');
         if (deleteBtn) deleteBtn.style.display = 'none';
         const addressesSection = document.querySelector('.addresses-section');
         if (addressesSection) addressesSection.style.display = 'none';
@@ -208,7 +208,7 @@ class OpcUaServerDetailManager {
                 <td>${this.escapeHtml(addr.dataType || '')}</td>
                 <td>${this.escapeHtml(addr.accessLevel || '')}</td>
                 <td>
-                    <button class="btn btn-danger" style="padding:0.3rem 0.6rem; font-size:0.7rem;" onclick="deleteAddress(${index})">Delete</button>
+                    <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Address" onclick="deleteAddress(${index})"></ix-icon-button>
                 </td>
             `;
             tbody.appendChild(row);

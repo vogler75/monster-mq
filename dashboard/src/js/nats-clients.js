@@ -78,9 +78,9 @@ class NatsClientManager {
                 <td>${metricsOut}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit client" onclick="natsClientManager.viewClient('${c.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="primary" ghost size="16" title="${c.enabled ? 'Disable' : 'Enable'}" onclick="natsClientManager.toggleClient('${c.name}', ${!c.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete" onclick="natsClientManager.deleteClient('${c.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit client" onclick="natsClientManager.viewClient('${c.name}')"></ix-icon-button>
+                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24" title="${c.enabled ? 'Disable' : 'Enable'}" onclick="natsClientManager.toggleClient('${c.name}', ${!c.enabled})"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete" onclick="natsClientManager.deleteClient('${c.name}')"></ix-icon-button>
                     </div>
                 </td>
             `;

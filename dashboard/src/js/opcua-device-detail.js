@@ -224,6 +224,9 @@ class OpcUaDeviceDetailManager {
         const saveBtn = document.getElementById('save-device-btn');
         if (saveBtn) saveBtn.innerHTML = saveBtn.innerHTML.replace('Save Device', 'Create Device');
 
+        const deleteBtn = document.getElementById('delete-btn');
+        if (deleteBtn) deleteBtn.style.display = 'none';
+
         document.getElementById('device-content').style.display = 'block';
     }
 
@@ -278,11 +281,7 @@ class OpcUaDeviceDetailManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn btn-sm btn-danger"
-                                onclick="deviceDetailManager.deleteAddress('${this.escapeHtml(address.address)}')"
-                                title="Delete Address">
-                            🗑️
-                        </button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Address" onclick="deviceDetailManager.deleteAddress('${this.escapeHtml(address.address)}')"></ix-icon-button>
                     </div>
                 </td>
             `;
@@ -594,6 +593,30 @@ class OpcUaDeviceDetailManager {
         }
     }
 
+    async deleteClient() {
+        try {
+            const mutation = `mutation DeleteOpcUaDevice($name: String!) { opcUaDevice { delete(name: $name) } }`;
+            const result = await this.client.query(mutation, { name: this.deviceName });
+            if (result.opcUaDevice.delete) {
+                this.showSuccess('OPC UA client deleted');
+                setTimeout(() => { window.spaLocation.href = '/pages/opcua-devices.html'; }, 800);
+            } else {
+                this.showError('Failed to delete OPC UA client');
+            }
+        } catch (e) {
+            console.error('Delete error', e);
+            this.showError('Failed to delete OPC UA client: ' + e.message);
+        }
+    }
+
+    showDeleteModal() {
+        const span = document.getElementById('delete-client-name');
+        if (span && this.device) span.textContent = this.device.name || this.deviceName;
+        document.getElementById('delete-client-modal').style.display = 'flex';
+    }
+    hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
+    confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
+
     goBack() {
         window.spaLocation.href = '/pages/opcua-devices.html';
     }
@@ -628,6 +651,10 @@ function goBack() {
     deviceDetailManager.goBack();
 }
 
+function showDeleteModal() { deviceDetailManager.showDeleteModal(); }
+function hideDeleteModal() { deviceDetailManager.hideDeleteModal(); }
+function confirmDeleteClient() { deviceDetailManager.confirmDeleteClient(); }
+
 // Initialize when DOM is loaded
 let deviceDetailManager;
 document.addEventListener('DOMContentLoaded', () => {
@@ -641,6 +668,8 @@ document.addEventListener('click', (e) => {
             deviceDetailManager.hideAddAddressModal();
         } else if (e.target.id === 'confirm-delete-address-modal') {
             deviceDetailManager.hideConfirmDeleteAddressModal();
+        } else if (e.target.id === 'delete-client-modal') {
+            deviceDetailManager.hideDeleteModal();
         }
     }
 });

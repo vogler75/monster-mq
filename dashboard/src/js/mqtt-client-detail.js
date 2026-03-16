@@ -74,9 +74,11 @@ class MqttClientDetailManager {
         const saveBtn = document.getElementById('save-client-btn');
         if (saveBtn) saveBtn.innerHTML = saveBtn.innerHTML.replace('Save Client', 'Create Client');
 
-        // Hide toggle/timestamps section
+        // Hide toggle/delete/timestamps section
         const toggleBtn = document.getElementById('toggle-client-btn');
         if (toggleBtn) toggleBtn.style.display = 'none';
+        const deleteBtn = document.getElementById('delete-btn');
+        if (deleteBtn) deleteBtn.style.display = 'none';
 
         // Hide address mappings section (not available until created)
         const addressSection = document.querySelector('.section-card:not(#client-content)');
@@ -270,22 +272,8 @@ class MqttClientDetailManager {
                 <td><span class="qos-badge">QoS ${address.qos ?? 0}</span></td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-icon btn-edit"
-                               
-                                onclick="mqttClientDetailManager.editAddress('${this.escapeHtml(address.remoteTopic)}')"
-                                title="Edit Address">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                            </svg>
-                        </button>
-                        <button class="btn-icon btn-delete"
-                               
-                                onclick="mqttClientDetailManager.deleteAddress('${this.escapeHtml(address.remoteTopic)}')"
-                                title="Delete Address">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                            </svg>
-                        </button>
+                        <ix-icon-button icon="pen" variant="primary" ghost size="16" title="Edit Address" onclick="mqttClientDetailManager.editAddress('${this.escapeHtml(address.remoteTopic)}')"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Address" onclick="mqttClientDetailManager.deleteAddress('${this.escapeHtml(address.remoteTopic)}')"></ix-icon-button>
                     </div>
                 </td>
             `;
@@ -781,6 +769,30 @@ class MqttClientDetailManager {
         if (el) el.textContent = value;
     }
 
+    async deleteClient() {
+        try {
+            const mutation = `mutation DeleteMqttClient($name: String!) { mqttClient { delete(name: $name) } }`;
+            const result = await this.client.query(mutation, { name: this.clientName });
+            if (result.mqttClient.delete) {
+                this.showSuccess('MQTT client deleted');
+                setTimeout(() => { window.spaLocation.href = '/pages/mqtt-clients.html'; }, 800);
+            } else {
+                this.showError('Failed to delete MQTT client');
+            }
+        } catch (e) {
+            console.error('Delete error', e);
+            this.showError('Failed to delete MQTT client: ' + e.message);
+        }
+    }
+
+    showDeleteModal() {
+        const span = document.getElementById('delete-client-name');
+        if (span && this.clientData) span.textContent = this.clientData.name;
+        document.getElementById('delete-client-modal').style.display = 'flex';
+    }
+    hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
+    confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
+
     goBack() {
         window.spaLocation.href = '/pages/mqtt-clients.html';
     }
@@ -909,6 +921,10 @@ function goBack() {
     mqttClientDetailManager.goBack();
 }
 
+function showDeleteModal() { mqttClientDetailManager.showDeleteModal(); }
+function hideDeleteModal() { mqttClientDetailManager.hideDeleteModal(); }
+function confirmDeleteClient() { mqttClientDetailManager.confirmDeleteClient(); }
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     mqttClientDetailManager = new MqttClientDetailManager();
@@ -923,6 +939,8 @@ document.addEventListener('click', (e) => {
             mqttClientDetailManager.hideEditAddressModal();
         } else if (e.target.id === 'confirm-delete-address-modal') {
             mqttClientDetailManager.hideConfirmDeleteAddressModal();
+        } else if (e.target.id === 'delete-client-modal') {
+            mqttClientDetailManager.hideDeleteModal();
         }
     }
 });

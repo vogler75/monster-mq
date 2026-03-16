@@ -196,9 +196,9 @@ class WinCCOaClientManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit Bridge" onclick="winCCOaClientManager.editClient('${client.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="primary" ghost size="16" title="${client.enabled ? 'Stop Bridge' : 'Start Bridge'}" onclick="winCCOaClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Bridge" onclick="winCCOaClientManager.deleteClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit Bridge" onclick="winCCOaClientManager.editClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24" title="${client.enabled ? 'Stop Bridge' : 'Start Bridge'}" onclick="winCCOaClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Bridge" onclick="winCCOaClientManager.deleteClient('${client.name}')"></ix-icon-button>
                     </div>
                 </td>
             `;

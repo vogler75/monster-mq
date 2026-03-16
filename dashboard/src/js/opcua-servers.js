@@ -123,10 +123,10 @@ function createServerRow(server) {
         <td>${statusBadge}</td>
         <td>
             <div class="action-buttons">
-                <ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit Server" onclick="editServer('${escapeHtml(server.name)}')"></ix-icon-button>
-                <ix-icon-button icon="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'play' : 'pause'}" variant="primary" ghost size="16" title="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'Start Server' : 'Stop Server'}" onclick="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? `startServer('${escapeHtml(server.name)}')` : `stopServer('${escapeHtml(server.name)}')`}"></ix-icon-button>
-                <ix-icon-button icon="lock-closed" variant="primary" ghost size="16" title="Manage Certificates" onclick="manageCertificates('${escapeHtml(server.name)}')"></ix-icon-button>
-                <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Server" onclick="deleteServer('${escapeHtml(server.name)}')"></ix-icon-button>
+                <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit Server" onclick="editServer('${escapeHtml(server.name)}')"></ix-icon-button>
+                <ix-icon-button icon="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'play' : 'pause'}" variant="primary" ghost size="24" title="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'Start Server' : 'Stop Server'}" onclick="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? `startServer('${escapeHtml(server.name)}')` : `stopServer('${escapeHtml(server.name)}')`}"></ix-icon-button>
+                <ix-icon-button icon="lock-closed" variant="primary" ghost size="24" title="Manage Certificates" onclick="manageCertificates('${escapeHtml(server.name)}')"></ix-icon-button>
+                <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Server" onclick="deleteServer('${escapeHtml(server.name)}')"></ix-icon-button>
             </div>
         </td>
     `;
@@ -222,10 +222,21 @@ async function stopServer(serverName) {
     }
 }
 
-async function deleteServer(serverName) {
-    if (!confirm(`Are you sure you want to delete the server '${serverName}'? This action cannot be undone.`)) {
-        return;
-    }
+let deleteServerName = null;
+
+function deleteServer(serverName) {
+    deleteServerName = serverName;
+    document.getElementById('delete-server-name').textContent = serverName;
+    document.getElementById('confirm-delete-modal').style.display = 'flex';
+}
+
+function hideConfirmDeleteModal() {
+    document.getElementById('confirm-delete-modal').style.display = 'none';
+}
+
+async function confirmDeleteServer() {
+    if (!deleteServerName) return;
+    hideConfirmDeleteModal();
 
     try {
         const mutation = `
@@ -239,23 +250,21 @@ async function deleteServer(serverName) {
             }
         `;
 
-        const variables = {
-            serverName: serverName
-        };
-
-        const response = await window.graphqlClient.query(mutation, variables);
+        const response = await window.graphqlClient.query(mutation, { serverName: deleteServerName });
 
         if (response && response.opcUaServer.delete.success) {
             await loadServers();
-            showSuccessMessage(`Server '${serverName}' deleted successfully`);
+            showSuccessMessage(`Server '${deleteServerName}' deleted successfully`);
         } else {
             throw new Error(response?.opcUaServer?.delete?.message || 'Failed to delete server');
         }
 
     } catch (error) {
         console.error('Error deleting server:', error);
-        alert('Failed to delete server: ' + error.message);
+        showErrorMessage('Failed to delete server: ' + error.message);
     }
+
+    deleteServerName = null;
 }
 
 function editServer(serverName) {
@@ -325,3 +334,10 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// Close modals on backdrop click
+document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('modal')) {
+        if (e.target.id === 'confirm-delete-modal') hideConfirmDeleteModal();
+    }
+});

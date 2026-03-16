@@ -454,7 +454,6 @@
             background: var(--dark-surface-2);
             color: var(--text-primary);
             border: 1px solid var(--dark-border);
-            min-width: 160px;
             white-space: nowrap;
         }
 
@@ -657,10 +656,12 @@
                         <p class="page-subtitle" id="client-subtitle">Client configuration and query management</p>
                     </div>
                     <div class="page-header-actions">
-                        <button class="btn btn-secondary" onclick="goBack()">
-                            Back to Clients
-                        </button>
-                        <button class="btn btn-primary" onclick="saveClient()" id="save-client-btn">
+                        <button class="btn btn-secondary btn-small" onclick="goBack()">← Back</button>
+                        <button class="btn btn-danger btn-small" id="delete-btn" onclick="showDeleteModal()">Delete</button>
+                        <button class="btn btn-primary btn-small" id="save-client-btn" onclick="saveClient()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                            </svg>
                             Save Client
                         </button>
                     </div>
@@ -1009,6 +1010,23 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-primary" onclick="hideQueryExamplesModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="delete-client-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideDeleteModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this WinCC OA client "<span id="delete-client-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideDeleteModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteClient()">Delete</button>
             </div>
         </div>
     </div>

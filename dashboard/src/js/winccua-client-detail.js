@@ -117,7 +117,10 @@ class WinCCUaClientDetailManager {
         document.getElementById('client-content').style.display = 'block';
 
         // Update save button text
-        document.getElementById('save-client-btn').textContent = 'Create Client';
+        document.getElementById('save-client-btn').innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg> Create Client';
+
+        const deleteBtn = document.getElementById('delete-btn');
+        if (deleteBtn) deleteBtn.style.display = 'none';
     }
 
     async loadClient() {
@@ -296,13 +299,7 @@ class WinCCUaClientDetailManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-action btn-delete"
-                                onclick="clientDetailManager.deleteAddress(${index})"
-                                title="Delete Subscription">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                            </svg>
-                        </button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Subscription" onclick="clientDetailManager.deleteAddress(${index})"></ix-icon-button>
                     </div>
                 </td>
             `;
@@ -780,6 +777,30 @@ class WinCCUaClientDetailManager {
             .replace(/>/g, '&gt;');
     }
 
+    async deleteClient() {
+        try {
+            const mutation = `mutation DeleteWinCCUaClient($name: String!) { winCCUaDevice { delete(name: $name) } }`;
+            const result = await this.client.query(mutation, { name: this.clientName });
+            if (result.winCCUaDevice.delete) {
+                this.showSuccess('WinCC Unified client deleted');
+                setTimeout(() => { window.spaLocation.href = '/pages/winccua-clients.html'; }, 800);
+            } else {
+                this.showError('Failed to delete WinCC Unified client');
+            }
+        } catch (e) {
+            console.error('Delete error', e);
+            this.showError('Failed to delete WinCC Unified client: ' + e.message);
+        }
+    }
+
+    showDeleteModal() {
+        const span = document.getElementById('delete-client-name');
+        if (span && this.clientData) span.textContent = this.clientData.name || this.clientName;
+        document.getElementById('delete-client-modal').style.display = 'flex';
+    }
+    hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
+    confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
+
     goBack() {
         if (this.hasUnsavedChanges) {
             if (!confirm('You have unsaved changes. Are you sure you want to leave without saving?')) {
@@ -819,8 +840,25 @@ function goBack() {
     clientDetailManager.goBack();
 }
 
+function showDeleteModal() { clientDetailManager.showDeleteModal(); }
+function hideDeleteModal() { clientDetailManager.hideDeleteModal(); }
+function confirmDeleteClient() { clientDetailManager.confirmDeleteClient(); }
+
 // Initialize when DOM is loaded
 let clientDetailManager;
 document.addEventListener('DOMContentLoaded', () => {
     clientDetailManager = new WinCCUaClientDetailManager();
+});
+
+// Handle modal clicks (close when clicking outside)
+document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('modal')) {
+        if (e.target.id === 'add-address-modal') {
+            clientDetailManager.hideAddAddressModal();
+        } else if (e.target.id === 'confirm-delete-address-modal') {
+            clientDetailManager.hideConfirmDeleteAddressModal();
+        } else if (e.target.id === 'delete-client-modal') {
+            clientDetailManager.hideDeleteModal();
+        }
+    }
 });
