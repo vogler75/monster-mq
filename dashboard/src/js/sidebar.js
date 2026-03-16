@@ -390,8 +390,8 @@ document.addEventListener=function(t,fn,o){
 };
 try{
 ${code}
-${exports}
 _cbs.forEach(function(fn){try{fn();}catch(e){console.error(e);}});
+${exports}
 }finally{document.addEventListener=_orig;}
 })();`;
 
