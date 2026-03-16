@@ -65,16 +65,12 @@ function renderDecoders(decoders) {
                 <td class="metric-value-table">${formatNumber(metrics.messagesSkipped || 0)}</td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-icon btn-view" onclick="viewDecoder('${escapeHtml(decoder.name)}')" title="Edit" aria-label="Edit">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                        </button>
+                        <ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit" onclick="viewDecoder('${escapeHtml(decoder.name)}')"></ix-icon-button>
                         ${decoder.enabled
-                            ? `<button class="btn-icon btn-pause" onclick="toggleDecoder('${escapeHtml(decoder.name)}', false)" title="Disable Decoder"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>`
-                            : `<button class="btn-icon btn-play" onclick="toggleDecoder('${escapeHtml(decoder.name)}', true)" title="Enable Decoder"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>`
+                            ? `<ix-icon-button icon="pause" variant="primary" ghost size="16" title="Disable Decoder" onclick="toggleDecoder('${escapeHtml(decoder.name)}', false)"></ix-icon-button>`
+                            : `<ix-icon-button icon="play" variant="primary" ghost size="16" title="Enable Decoder" onclick="toggleDecoder('${escapeHtml(decoder.name)}', true)"></ix-icon-button>`
                         }
-                        <button class="btn-icon btn-delete" onclick="deleteDecoder('${escapeHtml(decoder.name)}')" title="Delete" aria-label="Delete">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                        </button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete" onclick="deleteDecoder('${escapeHtml(decoder.name)}')"></ix-icon-button>
                     </div>
                 </td>
             </tr>
@@ -83,7 +79,7 @@ function renderDecoders(decoders) {
 }
 
 function viewDecoder(name) {
-    window.location.href = `sparkplugb-decoder-detail.html?name=${encodeURIComponent(name)}`;
+    window.spaLocation.href = `sparkplugb-decoder-detail.html?name=${encodeURIComponent(name)}`;
 }
 
 async function toggleDecoder(name, enabled) {

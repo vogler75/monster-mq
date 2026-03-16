@@ -348,7 +348,7 @@ class MqttClientDetailManager {
                 const result = await this.client.query(mutation, { input: data });
                 if (result.mqttClient.create.success) {
                     this.showSuccess(`Bridge "${data.name}" created successfully`);
-                    setTimeout(() => { window.location.href = '/pages/mqtt-clients.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = '/pages/mqtt-clients.html'; }, 800);
                 } else {
                     const errors = result.mqttClient.create.errors || ['Unknown error'];
                     this.showError('Failed to create bridge: ' + errors.join(', '));
@@ -763,7 +763,7 @@ class MqttClientDetailManager {
     }
 
     goBack() {
-        window.location.href = '/pages/mqtt-clients.html';
+        window.spaLocation.href = '/pages/mqtt-clients.html';
     }
 }
 

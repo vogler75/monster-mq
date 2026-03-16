@@ -448,7 +448,7 @@ class OpcUaDeviceDetailManager {
                 const result = await this.client.query(mutation, { input: deviceData });
                 if (result.opcUaDevice.add.success) {
                     this.showSuccess(`Device "${deviceData.name}" created successfully`);
-                    setTimeout(() => { window.location.href = '/pages/opcua-devices.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = '/pages/opcua-devices.html'; }, 800);
                 } else {
                     const errors = result.opcUaDevice.add.errors || ['Unknown error'];
                     this.showError('Failed to create device: ' + errors.join(', '));
@@ -571,7 +571,7 @@ class OpcUaDeviceDetailManager {
     }
 
     goBack() {
-        window.location.href = '/pages/opcua-devices.html';
+        window.spaLocation.href = '/pages/opcua-devices.html';
     }
 }
 

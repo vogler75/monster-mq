@@ -225,7 +225,7 @@ class Neo4jClientDetailManager {
                 const result = await this.client.query(mutation, { input });
                 if (result.neo4jClient.create.success) {
                     this.showSuccess('Neo4j client created successfully');
-                    setTimeout(() => { window.location.href = `/pages/neo4j-client-detail.html?client=${encodeURIComponent(input.name)}`; }, 800);
+                    setTimeout(() => { window.spaLocation.href = `/pages/neo4j-client-detail.html?client=${encodeURIComponent(input.name)}`; }, 800);
                 } else {
                     const errors = result.neo4jClient.create.errors || ['Unknown error'];
                     this.showError('Failed to create Neo4j client: ' + errors.join(', '));
@@ -328,7 +328,7 @@ class Neo4jClientDetailManager {
             if (result.neo4jClient.delete) {
                 this.showSuccess('Neo4j client deleted');
                 this.cleanup();
-                setTimeout(() => { window.location.href = '/pages/neo4j-clients.html'; }, 800);
+                setTimeout(() => { window.spaLocation.href = '/pages/neo4j-clients.html'; }, 800);
             } else {
                 this.showError('Failed to delete Neo4j client');
             }
@@ -346,7 +346,7 @@ class Neo4jClientDetailManager {
     }
     hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
     confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
-    goBack() { this.cleanup(); window.location.href = '/pages/neo4j-clients.html'; }
+    goBack() { this.cleanup(); window.spaLocation.href = '/pages/neo4j-clients.html'; }
 
     showLoading(show) { const el = document.getElementById('loading-indicator'); if (el) el.style.display = show ? 'flex' : 'none'; }
     showError(message) { const errorEl = document.getElementById('error-message'); const text = document.querySelector('#error-message .error-text'); if (errorEl && text) { text.textContent = message; errorEl.style.display='flex'; setTimeout(()=>this.hideError(),5000);} }

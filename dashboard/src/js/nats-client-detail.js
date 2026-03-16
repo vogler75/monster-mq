@@ -426,7 +426,7 @@ class NatsClientDetailManager {
                 const result = await this.client.query(mutation, { input: data });
                 if (result.natsClient.create.success) {
                     this.showSuccess(`NATS client "${data.name}" created successfully`);
-                    setTimeout(() => { window.location.href = '/pages/nats-clients.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = '/pages/nats-clients.html'; }, 800);
                 } else {
                     const errors = result.natsClient.create.errors || ['Unknown error'];
                     this.showError('Failed to create NATS client: ' + errors.join(', '));
@@ -524,7 +524,7 @@ class NatsClientDetailManager {
             if (result.natsClient.delete) {
                 this.showSuccess('NATS client deleted');
                 this.cleanup();
-                setTimeout(() => { window.location.href = '/pages/nats-clients.html'; }, 800);
+                setTimeout(() => { window.spaLocation.href = '/pages/nats-clients.html'; }, 800);
             } else {
                 this.showError('Failed to delete NATS client');
             }
@@ -543,7 +543,7 @@ class NatsClientDetailManager {
     }
     hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
     confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
-    goBack() { this.cleanup(); window.location.href = '/pages/nats-clients.html'; }
+    goBack() { this.cleanup(); window.spaLocation.href = '/pages/nats-clients.html'; }
 
     showLoading(show) {
         const el = document.getElementById('loading-indicator');

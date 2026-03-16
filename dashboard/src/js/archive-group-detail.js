@@ -208,7 +208,7 @@ class ArchiveGroupDetailManager {
 
                 if (result.archiveGroup.create.success) {
                     this.showSuccess('Archive group created successfully.');
-                    setTimeout(() => { window.location.href = '/pages/archive-group-detail.html?name=' + encodeURIComponent(data.name); }, 1000);
+                    setTimeout(() => { window.spaLocation.href = '/pages/archive-group-detail.html?name=' + encodeURIComponent(data.name); }, 1000);
                 } else {
                     this.showError(result.archiveGroup.create.message || 'Failed to create archive group.');
                 }
@@ -299,7 +299,7 @@ class ArchiveGroupDetailManager {
     }
 
     goBack() {
-        window.location.href = '/pages/archive-groups.html';
+        window.spaLocation.href = '/pages/archive-groups.html';
     }
 
     updateLastValRetentionHelp() {

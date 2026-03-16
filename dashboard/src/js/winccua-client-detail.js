@@ -649,7 +649,7 @@ class WinCCUaClientDetailManager {
             this.showSuccess(`Client "${clientData.name}" created successfully. Redirecting to edit page...`);
             // Redirect to edit mode so the user can add subscriptions
             setTimeout(() => {
-                window.location.href = '/pages/winccua-client-detail.html?client=' + encodeURIComponent(clientData.name);
+                window.spaLocation.href = '/pages/winccua-client-detail.html?client=' + encodeURIComponent(clientData.name);
             }, 1500);
         } else {
             const errors = result.winCCUaDevice.create.errors || ['Unknown error'];
@@ -762,7 +762,7 @@ class WinCCUaClientDetailManager {
                 return;
             }
         }
-        window.location.href = '/pages/winccua-clients.html';
+        window.spaLocation.href = '/pages/winccua-clients.html';
     }
 }
 

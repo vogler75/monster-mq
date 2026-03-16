@@ -32,7 +32,7 @@ class TopicSchemaPolicyDetailManager {
         this.policyName = params.get('name');
 
         if (!this.isNewPolicy && !this.policyName) {
-            window.location.href = '/pages/topic-schema-policies.html';
+            window.spaLocation.href = '/pages/topic-schema-policies.html';
             return;
         }
 
@@ -99,7 +99,7 @@ class TopicSchemaPolicyDetailManager {
             console.error('Error loading policy:', error);
             this.showError('Failed to load policy: ' + error.message);
             setTimeout(() => {
-                window.location.href = '/pages/topic-schema-policies.html';
+                window.spaLocation.href = '/pages/topic-schema-policies.html';
             }, 2000);
         }
     }
@@ -190,7 +190,7 @@ class TopicSchemaPolicyDetailManager {
 
                 if (result.topicSchemaPolicy.create.success) {
                     console.log('Policy created successfully');
-                    window.location.href = '/pages/topic-schema-policies.html';
+                    window.spaLocation.href = '/pages/topic-schema-policies.html';
                 } else {
                     const errors = result.topicSchemaPolicy.create.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to create policy';
@@ -213,7 +213,7 @@ class TopicSchemaPolicyDetailManager {
 
                 if (result.topicSchemaPolicy.update.success) {
                     console.log('Policy updated successfully');
-                    window.location.href = '/pages/topic-schema-policies.html';
+                    window.spaLocation.href = '/pages/topic-schema-policies.html';
                 } else {
                     const errors = result.topicSchemaPolicy.update.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to update policy';
@@ -313,7 +313,7 @@ class TopicSchemaPolicyDetailManager {
 
             if (result.topicSchemaPolicy.delete) {
                 console.log('Policy deleted successfully');
-                window.location.href = '/pages/topic-schema-policies.html';
+                window.spaLocation.href = '/pages/topic-schema-policies.html';
             } else {
                 this.showError('Failed to delete policy');
             }
@@ -347,7 +347,7 @@ class TopicSchemaPolicyDetailManager {
 
 // Global functions
 function goBack() {
-    window.location.href = '/pages/topic-schema-policies.html';
+    window.spaLocation.href = '/pages/topic-schema-policies.html';
 }
 
 function savePolicy() {

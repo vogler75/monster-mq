@@ -215,10 +215,7 @@
                         <button id="add-user-btn" class="btn btn-primary">
                             Add New User
                         </button>
-                        <button id="refresh-users" class="btn btn-secondary">
-                            <span id="refresh-text">Refresh</span>
-                            <span id="refresh-spinner" class="loading-spinner" style="display: none;"></span>
-                        </button>
+                        <ix-icon-button id="refresh-users" icon="refresh" variant="secondary" ghost onclick="if(window.usersManager)usersManager.loadUsers()" title="Refresh"></ix-icon-button>
                     </div>
                 </div>
                 <table>

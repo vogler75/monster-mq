@@ -78,6 +78,22 @@ class StorageManager {
 window.safeStorage = new StorageManager();
 
 /**
+ * SPA-aware location proxy.
+ * Assign spaLocation.href exactly like window.location.href.
+ * Uses window.navigateTo (SPA) when available, except for login page
+ * which always needs a full reload to clear auth state.
+ */
+window.spaLocation = {
+    set href(url) {
+        if (window.navigateTo && !url.includes('login.html')) {
+            window.navigateTo(url);
+        } else {
+            window.location.href = url;
+        }
+    }
+};
+
+/**
  * Shared auth check used by all dashboard pages.
  * Returns true if the user has a valid JWT, auth is disabled (token === 'null'),
  * or they are in guest (read-only) mode.

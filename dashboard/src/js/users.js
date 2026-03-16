@@ -14,7 +14,7 @@ class UserManager {
         }
 
         if (!this.isAdmin()) {
-            window.location.href = '/pages/dashboard.html';
+            window.spaLocation.href = '/pages/dashboard.html';
             return;
         }
 
@@ -109,18 +109,22 @@ class UserManager {
 
         // Event delegation for dynamically created buttons
         document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('edit-user-btn')) {
-                const username = e.target.dataset.username;
+            const editBtn = e.target.closest('.edit-user-btn');
+            const deleteBtn = e.target.closest('.delete-user-btn');
+            const viewAclBtn = e.target.closest('.view-acl-btn');
+            const deleteAclBtn = e.target.closest('.delete-acl-btn');
+            if (editBtn) {
+                const username = editBtn.dataset.username;
                 this.editUser(username);
-            } else if (e.target.classList.contains('delete-user-btn')) {
-                const username = e.target.dataset.username;
+            } else if (deleteBtn) {
+                const username = deleteBtn.dataset.username;
                 this.deleteUser(username);
-            } else if (e.target.classList.contains('view-acl-btn')) {
-                const username = e.target.dataset.username;
+            } else if (viewAclBtn) {
+                const username = viewAclBtn.dataset.username;
                 this.showAclRules(username);
-            } else if (e.target.classList.contains('delete-acl-btn')) {
-                const ruleId = e.target.dataset.id;
-                const username = e.target.dataset.username;
+            } else if (deleteAclBtn) {
+                const ruleId = deleteAclBtn.dataset.id;
+                const username = deleteAclBtn.dataset.username;
                 this.deleteAclRule(username, ruleId);
             }
         });
@@ -130,7 +134,7 @@ class UserManager {
         localStorage.removeItem('monstermq_token');
         localStorage.removeItem('monstermq_username');
         localStorage.removeItem('monstermq_isAdmin');
-        window.location.href = '/';
+        window.spaLocation.href = '/';
     }
 
     async loadUsers() {
@@ -152,17 +156,16 @@ class UserManager {
 
     setRefreshLoading(loading) {
         const refreshBtn = document.getElementById('refresh-users');
-        const refreshText = document.getElementById('refresh-text');
-        const refreshSpinner = document.getElementById('refresh-spinner');
-
-        refreshBtn.disabled = loading;
-
-        if (loading) {
-            refreshText.style.display = 'none';
-            refreshSpinner.style.display = 'inline-block';
-        } else {
-            refreshText.style.display = 'inline';
-            refreshSpinner.style.display = 'none';
+        if (refreshBtn) {
+            if (refreshBtn.tagName === 'IX-ICON-BUTTON') {
+                refreshBtn.loading = loading;
+            } else {
+                refreshBtn.disabled = loading;
+                const refreshText = document.getElementById('refresh-text');
+                const refreshSpinner = document.getElementById('refresh-spinner');
+                if (refreshText) refreshText.style.display = loading ? 'none' : 'inline';
+                if (refreshSpinner) refreshSpinner.style.display = loading ? 'inline-block' : 'none';
+            }
         }
     }
 
@@ -228,16 +231,10 @@ class UserManager {
                     <td>${user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}</td>
                     <td>
                         <div style="display: flex; gap: 0.5rem;">
-                            <button class="btn btn-secondary edit-user-btn"
-                                    data-username="${this.escapeHtml(user.username)}"
-                                    style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
-                                Edit
-                            </button>
-                            <button class="btn delete-user-btn"
-                                    data-username="${this.escapeHtml(user.username)}"
-                                    style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--monster-red); color: white; border: 1px solid var(--monster-red);">
-                                Delete
-                            </button>
+                            <ix-icon-button icon="highlight" variant="primary" ghost size="16" class="edit-user-btn" title="Edit"
+                                    data-username="${this.escapeHtml(user.username)}"></ix-icon-button>
+                            <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete delete-user-btn" title="Delete"
+                                    data-username="${this.escapeHtml(user.username)}"></ix-icon-button>
                         </div>
                     </td>
                 </tr>

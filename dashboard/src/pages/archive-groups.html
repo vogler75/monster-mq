@@ -123,10 +123,8 @@
                         <h2>Archive Groups</h2>
                     </div>
                     <div class="table-actions">
-                        <a href="/pages/archive-group-detail.html?new=true" class="btn btn-primary">+ Create Archive Group</a>
-                        <button id="refresh-archives" class="btn btn-secondary" onclick="archiveGroupsManager.loadArchiveGroups()">
-                            <span>Refresh</span>
-                        </button>
+                        <a href="/pages/archive-group-detail.html?new=true" class="btn btn-primary" style="text-decoration:none;"><ix-icon name="add-circle" size="16"></ix-icon> + Create Archive Group</a>
+                        <ix-icon-button id="refresh-archives" icon="refresh" variant="secondary" ghost onclick="archiveGroupsManager.loadArchiveGroups()" title="Refresh"></ix-icon-button>
                     </div>
                 </div>
                 <table>

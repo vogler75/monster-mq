@@ -93,7 +93,7 @@ function createNewInstance(){
         showNotification('Please select a flow class first','error');
         return;
     }
-    location.href = `/pages/workflows-edit-instance.html?type=instance&flowClassId=${encodeURIComponent(selectedFlowClassName)}`;
+    window.spaLocation.href = `/pages/workflows-edit-instance.html?type=instance&flowClassId=${encodeURIComponent(selectedFlowClassName)}`;
 }
 
 // ---------------------- Rendering ----------------------
@@ -111,7 +111,7 @@ function renderClassesTable(){
         <td style="text-align:right;">${r.connections.length}</td>
         <td>${formatDateTime(r.updatedAt)}</td>
           <td onclick="event.stopPropagation();"><div style="display:flex; gap:.4rem;">
-              <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Edit</button>
+              <button class="btn-action btn-edit" onclick="window.spaLocation.href = '/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Edit</button>
               <button class="btn-action btn-secondary" title="Restart all instances of this class" onclick="restartAllInstancesOfClass('${escapeHtml(r.name)}')">Restart All</button>
               <button class="btn-action btn-delete" onclick="listPageDeleteFlowClass('${escapeHtml(r.name)}')">Delete</button>
           </div></td>
@@ -144,7 +144,7 @@ function renderInstancesTable(){
         <td>${formatDateTime(r.updatedAt)}</td>
     <td><div style="display:flex; gap:.4rem;">
         ${startStopBtn}
-        <button class="btn-action btn-edit" onclick="location.href='/pages/workflows-edit-instance.html?type=instance&name=${encodeURIComponent(r.name)}&flowClassId=${encodeURIComponent(r.flowClassId)}'">Edit</button>
+        <button class="btn-action btn-edit" onclick="window.spaLocation.href = '/pages/workflows-edit-instance.html?type=instance&name=${encodeURIComponent(r.name)}&flowClassId=${encodeURIComponent(r.flowClassId)}'">Edit</button>
         <button class="btn-action btn-delete" onclick="listPageDeleteFlowInstance('${escapeHtml(r.name)}')">Delete</button>
     </div></td>
     </tr>`; }).join('');

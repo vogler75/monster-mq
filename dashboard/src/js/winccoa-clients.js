@@ -196,24 +196,9 @@ class WinCCOaClientManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-icon btn-view" onclick="winCCOaClientManager.editClient('${client.name}')" title="Edit Bridge" aria-label="Edit Bridge">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                            </svg>
-                        </button>
-            <button class="btn-icon ${client.enabled ? 'btn-pause' : 'btn-play'}"
-                                onclick="winCCOaClientManager.toggleClient('${client.name}', ${!client.enabled})"
-                                title="${client.enabled ? 'Stop Bridge' : 'Start Bridge'}">
-                            ${client.enabled ?
-                                '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>' :
-                                '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
-                            }
-                        </button>
-                        <button class="btn-icon btn-delete" onclick="winCCOaClientManager.deleteClient('${client.name}')" title="Delete Bridge" aria-label="Delete Bridge">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                            </svg>
-                        </button>
+                        <ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit Bridge" onclick="winCCOaClientManager.editClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="primary" ghost size="16" title="${client.enabled ? 'Stop Bridge' : 'Start Bridge'}" onclick="winCCOaClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Bridge" onclick="winCCOaClientManager.deleteClient('${client.name}')"></ix-icon-button>
                     </div>
                 </td>
             `;
@@ -223,7 +208,7 @@ class WinCCOaClientManager {
     }
 
     editClient(clientName) {
-        window.location.href = '/pages/winccoa-client-detail.html?client=' + encodeURIComponent(clientName);
+        window.spaLocation.href = '/pages/winccoa-client-detail.html?client=' + encodeURIComponent(clientName);
     }
 
     async toggleClient(clientName, enabled) {

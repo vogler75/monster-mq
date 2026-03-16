@@ -529,7 +529,7 @@ const VisualFlow = (() => {
       updateTitleDirty();
       if(!isUpdate){
         // redirect with name param
-        location.href='/pages/workflows-visual.html?name='+encodeURIComponent(name);
+        window.spaLocation.href = '/pages/workflows-visual.html?name='+encodeURIComponent(name);
       }
       state.flowClass={ name, namespace, version };
     }
@@ -538,7 +538,7 @@ const VisualFlow = (() => {
       notify('Save failed: '+e.message,'error');
     }
   }
-  async function deleteClass(){ if(!state.flowClass){ notify('Nothing to delete','error'); return; } if(!confirm('Delete this flow class?')) return; try { await gql(`mutation($name:String!){ flow { deleteClass(name:$name) } }`, { name: state.flowClass.name }); notify('Deleted','success'); location.href='/pages/workflows.html'; } catch(e){ console.error(e); notify('Delete failed: '+e.message,'error'); } }
+  async function deleteClass(){ if(!state.flowClass){ notify('Nothing to delete','error'); return; } if(!confirm('Delete this flow class?')) return; try { await gql(`mutation($name:String!){ flow { deleteClass(name:$name) } }`, { name: state.flowClass.name }); notify('Deleted','success'); window.spaLocation.href = '/pages/workflows.html'; } catch(e){ console.error(e); notify('Delete failed: '+e.message,'error'); } }
 
   async function restartAllInstances(){
     if(!state.flowClass){
@@ -847,7 +847,7 @@ const VisualFlow = (() => {
     });
   }
 
-  function cancel(){ state.dirty=false; location.href='/pages/workflows.html'; }
+  function cancel(){ state.dirty=false; window.spaLocation.href = '/pages/workflows.html'; }
 
   function handleInstanceButton(){
     const btn = qs('#instance-btn');
@@ -856,13 +856,13 @@ const VisualFlow = (() => {
     if(btn.textContent === 'Create Instance'){
       // Navigate to create new instance with current class
       if(state.flowClass){
-        location.href = `/pages/workflows-edit-instance.html?type=instance&class=${encodeURIComponent(state.flowClass.name)}&from=visual`;
+        window.spaLocation.href = `/pages/workflows-edit-instance.html?type=instance&class=${encodeURIComponent(state.flowClass.name)}&from=visual`;
       }
     } else if(btn.textContent === 'Edit Instance'){
       // Navigate to edit selected instance
       const selectedInstance = qs('#restart-instance-select')?.value;
       if(selectedInstance){
-        location.href = `/pages/workflows-edit-instance.html?type=instance&name=${encodeURIComponent(selectedInstance)}&class=${encodeURIComponent(state.flowClass.name)}&from=visual`;
+        window.spaLocation.href = `/pages/workflows-edit-instance.html?type=instance&name=${encodeURIComponent(selectedInstance)}&class=${encodeURIComponent(state.flowClass.name)}&from=visual`;
       } else {
         notify('Please select an instance', 'error');
       }

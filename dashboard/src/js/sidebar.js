@@ -1,12 +1,13 @@
-// Shared sidebar functionality for all dashboard pages
+// MonsterMQ Dashboard — Sidebar & SPA Navigation
 //
 // HOW TO ADD A NEW MENU ITEM:
-// 1. Add the menu item to the menuConfig array in the getMenuConfig() method below
-// 2. Specify: section, sectionIcon, href, icon (iX icon name), text, and optionally id/adminOnly
-// 3. The menu will automatically appear in all pages
+// 1. Add the item to getMenuConfig() below
+// 2. Specify: section, sectionIcon, href, icon, text, and optionally id/adminOnly
 
 class SidebarManager {
     constructor() {
+        this._currentHref = null;
+        this._pageCleanups = [];
         this.init();
     }
 
@@ -14,8 +15,49 @@ class SidebarManager {
         this.injectFavicons();
         this.renderMenu();
         this.setupUI();
-        this.setActiveNavItem();
-        this.setupClientNavigation();
+        this.initLogViewer();
+
+        // Expose navigateTo globally for page scripts
+        window.navigateTo = (href) => this.navigateTo(href);
+
+        // Intercept local <a> link clicks so they use SPA navigation instead of full reloads
+        document.addEventListener('click', (e) => {
+            const link = e.target.closest('a[href]');
+            if (!link) return;
+            const href = link.getAttribute('href');
+            if (!href || href.startsWith('http') || href.startsWith('//') ||
+                href.startsWith('mailto:') || href.startsWith('#')) return;
+            if (href.startsWith('/pages/') || href.startsWith('pages/')) {
+                e.preventDefault();
+                this.navigateTo(href.startsWith('/') ? href : '/' + href);
+            }
+        });
+
+        // Handle browser back/forward
+        window.addEventListener('popstate', (e) => {
+            const page = e.state?.page || '/pages/dashboard.html';
+            this.navigateTo(page, false);
+        });
+
+        // Load initial page based on current URL
+        this.loadInitialPage();
+    }
+
+    loadInitialPage() {
+        // Check for ?page= redirect from standalone pages
+        const params = new URLSearchParams(window.location.search);
+        const redirectPage = params.get('page');
+        if (redirectPage) {
+            this.navigateTo(redirectPage, true);
+            return;
+        }
+        // Otherwise check the URL path
+        const path = window.location.pathname;
+        if (path.includes('/pages/') && path.endsWith('.html')) {
+            this.navigateTo(path + window.location.search, true);
+        } else {
+            this.navigateTo('/pages/dashboard.html', true);
+        }
     }
 
     injectFavicons() {
@@ -34,11 +76,12 @@ class SidebarManager {
         });
     }
 
+    // ===================== Menu Configuration =====================
+
     getMenuConfig() {
         return [
             {
-                section: 'Monitoring',
-                sectionIcon: 'capacity-filled',
+                section: 'Monitoring', sectionIcon: 'capacity-filled',
                 items: [
                     { href: '/pages/dashboard.html', icon: 'capacity-filled', text: 'Dashboard' },
                     { href: '/pages/sessions.html', icon: 'user-management', text: 'Sessions' },
@@ -47,8 +90,7 @@ class SidebarManager {
                 ]
             },
             {
-                section: 'Configuration',
-                sectionIcon: 'cogwheel',
+                section: 'Configuration', sectionIcon: 'cogwheel',
                 items: [
                     { href: '/pages/archive-groups.html', icon: 'health', text: 'Archives' },
                     { href: '/pages/jdbc-loggers.html', icon: 'database', text: 'Loggers' },
@@ -57,16 +99,14 @@ class SidebarManager {
                 ]
             },
             {
-                section: 'Governance',
-                sectionIcon: 'shield',
+                section: 'Governance', sectionIcon: 'shield',
                 items: [
                     { href: '/pages/topic-schema-policies.html', icon: 'shield-check', text: 'Schema Policies' },
                     { href: '/pages/topic-namespaces.html', icon: 'folder', text: 'Topic Namespaces' }
                 ]
             },
             {
-                section: 'Bridging',
-                sectionIcon: 'link',
+                section: 'Bridging', sectionIcon: 'link',
                 items: [
                     { href: '/pages/opcua-devices.html', icon: 'screen', text: 'OPC UA Clients' },
                     { href: '/pages/opcua-servers.html', icon: 'project-server', text: 'OPC UA Servers' },
@@ -81,8 +121,7 @@ class SidebarManager {
                 ]
             },
             {
-                section: 'System',
-                sectionIcon: 'maintenance',
+                section: 'System', sectionIcon: 'maintenance',
                 items: [
                     { href: '/pages/broker-config.html', icon: 'cogwheel', text: 'Configuration' },
                     { href: '/pages/users.html', icon: 'user-settings', text: 'Users', id: 'users-nav-link', adminOnly: true },
@@ -92,33 +131,19 @@ class SidebarManager {
         ];
     }
 
+    // ===================== Menu Rendering =====================
+
     renderMenu() {
         const ixMenu = document.querySelector('ix-menu');
         if (!ixMenu) return;
 
-        // Add application header with logo and name
-        const ixApp = document.querySelector('ix-application');
-        if (ixApp && !ixApp.querySelector('ix-application-header')) {
-            const header = document.createElement('ix-application-header');
-            header.setAttribute('name', 'MonsterMQ');
-            header.setAttribute('slot', 'application-header');
-            const logo = document.createElement('img');
-            logo.src = '/assets/logo.png';
-            logo.alt = 'MonsterMQ';
-            logo.style.height = '32px';
-            logo.style.width = '32px';
-            logo.style.borderRadius = '4px';
-            logo.slot = 'logo';
-            header.appendChild(logo);
-            ixApp.prepend(header);
-        }
-
-        const menuConfig = this.getMenuConfig();
-
-        menuConfig.forEach(section => {
+        this.getMenuConfig().forEach(section => {
             const category = document.createElement('ix-menu-category');
             category.setAttribute('label', section.section);
             category.setAttribute('icon', section.sectionIcon);
+
+            // Prevent auto-closing other categories
+            category.addEventListener('closeOtherCategories', (e) => e.stopPropagation());
 
             section.items.forEach(item => {
                 if (item.isUserItem) return;
@@ -128,14 +153,9 @@ class SidebarManager {
                 menuItem.setAttribute('icon', item.icon);
                 if (item.id) menuItem.id = item.id;
                 if (item.adminOnly) menuItem.style.display = 'none';
-
-                menuItem.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.navigateTo(item.href);
-                });
-
                 menuItem.dataset.href = item.href;
+
+                menuItem.addEventListener('click', () => this.navigateTo(item.href));
 
                 category.appendChild(menuItem);
             });
@@ -159,19 +179,14 @@ class SidebarManager {
             guestItem.setAttribute('slot', 'bottom');
             guestItem.setAttribute('label', 'Sign in');
             guestItem.setAttribute('icon', 'log-out');
-            guestItem.addEventListener('click', () => {
-                window.location.href = '/pages/login.html';
-            });
+            guestItem.addEventListener('click', () => { window.location.href = '/pages/login.html'; });
             ixMenu.appendChild(guestItem);
         } else if (userManagementEnabled) {
             const logoutItem = document.createElement('ix-menu-item');
             logoutItem.setAttribute('slot', 'bottom');
             logoutItem.setAttribute('label', 'Logout (' + username + ')');
             logoutItem.setAttribute('icon', 'log-out');
-            logoutItem.id = 'user-menu-item';
-            logoutItem.addEventListener('click', () => {
-                this.logout();
-            });
+            logoutItem.addEventListener('click', () => this.logout());
             ixMenu.appendChild(logoutItem);
         }
     }
@@ -181,10 +196,7 @@ class SidebarManager {
         const token = safeStorage.getItem('monstermq_token');
         const isGuest = !token && safeStorage.getItem('monstermq_guest') === 'true';
 
-        if (isGuest) {
-            document.body.classList.add('read-only-mode');
-        }
-
+        if (isGuest) document.body.classList.add('read-only-mode');
         if (isAdmin) {
             const usersNavLink = document.getElementById('users-nav-link');
             if (usersNavLink) usersNavLink.style.display = '';
@@ -192,10 +204,9 @@ class SidebarManager {
     }
 
     setActiveNavItem() {
-        const currentPath = window.location.pathname;
+        const currentPath = this._currentHref?.split('?')[0];
         requestAnimationFrame(() => {
-            const menuItems = document.querySelectorAll('ix-menu-item[data-href]');
-            menuItems.forEach(item => {
+            document.querySelectorAll('ix-menu-item[data-href]').forEach(item => {
                 if (item.dataset.href === currentPath) {
                     item.setAttribute('active', '');
                 } else {
@@ -205,65 +216,38 @@ class SidebarManager {
         });
     }
 
-    // ===================== Client-Side Navigation =====================
+    // ===================== SPA Navigation =====================
 
-    setupClientNavigation() {
-        // Handle browser back/forward
-        window.addEventListener('popstate', (e) => {
-            if (e.state && e.state.href) {
-                this._loadPage(e.state.href, false);
-            }
-        });
+    async navigateTo(href, push = true) {
+        const hrefNoQuery = href.split('?')[0];
+        const currentNoQuery = this._currentHref?.split('?')[0];
 
-        // Intercept <a> links within main-content that point to /pages/
-        document.addEventListener('click', (e) => {
-            const link = e.target.closest('a[href]');
-            if (!link) return;
+        // Skip if same page (but allow query string changes)
+        if (href === this._currentHref) return;
 
-            const href = link.getAttribute('href');
-            if (!href) return;
-
-            // Only intercept internal /pages/ links
-            if (href.startsWith('/pages/') && href.endsWith('.html')) {
-                e.preventDefault();
-                // Preserve query string
-                const fullHref = link.href;
-                const url = new URL(fullHref, window.location.origin);
-                this.navigateTo(url.pathname + url.search);
-            }
-        });
-
-        // Store initial state
-        history.replaceState({ href: window.location.pathname + window.location.search }, '', window.location.href);
-    }
-
-    navigateTo(href) {
-        if (href === window.location.pathname + window.location.search) return;
-        this._loadPage(href, true);
-    }
-
-    async _loadPage(href, pushState) {
         try {
+            // Fetch the target page
             const response = await fetch(href, { cache: 'no-store' });
-            if (!response.ok) {
-                window.location.href = href; // fallback to full navigation
-                return;
-            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const html = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
+            const doc = new DOMParser().parseFromString(html, 'text/html');
 
             // Extract main content
             const newMainContent = doc.querySelector('#main-content');
-            if (!newMainContent) {
-                window.location.href = href; // fallback
-                return;
-            }
+            if (!newMainContent) throw new Error('No #main-content found');
 
-            // Extract page-specific <style> blocks from <head>
+            // Extract page-specific styles from <head>
             const newStyles = doc.querySelectorAll('head style');
 
-            // Extract page-specific scripts (skip shared, CDN, and module scripts)
+            // Extract page-specific stylesheets (not monster-theme or ix-app)
+            const sharedCSS = new Set(['/assets/monster-theme.css', '/assets/ix-app.css']);
+            const newStylesheets = [];
+            doc.querySelectorAll('head link[rel="stylesheet"]').forEach(link => {
+                const h = link.getAttribute('href');
+                if (h && !sharedCSS.has(h)) newStylesheets.push(h);
+            });
+
+            // Extract page-specific scripts (skip shared ones)
             const sharedScripts = new Set([
                 '/js/storage.js', '/js/graphql-client.js', '/js/sidebar.js',
                 '/js/log-viewer.js', '/js/ix-init.js'
@@ -272,45 +256,31 @@ class SidebarManager {
             doc.querySelectorAll('head script[src], body script[src]').forEach(s => {
                 const src = s.getAttribute('src');
                 if (!src) return;
-                // Skip module scripts (ix-init.js, Vite HMR client)
                 if (s.getAttribute('type') === 'module') return;
-                // Skip CDN scripts
                 if (src.includes('cdn.jsdelivr') || src.startsWith('http')) return;
-                // Strip query params for shared script matching
                 const srcPath = src.split('?')[0];
                 if (sharedScripts.has(srcPath)) return;
                 newScripts.push(srcPath);
             });
 
-            // Also collect CDN scripts needed by the page (e.g., Chart.js)
+            // Extract CDN scripts
             const cdnScripts = [];
             doc.querySelectorAll('head script[src]').forEach(s => {
                 const src = s.getAttribute('src');
-                if (src && src.startsWith('http') && !document.querySelector(`script[src="${src}"]`)) {
-                    cdnScripts.push(src);
+                if (src && (src.includes('cdn.jsdelivr') || src.startsWith('http'))) {
+                    if (!document.querySelector(`script[src="${src}"]`)) cdnScripts.push(src);
                 }
             });
 
-            // Extract all extra elements outside main-content but inside ix-application
-            // (modals, side panels, floating buttons, overlays, etc.)
+            // Extract extra elements outside #main-content (modals, panels, etc.)
             const newExtras = [];
             const ixApp = doc.querySelector('ix-application');
             if (ixApp) {
                 for (const child of ixApp.children) {
                     const tag = child.tagName.toLowerCase();
-                    if (tag === 'ix-menu' || tag === 'script' || child.id === 'main-content') continue;
+                    if (tag === 'ix-menu' || tag === 'ix-application-header' ||
+                        tag === 'script' || child.id === 'main-content') continue;
                     newExtras.push(child);
-                }
-            }
-
-            // Extract body data attributes for log viewer
-            const newBody = doc.querySelector('body');
-            const bodyDataAttrs = {};
-            if (newBody) {
-                for (const attr of newBody.attributes) {
-                    if (attr.name.startsWith('data-')) {
-                        bodyDataAttrs[attr.name] = attr.value;
-                    }
                 }
             }
 
@@ -318,10 +288,13 @@ class SidebarManager {
             const newTitle = doc.querySelector('title');
             if (newTitle) document.title = newTitle.textContent;
 
-            // Remove old page-specific styles
-            document.querySelectorAll('style[data-page-style]').forEach(s => s.remove());
+            // --- Cleanup previous page ---
+            this._cleanupPage();
 
-            // Add new page-specific styles
+            // --- Apply new page ---
+
+            // Swap styles
+            document.querySelectorAll('style[data-page-style]').forEach(s => s.remove());
             newStyles.forEach(style => {
                 const s = document.createElement('style');
                 s.setAttribute('data-page-style', 'true');
@@ -329,60 +302,55 @@ class SidebarManager {
                 document.head.appendChild(s);
             });
 
-            // Clean up previous page FIRST (stop intervals before swapping DOM)
-            this._cleanupPage();
+            // Swap stylesheets
+            document.querySelectorAll('link[data-page-css]').forEach(l => l.remove());
+            newStylesheets.forEach(href => {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = href;
+                link.setAttribute('data-page-css', 'true');
+                document.head.appendChild(link);
+            });
 
             // Swap main content
             const mainContent = document.getElementById('main-content');
             mainContent.innerHTML = newMainContent.innerHTML;
             mainContent.scrollTop = 0;
 
-            // Remove old page-specific extra elements from ix-application
+            // Swap extra elements
             const ixAppLocal = document.querySelector('ix-application');
             document.querySelectorAll('[data-page-extra]').forEach(el => el.remove());
-
-            // Add new extra elements
             newExtras.forEach(el => {
                 el.setAttribute('data-page-extra', 'true');
                 ixAppLocal.appendChild(el);
             });
 
-            // Update body data attributes
-            for (const attr of [...document.body.attributes]) {
-                if (attr.name.startsWith('data-log')) {
-                    document.body.removeAttribute(attr.name);
-                }
-            }
-            for (const [name, value] of Object.entries(bodyDataAttrs)) {
-                document.body.setAttribute(name, value);
-            }
-
             // Update URL
-            if (pushState) {
-                history.pushState({ href }, '', href);
+            if (push) {
+                history.pushState({ page: href }, '', href);
             }
+            this._currentHref = href;
 
             // Update active menu item
             this.setActiveNavItem();
 
-            // Load CDN scripts (only if not already loaded)
-            for (const src of cdnScripts) {
-                await this._loadCdnScript(src);
-            }
-
-            // Load and execute page scripts with DOMContentLoaded shim
-            for (const src of newScripts) {
-                await this._loadPageScript(src);
-            }
+            // Load scripts
+            for (const src of cdnScripts) await this._loadCdnScript(src);
+            for (const src of newScripts) await this._loadPageScript(src);
 
         } catch (error) {
-            console.error('Client navigation failed, falling back:', error);
-            window.location.href = href;
+            console.error('SPA navigation failed:', error);
+            // Fallback: full page load
+            window.location.replace(href);
         }
     }
 
     _cleanupPage() {
-        // Clear tracked intervals/timeouts from previous page
+        // Run registered cleanup callbacks
+        this._pageCleanups.forEach(fn => { try { fn(); } catch(e) {} });
+        this._pageCleanups = [];
+
+        // Clear tracked intervals/timeouts
         if (window._pageIntervals) {
             window._pageIntervals.forEach(id => clearInterval(id));
         }
@@ -399,34 +367,32 @@ class SidebarManager {
             if (!resp.ok) return;
             let code = await resp.text();
 
-            // Inside the IIFE, only let/const/class need conversion.
-            // function and async function declarations are fine in sloppy mode
-            // (they hoist and duplicates just overwrite).
+            // Rewrite let/const/class to var so they can be re-declared across navigations.
+            // function/async function are fine in sloppy mode IIFEs.
             code = code.replace(/^class\s+(\w+)/gm, 'var $1 = class $1');
             code = code.replace(/^(let |const )/gm, 'var ');
 
-            // Collect all top-level identifiers for window export
-            const topLevelNames = new Set();
-            code.replace(/^var\s+(\w+)/gm, (_, n) => { topLevelNames.add(n); });
-            code.replace(/^(?:async\s+)?function\s+(\w+)/gm, (_, n) => { topLevelNames.add(n); });
+            // Collect top-level identifiers for window export
+            const names = new Set();
+            code.replace(/^var\s+(\w+)/gm, (_, n) => names.add(n));
+            code.replace(/^(?:async\s+)?function\s+(\w+)/gm, (_, n) => names.add(n));
+            const exports = [...names].map(n =>
+                `if(typeof ${n}!=='undefined')window.${n}=${n};`
+            ).join('\n');
 
-            // Wrap in IIFE for clean scope, then export to window for inline onclick
-            const exports = [...topLevelNames].map(n => `window.${n} = typeof ${n} !== 'undefined' ? ${n} : undefined;`).join('\n');
-
-            const wrapped = `(function() {
-  var _origAddEL = document.addEventListener;
-  var _dclCallbacks = [];
-  document.addEventListener = function(type, fn, opts) {
-    if (type === 'DOMContentLoaded') { _dclCallbacks.push(fn); return; }
-    return _origAddEL.call(document, type, fn, opts);
-  };
-  try {
+            // IIFE wrapper: fresh scope + DOMContentLoaded shim
+            const wrapped = `(function(){
+var _orig=document.addEventListener;
+var _cbs=[];
+document.addEventListener=function(t,fn,o){
+  if(t==='DOMContentLoaded'){_cbs.push(fn);return;}
+  return _orig.call(document,t,fn,o);
+};
+try{
 ${code}
 ${exports}
-  _dclCallbacks.forEach(function(fn) { try { fn(); } catch(e) { console.error(e); } });
-  } finally {
-    document.addEventListener = _origAddEL;
-  }
+_cbs.forEach(function(fn){try{fn();}catch(e){console.error(e);}});
+}finally{document.addEventListener=_orig;}
 })();`;
 
             const script = document.createElement('script');
@@ -439,10 +405,8 @@ ${exports}
     }
 
     _loadCdnScript(src) {
-        if (document.querySelector(`script[src="${src}"]`)) {
-            return Promise.resolve();
-        }
-        return new Promise((resolve) => {
+        if (document.querySelector(`script[src="${src}"]`)) return Promise.resolve();
+        return new Promise(resolve => {
             const script = document.createElement('script');
             script.src = src;
             script.onload = resolve;
@@ -451,12 +415,29 @@ ${exports}
         });
     }
 
+    // ===================== Log Viewer =====================
+
+    initLogViewer() {
+        if (typeof LogViewer !== 'function') return;
+        let container = document.getElementById('log-viewer-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'log-viewer-container';
+            document.body.appendChild(container);
+        }
+        window.__monsterMQLogViewer = new LogViewer('log-viewer-container', {
+            collapsed: true,
+            maxLines: 1000,
+            autoScroll: true,
+            title: 'System Logs',
+            deferConnection: false
+        });
+    }
+
     // ===================== Auth =====================
 
     logout() {
-        if (window.graphqlClient) {
-            window.graphqlClient.stopTokenExpirationCheck();
-        }
+        if (window.graphqlClient) window.graphqlClient.stopTokenExpirationCheck();
         safeStorage.removeItem('monstermq_token');
         safeStorage.removeItem('monstermq_username');
         safeStorage.removeItem('monstermq_isAdmin');
@@ -466,7 +447,8 @@ ${exports}
     }
 }
 
-// Global interval/timeout tracking for client-side navigation cleanup
+// ===================== Global interval/timeout tracking =====================
+// Wraps setInterval/setTimeout so page navigations can clean up stale timers.
 (function() {
     window._pageIntervals = [];
     window._pageTimeouts = [];
@@ -496,60 +478,34 @@ ${exports}
     };
 })();
 
-// Initialize sidebar when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    new SidebarManager();
+// ===================== Page cleanup registration =====================
+window.registerPageCleanup = function(fn) {
+    if (window._sidebarManager) {
+        window._sidebarManager._pageCleanups.push(fn);
+    }
+};
 
-    // Inject global Log Viewer on all authenticated pages (exclude login page)
-    if (!window.location.pathname.endsWith('/pages/login.html')) {
-        let lvContainer = document.getElementById('log-viewer-container');
-        if (!lvContainer) {
-            lvContainer = document.createElement('div');
-            lvContainer.id = 'log-viewer-container';
-            document.body.appendChild(lvContainer);
+// ===================== Init =====================
+document.addEventListener('DOMContentLoaded', () => {
+    // Skip on login page
+    if (window.location.pathname.endsWith('/pages/login.html')) return;
+
+    if (window.__SPA_MODE) {
+        // SPA mode (index.html): check auth, then init full SPA with navigation
+        if (!window.isLoggedIn || !window.isLoggedIn()) {
+            window.location.href = '/pages/login.html';
+            return;
         }
-        if (!window.__monsterMQLogViewer) {
-            if (typeof LogViewer === 'function') {
-                const body = document.body;
-                const filters = {};
-                if (body.dataset.logSourceClass) filters.sourceClassRegex = body.dataset.logSourceClass;
-                if (body.dataset.logMessageRegex) filters.messageRegex = body.dataset.logMessageRegex;
-                if (body.dataset.logLoggerRegex) filters.loggerRegex = body.dataset.logLoggerRegex;
-                const title = body.dataset.logTitle || 'System Logs';
-                const startCollapsed = body.dataset.logCollapsed === 'false' ? false : true;
-                window.__monsterMQLogViewer = new LogViewer('log-viewer-container', {
-                    collapsed: startCollapsed,
-                    maxLines: 1000,
-                    autoScroll: true,
-                    title,
-                    filters,
-                    deferConnection: true
-                });
-                window.updateLogViewerFilters = (newFilters) => {
-                    if (window.__monsterMQLogViewer) {
-                        window.__monsterMQLogViewer.setFilters(newFilters);
-                    }
-                };
-                if (window.__monsterMQLogViewerReadyCallbacks) {
-                    window.__monsterMQLogViewerReadyCallbacks.forEach(cb => cb(window.__monsterMQLogViewer));
-                    window.__monsterMQLogViewerReadyCallbacks = [];
-                }
-                if (!window.__monsterMQLogViewer.isConnected && !window.__monsterMQLogViewer.ws) {
-                    window.__monsterMQLogViewer.connect();
-                }
-            }
-        }
+        window._sidebarManager = new SidebarManager();
+    } else {
+        // Standalone page mode: redirect to SPA shell so sidebar works properly.
+        // The SPA shell will load this page's content via navigateTo().
+        const target = window.location.pathname + window.location.search;
+        window.location.replace('/?page=' + encodeURIComponent(target));
     }
 });
 
-// Helper to run code when log viewer is ready
-window.onLogViewerReady = function (callback) {
-    if (window.__monsterMQLogViewer) {
-        callback(window.__monsterMQLogViewer);
-    } else {
-        if (!window.__monsterMQLogViewerReadyCallbacks) {
-            window.__monsterMQLogViewerReadyCallbacks = [];
-        }
-        window.__monsterMQLogViewerReadyCallbacks.push(callback);
-    }
+// Helper for log viewer (backward compat)
+window.onLogViewerReady = function(callback) {
+    if (window.__monsterMQLogViewer) callback(window.__monsterMQLogViewer);
 };

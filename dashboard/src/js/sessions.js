@@ -131,7 +131,7 @@ class SessionManager {
         localStorage.removeItem('monstermq_token');
         localStorage.removeItem('monstermq_username');
         localStorage.removeItem('monstermq_isAdmin');
-        window.location.href = '/';
+        window.spaLocation.href = '/';
     }
 
     async checkClusterMode() {
@@ -208,17 +208,16 @@ class SessionManager {
 
     setRefreshLoading(loading) {
         const refreshBtn = document.getElementById('refresh-sessions');
-        const refreshText = document.getElementById('refresh-text');
-        const refreshSpinner = document.getElementById('refresh-spinner');
-
-        refreshBtn.disabled = loading;
-
-        if (loading) {
-            refreshText.style.display = 'none';
-            refreshSpinner.style.display = 'inline-block';
-        } else {
-            refreshText.style.display = 'inline';
-            refreshSpinner.style.display = 'none';
+        if (refreshBtn) {
+            if (refreshBtn.tagName === 'IX-ICON-BUTTON') {
+                refreshBtn.loading = loading;
+            } else {
+                refreshBtn.disabled = loading;
+                const refreshText = document.getElementById('refresh-text');
+                const refreshSpinner = document.getElementById('refresh-spinner');
+                if (refreshText) refreshText.style.display = loading ? 'none' : 'inline';
+                if (refreshSpinner) refreshSpinner.style.display = loading ? 'inline-block' : 'none';
+            }
         }
     }
 

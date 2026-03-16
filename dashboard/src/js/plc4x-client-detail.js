@@ -428,7 +428,7 @@ class Plc4xClientDetailManager {
             this.showSuccess(`Client "${clientData.name}" created successfully. Redirecting to edit page...`);
             // Redirect to edit mode so the user can add addresses
             setTimeout(() => {
-                window.location.href = '/pages/plc4x-client-detail.html?client=' + encodeURIComponent(clientData.name);
+                window.spaLocation.href = '/pages/plc4x-client-detail.html?client=' + encodeURIComponent(clientData.name);
             }, 1500);
         } else {
             const errors = result.plc4xDevice.create.errors || ['Unknown error'];
@@ -572,7 +572,7 @@ class Plc4xClientDetailManager {
     }
 
     goBack() {
-        window.location.href = '/pages/plc4x-clients.html';
+        window.spaLocation.href = '/pages/plc4x-clients.html';
     }
 }
 

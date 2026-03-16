@@ -219,12 +219,12 @@
         /* Topic Browser Side Panel */
         .topic-browser-side-panel {
             position: fixed;
-            top: 0;
+            top: 48px;
             right: -400px;
             width: 380px;
             min-width: 300px;
             max-width: 600px;
-            height: 100vh;
+            height: calc(100vh - 48px);
             background: var(--dark-surface);
             border-left: 1px solid var(--dark-border);
             z-index: 1000;
@@ -628,7 +628,7 @@
                     <p class="page-subtitle" id="page-subtitle"></p>
                 </div>
                 <div class="page-header-actions" id="header-actions" style="display:none;">
-                    <button class="btn btn-secondary btn-small" onclick="location.href='/pages/workflows.html'">Back</button>
+                    <button class="btn btn-secondary btn-small" onclick="window.spaLocation.href = '/pages/workflows.html'">Back</button>
                     <button class="btn btn-primary btn-small" style="min-width:90px;" onclick="FlowEdit.save()">Save</button>
                     <button class="btn btn-danger btn-small" id="delete-button" style="display:none;" onclick="FlowEdit.deleteItem()">Delete</button>
                 </div>

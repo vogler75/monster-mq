@@ -85,10 +85,7 @@
                             <option value="true">Connected Only</option>
                             <option value="false">Disconnected Only</option>
                         </select>
-                        <button id="refresh-sessions" class="btn btn-secondary">
-                            <span id="refresh-text">Refresh</span>
-                            <span id="refresh-spinner" class="loading-spinner" style="display: none;"></span>
-                        </button>
+                        <ix-icon-button id="refresh-sessions" icon="refresh" variant="secondary" ghost onclick="if(window.sessionManager)sessionManager.loadSessions()" title="Refresh"></ix-icon-button>
                     </div>
                 </div>
                 <table>

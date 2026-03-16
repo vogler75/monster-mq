@@ -239,7 +239,7 @@ class KafkaClientDetailManager {
                 const result = await this.client.query(mutation, { input: data });
                 if (result.kafkaClient.create.success) {
                     this.showSuccess(`Kafka client "${data.name}" created successfully`);
-                    setTimeout(() => { window.location.href = '/pages/kafka-clients.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = '/pages/kafka-clients.html'; }, 800);
                 } else {
                     const errors = result.kafkaClient.create.errors || ['Unknown error'];
                     this.showError('Failed to create Kafka client: ' + errors.join(', '));
@@ -319,7 +319,7 @@ class KafkaClientDetailManager {
             if (result.kafkaClient.delete) {
                 this.showSuccess('Kafka client deleted');
                 this.cleanup();
-                setTimeout(() => { window.location.href = '/pages/kafka-clients.html'; }, 800);
+                setTimeout(() => { window.spaLocation.href = '/pages/kafka-clients.html'; }, 800);
             } else {
                 this.showError('Failed to delete Kafka client');
             }
@@ -337,7 +337,7 @@ class KafkaClientDetailManager {
     }
     hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
     confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
-    goBack() { this.cleanup(); window.location.href = '/pages/kafka-clients.html'; }
+    goBack() { this.cleanup(); window.spaLocation.href = '/pages/kafka-clients.html'; }
 
     showLoading(show) { const el = document.getElementById('loading-indicator'); if (el) el.style.display = show ? 'flex' : 'none'; }
     showError(message) { const errorEl = document.getElementById('error-message'); const text = document.querySelector('#error-message .error-text'); if (errorEl && text) { text.textContent = message; errorEl.style.display='flex'; setTimeout(()=>this.hideError(),5000);} }

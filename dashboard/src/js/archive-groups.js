@@ -158,21 +158,13 @@ class ArchiveGroupsManager {
                 <td>
                     <div class="action-buttons">
                         ${group.enabled ?
-                    `<button class="btn-action btn-disable" onclick="archiveGroupsManager.toggleArchiveGroup('${this.escapeHtml(group.name)}', false)">
-                                Disable
-                            </button>` :
-                    `<button class="btn-action btn-enable" onclick="archiveGroupsManager.toggleArchiveGroup('${this.escapeHtml(group.name)}', true)">
-                                Enable
-                            </button>`
+                    `<ix-icon-button icon="pause" variant="primary" ghost size="16" title="Disable" onclick="archiveGroupsManager.toggleArchiveGroup('${this.escapeHtml(group.name)}', false)"></ix-icon-button>` :
+                    `<ix-icon-button icon="play" variant="primary" ghost size="16" title="Enable" onclick="archiveGroupsManager.toggleArchiveGroup('${this.escapeHtml(group.name)}', true)"></ix-icon-button>`
                 }
-                        <a href="/pages/archive-group-detail.html?name=${encodeURIComponent(group.name)}" class="btn-action btn-edit">
-                            Edit
-                        </a>
-                        <button class="btn-action btn-delete"
+                        <a href="/pages/archive-group-detail.html?name=${encodeURIComponent(group.name)}"><ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit"></ix-icon-button></a>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="${group.enabled ? 'Disable the archive group first to delete' : 'Delete'}"
                                 onclick="archiveGroupsManager.deleteArchiveGroup('${this.escapeHtml(group.name)}')"
-                                ${group.enabled ? 'disabled title="Disable the archive group first to delete"' : ''}>
-                            Delete
-                        </button>
+                                ${group.enabled ? 'disabled' : ''}></ix-icon-button>
                     </div>
                 </td>
             </tr>`;

@@ -267,7 +267,7 @@ class OpcUaServerDetailManager {
                 const result = await this.client.query(mutation, { config: serverInput });
                 if (result.opcUaServer.create.success) {
                     this.showSuccess(`OPC UA server "${serverInput.name}" created successfully`);
-                    setTimeout(() => { window.location.href = '/pages/opcua-servers.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = '/pages/opcua-servers.html'; }, 800);
                 } else {
                     this.showError('Failed to create OPC UA server: ' + (result.opcUaServer.create.message || 'Unknown error'));
                 }
@@ -392,7 +392,7 @@ class OpcUaServerDetailManager {
             if (result.opcUaServer.delete.success) {
                 this.showSuccess('OPC UA server deleted');
                 setTimeout(() => {
-                    window.location.href = '/pages/opcua-servers.html';
+                    window.spaLocation.href = '/pages/opcua-servers.html';
                 }, 800);
             } else {
                 const message = result.opcUaServer.delete.message || 'Unknown error';
@@ -507,7 +507,7 @@ class OpcUaServerDetailManager {
     }
 
     goBack() {
-        window.location.href = '/pages/opcua-servers.html';
+        window.spaLocation.href = '/pages/opcua-servers.html';
     }
 
     showLoading(show) {

@@ -45,7 +45,7 @@ class JDBCLoggerDetailManager {
         this.loggerName = params.get('name');
 
         if (!this.isNewLogger && !this.loggerName) {
-            window.location.href = '/pages/jdbc-loggers.html';
+            window.spaLocation.href = '/pages/jdbc-loggers.html';
             return;
         }
 
@@ -260,7 +260,7 @@ class JDBCLoggerDetailManager {
             console.error('Error loading logger:', error);
             this.showError('Failed to load logger: ' + error.message);
             setTimeout(() => {
-                window.location.href = '/pages/jdbc-loggers.html';
+                window.spaLocation.href = '/pages/jdbc-loggers.html';
             }, 2000);
         }
     }
@@ -600,7 +600,7 @@ class JDBCLoggerDetailManager {
 
                 if (result.jdbcLogger.create.success) {
                     console.log('Logger created successfully');
-                    window.location.href = '/pages/jdbc-loggers.html';
+                    window.spaLocation.href = '/pages/jdbc-loggers.html';
                 } else {
                     const errors = result.jdbcLogger.create.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to create logger';
@@ -625,7 +625,7 @@ class JDBCLoggerDetailManager {
 
                 if (result.jdbcLogger.update.success) {
                     console.log('Logger updated successfully');
-                    window.location.href = '/pages/jdbc-loggers.html';
+                    window.spaLocation.href = '/pages/jdbc-loggers.html';
                 } else {
                     const errors = result.jdbcLogger.update.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to update logger';
@@ -663,7 +663,7 @@ class JDBCLoggerDetailManager {
 
             if (result.jdbcLogger.delete) {
                 console.log('Logger deleted successfully');
-                window.location.href = '/pages/jdbc-loggers.html';
+                window.spaLocation.href = '/pages/jdbc-loggers.html';
             } else {
                 this.showError('Failed to delete logger');
             }
@@ -676,7 +676,7 @@ class JDBCLoggerDetailManager {
 
 // Global functions
 function goBack() {
-    window.location.href = '/pages/jdbc-loggers.html';
+    window.spaLocation.href = '/pages/jdbc-loggers.html';
 }
 
 function saveLogger() {

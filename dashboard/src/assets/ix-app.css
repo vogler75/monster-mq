@@ -20,9 +20,45 @@ ix-application {
   box-sizing: border-box;
 }
 
-/* Shorten sidebar so the log viewer bar (36px collapsed) doesn't cover the bottom items.
-   The header is ~48px, so total offset from top is handled by ix-application layout. */
+/* Extend sidebar to fill full height so it aligns with the log viewer bar at the bottom */
 ix-menu {
-  max-height: calc(100% - 36px) !important;
+  height: 100% !important;
+}
+
+/* =============================================
+   Standardized table header and action buttons
+   ============================================= */
+
+/* Table header bar */
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: var(--dark-bg);
+  border-bottom: 1px solid var(--dark-border);
+  border-radius: 12px 12px 0 0;
+}
+.table-header .table-title h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.table-header .table-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+/* Per-row action buttons */
+.action-buttons {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.action-buttons ix-icon-button {
+  --ix-icon-button-height: 32px;
+  --ix-icon-button-width: 32px;
 }
 

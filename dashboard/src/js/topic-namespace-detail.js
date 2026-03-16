@@ -33,7 +33,7 @@ class TopicNamespaceDetailManager {
         this.namespaceName = params.get('name');
 
         if (!this.isNewNamespace && !this.namespaceName) {
-            window.location.href = '/pages/topic-namespaces.html';
+            window.spaLocation.href = '/pages/topic-namespaces.html';
             return;
         }
 
@@ -115,7 +115,7 @@ class TopicNamespaceDetailManager {
             console.error('Error loading namespace:', error);
             this.showError('Failed to load namespace: ' + error.message);
             setTimeout(() => {
-                window.location.href = '/pages/topic-namespaces.html';
+                window.spaLocation.href = '/pages/topic-namespaces.html';
             }, 2000);
         }
     }
@@ -194,7 +194,7 @@ class TopicNamespaceDetailManager {
 
                 if (result.topicNamespace.create.success) {
                     console.log('Namespace created successfully');
-                    window.location.href = '/pages/topic-namespaces.html';
+                    window.spaLocation.href = '/pages/topic-namespaces.html';
                 } else {
                     const errors = result.topicNamespace.create.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to create namespace';
@@ -217,7 +217,7 @@ class TopicNamespaceDetailManager {
 
                 if (result.topicNamespace.update.success) {
                     console.log('Namespace updated successfully');
-                    window.location.href = '/pages/topic-namespaces.html';
+                    window.spaLocation.href = '/pages/topic-namespaces.html';
                 } else {
                     const errors = result.topicNamespace.update.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to update namespace';
@@ -255,7 +255,7 @@ class TopicNamespaceDetailManager {
 
             if (result.topicNamespace.delete) {
                 console.log('Namespace deleted successfully');
-                window.location.href = '/pages/topic-namespaces.html';
+                window.spaLocation.href = '/pages/topic-namespaces.html';
             } else {
                 this.showError('Failed to delete namespace');
             }
@@ -289,7 +289,7 @@ class TopicNamespaceDetailManager {
 
 // Global functions
 function goBack() {
-    window.location.href = '/pages/topic-namespaces.html';
+    window.spaLocation.href = '/pages/topic-namespaces.html';
 }
 
 function saveNamespace() {

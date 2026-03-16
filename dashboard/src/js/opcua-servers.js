@@ -123,29 +123,10 @@ function createServerRow(server) {
         <td>${statusBadge}</td>
         <td>
             <div class="action-buttons">
-                <button class="btn-icon btn-view" onclick="editServer('${escapeHtml(server.name)}')" title="Edit Server" aria-label="Edit Server">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                    </svg>
-                </button>
-        <button class="btn-icon ${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'btn-play' : 'btn-pause'}"
-                        onclick="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? `startServer('${escapeHtml(server.name)}')` : `stopServer('${escapeHtml(server.name)}')`}"
-                        title="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'Start Server' : 'Stop Server'}">
-                    ${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ?
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>' :
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
-        }
-                </button>
-                <button class="btn-icon btn-cert" onclick="manageCertificates('${escapeHtml(server.name)}')" title="Manage Certificates" aria-label="Manage Certificates">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-                    </svg>
-                </button>
-                <button class="btn-icon btn-delete" onclick="deleteServer('${escapeHtml(server.name)}')" title="Delete Server" aria-label="Delete Server">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                    </svg>
-                </button>
+                <ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit Server" onclick="editServer('${escapeHtml(server.name)}')"></ix-icon-button>
+                <ix-icon-button icon="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'play' : 'pause'}" variant="primary" ghost size="16" title="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'Start Server' : 'Stop Server'}" onclick="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? `startServer('${escapeHtml(server.name)}')` : `stopServer('${escapeHtml(server.name)}')`}"></ix-icon-button>
+                <ix-icon-button icon="lock-closed" variant="primary" ghost size="16" title="Manage Certificates" onclick="manageCertificates('${escapeHtml(server.name)}')"></ix-icon-button>
+                <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Server" onclick="deleteServer('${escapeHtml(server.name)}')"></ix-icon-button>
             </div>
         </td>
     `;
@@ -278,7 +259,7 @@ async function deleteServer(serverName) {
 }
 
 function editServer(serverName) {
-    window.location.href = `/pages/opcua-server-detail.html?server=${encodeURIComponent(serverName)}`;
+    window.spaLocation.href = `/pages/opcua-server-detail.html?server=${encodeURIComponent(serverName)}`;
 }
 
 function showSuccessMessage(message) {
@@ -335,7 +316,7 @@ function showSuccessMessage(message) {
 
 function manageCertificates(serverName) {
     // Navigate to the certificate management page for the specific server
-    window.location.href = `/pages/opcua-server-certificates.html?server=${encodeURIComponent(serverName)}`;
+    window.spaLocation.href = `/pages/opcua-server-certificates.html?server=${encodeURIComponent(serverName)}`;
 }
 
 function escapeHtml(text) {

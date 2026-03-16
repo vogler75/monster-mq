@@ -4,47 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ</title>
-    <script>
-        // Check if user management is enabled
-        async function checkAndRedirect() {
-            try {
-                const response = await fetch('/graphql', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        query: `
-                            query GetBroker {
-                                broker {
-                                    userManagementEnabled
-                                }
-                            }
-                        `
-                    })
-                });
-
-                const result = await response.json();
-                const userManagementEnabled = result.data?.broker?.userManagementEnabled ?? false;
-
-                if (userManagementEnabled) {
-                    // User management is enabled, show login page
-                    window.location.href = 'pages/login.html';
-                } else {
-                    // User management is disabled, skip login and go directly to dashboard
-                    window.location.href = 'pages/dashboard.html';
-                }
-            } catch (error) {
-                console.error('Error checking user management status:', error);
-                // Default to login page if error
-                window.location.href = 'pages/login.html';
-            }
-        }
-
-        checkAndRedirect();
-    </script>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <link rel="stylesheet" href="/assets/ix-app.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script>window.__SPA_MODE = true;</script>
+    <script src="/js/sidebar.js"></script>
 </head>
 <body>
-    Redirecting...
+    <ix-application force-breakpoint="lg">
+        <ix-application-header name="MonsterMQ" slot="application-header">
+            <img src="/assets/logo.png" alt="MonsterMQ" slot="logo"
+                 style="height:32px;width:32px;border-radius:4px;">
+        </ix-application-header>
+
+        <ix-menu application-name="MonsterMQ" pinned start-expanded>
+        </ix-menu>
+
+        <div class="main-content" id="main-content">
+            <div class="container" id="page-content">
+                <p style="text-align:center;padding:4rem;color:var(--text-muted);">Loading...</p>
+            </div>
+        </div>
+    </ix-application>
+
+    <div id="log-viewer-container"></div>
 </body>
 </html>

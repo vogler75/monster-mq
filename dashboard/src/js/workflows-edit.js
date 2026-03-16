@@ -521,7 +521,7 @@ const FlowEdit = (() => {
     const vars = isUpdate? { name, input } : { input };
     await graphql(mutation, vars);
     notify('Saved flow instance','success');
-    location.href = '/pages/workflows.html';
+    window.spaLocation.href = '/pages/workflows.html';
   }
 
   async function deleteItem() {
@@ -532,7 +532,7 @@ const FlowEdit = (() => {
       await graphql(`mutation($name:String!){ flow { deleteInstance(name:$name) } }`, { name: state.name });
     }
     notify('Deleted','success');
-    location.href = '/pages/workflows.html';
+    window.spaLocation.href = '/pages/workflows.html';
   }
 
   async function restartAllInstances() {
@@ -567,7 +567,7 @@ const FlowEdit = (() => {
   function cancel(){
     // Cancel should not ask for confirmation per new UX requirement.
     state.dirty = false; // prevent any beforeunload handler (if added later) from prompting
-    location.href='/pages/workflows.html';
+    window.spaLocation.href = '/pages/workflows.html';
   }
 
   function notify(msg,type='info') {
@@ -587,14 +587,14 @@ const FlowEdit = (() => {
     if(fromVisual){
       // Called from workflows-visual.html, go back there
       if(className){
-        location.href = `/pages/workflows-visual.html?name=${encodeURIComponent(className)}`;
+        window.spaLocation.href = `/pages/workflows-visual.html?name=${encodeURIComponent(className)}`;
       } else {
         // Fallback: go to workflows list
-        location.href = '/pages/workflows.html';
+        window.spaLocation.href = '/pages/workflows.html';
       }
     } else {
       // Called from workflows.html, go back there
-      location.href = '/pages/workflows.html';
+      window.spaLocation.href = '/pages/workflows.html';
     }
   }
 
