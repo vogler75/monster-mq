@@ -90,8 +90,8 @@ class TopicNamespacesManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <a href="/pages/topic-namespace-detail.html?name=${encodeURIComponent(ns.name)}"><ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit namespace"></ix-icon-button></a>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete namespace" onclick="namespacesManager.showConfirmDeleteModal('${this.escapeHtml(ns.name)}')"></ix-icon-button>
+                        <a href="/pages/topic-namespace-detail.html?name=${encodeURIComponent(ns.name)}"><ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit namespace"></ix-icon-button></a>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete namespace" onclick="namespacesManager.showConfirmDeleteModal('${this.escapeHtml(ns.name)}')"></ix-icon-button>
                     </div>
                 </td>
             </tr>`;

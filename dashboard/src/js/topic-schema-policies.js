@@ -86,8 +86,8 @@ class TopicSchemaPoliciesManager {
                 <td style="color: var(--text-secondary); max-width: 300px;">${this.escapeHtml(policy.description || '-')}</td>
                 <td>
                     <div class="action-buttons">
-                        <a href="/pages/topic-schema-policy-detail.html?name=${encodeURIComponent(policy.name)}"><ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit policy"></ix-icon-button></a>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete policy" onclick="policiesManager.showConfirmDeleteModal('${this.escapeHtml(policy.name)}')"></ix-icon-button>
+                        <a href="/pages/topic-schema-policy-detail.html?name=${encodeURIComponent(policy.name)}"><ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit policy"></ix-icon-button></a>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete policy" onclick="policiesManager.showConfirmDeleteModal('${this.escapeHtml(policy.name)}')"></ix-icon-button>
                     </div>
                 </td>
             </tr>`;
