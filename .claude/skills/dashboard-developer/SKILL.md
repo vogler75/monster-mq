@@ -25,12 +25,6 @@ npm run dev          # Vite dev server on http://localhost:5173, proxies /graphq
 npm run build        # Outputs to dashboard/dist/
 ```
 
-To serve the built dashboard from the broker:
-```bash
-cd broker
-./run.sh -dashboardPath ../dashboard/dist
-```
-
 The Vite dev server proxies `/graphql` and `/graphqlws` to the broker backend (configured in `vite.config.js`).
 
 ## Project Structure

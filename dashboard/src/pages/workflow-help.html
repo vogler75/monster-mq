@@ -4,10 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MonsterMQ - Workflow Help</title>
-    <script type="module" src="/js/ix-init.js"></script>
-  <link rel="stylesheet" href="/assets/monster-theme.css" />
-    <script src="/js/storage.js"></script>
-    <script src="/js/sidebar.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css" />
     <style>
         /* Always modal style with left navigation */
         body, html {
@@ -15,6 +12,8 @@
             padding: 0;
             height: 100%;
             overflow: hidden;
+            background: var(--background-secondary, #12141a);
+            color: var(--text-primary, #e8eaed);
         }
 
         .help-container {
@@ -39,35 +38,6 @@
             margin: 0;
         }
 
-        .page-header-actions {
-            display: none;
-        }
-
-        .top-bar {
-            display: none;
-        }
-
-        .sidebar {
-            display: none;
-        }
-
-        .page-header {
-            display: none;
-        }
-
-        .container {
-            width: 100%;
-            height: 100%;
-            padding: 0;
-            margin: 0;
-        }
-
-        .main-content {
-            width: 100%;
-            height: 100%;
-            padding: 0;
-            margin: 0;
-        }
         .help-nav h3 {
             margin: 0 0 0.75rem 0;
             font-size: 0.75rem;
@@ -279,16 +249,6 @@
     </style>
 </head>
 <body>
-    <ix-application force-breakpoint="lg">
-    <ix-menu application-name="MonsterMQ" pinned start-expanded>
-    </ix-menu>
-    <div class="main-content" id="main-content">
-        <div class="container">
-        <div class="page-header">
-            <h1 class="page-title">Workflow Help & Documentation</h1>
-            <p class="page-subtitle">Complete guide to the MonsterMQ workflow engine</p>
-        </div>
-
         <div class="help-container">
             <nav class="help-nav">
                 <h3>Contents</h3>
@@ -794,7 +754,7 @@ if (typeof data === 'object' && data.temp !== undefined) {
     let temp = parseFloat(data.temp);
 
     // Range check
-    if (temp >= -50 && temp <= 150) {
+    if (temp >= -50 && temp &lt;= 150) {
         outputs.send("valid", {
             temperature: temp,
             timestamp: new Date().toISOString(),
@@ -875,9 +835,6 @@ if (typeof data === 'object' && data.temp !== undefined) {
                 </section>
             </div>
         </div>
-    </div>
-</div>
-
 <script>
     // Update active navigation link based on scroll position
     const sections = document.querySelectorAll('.help-section');
@@ -924,6 +881,5 @@ if (typeof data === 'object' && data.temp !== undefined) {
         }
     });
 </script>
-    </ix-application>
 </body>
 </html>

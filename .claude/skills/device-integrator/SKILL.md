@@ -85,18 +85,15 @@ If the device needs to **receive MQTT messages** (commands, subscriptions):
 - Preserve existing password on update if not provided
 
 ### 7. Dashboard List Page
-**Location**: `broker/src/main/resources/dashboard/pages/yourdevice-clients.html` + `js/yourdevice-clients.js`
+**Location**: `dashboard/src/pages/yourdevice-clients.html` + `js/yourdevice-clients.js`
 
-- Follow the standard page template structure:
-  - Head: Inter font, `monster-theme.css`, `storage.js`, `graphql-client.js`, `log-viewer.js`, `sidebar.js`
-  - Body: sidebar placeholder `<aside class="sidebar" id="sidebar"><nav id="sidebar-nav"></nav></aside>`
-  - Main content wrapper: `<div class="main-content" id="main-content">`
+- Follow the iX dashboard page template structure using `<ix-application>` + `<ix-menu>` shell
 - Table with columns: Name, Namespace, Status (connected indicator), Messages In/Out, Actions
 - Auto-refresh every 30 seconds
 - Use `GraphQLDashboardClient` for queries (instance at `window.graphqlClient`)
 
 ### 8. Dashboard Detail Page
-**Location**: `broker/src/main/resources/dashboard/pages/yourdevice-client-detail.html` + `js/yourdevice-client-detail.js`
+**Location**: `dashboard/src/pages/yourdevice-client-detail.html` + `js/yourdevice-client-detail.js`
 
 - Form for create/update with all config fields
 - Dynamic address list management (add/remove rows)
@@ -104,11 +101,11 @@ If the device needs to **receive MQTT messages** (commands, subscriptions):
 - Preserve password field behavior (don't clear on update)
 
 ### 9. Add to Sidebar Menu
-**Location**: `broker/src/main/resources/dashboard/js/sidebar.js`
+**Location**: `dashboard/src/js/sidebar.js`
 
 - Add entry to the `menuConfig` array in the `renderMenu()` method
 - Place in the "Bridging" section
-- Choose an appropriate SVG icon
+- Choose an appropriate iX icon
 
 ## Key Patterns to Follow
 

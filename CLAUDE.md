@@ -23,27 +23,14 @@ java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt [-clu
 ./run.sh [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
 ```
 
-#### Dashboard Development Mode (Legacy)
-When making changes to HTML/CSS/JavaScript dashboard files, you can run the broker with the `-dashboardPath` option to avoid rebuilding:
-```bash
-cd broker
-./run.sh -dashboardPath src/main/resources/dashboard [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
-```
-
-#### New iX Dashboard (dashboard/)
-The new dashboard using Siemens iX lives in `dashboard/` and is built with Vite. It outputs to `dashboard/dist/`.
+#### iX Dashboard (dashboard/)
+The dashboard using Siemens iX lives in `dashboard/` and is built with Vite. It outputs to `dashboard/dist/`.
 
 ```bash
 cd dashboard
 npm install
 npm run dev          # Vite dev server on http://localhost:5173, proxies /graphql to :4000
 npm run build        # Outputs to dashboard/dist/
-```
-
-To serve the built iX dashboard from the broker:
-```bash
-cd broker
-./run.sh -dashboardPath ../dashboard/dist [-cluster]
 ```
 
 ### Running Tests
@@ -151,10 +138,7 @@ For device integration guidance, see `plans/DEVICE_INTEGRATION.md`.
 
 ### Web Dashboard
 
-**Legacy dashboard** (vanilla HTML/CSS/JS, currently active):
-- `broker/src/main/resources/dashboard/` — Served by Vert.x `StaticHandler`
-
-**New iX dashboard** (Siemens iX design system, in development):
+**iX Dashboard** (Siemens iX design system):
 - `dashboard/` - Vite project root
   - `package.json` - Dependencies: `@siemens/ix`, `@siemens/ix-icons`, `@siemens/ix-echarts`, `echarts`, `vite`
   - `vite.config.js` - Build config, outputs to `dashboard/dist/`
@@ -168,7 +152,7 @@ For device integration guidance, see `plans/DEVICE_INTEGRATION.md`.
     - `assets/ix-app.css` - iX layout overrides
     - `pages/` - HTML pages (one per view), use `<ix-application>` + `<ix-menu>` shell
     - `js/` - Page-specific JavaScript
-  - `dist/` - Build output (gitignored, serve via `-dashboardPath ../dashboard/dist`)
+  - `dist/` - Build output (gitignored)
 
 ### HTTP Services and Ports
 
@@ -235,6 +219,6 @@ Key configuration sections:
 - Logging level can be configured via command line or properties files in `src/main/resources/`
 - The MCP Server integration uses the official MCP SDK (io.modelcontextprotocol.sdk)
 - Device integrations follow the Extension + Connector pattern (see `plans/DEVICE_INTEGRATION.md`)
-- The dashboard uses vanilla JS with `GraphQLDashboardClient` — no build tools or frameworks
+- The iX dashboard uses vanilla JS with `GraphQLDashboardClient` and Vite for bundling
 - GraphQL schema is split across `broker/src/main/resources/schema-*.graphqls` files
 - Planning documents are in `plans/` (MQTT5 implementation, device integration, GraalVM analysis)

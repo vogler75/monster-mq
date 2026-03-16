@@ -69,7 +69,6 @@ class Monster(args: Array<String>) {
     private val configFile: String
     private var configJson: JsonObject = JsonObject()
     private val archiveConfigFile: String?
-    private val dashboardPath: String?
     var archiveHandler: ArchiveHandler? = null
 
     // Cluster manager reference for Vert.x 5 compatibility
@@ -295,14 +294,6 @@ class Monster(args: Array<String>) {
             null
         }
 
-        // Dashboard path for development (optional)
-        val dashboardPathIndex = Utils.getArgIndex(args, listOf("-dashboardPath", "--dashboardPath"))
-        dashboardPath = if (dashboardPathIndex != -1 && dashboardPathIndex + 1 < args.size) {
-            args[dashboardPathIndex + 1]
-        } else {
-            null
-        }
-
         Utils.getArgIndex(args, listOf("-log", "--log")).let {
             if (it != -1) {
                 val level = Level.parse(args[it + 1])
@@ -363,10 +354,6 @@ OPTIONS:
   -workerPoolSize <num> Vert.x worker thread pool size
                         Default: 2×CPU count (e.g., 16 on 8-core machine)
                         Increase for high-concurrency scenarios
-
-  -dashboardPath <path> Serve dashboard files from filesystem path (development only)
-                        Example: broker/src/main/resources/dashboard
-                        Default: serve from classpath resources
 
 EXAMPLES:
   # Start with default configuration
@@ -840,7 +827,6 @@ MORE INFO:
                         sessionHandler,
                         metricsStore,
                         this.archiveHandler,
-                        dashboardPath,
                         deviceConfigStore,
                         genAiProvider
                     )

@@ -75,7 +75,6 @@ Auth:
 -cluster              Enable Hazelcast clustering
 -log LEVEL            Set log level: INFO|FINE|FINER|FINEST|ALL
 -config FILE          Custom config file path (default: config.yaml)
--dashboardPath PATH   Serve dashboard from filesystem (dev mode)
 ```
 
 ## Docker Deployment

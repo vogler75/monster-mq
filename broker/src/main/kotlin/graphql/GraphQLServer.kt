@@ -55,8 +55,6 @@ import io.vertx.core.http.HttpServerOptions
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.handler.BodyHandler
-import io.vertx.ext.web.handler.StaticHandler
-import io.vertx.ext.web.handler.FileSystemAccess
 import io.vertx.ext.web.handler.graphql.GraphQLHandler
 import io.vertx.ext.web.handler.graphql.GraphQLHandlerOptions
 import io.vertx.ext.web.handler.graphql.ws.GraphQLWSHandler
@@ -74,7 +72,6 @@ class GraphQLServer(
     private val sessionHandler: SessionHandler,
     private val metricsStore: IMetricsStore?,
     private val archiveHandler: ArchiveHandler?,
-    private val dashboardPath: String? = null,
     private val sharedDeviceConfigStore: IDeviceConfigStore? = null,
     private val genAiProvider: at.rocworks.genai.IGenAiProvider? = null
 ) {
@@ -195,23 +192,6 @@ class GraphQLServer(
                 .putHeader("content-type", "application/json")
                 .end(JsonObject().put("status", "healthy").encode())
         }
-
-        // Serve dashboard static files
-        router.route("/*").handler(
-            if (dashboardPath != null) {
-                // Development mode: serve from filesystem
-                logger.info("Dashboard serving from filesystem: $dashboardPath")
-                StaticHandler.create(FileSystemAccess.ROOT, dashboardPath)
-                    .setIndexPage("pages/login.html")
-                    .setCachingEnabled(false)  // Disable caching for development
-            } else {
-                // Production mode: serve from classpath resources
-                logger.fine("Dashboard serving from classpath resources")
-                StaticHandler.create("dashboard")
-                    .setIndexPage("pages/login.html")
-                    .setCachingEnabled(false)  // Disable caching for development
-            }
-        )
 
         // Create HTTP server
         val options = HttpServerOptions()
