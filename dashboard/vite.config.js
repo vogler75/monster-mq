@@ -32,10 +32,13 @@ function buildProxyConfig() {
       proxy[`/broker-api/${name}`] = {
         target,
         changeOrigin: true,
+        secure: false,
         rewrite: (path) => path.replace(new RegExp(`^/broker-api/${name}`), '')
       };
       proxy[`/broker-ws/${name}`] = {
         target: target.replace(/^http/, 'ws'),
+        changeOrigin: true,
+        secure: false,
         ws: true,
         rewrite: (path) => path.replace(new RegExp(`^/broker-ws/${name}`), '')
       };

@@ -43,7 +43,8 @@ class LogViewer {
     const host = window.location.hostname;
     const port = window.location.port;
     const portPart = port ? `:${port}` : '';
-    return `${protocol}//${host}${portPart}/graphqlws`;
+    const wsPath = window.brokerManager ? window.brokerManager.getWsEndpoint() : '/graphqlws';
+    return `${protocol}//${host}${portPart}${wsPath}`;
   }
 
   init() {
