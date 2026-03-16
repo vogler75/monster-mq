@@ -148,12 +148,12 @@ class JDBCLoggersManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <a href="/pages/jdbc-logger-detail.html?name=${encodeURIComponent(logger.name)}"><ix-icon-button icon="highlight" variant="primary" ghost size="16" title="Edit logger"></ix-icon-button></a>
+                        <a href="/pages/jdbc-logger-detail.html?name=${encodeURIComponent(logger.name)}"><ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit logger"></ix-icon-button></a>
                         ${logger.enabled ?
-                    `<ix-icon-button icon="pause" variant="primary" ghost size="16" title="Stop logger" onclick="jdbcLoggersManager.toggleLogger('${this.escapeHtml(logger.name)}', false)"></ix-icon-button>` :
-                    `<ix-icon-button icon="play" variant="primary" ghost size="16" title="Start logger" onclick="jdbcLoggersManager.toggleLogger('${this.escapeHtml(logger.name)}', true)"></ix-icon-button>`
+                    `<ix-icon-button icon="pause" variant="primary" ghost size="24" title="Stop logger" onclick="jdbcLoggersManager.toggleLogger('${this.escapeHtml(logger.name)}', false)"></ix-icon-button>` :
+                    `<ix-icon-button icon="play" variant="primary" ghost size="24" title="Start logger" onclick="jdbcLoggersManager.toggleLogger('${this.escapeHtml(logger.name)}', true)"></ix-icon-button>`
                 }
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete logger" onclick="jdbcLoggersManager.showConfirmDeleteModal('${this.escapeHtml(logger.name)}')"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete logger" onclick="jdbcLoggersManager.showConfirmDeleteModal('${this.escapeHtml(logger.name)}')"></ix-icon-button>
                     </div>
                 </td>
             </tr>`;
