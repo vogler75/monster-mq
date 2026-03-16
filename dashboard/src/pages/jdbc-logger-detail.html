@@ -719,23 +719,6 @@ Row 3: {ts: '2024-01-15T10:30:00Z', device_id: 'sensor-123', sensor_id: 'humidit
 </div>
 
 <script src="/js/jdbc-logger-detail.js"></script>
-<script>
-    // Add event listeners for password toggle
-    document.addEventListener('DOMContentLoaded', function() {
-        // Toggle password field visibility
-        const updatePasswordCheckbox = document.getElementById('logger-update-password');
-        const passwordFieldGroup = document.getElementById('password-field-group');
-
-        if (updatePasswordCheckbox) {
-            updatePasswordCheckbox.addEventListener('change', function() {
-                passwordFieldGroup.style.display = this.checked ? 'block' : 'none';
-                if (!this.checked) {
-                    document.getElementById('logger-password').value = '';
-                }
-            });
-        }
-    });
-</script>
     </ix-application>
 </body>
 </html>

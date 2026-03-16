@@ -16,6 +16,7 @@ class JDBCLoggerDetailManager {
         }
 
         this.parseUrlParams();
+        this.setupPasswordToggle();
         await this.loadClusterNodes();
 
         if (this.isNewLogger) {
@@ -55,6 +56,19 @@ class JDBCLoggerDetailManager {
             this.isNewLogger ? 'Configure a new JDBC logger' : 'Edit logger configuration';
         document.getElementById('save-logger-btn').textContent =
             this.isNewLogger ? 'Create Logger' : 'Save Changes';
+    }
+
+    setupPasswordToggle() {
+        var checkbox = document.getElementById('logger-update-password');
+        var fieldGroup = document.getElementById('password-field-group');
+        if (checkbox && fieldGroup) {
+            checkbox.addEventListener('change', function() {
+                fieldGroup.style.display = this.checked ? 'block' : 'none';
+                if (!this.checked) {
+                    document.getElementById('logger-password').value = '';
+                }
+            });
+        }
     }
 
     async loadClusterNodes() {
@@ -391,14 +405,37 @@ class JDBCLoggerDetailManager {
     }
 
     showError(message) {
-        const errorDiv = document.getElementById('error-message');
-        const errorText = errorDiv.querySelector('.error-text');
-        errorText.textContent = message;
-        errorDiv.style.display = 'block';
+        // Also update the inline error div if present
+        var errorDiv = document.getElementById('error-message');
+        if (errorDiv) {
+            var errorText = errorDiv.querySelector('.error-text');
+            if (errorText) errorText.textContent = message;
+            errorDiv.style.display = 'flex';
+        }
 
-        setTimeout(() => {
-            errorDiv.style.display = 'none';
-        }, 5000);
+        // Show a fixed-position toast so the error is always visible
+        var existing = document.getElementById('error-toast');
+        if (existing) existing.remove();
+
+        var toast = document.createElement('div');
+        toast.id = 'error-toast';
+        toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-red,#EF4444);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
+        toast.innerHTML = '<span style="font-size:1.2rem;">&#9888;</span><span>' + message + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
+
+        // Add animation
+        if (!document.getElementById('error-toast-style')) {
+            var style = document.createElement('style');
+            style.id = 'error-toast-style';
+            style.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}';
+            document.head.appendChild(style);
+        }
+
+        document.body.appendChild(toast);
+
+        setTimeout(function() {
+            if (toast.parentElement) toast.remove();
+            if (errorDiv) errorDiv.style.display = 'none';
+        }, 8000);
     }
 
     validateForm() {
