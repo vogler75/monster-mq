@@ -1023,11 +1023,11 @@ class TopicBrowserAI {
     }
 
     /**
-     * Load config from ai-prompts.json (system prompt and quick actions)
+     * Load config from prompts.json (system prompt and quick actions)
      */
     async loadConfig() {
         try {
-            const response = await fetch('/config/ai-prompts.json');
+            const response = await fetch('/config/prompts.json');
             if (response.ok) {
                 const config = await response.json();
                 // Load system prompt from config
@@ -1040,12 +1040,12 @@ class TopicBrowserAI {
                 this.quickActions = config.quickActions || [];
                 this.renderQuickActionButtons();
             } else {
-                console.warn('Could not load ai-prompts.json, using defaults');
+                console.warn('Could not load prompts.json, using defaults');
                 this.useDefaultSystemPrompt();
                 this.useDefaultQuickActions();
             }
         } catch (e) {
-            console.warn('Error loading ai-prompts.json:', e.message);
+            console.warn('Error loading prompts.json:', e.message);
             this.useDefaultSystemPrompt();
             this.useDefaultQuickActions();
         }
