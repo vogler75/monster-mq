@@ -401,6 +401,15 @@ class NatsClientDetailManager {
             configInput.streamName = document.getElementById('client-stream-name').value.trim();
             configInput.consumerDurableName = document.getElementById('client-durable-name').value.trim();
         }
+        // Include current addresses so they don't get wiped on save
+        configInput.addresses = this.addresses.map(a => ({
+            mode: a.mode,
+            natsSubject: a.natsSubject,
+            mqttTopic: a.mqttTopic,
+            qos: a.qos,
+            autoConvert: a.autoConvert,
+            removePath: a.removePath
+        }));
         return {
             name: document.getElementById('client-name').value.trim(),
             namespace: document.getElementById('client-namespace').value.trim(),
