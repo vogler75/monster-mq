@@ -578,7 +578,7 @@ class SessionManager {
             `;
 
             const headers = this.getAuthHeaders();
-            const response = await fetch('/graphql', {
+            const response = await fetch(window.graphqlClient.endpoint, {
                 method: 'POST',
                 headers: headers,
                 body: JSON.stringify({

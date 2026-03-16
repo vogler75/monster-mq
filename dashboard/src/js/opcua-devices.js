@@ -2,7 +2,7 @@
 
 class OpcUaDeviceManager {
     constructor() {
-        this.client = new GraphQLDashboardClient('/graphql');
+        this.client = new GraphQLDashboardClient();
         this.devices = [];
         this.clusterNodes = [];
         this.deleteDeviceName = null;

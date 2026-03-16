@@ -1,9 +1,16 @@
 class GraphQLDashboardClient {
-    constructor(endpoint = '/graphql') {
-        this.endpoint = endpoint;
+    constructor(endpoint = null) {
+        this._fixedEndpoint = endpoint; // null = use broker manager dynamically
         this.tokenCheckInterval = null;
         this.WARNING_THRESHOLD_SECONDS = 5 * 60; // 5 minutes
         this.CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
+    }
+
+    /** Resolve the current GraphQL endpoint dynamically */
+    get endpoint() {
+        if (this._fixedEndpoint) return this._fixedEndpoint;
+        if (window.brokerManager) return window.brokerManager.getEndpoint();
+        return '/graphql';
     }
 
     // ===================== SESSION EXPIRY HANDLING =====================

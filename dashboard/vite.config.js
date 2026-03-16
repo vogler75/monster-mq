@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import { resolve, join } from 'path';
-import { readdirSync, copyFileSync, mkdirSync, existsSync, statSync } from 'fs';
+import { readdirSync, readFileSync, copyFileSync, mkdirSync, existsSync, statSync } from 'fs';
 
 // Recursively copy files, skipping those already produced by rollup
 function copyDir(src, dest) {
@@ -17,6 +17,33 @@ function copyDir(src, dest) {
       copyFileSync(srcPath, destPath);
     }
   }
+}
+
+// Build proxy entries from brokers.json
+function buildProxyConfig() {
+  const proxy = {};
+  try {
+    const brokers = JSON.parse(readFileSync(resolve(__dirname, 'src/config/brokers.json'), 'utf-8'));
+    for (const broker of brokers) {
+      if (!broker.host) continue; // Local broker only works in production (served by broker)
+
+      const target = `${broker.tls ? 'https' : 'http'}://${broker.host}:${broker.port}`;
+      const name = encodeURIComponent(broker.name);
+      proxy[`/broker-api/${name}`] = {
+        target,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(new RegExp(`^/broker-api/${name}`), '')
+      };
+      proxy[`/broker-ws/${name}`] = {
+        target: target.replace(/^http/, 'ws'),
+        ws: true,
+        rewrite: (path) => path.replace(new RegExp(`^/broker-ws/${name}`), '')
+      };
+    }
+  } catch (e) {
+    console.warn('Could not read brokers.json:', e.message);
+  }
+  return proxy;
 }
 
 export default defineConfig({
@@ -40,11 +67,7 @@ export default defineConfig({
     name: 'copy-static',
     closeBundle() {
       const dest = resolve(__dirname, 'dist');
-
-      // Copy dashboard source files
       copyDir(resolve(__dirname, 'src'), dest);
-
-      // Copy iX icon SVGs
       const svgSrc = resolve(__dirname, 'node_modules/@siemens/ix-icons/dist/ix-icons/svg');
       const svgDest = join(dest, 'svg');
       copyDir(svgSrc, svgDest);
@@ -52,15 +75,6 @@ export default defineConfig({
   }],
   server: {
     port: 5173,
-    proxy: {
-      '/graphql': {
-        target: 'http://localhost:4000',
-        changeOrigin: true
-      },
-      '/graphqlws': {
-        target: 'ws://localhost:4000',
-        ws: true
-      }
-    }
+    proxy: buildProxyConfig()
   }
 });

@@ -11,8 +11,9 @@ class SidebarManager {
         this.init();
     }
 
-    init() {
+    async init() {
         this.injectFavicons();
+        if (window.brokerManager) await window.brokerManager.ready();
         this.renderMenu();
         this.setupUI();
         this.initLogViewer();
@@ -174,6 +175,17 @@ class SidebarManager {
             safeStorage.getItem('monstermq_userManagementEnabled') === 'true';
         const username = isGuest ? 'Anonymous' : (safeStorage.getItem('monstermq_username') || 'User');
 
+        // Broker switcher item
+        if (window.brokerManager) {
+            const brokerName = window.brokerManager.getDisplayName();
+            const brokerItem = document.createElement('ix-menu-item');
+            brokerItem.setAttribute('slot', 'bottom');
+            brokerItem.setAttribute('label', brokerName);
+            brokerItem.setAttribute('icon', 'distribution');
+            brokerItem.addEventListener('click', () => this.showBrokerSwitcher());
+            ixMenu.appendChild(brokerItem);
+        }
+
         if (isGuest) {
             const guestItem = document.createElement('ix-menu-item');
             guestItem.setAttribute('slot', 'bottom');
@@ -189,6 +201,88 @@ class SidebarManager {
             logoutItem.addEventListener('click', () => this.logout());
             ixMenu.appendChild(logoutItem);
         }
+    }
+
+    showBrokerSwitcher() {
+        // Remove existing overlay if any
+        const existing = document.getElementById('broker-switcher-overlay');
+        if (existing) { existing.remove(); return; }
+
+        const brokers = window.brokerManager.getAllBrokers();
+        const activeBroker = window.brokerManager.getActiveBroker();
+        const activeId = activeBroker ? activeBroker.name : null;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'broker-switcher-overlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
+        let brokerListHtml = brokers.map(b => {
+            const isActive = b.name === activeId;
+            const detail = b.host ? (b.tls ? 'https://' : 'http://') + b.host + ':' + b.port : 'This server';
+            return '<div class="broker-switcher-item' + (isActive ? ' active' : '') + '" data-broker-id="' + b.name + '">' +
+                '<div class="broker-item-info">' +
+                '<div class="broker-item-name">' + b.name + (isActive ? ' <span class="broker-active-badge">active</span>' : '') + '</div>' +
+                '<div class="broker-item-detail">' + detail + '</div>' +
+                '</div>' +
+                '</div>';
+        }).join('');
+
+        overlay.innerHTML =
+            '<div class="broker-switcher-card">' +
+            '<div class="broker-switcher-header">' +
+            '<h3>Switch Broker</h3>' +
+            '<button class="broker-switcher-close">&times;</button>' +
+            '</div>' +
+            '<div class="broker-switcher-list">' + brokerListHtml + '</div>' +
+            '</div>';
+
+        // Inject styles
+        const style = document.createElement('style');
+        style.id = 'broker-switcher-styles';
+        style.textContent = [
+            '.broker-switcher-card { background:var(--dark-surface,#1E293B);border:1px solid var(--dark-border,#475569);border-radius:12px;width:400px;max-width:90vw;max-height:70vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.5); }',
+            '.broker-switcher-header { display:flex;justify-content:space-between;align-items:center;padding:1.25rem 1.5rem;border-bottom:1px solid var(--dark-border,#475569); }',
+            '.broker-switcher-header h3 { margin:0;color:var(--text-primary,#F1F5F9);font-size:1.1rem; }',
+            '.broker-switcher-close { background:none;border:none;color:var(--text-muted,#94A3B8);font-size:1.5rem;cursor:pointer;padding:0;line-height:1; }',
+            '.broker-switcher-close:hover { color:var(--text-primary,#F1F5F9); }',
+            '.broker-switcher-list { overflow-y:auto;padding:0.5rem; }',
+            '.broker-switcher-item { display:flex;align-items:center;padding:0.75rem 1rem;border-radius:8px;cursor:pointer;transition:background 0.15s; }',
+            '.broker-switcher-item:hover { background:var(--dark-surface-2,#334155); }',
+            '.broker-switcher-item.active { background:var(--dark-surface-2,#334155);border:1px solid var(--monster-purple,#7C3AED); }',
+            '.broker-item-info { flex:1;min-width:0; }',
+            '.broker-item-name { color:var(--text-primary,#F1F5F9);font-weight:500;font-size:0.95rem; }',
+            '.broker-item-detail { color:var(--text-muted,#94A3B8);font-size:0.8rem;margin-top:2px; }',
+            '.broker-active-badge { background:var(--monster-purple,#7C3AED);color:white;font-size:0.65rem;padding:2px 6px;border-radius:4px;margin-left:0.5rem;vertical-align:middle;text-transform:uppercase;letter-spacing:0.03em; }'
+        ].join('\n');
+        document.head.appendChild(style);
+
+        document.body.appendChild(overlay);
+
+        // Close on backdrop click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) { overlay.remove(); style.remove(); }
+        });
+
+        // Close button
+        overlay.querySelector('.broker-switcher-close').addEventListener('click', () => {
+            overlay.remove(); style.remove();
+        });
+
+        // Broker selection
+        overlay.querySelectorAll('.broker-switcher-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const brokerId = item.dataset.brokerId;
+                if (brokerId === activeId) { overlay.remove(); style.remove(); return; }
+                if (window.brokerManager.switchBroker(brokerId)) {
+                    if (window.isLoggedIn()) {
+                        // Valid session restored — reload dashboard
+                        window.location.href = '/';
+                    } else {
+                        window.location.href = '/pages/login.html';
+                    }
+                }
+            });
+        });
     }
 
     setupUI() {
@@ -249,8 +343,8 @@ class SidebarManager {
 
             // Extract page-specific scripts (skip shared ones)
             const sharedScripts = new Set([
-                '/js/storage.js', '/js/graphql-client.js', '/js/sidebar.js',
-                '/js/log-viewer.js', '/js/ix-init.js'
+                '/js/storage.js', '/js/broker-manager.js', '/js/graphql-client.js',
+                '/js/sidebar.js', '/js/log-viewer.js', '/js/ix-init.js'
             ]);
             const newScripts = [];
             doc.querySelectorAll('head script[src], body script[src]').forEach(s => {

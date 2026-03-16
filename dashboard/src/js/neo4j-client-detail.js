@@ -2,7 +2,7 @@
 
 class Neo4jClientDetailManager {
     constructor() {
-        this.client = new GraphQLDashboardClient('/graphql');
+        this.client = new GraphQLDashboardClient();
         this.clientName = null; // URL param (original name for updates)
         this.clientData = null; // Loaded neo4jClient object
         this.clusterNodes = [];

@@ -2,7 +2,7 @@
 
 class MqttClientDetailManager {
     constructor() {
-        this.client = new GraphQLDashboardClient('/graphql');
+        this.client = new GraphQLDashboardClient();
         this.clientName = null;
         this.clientData = null;
         this.clusterNodes = [];

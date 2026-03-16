@@ -2,7 +2,7 @@
 
 class OpcUaServerDetailManager {
     constructor() {
-        this.client = new GraphQLDashboardClient('/graphql');
+        this.client = new GraphQLDashboardClient();
         this.serverName = null; // URL param (original name for updates)
         this.serverData = null; // Loaded opcUaServer object
         this.clusterNodes = [];

@@ -65,6 +65,47 @@
             outline: none;
             border-color: var(--theme-color-primary);
         }
+        select.form-control {
+            appearance: auto;
+            cursor: pointer;
+        }
+
+        /* Broker section */
+        .broker-section {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--theme-color-soft-bdr);
+        }
+        .broker-section .section-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+            color: var(--theme-color-soft-text);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .broker-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--theme-color-soft-text);
+        }
+        .broker-status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--theme-color-soft-text);
+        }
+        .broker-status .dot.connected {
+            background: var(--monster-green, #10B981);
+        }
+        .broker-status .dot.error {
+            background: var(--monster-red, #EF4444);
+        }
     </style>
 </head>
 <body>
@@ -74,6 +115,22 @@
                 <img src="/assets/logo.png" alt="MonsterMQ Logo">
                 <h1>Welcome Back</h1>
                 <p>Sign in to access your MonsterMQ dashboard</p>
+            </div>
+
+            <div class="broker-section">
+                <div class="section-label">
+                    <ix-icon name="distribution" size="16"></ix-icon>
+                    Broker
+                </div>
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <select id="broker-select" class="form-control">
+                        <option value="" disabled selected>Loading brokers...</option>
+                    </select>
+                </div>
+                <div id="broker-status" class="broker-status" style="display:none;">
+                    <span class="dot" id="broker-status-dot"></span>
+                    <span id="broker-status-text"></span>
+                </div>
             </div>
 
             <div id="alert-container"></div>
@@ -105,6 +162,7 @@
     </div>
 
     <script src="/js/storage.js"></script>
+    <script src="/js/broker-manager.js"></script>
     <script src="/js/login.js"></script>
 </body>
 </html>

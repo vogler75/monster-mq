@@ -7,28 +7,29 @@ class LoginManager {
         this.loginText = document.getElementById('login-text');
         this.loginSpinner = document.getElementById('login-spinner');
         this.alertContainer = document.getElementById('alert-container');
+        this.brokerSelect = document.getElementById('broker-select');
 
         this.init();
     }
 
-    init() {
-        // Clear any stale session data from previous sessions
+    async init() {
         sessionStorage.clear();
-        // Clear guest flag — arriving at login page means the user wants to sign in
         safeStorage.removeItem('monstermq_guest');
+
+        await window.brokerManager.ready();
+        this.populateBrokerSelect();
 
         if (this.isLoggedIn()) {
             window.location.href = '/pages/dashboard.html';
             return;
         }
 
-        // Check if user management is enabled
         this.checkUserManagementEnabled();
 
         this.form.addEventListener('submit', (e) => this.handleLogin(e));
+        this.brokerSelect.addEventListener('change', () => this.onBrokerSelectChange());
 
-        // Wire up the guest link
-        const guestLink = document.getElementById('guest-link');
+        var guestLink = document.getElementById('guest-link');
         if (guestLink) {
             guestLink.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -37,98 +38,134 @@ class LoginManager {
         }
     }
 
+    populateBrokerSelect() {
+        var brokers = window.brokerManager.getAllBrokers();
+        var activeBroker = window.brokerManager.getActiveBroker();
+        var activeId = activeBroker ? activeBroker.name : null;
+
+        this.brokerSelect.innerHTML = '';
+
+        brokers.forEach(function(broker) {
+            var option = document.createElement('option');
+            option.value = broker.name;
+            var label = broker.name;
+            if (!broker.host) label += ' (this server)';
+            option.textContent = label;
+            if (broker.name === activeId) option.selected = true;
+            this.brokerSelect.appendChild(option);
+        }.bind(this));
+    }
+
+    onBrokerSelectChange() {
+        window.brokerManager.setActiveBroker(this.brokerSelect.value);
+        // Hide guest access until re-checked
+        var guestAccess = document.getElementById('guest-access');
+        if (guestAccess) guestAccess.style.display = 'none';
+        this.checkUserManagementEnabled();
+    }
+
+    getGraphqlEndpoint() {
+        return window.brokerManager.getEndpoint();
+    }
+
+    showBrokerStatus(state, message) {
+        var container = document.getElementById('broker-status');
+        var dot = document.getElementById('broker-status-dot');
+        var text = document.getElementById('broker-status-text');
+
+        if (state === 'hidden') {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'flex';
+        dot.className = 'dot';
+
+        if (state === 'checking') {
+            text.textContent = 'Checking broker...';
+        } else if (state === 'connected') {
+            dot.classList.add('connected');
+            text.textContent = message || 'Broker reachable';
+        } else if (state === 'error') {
+            dot.classList.add('error');
+            text.textContent = message || 'Cannot reach broker';
+        }
+    }
+
     async checkUserManagementEnabled() {
+        var endpoint = this.getGraphqlEndpoint();
+        this.showBrokerStatus('checking');
+
         try {
-            const response = await fetch('/graphql', {
+            var response = await fetch(endpoint, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    query: `
-                        query GetBroker {
-                            broker {
-                                userManagementEnabled
-                                anonymousEnabled
-                            }
-                        }
-                    `
+                    query: '{ broker { userManagementEnabled anonymousEnabled } }'
                 })
             });
 
-            const result = await response.json();
-            const userManagementEnabled = result.data?.broker?.userManagementEnabled ?? false;
-            const anonymousEnabled = result.data?.broker?.anonymousEnabled ?? false;
+            var result = await response.json();
+            var userManagementEnabled = result.data?.broker?.userManagementEnabled ?? false;
+            var anonymousEnabled = result.data?.broker?.anonymousEnabled ?? false;
+
+            this.showBrokerStatus('connected');
 
             if (!userManagementEnabled) {
-                // User management is disabled, auto-login with empty credentials
                 console.log('User management is disabled, auto-logging in...');
                 this.autoLoginDisabled();
             } else if (anonymousEnabled) {
-                // Anonymous user is enabled — show the guest access option
-                const guestAccess = document.getElementById('guest-access');
+                var guestAccess = document.getElementById('guest-access');
                 if (guestAccess) guestAccess.style.display = 'block';
             }
-            // If userManagementEnabled=true and anonymousEnabled=false, hide guest access (default)
         } catch (error) {
             console.error('Error checking user management status:', error);
-            // Continue with normal login flow if there's an error
+            this.showBrokerStatus('error', 'Cannot reach broker');
         }
     }
 
     autoLoginDisabled() {
-        // Auto-login when user management is disabled
         safeStorage.setItem('monstermq_token', 'null');
         safeStorage.setItem('monstermq_username', 'Anonymous');
         safeStorage.setItem('monstermq_isAdmin', 'false');
         safeStorage.setItem('monstermq_userManagementEnabled', 'false');
+        window.brokerManager.saveAuthForBroker();
 
-        // Show success message and redirect
         this.showAlert('Authentication disabled - accessing dashboard...', 'success');
 
-        setTimeout(() => {
+        setTimeout(function() {
             window.location.href = '/pages/dashboard.html';
         }, 500);
     }
 
     enterGuestMode() {
-        // Store guest flag — no token, read-only mode
         safeStorage.removeItem('monstermq_token');
         safeStorage.removeItem('monstermq_username');
         safeStorage.removeItem('monstermq_isAdmin');
         safeStorage.setItem('monstermq_guest', 'true');
         safeStorage.setItem('monstermq_userManagementEnabled', 'true');
+        window.brokerManager.saveAuthForBroker();
         window.location.href = '/pages/dashboard.html';
     }
 
     isLoggedIn() {
-        const token = safeStorage.getItem('monstermq_token');
-        // On the login page, guest mode is NOT considered logged in —
-        // the user is here to sign in, so let them through.
+        var token = safeStorage.getItem('monstermq_token');
         if (!token) return false;
         if (token === 'null') return true;
         try {
-            const decoded = JSON.parse(atob(token.split('.')[1]));
+            var decoded = JSON.parse(atob(token.split('.')[1]));
             return decoded.exp > Date.now() / 1000;
         } catch {
             return false;
         }
     }
 
-    showAlert(message, type = 'error') {
-        const ixType = type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'error';
-        // Use ix-toast if available, fall back to alert div
-        if (customElements.get('ix-toast-container')) {
-            window.showToastMessage?.({ message, type: ixType });
-        }
-        this.alertContainer.innerHTML = `
-            <div class="alert alert-${type}">
-                ${message}
-            </div>
-        `;
-        setTimeout(() => {
+    showAlert(message, type) {
+        type = type || 'error';
+        this.alertContainer.innerHTML = '<div class="alert alert-' + type + '">' + message + '</div>';
+        setTimeout(function() {
             this.alertContainer.innerHTML = '';
-        }, 5000);
+        }.bind(this), 5000);
     }
 
     setLoading(loading) {
@@ -144,70 +181,46 @@ class LoginManager {
     async handleLogin(e) {
         e.preventDefault();
 
-        const username = this.usernameInput.value.trim();
-        const password = this.passwordInput.value;
+        var username = this.usernameInput.value.trim();
+        var password = this.passwordInput.value;
 
-        console.log('Login attempt:', { username: username || '(empty)', password: password ? '***' : '(empty)' });
-
-        // Allow empty credentials to test if authentication is disabled
-        // Also allow if both are provided
-        // Only reject if one is empty and the other is not
         if ((!username && password) || (username && !password)) {
-            console.log('Validation failed: partial credentials');
             this.showAlert('Please enter both username and password, or leave both empty if authentication is disabled');
             return;
         }
 
-        console.log('Validation passed, proceeding with login...');
-
         this.setLoading(true);
         this.alertContainer.innerHTML = '';
 
+        var graphqlEndpoint = this.getGraphqlEndpoint();
+
         try {
-            // Use GraphQL directly for login
-            const graphqlEndpoint = '/graphql';
-            const response = await fetch(graphqlEndpoint, {
+            var response = await fetch(graphqlEndpoint, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    query: `
-                        mutation Login($username: String!, $password: String!) {
-                            login(username: $username, password: $password) {
-                                success
-                                message
-                                token
-                                username
-                                isAdmin
-                            }
-                        }
-                    `,
-                    variables: {
-                        username: username || '',
-                        password: password || ''
-                    }
+                    query: 'mutation Login($username: String!, $password: String!) { login(username: $username, password: $password) { success message token username isAdmin } }',
+                    variables: { username: username || '', password: password || '' }
                 })
             });
 
-            const graphqlResult = await response.json();
+            var graphqlResult = await response.json();
 
             if (graphqlResult.errors) {
                 throw new Error(graphqlResult.errors[0].message);
             }
 
-            const result = graphqlResult.data?.login || {};
+            var result = graphqlResult.data?.login || {};
 
             if (result.success) {
-                // Clear guest flag on real login
                 safeStorage.removeItem('monstermq_guest');
 
-                // Handle case where authentication is disabled (token is null)
-                const token = result.token || 'null';
+                var token = result.token || 'null';
                 safeStorage.setItem('monstermq_token', token);
                 safeStorage.setItem('monstermq_username', result.username);
                 safeStorage.setItem('monstermq_isAdmin', result.isAdmin);
                 safeStorage.setItem('monstermq_userManagementEnabled', 'true');
+                window.brokerManager.saveAuthForBroker();
 
                 if (result.token === null) {
                     this.showAlert('Authentication disabled - accessing dashboard...', 'success');
@@ -215,7 +228,7 @@ class LoginManager {
                     this.showAlert('Login successful! Redirecting...', 'success');
                 }
 
-                setTimeout(() => {
+                setTimeout(function() {
                     window.location.href = '/pages/dashboard.html';
                 }, 1000);
             } else {
@@ -230,6 +243,6 @@ class LoginManager {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
     new LoginManager();
 });

@@ -2,7 +2,7 @@
 
 class BrokerConfigManager {
     constructor() {
-        this.client = new GraphQLDashboardClient('/graphql');
+        this.client = new GraphQLDashboardClient();
         this.init();
     }
 

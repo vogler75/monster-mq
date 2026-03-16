@@ -2,7 +2,7 @@
 
 class WinCCUaClientDetailManager {
     constructor() {
-        this.client = new GraphQLDashboardClient('/graphql');
+        this.client = new GraphQLDashboardClient();
         this.clientData = null;
         this.clusterNodes = [];
         this.clientName = null;

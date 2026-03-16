@@ -2,7 +2,7 @@
 
 class KafkaClientManager {
     constructor() {
-        this.client = new GraphQLDashboardClient('/graphql');
+        this.client = new GraphQLDashboardClient();
         this.clients = [];
         this.clusterNodes = [];
         this.deleteClientName = null;

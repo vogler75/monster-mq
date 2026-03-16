@@ -305,7 +305,7 @@ const ScriptEditorModal = (() => {
       const prompt = promptParts.join('\n');
 
       // Call GraphQL API
-      const response = await fetch('/graphql', {
+      const response = await fetch(window.graphqlClient.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
