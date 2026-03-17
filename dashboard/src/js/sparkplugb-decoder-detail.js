@@ -94,8 +94,8 @@ async function loadDecoder() {
         const decoders = result.sparkplugBDecoders || [];
 
         if (decoders.length === 0) {
-            alert('Decoder not found');
-            window.location.href = 'sparkplugb-decoders.html';
+            showError('Decoder not found');
+            window.spaLocation.href = '/pages/sparkplugb-decoders.html';
             return;
         }
 
@@ -103,7 +103,7 @@ async function loadDecoder() {
         populateForm(decoder);
     } catch (error) {
         console.error('Error loading decoder:', error);
-        alert('Failed to load decoder: ' + error.message);
+        showError('Failed to load decoder: ' + error.message);
     }
 }
 
@@ -336,19 +336,19 @@ async function saveDecoder(event) {
 
     // Validation
     if (!name || !namespace || !nodeId) {
-        alert('Please fill in all required fields');
+        showError('Please fill in all required fields');
         return;
     }
 
     if (rules.length === 0) {
-        alert('Please add at least one decoder rule');
+        showError('Please add at least one decoder rule');
         return;
     }
 
     // Validate all rules
     for (const rule of rules) {
         if (!rule.name || !rule.nodeIdRegex || !rule.deviceIdRegex || !rule.destinationTopic) {
-            alert('Please fill in all required fields for each rule');
+            showError('Please fill in all required fields for each rule');
             return;
         }
     }
@@ -407,13 +407,14 @@ async function saveDecoder(event) {
         const response = isEditMode ? result.sparkplugBDecoder?.update : result.sparkplugBDecoder?.create;
 
         if (response?.success) {
-            window.location.href = 'sparkplugb-decoders.html';
+            showSuccess('Decoder saved successfully');
+            setTimeout(() => { window.spaLocation.href = '/pages/sparkplugb-decoders.html'; }, 800);
         } else {
-            alert('Failed to save decoder:\n' + (response?.errors?.join('\n') || 'Unknown error'));
+            showError('Failed to save decoder: ' + (response?.errors?.join(', ') || 'Unknown error'));
         }
     } catch (error) {
         console.error('Error saving decoder:', error);
-        alert('Failed to save decoder: ' + error.message);
+        showError('Failed to save decoder: ' + error.message);
     }
 }
 
@@ -425,6 +426,26 @@ function escapeHtml(text) {
 
 function escapeGraphQL(text) {
     return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+
+function showSuccess(message) {
+    var existing = document.getElementById('success-toast'); if (existing) existing.remove();
+    var toast = document.createElement('div'); toast.id = 'success-toast';
+    toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-green,#10B981);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
+    toast.innerHTML = '<span style="font-size:1.2rem;">&#10003;</span><span>' + escapeHtml(message) + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
+    if (!document.getElementById('toast-anim-style')) { var s = document.createElement('style'); s.id = 'toast-anim-style'; s.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}'; document.head.appendChild(s); }
+    document.body.appendChild(toast);
+    setTimeout(function() { if (toast.parentElement) { toast.style.animation = 'fadeOut 0.3s ease-out forwards'; setTimeout(function() { if (toast.parentElement) toast.remove(); }, 300); } }, 3000);
+}
+
+function showError(message) {
+    var existing = document.getElementById('error-toast'); if (existing) existing.remove();
+    var toast = document.createElement('div'); toast.id = 'error-toast';
+    toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-red,#EF4444);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
+    toast.innerHTML = '<span style="font-size:1.2rem;">&#9888;</span><span>' + escapeHtml(message) + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
+    if (!document.getElementById('toast-anim-style')) { var s = document.createElement('style'); s.id = 'toast-anim-style'; s.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}'; document.head.appendChild(s); }
+    document.body.appendChild(toast);
+    setTimeout(function() { if (toast.parentElement) { toast.style.animation = 'fadeOut 0.3s ease-out forwards'; setTimeout(function() { if (toast.parentElement) toast.remove(); }, 300); } }, 8000);
 }
 
 // Initialize
