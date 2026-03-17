@@ -1,0 +1,48 @@
+Release v1.8.1
+Built from commit: 4145fec
+Date: 2026-03-17 19:15:21
+
+Changes since v1.8.0:
+---
+4145fec Update version.txt
+b10839b Fix success/error toasts across all dashboard pages
+e3adeea Document OPC UA client write and read support #95
+c9286bf Add request/response read support and separate enable toggles #95
+49947ee Add OPC UA client write support (MQTT to OPC UA) #95
+0181eb6 Rename plan files to include GitHub issue numbers
+9e64ac9 Fix workflow toast not dismissing and replace native confirm dialogs with styled modals
+0ec3f57 Remove MqttApi (ApiService) due to authentication gap
+62cd868 Update README and run.sh to include dashboard build in build-from-source workflow
+74697cf Enable dashboard by default and remove brokers.json from production build
+d864ee5 Create run.sh
+89ac420 Re-integrate dashboard into broker with config toggle and iX theme fixes
+55ade66 Use "*" as default nodeId for topic schema policies and namespaces
+c42f4d5 Fix oversized metrics column in WinCC OA/UA client tables
+ce22cb6 Fix OPC UA metrics not showing on dashboard by registering connectorsList consumer early
+b00dd49 Remove legacy dashboard and stop serving static files from broker
+3111950 Rename ai-prompts.json to prompts.json
+ff0aa2d Remove broker-side AI prompt loading, let dashboard always send system prompt
+62c6e36 Reduce sidebar toggle gap, add Collapse label, and increase button size
+191b994 Increase table action button size on topic schema and namespace pages
+885c336 Standardize button layout across all bridging detail and list pages
+78feee7 Fix NATS client save wiping addresses and rename sidebar entry
+9bb329b Standardize error display as fixed-position toast across all pages
+fd6b9d0 Fix password toggle, error visibility, ACL modal height, and namespace constraint
+f6c423f Fix WebSocket logs and TLS proxy for multi-broker support
+3fe9df8 Add multi-broker support to dashboard
+18431aa Update sidebar.js
+5b5caca Update SKILL.md
+6f132c9 Delete config.yaml
+29d0766 Fix invalid HTML in winccoa-client-detail.html placeholder attribute
+b97fee5 Fix dashboard SPA navigation, sidebar height, and topic browser panel
+0ba1423 Remove metrics card from schema policies page
+460ecd8 Fix client-side navigation: IIFE scope isolation and script re-execution
+7c5b3f3 Fix log viewer layout with sidebar resize
+85d296b Update sidebar.js
+ac3404e Initial commit for new ix design
+5df81fe Add archive group detail page and refactor list UI
+b2214df Update README.md
+b23a332 Merge pull request #114 from KevinJoosten/fix-mqtt5-maximum-qos-protocol-error
+dcb7d33 fix(mqtt5): remove invalid Maximum QoS = 2 from CONNACK
+f7b43f2 Use per-subscription listener for remote MQTT
+d33671e Reduce schema check log verbosity
