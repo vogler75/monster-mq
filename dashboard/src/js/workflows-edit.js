@@ -525,14 +525,16 @@ const FlowEdit = (() => {
   }
 
   async function deleteItem() {
-    if(!confirm('Delete this item?')) return;
-    if(state.type==='class') {
-      await graphql(`mutation($name:String!){ flow { deleteClass(name:$name) } }`, { name: state.name });
-    } else {
-      await graphql(`mutation($name:String!){ flow { deleteInstance(name:$name) } }`, { name: state.name });
-    }
-    notify('Deleted','success');
-    window.spaLocation.href = '/pages/workflows.html';
+    const itemType = state.type === 'class' ? 'flow class' : 'flow instance';
+    showConfirmModal('Confirm Delete', `Are you sure you want to delete this ${itemType} "<b>${escape(state.name)}</b>"?<br><br>This action cannot be undone.`, async () => {
+      if(state.type==='class') {
+        await graphql(`mutation($name:String!){ flow { deleteClass(name:$name) } }`, { name: state.name });
+      } else {
+        await graphql(`mutation($name:String!){ flow { deleteInstance(name:$name) } }`, { name: state.name });
+      }
+      notify('Deleted','success');
+      window.spaLocation.href = '/pages/workflows.html';
+    });
   }
 
   async function restartAllInstances() {
@@ -573,11 +575,42 @@ const FlowEdit = (() => {
   function notify(msg,type='info') {
     const div = document.createElement('div');
     div.textContent = msg;
-    div.style.cssText = `position:fixed;top:20px;right:20px;background:${type==='error'?'#dc3545':type==='success'?'#28a745':'#17a2b8'};color:#fff;padding:.6rem 1rem;border-radius:4px;z-index:10000;font-size:.75rem;`;
-    document.body.appendChild(div); setTimeout(()=>{ div.style.opacity='0'; setTimeout(()=>div.remove(),300); },2500);
+    div.style.cssText = `position:fixed;top:20px;right:20px;background:${type==='error'?'#dc3545':type==='success'?'#28a745':'#17a2b8'};color:#fff;padding:.6rem 1rem;border-radius:4px;z-index:10000;font-size:.75rem;opacity:1;transition:opacity .3s;animation:notify-dismiss 2.8s forwards;`;
+    document.body.appendChild(div);
+    div.addEventListener('animationend', () => div.remove());
+    if (!document.getElementById('notify-keyframes')) {
+      const style = document.createElement('style');
+      style.id = 'notify-keyframes';
+      style.textContent = '@keyframes notify-dismiss{0%,85%{opacity:1}100%{opacity:0}}';
+      document.head.appendChild(style);
+    }
   }
 
   function escape(str){ return (str??'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+
+  function showConfirmModal(title, message, onConfirm, confirmLabel) {
+    confirmLabel = confirmLabel || 'Delete';
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;justify-content:center;align-items:center;z-index:9999;padding:2rem;box-sizing:border-box;';
+    overlay.innerHTML = `
+      <div style="background:var(--dark-surface);border-radius:12px;border:1px solid var(--dark-border);max-width:500px;width:100%;box-shadow:0 20px 40px rgba(0,0,0,0.5);">
+        <div style="padding:1.5rem 2rem;border-bottom:1px solid var(--dark-border);display:flex;justify-content:space-between;align-items:center;">
+          <h3 style="margin:0;color:var(--text-primary);font-size:1.25rem;font-weight:600;">${title}</h3>
+          <button class="modal-close-btn" style="background:none;border:none;color:var(--text-muted);font-size:1.5rem;cursor:pointer;padding:0.25rem;line-height:1;">×</button>
+        </div>
+        <div style="padding:2rem;color:var(--text-primary);">${message}</div>
+        <div style="padding:1.5rem 2rem;border-top:1px solid var(--dark-border);display:flex;justify-content:flex-end;gap:1rem;">
+          <button class="btn btn-secondary modal-cancel-btn">Cancel</button>
+          <button class="btn btn-danger modal-confirm-btn">${confirmLabel}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector('.modal-close-btn').onclick = close;
+    overlay.querySelector('.modal-cancel-btn').onclick = close;
+    overlay.querySelector('.modal-confirm-btn').onclick = () => { close(); onConfirm(); };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  }
 
   function goBack(){
     const p = new URLSearchParams(location.search);

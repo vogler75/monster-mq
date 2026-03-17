@@ -538,7 +538,7 @@ const VisualFlow = (() => {
       notify('Save failed: '+e.message,'error');
     }
   }
-  async function deleteClass(){ if(!state.flowClass){ notify('Nothing to delete','error'); return; } if(!confirm('Delete this flow class?')) return; try { await gql(`mutation($name:String!){ flow { deleteClass(name:$name) } }`, { name: state.flowClass.name }); notify('Deleted','success'); window.spaLocation.href = '/pages/workflows.html'; } catch(e){ console.error(e); notify('Delete failed: '+e.message,'error'); } }
+  async function deleteClass(){ if(!state.flowClass){ notify('Nothing to delete','error'); return; } showConfirmModal('Confirm Delete', `Are you sure you want to delete flow class "<b>${state.flowClass.name}</b>"?<br><br>This action cannot be undone.`, async () => { try { await gql(`mutation($name:String!){ flow { deleteClass(name:$name) } }`, { name: state.flowClass.name }); notify('Deleted','success'); window.spaLocation.href = '/pages/workflows.html'; } catch(e){ console.error(e); notify('Delete failed: '+e.message,'error'); } }); }
 
   async function restartAllInstances(){
     if(!state.flowClass){
@@ -558,44 +558,44 @@ const VisualFlow = (() => {
         return;
       }
 
-      if(!confirm(`Restart all ${instances.length} instance(s) of class "${flowClassName}"?`)) return;
+      showConfirmModal('Confirm Restart', `Restart all ${instances.length} instance(s) of class "<b>${flowClassName}</b>"?`, async () => {
+        let successCount = 0;
+        let failCount = 0;
 
-      let successCount = 0;
-      let failCount = 0;
-
-      // Disable all instances
-      for(const instance of instances){
-        try {
-          const mutation = `mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`;
-          await gql(mutation, { name: instance.name });
-          successCount++;
-        } catch(e){
-          console.error(e);
-          failCount++;
-        }
-      }
-
-      // Small delay between disable and enable
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Enable all instances again
-      for(const instance of instances){
-        if(instance.enabled){
+        // Disable all instances
+        for(const instance of instances){
           try {
-            const mutation = `mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`;
+            const mutation = `mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`;
             await gql(mutation, { name: instance.name });
+            successCount++;
           } catch(e){
             console.error(e);
             failCount++;
           }
         }
-      }
 
-      if(failCount === 0){
-        notify(`Successfully restarted ${successCount} instance(s)`, 'success');
-      } else {
-        notify(`Restarted ${successCount} instance(s), ${failCount} failed`, 'error');
-      }
+        // Small delay between disable and enable
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Enable all instances again
+        for(const instance of instances){
+          if(instance.enabled){
+            try {
+              const mutation = `mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`;
+              await gql(mutation, { name: instance.name });
+            } catch(e){
+              console.error(e);
+              failCount++;
+            }
+          }
+        }
+
+        if(failCount === 0){
+          notify(`Successfully restarted ${successCount} instance(s)`, 'success');
+        } else {
+          notify(`Restarted ${successCount} instance(s), ${failCount} failed`, 'error');
+        }
+      }, 'Restart');
     } catch(e){
       console.error(e);
       notify('Restart failed: '+e.message, 'error');
@@ -769,7 +769,20 @@ const VisualFlow = (() => {
   // initial population after load will call refresh in updateTitleDirty()
 
   // ------------- Notifications -------------
-  function notify(msg,type='info'){ const div=ce('div'); div.textContent=msg; div.style.cssText=`position:fixed;top:18px;right:18px;background:${type==='error'?'#dc3545':type==='success'?'#28a745':'#17a2b8'};color:#fff;padding:.5rem .75rem;border-radius:4px;font-size:.65rem;z-index:10000;`; document.body.appendChild(div); setTimeout(()=>{ div.style.opacity='0'; setTimeout(()=>div.remove(),300); },2200); }
+  function notify(msg,type='info'){ const div=ce('div'); div.textContent=msg; div.style.cssText=`position:fixed;top:18px;right:18px;background:${type==='error'?'#dc3545':type==='success'?'#28a745':'#17a2b8'};color:#fff;padding:.5rem .75rem;border-radius:4px;font-size:.65rem;z-index:10000;opacity:1;transition:opacity .3s;animation:notify-dismiss 2.5s forwards;`; document.body.appendChild(div); div.addEventListener('animationend',()=>div.remove()); if(!document.getElementById('notify-keyframes')){const s=ce('style');s.id='notify-keyframes';s.textContent='@keyframes notify-dismiss{0%,85%{opacity:1}100%{opacity:0}}';document.head.appendChild(s);} }
+
+  function showConfirmModal(title, message, onConfirm, confirmLabel) {
+    confirmLabel = confirmLabel || 'Delete';
+    const overlay = ce('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;justify-content:center;align-items:center;z-index:9999;padding:2rem;box-sizing:border-box;';
+    overlay.innerHTML = `<div style="background:var(--dark-surface);border-radius:12px;border:1px solid var(--dark-border);max-width:500px;width:100%;box-shadow:0 20px 40px rgba(0,0,0,0.5);"><div style="padding:1.5rem 2rem;border-bottom:1px solid var(--dark-border);display:flex;justify-content:space-between;align-items:center;"><h3 style="margin:0;color:var(--text-primary);font-size:1.25rem;font-weight:600;">${title}</h3><button class="modal-close-btn" style="background:none;border:none;color:var(--text-muted);font-size:1.5rem;cursor:pointer;padding:0.25rem;line-height:1;">×</button></div><div style="padding:2rem;color:var(--text-primary);">${message}</div><div style="padding:1.5rem 2rem;border-top:1px solid var(--dark-border);display:flex;justify-content:flex-end;gap:1rem;"><button class="btn btn-secondary modal-cancel-btn">Cancel</button><button class="btn btn-danger modal-confirm-btn">${confirmLabel}</button></div></div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector('.modal-close-btn').onclick = close;
+    overlay.querySelector('.modal-cancel-btn').onclick = close;
+    overlay.querySelector('.modal-confirm-btn').onclick = () => { close(); onConfirm(); };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  }
 
   // ------------- Events -------------
   document.addEventListener('mousemove', handleMouseMove);

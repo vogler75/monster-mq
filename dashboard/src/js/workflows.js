@@ -153,17 +153,19 @@ function renderInstancesTable(){
 // ---------------------- Actions ----------------------
 // Use unique internal names to avoid being shadowed by legacy functions defined later in file.
 async function listPageDeleteFlowClass(name){
-    if(!confirm(`Delete flow class "${name}"?`)) return;
-    const mutation = `mutation($name:String!){ flow { deleteClass(name:$name) } }`;
-    try { await graphqlQuery(mutation,{name}); showNotification('Deleted','success'); await loadFlowClasses(); renderClassesTable(); }
-    catch(e){ console.error(e); showNotification('Delete failed','error'); }
+    showConfirmModal('Confirm Delete', `Are you sure you want to delete flow class "<b>${name}</b>"?<br><br>This action cannot be undone.`, async () => {
+        const mutation = `mutation($name:String!){ flow { deleteClass(name:$name) } }`;
+        try { await graphqlQuery(mutation,{name}); showNotification('Deleted','success'); await loadFlowClasses(); renderClassesTable(); }
+        catch(e){ console.error(e); showNotification('Delete failed','error'); }
+    });
 }
 
 async function listPageDeleteFlowInstance(name){
-    if(!confirm(`Delete flow instance "${name}"?`)) return;
-    const mutation = `mutation($name:String!){ flow { deleteInstance(name:$name) } }`;
-    try { await graphqlQuery(mutation,{name}); showNotification('Deleted','success'); if(selectedFlowClassName) await loadFlowInstancesForClass(selectedFlowClassName); renderInstancesTable(); }
-    catch(e){ console.error(e); showNotification('Delete failed','error'); }
+    showConfirmModal('Confirm Delete', `Are you sure you want to delete flow instance "<b>${name}</b>"?<br><br>This action cannot be undone.`, async () => {
+        const mutation = `mutation($name:String!){ flow { deleteInstance(name:$name) } }`;
+        try { await graphqlQuery(mutation,{name}); showNotification('Deleted','success'); if(selectedFlowClassName) await loadFlowInstancesForClass(selectedFlowClassName); renderInstancesTable(); }
+        catch(e){ console.error(e); showNotification('Delete failed','error'); }
+    });
 }
 
 async function listPageStartFlowInstance(name){
@@ -193,53 +195,53 @@ async function restartAllInstancesOfClass(flowClassName){
         return;
     }
 
-    if(!confirm(`Restart all ${instancesToRestart.length} instance(s) of class "${flowClassName}"?`)) return;
+    showConfirmModal('Confirm Restart', `Restart all ${instancesToRestart.length} instance(s) of class "<b>${flowClassName}</b>"?`, async () => {
+        try {
+            let successCount = 0;
+            let failCount = 0;
 
-    try {
-        let successCount = 0;
-        let failCount = 0;
-
-        // Disable all instances
-        for(const instance of instancesToRestart){
-            try {
-                const mutation = `mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`;
-                await graphqlQuery(mutation, {name: instance.name});
-                successCount++;
-            } catch(e){
-                console.error(e);
-                failCount++;
-            }
-        }
-
-        // Small delay between disable and enable
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Enable all instances again
-        for(const instance of instancesToRestart){
-            if(instance.enabled){ // Only re-enable if it was previously enabled
+            // Disable all instances
+            for(const instance of instancesToRestart){
                 try {
-                    const mutation = `mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`;
+                    const mutation = `mutation($name:String!){ flow { disableInstance(name:$name) { name } } }`;
                     await graphqlQuery(mutation, {name: instance.name});
+                    successCount++;
                 } catch(e){
                     console.error(e);
                     failCount++;
                 }
             }
-        }
 
-        // Reload instances
-        await loadFlowInstancesForClass(flowClassName);
-        renderInstancesTable();
+            // Small delay between disable and enable
+            await new Promise(resolve => setTimeout(resolve, 500));
 
-        if(failCount === 0){
-            showNotification(`Successfully restarted ${successCount} instance(s)`, 'success');
-        } else {
-            showNotification(`Restarted ${successCount} instance(s), ${failCount} failed`, 'error');
+            // Enable all instances again
+            for(const instance of instancesToRestart){
+                if(instance.enabled){ // Only re-enable if it was previously enabled
+                    try {
+                        const mutation = `mutation($name:String!){ flow { enableInstance(name:$name) { name } } }`;
+                        await graphqlQuery(mutation, {name: instance.name});
+                    } catch(e){
+                        console.error(e);
+                        failCount++;
+                    }
+                }
+            }
+
+            // Reload instances
+            await loadFlowInstancesForClass(flowClassName);
+            renderInstancesTable();
+
+            if(failCount === 0){
+                showNotification(`Successfully restarted ${successCount} instance(s)`, 'success');
+            } else {
+                showNotification(`Restarted ${successCount} instance(s), ${failCount} failed`, 'error');
+            }
+        } catch(e){
+            console.error(e);
+            showNotification('Restart failed: '+e.message, 'error');
         }
-    } catch(e){
-        console.error(e);
-        showNotification('Restart failed: '+e.message, 'error');
-    }
+    }, 'Restart');
 }
 
 // ---------------------- Sorting & Helpers ----------------------
@@ -271,7 +273,37 @@ function formatDateTime(dateStr) {
 function showNotification(message, type='info') {
     const notification = document.createElement('div');
     notification.textContent = message;
-    notification.style.cssText = `position:fixed;top:20px;right:20px;padding:.6rem 1rem;background:${type==='success'?'#28a745':type==='error'?'#dc3545':'#17a2b8'};color:#fff;border-radius:4px;z-index:10000;font-size:.75rem;`;
+    notification.style.cssText = `position:fixed;top:20px;right:20px;padding:.6rem 1rem;background:${type==='success'?'#28a745':type==='error'?'#dc3545':'#17a2b8'};color:#fff;border-radius:4px;z-index:10000;font-size:.75rem;opacity:1;transition:opacity .3s;animation:notify-dismiss 2.8s forwards;`;
     document.body.appendChild(notification);
-    setTimeout(()=>{ notification.style.opacity='0'; setTimeout(()=>notification.remove(),300); },2500);
+    notification.addEventListener('animationend', () => notification.remove());
+    if (!document.getElementById('notify-keyframes')) {
+        const style = document.createElement('style');
+        style.id = 'notify-keyframes';
+        style.textContent = '@keyframes notify-dismiss{0%,85%{opacity:1}100%{opacity:0}}';
+        document.head.appendChild(style);
+    }
+}
+
+function showConfirmModal(title, message, onConfirm, confirmLabel) {
+    confirmLabel = confirmLabel || 'Delete';
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;justify-content:center;align-items:center;z-index:9999;padding:2rem;box-sizing:border-box;';
+    overlay.innerHTML = `
+        <div style="background:var(--dark-surface);border-radius:12px;border:1px solid var(--dark-border);max-width:500px;width:100%;box-shadow:0 20px 40px rgba(0,0,0,0.5);">
+            <div style="padding:1.5rem 2rem;border-bottom:1px solid var(--dark-border);display:flex;justify-content:space-between;align-items:center;">
+                <h3 style="margin:0;color:var(--text-primary);font-size:1.25rem;font-weight:600;">${title}</h3>
+                <button class="modal-close-btn" style="background:none;border:none;color:var(--text-muted);font-size:1.5rem;cursor:pointer;padding:0.25rem;line-height:1;">×</button>
+            </div>
+            <div style="padding:2rem;color:var(--text-primary);">${message}</div>
+            <div style="padding:1.5rem 2rem;border-top:1px solid var(--dark-border);display:flex;justify-content:flex-end;gap:1rem;">
+                <button class="btn btn-secondary modal-cancel-btn">Cancel</button>
+                <button class="btn btn-danger modal-confirm-btn">${confirmLabel}</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector('.modal-close-btn').onclick = close;
+    overlay.querySelector('.modal-cancel-btn').onclick = close;
+    overlay.querySelector('.modal-confirm-btn').onclick = () => { close(); onConfirm(); };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 }
