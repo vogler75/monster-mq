@@ -30,59 +30,146 @@ docker run \
   rocworks/monstermq:latest
 ```
 
-Or start the included local stack:
-
-```bash
-docker-compose up -d
-```
-
 ### Build From Source
 
 ```bash
 cd broker
-mvn clean package
 
-# Run with default config
-./run.sh
+# Build everything (dashboard + broker) and run
+./run.sh -build
 
-# Run with a custom config
-./run.sh -config configs/config-postgres.yaml
+# Or run with a custom config
+./run.sh -build -config configs/config-postgres.yaml
 
-# Run in cluster mode
-./run.sh -cluster -config configs/config-hazelcast.yaml
+# Or run in cluster mode
+./run.sh -build -cluster -config configs/config-hazelcast.yaml
 ```
 
-### Minimal Configuration
+The `./run.sh -build` flag builds the dashboard (`npm install && npm run build` in `dashboard/`), copies the output to `broker/src/main/resources/dashboard/`, then runs `mvn package` to compile the broker with the dashboard embedded.
+
+For dashboard development, use `npm run dev` in the `dashboard/` directory to start a Vite dev server with hot reload on port 5173.
+
+### Configuration
 
 ```yaml
 TCP: 1883
 TCPS: 8883
-WS: 9000
-WSS: 9001
+WSS: 8083
 NATS: 4222
 
 DefaultStoreType: POSTGRES
+#DefaultStoreType: MONGODB
+#DefaultStoreType: SQLITE
 
+BulkProcessing:
+  Enabled: false
+  TimeoutMS: 50
+  BulkSize: 1000
+  WorkerThreads: 4
+
+BulkMessaging:
+  Enabled: true
+  TimeoutMS: 100
+  BulkSize: 1000
+
+# MQTT TCP Server configuration (socket-level settings)
+MqttTcpServer:
+  NoDelay: true                  # TCP_NODELAY - disable Nagle's algorithm for immediate packet transmission
+  ReceiveBufferSizeKb: 512       # Socket receive buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+  SendBufferSizeKb: 512          # Socket send buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+  MaxMessageSizeKb: 512          # Maximum MQTT message size (default: 512KB)
+
+QueuedMessagesEnabled: true
+AllowRootWildcardSubscription: true
+
+# Rate limiting for MQTT clients (0 = unlimited)
+#MaxPublishRate: 10000    # Max messages per second a client can publish
+#MaxSubscribeRate: 10000  # Max messages per second a client can receive
+
+# Queue size configuration for high-load scenarios
+# Increase these values if experiencing NetworkTimeout errors during heavy subscription load
+Queues:
+  SubscriptionQueueSize: 50000  # Queue size for subscription add/delete operations (default: 10,000)
+  MessageQueueSize: 50000       # Queue size for message add/delete operations (default: 10,000)
+
+# User Management configuration
+UserManagement:
+  Enabled: true  # Set to true to enable user authentication and ACL
+  PasswordAlgorithm: bcrypt
+  CacheRefreshInterval: 60  # seconds
+  DisconnectOnUnauthorized: true
+
+Metrics:
+  Enabled: true
+  RetentionHours: 1   # Default 1 hour
+  CollectionInterval: 10  # Collection interval in seconds (default: 1)
+
+Logging:
+  Mqtt:
+    Enabled: true          # Enable MQTT log publishing to $SYS/syslogs/<node>/<level> topics
+  Memory:
+    Enabled: true         # Enable in-memory log storage (circular buffer)
+    Entries: 1000          # Maximum number of log entries to store in memory
+
+# SQLite configuration
+SQLite:
+  Path: "sqlite"
+  EnableWAL: true  # Set to true for better performance, false for easier multi-client access
+
+# PostgreSQL configuration
 Postgres:
   Url: jdbc:postgresql://localhost:5432/monster
   User: system
   Pass: manager
 
+# MongoDB configuration
+MongoDB:
+  Url: mongodb://system:manager@localhost:27017
+  Database: monster
+
+# CrateDB configuration
+CrateDB:
+  Url: jdbc:postgresql://localhost:5433/monster
+  User: crate
+  Pass: ""
+
 GraphQL:
   Enabled: true
   Port: 4000
+  Path: /graphql
+  MqttApi: false         # Enable/disable MQTT API service (JSON-RPC 2.0)
 
+Dashboard:
+  Enabled: true
+
+# MCP Server configuration
 MCP:
   Enabled: true
   Port: 3000
 
-ArchiveGroups:
-  - Name: Default
-    Filter: "#"
-    Enabled: true
+Prometheus:
+  Enabled: true
+  Port: 3001
+  RawQueryLimit: 10000
+
+I3x:
+  Enabled: true
+  Port: 3002
+  DefaultArchiveGroup: SCADA
+
+# GenAI Configuration
+GenAI:
+  Enabled: true
+  Provider: "gemini"
+  # Set your API key in environment: export GENAI_API_KEY="your-key-here"
+  ApiKey: "${GENAI_API_KEY}"
+  Model: "gemini-2.5-flash"
+  MaxTokens: 0
+  Temperature: 0.7
+  DocsPath: "docs"  
 ```
 
-For more examples, see `config.yaml` and `broker/configs/`.
+For more examples, see `broker/configs/`.
 
 ## Core Capabilities
 

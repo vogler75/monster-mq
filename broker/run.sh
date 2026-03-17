@@ -30,8 +30,27 @@ for arg in "$@"; do
     esac
 done
 
-# If -build option is specified, run Maven build first
+# If -build option is specified, build dashboard and broker
 if [ "$BUILD_FIRST" = true ]; then
+    # Build the dashboard
+    DASHBOARD_DIR="$(cd "$(dirname "$0")/../dashboard" && pwd)"
+    RESOURCES_DIR="$(cd "$(dirname "$0")" && pwd)/src/main/resources/dashboard"
+    if [ -f "$DASHBOARD_DIR/package.json" ]; then
+        echo "Building dashboard..."
+        (cd "$DASHBOARD_DIR" && npm install && npm run build)
+        if [ $? -ne 0 ]; then
+            echo "Dashboard build failed!"
+            exit 1
+        fi
+        echo "Copying dashboard to broker resources..."
+        rm -rf "$RESOURCES_DIR"
+        cp -r "$DASHBOARD_DIR/dist" "$RESOURCES_DIR"
+        echo "Dashboard build completed."
+    else
+        echo "Dashboard not found, skipping."
+    fi
+
+    # Build the broker
     echo "Building MonsterMQ..."
     mvn package
     if [ $? -ne 0 ]; then
