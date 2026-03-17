@@ -8,7 +8,6 @@ import at.rocworks.Monster
 import at.rocworks.MqttClient
 import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
-import at.rocworks.extensions.ApiService
 import at.rocworks.extensions.Oa4jBridge
 import at.rocworks.cluster.DataReplicator
 import at.rocworks.cluster.SetMapReplicator
@@ -1282,18 +1281,6 @@ open class SessionHandler(
     //----------------------------------------------------------------------------------------------------
 
     fun publishMessage(message: BrokerMessage) {
-        // Special handling for API request topics - route to ApiService on the target node
-        // Fast path: quick prefix check before regex matching
-        if (ApiService.isApiRequestTopic(message.topicName)) {
-            val details = ApiService.extractApiRequestDetails(message.topicName)
-            if (details != null) {
-                val eventBusAddress = "api.service.requests.${details.targetNodeId}"
-                vertx.eventBus().send(eventBusAddress, message)
-                logger.fine { "Routed API request message [${message.topicName}] to node [${details.targetNodeId}]" }
-            }
-            // Still allow distribution to normal subscribers
-        }
-
         // NEW: If publish bulk processing is enabled, buffer the message instead of processing immediately
         if (publishBulkProcessingEnabled) {
             try {

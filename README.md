@@ -137,7 +137,6 @@ GraphQL:
   Enabled: true
   Port: 4000
   Path: /graphql
-  MqttApi: false         # Enable/disable MQTT API service (JSON-RPC 2.0)
 
 Dashboard:
   Enabled: true
@@ -200,7 +199,6 @@ For more examples, see `broker/configs/`.
 - Flow engine with reusable flow classes and deployed instances
 - JavaScript execution with GraalVM
 - GraphQL queries, mutations, and subscriptions ([details](doc/graphql.md))
-- MQTT JSON-RPC API for GraphQL over MQTT ([details](doc/mqtt-api.md))
 - MCP server for AI-oriented access ([details](doc/mcp.md))
 
 ### Operations and UI

@@ -15,7 +15,6 @@ import at.rocworks.extensions.graphql.GraphQLServer
 import at.rocworks.extensions.McpServer
 import at.rocworks.extensions.PrometheusServer
 import at.rocworks.extensions.I3xServer
-import at.rocworks.extensions.ApiService
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.handlers.ArchiveHandler
@@ -843,20 +842,6 @@ MORE INFO:
                     null
                 }
 
-                // API Service (JSON-RPC 2.0 over MQTT)
-                val apiEnabled = graphQLConfig.getBoolean("MqttApi", true)
-                val apiService = if (apiEnabled && graphQLServer != null) {
-                    val graphQLPort = graphQLConfig.getInteger("Port", 4000)
-                    val graphQLPath = graphQLConfig.getString("Path", "/graphql")
-                    ApiService(sessionHandler, "graphql", graphQLPort, graphQLPath)
-                } else {
-                    if (!apiEnabled) {
-                        logger.fine("API Service is disabled in configuration")
-                    } else if (graphQLServer == null) {
-                        logger.fine("GraphQL server is disabled, API Service will not start")
-                    }
-                    null
-                }
 
                 // MQTT Servers
                 val servers = listOfNotNull(
@@ -1025,15 +1010,6 @@ MORE INFO:
                         }
                     }
                     .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) }) }
-                    .compose {
-                        // Deploy API Service after other components are ready
-                        if (apiService != null) {
-                            logger.fine("Deploying API Service...")
-                            vertx.deployVerticle(apiService)
-                        } else {
-                            Future.succeededFuture<String>()
-                        }
-                    }
                     .compose {
                         // Start GraphQL server after all other components are ready
                         if (graphQLServer != null) {

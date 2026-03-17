@@ -128,7 +128,7 @@ For device integration guidance, see `plans/DEVICE_INTEGRATION.md`.
   - `devices/` - Device configuration data classes
 - `broker/src/main/kotlin/devices/` - Device connector/extension implementations
 - `broker/src/main/kotlin/handlers/` - Message and subscription handlers
-- `broker/src/main/kotlin/extensions/` - Extensions (MCP Server, I3X API, Sparkplug, API Service)
+- `broker/src/main/kotlin/extensions/` - Extensions (MCP Server, I3X API, Sparkplug)
 - `broker/src/main/kotlin/graphql/` - GraphQL resolvers, queries, and mutations
 - `broker/src/main/kotlin/flowengine/` - Flow engine for automation workflows
 - `broker/src/main/kotlin/auth/` - Authentication and authorization
@@ -184,7 +184,6 @@ Key configuration sections:
 
 1. **MCP Server** (`extensions/McpServer.kt`, `extensions/McpHandler.kt`): Model Context Protocol integration for AI models
 2. **I3X API** (`extensions/I3xServer.kt`): CESMII I3X standard API for manufacturing data
-3. **API Service** (`extensions/ApiService.kt`): Generic REST API service
 4. **Sparkplug Extension** (`extensions/SparkplugExtension.kt`): Expands SparkplugB messages
 
 ### Technology Stack

@@ -24,7 +24,7 @@ class BrokerConfigManager {
                         mcpEnabled mcpPort
                         prometheusEnabled prometheusPort
                         i3xEnabled i3xPort
-                        graphqlEnabled graphqlPort mqttApiEnabled
+                        graphqlEnabled graphqlPort
                         metricsEnabled
                         genAiEnabled genAiProvider genAiModel
                         postgresUrl postgresUser
@@ -76,9 +76,6 @@ class BrokerConfigManager {
         // Extensions
         this.setEl('cfg-graphql', cfg.graphqlEnabled
             ? `${this.badge('enabled', 'Enabled')} ${this.portLabel(cfg.graphqlPort)}`
-            : this.badge('disabled', 'Disabled'));
-        this.setEl('cfg-mqtt-api', cfg.mqttApiEnabled
-            ? this.badge('enabled', 'Enabled')
             : this.badge('disabled', 'Disabled'));
         this.setEl('cfg-mcp', cfg.mcpEnabled
             ? `${this.badge('enabled', 'Enabled')} ${this.portLabel(cfg.mcpPort)}`

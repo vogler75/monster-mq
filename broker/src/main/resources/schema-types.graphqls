@@ -126,7 +126,6 @@ type BrokerConfig {
     # GraphQL / HTTP API
     graphqlEnabled: Boolean!
     graphqlPort: Int!
-    mqttApiEnabled: Boolean!
     # Metrics
     metricsEnabled: Boolean!
     # GenAI
