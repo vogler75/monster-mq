@@ -254,6 +254,52 @@
                         </div>
                     </div>
 
+                    <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px solid var(--dark-border);">
+                        <h3 style="color:var(--text-primary); margin-bottom:1rem;">Write Configuration</h3>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="write-enabled">
+                                <label for="write-enabled">Enable OPC UA Writes (MQTT &rarr; OPC UA)</label>
+                            </div>
+                            <span class="form-hint">Allow MQTT clients to write values to OPC UA server nodes</span>
+                        </div>
+                        <div id="write-config-fields" style="display:none;">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="write-qos">Write QoS</label>
+                                    <select id="write-qos">
+                                        <option value="0">0 - At most once</option>
+                                        <option value="1" selected>1 - At least once</option>
+                                        <option value="2">2 - Exactly once</option>
+                                    </select>
+                                    <span class="form-hint">Internal MQTT subscription QoS for write topics</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="write-timeout">Write Timeout (ms)</label>
+                                    <input type="number" id="write-timeout" value="5000">
+                                </div>
+                                <div class="form-group">
+                                    <label for="write-topic-prefix">Fire &amp; Forget Topic Prefix</label>
+                                    <input type="text" id="write-topic-prefix" value="write">
+                                    <span class="form-hint">{namespace}/{prefix}/{nodeId} &mdash; no response</span>
+                                </div>
+                                <div class="form-group" style="grid-column: span 2;"></div>
+                                <div class="form-group">
+                                    <label for="write-request-topic-prefix">Request Topic Prefix</label>
+                                    <input type="text" id="write-request-topic-prefix" value="request">
+                                    <span class="form-hint">{namespace}/{prefix}/{nodeId} &mdash; publishes response</span>
+                                </div>
+                                <div class="form-group">
+                                    <label for="write-response-topic-prefix">Response Topic Prefix</label>
+                                    <input type="text" id="write-response-topic-prefix" value="response">
+                                    <span class="form-hint">Response topic: {namespace}/{prefix}/{nodeId}</span>
+                                </div>
+                            </div>
+                            <div id="write-topic-info" style="margin-top:1rem; padding:1rem; background:var(--dark-bg); border-radius:8px; border:1px solid var(--dark-border); font-size:0.8rem; color:var(--text-muted); line-height:1.6;">
+                            </div>
+                        </div>
+                    </div>
+
                     <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px solid var(--dark-border);" id="device-created-row">
                         <h3 style="color:var(--text-primary); margin-bottom:1rem;">Timestamps</h3>
                         <div class="info-grid">
@@ -335,6 +381,49 @@
     </div>
 </div>
 
+<!-- Edit Address Modal -->
+<div id="edit-address-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Edit OPC UA Address</h3>
+            <button class="modal-close" onclick="hideEditAddressModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <form id="edit-address-form">
+                <input type="hidden" id="edit-address-original">
+                <div class="form-group">
+                    <label for="edit-address-address">Address *</label>
+                    <input type="text" id="edit-address-address" required placeholder="e.g., BrowsePath://Objects/Factory/# or NodeId://ns=2;i=16">
+                    <span class="form-hint">Use BrowsePath:// for hierarchical browsing or NodeId:// for specific nodes</span>
+                </div>
+                <div class="form-group">
+                    <label for="edit-address-topic">Topic *</label>
+                    <input type="text" id="edit-address-topic" required placeholder="e.g., factory/values">
+                    <span class="form-hint">MQTT topic where values will be published</span>
+                </div>
+                <div class="form-group">
+                    <label for="edit-address-publish-mode">Publish Mode</label>
+                    <select id="edit-address-publish-mode">
+                        <option value="SEPARATE">Separate (each node gets own topic)</option>
+                        <option value="SINGLE">Single (all values on one topic)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="edit-address-remove-path" checked>
+                        <label for="edit-address-remove-path">Remove Base Path</label>
+                    </div>
+                    <span class="form-hint">Remove base path before first wildcard from topic</span>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideEditAddressModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="saveEditedAddress()">Save Address</button>
+        </div>
+    </div>
+</div>
+
 <!-- Confirm Delete Address Modal -->
 <div id="confirm-delete-address-modal" class="modal" style="display:none;">
     <div class="modal-content">
@@ -371,26 +460,6 @@
 </div>
 
 <script src="/js/opcua-device-detail.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const updatePasswordCheckbox = document.getElementById('device-update-password');
-        const passwordFieldGroup = document.getElementById('password-field-group');
-        if (updatePasswordCheckbox) {
-            updatePasswordCheckbox.addEventListener('change', function() {
-                passwordFieldGroup.style.display = this.checked ? 'block' : 'none';
-                if (!this.checked) document.getElementById('device-password').value = '';
-            });
-        }
-        const updateKeystorePasswordCheckbox = document.getElementById('cert-update-keystore-password');
-        const keystorePasswordFieldGroup = document.getElementById('keystore-password-field-group');
-        if (updateKeystorePasswordCheckbox) {
-            updateKeystorePasswordCheckbox.addEventListener('change', function() {
-                keystorePasswordFieldGroup.style.display = this.checked ? 'block' : 'none';
-                if (!this.checked) document.getElementById('cert-keystore-password').value = '';
-            });
-        }
-    });
-</script>
     </ix-application>
 </body>
 </html>

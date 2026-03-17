@@ -142,6 +142,14 @@ class OpcUaClientConfigQueries(
                     "keystorePassword" to config.certificateConfig.keystorePassword,
                     "validateServerCertificate" to config.certificateConfig.validateServerCertificate,
                     "autoAcceptServerCertificates" to config.certificateConfig.autoAcceptServerCertificates
+                ),
+                "writeConfig" to mapOf(
+                    "enabled" to config.writeConfig.enabled,
+                    "topicPrefix" to config.writeConfig.topicPrefix,
+                    "requestTopicPrefix" to config.writeConfig.requestTopicPrefix,
+                    "responseTopicPrefix" to config.writeConfig.responseTopicPrefix,
+                    "qos" to config.writeConfig.qos,
+                    "writeTimeout" to config.writeConfig.writeTimeout
                 )
             ),
             "enabled" to device.enabled,

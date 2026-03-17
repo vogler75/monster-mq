@@ -11,6 +11,8 @@ class OpcUaDeviceDetailManager {
     }
 
     async init() {
+        this.setupToggleListeners();
+
         const urlParams = new URLSearchParams(window.location.search);
         this.deviceName = urlParams.get('device');
         this.isNew = urlParams.get('new') === 'true';
@@ -28,6 +30,41 @@ class OpcUaDeviceDetailManager {
 
         await this.loadClusterNodes();
         await this.loadDevice();
+    }
+
+    setupToggleListeners() {
+        const updatePasswordCheckbox = document.getElementById('device-update-password');
+        const passwordFieldGroup = document.getElementById('password-field-group');
+        if (updatePasswordCheckbox) {
+            updatePasswordCheckbox.addEventListener('change', function() {
+                passwordFieldGroup.style.display = this.checked ? 'block' : 'none';
+                if (!this.checked) document.getElementById('device-password').value = '';
+            });
+        }
+
+        const updateKeystorePasswordCheckbox = document.getElementById('cert-update-keystore-password');
+        const keystorePasswordFieldGroup = document.getElementById('keystore-password-field-group');
+        if (updateKeystorePasswordCheckbox) {
+            updateKeystorePasswordCheckbox.addEventListener('change', function() {
+                keystorePasswordFieldGroup.style.display = this.checked ? 'block' : 'none';
+                if (!this.checked) document.getElementById('cert-keystore-password').value = '';
+            });
+        }
+
+        const writeEnabledCheckbox = document.getElementById('write-enabled');
+        const writeConfigFields = document.getElementById('write-config-fields');
+        if (writeEnabledCheckbox) {
+            writeEnabledCheckbox.addEventListener('change', () => {
+                writeConfigFields.style.display = writeEnabledCheckbox.checked ? 'block' : 'none';
+                this.updateWriteTopicInfo();
+            });
+        }
+
+        // Update topic info when prefix fields change
+        ['write-topic-prefix', 'write-request-topic-prefix', 'write-response-topic-prefix'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', () => this.updateWriteTopicInfo());
+        });
     }
 
     async loadClusterNodes() {
@@ -99,6 +136,14 @@ class OpcUaDeviceDetailManager {
                                 validateServerCertificate
                                 autoAcceptServerCertificates
                             }
+                            writeConfig {
+                                enabled
+                                topicPrefix
+                                requestTopicPrefix
+                                responseTopicPrefix
+                                qos
+                                writeTimeout
+                            }
                         }
                     }
                 }
@@ -169,6 +214,19 @@ class OpcUaDeviceDetailManager {
         document.getElementById('cert-validate-server').checked = certConfig.validateServerCertificate;
         document.getElementById('cert-auto-accept').checked = certConfig.autoAcceptServerCertificates;
 
+        // Write configuration
+        const writeConfig = this.device.config.writeConfig;
+        if (writeConfig) {
+            document.getElementById('write-enabled').checked = writeConfig.enabled;
+            document.getElementById('write-topic-prefix').value = writeConfig.topicPrefix || 'write';
+            document.getElementById('write-request-topic-prefix').value = writeConfig.requestTopicPrefix || 'request';
+            document.getElementById('write-response-topic-prefix').value = writeConfig.responseTopicPrefix || 'response';
+            document.getElementById('write-qos').value = writeConfig.qos != null ? writeConfig.qos : 1;
+            document.getElementById('write-timeout').value = writeConfig.writeTimeout || 5000;
+            document.getElementById('write-config-fields').style.display = writeConfig.enabled ? 'block' : 'none';
+        }
+        this.updateWriteTopicInfo();
+
         // Render addresses
         this.renderAddresses();
 
@@ -212,6 +270,15 @@ class OpcUaDeviceDetailManager {
         document.getElementById('cert-validate-server').checked = false;
         document.getElementById('cert-auto-accept').checked = true;
 
+        // Set write config defaults
+        document.getElementById('write-enabled').checked = false;
+        document.getElementById('write-topic-prefix').value = 'write';
+        document.getElementById('write-request-topic-prefix').value = 'request';
+        document.getElementById('write-response-topic-prefix').value = 'response';
+        document.getElementById('write-qos').value = '1';
+        document.getElementById('write-timeout').value = '5000';
+        document.getElementById('write-config-fields').style.display = 'none';
+
         // Hide status badge and addresses section
         const statusBadge = document.getElementById('device-status-badge');
         if (statusBadge) statusBadge.style.display = 'none';
@@ -228,6 +295,31 @@ class OpcUaDeviceDetailManager {
         if (deleteBtn) deleteBtn.style.display = 'none';
 
         document.getElementById('device-content').style.display = 'block';
+    }
+
+    updateWriteTopicInfo() {
+        const infoDiv = document.getElementById('write-topic-info');
+        if (!infoDiv) return;
+
+        const namespace = document.getElementById('device-namespace')?.value || '{namespace}';
+        const prefix = document.getElementById('write-topic-prefix')?.value || 'write';
+        const reqPrefix = document.getElementById('write-request-topic-prefix')?.value || 'request';
+        const resPrefix = document.getElementById('write-response-topic-prefix')?.value || 'response';
+
+        infoDiv.innerHTML = `
+            <strong style="color:var(--text-primary);">Write Topics</strong><br><br>
+            <strong>Fire &amp; Forget</strong> (no response):<br>
+            <code style="color:var(--monster-teal);">${this.escapeHtml(namespace)}/${this.escapeHtml(prefix)}/{nodeId}</code>
+            &nbsp; payload: <code>{"value": 42.5}</code> or <code>{"value": 42.5, "dataType": "Double"}</code><br><br>
+            <strong>Request/Response</strong> (status feedback):<br>
+            Publish to: <code style="color:var(--monster-teal);">${this.escapeHtml(namespace)}/${this.escapeHtml(reqPrefix)}/{nodeId}</code><br>
+            Response on: <code style="color:var(--monster-purple);">${this.escapeHtml(namespace)}/${this.escapeHtml(resPrefix)}/{nodeId}</code><br><br>
+            <strong>Batch Write</strong> (multiple nodes at once):<br>
+            Topic: <code style="color:var(--monster-teal);">${this.escapeHtml(namespace)}/${this.escapeHtml(prefix)}</code> or
+            <code style="color:var(--monster-teal);">${this.escapeHtml(namespace)}/${this.escapeHtml(reqPrefix)}</code><br>
+            Payload: <code>[{"nodeId": "ns=2;i=1001", "value": 42.5}, {"nodeId": "ns=2;i=1002", "value": true}]</code><br><br>
+            <strong>Supported dataType hints:</strong> Boolean, Byte, UByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Float, Double, String
+        `;
     }
 
     renderAddresses() {
@@ -280,7 +372,8 @@ class OpcUaDeviceDetailManager {
                     </div>
                 </td>
                 <td>
-                    <div class="action-buttons">
+                    <div class="action-buttons" style="display:flex; gap:0.25rem;">
+                        <ix-icon-button icon="pen" variant="primary" ghost size="16" title="Edit Address" onclick="deviceDetailManager.editAddress('${this.escapeHtml(address.address)}')"></ix-icon-button>
                         <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Address" onclick="deviceDetailManager.deleteAddress('${this.escapeHtml(address.address)}')"></ix-icon-button>
                     </div>
                 </td>
@@ -336,6 +429,91 @@ class OpcUaDeviceDetailManager {
         } catch (error) {
             console.error('Error adding address:', error);
             this.showError('Failed to add address: ' + error.message);
+        }
+    }
+
+    editAddress(address) {
+        const addr = this.device.config.addresses.find(a => a.address === address);
+        if (!addr) return;
+
+        document.getElementById('edit-address-original').value = addr.address;
+        document.getElementById('edit-address-address').value = addr.address;
+        document.getElementById('edit-address-topic').value = addr.topic;
+        document.getElementById('edit-address-publish-mode').value = addr.publishMode;
+        document.getElementById('edit-address-remove-path').checked = addr.removePath;
+        document.getElementById('edit-address-modal').style.display = 'flex';
+    }
+
+    hideEditAddressModal() {
+        document.getElementById('edit-address-modal').style.display = 'none';
+    }
+
+    async saveEditedAddress() {
+        const form = document.getElementById('edit-address-form');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        const originalAddress = document.getElementById('edit-address-original').value;
+        const newAddressData = {
+            address: document.getElementById('edit-address-address').value.trim(),
+            topic: document.getElementById('edit-address-topic').value.trim(),
+            publishMode: document.getElementById('edit-address-publish-mode').value,
+            removePath: document.getElementById('edit-address-remove-path').checked
+        };
+
+        try {
+            // Delete old address first
+            const deleteMutation = `
+                mutation DeleteOpcUaAddress($deviceName: String!, $address: String!) {
+                    opcUaDevice {
+                        deleteAddress(deviceName: $deviceName, address: $address) {
+                            success
+                            errors
+                        }
+                    }
+                }
+            `;
+            const deleteResult = await this.client.query(deleteMutation, {
+                deviceName: this.deviceName,
+                address: originalAddress
+            });
+
+            if (!deleteResult.opcUaDevice.deleteAddress.success) {
+                const errors = deleteResult.opcUaDevice.deleteAddress.errors || ['Unknown error'];
+                this.showError('Failed to update address: ' + errors.join(', '));
+                return;
+            }
+
+            // Add new address
+            const addMutation = `
+                mutation AddOpcUaAddress($deviceName: String!, $input: OpcUaAddressInput!) {
+                    opcUaDevice {
+                        addAddress(deviceName: $deviceName, input: $input) {
+                            success
+                            errors
+                        }
+                    }
+                }
+            `;
+            const addResult = await this.client.query(addMutation, {
+                deviceName: this.deviceName,
+                input: newAddressData
+            });
+
+            if (addResult.opcUaDevice.addAddress.success) {
+                this.hideEditAddressModal();
+                await this.loadDevice();
+                this.showSuccess('Address updated successfully');
+            } else {
+                const errors = addResult.opcUaDevice.addAddress.errors || ['Unknown error'];
+                this.showError('Failed to update address: ' + errors.join(', '));
+                await this.loadDevice();
+            }
+        } catch (error) {
+            console.error('Error editing address:', error);
+            this.showError('Failed to update address: ' + error.message);
         }
     }
 
@@ -427,6 +605,14 @@ class OpcUaDeviceDetailManager {
                         document.getElementById('cert-keystore-password').value || null : undefined,
                     validateServerCertificate: document.getElementById('cert-validate-server').checked,
                     autoAcceptServerCertificates: document.getElementById('cert-auto-accept').checked
+                },
+                writeConfig: {
+                    enabled: document.getElementById('write-enabled').checked,
+                    topicPrefix: document.getElementById('write-topic-prefix').value.trim() || 'write',
+                    requestTopicPrefix: document.getElementById('write-request-topic-prefix').value.trim() || 'request',
+                    responseTopicPrefix: document.getElementById('write-response-topic-prefix').value.trim() || 'response',
+                    qos: parseInt(document.getElementById('write-qos').value),
+                    writeTimeout: parseInt(document.getElementById('write-timeout').value) || 5000
                 }
             }
         };
@@ -539,19 +725,23 @@ class OpcUaDeviceDetailManager {
         toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-red,#EF4444);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
         toast.innerHTML = '<span style="font-size:1.2rem;">&#9888;</span><span>' + message + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
 
-        // Add animation
-        if (!document.getElementById('error-toast-style')) {
+        if (!document.getElementById('toast-anim-style')) {
             var style = document.createElement('style');
-            style.id = 'error-toast-style';
-            style.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}';
+            style.id = 'toast-anim-style';
+            style.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}';
             document.head.appendChild(style);
         }
 
         document.body.appendChild(toast);
 
         setTimeout(function() {
-            if (toast.parentElement) toast.remove();
-            if (errorDiv) errorDiv.style.display = 'none';
+            if (toast.parentElement) {
+                toast.style.animation = 'fadeOut 0.3s ease-out forwards';
+                setTimeout(function() {
+                    if (toast.parentElement) toast.remove();
+                    if (errorDiv) errorDiv.style.display = 'none';
+                }, 300);
+            }
         }, 8000);
     }
 
@@ -563,18 +753,26 @@ class OpcUaDeviceDetailManager {
     }
 
     showSuccess(message) {
-        // Create temporary success notification
-        const notification = document.createElement('div');
-        notification.className = 'success-notification';
-        notification.innerHTML = `
-            <span class="success-icon">✅</span>
-            <span class="success-text">${this.escapeHtml(message)}</span>
-        `;
-        document.body.appendChild(notification);
+        var existing = document.getElementById('success-toast');
+        if (existing) existing.remove();
 
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
+        var toast = document.createElement('div');
+        toast.id = 'success-toast';
+        toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-green,#10B981);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
+        toast.innerHTML = '<span style="font-size:1.2rem;">&#10003;</span><span>' + this.escapeHtml(message) + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
+
+        if (!document.getElementById('toast-anim-style')) {
+            var style = document.createElement('style');
+            style.id = 'toast-anim-style';
+            style.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}';
+            document.head.appendChild(style);
+        }
+
+        document.body.appendChild(toast);
+        setTimeout(function() {
+            if (toast.parentElement) {
+                toast.style.animation = 'fadeOut 0.3s ease-out forwards';
+                setTimeout(function() { if (toast.parentElement) toast.remove(); }, 300);
             }
         }, 3000);
     }
@@ -647,6 +845,14 @@ function confirmDeleteAddress() {
     deviceDetailManager.confirmDeleteAddress();
 }
 
+function hideEditAddressModal() {
+    deviceDetailManager.hideEditAddressModal();
+}
+
+function saveEditedAddress() {
+    deviceDetailManager.saveEditedAddress();
+}
+
 function goBack() {
     deviceDetailManager.goBack();
 }
@@ -666,6 +872,8 @@ document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal')) {
         if (e.target.id === 'add-address-modal') {
             deviceDetailManager.hideAddAddressModal();
+        } else if (e.target.id === 'edit-address-modal') {
+            deviceDetailManager.hideEditAddressModal();
         } else if (e.target.id === 'confirm-delete-address-modal') {
             deviceDetailManager.hideConfirmDeleteAddressModal();
         } else if (e.target.id === 'delete-client-modal') {

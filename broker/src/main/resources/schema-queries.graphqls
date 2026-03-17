@@ -442,6 +442,15 @@ enum SecurityPolicy {
     Aes128_Sha256_RsaOaep
 }
 
+type OpcUaWriteConfig {
+    enabled: Boolean!
+    topicPrefix: String!
+    requestTopicPrefix: String!
+    responseTopicPrefix: String!
+    qos: Int!
+    writeTimeout: Long!
+}
+
 type OpcUaConnectionConfig {
     endpointUrl: String!
     updateEndpointUrl: Boolean!
@@ -457,6 +466,8 @@ type OpcUaConnectionConfig {
     addresses: [OpcUaAddress!]!
     # Certificate configuration for TLS/SSL connections and client authentication
     certificateConfig: CertificateConfig!
+    # Write configuration for MQTT-to-OPC UA writes
+    writeConfig: OpcUaWriteConfig!
 }
 
 type OpcUaDevice {

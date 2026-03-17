@@ -346,6 +346,21 @@ input CertificateConfigInput {
     autoAcceptServerCertificates: Boolean = false
 }
 
+input OpcUaWriteConfigInput {
+    # Enable MQTT-to-OPC UA write support (default: false)
+    enabled: Boolean = false
+    # Topic prefix for fire-and-forget writes: {namespace}/{topicPrefix}/{nodeId}
+    topicPrefix: String = "write"
+    # Topic prefix for request/response writes: {namespace}/{requestTopicPrefix}/{nodeId}
+    requestTopicPrefix: String = "request"
+    # Topic prefix for write responses: {namespace}/{responseTopicPrefix}/{nodeId}
+    responseTopicPrefix: String = "response"
+    # QoS for write topic subscriptions (default: 1)
+    qos: Int = 1
+    # Write operation timeout in milliseconds (default: 5000)
+    writeTimeout: Long = 5000
+}
+
 input OpcUaConnectionConfigInput {
     endpointUrl: String!
     updateEndpointUrl: Boolean = true
@@ -360,6 +375,8 @@ input OpcUaConnectionConfigInput {
     monitoringParameters: MonitoringParametersInput
     # Certificate configuration for TLS/SSL and client authentication
     certificateConfig: CertificateConfigInput
+    # Write configuration for MQTT-to-OPC UA writes
+    writeConfig: OpcUaWriteConfigInput
 }
 
 input OpcUaAddressInput {
