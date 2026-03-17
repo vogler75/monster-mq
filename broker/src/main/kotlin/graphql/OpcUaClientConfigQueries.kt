@@ -145,6 +145,7 @@ class OpcUaClientConfigQueries(
                 ),
                 "writeConfig" to mapOf(
                     "enabled" to config.writeConfig.enabled,
+                    "requestResponseEnabled" to config.writeConfig.requestResponseEnabled,
                     "topicPrefix" to config.writeConfig.topicPrefix,
                     "requestTopicPrefix" to config.writeConfig.requestTopicPrefix,
                     "responseTopicPrefix" to config.writeConfig.responseTopicPrefix,

@@ -1047,7 +1047,7 @@ class OpcUaConnector : AbstractVerticle() {
 
     private fun setupWriteSubscriptions() {
         val writeConfig = opcUaConfig.writeConfig
-        if (!writeConfig.enabled) return
+        if (!writeConfig.enabled && !writeConfig.requestResponseEnabled) return
 
         val sessionHandler = Monster.getSessionHandler() ?: run {
             logger.warning("SessionHandler not available for write subscriptions on device ${deviceConfig.name}")
@@ -1068,15 +1068,19 @@ class OpcUaConnector : AbstractVerticle() {
             }
         }
 
-        // Subscribe to fire&forget write topics: {namespace}/{topicPrefix}/#
-        val fireForgetTopic = "$namespace/${writeConfig.topicPrefix}/#"
-        sessionHandler.subscribeInternalClient(writeClientId, fireForgetTopic, writeConfig.qos)
-        logger.info("Subscribed to fire&forget write topic: $fireForgetTopic for device ${deviceConfig.name}")
+        // Subscribe to fire&forget write topics
+        if (writeConfig.enabled) {
+            val fireForgetTopic = "$namespace/${writeConfig.topicPrefix}/#"
+            sessionHandler.subscribeInternalClient(writeClientId, fireForgetTopic, writeConfig.qos)
+            logger.info("Subscribed to fire&forget write topic: $fireForgetTopic for device ${deviceConfig.name}")
+        }
 
-        // Subscribe to request/response write topics: {namespace}/{requestTopicPrefix}/#
-        val requestTopic = "$namespace/${writeConfig.requestTopicPrefix}/#"
-        sessionHandler.subscribeInternalClient(writeClientId, requestTopic, writeConfig.qos)
-        logger.info("Subscribed to request/response write topic: $requestTopic for device ${deviceConfig.name}")
+        // Subscribe to request/response topics (read + write)
+        if (writeConfig.requestResponseEnabled) {
+            val requestTopic = "$namespace/${writeConfig.requestTopicPrefix}/#"
+            sessionHandler.subscribeInternalClient(writeClientId, requestTopic, writeConfig.qos)
+            logger.info("Subscribed to request/response topic: $requestTopic for device ${deviceConfig.name}")
+        }
     }
 
     private fun teardownWriteSubscriptions() {
@@ -1089,7 +1093,7 @@ class OpcUaConnector : AbstractVerticle() {
         if (message.senderId == deviceConfig.name) return
 
         if (!isConnected || client == null) {
-            logger.fine { "Not connected to OPC UA server, skipping write for ${message.topicName}" }
+            logger.fine { "Not connected to OPC UA server, skipping request for ${message.topicName}" }
             return
         }
 
@@ -1110,7 +1114,7 @@ class OpcUaConnector : AbstractVerticle() {
                 nodeIdPart = topic.removePrefix("$requestPrefix/")
             }
             topic == requestPrefix -> {
-                // Batch write on request/response base topic
+                // Batch on request/response base topic
                 isRequestResponse = true
                 nodeIdPart = ""
             }
@@ -1124,26 +1128,91 @@ class OpcUaConnector : AbstractVerticle() {
                 nodeIdPart = ""
             }
             else -> {
-                logger.warning("Unexpected write topic: $topic")
+                logger.warning("Unexpected write/request topic: $topic")
                 return
             }
         }
 
         try {
-            val payloadStr = String(message.payload)
+            val payloadStr = String(message.payload).trim()
 
             // Detect batch vs single: if payload starts with '[' it's a batch
-            if (payloadStr.trimStart().startsWith("[")) {
-                val writes = JsonArray(payloadStr)
-                executeBatchWrite(writes, isRequestResponse, topic)
+            if (payloadStr.startsWith("[")) {
+                val entries = JsonArray(payloadStr)
+                executeBatch(entries, isRequestResponse, topic)
             } else if (nodeIdPart.isNotEmpty()) {
-                val payload = JsonObject(payloadStr)
-                executeSingleWrite(nodeIdPart, payload, isRequestResponse, topic)
+                val payload = if (payloadStr.startsWith("{")) JsonObject(payloadStr) else JsonObject()
+                // No "value" field → read, has "value" field → write
+                if (payload.containsKey("value")) {
+                    executeSingleWrite(nodeIdPart, payload, isRequestResponse, topic)
+                } else if (isRequestResponse) {
+                    executeSingleRead(nodeIdPart, topic)
+                } else {
+                    logger.warning("Read requires request/response topic, not fire&forget: $topic")
+                }
             } else {
-                logger.warning("Single write requires nodeId in topic path: $topic")
+                logger.warning("Single read/write requires nodeId in topic path: $topic")
             }
         } catch (e: Exception) {
-            logger.severe("Error parsing write payload for topic $topic: ${e.message}")
+            logger.severe("Error parsing payload for topic $topic: ${e.message}")
+            if (isRequestResponse) {
+                publishErrorResponse(topic, null, e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    private fun executeSingleRead(nodeIdStr: String, originalTopic: String) {
+        thread {
+            try {
+                val nodeId = NodeId.parse(nodeIdStr)
+                val readValueId = ReadValueId(
+                    nodeId,
+                    Unsigned.uint(13), // AttributeId.Value
+                    null,
+                    QualifiedName.NULL_VALUE
+                )
+
+                val readResponse = client!!.read(
+                    0.0,
+                    TimestampsToReturn.Both,
+                    listOf(readValueId)
+                ).get(opcUaConfig.writeConfig.writeTimeout, TimeUnit.MILLISECONDS)
+
+                val dataValue = readResponse.results[0]
+                val statusCode = dataValue.statusCode ?: StatusCode.GOOD
+                val value = dataValue.value?.value
+                val timestamp = dataValue.sourceTime?.javaInstant ?: Instant.now()
+
+                val response = JsonObject()
+                    .put("nodeId", nodeIdStr)
+                    .put("status", if (statusCode.isGood) "Good" else statusCode.toString())
+                    .put("statusCode", statusCode.value)
+                    .put("timestamp", timestamp.toString())
+
+                // Convert OPC UA value to JSON (reuse read-path conversion logic)
+                when (value) {
+                    null -> response.putNull("value")
+                    is Boolean -> response.put("value", value)
+                    is Byte -> response.put("value", value.toInt())
+                    is Short -> response.put("value", value.toInt())
+                    is Int -> response.put("value", value)
+                    is Long -> response.put("value", value)
+                    is Float -> response.put("value", value.toDouble())
+                    is Double -> response.put("value", value)
+                    is String -> response.put("value", value)
+                    is UByte -> response.put("value", value.toInt())
+                    is UShort -> response.put("value", value.toInt())
+                    is UInteger -> response.put("value", value.toLong())
+                    is ULong -> response.put("value", value.toLong())
+                    else -> response.put("value", value.toString())
+                }
+
+                logger.fine { "OPC UA read $nodeIdStr: value=$value status=$statusCode" }
+                publishResponse(originalTopic, response.encode().toByteArray())
+            } catch (e: Exception) {
+                logger.severe("OPC UA read failed for $nodeIdStr: ${e.message}")
+                publishErrorResponse(originalTopic, nodeIdStr, e.message ?: "Unknown error")
+            }
         }
     }
 
@@ -1170,54 +1239,119 @@ class OpcUaConnector : AbstractVerticle() {
                 logger.fine { "OPC UA write to $nodeIdStr: status=${statusCode}" }
 
                 if (isRequestResponse) {
-                    publishWriteResponse(originalTopic, nodeIdStr, statusCode)
+                    val response = JsonObject()
+                        .put("nodeId", nodeIdStr)
+                        .put("status", if (statusCode.isGood) "Good" else statusCode.toString())
+                        .put("statusCode", statusCode.value)
+                        .put("timestamp", Instant.now().toString())
+                    publishResponse(originalTopic, response.encode().toByteArray())
                 }
             } catch (e: Exception) {
                 logger.severe("OPC UA write failed for $nodeIdStr: ${e.message}")
                 if (isRequestResponse) {
-                    publishWriteErrorResponse(originalTopic, nodeIdStr, e.message ?: "Unknown error")
+                    publishErrorResponse(originalTopic, nodeIdStr, e.message ?: "Unknown error")
                 }
             }
         }
     }
 
-    private fun executeBatchWrite(writes: JsonArray, isRequestResponse: Boolean, originalTopic: String) {
+    private fun executeBatch(entries: JsonArray, isRequestResponse: Boolean, originalTopic: String) {
         thread {
             try {
-                val writeValues = mutableListOf<WriteValue>()
-                val nodeIdStrings = mutableListOf<String>()
+                // Separate reads and writes, preserving original indices
+                data class ReadEntry(val index: Int, val nodeIdStr: String, val nodeId: NodeId)
+                data class WriteEntry(val index: Int, val nodeIdStr: String, val writeValue: WriteValue)
 
-                for (i in 0 until writes.size()) {
-                    val entry = writes.getJsonObject(i)
+                val reads = mutableListOf<ReadEntry>()
+                val writes = mutableListOf<WriteEntry>()
+
+                for (i in 0 until entries.size()) {
+                    val entry = entries.getJsonObject(i)
                     val nodeIdStr = entry.getString("nodeId")
-                    val value = entry.getValue("value")
-                    val dataTypeHint = entry.getString("dataType")
-
                     val nodeId = NodeId.parse(nodeIdStr)
-                    val variant = convertJsonToVariant(value, dataTypeHint)
 
-                    writeValues.add(WriteValue(
-                        nodeId,
-                        Unsigned.uint(13), // AttributeId.Value
-                        null,
-                        DataValue(variant, null, null, null)
-                    ))
-                    nodeIdStrings.add(nodeIdStr)
+                    if (entry.containsKey("value")) {
+                        val variant = convertJsonToVariant(entry.getValue("value"), entry.getString("dataType"))
+                        writes.add(WriteEntry(i, nodeIdStr, WriteValue(
+                            nodeId,
+                            Unsigned.uint(13), // AttributeId.Value
+                            null,
+                            DataValue(variant, null, null, null)
+                        )))
+                    } else {
+                        reads.add(ReadEntry(i, nodeIdStr, nodeId))
+                    }
                 }
 
-                val writeResponse = client!!.write(writeValues)
-                    .get(opcUaConfig.writeConfig.writeTimeout, TimeUnit.MILLISECONDS)
+                // Results array matching input order
+                val results = arrayOfNulls<JsonObject>(entries.size())
+                val timeout = opcUaConfig.writeConfig.writeTimeout
 
-                messagesOutCounter.addAndGet(writeValues.size.toLong())
-                logger.fine { "OPC UA batch write: ${writeValues.size} values written" }
+                // Execute writes
+                if (writes.isNotEmpty()) {
+                    val writeResponse = client!!.write(writes.map { it.writeValue })
+                        .get(timeout, TimeUnit.MILLISECONDS)
+                    messagesOutCounter.addAndGet(writes.size.toLong())
+
+                    writes.forEachIndexed { idx, entry ->
+                        val sc = writeResponse.results[idx]
+                        results[entry.index] = JsonObject()
+                            .put("nodeId", entry.nodeIdStr)
+                            .put("status", if (sc.isGood) "Good" else sc.toString())
+                            .put("statusCode", sc.value)
+                            .put("timestamp", Instant.now().toString())
+                    }
+                }
+
+                // Execute reads
+                if (reads.isNotEmpty()) {
+                    val readValueIds = reads.map { entry ->
+                        ReadValueId(entry.nodeId, Unsigned.uint(13), null, QualifiedName.NULL_VALUE)
+                    }
+                    val readResponse = client!!.read(0.0, TimestampsToReturn.Both, readValueIds)
+                        .get(timeout, TimeUnit.MILLISECONDS)
+
+                    reads.forEachIndexed { idx, entry ->
+                        val dv = readResponse.results[idx]
+                        val sc = dv.statusCode ?: StatusCode.GOOD
+                        val value = dv.value?.value
+                        val ts = dv.sourceTime?.javaInstant ?: Instant.now()
+                        val r = JsonObject()
+                            .put("nodeId", entry.nodeIdStr)
+                            .put("status", if (sc.isGood) "Good" else sc.toString())
+                            .put("statusCode", sc.value)
+                            .put("timestamp", ts.toString())
+                        when (value) {
+                            null -> r.putNull("value")
+                            is Boolean -> r.put("value", value)
+                            is Byte -> r.put("value", value.toInt())
+                            is Short -> r.put("value", value.toInt())
+                            is Int -> r.put("value", value)
+                            is Long -> r.put("value", value)
+                            is Float -> r.put("value", value.toDouble())
+                            is Double -> r.put("value", value)
+                            is String -> r.put("value", value)
+                            is UByte -> r.put("value", value.toInt())
+                            is UShort -> r.put("value", value.toInt())
+                            is UInteger -> r.put("value", value.toLong())
+                            is ULong -> r.put("value", value.toLong())
+                            else -> r.put("value", value.toString())
+                        }
+                        results[entry.index] = r
+                    }
+                }
+
+                logger.fine { "OPC UA batch: ${writes.size} writes, ${reads.size} reads" }
 
                 if (isRequestResponse) {
-                    publishBatchWriteResponse(originalTopic, nodeIdStrings, writeResponse.results.toList())
+                    val responseArray = JsonArray()
+                    results.forEach { responseArray.add(it) }
+                    publishResponse(originalTopic, responseArray.encode().toByteArray())
                 }
             } catch (e: Exception) {
-                logger.severe("OPC UA batch write failed: ${e.message}")
+                logger.severe("OPC UA batch request failed: ${e.message}")
                 if (isRequestResponse) {
-                    publishWriteErrorResponse(originalTopic, null, e.message ?: "Unknown error")
+                    publishErrorResponse(originalTopic, null, e.message ?: "Unknown error")
                 }
             }
         }
@@ -1258,7 +1392,7 @@ class OpcUaConnector : AbstractVerticle() {
         }
     }
 
-    private fun publishWriteResponse(originalTopic: String, nodeIdStr: String, statusCode: StatusCode) {
+    private fun publishResponse(originalTopic: String, payload: ByteArray) {
         val writeConfig = opcUaConfig.writeConfig
         val namespace = deviceConfig.namespace
         val requestPrefix = "$namespace/${writeConfig.requestTopicPrefix}"
@@ -1266,61 +1400,12 @@ class OpcUaConnector : AbstractVerticle() {
 
         val responseTopic = originalTopic.replaceFirst(requestPrefix, responsePrefix)
 
-        val response = JsonObject()
-            .put("nodeId", nodeIdStr)
-            .put("status", if (statusCode.isGood) "Good" else statusCode.toString())
-            .put("statusCode", statusCode.value)
-            .put("timestamp", Instant.now().toString())
-
-        publishResponseMessage(responseTopic, response.encode().toByteArray())
-    }
-
-    private fun publishBatchWriteResponse(originalTopic: String, nodeIdStrings: List<String>, results: List<StatusCode>) {
-        val writeConfig = opcUaConfig.writeConfig
-        val namespace = deviceConfig.namespace
-        val requestPrefix = "$namespace/${writeConfig.requestTopicPrefix}"
-        val responsePrefix = "$namespace/${writeConfig.responseTopicPrefix}"
-
-        val responseTopic = originalTopic.replaceFirst(requestPrefix, responsePrefix)
-
-        val responseArray = JsonArray()
-        for (i in nodeIdStrings.indices) {
-            val statusCode = results[i]
-            responseArray.add(JsonObject()
-                .put("nodeId", nodeIdStrings[i])
-                .put("status", if (statusCode.isGood) "Good" else statusCode.toString())
-                .put("statusCode", statusCode.value)
-                .put("timestamp", Instant.now().toString())
-            )
-        }
-
-        publishResponseMessage(responseTopic, responseArray.encode().toByteArray())
-    }
-
-    private fun publishWriteErrorResponse(originalTopic: String, nodeIdStr: String?, errorMessage: String) {
-        val writeConfig = opcUaConfig.writeConfig
-        val namespace = deviceConfig.namespace
-        val requestPrefix = "$namespace/${writeConfig.requestTopicPrefix}"
-        val responsePrefix = "$namespace/${writeConfig.responseTopicPrefix}"
-
-        val responseTopic = originalTopic.replaceFirst(requestPrefix, responsePrefix)
-
-        val response = JsonObject()
-            .put("status", "Bad")
-            .put("error", errorMessage)
-            .put("timestamp", Instant.now().toString())
-        if (nodeIdStr != null) response.put("nodeId", nodeIdStr)
-
-        publishResponseMessage(responseTopic, response.encode().toByteArray())
-    }
-
-    private fun publishResponseMessage(topic: String, payload: ByteArray) {
         try {
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
                 val responseMessage = BrokerMessage(
                     messageId = 0,
-                    topicName = topic,
+                    topicName = responseTopic,
                     payload = payload,
                     qosLevel = 0,
                     isRetain = false,
@@ -1330,10 +1415,20 @@ class OpcUaConnector : AbstractVerticle() {
                     senderId = deviceConfig.name
                 )
                 sessionHandler.publishMessage(responseMessage)
-                logger.fine { "Published write response to $topic" }
+                logger.fine { "Published response to $responseTopic" }
             }
         } catch (e: Exception) {
-            logger.severe("Error publishing write response to $topic: ${e.message}")
+            logger.severe("Error publishing response to $responseTopic: ${e.message}")
         }
+    }
+
+    private fun publishErrorResponse(originalTopic: String, nodeIdStr: String?, errorMessage: String) {
+        val response = JsonObject()
+            .put("status", "Bad")
+            .put("error", errorMessage)
+            .put("timestamp", Instant.now().toString())
+        if (nodeIdStr != null) response.put("nodeId", nodeIdStr)
+
+        publishResponse(originalTopic, response.encode().toByteArray())
     }
 }

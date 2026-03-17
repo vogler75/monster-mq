@@ -444,6 +444,7 @@ enum SecurityPolicy {
 
 type OpcUaWriteConfig {
     enabled: Boolean!
+    requestResponseEnabled: Boolean!
     topicPrefix: String!
     requestTopicPrefix: String!
     responseTopicPrefix: String!

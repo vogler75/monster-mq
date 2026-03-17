@@ -259,9 +259,16 @@
                         <div class="form-group">
                             <div class="checkbox-group">
                                 <input type="checkbox" id="write-enabled">
-                                <label for="write-enabled">Enable OPC UA Writes (MQTT &rarr; OPC UA)</label>
+                                <label for="write-enabled">Enable Fire &amp; Forget Writes</label>
                             </div>
-                            <span class="form-hint">Allow MQTT clients to write values to OPC UA server nodes</span>
+                            <span class="form-hint">Write to OPC UA nodes via {namespace}/write/{nodeId} &mdash; no response</span>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="write-rr-enabled">
+                                <label for="write-rr-enabled">Enable Request/Response (Read &amp; Write)</label>
+                            </div>
+                            <span class="form-hint">Read/write OPC UA nodes via {namespace}/request/{nodeId} with response on {namespace}/response/{nodeId}</span>
                         </div>
                         <div id="write-config-fields" style="display:none;">
                             <div class="form-grid">

@@ -347,8 +347,10 @@ input CertificateConfigInput {
 }
 
 input OpcUaWriteConfigInput {
-    # Enable MQTT-to-OPC UA write support (default: false)
+    # Enable fire-and-forget writes (default: false)
     enabled: Boolean = false
+    # Enable request/response for reads and writes (default: false)
+    requestResponseEnabled: Boolean = false
     # Topic prefix for fire-and-forget writes: {namespace}/{topicPrefix}/{nodeId}
     topicPrefix: String = "write"
     # Topic prefix for request/response writes: {namespace}/{requestTopicPrefix}/{nodeId}

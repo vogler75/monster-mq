@@ -489,6 +489,7 @@ class OpcUaClientConfigMutations(
             val wm = writeMap as Map<String, Any>
             OpcUaWriteConfig(
                 enabled = wm["enabled"] as? Boolean ?: false,
+                requestResponseEnabled = wm["requestResponseEnabled"] as? Boolean ?: false,
                 topicPrefix = wm["topicPrefix"] as? String ?: "write",
                 requestTopicPrefix = wm["requestTopicPrefix"] as? String ?: "request",
                 responseTopicPrefix = wm["responseTopicPrefix"] as? String ?: "response",
@@ -814,6 +815,7 @@ class OpcUaClientConfigMutations(
                 ),
                 "writeConfig" to mapOf(
                     "enabled" to config.writeConfig.enabled,
+                    "requestResponseEnabled" to config.writeConfig.requestResponseEnabled,
                     "topicPrefix" to config.writeConfig.topicPrefix,
                     "requestTopicPrefix" to config.writeConfig.requestTopicPrefix,
                     "responseTopicPrefix" to config.writeConfig.responseTopicPrefix,

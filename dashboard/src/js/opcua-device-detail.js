@@ -52,13 +52,15 @@ class OpcUaDeviceDetailManager {
         }
 
         const writeEnabledCheckbox = document.getElementById('write-enabled');
+        const writeRrEnabledCheckbox = document.getElementById('write-rr-enabled');
         const writeConfigFields = document.getElementById('write-config-fields');
-        if (writeEnabledCheckbox) {
-            writeEnabledCheckbox.addEventListener('change', () => {
-                writeConfigFields.style.display = writeEnabledCheckbox.checked ? 'block' : 'none';
-                this.updateWriteTopicInfo();
-            });
-        }
+        const updateWriteFieldsVisibility = () => {
+            const anyEnabled = writeEnabledCheckbox?.checked || writeRrEnabledCheckbox?.checked;
+            writeConfigFields.style.display = anyEnabled ? 'block' : 'none';
+            this.updateWriteTopicInfo();
+        };
+        if (writeEnabledCheckbox) writeEnabledCheckbox.addEventListener('change', updateWriteFieldsVisibility);
+        if (writeRrEnabledCheckbox) writeRrEnabledCheckbox.addEventListener('change', updateWriteFieldsVisibility);
 
         // Update topic info when prefix fields change
         ['write-topic-prefix', 'write-request-topic-prefix', 'write-response-topic-prefix'].forEach(id => {
@@ -138,6 +140,7 @@ class OpcUaDeviceDetailManager {
                             }
                             writeConfig {
                                 enabled
+                                requestResponseEnabled
                                 topicPrefix
                                 requestTopicPrefix
                                 responseTopicPrefix
@@ -218,12 +221,14 @@ class OpcUaDeviceDetailManager {
         const writeConfig = this.device.config.writeConfig;
         if (writeConfig) {
             document.getElementById('write-enabled').checked = writeConfig.enabled;
+            document.getElementById('write-rr-enabled').checked = writeConfig.requestResponseEnabled;
             document.getElementById('write-topic-prefix').value = writeConfig.topicPrefix || 'write';
             document.getElementById('write-request-topic-prefix').value = writeConfig.requestTopicPrefix || 'request';
             document.getElementById('write-response-topic-prefix').value = writeConfig.responseTopicPrefix || 'response';
             document.getElementById('write-qos').value = writeConfig.qos != null ? writeConfig.qos : 1;
             document.getElementById('write-timeout').value = writeConfig.writeTimeout || 5000;
-            document.getElementById('write-config-fields').style.display = writeConfig.enabled ? 'block' : 'none';
+            document.getElementById('write-config-fields').style.display =
+                (writeConfig.enabled || writeConfig.requestResponseEnabled) ? 'block' : 'none';
         }
         this.updateWriteTopicInfo();
 
@@ -272,6 +277,7 @@ class OpcUaDeviceDetailManager {
 
         // Set write config defaults
         document.getElementById('write-enabled').checked = false;
+        document.getElementById('write-rr-enabled').checked = false;
         document.getElementById('write-topic-prefix').value = 'write';
         document.getElementById('write-request-topic-prefix').value = 'request';
         document.getElementById('write-response-topic-prefix').value = 'response';
@@ -306,19 +312,29 @@ class OpcUaDeviceDetailManager {
         const reqPrefix = document.getElementById('write-request-topic-prefix')?.value || 'request';
         const resPrefix = document.getElementById('write-response-topic-prefix')?.value || 'response';
 
+        const ns = this.escapeHtml(namespace);
+        const pf = this.escapeHtml(prefix);
+        const rq = this.escapeHtml(reqPrefix);
+        const rs = this.escapeHtml(resPrefix);
+        const t = 'color:var(--monster-teal);';
+        const p = 'color:var(--monster-purple);';
+
         infoDiv.innerHTML = `
-            <strong style="color:var(--text-primary);">Write Topics</strong><br><br>
-            <strong>Fire &amp; Forget</strong> (no response):<br>
-            <code style="color:var(--monster-teal);">${this.escapeHtml(namespace)}/${this.escapeHtml(prefix)}/{nodeId}</code>
+            <strong style="color:var(--text-primary);">Topic Reference</strong><br><br>
+            <strong>Fire &amp; Forget Write</strong> (no response):<br>
+            <code style="${t}">${ns}/${pf}/{nodeId}</code>
             &nbsp; payload: <code>{"value": 42.5}</code> or <code>{"value": 42.5, "dataType": "Double"}</code><br><br>
-            <strong>Request/Response</strong> (status feedback):<br>
-            Publish to: <code style="color:var(--monster-teal);">${this.escapeHtml(namespace)}/${this.escapeHtml(reqPrefix)}/{nodeId}</code><br>
-            Response on: <code style="color:var(--monster-purple);">${this.escapeHtml(namespace)}/${this.escapeHtml(resPrefix)}/{nodeId}</code><br><br>
-            <strong>Batch Write</strong> (multiple nodes at once):<br>
-            Topic: <code style="color:var(--monster-teal);">${this.escapeHtml(namespace)}/${this.escapeHtml(prefix)}</code> or
-            <code style="color:var(--monster-teal);">${this.escapeHtml(namespace)}/${this.escapeHtml(reqPrefix)}</code><br>
-            Payload: <code>[{"nodeId": "ns=2;i=1001", "value": 42.5}, {"nodeId": "ns=2;i=1002", "value": true}]</code><br><br>
-            <strong>Supported dataType hints:</strong> Boolean, Byte, UByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Float, Double, String
+            <strong>Request/Response Write</strong> (with status):<br>
+            Publish: <code style="${t}">${ns}/${rq}/{nodeId}</code> &nbsp; payload: <code>{"value": 42.5}</code><br>
+            Response: <code style="${p}">${ns}/${rs}/{nodeId}</code> &nbsp; <code>{"nodeId":"...","status":"Good","statusCode":0,"timestamp":"..."}</code><br><br>
+            <strong>Request/Response Read</strong> (on-demand value):<br>
+            Publish: <code style="${t}">${ns}/${rq}/{nodeId}</code> &nbsp; payload: <code>{}</code> (empty or no payload)<br>
+            Response: <code style="${p}">${ns}/${rs}/{nodeId}</code> &nbsp; <code>{"nodeId":"...","value":42.5,"status":"Good","timestamp":"..."}</code><br><br>
+            <strong>Batch</strong> (mixed read/write in one call):<br>
+            Publish: <code style="${t}">${ns}/${rq}</code> or <code style="${t}">${ns}/${pf}</code> (writes only)<br>
+            Payload: <code>[{"nodeId":"ns=2;i=1001"}, {"nodeId":"ns=2;i=1002","value":42.5}]</code><br>
+            <span style="font-size:0.75rem;">Entries without <code>value</code> are reads, entries with <code>value</code> are writes.</span><br><br>
+            <strong>dataType hints:</strong> Boolean, Byte, UByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Float, Double, String
         `;
     }
 
@@ -608,6 +624,7 @@ class OpcUaDeviceDetailManager {
                 },
                 writeConfig: {
                     enabled: document.getElementById('write-enabled').checked,
+                    requestResponseEnabled: document.getElementById('write-rr-enabled').checked,
                     topicPrefix: document.getElementById('write-topic-prefix').value.trim() || 'write',
                     requestTopicPrefix: document.getElementById('write-request-topic-prefix').value.trim() || 'request',
                     responseTopicPrefix: document.getElementById('write-response-topic-prefix').value.trim() || 'response',

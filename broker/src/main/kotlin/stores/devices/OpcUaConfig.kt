@@ -182,17 +182,19 @@ data class OpcUaAddress(
  * OPC UA write configuration for MQTT-to-OPC UA writes
  */
 data class OpcUaWriteConfig(
-    val enabled: Boolean = false,
-    val topicPrefix: String = "write",                    // Fire&forget: {namespace}/{topicPrefix}/...
+    val enabled: Boolean = false,                          // Enable fire&forget writes
+    val requestResponseEnabled: Boolean = false,           // Enable request/response (read + write)
+    val topicPrefix: String = "write",                     // Fire&forget: {namespace}/{topicPrefix}/...
     val requestTopicPrefix: String = "request",            // Request/response publish topic
     val responseTopicPrefix: String = "response",          // Request/response response topic
-    val qos: Int = 1,                                     // QoS for write topic subscriptions
-    val writeTimeout: Long = 5000                         // Write operation timeout in ms
+    val qos: Int = 1,                                      // QoS for write topic subscriptions
+    val writeTimeout: Long = 5000                          // Write operation timeout in ms
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): OpcUaWriteConfig {
             return OpcUaWriteConfig(
                 enabled = json.getBoolean("enabled", false),
+                requestResponseEnabled = json.getBoolean("requestResponseEnabled", false),
                 topicPrefix = json.getString("topicPrefix", "write"),
                 requestTopicPrefix = json.getString("requestTopicPrefix", "request"),
                 responseTopicPrefix = json.getString("responseTopicPrefix", "response"),
@@ -205,6 +207,7 @@ data class OpcUaWriteConfig(
     fun toJsonObject(): JsonObject {
         return JsonObject()
             .put("enabled", enabled)
+            .put("requestResponseEnabled", requestResponseEnabled)
             .put("topicPrefix", topicPrefix)
             .put("requestTopicPrefix", requestTopicPrefix)
             .put("responseTopicPrefix", responseTopicPrefix)
