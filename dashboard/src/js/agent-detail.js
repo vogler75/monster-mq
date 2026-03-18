@@ -6,6 +6,7 @@ class AgentDetailManager {
         this.agentName = null;
         this.agentData = null;
         this.clusterNodes = [];
+        this.availableMcpServers = [];
         this.init();
     }
 
@@ -16,6 +17,7 @@ class AgentDetailManager {
 
         if (this.isNew) {
             await this.loadClusterNodes();
+            await this.loadMcpServers();
             this.showNewAgentForm();
             return;
         }
@@ -30,6 +32,7 @@ class AgentDetailManager {
         this.showLoading(true);
         try {
             await this.loadClusterNodes();
+            await this.loadMcpServers();
             await this.loadAgentData();
         } catch (error) {
             this.showError('Failed to load agent data: ' + error.message);
@@ -78,6 +81,7 @@ class AgentDetailManager {
         // Show all other sections
         document.getElementById('agent-content').style.display = 'block';
         document.getElementById('provider-section').style.display = 'block';
+        document.getElementById('mcp-section').style.display = 'block';
         document.getElementById('trigger-section').style.display = 'block';
         document.getElementById('prompt-section').style.display = 'block';
 
@@ -108,6 +112,46 @@ class AgentDetailManager {
         }
     }
 
+    async loadMcpServers() {
+        try {
+            const query = `query { mcpServers { name url enabled } }`;
+            const result = await this.client.query(query);
+            this.availableMcpServers = result.mcpServers || [];
+            this.renderMcpServerCheckboxes();
+        } catch (error) {
+            console.error('Error loading MCP servers:', error);
+        }
+    }
+
+    renderMcpServerCheckboxes(selectedServers = []) {
+        const container = document.getElementById('mcp-server-list');
+        if (!container) return;
+
+        if (this.availableMcpServers.length === 0) {
+            container.innerHTML = '<div style="color: var(--text-muted);">No MCP servers configured. <a href="/pages/mcp-server-detail.html?new=true" style="color: var(--monster-teal);">Add one</a></div>';
+            return;
+        }
+
+        container.innerHTML = this.availableMcpServers.map(server => {
+            const checked = selectedServers.includes(server.name) ? 'checked' : '';
+            const statusColor = server.enabled ? 'var(--monster-green)' : 'var(--text-muted)';
+            return `
+                <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: var(--dark-bg); border-radius: 8px; border: 1px solid var(--dark-border); cursor: pointer;">
+                    <input type="checkbox" class="mcp-server-checkbox" value="${server.name}" ${checked} style="accent-color: var(--monster-purple);">
+                    <div>
+                        <div style="color: var(--text-primary); font-weight: 500;">${server.name}</div>
+                        <div style="color: var(--text-muted); font-size: 0.8rem;">${server.url}</div>
+                    </div>
+                    <span style="margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: ${statusColor};"></span>
+                </label>
+            `;
+        }).join('');
+    }
+
+    getSelectedMcpServers() {
+        return Array.from(document.querySelectorAll('.mcp-server-checkbox:checked')).map(cb => cb.value);
+    }
+
     async loadAgentData() {
         this.showLoading(true);
         this.hideError();
@@ -134,6 +178,8 @@ class AgentDetailManager {
                         maxToolIterations
                         memoryWindowSize
                         stateEnabled
+                        mcpServers
+                        useMonsterMqMcp
                         createdAt
                         updatedAt
                     }
@@ -190,6 +236,10 @@ class AgentDetailManager {
         document.getElementById('agent-input-topics').value = (d.inputTopics || []).join('\n');
         document.getElementById('agent-output-topics').value = (d.outputTopics || []).join('\n');
 
+        // Populate MCP Servers
+        document.getElementById('agent-use-monstermq-mcp').checked = d.useMonsterMqMcp || false;
+        this.renderMcpServerCheckboxes(d.mcpServers || []);
+
         // Populate System Prompt
         document.getElementById('agent-system-prompt').value = d.systemPrompt || '';
 
@@ -210,6 +260,7 @@ class AgentDetailManager {
         // Show all sections
         document.getElementById('agent-content').style.display = 'block';
         document.getElementById('provider-section').style.display = 'block';
+        document.getElementById('mcp-section').style.display = 'block';
         document.getElementById('trigger-section').style.display = 'block';
         document.getElementById('prompt-section').style.display = 'block';
         document.getElementById('timestamps-section').style.display = 'block';
@@ -240,7 +291,9 @@ class AgentDetailManager {
             triggerType: document.getElementById('agent-trigger-type').value,
             cronIntervalMs: parseInt(document.getElementById('agent-cron-interval').value) || null,
             inputTopics: inputTopics,
-            outputTopics: outputTopics
+            outputTopics: outputTopics,
+            mcpServers: this.getSelectedMcpServers(),
+            useMonsterMqMcp: document.getElementById('agent-use-monstermq-mcp').checked
         };
 
         const apiKey = document.getElementById('agent-api-key').value;

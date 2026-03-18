@@ -63,9 +63,6 @@ class McpServer(
             logger.fine("Post request received for MCP at path $MCP_PATH")
             val body = ctx.body().asJsonObject()
 
-            // Set keep-alive header for all responses to maintain connection
-            ctx.response().putHeader("Connection", "keep-alive")
-
             mcpHandler!!.handleRequest(body)
                 .onComplete { ar ->
                     if (ar.succeeded()) {

@@ -106,6 +106,8 @@ class AgentQueries(
                 "maxToolIterations" to agentConfig.maxToolIterations,
                 "memoryWindowSize" to agentConfig.memoryWindowSize,
                 "stateEnabled" to agentConfig.stateEnabled,
+                "mcpServers" to agentConfig.mcpServers,
+                "useMonsterMqMcp" to agentConfig.useMonsterMqMcp,
                 "createdAt" to device.createdAt.toString(),
                 "updatedAt" to device.updatedAt.toString()
             )

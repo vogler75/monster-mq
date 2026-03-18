@@ -155,6 +155,28 @@
                 </div>
             </div>
 
+            <!-- MCP Servers Section -->
+            <div class="section-card" id="mcp-section" style="display:none;">
+                <div class="section-header">
+                    <div class="section-title"><h2>MCP Servers</h2></div>
+                </div>
+                <div class="section-content">
+                    <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: var(--dark-bg); border-radius: 8px; border: 1px solid var(--monster-purple); cursor: pointer; margin-bottom: 1rem;">
+                        <input type="checkbox" id="agent-use-monstermq-mcp" style="accent-color: var(--monster-purple);">
+                        <div>
+                            <div style="color: var(--text-primary); font-weight: 600;">MonsterMQ MCP Server</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">Built-in tools: topic discovery, archive queries, value retrieval, SQL queries</div>
+                        </div>
+                    </label>
+                    <small style="color: var(--text-muted); margin-bottom: 0.75rem; display: block;">
+                        External MCP servers:
+                    </small>
+                    <div id="mcp-server-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <div style="color: var(--text-muted);">Loading MCP servers...</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Trigger Configuration Section -->
             <div class="section-card" id="trigger-section" style="display:none;">
                 <div class="section-header">

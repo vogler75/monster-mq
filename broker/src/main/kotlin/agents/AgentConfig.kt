@@ -19,7 +19,9 @@ data class AgentConfig(
     val temperature: Double = 0.7,
     val maxToolIterations: Int = 10,
     val memoryWindowSize: Int = 20,
-    val stateEnabled: Boolean = true
+    val stateEnabled: Boolean = true,
+    val mcpServers: List<String> = emptyList(),
+    val useMonsterMqMcp: Boolean = false
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): AgentConfig {
@@ -39,7 +41,9 @@ data class AgentConfig(
                 temperature = json.getDouble("temperature", 0.7),
                 maxToolIterations = json.getInteger("maxToolIterations", 10),
                 memoryWindowSize = json.getInteger("memoryWindowSize", 20),
-                stateEnabled = json.getBoolean("stateEnabled", true)
+                stateEnabled = json.getBoolean("stateEnabled", true),
+                mcpServers = json.getJsonArray("mcpServers", JsonArray()).filterIsInstance<String>().toList(),
+                useMonsterMqMcp = json.getBoolean("useMonsterMqMcp", false)
             )
         }
     }
@@ -62,6 +66,8 @@ data class AgentConfig(
             .put("maxToolIterations", maxToolIterations)
             .put("memoryWindowSize", memoryWindowSize)
             .put("stateEnabled", stateEnabled)
+            .put("mcpServers", JsonArray(mcpServers))
+            .put("useMonsterMqMcp", useMonsterMqMcp)
     }
 }
 

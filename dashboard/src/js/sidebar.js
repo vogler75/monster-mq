@@ -97,6 +97,7 @@ class SidebarManager {
                     { href: '/pages/jdbc-loggers.html', icon: 'database', text: 'Loggers' },
                     { href: '/pages/workflows.html', icon: 'ontology-filled', text: 'Workflows' },
                     { href: '/pages/agents.html', icon: 'rocket', text: 'AI Agents' },
+                    { href: '/pages/mcp-servers.html', icon: 'connector', text: 'MCP Servers' },
                     { href: '/pages/device-config-export-import.html', icon: 'upload', text: 'Import/Export' }
                 ]
             },

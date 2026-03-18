@@ -57,7 +57,6 @@ import java.util.logging.Logger
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
-    // Print working directory and user.dir property
     Monster(args)
 }
 
@@ -1147,7 +1146,15 @@ MORE INFO:
                         vertx.deployVerticle(flowEngineExtension, flowEngineDeploymentOptions)
                     }
                     .compose {
-                        // Agent Extension
+                        if (metricsCollector != null) {
+                            vertx.deployVerticle(metricsCollector)
+                        } else {
+                            Future.succeededFuture<String>()
+                        }
+                    }
+                    .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) }) }
+                    .compose {
+                        // Agent Extension (must start AFTER MCP server and other servers are ready)
                         val agentExtension = at.rocworks.agents.AgentExtension()
                         val agentDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(agentExtension, agentDeploymentOptions)
@@ -1157,14 +1164,6 @@ MORE INFO:
                                 Future.succeededFuture<String>()
                             }
                     }
-                    .compose {
-                        if (metricsCollector != null) {
-                            vertx.deployVerticle(metricsCollector)
-                        } else {
-                            Future.succeededFuture<String>()
-                        }
-                    }
-                    .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) }) }
                     .compose {
                         // Start GraphQL server after all other components are ready
                         if (graphQLServer != null) {

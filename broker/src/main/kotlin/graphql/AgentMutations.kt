@@ -178,7 +178,9 @@ class AgentMutations(
             temperature = (input["temperature"] as? Number)?.toDouble() ?: 0.7,
             maxToolIterations = (input["maxToolIterations"] as? Number)?.toInt() ?: 10,
             memoryWindowSize = (input["memoryWindowSize"] as? Number)?.toInt() ?: 20,
-            stateEnabled = input["stateEnabled"] as? Boolean ?: true
+            stateEnabled = input["stateEnabled"] as? Boolean ?: true,
+            mcpServers = parseStringList(input["mcpServers"]),
+            useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: false
         )
 
         return DeviceConfig(
@@ -212,7 +214,9 @@ class AgentMutations(
             temperature = (input["temperature"] as? Number)?.toDouble() ?: existingConfig.temperature,
             maxToolIterations = (input["maxToolIterations"] as? Number)?.toInt() ?: existingConfig.maxToolIterations,
             memoryWindowSize = (input["memoryWindowSize"] as? Number)?.toInt() ?: existingConfig.memoryWindowSize,
-            stateEnabled = input["stateEnabled"] as? Boolean ?: existingConfig.stateEnabled
+            stateEnabled = input["stateEnabled"] as? Boolean ?: existingConfig.stateEnabled,
+            mcpServers = if (input.containsKey("mcpServers")) parseStringList(input["mcpServers"]) else existingConfig.mcpServers,
+            useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: existingConfig.useMonsterMqMcp
         )
 
         return existing.copy(

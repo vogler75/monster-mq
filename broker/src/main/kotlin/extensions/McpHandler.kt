@@ -1,7 +1,9 @@
 package at.rocworks.extensions
 
 import at.rocworks.Const
+import at.rocworks.Monster
 import at.rocworks.Utils
+import at.rocworks.data.BrokerMessage
 import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.IMessageArchive
@@ -131,7 +133,7 @@ class McpHandler(
         val id = request.getValue("id")
         val params = request.getJsonObject("params", JsonObject())
 
-        logger.info("Handling MCP request: method=$method, id=$id, params=$params")
+        logger.fine("Handling MCP request: method=$method, id=$id, params=$params")
 
         // Handle notifications (messages without id) - these should not return responses
         if (id == null) {
@@ -580,6 +582,63 @@ JsonObject()
             )
         )
         registerTool(
+            AsyncTool(
+                "set-topic-value",
+                """
+**Set Topic Value**
+
+Publishes a value to an MQTT topic. This tool allows you to send data or commands to devices, sensors, or any system subscribed to the specified topic.
+
+**MQTT Context:**
+- Publishing sends a message to all subscribers of the given topic
+- Topics follow standard MQTT naming conventions with forward-slash hierarchy
+- The message is distributed through the broker to all matching subscribers
+
+**Input:**
+- **topic** (required): The MQTT topic to publish to (e.g., "devices/thermostat/01/setpoint")
+- **payload** (required): The message payload as text or JSON string
+- **retained** (optional): If true, the broker stores the message as the last known value for the topic (default: false)
+- **qos** (optional): Quality of Service level 0, 1, or 2 (default: 0)
+
+**Use Cases:**
+- Send commands to devices: `topic: "devices/light/01/command", payload: "ON"`
+- Update configuration: `topic: "config/threshold", payload: "42.5"`
+- Send JSON data: `topic: "sensors/data", payload: "{\"temp\": 22.5}"`
+- Set retained values: `topic: "status/system", payload: "online", retained: true`
+
+**Return Value:**
+- Confirmation that the message was published successfully, or an error message
+                """.trimIndent(),
+                JsonObject()
+                    .put("type", "object")
+                    .put(
+                        "properties", JsonObject()
+                            .put(
+                                "topic", JsonObject()
+                                    .put("type", "string")
+                                    .put("description", "The MQTT topic to publish to")
+                            )
+                            .put(
+                                "payload", JsonObject()
+                                    .put("type", "string")
+                                    .put("description", "The message payload (text or JSON)")
+                            )
+                            .put(
+                                "retained", JsonObject()
+                                    .put("type", "boolean")
+                                    .put("description", "Whether to retain the message (default: false)")
+                            )
+                            .put(
+                                "qos", JsonObject()
+                                    .put("type", "integer")
+                                    .put("description", "Quality of Service level: 0, 1, or 2 (default: 0)")
+                            )
+                    )
+                    .put("required", JsonArray().add("topic").add("payload")),
+                ::setTopicValueTool
+            )
+        )
+        registerTool(
                 AsyncTool(
                     "query-message-archive",
                     """
@@ -619,12 +678,12 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
 - Messages are returned chronologically, so you get the oldest messages first
 - Increase limit for comprehensive historical analysis, decrease for quick sampling
 
-**lastMinutes** (optional):
-- Query messages from the last N minutes
-- If specified, automatically sets startTime to (current time - N minutes) and endTime to current time
+**lastSeconds** (optional):
+- Query messages from the last N seconds
+- If specified, automatically sets startTime to (current time - N seconds) and endTime to current time
 - Overrides any manually specified startTime and endTime parameters
 - Convenient shorthand for recent data queries
-- Example: `lastMinutes: 60` retrieves messages from the last hour
+- Example: `lastSeconds: 3600` retrieves messages from the last hour
 
 **archiveGroup** (optional, defaults to "Default"):
 - Specifies which archive group to query
@@ -652,8 +711,8 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
 - For real-time data, use the get-topic-value tool instead
 
 **Example Queries:**
-- Last 30 minutes: `lastMinutes: 30`
-- Last hour: `lastMinutes: 60`
+- Last 30 minutes: `lastSeconds: 1800`
+- Last hour: `lastSeconds: 3600`
 - Last 24 hours: `startTime: "2024-01-15T00:00:00Z"`, `endTime: "2024-01-16T00:00:00Z"`
 - Specific incident window: `startTime: "2024-01-15T14:30:00Z"`, `endTime: "2024-01-15T15:00:00Z"`
 - Sample recent data: `limit: 100` (no time range for most recent 100 messages)
@@ -679,9 +738,9 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
                                     .put("description", "Maximum number of messages to return")
                                     .put("default", 100)
                                 )
-                                .put("lastMinutes", JsonObject()
+                                .put("lastSeconds", JsonObject()
                                     .put("type", "integer")
-                                    .put("description", "Query messages from the last N minutes (overrides startTime and endTime)")
+                                    .put("description", "Query messages from the last N seconds (overrides startTime and endTime)")
                                 )
                                 .put("archiveGroup", JsonObject()
                                     .put("type", "string")
@@ -811,7 +870,7 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
         }
         registerTool(
                 AsyncTool(
-                    "query-aggregated-messages",
+                    "query-message-archive-aggregated",
                     """
 **Query Aggregated Messages (PREFERRED for Historical Data)**
 
@@ -850,12 +909,17 @@ Before using this tool, you **MUST** call `get-topic-value` first to inspect the
 - Choose based on your time range: use smaller intervals for shorter periods
 - Example: Use `ONE_HOUR` for weekly data, `FIVE_MINUTES` for daily data
 
-**startTime** (required):
+**lastSeconds** (optional):
+- If set, queries the last N seconds of data (startTime = now - N seconds, endTime = now)
+- Example: `3600` for the last hour, `86400` for the last 24 hours
+- When provided, startTime and endTime are not required
+
+**startTime** (required unless lastSeconds is set):
 - Start of the time range in ISO 8601 format
 - Example: `2024-01-15T00:00:00Z`
 - Must include timezone (use Z for UTC)
 
-**endTime** (required):
+**endTime** (required unless lastSeconds is set):
 - End of the time range in ISO 8601 format
 - Example: `2024-01-16T00:00:00Z`
 - Must be after startTime
@@ -941,13 +1005,17 @@ A table with:
                                     )
                                     .put("description", "Aggregation time interval (bucket size)")
                                 )
+                                .put("lastSeconds", JsonObject()
+                                    .put("type", "integer")
+                                    .put("description", "If set, query the last N seconds of data (sets startTime to now minus N seconds and endTime to now). When provided, startTime and endTime are not required.")
+                                )
                                 .put("startTime", JsonObject()
                                     .put("type", "string")
-                                    .put("description", "Start time in ISO 8601 format (e.g., 2024-01-15T00:00:00Z)")
+                                    .put("description", "Start time in ISO 8601 format (e.g., 2024-01-15T00:00:00Z). Not required if lastSeconds is set.")
                                 )
                                 .put("endTime", JsonObject()
                                     .put("type", "string")
-                                    .put("description", "End time in ISO 8601 format (e.g., 2024-01-16T00:00:00Z)")
+                                    .put("description", "End time in ISO 8601 format (e.g., 2024-01-16T00:00:00Z). Not required if lastSeconds is set.")
                                 )
                                 .put("functions", JsonObject()
                                     .put("type", "array")
@@ -973,7 +1041,7 @@ A table with:
                                     .put("description", "Optional archive group name (defaults to 'Default')")
                                 )
                         )
-                        .put("required", JsonArray().add("topics").add("interval").add("startTime").add("endTime")),
+                        .put("required", JsonArray().add("topics").add("interval")),
                     ::queryAggregatedMessages
                 )
             )
@@ -1140,6 +1208,52 @@ A table with:
 
     // --------------------------------------------------------------------------------------------------------------
 
+    private fun setTopicValueTool(args: JsonObject): Future<JsonArray> {
+        logger.info("setTopicValueTool called with args: $args")
+        if (!args.containsKey("topic")) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Topic parameter required"))
+        }
+        if (!args.containsKey("payload")) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Payload parameter required"))
+        }
+        val topic = args.getString("topic")
+        val payload = args.getString("payload")
+        val retained = args.getBoolean("retained", false)
+        val qos = args.getInteger("qos", 0)
+
+        val promise = Promise.promise<JsonArray>()
+        try {
+            val sessionHandler = Monster.getSessionHandler()
+                ?: return Future.failedFuture(McpException(JSONRPC_INTERNAL_ERROR, "Session handler not available"))
+
+            val message = BrokerMessage(
+                messageUuid = at.rocworks.Utils.getUuid(),
+                messageId = 0,
+                topicName = topic,
+                payload = payload.toByteArray(),
+                qosLevel = qos,
+                isRetain = retained,
+                isDup = false,
+                isQueued = false,
+                clientId = "mcp-server"
+            )
+            sessionHandler.publishMessage(message)
+
+            val answer = JsonArray().add(
+                JsonObject()
+                    .put("type", "text")
+                    .put("text", "Published to topic '$topic'" + if (retained) " (retained)" else "")
+            )
+            promise.complete(answer)
+        } catch (e: Exception) {
+            logger.severe("Error publishing message: ${e.message}")
+            promise.fail(McpException(JSONRPC_INTERNAL_ERROR, "Error publishing message: ${e.message}"))
+        }
+        return promise.future()
+    }
+
+    // --------------------------------------------------------------------------------------------------------------
+
     private fun queryMessageArchive(args: JsonObject): Future<JsonArray> {
         logger.info("queryMessageArchive called with args: $args")
         if (!args.containsKey("topic")) {
@@ -1148,12 +1262,12 @@ A table with:
         val topic = args.getString("topic", "")
         val limit = args.getInteger("limit", 1000)
         val archiveGroupName = args.getString("archiveGroup")
-        val lastMinutes = args.getInteger("lastMinutes")
+        val lastSeconds = args.getInteger("lastSeconds")
 
-        // Calculate time range based on lastMinutes or use provided startTime/endTime
-        val (startTime, endTime) = if (lastMinutes != null) {
+        // Calculate time range based on lastSeconds or use provided startTime/endTime
+        val (startTime, endTime) = if (lastSeconds != null) {
             val now = Instant.now()
-            val start = now.minusSeconds(lastMinutes.toLong() * 60)
+            val start = now.minusSeconds(lastSeconds.toLong())
             Pair(start, now)
         } else {
             val start = args.getString("startTime")?.let { Instant.parse(it) }
@@ -1236,11 +1350,8 @@ A table with:
         if (!args.containsKey("interval")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "interval parameter required"))
         }
-        if (!args.containsKey("startTime")) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "startTime parameter required"))
-        }
-        if (!args.containsKey("endTime")) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "endTime parameter required"))
+        if (!args.containsKey("lastSeconds") && !args.containsKey("startTime")) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Either lastSeconds or startTime/endTime is required"))
         }
 
         val topicsArray = args.getJsonArray("topics", JsonArray())
@@ -1262,11 +1373,17 @@ A table with:
 
         val startTime: Instant
         val endTime: Instant
-        try {
-            startTime = Instant.parse(args.getString("startTime"))
-            endTime = Instant.parse(args.getString("endTime"))
-        } catch (e: Exception) {
-            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Invalid timestamp format. Use ISO 8601 format (e.g., 2024-01-15T00:00:00Z)"))
+        val lastSeconds = args.getInteger("lastSeconds")
+        if (lastSeconds != null && lastSeconds > 0) {
+            endTime = Instant.now()
+            startTime = endTime.minusSeconds(lastSeconds.toLong())
+        } else {
+            try {
+                startTime = Instant.parse(args.getString("startTime"))
+                endTime = Instant.parse(args.getString("endTime"))
+            } catch (e: Exception) {
+                return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Invalid timestamp format. Use ISO 8601 format (e.g., 2024-01-15T00:00:00Z)"))
+            }
         }
 
         val functionsArray = args.getJsonArray("functions", JsonArray().add("AVG"))

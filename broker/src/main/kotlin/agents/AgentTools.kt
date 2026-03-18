@@ -21,7 +21,8 @@ import java.util.logging.Logger
 class AgentTools(
     private val archiveHandler: ArchiveHandler?,
     private val retainedStore: IMessageStore?,
-    private val agentClientId: String
+    private val agentClientId: String,
+    private val toolLogger: ((String, String, String) -> Unit)? = null
 ) {
     private val logger: Logger = Utils.getLogger(AgentTools::class.java)
 
@@ -29,12 +30,17 @@ class AgentTools(
         return archiveHandler?.getDeployedArchiveGroups() ?: emptyMap()
     }
 
+    private fun logTool(name: String, args: String, result: String): String {
+        toolLogger?.invoke(name, args, result)
+        return result
+    }
+
     @Tool("Publish a message to an MQTT topic. Use this to send data or commands to other systems.")
     fun publishMessage(
         @P("The MQTT topic to publish to") topic: String,
         @P("The message payload (text or JSON)") payload: String
     ): String {
-        return try {
+        val result = try {
             val msg = BrokerMessage(agentClientId, topic, payload)
             val handler = Monster.getSessionHandler()
             handler?.publishMessage(msg)
@@ -43,6 +49,7 @@ class AgentTools(
             logger.warning("publishMessage error: ${e.message}")
             "Error publishing: ${e.message}"
         }
+        return logTool("publishMessage", "topic=$topic", result)
     }
 
     @Tool("Get the current/last known value for one or more MQTT topics from the last-value store.")
@@ -50,10 +57,10 @@ class AgentTools(
         @P("Comma-separated list of exact MQTT topics") topics: String,
         @P("Archive group name (default: 'Default')") archiveGroup: String?
     ): String {
-        return try {
+        val result = try {
             val group = archiveGroup ?: "Default"
             val store = getArchiveGroups()[group]?.lastValStore
-            if (store == null) return "No LastValueStore for archive group '$group'"
+            if (store == null) return logTool("getTopicValues", "topics=$topics", "No LastValueStore for archive group '$group'")
 
             val results = JsonArray()
             for (topic in topics.split(",").map { it.trim() }) {
@@ -71,6 +78,7 @@ class AgentTools(
             logger.warning("getTopicValues error: ${e.message}")
             "Error: ${e.message}"
         }
+        return logTool("getTopicValues", "topics=$topics", result)
     }
 
     @Tool("Search for MQTT topics matching a pattern. Use MQTT wildcards: + for single level, # for multi level.")
@@ -78,10 +86,10 @@ class AgentTools(
         @P("MQTT topic pattern (e.g., 'sensors/#', 'plant/+/temperature')") pattern: String,
         @P("Archive group name (default: 'Default')") archiveGroup: String?
     ): String {
-        return try {
+        val result = try {
             val group = archiveGroup ?: "Default"
             val store = getArchiveGroups()[group]?.lastValStore
-            if (store == null) return "No LastValueStore for archive group '$group'"
+            if (store == null) return logTool("findTopics", "pattern=$pattern", "No LastValueStore for archive group '$group'")
 
             val results = JsonArray()
             var count = 0
@@ -97,6 +105,7 @@ class AgentTools(
             logger.warning("findTopics error: ${e.message}")
             "Error: ${e.message}"
         }
+        return logTool("findTopics", "pattern=$pattern", result)
     }
 
     @Tool("Query historical messages from the message archive for a specific topic within a time range.")
@@ -107,40 +116,42 @@ class AgentTools(
         @P("Maximum number of messages to return (default: 100)") limit: Int?,
         @P("Archive group name (default: 'Default')") archiveGroup: String?
     ): String {
-        return try {
+        val result = try {
             val group = archiveGroup ?: "Default"
             val store = getArchiveGroups()[group]?.archiveStore as? IMessageArchiveExtended
-            if (store == null) return "No archive store for group '$group'"
+            if (store == null) return logTool("queryHistory", "topic=$topic", "No archive store for group '$group'")
 
-            val result = store.getHistory(
+            val r = store.getHistory(
                 topic = topic,
                 startTime = startTime?.let { Instant.parse(it) },
                 endTime = endTime?.let { Instant.parse(it) },
                 limit = limit ?: 100
             )
-            result.encodePrettily()
+            r.encodePrettily()
         } catch (e: Exception) {
             logger.warning("queryHistory error: ${e.message}")
             "Error: ${e.message}"
         }
+        return logTool("queryHistory", "topic=$topic, start=$startTime, end=$endTime, limit=$limit", result)
     }
 
     @Tool("List all configured archive groups. Use this to discover available data stores before querying.")
     fun listArchiveGroups(): String {
-        return try {
+        val result = try {
             val groups = getArchiveGroups()
-            val result = JsonArray()
+            val r = JsonArray()
             for ((name, group) in groups) {
-                result.add(JsonObject()
+                r.add(JsonObject()
                     .put("name", name)
                     .put("archiveType", group.getArchiveType().name)
                     .put("lastValType", group.getLastValType().name)
                 )
             }
-            result.encodePrettily()
+            r.encodePrettily()
         } catch (e: Exception) {
             logger.warning("listArchiveGroups error: ${e.message}")
             "Error: ${e.message}"
         }
+        return logTool("listArchiveGroups", "", result)
     }
 }

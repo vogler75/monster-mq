@@ -2,6 +2,7 @@ package at.rocworks.agents
 
 import at.rocworks.Utils
 import dev.langchain4j.model.chat.ChatModel
+import dev.langchain4j.model.chat.listener.ChatModelListener
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel
 import dev.langchain4j.model.anthropic.AnthropicChatModel
 import dev.langchain4j.model.openai.OpenAiChatModel
@@ -12,7 +13,7 @@ import java.util.logging.Logger
 object LangChain4jFactory {
     private val logger: Logger = Utils.getLogger(LangChain4jFactory::class.java)
 
-    fun createChatModel(config: AgentConfig, globalConfig: JsonObject): ChatModel {
+    fun createChatModel(config: AgentConfig, globalConfig: JsonObject, listeners: List<ChatModelListener> = emptyList()): ChatModel {
         val apiKey = resolveApiKey(config.apiKey, config.provider, globalConfig)
         logger.fine("Creating LangChain4j ${config.provider} model: ${config.model ?: "default"}")
 
@@ -22,6 +23,7 @@ object LangChain4jFactory {
                 .modelName(config.model ?: "gemini-2.0-flash")
                 .temperature(config.temperature)
                 .apply { config.maxTokens?.let { maxOutputTokens(it) } }
+                .listeners(listeners)
                 .build()
 
             "claude" -> AnthropicChatModel.builder()
@@ -29,6 +31,7 @@ object LangChain4jFactory {
                 .modelName(config.model ?: "claude-sonnet-4-20250514")
                 .maxTokens(config.maxTokens ?: 4096)
                 .temperature(config.temperature)
+                .listeners(listeners)
                 .build()
 
             "openai" -> OpenAiChatModel.builder()
@@ -36,12 +39,14 @@ object LangChain4jFactory {
                 .modelName(config.model ?: "gpt-4o")
                 .temperature(config.temperature)
                 .apply { config.maxTokens?.let { maxTokens(it) } }
+                .listeners(listeners)
                 .build()
 
             "ollama" -> OllamaChatModel.builder()
-                .baseUrl(apiKey) // For Ollama, apiKey holds the base URL
+                .baseUrl(apiKey)
                 .modelName(config.model ?: "llama3")
                 .temperature(config.temperature)
+                .listeners(listeners)
                 .build()
 
             else -> throw IllegalArgumentException("Unknown AI provider: ${config.provider}. Supported: gemini, claude, openai, ollama")
