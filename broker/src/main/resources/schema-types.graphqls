@@ -140,6 +140,8 @@ type BrokerConfig {
     mongoDbUrl: String!
     mongoDbDatabase: String!
     sqlitePath: String!
+    # Kafka
+    kafkaServers: String!
 }
 
 # Represents a broker node in the MonsterMQ cluster

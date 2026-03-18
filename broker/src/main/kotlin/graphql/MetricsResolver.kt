@@ -1614,7 +1614,8 @@ class MetricsResolver(
         val crateDbUser: String,
         val mongoDbUrl: String,
         val mongoDbDatabase: String,
-        val sqlitePath: String
+        val sqlitePath: String,
+        val kafkaServers: String
     )
 
     fun brokerConfig(): DataFetcher<BrokerConfig> {
@@ -1654,7 +1655,8 @@ class MetricsResolver(
                 crateDbUser = config.getJsonObject("CrateDB", io.vertx.core.json.JsonObject()).getString("User", ""),
                 mongoDbUrl = sanitizeUrl(config.getJsonObject("MongoDB", io.vertx.core.json.JsonObject()).getString("Url", "")),
                 mongoDbDatabase = config.getJsonObject("MongoDB", io.vertx.core.json.JsonObject()).getString("Database", ""),
-                sqlitePath = config.getJsonObject("SQLite", io.vertx.core.json.JsonObject()).getString("Path", "")
+                sqlitePath = config.getJsonObject("SQLite", io.vertx.core.json.JsonObject()).getString("Path", ""),
+                kafkaServers = config.getJsonObject("Kafka", io.vertx.core.json.JsonObject()).getString("Servers", "")
             )
         }
     }

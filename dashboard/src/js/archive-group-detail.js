@@ -12,6 +12,8 @@ class ArchiveGroupDetailManager {
             return;
         }
 
+        await this.filterStorageOptions();
+
         const urlParams = new URLSearchParams(window.location.search);
         this.isNew = urlParams.get('new') === 'true';
         this.groupName = urlParams.get('name');
@@ -132,6 +134,44 @@ class ArchiveGroupDetailManager {
             `).join('');
         } else {
             indicators.innerHTML = '<span style="color: var(--text-muted); font-size: 0.85rem;">No connection data available</span>';
+        }
+    }
+
+    async filterStorageOptions() {
+        try {
+            const result = await window.graphqlClient.query(`
+                query { brokerConfig {
+                    clustered postgresUrl crateDbUrl mongoDbUrl sqlitePath kafkaServers
+                } }
+            `);
+            const cfg = result.brokerConfig;
+
+            const lastValAllowed = new Set(['NONE', 'MEMORY']);
+            if (cfg.clustered) lastValAllowed.add('HAZELCAST');
+            if (cfg.postgresUrl) lastValAllowed.add('POSTGRES');
+            if (cfg.crateDbUrl) lastValAllowed.add('CRATEDB');
+            if (cfg.mongoDbUrl) lastValAllowed.add('MONGODB');
+            if (cfg.sqlitePath) lastValAllowed.add('SQLITE');
+
+            const archiveAllowed = new Set(['NONE']);
+            if (cfg.postgresUrl) archiveAllowed.add('POSTGRES');
+            if (cfg.crateDbUrl) archiveAllowed.add('CRATEDB');
+            if (cfg.mongoDbUrl) archiveAllowed.add('MONGODB');
+            if (cfg.sqlitePath) archiveAllowed.add('SQLITE');
+            if (cfg.kafkaServers) archiveAllowed.add('KAFKA');
+
+            const filterSelect = (id, allowed) => {
+                const select = document.getElementById(id);
+                if (!select) return;
+                for (const opt of Array.from(select.options)) {
+                    if (!allowed.has(opt.value)) opt.remove();
+                }
+            };
+
+            filterSelect('group-last-val-type', lastValAllowed);
+            filterSelect('group-archive-type', archiveAllowed);
+        } catch (e) {
+            console.warn('Failed to fetch broker config for storage filtering:', e);
         }
     }
 

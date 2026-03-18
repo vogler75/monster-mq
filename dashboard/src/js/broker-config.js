@@ -31,6 +31,7 @@ class BrokerConfigManager {
                         crateDbUrl crateDbUser
                         mongoDbUrl mongoDbDatabase
                         sqlitePath
+                        kafkaServers
                     }
                 }
             `;
@@ -126,6 +127,11 @@ class BrokerConfigManager {
         if (cfg.sqlitePath) {
             dbs.push({ name: 'SQLite', icon: '💾', items: [
                 { label: 'Path', value: cfg.sqlitePath, mono: true },
+            ]});
+        }
+        if (cfg.kafkaServers) {
+            dbs.push({ name: 'Kafka', icon: '📨', items: [
+                { label: 'Servers', value: cfg.kafkaServers, mono: true },
             ]});
         }
         const container = document.getElementById('cfg-db-list');
