@@ -70,6 +70,8 @@ class Monster(args: Array<String>) {
     private var configJson: JsonObject = JsonObject()
     private val archiveConfigsFile: String?
     private val archiveConfigsMergeFile: String?
+    private val deviceConfigsFile: String?
+    private val deviceConfigsMergeFile: String?
     var archiveHandler: ArchiveHandler? = null
 
     // Cluster manager reference for Vert.x 5 compatibility
@@ -313,6 +315,28 @@ class Monster(args: Array<String>) {
             exitProcess(1)
         }
 
+        // Device configs file (optional) - full sync: import from file, delete orphans
+        val deviceConfigsIndex = Utils.getArgIndex(args, listOf("-deviceConfigs", "--deviceConfigs"))
+        deviceConfigsFile = if (deviceConfigsIndex != -1 && deviceConfigsIndex + 1 < args.size) {
+            args[deviceConfigsIndex + 1]
+        } else {
+            null
+        }
+
+        // Device configs merge file (optional) - merge: import/update from file, keep existing
+        val deviceConfigsMergeIndex = Utils.getArgIndex(args, listOf("-deviceConfigsMerge", "--deviceConfigsMerge"))
+        deviceConfigsMergeFile = if (deviceConfigsMergeIndex != -1 && deviceConfigsMergeIndex + 1 < args.size) {
+            args[deviceConfigsMergeIndex + 1]
+        } else {
+            null
+        }
+
+        // Validate that both device import modes aren't specified simultaneously
+        if (deviceConfigsFile != null && deviceConfigsMergeFile != null) {
+            println("ERROR: -deviceConfigs and -deviceConfigsMerge cannot be used together")
+            exitProcess(1)
+        }
+
         Utils.getArgIndex(args, listOf("-log", "--log")).let {
             if (it != -1) {
                 val level = Level.parse(args[it + 1])
@@ -349,6 +373,78 @@ class Monster(args: Array<String>) {
             localSetup(builder)
     }
 
+    private fun loadDeviceConfigs(vertx: Vertx, store: at.rocworks.stores.IDeviceConfigStore, file: String, fullSync: Boolean) {
+        val mode = if (fullSync) "full sync" else "merge"
+        logger.fine("Loading device configurations from: $file (mode: $mode)")
+
+        vertx.fileSystem().readFile(file).onComplete { readResult ->
+            if (readResult.failed()) {
+                logger.severe("Failed to read device config file $file: ${readResult.cause()?.message}")
+                return@onComplete
+            }
+
+            try {
+                val jsonArray = JsonArray(readResult.result().toString())
+                if (jsonArray.isEmpty) {
+                    logger.warning("No device configurations found in $file")
+                    return@onComplete
+                }
+
+                // Convert JsonArray to List<Map> and force enabled=false for safety
+                val configs = jsonArray.filterIsInstance<JsonObject>().map { obj ->
+                    val map = obj.map.toMutableMap()
+                    map["enabled"] = false
+                    map
+                }
+
+                val importedNames = configs.mapNotNull { it["name"] as? String }.toSet()
+
+                store.importConfigs(configs).onComplete { importResult ->
+                    if (importResult.succeeded()) {
+                        val result = importResult.result()
+                        logger.fine("Imported ${result.imported} device configs from $file (failed: ${result.failed})")
+                        if (result.errors.isNotEmpty()) {
+                            result.errors.forEach { logger.warning("Device import error: $it") }
+                        }
+
+                        if (fullSync) {
+                            deleteOrphanDeviceConfigs(store, importedNames)
+                        }
+                    } else {
+                        logger.severe("Failed to import device configs from $file: ${importResult.cause()?.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                logger.severe("Failed to parse JSON from $file: ${e.message}")
+            }
+        }
+    }
+
+    private fun deleteOrphanDeviceConfigs(store: at.rocworks.stores.IDeviceConfigStore, importedNames: Set<String>) {
+        store.getAllDevices().onComplete { getAllResult ->
+            if (getAllResult.succeeded()) {
+                val orphanNames = getAllResult.result()
+                    .map { it.name }
+                    .filter { it !in importedNames }
+
+                if (orphanNames.isEmpty()) return@onComplete
+
+                orphanNames.forEach { name ->
+                    store.deleteDevice(name).onComplete { deleteResult ->
+                        if (deleteResult.succeeded() && deleteResult.result()) {
+                            logger.fine("Deleted orphan device config [$name] (full sync)")
+                        } else {
+                            logger.warning("Failed to delete orphan device config [$name]")
+                        }
+                    }
+                }
+                logger.fine("Full sync cleanup: deleting ${orphanNames.size} orphan device configs: $orphanNames")
+            } else {
+                logger.warning("Failed to get all devices for orphan cleanup: ${getAllResult.cause()?.message}")
+            }
+        }
+    }
+
     private fun printHelp() {
         println("""
 MonsterMQ - High-Performance MQTT Broker
@@ -369,6 +465,18 @@ OPTIONS:
                         Imports/updates groups from file, keeps existing groups
                         If ConfigStoreType is NONE: loads into memory
                         Cannot be used together with -archiveConfigs
+
+  -deviceConfigs <file> Load device configurations from a JSON file (full sync)
+                        Imports all devices from file, deletes devices not in file
+                        Requires ConfigStoreType to be set (not NONE)
+                        Imported devices are disabled by default
+
+  -deviceConfigsMerge <file>
+                        Load device configurations from a JSON file (merge)
+                        Imports/updates devices from file, keeps existing devices
+                        Requires ConfigStoreType to be set (not NONE)
+                        Imported devices are disabled by default
+                        Cannot be used together with -deviceConfigs
 
   -cluster              Enable Hazelcast clustering mode for multi-node deployment
 
@@ -738,6 +846,13 @@ MORE INFO:
                             } else {
                                 // Start Topic Schema Policy Cache after store is ready
                                 at.rocworks.schema.TopicSchemaPolicyCache(vertx, store).start()
+
+                                // Load device configs from file if specified
+                                val deviceConfigFile = deviceConfigsFile ?: deviceConfigsMergeFile
+                                if (deviceConfigFile != null && store != null) {
+                                    val fullSync = deviceConfigsFile != null
+                                    loadDeviceConfigs(vertx, store, deviceConfigFile, fullSync)
+                                }
                             }
                         }
                         store
@@ -746,6 +861,9 @@ MORE INFO:
                         null
                     }
                 } else {
+                    if (deviceConfigsFile != null || deviceConfigsMergeFile != null) {
+                        logger.warning("-deviceConfigs/-deviceConfigsMerge requires ConfigStoreType to be set (not NONE)")
+                    }
                     null
                 }
 
