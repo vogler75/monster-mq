@@ -154,6 +154,8 @@ For device integration guidance, see `plans/DEVICE_INTEGRATION.md`.
     - `js/` - Page-specific JavaScript
   - `dist/` - Build output (gitignored)
 
+**IMPORTANT**: Always edit dashboard files in `dashboard/src/`, NOT in `broker/src/main/resources/dashboard/`. The Vite build (`npm run build` or `./run -build`) copies the built output to `broker/src/main/resources/dashboard/`, so any direct edits there will be overwritten.
+
 ### HTTP Services and Ports
 
 | Service | Default Port | Description |

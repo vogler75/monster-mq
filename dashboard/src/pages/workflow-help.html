@@ -78,6 +78,12 @@
             font-weight: 600;
         }
 
+        .help-nav-list a[href^="#api-"] {
+            padding-left: 1.4rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
         .help-content {
             background: var(--background-secondary);
             padding: 2rem 2.5rem;
@@ -262,6 +268,13 @@
                     <li><a href="#outputs">Output Mappings</a></li>
                     <li><a href="#variables">Variables</a></li>
                     <li><a href="#script-api">Script API</a></li>
+                    <li><a href="#api-inputs">inputs</a></li>
+                    <li><a href="#api-msg">msg</a></li>
+                    <li><a href="#api-outputs">outputs</a></li>
+                    <li><a href="#api-state">state</a></li>
+                    <li><a href="#api-flow">flow</a></li>
+                    <li><a href="#api-console">console</a></li>
+                    <li><a href="#api-archive">archive</a></li>
                     <li><a href="#examples">Examples</a></li>
                     <li><a href="#troubleshooting">Troubleshooting</a></li>
                 </ul>
@@ -404,6 +417,7 @@
                         <li><code class="code-inline">state</code> - Persistent node-level storage</li>
                         <li><code class="code-inline">flow</code> - Flow instance variables</li>
                         <li><code class="code-inline">console</code> - Logging functions</li>
+                        <li><code class="code-inline">archive</code> - Query last values and historical data from archive stores</li>
                     </ul>
                 </section>
 
@@ -593,7 +607,7 @@ if (inputs.temp.value > threshold) {
                         Your node scripts execute in a JavaScript runtime with access to the following global objects and functions.
                     </p>
 
-                    <div class="api-section">
+                    <div id="api-inputs" class="api-section">
                         <div class="api-section-title">inputs Object</div>
                         <p>Access input values from MQTT topics or connected nodes:</p>
                         <ul class="property-list">
@@ -616,7 +630,7 @@ if (inputs.temp.value > threshold) {
                         </ul>
                     </div>
 
-                    <div class="api-section">
+                    <div id="api-msg" class="api-section">
                         <div class="api-section-title">msg Object</div>
                         <p>Shorthand for the triggering input message:</p>
                         <ul class="property-list">
@@ -635,7 +649,7 @@ if (inputs.temp.value > threshold) {
                         </ul>
                     </div>
 
-                    <div class="api-section">
+                    <div id="api-outputs" class="api-section">
                         <div class="api-section-title">outputs Object</div>
                         <p>Send data to output ports:</p>
                         <ul class="property-list">
@@ -646,7 +660,7 @@ if (inputs.temp.value > threshold) {
                         </ul>
                     </div>
 
-                    <div class="api-section">
+                    <div id="api-state" class="api-section">
                         <div class="api-section-title">state Object</div>
                         <p>Persistent node-level storage (survives across executions):</p>
                         <div class="code-block"><code>// Initialize on first run
@@ -666,7 +680,7 @@ if (state.values.length > 10) {
 </code></div>
                     </div>
 
-                    <div class="api-section">
+                    <div id="api-flow" class="api-section">
                         <div class="api-section-title">flow Object</div>
                         <p>Read-only instance variables (set via UI):</p>
                         <div class="code-block"><code>// Access variables
@@ -676,7 +690,7 @@ let location = flow.location;
 </code></div>
                     </div>
 
-                    <div class="api-section">
+                    <div id="api-console" class="api-section">
                         <div class="api-section-title">console Object</div>
                         <p>Logging functions:</p>
                         <ul class="property-list">
@@ -693,6 +707,120 @@ let location = flow.location;
                                 <div class="property-desc">Log error messages</div>
                             </li>
                         </ul>
+                    </div>
+
+                    <div id="api-archive" class="api-section">
+                        <div class="api-section-title">archive Object</div>
+                        <p>Query the broker's archive stores for last values and historical data. Requires an archive group to be configured (defaults to "Default").</p>
+
+                        <h4>archive.getLastValue(topic, archiveGroup?)</h4>
+                        <p>Get the last known value for a specific topic.</p>
+                        <ul class="property-list">
+                            <li>
+                                <div class="property-name">topic</div>
+                                <div class="property-desc">Exact MQTT topic name (string)</div>
+                            </li>
+                            <li>
+                                <div class="property-name">archiveGroup</div>
+                                <div class="property-desc">Optional archive group name (default: "Default")</div>
+                            </li>
+                            <li>
+                                <div class="property-name">Returns</div>
+                                <div class="property-desc"><code class="code-inline">{ topic, value, timestamp, qos }</code> or <code class="code-inline">null</code></div>
+                            </li>
+                        </ul>
+                        <div class="code-block"><code>const val = archive.getLastValue("sensors/temp1");
+if (val) {
+    console.log("Last value:", val.value, "at", val.timestamp);
+}</code></div>
+
+                        <h4>archive.getLastValues(topicFilter, limit?, archiveGroup?)</h4>
+                        <p>Get last values for topics matching a wildcard filter.</p>
+                        <ul class="property-list">
+                            <li>
+                                <div class="property-name">topicFilter</div>
+                                <div class="property-desc">Topic filter with wildcards, e.g. <code class="code-inline">"sensors/#"</code></div>
+                            </li>
+                            <li>
+                                <div class="property-name">limit</div>
+                                <div class="property-desc">Maximum results (default: 100)</div>
+                            </li>
+                            <li>
+                                <div class="property-name">Returns</div>
+                                <div class="property-desc">Array of <code class="code-inline">{ topic, value, timestamp, qos }</code></div>
+                            </li>
+                        </ul>
+                        <div class="code-block"><code>const values = archive.getLastValues("sensors/#", 50);
+console.log("Found", values.length, "topics");
+for (let i = 0; i &lt; values.length; i++) {
+    console.log(values[i].topic, "=", values[i].value);
+}</code></div>
+
+                        <h4>archive.getHistory(topicFilter, startTime?, endTime?, limit?, archiveGroup?)</h4>
+                        <p>Query historical messages for a topic within a time range.</p>
+                        <ul class="property-list">
+                            <li>
+                                <div class="property-name">topicFilter</div>
+                                <div class="property-desc">Topic name or wildcard filter</div>
+                            </li>
+                            <li>
+                                <div class="property-name">startTime / endTime</div>
+                                <div class="property-desc">ISO-8601 strings, e.g. <code class="code-inline">"2024-01-15T10:00:00Z"</code> (optional)</div>
+                            </li>
+                            <li>
+                                <div class="property-name">limit</div>
+                                <div class="property-desc">Maximum results (default: 100)</div>
+                            </li>
+                            <li>
+                                <div class="property-name">Returns</div>
+                                <div class="property-desc">Array of <code class="code-inline">{ topic, timestamp, qos, client_id, payload_json }</code></div>
+                            </li>
+                        </ul>
+                        <div class="code-block"><code>const history = archive.getHistory(
+    "sensors/temp1",
+    "2024-01-01T00:00:00Z",
+    null,  // no end time
+    50     // last 50 entries
+);
+console.log("History count:", history.length);</code></div>
+
+                        <h4>archive.getAggregatedHistory(topics, interval, startTime, endTime, functions?, fields?, archiveGroup?)</h4>
+                        <p>Get time-bucketed aggregated data for charting and analytics.</p>
+                        <ul class="property-list">
+                            <li>
+                                <div class="property-name">topics</div>
+                                <div class="property-desc">Array of exact topic strings (no wildcards)</div>
+                            </li>
+                            <li>
+                                <div class="property-name">interval</div>
+                                <div class="property-desc">Time bucket size: <code class="code-inline">"1m"</code>, <code class="code-inline">"5m"</code>, <code class="code-inline">"15m"</code>, <code class="code-inline">"1h"</code>, <code class="code-inline">"1d"</code></div>
+                            </li>
+                            <li>
+                                <div class="property-name">startTime / endTime</div>
+                                <div class="property-desc">ISO-8601 strings (required)</div>
+                            </li>
+                            <li>
+                                <div class="property-name">functions</div>
+                                <div class="property-desc">Array of <code class="code-inline">"AVG"</code>, <code class="code-inline">"MIN"</code>, <code class="code-inline">"MAX"</code>, <code class="code-inline">"COUNT"</code> (default: <code class="code-inline">["AVG"]</code>)</div>
+                            </li>
+                            <li>
+                                <div class="property-name">fields</div>
+                                <div class="property-desc">Optional JSON field paths, e.g. <code class="code-inline">["temperature", "sensor.value"]</code></div>
+                            </li>
+                            <li>
+                                <div class="property-name">Returns</div>
+                                <div class="property-desc"><code class="code-inline">{ columns: [...], rows: [[timestamp, val1, ...], ...] }</code></div>
+                            </li>
+                        </ul>
+                        <div class="code-block"><code>const agg = archive.getAggregatedHistory(
+    ["sensors/temp1", "sensors/temp2"],
+    "5m",
+    "2024-01-15T08:00:00Z",
+    "2024-01-15T12:00:00Z",
+    ["AVG", "MAX"]
+);
+console.log("Columns:", JSON.stringify(agg.columns));
+console.log("Rows:", agg.rows.length);</code></div>
                     </div>
                 </section>
 

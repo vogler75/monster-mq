@@ -166,6 +166,10 @@ class Monster(args: Array<String>) {
             return getInstance().sessionHandler
         }
 
+        fun getArchiveHandler(): ArchiveHandler? {
+            return getInstance().archiveHandler
+        }
+
         fun getVertx(): Vertx? {
             return getInstance().vertx
         }

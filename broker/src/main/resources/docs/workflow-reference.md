@@ -110,6 +110,7 @@ The node script is executed every time the node receives input. Your script has 
 - `state` - Persistent node-level storage
 - `flow` - Flow instance variables
 - `console` - Logging functions
+- `archive` - Query last values and historical data from archive stores
 
 ---
 
@@ -366,6 +367,71 @@ Logging functions:
 - `console.log(...args)` - Log informational messages
 - `console.warn(...args)` - Log warning messages
 - `console.error(...args)` - Log error messages
+
+### archive Object
+
+Query the broker's archive stores for last values and historical data. Requires a configured archive group (defaults to "Default").
+
+#### archive.getLastValue(topic, archiveGroup?)
+
+Get the last known value for a specific topic. Returns `{ topic, value, timestamp, qos }` or `null`.
+
+```javascript
+const val = archive.getLastValue("sensors/temp1");
+if (val) {
+    console.log("Last value:", val.value, "at", val.timestamp);
+}
+
+// Query a specific archive group
+const prodVal = archive.getLastValue("sensors/temp1", "Production");
+```
+
+#### archive.getLastValues(topicFilter, limit?, archiveGroup?)
+
+Get last values for topics matching a wildcard filter. Returns array of `{ topic, value, timestamp, qos }`.
+
+```javascript
+const values = archive.getLastValues("sensors/#", 50);
+for (let i = 0; i < values.length; i++) {
+    console.log(values[i].topic, "=", values[i].value);
+}
+```
+
+#### archive.getHistory(topicFilter, startTime?, endTime?, limit?, archiveGroup?)
+
+Query historical messages for a topic within a time range. Times are ISO-8601 strings. Returns array of `{ topic, timestamp, qos, client_id, payload_json }`.
+
+```javascript
+const history = archive.getHistory(
+    "sensors/temp1",
+    "2024-01-01T00:00:00Z",  // startTime (ISO-8601)
+    null,                      // endTime (null = now)
+    50                         // limit
+);
+console.log("History count:", history.length);
+```
+
+#### archive.getAggregatedHistory(topics, interval, startTime, endTime, functions?, fields?, archiveGroup?)
+
+Get time-bucketed aggregated data for charting and analytics. Returns `{ columns: [...], rows: [[timestamp, val1, ...], ...] }`.
+
+- **topics**: Array of exact topic strings (no wildcards)
+- **interval**: `"1m"`, `"5m"`, `"15m"`, `"1h"`, `"1d"`
+- **startTime/endTime**: ISO-8601 strings (required)
+- **functions**: Array of `"AVG"`, `"MIN"`, `"MAX"`, `"COUNT"` (default: `["AVG"]`)
+- **fields**: Optional JSON field paths, e.g. `["temperature", "sensor.value"]`
+
+```javascript
+const agg = archive.getAggregatedHistory(
+    ["sensors/temp1", "sensors/temp2"],
+    "5m",
+    "2024-01-15T08:00:00Z",
+    "2024-01-15T12:00:00Z",
+    ["AVG", "MAX"]
+);
+console.log("Columns:", JSON.stringify(agg.columns));
+console.log("Rows:", agg.rows.length);
+```
 
 ---
 
