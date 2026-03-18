@@ -103,6 +103,9 @@ class MessageArchiveMongoDB(
                         builder.connectTimeout(5, TimeUnit.SECONDS)
                         builder.readTimeout(10, TimeUnit.SECONDS)
                     }
+                    .applyToClusterSettings { builder ->
+                        builder.serverSelectionTimeout(5, TimeUnit.SECONDS)
+                    }
                     .build()
 
                 val newClient = MongoClients.create(settings)

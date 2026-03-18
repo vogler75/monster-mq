@@ -177,9 +177,9 @@ class ArchiveConfigStoreSQLite(
             try {
                 db.connection?.let { connection ->
                     connection.prepareStatement(sql).use { preparedStatement ->
-                        val lastValRetention = archiveGroup.getLastValRetentionMs()?.let { Utils.formatDuration(it) }
-                        val archiveRetention = archiveGroup.getArchiveRetentionMs()?.let { Utils.formatDuration(it) }
-                        val purgeInterval = archiveGroup.getPurgeIntervalMs()?.let { Utils.formatDuration(it) }
+                        val lastValRetention = archiveGroup.getLastValRetention()
+                        val archiveRetention = archiveGroup.getArchiveRetention()
+                        val purgeInterval = archiveGroup.getPurgeInterval()
 
                         preparedStatement.setString(1, archiveGroup.name)
                         preparedStatement.setInt(2, if (enabled) 1 else 0)

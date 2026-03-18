@@ -116,6 +116,9 @@ class MessageStoreMongoDB(
                         builder.connectTimeout(5, TimeUnit.SECONDS)
                         builder.readTimeout(10, TimeUnit.SECONDS)
                     }
+                    .applyToClusterSettings { builder ->
+                        builder.serverSelectionTimeout(5, TimeUnit.SECONDS)
+                    }
                     .writeConcern(WriteConcern.W1.withJournal(false)) // Faster writes
                     .build()
 

@@ -18,6 +18,7 @@ import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import org.bson.Document
 import org.bson.types.Binary
+import java.util.concurrent.Callable
 
 class SessionStoreMongoDB(
     private val connectionString: String,
@@ -40,7 +41,7 @@ class SessionStoreMongoDB(
 
     override fun start(startPromise: Promise<Void>) {
         try {
-            mongoClient = MongoClients.create(connectionString)
+            mongoClient = MongoClients.create(MongoClientSettingsFactory.createSettings(connectionString))
             database = mongoClient.getDatabase(databaseName)
 
             // Initialize collections
@@ -49,13 +50,21 @@ class SessionStoreMongoDB(
             queuedMessagesCollection = database.getCollection("queuedmessages")
             queuedMessagesClientsCollection = database.getCollection("queuedmessagesclients")
 
-            // Create indexes for faster queries
-            sessionsCollection.createIndex(Document("client_id", 1))
-            subscriptionsCollection.createIndex(Document("client_id", 1).append("topic", 1))
-            queuedMessagesCollection.createIndex(Document("client_id", 1))
-            queuedMessagesCollection.createIndex(Document("message_uuid", 1))  // For $lookup joins
-            queuedMessagesClientsCollection.createIndex(Document("client_id", 1))
-            queuedMessagesClientsCollection.createIndex(Document("client_id", 1).append("status", 1))
+            // Create indexes in background to avoid blocking the event loop
+            vertx.executeBlocking(Callable {
+                try {
+                    sessionsCollection.createIndex(Document("client_id", 1))
+                    subscriptionsCollection.createIndex(Document("client_id", 1).append("topic", 1))
+                    queuedMessagesCollection.createIndex(Document("client_id", 1))
+                    queuedMessagesCollection.createIndex(Document("message_uuid", 1))  // For $lookup joins
+                    queuedMessagesClientsCollection.createIndex(Document("client_id", 1))
+                    queuedMessagesClientsCollection.createIndex(Document("client_id", 1).append("status", 1))
+                    logger.info("MongoDB session store indexes created successfully")
+                } catch (e: Exception) {
+                    logger.warning("Failed to create indexes: ${e.message}")
+                }
+                null
+            })
 
             logger.fine("MongoDB connection established successfully.")
             startPromise.complete()

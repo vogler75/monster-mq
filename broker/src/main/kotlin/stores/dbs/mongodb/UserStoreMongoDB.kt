@@ -99,7 +99,7 @@ class UserStoreMongoDB(
 
         vertx.executeBlocking(Callable {
             try {
-                mongoClient = MongoClients.create(url)
+                mongoClient = MongoClients.create(MongoClientSettingsFactory.createSettings(url))
                 mongoDatabase = mongoClient!!.getDatabase(database)
                 usersCollection = mongoDatabase!!.getCollection(usersCollectionName)
                 usersAclCollection = mongoDatabase!!.getCollection(usersAclCollectionName)

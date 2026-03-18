@@ -48,7 +48,7 @@ class DeviceConfigStoreMongoDB(
         val promise = Promise.promise<Void>()
 
         try {
-            mongoClient = MongoClients.create(connectionString)
+            mongoClient = MongoClients.create(MongoClientSettingsFactory.createSettings(connectionString))
             database = mongoClient.getDatabase(databaseName)
 
             // Initialize collection
@@ -61,7 +61,6 @@ class DeviceConfigStoreMongoDB(
             deviceConfigsCollection.createIndex(Document("namespace", 1))
             deviceConfigsCollection.createIndex(Document("type", 1))
 
-            logger.info("DeviceConfigStoreMongoDB initialized successfully")
             promise.complete()
         } catch (e: Exception) {
             logger.severe("Failed to initialize DeviceConfigStoreMongoDB: ${e.message}")
@@ -358,7 +357,7 @@ class DeviceConfigStoreMongoDB(
                         logger.finer("Error closing old MongoDB connection: ${e.message}")
                     }
                     // Create new client
-                    mongoClient = MongoClients.create(connectionString)
+                    mongoClient = MongoClients.create(MongoClientSettingsFactory.createSettings(connectionString))
                     database = mongoClient.getDatabase(databaseName)
                     deviceConfigsCollection = database.getCollection(COLLECTION_NAME)
                     logger.info("Successfully reconnected to MongoDB")
