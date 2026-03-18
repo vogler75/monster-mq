@@ -180,7 +180,9 @@ class AgentMutations(
             memoryWindowSize = (input["memoryWindowSize"] as? Number)?.toInt() ?: 20,
             stateEnabled = input["stateEnabled"] as? Boolean ?: true,
             mcpServers = parseStringList(input["mcpServers"]),
-            useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: false
+            useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: false,
+            contextLastvalTopics = parseContextLastvalTopics(input["contextLastvalTopics"]),
+            contextRetainedTopics = parseStringList(input["contextRetainedTopics"])
         )
 
         return DeviceConfig(
@@ -216,7 +218,9 @@ class AgentMutations(
             memoryWindowSize = (input["memoryWindowSize"] as? Number)?.toInt() ?: existingConfig.memoryWindowSize,
             stateEnabled = input["stateEnabled"] as? Boolean ?: existingConfig.stateEnabled,
             mcpServers = if (input.containsKey("mcpServers")) parseStringList(input["mcpServers"]) else existingConfig.mcpServers,
-            useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: existingConfig.useMonsterMqMcp
+            useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: existingConfig.useMonsterMqMcp,
+            contextLastvalTopics = if (input.containsKey("contextLastvalTopics")) parseContextLastvalTopics(input["contextLastvalTopics"]) else existingConfig.contextLastvalTopics,
+            contextRetainedTopics = if (input.containsKey("contextRetainedTopics")) parseStringList(input["contextRetainedTopics"]) else existingConfig.contextRetainedTopics
         )
 
         return existing.copy(
@@ -245,6 +249,18 @@ class AgentMutations(
     private fun parseStringList(raw: Any?): List<String> {
         if (raw == null) return emptyList()
         return (raw as? List<String>) ?: emptyList()
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parseContextLastvalTopics(raw: Any?): Map<String, List<String>> {
+        if (raw == null) return emptyMap()
+        val map = raw as? Map<String, Any> ?: return emptyMap()
+        return map.mapValues { (_, v) ->
+            when (v) {
+                is List<*> -> v.filterIsInstance<String>()
+                else -> emptyList()
+            }
+        }
     }
 
     private fun notifyConfigChange(operation: String, device: DeviceConfig) {

@@ -21,7 +21,9 @@ data class AgentConfig(
     val memoryWindowSize: Int = 20,
     val stateEnabled: Boolean = true,
     val mcpServers: List<String> = emptyList(),
-    val useMonsterMqMcp: Boolean = false
+    val useMonsterMqMcp: Boolean = false,
+    val contextLastvalTopics: Map<String, List<String>> = emptyMap(),  // archiveGroup -> list of topic filters
+    val contextRetainedTopics: List<String> = emptyList()       // topic filters for retained messages
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): AgentConfig {
@@ -43,7 +45,13 @@ data class AgentConfig(
                 memoryWindowSize = json.getInteger("memoryWindowSize", 20),
                 stateEnabled = json.getBoolean("stateEnabled", true),
                 mcpServers = json.getJsonArray("mcpServers", JsonArray()).filterIsInstance<String>().toList(),
-                useMonsterMqMcp = json.getBoolean("useMonsterMqMcp", false)
+                useMonsterMqMcp = json.getBoolean("useMonsterMqMcp", false),
+                contextLastvalTopics = json.getJsonObject("contextLastvalTopics", JsonObject()).let { obj ->
+                    obj.fieldNames().associateWith { key ->
+                        obj.getJsonArray(key, JsonArray()).filterIsInstance<String>()
+                    }
+                },
+                contextRetainedTopics = json.getJsonArray("contextRetainedTopics", JsonArray()).filterIsInstance<String>().toList()
             )
         }
     }
@@ -68,6 +76,10 @@ data class AgentConfig(
             .put("stateEnabled", stateEnabled)
             .put("mcpServers", JsonArray(mcpServers))
             .put("useMonsterMqMcp", useMonsterMqMcp)
+            .put("contextLastvalTopics", JsonObject().also { obj ->
+                contextLastvalTopics.forEach { (group, topics) -> obj.put(group, JsonArray(topics)) }
+            })
+            .put("contextRetainedTopics", JsonArray(contextRetainedTopics))
     }
 }
 

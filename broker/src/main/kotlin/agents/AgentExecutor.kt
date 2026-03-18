@@ -279,6 +279,45 @@ class AgentExecutor(
             .build()
     }
 
+    private fun buildContextData(): String {
+        val lines = mutableListOf<String>()
+
+        // Fetch from archive last-value stores
+        if (agentConfig.contextLastvalTopics.isNotEmpty()) {
+            val archiveGroups = Monster.getArchiveHandler()?.getDeployedArchiveGroups() ?: emptyMap()
+            for ((groupName, topicFilters) in agentConfig.contextLastvalTopics) {
+                val store = archiveGroups[groupName]?.lastValStore ?: continue
+                for (filter in topicFilters) {
+                    store.findMatchingMessages(filter) { msg ->
+                        val value = msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
+                        lines.add("[Archive:$groupName] ${msg.topicName} = $value (${msg.time})")
+                        lines.size < 500 // safety limit
+                    }
+                }
+            }
+        }
+
+        // Fetch retained messages
+        if (agentConfig.contextRetainedTopics.isNotEmpty()) {
+            val retainedStore = Monster.getRetainedStore()
+            if (retainedStore != null) {
+                for (filter in agentConfig.contextRetainedTopics) {
+                    retainedStore.findMatchingMessages(filter) { msg ->
+                        val value = msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
+                        lines.add("[Retained] ${msg.topicName} = $value")
+                        lines.size < 500
+                    }
+                }
+            }
+        }
+
+        if (lines.isEmpty()) return ""
+
+        return "--- Context Data (current values for your reference) ---\n" +
+            lines.joinToString("\n") +
+            "\n--- End Context Data ---"
+    }
+
     private fun handleMqttMessage(msg: BrokerMessage) {
         val payloadStr = msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
         val userMessage = "[Topic: ${msg.topicName}] $payloadStr"
@@ -293,7 +332,13 @@ class AgentExecutor(
 
         vertx.executeBlocking {
             llmCalls.incrementAndGet()
-            service.chat(userMessage)
+            val contextData = buildContextData()
+            val fullMessage = if (contextData.isNotBlank()) {
+                "$contextData\n\n$userMessage"
+            } else {
+                userMessage
+            }
+            service.chat(fullMessage)
         }.onComplete { result ->
             if (result.succeeded()) {
                 val chatResult = result.result()

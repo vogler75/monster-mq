@@ -66,6 +66,8 @@ class AgentDetailManager {
         document.getElementById('agent-input-topics').value = '';
         document.getElementById('agent-output-topics').value = '';
         document.getElementById('agent-system-prompt').value = '';
+        document.getElementById('agent-context-lastval-topics').value = '';
+        document.getElementById('agent-context-retained').value = '';
 
         // Update save button label
         const saveBtn = document.getElementById('save-agent-btn');
@@ -83,6 +85,7 @@ class AgentDetailManager {
         document.getElementById('provider-section').style.display = 'block';
         document.getElementById('mcp-section').style.display = 'block';
         document.getElementById('trigger-section').style.display = 'block';
+        document.getElementById('context-section').style.display = 'block';
         document.getElementById('prompt-section').style.display = 'block';
 
         // Update model placeholder
@@ -148,6 +151,17 @@ class AgentDetailManager {
         }).join('');
     }
 
+    parseContextLastvalTopics() {
+        const raw = document.getElementById('agent-context-lastval-topics').value.trim();
+        if (!raw) return null;
+        try {
+            return JSON.parse(raw);
+        } catch (e) {
+            this.showError('Invalid JSON in Lastval Message Topics: ' + e.message);
+            return null;
+        }
+    }
+
     getSelectedMcpServers() {
         return Array.from(document.querySelectorAll('.mcp-server-checkbox:checked')).map(cb => cb.value);
     }
@@ -180,6 +194,8 @@ class AgentDetailManager {
                         stateEnabled
                         mcpServers
                         useMonsterMqMcp
+                        contextLastvalTopics
+                        contextRetainedTopics
                         createdAt
                         updatedAt
                     }
@@ -240,6 +256,10 @@ class AgentDetailManager {
         document.getElementById('agent-use-monstermq-mcp').checked = d.useMonsterMqMcp || false;
         this.renderMcpServerCheckboxes(d.mcpServers || []);
 
+        // Populate Context Data
+        document.getElementById('agent-context-lastval-topics').value = d.contextLastvalTopics ? JSON.stringify(d.contextLastvalTopics, null, 2) : '';
+        document.getElementById('agent-context-retained').value = (d.contextRetainedTopics || []).join('\n');
+
         // Populate System Prompt
         document.getElementById('agent-system-prompt').value = d.systemPrompt || '';
 
@@ -262,6 +282,7 @@ class AgentDetailManager {
         document.getElementById('provider-section').style.display = 'block';
         document.getElementById('mcp-section').style.display = 'block';
         document.getElementById('trigger-section').style.display = 'block';
+        document.getElementById('context-section').style.display = 'block';
         document.getElementById('prompt-section').style.display = 'block';
         document.getElementById('timestamps-section').style.display = 'block';
 
@@ -293,7 +314,10 @@ class AgentDetailManager {
             inputTopics: inputTopics,
             outputTopics: outputTopics,
             mcpServers: this.getSelectedMcpServers(),
-            useMonsterMqMcp: document.getElementById('agent-use-monstermq-mcp').checked
+            useMonsterMqMcp: document.getElementById('agent-use-monstermq-mcp').checked,
+            contextLastvalTopics: this.parseContextLastvalTopics(),
+            contextRetainedTopics: document.getElementById('agent-context-retained').value
+                .split('\n').map(t => t.trim()).filter(t => t.length > 0)
         };
 
         const apiKey = document.getElementById('agent-api-key').value;

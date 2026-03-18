@@ -80,6 +80,7 @@ class Monster(args: Array<String>) {
     private var vertx: Vertx? = null
     private var sessionHandler: SessionHandler? = null
     private var messageBus: IMessageBus? = null
+    private var retainedStore: IMessageStore? = null
 
     private val postgresConfig = object {
         var url: String = ""
@@ -171,6 +172,10 @@ class Monster(args: Array<String>) {
 
         fun getArchiveHandler(): ArchiveHandler? {
             return getInstance().archiveHandler
+        }
+
+        fun getRetainedStore(): IMessageStore? {
+            return getInstance().retainedStore
         }
 
         fun getVertx(): Vertx? {
@@ -795,6 +800,7 @@ MORE INFO:
 
             // Retained messages
             val (retainedStore, retainedReady) = getMessageStore(vertx, "RetainedMessages", retainedStoreType)
+            this.retainedStore = retainedStore
 
             // Archive groups
             val archiveHandler = ArchiveHandler(vertx, configJson, archiveConfigsFile, archiveConfigsMergeFile, isClustered)

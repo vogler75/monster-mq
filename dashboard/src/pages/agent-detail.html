@@ -217,6 +217,32 @@
                 </div>
             </div>
 
+            <!-- Context Data Section -->
+            <div class="section-card" id="context-section" style="display:none;">
+                <div class="section-header">
+                    <div class="section-title"><h2>Context Data</h2></div>
+                </div>
+                <div class="section-content">
+                    <small style="color: var(--text-muted); margin-bottom: 1rem; display: block;">
+                        Define topics whose current values are fetched and included in the agent's context on every invocation.
+                    </small>
+                    <div class="form-group">
+                        <label for="agent-context-lastval-topics">Lastval Message Topics</label>
+                        <textarea id="agent-context-lastval-topics" rows="4" placeholder='{"Default": ["sensors/#"], "SCADA": ["enterprise/+/value"]}' style="font-family: monospace; font-size: 0.85rem;"></textarea>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                            JSON mapping archive group names to topic filters, e.g. <code>{"Default": ["sensors/#"], "SCADA": ["enterprise/+/value"]}</code>. Last values from each group's store are included as context.
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <label for="agent-context-retained">Retained Message Topics</label>
+                        <textarea id="agent-context-retained" rows="3" placeholder="One topic per line&#10;e.g., config/limits&#10;     status/+/health"></textarea>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                            Topic filters for retained messages (one per line). Current retained values are included as context.
+                        </small>
+                    </div>
+                </div>
+            </div>
+
             <!-- System Prompt Section -->
             <div class="section-card" id="prompt-section" style="display:none;">
                 <div class="section-header">
