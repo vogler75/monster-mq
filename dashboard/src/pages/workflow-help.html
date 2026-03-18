@@ -275,6 +275,7 @@
                     <li><a href="#api-flow">flow</a></li>
                     <li><a href="#api-console">console</a></li>
                     <li><a href="#api-archive">archive</a></li>
+                    <li><a href="#api-dbs">dbs</a></li>
                     <li><a href="#examples">Examples</a></li>
                     <li><a href="#troubleshooting">Troubleshooting</a></li>
                 </ul>
@@ -418,6 +419,7 @@
                         <li><code class="code-inline">flow</code> - Flow instance variables</li>
                         <li><code class="code-inline">console</code> - Logging functions</li>
                         <li><code class="code-inline">archive</code> - Query last values and historical data from archive stores</li>
+                        <li><code class="code-inline">dbs</code> - Access database nodes for SQL queries</li>
                     </ul>
                 </section>
 
@@ -821,6 +823,77 @@ console.log("History count:", history.length);</code></div>
 );
 console.log("Columns:", JSON.stringify(agg.columns));
 console.log("Rows:", agg.rows.length);</code></div>
+                    </div>
+                </section>
+
+                    <div id="api-dbs" class="api-section">
+                        <div class="api-section-title">dbs Object</div>
+                        <p>Access database nodes defined in the flow. Database nodes allow executing SQL queries against external databases (PostgreSQL, MySQL, SQLite, etc.) from within your flow scripts.</p>
+
+                        <h4>dbs.get(nodeId)</h4>
+                        <p>Get a database node proxy by its node ID. Returns a database proxy object, or <code class="code-inline">null</code> if the node doesn't exist.</p>
+                        <div class="code-block"><code>const db = dbs.get("my-database-node");</code></div>
+
+                        <h4>db.open()</h4>
+                        <p>Open the database connection. Returns <code class="code-inline">true</code> on success, <code class="code-inline">false</code> on failure. The connection is automatically opened on the first <code class="code-inline">execute()</code> call if not already open.</p>
+                        <div class="code-block"><code>const db = dbs.get("my-database-node");
+db.open();</code></div>
+
+                        <h4>db.execute(sql, arguments?)</h4>
+                        <p>Execute a SQL query with optional parameterized arguments. Returns a result object.</p>
+                        <div class="property-list">
+                            <div class="property-item">
+                                <div class="property-name">sql</div>
+                                <div class="property-desc">SQL string with <code class="code-inline">?</code> placeholders for parameters</div>
+                            </div>
+                            <div class="property-item">
+                                <div class="property-name">arguments</div>
+                                <div class="property-desc">Optional array of parameter values</div>
+                            </div>
+                        </div>
+                        <p><strong>SELECT queries</strong> return <code class="code-inline">{ success, rows }</code> where rows[0] = column names, rows[1] = column types, rows[2..n] = data rows.</p>
+                        <p><strong>INSERT/UPDATE/DELETE</strong> return <code class="code-inline">{ success, affectedRows }</code>.</p>
+                        <p><strong>On error</strong> returns <code class="code-inline">{ success: false, error: "message" }</code>.</p>
+                        <div class="code-block"><code>const db = dbs.get("my-database-node");
+
+// Query with parameters
+const result = db.execute("SELECT * FROM sensors WHERE location = ?", ["warehouse"]);
+if (result.success) {
+    const columnNames = result.rows[0];  // First row is column names
+    const columnTypes = result.rows[1];  // Second row is column types
+    for (let i = 2; i < result.rows.length; i++) {
+        console.log("Row:", JSON.stringify(result.rows[i]));
+    }
+}
+
+// Insert with parameters
+const insert = db.execute(
+    "INSERT INTO readings (topic, value, ts) VALUES (?, ?, ?)",
+    [msg.topic, msg.value, new Date().toISOString()]
+);
+console.log("Inserted rows:", insert.affectedRows);</code></div>
+
+                        <h4>db.close()</h4>
+                        <p>Close the database connection. Call this when you're done to free resources.</p>
+                        <div class="code-block"><code>db.close();</code></div>
+
+                        <h4>Database Node Configuration</h4>
+                        <p>Database nodes require the following configuration in the flow visual editor:</p>
+                        <div class="property-list">
+                            <div class="property-item">
+                                <div class="property-name">jdbcUrl</div>
+                                <div class="property-desc">JDBC connection string (e.g., <code class="code-inline">jdbc:postgresql://localhost:5432/mydb</code>)</div>
+                            </div>
+                            <div class="property-item">
+                                <div class="property-name">username</div>
+                                <div class="property-desc">Database username</div>
+                            </div>
+                            <div class="property-item">
+                                <div class="property-name">password</div>
+                                <div class="property-desc">Database password</div>
+                            </div>
+                        </div>
+                        <p>The JDBC driver is automatically inferred from the URL.</p>
                     </div>
                 </section>
 
