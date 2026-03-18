@@ -1,0 +1,91 @@
+# =======================
+# AI Agent Types
+# =======================
+
+type Agent {
+    name: String!
+    description: String
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean!
+    skills: [AgentSkill!]!
+    inputTopics: [String!]!
+    outputTopics: [String!]!
+    triggerType: String!
+    cronExpression: String
+    cronIntervalMs: Long
+    provider: String
+    model: String
+    systemPrompt: String
+    maxTokens: Int
+    temperature: Float
+    maxToolIterations: Int
+    memoryWindowSize: Int
+    stateEnabled: Boolean!
+    createdAt: String!
+    updatedAt: String!
+}
+
+type AgentSkill {
+    name: String!
+    description: String!
+    inputSchema: JSON
+}
+
+# =======================
+# AI Agent Input Types
+# =======================
+
+input AgentInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    description: String
+    skills: [AgentSkillInput!]
+    inputTopics: [String!]
+    outputTopics: [String!]
+    triggerType: String
+    cronExpression: String
+    cronIntervalMs: Long
+    provider: String
+    model: String
+    apiKey: String
+    systemPrompt: String
+    maxTokens: Int
+    temperature: Float
+    maxToolIterations: Int
+    memoryWindowSize: Int
+    stateEnabled: Boolean
+    enabled: Boolean
+}
+
+input AgentSkillInput {
+    name: String!
+    description: String!
+    inputSchema: JSON
+}
+
+# =======================
+# AI Agent Mutations
+# =======================
+
+type AgentMutations {
+    create(input: AgentInput!): Agent!
+    update(name: String!, input: AgentInput!): Agent!
+    delete(name: String!): Boolean!
+    start(name: String!): Agent!
+    stop(name: String!): Agent!
+}
+
+# =======================
+# AI Agent Queries
+# =======================
+
+extend type Query {
+    agents(nodeId: String, enabled: Boolean): [Agent!]!
+    agent(name: String!): Agent
+}
+
+extend type Mutation {
+    agent: AgentMutations
+}

@@ -34,6 +34,7 @@ data class DeviceConfig(
         const val DEVICE_TYPE_FLOW_OBJECT = "Flow-Object"
         const val DEVICE_TYPE_TOPIC_SCHEMA_POLICY = "TopicSchema-Policy"
         const val DEVICE_TYPE_TOPIC_NAMESPACE = "TopicNamespace"
+        const val DEVICE_TYPE_AGENT = "Agent"
 
         fun fromJsonObject(json: JsonObject): DeviceConfig {
             return DeviceConfig(

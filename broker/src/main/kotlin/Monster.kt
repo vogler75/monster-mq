@@ -849,7 +849,7 @@ MORE INFO:
 
                                 // Load device configs from file if specified
                                 val deviceConfigFile = deviceConfigsFile ?: deviceConfigsMergeFile
-                                if (deviceConfigFile != null && store != null) {
+                                if (deviceConfigFile != null) {
                                     val fullSync = deviceConfigsFile != null
                                     loadDeviceConfigs(vertx, store, deviceConfigFile, fullSync)
                                 }
@@ -1145,6 +1145,17 @@ MORE INFO:
                         val flowEngineExtension = FlowEngineExtension()
                         val flowEngineDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(flowEngineExtension, flowEngineDeploymentOptions)
+                    }
+                    .compose {
+                        // Agent Extension
+                        val agentExtension = at.rocworks.agents.AgentExtension()
+                        val agentDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(agentExtension, agentDeploymentOptions)
+                            .recover { error ->
+                                // Non-fatal: agents are optional
+                                logger.warning("AgentExtension not started: ${error.message}")
+                                Future.succeededFuture<String>()
+                            }
                     }
                     .compose {
                         if (metricsCollector != null) {

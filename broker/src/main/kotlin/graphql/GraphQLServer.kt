@@ -38,6 +38,8 @@ import at.rocworks.graphql.SparkplugBDecoderQueries
 import at.rocworks.graphql.SparkplugBDecoderMutations
 import at.rocworks.graphql.FlowQueries
 import at.rocworks.graphql.FlowMutations
+import at.rocworks.graphql.AgentQueries
+import at.rocworks.graphql.AgentMutations
 import at.rocworks.graphql.TopicSchemaQueries
 import at.rocworks.graphql.TopicSchemaMutations
 import at.rocworks.schema.TopicSchemaPolicyCache
@@ -256,7 +258,8 @@ class GraphQLServer(
             "schema-flows.graphqls",       // Flow Engine types and operations
             "schema-sparkplugb-decoder.graphqls", // SparkplugB Decoder device types and operations
             "schema-genai.graphqls",       // GenAI integration
-            "schema-topic-schema.graphqls" // Topic Schema Governance
+            "schema-topic-schema.graphqls", // Topic Schema Governance
+            "schema-agents.graphqls"       // AI Agents
         )
 
         return schemaFiles.joinToString("\n") { filename ->
@@ -385,6 +388,10 @@ class GraphQLServer(
             TopicSchemaMutations(deviceStore, topicSchemaPolicyCache)
         } else null
 
+        // Initialize AI Agent resolvers
+        val agentQueries = deviceStore?.let { AgentQueries(vertx, it) }
+        val agentMutations = deviceStore?.let { AgentMutations(vertx, it) }
+
         // Initialize GenAI resolver (with archiveHandler for topic analysis)
         val genAiResolver = genAiProvider?.let { GenAiResolver(vertx, it, archiveHandler) }
 
@@ -508,6 +515,13 @@ class GraphQLServer(
                             dataFetcher("flowClasses", resolver.flowClasses())
                             dataFetcher("flowInstances", resolver.flowInstances())
                             dataFetcher("flowNodeTypes", resolver.flowNodeTypes())
+                        }
+                    }
+                    // AI Agent queries
+                    .apply {
+                        agentQueries?.let { resolver ->
+                            dataFetcher("agents", resolver.agents())
+                            dataFetcher("agent", resolver.agent())
                         }
                     }
                     // GenAI queries
@@ -705,6 +719,16 @@ class GraphQLServer(
                     .apply {
                         topicSchemaMutations?.let { _ ->
                             dataFetcher("topicNamespace") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
+                    // AI Agent mutations - grouped under agent
+                    .apply {
+                        agentMutations?.let { _ ->
+                            dataFetcher("agent") { env ->
                                 val result = authContext.validateFieldAccess(env)
                                 if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
                                 emptyMap<String, Any>()
@@ -1103,6 +1127,18 @@ class GraphQLServer(
                 builder
                     .dataFetcher("metrics", metricsResolver.opcUaDeviceMetricsField())
                     .dataFetcher("metricsHistory", metricsResolver.opcUaDeviceMetricsHistoryField())
+            }
+            // Register Agent Mutations type
+            .type("AgentMutations") { builder ->
+                builder.apply {
+                    agentMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createAgent())
+                        dataFetcher("update", resolver.updateAgent())
+                        dataFetcher("delete", resolver.deleteAgent())
+                        dataFetcher("start", resolver.startAgent())
+                        dataFetcher("stop", resolver.stopAgent())
+                    }
+                }
             }
             .build()
     }

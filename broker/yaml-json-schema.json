@@ -436,9 +436,38 @@
           "type": "string",
           "description": "Path to documentation directory containing markdown files for context",
           "default": "docs"
+        },
+        "Providers": {
+          "type": "object",
+          "description": "Per-provider API keys for AI agents (used when agents don't specify their own API key)",
+          "properties": {
+            "Gemini": {
+              "type": "object",
+              "properties": {
+                "ApiKey": { "type": "string", "description": "Gemini API key (supports ${ENV_VAR} syntax)" }
+              }
+            },
+            "Claude": {
+              "type": "object",
+              "properties": {
+                "ApiKey": { "type": "string", "description": "Anthropic API key (supports ${ENV_VAR} syntax)" }
+              }
+            },
+            "OpenAI": {
+              "type": "object",
+              "properties": {
+                "ApiKey": { "type": "string", "description": "OpenAI API key (supports ${ENV_VAR} syntax)" }
+              }
+            },
+            "Ollama": {
+              "type": "object",
+              "properties": {
+                "BaseUrl": { "type": "string", "description": "Ollama base URL (e.g., http://localhost:11434)", "default": "http://localhost:11434" }
+              }
+            }
+          }
         }
-      },
-      "required": ["ApiKey"]
+      }
     },
     "ArchiveGroups": {
       "type": "array",
