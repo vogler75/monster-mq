@@ -105,7 +105,7 @@ Oa4jBridge:
     - "_online.._stime"   # -> "stime" in JSON
     - "_online.._status"  # -> "status" in JSON
 
-# Archive group examples (import via -archiveConfig or GraphQL mutations)
+# Archive group examples (import via -archiveConfigs/-archiveConfigsMerge or GraphQL mutations)
 ArchiveGroups:
   - Name: Default
     Enabled: true

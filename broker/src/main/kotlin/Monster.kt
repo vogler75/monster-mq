@@ -33,6 +33,7 @@ import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
 import io.vertx.core.*
 // VertxInternal removed in Vert.x 5 - using alternative approaches
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import com.hazelcast.config.Config
@@ -67,7 +68,8 @@ class Monster(args: Array<String>) {
 
     private val configFile: String
     private var configJson: JsonObject = JsonObject()
-    private val archiveConfigFile: String?
+    private val archiveConfigsFile: String?
+    private val archiveConfigsMergeFile: String?
     var archiveHandler: ArchiveHandler? = null
 
     // Cluster manager reference for Vert.x 5 compatibility
@@ -289,12 +291,26 @@ class Monster(args: Array<String>) {
             System.getenv("GATEWAY_CONFIG") ?: "config.yaml"
         }
 
-        // Archive config file (optional)
-        val archiveConfigIndex = Utils.getArgIndex(args, listOf("-archiveConfig", "--archiveConfig"))
-        archiveConfigFile = if (archiveConfigIndex != -1 && archiveConfigIndex + 1 < args.size) {
-            args[archiveConfigIndex + 1]
+        // Archive configs file (optional) - full sync: import from file, delete orphans
+        val archiveConfigsIndex = Utils.getArgIndex(args, listOf("-archiveConfigs", "--archiveConfigs"))
+        archiveConfigsFile = if (archiveConfigsIndex != -1 && archiveConfigsIndex + 1 < args.size) {
+            args[archiveConfigsIndex + 1]
         } else {
             null
+        }
+
+        // Archive configs merge file (optional) - merge: import/update from file, keep existing
+        val archiveConfigsMergeIndex = Utils.getArgIndex(args, listOf("-archiveConfigsMerge", "--archiveConfigsMerge"))
+        archiveConfigsMergeFile = if (archiveConfigsMergeIndex != -1 && archiveConfigsMergeIndex + 1 < args.size) {
+            args[archiveConfigsMergeIndex + 1]
+        } else {
+            null
+        }
+
+        // Validate that both import modes aren't specified simultaneously
+        if (archiveConfigsFile != null && archiveConfigsMergeFile != null) {
+            println("ERROR: -archiveConfigs and -archiveConfigsMerge cannot be used together")
+            exitProcess(1)
         }
 
         Utils.getArgIndex(args, listOf("-log", "--log")).let {
@@ -344,9 +360,15 @@ OPTIONS:
   -config <file>        Configuration file path (default: config.yaml)
                         Environment: GATEWAY_CONFIG
 
-  -archiveConfig <file> Load ArchiveGroups from separate YAML file
-                        If ConfigStoreType is set: imports to database
-                        Otherwise: merges with main config in memory
+  -archiveConfigs <file> Load ArchiveGroups from a JSON file (full sync)
+                        Imports all groups from file, deletes groups not in file
+                        If ConfigStoreType is NONE: loads into memory
+
+  -archiveConfigsMerge <file>
+                        Load ArchiveGroups from a JSON file (merge)
+                        Imports/updates groups from file, keeps existing groups
+                        If ConfigStoreType is NONE: loads into memory
+                        Cannot be used together with -archiveConfigs
 
   -cluster              Enable Hazelcast clustering mode for multi-node deployment
 
@@ -668,7 +690,7 @@ MORE INFO:
             val (retainedStore, retainedReady) = getMessageStore(vertx, "RetainedMessages", retainedStoreType)
 
             // Archive groups
-            val archiveHandler = ArchiveHandler(vertx, configJson, archiveConfigFile, isClustered)
+            val archiveHandler = ArchiveHandler(vertx, configJson, archiveConfigsFile, archiveConfigsMergeFile, isClustered)
             val archiveGroupsFuture = archiveHandler.initialize()
 
             // Wait for all stores to be ready

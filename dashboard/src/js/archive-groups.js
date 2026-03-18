@@ -230,6 +230,57 @@ class ArchiveGroupsManager {
         }
     }
 
+    async exportArchiveGroups() {
+        try {
+            const result = await window.graphqlClient.query(`
+                query GetArchiveGroups {
+                    archiveGroups {
+                        name
+                        enabled
+                        topicFilter
+                        retainedOnly
+                        lastValType
+                        archiveType
+                        payloadFormat
+                        lastValRetention
+                        archiveRetention
+                        purgeInterval
+                    }
+                }
+            `);
+
+            const groups = (result.archiveGroups || []).map(g => {
+                const obj = {
+                    Name: g.name,
+                    Enabled: g.enabled,
+                    TopicFilter: g.topicFilter,
+                    RetainedOnly: g.retainedOnly,
+                    LastValType: g.lastValType,
+                    ArchiveType: g.archiveType,
+                    PayloadFormat: g.payloadFormat
+                };
+                if (g.lastValRetention) obj.LastValRetention = g.lastValRetention;
+                if (g.archiveRetention) obj.ArchiveRetention = g.archiveRetention;
+                if (g.purgeInterval) obj.PurgeInterval = g.purgeInterval;
+                return obj;
+            });
+
+            const json = JSON.stringify(groups, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'archive-groups.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error exporting archive groups:', error);
+            this.showError('Failed to export archive groups: ' + error.message);
+        }
+    }
+
     showError(message) {
         alert('Error: ' + message);
     }
