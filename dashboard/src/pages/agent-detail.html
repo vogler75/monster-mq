@@ -91,13 +91,17 @@
                                 <input type="text" id="agent-namespace" required>
                             </div>
                             <div class="form-group">
+                                <label for="agent-version">Version</label>
+                                <input type="text" id="agent-version" value="1.0.0" placeholder="1.0.0">
+                            </div>
+                            <div class="form-group">
                                 <label for="agent-node">Cluster Node</label>
                                 <select id="agent-node">
                                     <option value="*">* (Any Node)</option>
                                 </select>
                             </div>
-                            <div class="form-group">
-                                <div class="checkbox-group">
+                            <div class="form-group" style="display: flex; flex-direction: column; justify-content: flex-end;">
+                                <div class="checkbox-group" style="height: 2.5rem; display: flex; align-items: center;">
                                     <input type="checkbox" id="agent-enabled">
                                     <label for="agent-enabled">Enabled</label>
                                 </div>

@@ -83,6 +83,7 @@ class AgentQueries(
             return mapOf(
                 "name" to device.name,
                 "description" to agentConfig.description,
+                "version" to agentConfig.version,
                 "namespace" to device.namespace,
                 "nodeId" to device.nodeId,
                 "enabled" to device.enabled,

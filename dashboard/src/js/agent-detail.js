@@ -51,6 +51,7 @@ class AgentDetailManager {
         document.getElementById('agent-name').value = '';
         document.getElementById('agent-name').disabled = false;
         document.getElementById('agent-namespace').value = '';
+        document.getElementById('agent-version').value = '1.0.0';
         document.getElementById('agent-node').value = '*';
         document.getElementById('agent-description').value = '';
         document.getElementById('agent-enabled').checked = true;
@@ -176,6 +177,7 @@ class AgentDetailManager {
                     agent(name: $name) {
                         name
                         description
+                        version
                         namespace
                         nodeId
                         enabled
@@ -232,6 +234,7 @@ class AgentDetailManager {
         document.getElementById('agent-name').value = d.name;
         document.getElementById('agent-name').disabled = true;
         document.getElementById('agent-namespace').value = d.namespace || '';
+        document.getElementById('agent-version').value = d.version || '1.0.0';
         document.getElementById('agent-node').value = d.nodeId || '*';
         document.getElementById('agent-description').value = d.description || '';
         document.getElementById('agent-enabled').checked = d.enabled;
@@ -299,6 +302,7 @@ class AgentDetailManager {
         const data = {
             name: document.getElementById('agent-name').value.trim(),
             namespace: document.getElementById('agent-namespace').value.trim(),
+            version: document.getElementById('agent-version').value.trim() || '1.0.0',
             nodeId: document.getElementById('agent-node').value,
             description: document.getElementById('agent-description').value.trim() || null,
             enabled: document.getElementById('agent-enabled').checked,

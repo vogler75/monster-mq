@@ -456,20 +456,46 @@ class AgentExecutor(
 
     private fun publishAgentCard() {
         val sessionHandler = Monster.getSessionHandler() ?: return
+        val agentName = deviceConfig.name
 
         val card = JsonObject()
-            .put("name", deviceConfig.name)
+            // A2A-compatible fields
+            .put("protocolVersion", "1.0")
+            .put("name", agentName)
             .put("description", agentConfig.description)
+            .put("url", "agents/$agentName")
+            .put("preferredTransport", "MQTT")
+            .put("version", agentConfig.version)
+            .put("defaultInputModes", listOf("application/json", "text/plain"))
+            .put("defaultOutputModes", listOf("application/json", "text/plain"))
+            // Agent-specific fields
             .put("provider", agentConfig.provider)
             .put("model", agentConfig.model)
             .put("triggerType", agentConfig.triggerType.name)
             .put("inputTopics", agentConfig.inputTopics)
             .put("outputTopics", agentConfig.outputTopics)
-            .put("skills", agentConfig.skills.map { it.toJsonObject() })
+            .put("skills", agentConfig.skills.map { skill ->
+                JsonObject()
+                    .put("id", skill.name)
+                    .put("name", skill.name)
+                    .put("description", skill.description)
+                    .put("inputSchema", skill.inputSchema)
+            })
             .put("status", "running")
             .put("nodeId", deviceConfig.nodeId)
+            .put("timestamp", Instant.now().toString())
 
-        val msg = BrokerMessage(clientId, "agents/${deviceConfig.name}/card", card.encode())
+        val payload = card.encode().toByteArray()
+        val msg = BrokerMessage(
+            messageId = 0,
+            topicName = "agents/$agentName/card",
+            payload = payload,
+            qosLevel = 1,
+            isRetain = true,
+            isDup = false,
+            isQueued = false,
+            clientId = clientId
+        )
         sessionHandler.publishMessage(msg)
     }
 
@@ -484,7 +510,17 @@ class AgentExecutor(
             .put("llmCalls", llmCalls.get())
             .put("errors", errors.get())
 
-        val msg = BrokerMessage(clientId, "agents/${deviceConfig.name}/health", health.encode())
+        val payload = health.encode().toByteArray()
+        val msg = BrokerMessage(
+            messageId = 0,
+            topicName = "agents/${deviceConfig.name}/health",
+            payload = payload,
+            qosLevel = 0,
+            isRetain = true,
+            isDup = false,
+            isQueued = false,
+            clientId = clientId
+        )
         sessionHandler.publishMessage(msg)
     }
 }

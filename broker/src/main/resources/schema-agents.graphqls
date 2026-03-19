@@ -5,6 +5,7 @@
 type Agent {
     name: String!
     description: String
+    version: String!
     namespace: String!
     nodeId: String!
     enabled: Boolean!
@@ -45,6 +46,7 @@ input AgentInput {
     namespace: String!
     nodeId: String!
     description: String
+    version: String
     skills: [AgentSkillInput!]
     inputTopics: [String!]
     outputTopics: [String!]

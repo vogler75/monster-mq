@@ -164,6 +164,7 @@ class AgentMutations(
 
         val agentConfig = AgentConfig(
             description = input["description"] as? String ?: "",
+            version = input["version"] as? String ?: "1.0.0",
             skills = parseSkills(input["skills"]),
             inputTopics = parseStringList(input["inputTopics"]),
             outputTopics = parseStringList(input["outputTopics"]),
@@ -202,6 +203,7 @@ class AgentMutations(
 
         val merged = AgentConfig(
             description = input["description"] as? String ?: existingConfig.description,
+            version = input["version"] as? String ?: existingConfig.version,
             skills = if (input.containsKey("skills")) parseSkills(input["skills"]) else existingConfig.skills,
             inputTopics = if (input.containsKey("inputTopics")) parseStringList(input["inputTopics"]) else existingConfig.inputTopics,
             outputTopics = if (input.containsKey("outputTopics")) parseStringList(input["outputTopics"]) else existingConfig.outputTopics,
