@@ -23,6 +23,8 @@ object LangChain4jFactory {
                 .modelName(config.model ?: "gemini-2.0-flash")
                 .temperature(config.temperature)
                 .apply { config.maxTokens?.let { maxOutputTokens(it) } }
+                .sendThinking(true)
+                .returnThinking(true)
                 .listeners(listeners)
                 .build()
 
