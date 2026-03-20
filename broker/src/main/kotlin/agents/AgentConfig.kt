@@ -23,6 +23,7 @@ data class AgentConfig(
     val stateEnabled: Boolean = true,
     val mcpServers: List<String> = emptyList(),
     val useMonsterMqMcp: Boolean = false,
+    val defaultArchiveGroup: String = "Default",
     val contextLastvalTopics: Map<String, List<String>> = emptyMap(),  // archiveGroup -> list of topic filters
     val contextRetainedTopics: List<String> = emptyList(),      // topic filters for retained messages
     val contextHistoryQueries: List<ContextHistoryQuery> = emptyList()  // history data queries
@@ -49,6 +50,7 @@ data class AgentConfig(
                 stateEnabled = json.getBoolean("stateEnabled", true),
                 mcpServers = json.getJsonArray("mcpServers", JsonArray()).filterIsInstance<String>().toList(),
                 useMonsterMqMcp = json.getBoolean("useMonsterMqMcp", false),
+                defaultArchiveGroup = json.getString("defaultArchiveGroup", "Default"),
                 contextLastvalTopics = json.getJsonObject("contextLastvalTopics", JsonObject()).let { obj ->
                     obj.fieldNames().associateWith { key ->
                         obj.getJsonArray(key, JsonArray()).filterIsInstance<String>()
@@ -82,6 +84,7 @@ data class AgentConfig(
             .put("stateEnabled", stateEnabled)
             .put("mcpServers", JsonArray(mcpServers))
             .put("useMonsterMqMcp", useMonsterMqMcp)
+            .put("defaultArchiveGroup", defaultArchiveGroup)
             .put("contextLastvalTopics", JsonObject().also { obj ->
                 contextLastvalTopics.forEach { (group, topics) -> obj.put(group, JsonArray(topics)) }
             })

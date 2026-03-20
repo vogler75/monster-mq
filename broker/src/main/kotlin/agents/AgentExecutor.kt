@@ -79,7 +79,7 @@ class AgentExecutor(
             // Create tools
             val archiveHandler = Monster.getArchiveHandler()
             val sessionHandler = Monster.getSessionHandler()
-            agentTools = AgentTools(archiveHandler, null, clientId) { name, args, result ->
+            agentTools = AgentTools(archiveHandler, null, clientId, agentConfig.defaultArchiveGroup) { name, args, result ->
                 publishToolLog(name, args, result)
             }
 
@@ -437,6 +437,8 @@ class AgentExecutor(
                 // Log MCP/tool executions that went through LangChain4j's tool provider
                 chatResult?.toolExecutions()?.forEach { toolExecution ->
                     val req = toolExecution.request()
+                    // Skip native @Tool calls — those are already logged via publishToolLog
+                    if (agentTools != null && agentTools!!.isNativeTool(req.name())) return@forEach
                     val log = JsonObject()
                         .put("type", "mcp-tool-call")
                         .put("timestamp", Instant.now().toString())

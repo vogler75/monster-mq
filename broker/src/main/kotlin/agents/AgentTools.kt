@@ -22,9 +22,19 @@ class AgentTools(
     private val archiveHandler: ArchiveHandler?,
     private val retainedStore: IMessageStore?,
     private val agentClientId: String,
+    private val defaultArchiveGroup: String = "Default",
     private val toolLogger: ((String, String, String) -> Unit)? = null
 ) {
     private val logger: Logger = Utils.getLogger(AgentTools::class.java)
+
+    private val nativeToolNames: Set<String> by lazy {
+        this::class.java.methods
+            .filter { it.isAnnotationPresent(Tool::class.java) }
+            .map { it.name }
+            .toSet()
+    }
+
+    fun isNativeTool(name: String): Boolean = name in nativeToolNames
 
     private fun getArchiveGroups(): Map<String, ArchiveGroup> {
         return archiveHandler?.getDeployedArchiveGroups() ?: emptyMap()
@@ -55,10 +65,10 @@ class AgentTools(
     @Tool("Get the current/last known value for one or more MQTT topics from the last-value store.")
     fun getTopicValues(
         @P("Comma-separated list of exact MQTT topics") topics: String,
-        @P("Archive group name (default: 'Default')") archiveGroup: String?
+        @P("Archive group name, or null to use the agent's default") archiveGroup: String?
     ): String {
         val result = try {
-            val group = archiveGroup ?: "Default"
+            val group = archiveGroup ?: defaultArchiveGroup
             val store = getArchiveGroups()[group]?.lastValStore
             if (store == null) return logTool("getTopicValues", "topics=$topics", "No LastValueStore for archive group '$group'")
 
@@ -84,10 +94,10 @@ class AgentTools(
     @Tool("Search for MQTT topics matching a pattern. Use MQTT wildcards: + for single level, # for multi level.")
     fun findTopics(
         @P("MQTT topic pattern (e.g., 'sensors/#', 'plant/+/temperature')") pattern: String,
-        @P("Archive group name (default: 'Default')") archiveGroup: String?
+        @P("Archive group name, or null to use the agent's default") archiveGroup: String?
     ): String {
         val result = try {
-            val group = archiveGroup ?: "Default"
+            val group = archiveGroup ?: defaultArchiveGroup
             val store = getArchiveGroups()[group]?.lastValStore
             if (store == null) return logTool("findTopics", "pattern=$pattern", "No LastValueStore for archive group '$group'")
 
@@ -114,10 +124,10 @@ class AgentTools(
         @P("Start time in ISO-8601 format (e.g., '2024-01-01T00:00:00Z'), or null for no lower bound") startTime: String?,
         @P("End time in ISO-8601 format, or null for now") endTime: String?,
         @P("Maximum number of messages to return (default: 100)") limit: Int?,
-        @P("Archive group name (default: 'Default')") archiveGroup: String?
+        @P("Archive group name, or null to use the agent's default") archiveGroup: String?
     ): String {
         val result = try {
-            val group = archiveGroup ?: "Default"
+            val group = archiveGroup ?: defaultArchiveGroup
             val store = getArchiveGroups()[group]?.archiveStore as? IMessageArchiveExtended
             if (store == null) return logTool("queryHistory", "topic=$topic", "No archive store for group '$group'")
 

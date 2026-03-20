@@ -25,6 +25,7 @@ type Agent {
     stateEnabled: Boolean!
     mcpServers: [String!]!
     useMonsterMqMcp: Boolean!
+    defaultArchiveGroup: String!
     contextLastvalTopics: JSON
     contextRetainedTopics: [String!]!
     contextHistoryQueries: [ContextHistoryQuery!]!
@@ -65,6 +66,7 @@ input AgentInput {
     stateEnabled: Boolean
     mcpServers: [String!]
     useMonsterMqMcp: Boolean
+    defaultArchiveGroup: String
     contextLastvalTopics: JSON
     contextRetainedTopics: [String!]
     contextHistoryQueries: [ContextHistoryQueryInput!]

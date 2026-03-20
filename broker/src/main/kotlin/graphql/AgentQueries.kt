@@ -109,6 +109,7 @@ class AgentQueries(
                 "stateEnabled" to agentConfig.stateEnabled,
                 "mcpServers" to agentConfig.mcpServers,
                 "useMonsterMqMcp" to agentConfig.useMonsterMqMcp,
+                "defaultArchiveGroup" to agentConfig.defaultArchiveGroup,
                 "contextLastvalTopics" to agentConfig.contextLastvalTopics.mapValues { it.value },
                 "contextRetainedTopics" to agentConfig.contextRetainedTopics,
                 "contextHistoryQueries" to agentConfig.contextHistoryQueries.map { q ->

@@ -183,6 +183,7 @@ class AgentMutations(
             stateEnabled = input["stateEnabled"] as? Boolean ?: true,
             mcpServers = parseStringList(input["mcpServers"]),
             useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: false,
+            defaultArchiveGroup = input["defaultArchiveGroup"] as? String ?: "Default",
             contextLastvalTopics = parseContextLastvalTopics(input["contextLastvalTopics"]),
             contextRetainedTopics = parseStringList(input["contextRetainedTopics"]),
             contextHistoryQueries = parseContextHistoryQueries(input["contextHistoryQueries"])
@@ -223,6 +224,7 @@ class AgentMutations(
             stateEnabled = input["stateEnabled"] as? Boolean ?: existingConfig.stateEnabled,
             mcpServers = if (input.containsKey("mcpServers")) parseStringList(input["mcpServers"]) else existingConfig.mcpServers,
             useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: existingConfig.useMonsterMqMcp,
+            defaultArchiveGroup = input["defaultArchiveGroup"] as? String ?: existingConfig.defaultArchiveGroup,
             contextLastvalTopics = if (input.containsKey("contextLastvalTopics")) parseContextLastvalTopics(input["contextLastvalTopics"]) else existingConfig.contextLastvalTopics,
             contextRetainedTopics = if (input.containsKey("contextRetainedTopics")) parseStringList(input["contextRetainedTopics"]) else existingConfig.contextRetainedTopics,
             contextHistoryQueries = if (input.containsKey("contextHistoryQueries")) parseContextHistoryQueries(input["contextHistoryQueries"]) else existingConfig.contextHistoryQueries

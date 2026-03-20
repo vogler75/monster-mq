@@ -325,6 +325,7 @@ class AgentDetailManager {
                         stateEnabled
                         mcpServers
                         useMonsterMqMcp
+                        defaultArchiveGroup
                         contextLastvalTopics
                         contextRetainedTopics
                         contextHistoryQueries { archiveGroup topics lastSeconds interval function fields }
@@ -419,6 +420,7 @@ class AgentDetailManager {
 
         // Populate MCP Servers
         document.getElementById('agent-use-monstermq-mcp').checked = d.useMonsterMqMcp || false;
+        document.getElementById('agent-default-archive-group').value = d.defaultArchiveGroup || 'Default';
         this.renderMcpServerCheckboxes(d.mcpServers || []);
 
         // Populate Context Data
@@ -483,6 +485,7 @@ class AgentDetailManager {
             outputTopics: outputTopics,
             mcpServers: this.getSelectedMcpServers(),
             useMonsterMqMcp: document.getElementById('agent-use-monstermq-mcp').checked,
+            defaultArchiveGroup: document.getElementById('agent-default-archive-group').value.trim() || 'Default',
             contextLastvalTopics: this.parseContextLastvalTopics(),
             contextRetainedTopics: document.getElementById('agent-context-retained').value
                 .split('\n').map(t => t.trim()).filter(t => t.length > 0),
