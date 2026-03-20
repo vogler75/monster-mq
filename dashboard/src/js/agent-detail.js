@@ -610,9 +610,86 @@ function updateModelPlaceholder() {
     modelInput.placeholder = placeholders[provider] || 'Model name';
 }
 
+// Set up custom drop handlers for context data textareas (append instead of replace)
+function setupContextDropZones() {
+    const retainedTextarea = document.getElementById('agent-context-retained');
+    const lastvalTextarea = document.getElementById('agent-context-lastval-topics');
+    const inputTopicsTextarea = document.getElementById('agent-input-topics');
+    const outputTopicsTextarea = document.getElementById('agent-output-topics');
+
+    // Helper: visual drop feedback on a textarea
+    function addDragStyles(textarea) {
+        textarea.setAttribute('data-drop-zone-enabled', 'true'); // prevent side panel generic handler
+        textarea.classList.add('drop-zone');
+        textarea.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; textarea.classList.add('drag-over'); });
+        textarea.addEventListener('dragenter', (e) => { e.preventDefault(); textarea.classList.add('drag-over'); });
+        textarea.addEventListener('dragleave', (e) => { e.preventDefault(); if (!textarea.contains(e.relatedTarget)) textarea.classList.remove('drag-over'); });
+    }
+
+    function flashGreen(el) {
+        el.style.backgroundColor = 'rgba(34, 197, 94, 0.1)';
+        setTimeout(() => { el.style.backgroundColor = ''; }, 500);
+    }
+
+    // Append topic on a new line for plain-text topic list textareas
+    [retainedTextarea, inputTopicsTextarea, outputTopicsTextarea].forEach(textarea => {
+        if (!textarea) return;
+        addDragStyles(textarea);
+        textarea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            textarea.classList.remove('drag-over');
+            const topic = e.dataTransfer.getData('text/plain');
+            if (topic) {
+                const current = textarea.value.trim();
+                // Append on new line, avoid duplicates
+                const lines = current ? current.split('\n').map(l => l.trim()).filter(l => l) : [];
+                if (!lines.includes(topic)) lines.push(topic);
+                textarea.value = lines.join('\n');
+                textarea.focus();
+                textarea.dispatchEvent(new Event('change', { bubbles: true }));
+                flashGreen(textarea);
+            }
+        });
+    });
+
+    // For lastval JSON textarea: add topic under the selected archive group
+    if (lastvalTextarea) {
+        addDragStyles(lastvalTextarea);
+        lastvalTextarea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            lastvalTextarea.classList.remove('drag-over');
+            const topic = e.dataTransfer.getData('text/plain');
+            if (topic) {
+                // Get the archive group from the side panel selector
+                const archiveGroupSelect = document.getElementById('topic-panel-archive-group');
+                const archiveGroup = archiveGroupSelect ? archiveGroupSelect.value || 'Default' : 'Default';
+
+                // Parse existing JSON or start fresh
+                let obj = {};
+                try {
+                    const current = lastvalTextarea.value.trim();
+                    if (current) obj = JSON.parse(current);
+                } catch (_) { /* start fresh if invalid JSON */ }
+
+                // Ensure the archive group array exists and append topic (no duplicates)
+                if (!Array.isArray(obj[archiveGroup])) obj[archiveGroup] = [];
+                if (!obj[archiveGroup].includes(topic)) obj[archiveGroup].push(topic);
+
+                lastvalTextarea.value = JSON.stringify(obj, null, 2);
+                lastvalTextarea.focus();
+                lastvalTextarea.dispatchEvent(new Event('change', { bubbles: true }));
+                flashGreen(lastvalTextarea);
+            }
+        });
+    }
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     agentDetailManager = new AgentDetailManager();
+    setupContextDropZones();
 });
 
 // Handle modal clicks (close on backdrop)

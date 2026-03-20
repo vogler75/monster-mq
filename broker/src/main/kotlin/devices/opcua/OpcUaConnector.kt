@@ -607,7 +607,7 @@ class OpcUaConnector : AbstractVerticle() {
                 }
                 .onComplete { result ->
                     if (result.succeeded()) {
-                        logger.info("Successfully set up subscription for address: ${address.address} -> ${address.topic}")
+                        logger.finer { "Successfully set up subscription for address: ${address.address} -> ${address.topic}" }
                         promise.complete()
                     } else {
                         logger.warning("Failed to set up subscription for address ${address.address}: ${result.cause()?.message}")
