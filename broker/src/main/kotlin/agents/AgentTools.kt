@@ -22,6 +22,7 @@ class AgentTools(
     private val archiveHandler: ArchiveHandler?,
     private val retainedStore: IMessageStore?,
     private val agentClientId: String,
+    private val agentName: String,
     private val defaultArchiveGroup: String = "Default",
     private val toolLogger: ((String, String, String) -> Unit)? = null
 ) {
@@ -145,23 +146,96 @@ class AgentTools(
         return logTool("queryHistory", "topic=$topic, start=$startTime, end=$endTime, limit=$limit", result)
     }
 
-    @Tool("List all configured archive groups. Use this to discover available data stores before querying.")
-    fun listArchiveGroups(): String {
+    // --- Agent Notes (persistent key/value memory via retained MQTT messages) ---
+
+    private val notesPrefix = "agents/$agentName/memory"
+
+    @Tool("Save a note to persistent memory. Use this to remember observations, decisions, or learned information across invocations. Keys can be hierarchical (e.g., 'decisions/heater', 'observations/2024-03-20').")
+    fun saveNote(
+        @P("A descriptive key for the note (e.g., 'last_decision', 'user_preference/threshold')") key: String,
+        @P("The content to store (text or JSON)") content: String
+    ): String {
         val result = try {
-            val groups = getArchiveGroups()
-            val r = JsonArray()
-            for ((name, group) in groups) {
-                r.add(JsonObject()
-                    .put("name", name)
-                    .put("archiveType", group.getArchiveType().name)
-                    .put("lastValType", group.getLastValType().name)
-                )
-            }
-            r.encodePrettily()
+            val topic = "$notesPrefix/$key"
+            val msg = BrokerMessage(agentClientId, topic, content).cloneWithRetainFlag(true)
+            Monster.getSessionHandler()?.publishMessage(msg)
+            "Saved note '$key'"
         } catch (e: Exception) {
-            logger.warning("listArchiveGroups error: ${e.message}")
-            "Error: ${e.message}"
+            logger.warning("saveNote error: ${e.message}")
+            "Error saving note: ${e.message}"
         }
-        return logTool("listArchiveGroups", "", result)
+        return logTool("saveNote", "key=$key", result)
     }
+
+    @Tool("Recall a previously saved note by its exact key.")
+    fun recallNote(
+        @P("The exact key of the note to retrieve") key: String
+    ): String {
+        val result = try {
+            val topic = "$notesPrefix/$key"
+            val store = Monster.getRetainedStore()
+            if (store == null) return logTool("recallNote", "key=$key", "No retained store available")
+            val msg = store[topic]
+            if (msg != null) {
+                msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
+            } else {
+                "No note found for key '$key'"
+            }
+        } catch (e: Exception) {
+            logger.warning("recallNote error: ${e.message}")
+            "Error recalling note: ${e.message}"
+        }
+        return logTool("recallNote", "key=$key", result)
+    }
+
+    @Tool("Search for saved notes matching a pattern. Use MQTT wildcards: + for single level, # for all sub-levels. Example: 'decisions/#' finds all decision notes.")
+    fun searchNotes(
+        @P("Search pattern relative to the notes namespace (e.g., '#' for all, 'decisions/#', '+/temperature')") pattern: String
+    ): String {
+        val result = try {
+            val fullPattern = "$notesPrefix/$pattern"
+            val store = Monster.getRetainedStore()
+            if (store == null) return logTool("searchNotes", "pattern=$pattern", "No retained store available")
+            val results = JsonArray()
+            var count = 0
+            store.findMatchingMessages(fullPattern) { msg ->
+                if (count < 100) {
+                    val key = msg.topicName.removePrefix("$notesPrefix/")
+                    results.add(JsonObject()
+                        .put("key", key)
+                        .put("content", msg.getPayloadAsJson() ?: msg.getPayloadAsBase64())
+                        .put("timestamp", msg.time.toString())
+                    )
+                    count++
+                    true
+                } else false
+            }
+            if (results.isEmpty) "No notes found matching '$pattern'" else results.encodePrettily()
+        } catch (e: Exception) {
+            logger.warning("searchNotes error: ${e.message}")
+            "Error searching notes: ${e.message}"
+        }
+        return logTool("searchNotes", "pattern=$pattern", result)
+    }
+
+    @Tool("Delete a previously saved note by its exact key.")
+    fun deleteNote(
+        @P("The exact key of the note to delete") key: String
+    ): String {
+        val result = try {
+            val topic = "$notesPrefix/$key"
+            // Publishing an empty retained message deletes the retained entry
+            val msg = BrokerMessage(
+                Utils.getUuid(), 0, topic, ByteArray(0), 0,
+                isRetain = true, isDup = false, isQueued = false, clientId = agentClientId
+            )
+            Monster.getSessionHandler()?.publishMessage(msg)
+            "Deleted note '$key'"
+        } catch (e: Exception) {
+            logger.warning("deleteNote error: ${e.message}")
+            "Error deleting note: ${e.message}"
+        }
+        return logTool("deleteNote", "key=$key", result)
+    }
+
 }

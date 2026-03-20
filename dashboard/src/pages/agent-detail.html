@@ -224,9 +224,50 @@
                         <label for="agent-default-archive-group">Default Archive Group</label>
                         <input type="text" id="agent-default-archive-group" value="Default" placeholder="Default">
                         <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
-                            Archive group used by built-in tools (getTopicValues, findTopics, queryHistory) when no group is specified.
+                            Archive group used by built-in tools when no group is specified.
                         </small>
                     </div>
+
+                    <details style="margin-bottom: 1rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px;">
+                        <summary style="padding: 0.75rem 1rem; cursor: pointer; color: var(--text-primary); font-weight: 600; font-size: 0.9rem; user-select: none;">
+                            Built-in Tools Reference
+                        </summary>
+                        <div style="padding: 0 1rem 1rem; font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+                            <p style="margin: 0.75rem 0 0.5rem; color: var(--text-primary); font-weight: 600;">MQTT</p>
+                            <div style="margin-left: 0.5rem;">
+                                <code>publishMessage(topic, payload)</code><br>
+                                Publish a message to any MQTT topic.
+                            </div>
+
+                            <p style="margin: 0.75rem 0 0.5rem; color: var(--text-primary); font-weight: 600;">Data Queries</p>
+                            <div style="margin-left: 0.5rem;">
+                                <code>getTopicValues(topics, archiveGroup?)</code><br>
+                                Get last known values for comma-separated topics.<br><br>
+                                <code>findTopics(pattern, archiveGroup?)</code><br>
+                                Search topics by MQTT wildcard pattern (<code>+</code> single level, <code>#</code> multi-level).<br><br>
+                                <code>queryHistory(topic, startTime?, endTime?, limit?, archiveGroup?)</code><br>
+                                Query archived messages for a topic within a time range (ISO-8601 timestamps).
+                            </div>
+
+                            <p style="margin: 0.75rem 0 0.5rem; color: var(--text-primary); font-weight: 600;">Agent Notes (Persistent Memory)</p>
+                            <div style="margin-left: 0.5rem;">
+                                <code>saveNote(key, content)</code><br>
+                                Save a note to persistent memory. Keys can be hierarchical (e.g. <code>decisions/heater</code>).<br><br>
+                                <code>recallNote(key)</code><br>
+                                Retrieve a note by its exact key.<br><br>
+                                <code>searchNotes(pattern)</code><br>
+                                Find notes by pattern (e.g. <code>#</code> for all, <code>decisions/#</code>).<br><br>
+                                <code>deleteNote(key)</code><br>
+                                Delete a note by key.
+                            </div>
+
+                            <p style="margin: 0.75rem 0 0.25rem; font-size: 0.8rem;">
+                                Notes are stored as retained MQTT messages under <code>agents/{name}/memory/{key}</code> and persist across restarts.
+                                Tools with <code>archiveGroup?</code> use the configured default archive group when omitted.
+                            </p>
+                        </div>
+                    </details>
+
                     <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: var(--dark-bg); border-radius: 8px; border: 1px solid var(--monster-purple); cursor: pointer; margin-bottom: 1rem;">
                         <input type="checkbox" id="agent-use-monstermq-mcp" style="accent-color: var(--monster-purple);">
                         <div>
