@@ -949,9 +949,8 @@ MORE INFO:
                 }
 
                 // GenAI Provider
-                val genAiConfig = configJson.getJsonObject("GenAI", JsonObject())
                 val genAiProvider = try {
-                    at.rocworks.genai.GenAiProviderFactory.create(vertx, genAiConfig).get()
+                    at.rocworks.genai.GenAiProviderFactory.create(vertx, configJson).get()
                 } catch (e: Exception) {
                     logger.warning("Failed to initialize GenAI provider: ${e.message}")
                     null

@@ -10,10 +10,21 @@ import dev.langchain4j.model.ollama.OllamaChatModel
 import io.vertx.core.json.JsonObject
 import java.util.logging.Logger
 
+/**
+ * Generic chat model configuration, usable by both agents and the internal assistant.
+ */
+data class ChatModelConfig(
+    val provider: String,
+    val model: String? = null,
+    val apiKey: String? = null,
+    val maxTokens: Int? = null,
+    val temperature: Double = 0.7
+)
+
 object LangChain4jFactory {
     private val logger: Logger = Utils.getLogger(LangChain4jFactory::class.java)
 
-    fun createChatModel(config: AgentConfig, globalConfig: JsonObject, listeners: List<ChatModelListener> = emptyList()): ChatModel {
+    fun createChatModel(config: ChatModelConfig, globalConfig: JsonObject, listeners: List<ChatModelListener> = emptyList()): ChatModel {
         val apiKey = resolveApiKey(config.apiKey, config.provider, globalConfig)
         logger.fine("Creating LangChain4j ${config.provider} model: ${config.model ?: "default"}")
 
@@ -55,6 +66,20 @@ object LangChain4jFactory {
         }
     }
 
+    fun createChatModel(config: AgentConfig, globalConfig: JsonObject, listeners: List<ChatModelListener> = emptyList()): ChatModel {
+        return createChatModel(
+            ChatModelConfig(
+                provider = config.provider,
+                model = config.model,
+                apiKey = config.apiKey,
+                maxTokens = config.maxTokens,
+                temperature = config.temperature
+            ),
+            globalConfig,
+            listeners
+        )
+    }
+
     private fun resolveApiKey(agentApiKey: String?, provider: String, globalConfig: JsonObject): String {
         // 1. Agent-specific API key
         if (!agentApiKey.isNullOrBlank()) {
@@ -81,13 +106,7 @@ object LangChain4jFactory {
             return resolveEnvVar(providerKey)
         }
 
-        // 3. Global GenAI.ApiKey (fallback for single-provider setups)
-        val globalKey = genAiConfig.getString("ApiKey")
-        if (!globalKey.isNullOrBlank()) {
-            return resolveEnvVar(globalKey)
-        }
-
-        // 4. Environment variable by convention
+        // 3. Environment variable by convention
         val envVarName = when (provider.lowercase()) {
             "gemini" -> "GEMINI_API_KEY"
             "claude" -> "ANTHROPIC_API_KEY"
@@ -100,13 +119,13 @@ object LangChain4jFactory {
             if (!envValue.isNullOrBlank()) return envValue
         }
 
-        // 5. Default for Ollama (local, no key needed)
+        // 4. Default for Ollama (local, no key needed)
         if (provider.lowercase() == "ollama") {
             return "http://localhost:11434"
         }
 
         throw IllegalArgumentException("No API key found for provider '$provider'. " +
-            "Configure it in: agent config, GenAI.Providers.$provider, GenAI.ApiKey, or env ${envVarName ?: "variable"}")
+            "Configure it in: agent config, GenAI.Providers.$provider, or env ${envVarName ?: "variable"}")
     }
 
     private fun resolveEnvVar(value: String): String {

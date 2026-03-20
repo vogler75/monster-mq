@@ -1647,8 +1647,12 @@ class MetricsResolver(
                 graphqlPort = config.getJsonObject("GraphQL", io.vertx.core.json.JsonObject()).getInteger("Port", 4000),
                 metricsEnabled = config.getJsonObject("Metrics", io.vertx.core.json.JsonObject()).getBoolean("Enabled", true),
                 genAiEnabled = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getBoolean("Enabled", false),
-                genAiProvider = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getString("Provider", ""),
-                genAiModel = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getString("Model", ""),
+                genAiProvider = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).let { genAi ->
+                    genAi.getJsonObject("Assistant", null)?.getString("Provider") ?: genAi.getString("Provider", "")
+                },
+                genAiModel = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).let { genAi ->
+                    genAi.getJsonObject("Assistant", null)?.getString("Model") ?: genAi.getString("Model", "")
+                },
                 postgresUrl = config.getJsonObject("Postgres", io.vertx.core.json.JsonObject()).getString("Url", ""),
                 postgresUser = config.getJsonObject("Postgres", io.vertx.core.json.JsonObject()).getString("User", ""),
                 crateDbUrl = config.getJsonObject("CrateDB", io.vertx.core.json.JsonObject()).getString("Url", ""),

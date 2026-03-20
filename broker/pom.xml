@@ -295,13 +295,6 @@
             <version>22.0</version>
         </dependency>
 
-        <!-- Google Generative AI (Gemini) - used by existing GeminiProvider -->
-        <dependency>
-            <groupId>com.google.genai</groupId>
-            <artifactId>google-genai</artifactId>
-            <version>1.24.0</version>
-        </dependency>
-
         <!-- LangChain4j - AI Agent Framework -->
         <dependency>
             <groupId>dev.langchain4j</groupId>

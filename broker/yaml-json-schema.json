@@ -397,49 +397,73 @@
     },
     "GenAI": {
       "type": "object",
-      "description": "Generative AI integration configuration for JavaScript coding assistance",
+      "description": "Generative AI configuration for assistant (script editor, topic analysis) and agent API keys",
       "properties": {
         "Enabled": {
           "type": "boolean",
-          "description": "Enable GenAI integration for AI-supported JavaScript coding",
+          "description": "Enable GenAI integration for AI-supported features",
           "default": false
+        },
+        "Assistant": {
+          "type": "object",
+          "description": "Configuration for the internal AI assistant (script editor, topic analysis). Uses LangChain4j.",
+          "properties": {
+            "Provider": {
+              "type": "string",
+              "description": "AI provider for the assistant",
+              "enum": ["gemini", "claude", "openai", "ollama"],
+              "default": "gemini"
+            },
+            "Model": {
+              "type": "string",
+              "description": "Model name (e.g., 'gemini-2.5-flash', 'claude-sonnet-4-20250514', 'gpt-4o', 'llama3')"
+            },
+            "Temperature": {
+              "type": "number",
+              "description": "Sampling temperature (0.0 to 2.0, higher = more creative)",
+              "default": 0.7,
+              "minimum": 0.0,
+              "maximum": 2.0
+            },
+            "DocsPath": {
+              "type": "string",
+              "description": "Path to documentation directory containing markdown files for context",
+              "default": "docs"
+            }
+          }
         },
         "Provider": {
           "type": "string",
-          "description": "AI provider to use",
-          "enum": ["gemini", "claude", "openai"],
+          "description": "(Deprecated: use Assistant.Provider) AI provider to use",
+          "enum": ["gemini", "claude", "openai", "ollama"],
           "default": "gemini"
-        },
-        "ApiKey": {
-          "type": "string",
-          "description": "API key for the selected provider (supports environment variable substitution like ${GENAI_API_KEY})"
         },
         "Model": {
           "type": "string",
-          "description": "Optional model name to use (provider-specific, e.g., 'gemini-pro', 'claude-3-opus', 'gpt-4')"
+          "description": "(Deprecated: use Assistant.Model) Model name to use"
         },
         "MaxTokens": {
           "type": "integer",
-          "description": "Maximum number of tokens in the response",
+          "description": "(Deprecated) Maximum number of tokens in the response",
           "default": 2048,
           "minimum": 1,
           "maximum": 100000
         },
         "Temperature": {
           "type": "number",
-          "description": "Sampling temperature for response generation (0.0 to 2.0, higher = more creative)",
+          "description": "(Deprecated: use Assistant.Temperature) Sampling temperature",
           "default": 0.7,
           "minimum": 0.0,
           "maximum": 2.0
         },
         "DocsPath": {
           "type": "string",
-          "description": "Path to documentation directory containing markdown files for context",
+          "description": "(Deprecated: use Assistant.DocsPath) Path to documentation directory",
           "default": "docs"
         },
         "Providers": {
           "type": "object",
-          "description": "Per-provider API keys for AI agents (used when agents don't specify their own API key)",
+          "description": "Per-provider API keys (shared by Assistant and Agents)",
           "properties": {
             "Gemini": {
               "type": "object",

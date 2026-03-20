@@ -300,13 +300,13 @@ User question: $question
                 genAiProvider.generate(request)
                     .thenAccept { response ->
                         // Log full LLM response for debugging truncation issues
-                        logger.info("=== LLM Response Received ===")
-                        logger.info("Model: ${response.model}")
-                        logger.info("Error: ${response.error}")
-                        logger.info("Response length: ${response.response.length} chars")
-                        logger.info("=== FULL LLM RESPONSE START ===")
-                        logger.info(response.response)
-                        logger.info("=== FULL LLM RESPONSE END ===")
+                        logger.fine("=== LLM Response Received ===")
+                        logger.fine("Model: ${response.model}")
+                        logger.fine("Error: ${response.error}")
+                        logger.fine("Response length: ${response.response.length} chars")
+                        logger.fine("=== FULL LLM RESPONSE START ===")
+                        logger.fine(response.response)
+                        logger.fine("=== FULL LLM RESPONSE END ===")
 
                         future.complete(TopicAnalysisResponseGraphQL(
                             response = response.response,
