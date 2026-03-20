@@ -318,6 +318,7 @@ input MonitoringParametersInput {
     bufferSize: Int = 100
     samplingInterval: Float = 0.0
     discardOldest: Boolean = false
+    monitoredItemsBatchSize: Int = 1000
 }
 
 # Input type for certificate configuration settings

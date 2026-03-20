@@ -431,6 +431,7 @@ type MonitoringParameters {
     bufferSize: Int!
     samplingInterval: Float!
     discardOldest: Boolean!
+    monitoredItemsBatchSize: Int!
 }
 
 enum SecurityPolicy {

@@ -40,6 +40,7 @@
          .form-control:disabled, input:disabled { background:var(--dark-surface-2); opacity:0.6; cursor:not-allowed;}
          .checkbox-group { display:flex; align-items:center; gap:0.5rem;}
          .checkbox-group input[type=checkbox] { accent-color:var(--monster-purple);}
+         .pagination-controls { display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0;}
          .form-hint { color:var(--text-muted); font-size:0.7rem; margin-top:0.4rem; display:block;}
          .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem;}
          .info-item { display:flex; flex-direction:column; padding:1rem; background:var(--dark-bg); border-radius:8px; border:1px solid var(--dark-border);}
@@ -184,6 +185,10 @@
                                 <label for="config-monitoring-sampling">Monitoring Sampling Interval (ms)</label>
                                 <input type="number" id="config-monitoring-sampling" step="0.1">
                             </div>
+                            <div class="form-group">
+                                <label for="config-batch-size">Monitored Items Batch Size</label>
+                                <input type="number" id="config-batch-size" min="1">
+                            </div>
                         </div>
                         <div class="form-group">
                             <div class="checkbox-group">
@@ -327,6 +332,7 @@
             </div>
             <div class="section-content">
                 <div id="addresses-table" style="display:none;">
+                    <div id="addresses-pagination-top" class="pagination-controls" style="display:none; margin-bottom:0.5rem;"></div>
                     <table>
                         <thead>
                             <tr>
@@ -339,6 +345,7 @@
                         </thead>
                         <tbody id="addresses-table-body"></tbody>
                     </table>
+                    <div id="addresses-pagination-bottom" class="pagination-controls" style="display:none; margin-top:0.5rem;"></div>
                 </div>
                 <div id="no-addresses" class="no-data">No addresses configured. Click "Add Address" to start monitoring OPC UA nodes.</div>
             </div>

@@ -120,7 +120,8 @@ class OpcUaClientConfigQueries(
                 "monitoringParameters" to mapOf(
                     "bufferSize" to config.monitoringParameters.bufferSize,
                     "samplingInterval" to config.monitoringParameters.samplingInterval,
-                    "discardOldest" to config.monitoringParameters.discardOldest
+                    "discardOldest" to config.monitoringParameters.discardOldest,
+                    "monitoredItemsBatchSize" to config.monitoringParameters.monitoredItemsBatchSize
                 ),
                 "addresses" to config.addresses.map { address ->
                     mapOf(

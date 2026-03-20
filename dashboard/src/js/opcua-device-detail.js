@@ -7,6 +7,8 @@ class OpcUaDeviceDetailManager {
         this.clusterNodes = [];
         this.deviceName = null;
         this.deleteAddressName = null;
+        this.addressPage = 0;
+        this.addressPageSize = 1000;
         this.init();
     }
 
@@ -118,6 +120,7 @@ class OpcUaDeviceDetailManager {
                                 bufferSize
                                 samplingInterval
                                 discardOldest
+                                monitoredItemsBatchSize
                             }
                             addresses {
                                 address
@@ -203,6 +206,7 @@ class OpcUaDeviceDetailManager {
         document.getElementById('config-buffer-size').value = this.device.config.monitoringParameters.bufferSize;
         document.getElementById('config-monitoring-sampling').value = this.device.config.monitoringParameters.samplingInterval;
         document.getElementById('config-discard-oldest').checked = this.device.config.monitoringParameters.discardOldest;
+        document.getElementById('config-batch-size').value = this.device.config.monitoringParameters.monitoredItemsBatchSize;
 
         // Certificate configuration
         const certConfig = this.device.config.certificateConfig;
@@ -262,6 +266,7 @@ class OpcUaDeviceDetailManager {
         document.getElementById('config-buffer-size').value = '10';
         document.getElementById('config-monitoring-sampling').value = '0';
         document.getElementById('config-discard-oldest').checked = true;
+        document.getElementById('config-batch-size').value = '1000';
 
         // Set certificate defaults
         document.getElementById('cert-security-dir').value = 'security';
@@ -347,16 +352,28 @@ class OpcUaDeviceDetailManager {
 
         tbody.innerHTML = '';
 
-        if (!this.device.config.addresses || this.device.config.addresses.length === 0) {
+        const allAddresses = this.device.config.addresses || [];
+        if (allAddresses.length === 0) {
             addressesTable.style.display = 'none';
             noAddresses.style.display = 'block';
+            this.renderAddressPagination(0, 0);
             return;
         }
 
         addressesTable.style.display = 'block';
         noAddresses.style.display = 'none';
 
-        this.device.config.addresses.forEach(address => {
+        const totalPages = Math.ceil(allAddresses.length / this.addressPageSize);
+        if (this.addressPage >= totalPages) this.addressPage = totalPages - 1;
+        if (this.addressPage < 0) this.addressPage = 0;
+
+        const start = this.addressPage * this.addressPageSize;
+        const end = Math.min(start + this.addressPageSize, allAddresses.length);
+        const pageAddresses = allAddresses.slice(start, end);
+
+        this.renderAddressPagination(allAddresses.length, totalPages);
+
+        pageAddresses.forEach(address => {
             const row = document.createElement('tr');
 
             const publishModeIcon = address.publishMode === 'SEPARATE' ? '📊' : '📈';
@@ -397,6 +414,86 @@ class OpcUaDeviceDetailManager {
 
             tbody.appendChild(row);
         });
+    }
+
+    renderAddressPagination(totalItems, totalPages) {
+        const paginationTop = document.getElementById('addresses-pagination-top');
+        const paginationBottom = document.getElementById('addresses-pagination-bottom');
+        if (!paginationTop || !paginationBottom) return;
+
+        if (totalPages <= 1) {
+            paginationTop.style.display = totalItems > 0 ? 'flex' : 'none';
+            paginationTop.innerHTML = totalItems > 0 ? `<span style="color:var(--theme-color-std-text);font-size:0.85rem;">${totalItems.toLocaleString()} addresses</span>` : '';
+            paginationBottom.style.display = 'none';
+            return;
+        }
+
+        const start = this.addressPage * this.addressPageSize + 1;
+        const end = Math.min((this.addressPage + 1) * this.addressPageSize, totalItems);
+        const current = this.addressPage;
+
+        // Build page number buttons with ellipsis for large page counts
+        const pageButtons = this.buildPageNumbers(current, totalPages).map(p => {
+            if (p === '...') {
+                return `<span style="color:var(--theme-color-std-text);font-size:0.85rem;padding:0 0.15rem;">&hellip;</span>`;
+            }
+            const idx = p;
+            const active = idx === current;
+            return `<button onclick="deviceDetailManager.goToAddressPage(${idx})"
+                style="min-width:1.75rem;height:1.75rem;padding:0 0.35rem;border-radius:4px;border:1px solid ${active ? 'var(--theme-color-primary)' : 'var(--theme-color-std-bdr)'};
+                background:${active ? 'var(--theme-color-primary)' : 'transparent'};color:${active ? 'var(--theme-color-primary--contrast)' : 'var(--theme-color-std-text)'};
+                font-size:0.8rem;cursor:pointer;">${idx + 1}</button>`;
+        }).join('');
+
+        const html = `
+            <span style="color:var(--theme-color-std-text);font-size:0.85rem;">
+                ${start.toLocaleString()}&ndash;${end.toLocaleString()} of ${totalItems.toLocaleString()} addresses
+            </span>
+            <span style="display:flex;gap:0.25rem;align-items:center;">
+                <ix-icon-button icon="chevron-left-small" ghost size="16" title="Previous page"
+                    ${current === 0 ? 'disabled' : ''}
+                    onclick="deviceDetailManager.goToAddressPage(${current - 1})"></ix-icon-button>
+                ${pageButtons}
+                <ix-icon-button icon="chevron-right-small" ghost size="16" title="Next page"
+                    ${current >= totalPages - 1 ? 'disabled' : ''}
+                    onclick="deviceDetailManager.goToAddressPage(${current + 1})"></ix-icon-button>
+            </span>
+        `;
+
+        paginationTop.style.display = 'flex';
+        paginationTop.innerHTML = html;
+        paginationBottom.style.display = 'flex';
+        paginationBottom.innerHTML = html;
+    }
+
+    /**
+     * Build an array of page indices and '...' ellipsis markers.
+     * Always shows first, last, and up to 2 pages around the current page.
+     */
+    buildPageNumbers(current, totalPages) {
+        if (totalPages <= 7) {
+            return Array.from({length: totalPages}, (_, i) => i);
+        }
+        const pages = new Set();
+        pages.add(0);
+        pages.add(totalPages - 1);
+        for (let i = current - 1; i <= current + 1; i++) {
+            if (i >= 0 && i < totalPages) pages.add(i);
+        }
+        const sorted = [...pages].sort((a, b) => a - b);
+        const result = [];
+        for (let i = 0; i < sorted.length; i++) {
+            if (i > 0 && sorted[i] - sorted[i - 1] > 1) {
+                result.push('...');
+            }
+            result.push(sorted[i]);
+        }
+        return result;
+    }
+
+    goToAddressPage(page) {
+        this.addressPage = page;
+        this.renderAddresses();
     }
 
     async addAddress() {
@@ -606,7 +703,8 @@ class OpcUaDeviceDetailManager {
                 monitoringParameters: {
                     bufferSize: parseInt(document.getElementById('config-buffer-size').value),
                     samplingInterval: parseFloat(document.getElementById('config-monitoring-sampling').value),
-                    discardOldest: document.getElementById('config-discard-oldest').checked
+                    discardOldest: document.getElementById('config-discard-oldest').checked,
+                    monitoredItemsBatchSize: parseInt(document.getElementById('config-batch-size').value)
                 },
                 certificateConfig: {
                     securityDir: document.getElementById('cert-security-dir').value.trim(),

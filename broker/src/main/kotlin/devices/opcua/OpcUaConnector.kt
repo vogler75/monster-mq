@@ -231,21 +231,113 @@ class OpcUaConnector : AbstractVerticle() {
 
         logger.info("Setting up ${addresses.size} static address subscriptions for device ${deviceConfig.name}")
 
-        // Process each configured address
-        val setupFutures = addresses.map { address ->
-            setupAddressSubscription(address)
+        // Phase 1: Resolve all addresses to (address, nodeId, browsePath) tuples
+        val resolveFutures = addresses.map { address ->
+            parseAddressToNodeIds(address).map { nodeIdPairs ->
+                nodeIdPairs.map { (nodeId, browsePath) -> Triple(address, nodeId, browsePath) }
+            }
         }
 
-        Future.all<Void>(setupFutures)
+        Future.all<Any>(resolveFutures.map { it.map { r -> r as Any } })
+            .compose { compositeResult ->
+                val allItems = mutableListOf<Triple<OpcUaAddress, NodeId, String>>()
+                for (i in 0 until compositeResult.size()) {
+                    @Suppress("UNCHECKED_CAST")
+                    val items = compositeResult.resultAt<Any>(i) as? List<Triple<OpcUaAddress, NodeId, String>>
+                    if (items != null) allItems.addAll(items)
+                }
+
+                if (allItems.isEmpty()) {
+                    logger.warning("No nodes resolved for any configured address on device ${deviceConfig.name}")
+                    return@compose Future.succeededFuture<Void>()
+                }
+
+                // Phase 2: Batch create monitored items
+                val batchSize = opcUaConfig.monitoringParameters.monitoredItemsBatchSize
+                val batches = allItems.chunked(batchSize)
+                logger.info("Creating ${allItems.size} monitored items in ${batches.size} batch(es) for device ${deviceConfig.name}")
+
+                val batchFutures = batches.map { batch -> createMonitoredItemsBatch(batch) }
+                Future.all<Void>(batchFutures).map { null as Void? }
+            }
             .onComplete { result ->
                 if (result.succeeded()) {
-                    logger.info("Successfully set up ${addresses.size} address subscriptions for device ${deviceConfig.name}")
+                    logger.info("Successfully set up address subscriptions for device ${deviceConfig.name}")
                     promise.complete()
                 } else {
                     logger.severe("Failed to set up address subscriptions: ${result.cause()?.message}")
                     promise.fail(result.cause())
                 }
             }
+
+        return promise.future()
+    }
+
+    /**
+     * Create monitored items in a single batch request to reduce round-trips to the OPC UA server.
+     */
+    private fun createMonitoredItemsBatch(items: List<Triple<OpcUaAddress, NodeId, String>>): Future<Void> {
+        val promise = Promise.promise<Void>()
+
+        if (subscription == null) {
+            promise.fail(Exception("OPC UA subscription not available"))
+            return promise.future()
+        }
+
+        try {
+            val requests = items.map { (_, nodeId, _) ->
+                val clientHandle = subscription!!.nextClientHandle()
+                MonitoredItemCreateRequest(
+                    ReadValueId(nodeId, Unsigned.uint(13), null, QualifiedName.NULL_VALUE),
+                    MonitoringMode.Reporting,
+                    MonitoringParameters(
+                        clientHandle,
+                        opcUaConfig.monitoringParameters.samplingInterval,
+                        null,
+                        Unsigned.uint(opcUaConfig.monitoringParameters.bufferSize),
+                        opcUaConfig.monitoringParameters.discardOldest
+                    )
+                )
+            }
+
+            subscription!!.createMonitoredItems(
+                TimestampsToReturn.Both,
+                requests
+            ) { item, idx ->
+                val (address, nodeId, browsePath) = items[idx]
+                item.setValueConsumer { dataValue ->
+                    handleOpcUaValueChangeForAddress(address, nodeId, browsePath, dataValue)
+                }
+            }.whenComplete { createdItems, throwable ->
+                if (throwable != null) {
+                    logger.severe("Failed to create monitored items batch: ${throwable.message}")
+                    promise.fail(throwable)
+                    return@whenComplete
+                }
+
+                var successCount = 0
+                createdItems.forEachIndexed { idx, item ->
+                    val (address, nodeId, _) = items[idx]
+                    if (item.statusCode.isGood) {
+                        addressSubscriptions[address.address] = AddressSubscription(address, nodeId)
+                        opcUaMonitoredItems[address.address] = item
+                        successCount++
+                        logger.fine { "Created monitored item for address ${address.address}, nodeId $nodeId" }
+                    } else {
+                        logger.warning("Failed to create monitored item for address ${address.address}: ${item.statusCode}")
+                    }
+                }
+
+                if (successCount > 0) {
+                    logger.info("Batch created $successCount/${items.size} monitored items successfully")
+                    promise.complete()
+                } else {
+                    promise.fail(Exception("All ${items.size} monitored items in batch failed"))
+                }
+            }
+        } catch (e: Exception) {
+            promise.fail(e)
+        }
 
         return promise.future()
     }
@@ -585,43 +677,6 @@ class OpcUaConnector : AbstractVerticle() {
         }
     }
 
-    private fun setupAddressSubscription(address: OpcUaAddress): Future<Void> {
-        val promise = Promise.promise<Void>()
-
-        try {
-            // Parse the address to get NodeIds (can be multiple for wildcards)
-            parseAddressToNodeIds(address)
-                .compose { nodeIdPairs ->
-                    if (nodeIdPairs.isEmpty()) {
-                        promise.fail(Exception("No nodes found for address: ${address.address}"))
-                        return@compose Future.succeededFuture<Void>()
-                    }
-
-                    // Create monitored items for all resolved nodes
-                    val createFutures = nodeIdPairs.map { (nodeId, browsePath) ->
-                        createMonitoredItemForAddress(address, nodeId, browsePath)
-                    }
-
-                    Future.all<Void>(createFutures)
-                        .map { Void.TYPE.cast(null) }
-                }
-                .onComplete { result ->
-                    if (result.succeeded()) {
-                        logger.finer { "Successfully set up subscription for address: ${address.address} -> ${address.topic}" }
-                        promise.complete()
-                    } else {
-                        logger.warning("Failed to set up subscription for address ${address.address}: ${result.cause()?.message}")
-                        promise.fail(result.cause())
-                    }
-                }
-
-        } catch (e: Exception) {
-            promise.fail(e)
-        }
-
-        return promise.future()
-    }
-
     private fun parseAddressToNodeIds(address: OpcUaAddress): Future<List<Pair<NodeId, String>>> {
         val promise = Promise.promise<List<Pair<NodeId, String>>>()
 
@@ -809,63 +864,6 @@ class OpcUaConnector : AbstractVerticle() {
         return promise.future()
     }
 
-    private fun createMonitoredItemForAddress(address: OpcUaAddress, nodeId: NodeId, browsePath: String = nodeId.toParseableString()): Future<Void> {
-        val promise = Promise.promise<Void>()
-
-        if (subscription == null) {
-            promise.fail(Exception("OPC UA subscription not available"))
-            return promise.future()
-        }
-
-        try {
-            val clientHandle = subscription!!.nextClientHandle()
-
-            val request = MonitoredItemCreateRequest(
-                ReadValueId(nodeId, Unsigned.uint(13), null, QualifiedName.NULL_VALUE),
-                MonitoringMode.Reporting,
-                MonitoringParameters(
-                    clientHandle,
-                    opcUaConfig.monitoringParameters.samplingInterval,
-                    null, // No data change filter for now
-                    Unsigned.uint(opcUaConfig.monitoringParameters.bufferSize),
-                    opcUaConfig.monitoringParameters.discardOldest
-                )
-            )
-
-            subscription!!.createMonitoredItems(
-                TimestampsToReturn.Both,
-                listOf(request)
-            ) { item, _ ->
-                // Set value consumer
-                item.setValueConsumer { dataValue ->
-                    handleOpcUaValueChangeForAddress(address, nodeId, browsePath, dataValue)
-                }
-            }.whenComplete { items, throwable ->
-                if (throwable == null && items.isNotEmpty()) {
-                    val item = items[0]
-                    if (item.statusCode.isGood) {
-                        // Track the subscription
-                        addressSubscriptions[address.address] = AddressSubscription(address, nodeId)
-                        opcUaMonitoredItems[address.address] = item
-
-                        logger.fine { "Created monitored item for address ${address.address}, nodeId $nodeId" }
-                        promise.complete()
-                    } else {
-                        logger.warning("Failed to create monitored item for address ${address.address}: ${item.statusCode}")
-                        promise.fail(Exception("Monitored item creation failed: ${item.statusCode}"))
-                    }
-                } else {
-                    logger.severe("Failed to create monitored item for address ${address.address}: ${throwable?.message}")
-                    promise.fail(throwable ?: Exception("Unknown error creating monitored item"))
-                }
-            }
-
-        } catch (e: Exception) {
-            promise.fail(e)
-        }
-
-        return promise.future()
-    }
 
     private fun createCertificateValidator(): ClientCertificateValidator {
         val certificateConfig = opcUaConfig.certificateConfig

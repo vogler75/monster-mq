@@ -460,7 +460,8 @@ class OpcUaClientConfigMutations(
             MonitoringParameters(
                 bufferSize = (paramsMap["bufferSize"] as? Number)?.toInt() ?: 100,
                 samplingInterval = (paramsMap["samplingInterval"] as? Number)?.toDouble() ?: 0.0,
-                discardOldest = paramsMap["discardOldest"] as? Boolean ?: false
+                discardOldest = paramsMap["discardOldest"] as? Boolean ?: false,
+                monitoredItemsBatchSize = (paramsMap["monitoredItemsBatchSize"] as? Number)?.toInt() ?: 1000
             )
         } ?: MonitoringParameters()
 
@@ -792,7 +793,8 @@ class OpcUaClientConfigMutations(
                 "monitoringParameters" to mapOf(
                     "bufferSize" to config.monitoringParameters.bufferSize,
                     "samplingInterval" to config.monitoringParameters.samplingInterval,
-                    "discardOldest" to config.monitoringParameters.discardOldest
+                    "discardOldest" to config.monitoringParameters.discardOldest,
+                    "monitoredItemsBatchSize" to config.monitoringParameters.monitoredItemsBatchSize
                 ),
                 "addresses" to config.addresses.map { address ->
                     mapOf(

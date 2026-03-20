@@ -464,14 +464,16 @@ data class CertificateConfig(
 data class MonitoringParameters(
     val bufferSize: Int = 100,
     val samplingInterval: Double = 0.0,
-    val discardOldest: Boolean = false
+    val discardOldest: Boolean = false,
+    val monitoredItemsBatchSize: Int = 1000
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): MonitoringParameters {
             return MonitoringParameters(
                 bufferSize = json.getInteger("bufferSize", 100),
                 samplingInterval = json.getDouble("samplingInterval", 0.0),
-                discardOldest = json.getBoolean("discardOldest", false)
+                discardOldest = json.getBoolean("discardOldest", false),
+                monitoredItemsBatchSize = json.getInteger("monitoredItemsBatchSize", 1000)
             )
         }
     }
@@ -481,5 +483,6 @@ data class MonitoringParameters(
             .put("bufferSize", bufferSize)
             .put("samplingInterval", samplingInterval)
             .put("discardOldest", discardOldest)
+            .put("monitoredItemsBatchSize", monitoredItemsBatchSize)
     }
 }
