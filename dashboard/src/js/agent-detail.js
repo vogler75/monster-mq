@@ -167,6 +167,131 @@ class AgentDetailManager {
         }
     }
 
+    // --- History Query Management ---
+
+    renderHistoryQueries(queries) {
+        const container = document.getElementById('history-queries-list');
+        container.innerHTML = '';
+        (queries || []).forEach((q, idx) => this.addHistoryQueryCard(q, idx));
+    }
+
+    addHistoryQueryCard(query, idx) {
+        const container = document.getElementById('history-queries-list');
+        const card = document.createElement('div');
+        card.className = 'history-query-card';
+        card.dataset.index = idx !== undefined ? idx : container.children.length;
+
+        const isRaw = !query || query.interval === 'RAW';
+
+        card.innerHTML = `
+            <div class="history-query-header">
+                <span>Query #${parseInt(card.dataset.index) + 1}</span>
+                <button type="button" class="history-query-remove" title="Remove">&times;</button>
+            </div>
+            <div class="history-query-grid">
+                <div class="full">
+                    <label>Topics (one per line)</label>
+                    <textarea class="hq-topics" rows="2" data-drop-zone-enabled="true" placeholder="sensor/temperature&#10;sensor/humidity">${(query?.topics || []).join('\n')}</textarea>
+                </div>
+                <div>
+                    <label>Archive Group</label>
+                    <input type="text" class="hq-archive-group" value="${query?.archiveGroup || 'Default'}" placeholder="Default">
+                </div>
+                <div>
+                    <label>Last Seconds</label>
+                    <input type="number" class="hq-last-seconds" value="${query?.lastSeconds || 3600}" min="1">
+                </div>
+                <div>
+                    <label>Interval</label>
+                    <select class="hq-interval">
+                        <option value="RAW" ${isRaw ? 'selected' : ''}>RAW</option>
+                        <option value="ONE_MINUTE" ${query?.interval === 'ONE_MINUTE' ? 'selected' : ''}>1 Minute</option>
+                        <option value="FIVE_MINUTES" ${query?.interval === 'FIVE_MINUTES' ? 'selected' : ''}>5 Minutes</option>
+                        <option value="FIFTEEN_MINUTES" ${query?.interval === 'FIFTEEN_MINUTES' ? 'selected' : ''}>15 Minutes</option>
+                        <option value="ONE_HOUR" ${query?.interval === 'ONE_HOUR' ? 'selected' : ''}>1 Hour</option>
+                        <option value="ONE_DAY" ${query?.interval === 'ONE_DAY' ? 'selected' : ''}>1 Day</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Aggregation</label>
+                    <select class="hq-function" ${isRaw ? 'disabled' : ''}>
+                        <option value="AVG" ${query?.function === 'AVG' || !query?.function ? 'selected' : ''}>AVG</option>
+                        <option value="MIN" ${query?.function === 'MIN' ? 'selected' : ''}>MIN</option>
+                        <option value="MAX" ${query?.function === 'MAX' ? 'selected' : ''}>MAX</option>
+                    </select>
+                </div>
+                <div class="full">
+                    <label>JSON Fields (optional, comma-separated)</label>
+                    <input type="text" class="hq-fields" value="${(query?.fields || []).join(', ')}" placeholder="e.g. temperature, pressure" ${isRaw ? 'disabled' : ''}>
+                </div>
+            </div>
+        `;
+
+        // Wire up remove button
+        card.querySelector('.history-query-remove').addEventListener('click', () => {
+            card.remove();
+            this.renumberHistoryQueries();
+        });
+
+        // Toggle aggregation function enabled/disabled based on interval
+        const intervalSelect = card.querySelector('.hq-interval');
+        const functionSelect = card.querySelector('.hq-function');
+        const fieldsInput = card.querySelector('.hq-fields');
+        intervalSelect.addEventListener('change', () => {
+            const raw = intervalSelect.value === 'RAW';
+            functionSelect.disabled = raw;
+            fieldsInput.disabled = raw;
+        });
+
+        // Set up drop zone for topics textarea (append behavior)
+        const topicsTextarea = card.querySelector('.hq-topics');
+        topicsTextarea.classList.add('drop-zone');
+        topicsTextarea.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; topicsTextarea.classList.add('drag-over'); });
+        topicsTextarea.addEventListener('dragenter', (e) => { e.preventDefault(); topicsTextarea.classList.add('drag-over'); });
+        topicsTextarea.addEventListener('dragleave', (e) => { e.preventDefault(); if (!topicsTextarea.contains(e.relatedTarget)) topicsTextarea.classList.remove('drag-over'); });
+        topicsTextarea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            topicsTextarea.classList.remove('drag-over');
+            const topic = e.dataTransfer.getData('text/plain');
+            if (topic) {
+                const lines = topicsTextarea.value.trim() ? topicsTextarea.value.trim().split('\n').map(l => l.trim()).filter(l => l) : [];
+                if (!lines.includes(topic)) lines.push(topic);
+                topicsTextarea.value = lines.join('\n');
+                topicsTextarea.style.backgroundColor = 'rgba(34, 197, 94, 0.1)';
+                setTimeout(() => { topicsTextarea.style.backgroundColor = ''; }, 500);
+            }
+        });
+
+        container.appendChild(card);
+    }
+
+    renumberHistoryQueries() {
+        document.querySelectorAll('.history-query-card').forEach((card, i) => {
+            card.dataset.index = i;
+            card.querySelector('.history-query-header span').textContent = `Query #${i + 1}`;
+        });
+    }
+
+    collectHistoryQueries() {
+        const cards = document.querySelectorAll('.history-query-card');
+        const queries = [];
+        cards.forEach(card => {
+            const topics = card.querySelector('.hq-topics').value.split('\n').map(t => t.trim()).filter(t => t);
+            if (topics.length === 0) return;
+            const fields = card.querySelector('.hq-fields').value.split(',').map(f => f.trim()).filter(f => f);
+            queries.push({
+                archiveGroup: card.querySelector('.hq-archive-group').value.trim() || 'Default',
+                topics: topics,
+                lastSeconds: parseInt(card.querySelector('.hq-last-seconds').value) || 3600,
+                interval: card.querySelector('.hq-interval').value,
+                function: card.querySelector('.hq-function').value,
+                fields: fields
+            });
+        });
+        return queries;
+    }
+
     getSelectedMcpServers() {
         return Array.from(document.querySelectorAll('.mcp-server-checkbox:checked')).map(cb => cb.value);
     }
@@ -202,6 +327,7 @@ class AgentDetailManager {
                         useMonsterMqMcp
                         contextLastvalTopics
                         contextRetainedTopics
+                        contextHistoryQueries { archiveGroup topics lastSeconds interval function fields }
                         createdAt
                         updatedAt
                     }
@@ -298,6 +424,7 @@ class AgentDetailManager {
         // Populate Context Data
         document.getElementById('agent-context-lastval-topics').value = d.contextLastvalTopics ? JSON.stringify(d.contextLastvalTopics, null, 2) : '';
         document.getElementById('agent-context-retained').value = (d.contextRetainedTopics || []).join('\n');
+        this.renderHistoryQueries(d.contextHistoryQueries);
 
         // Populate System Prompt
         document.getElementById('agent-system-prompt').value = d.systemPrompt || '';
@@ -358,7 +485,8 @@ class AgentDetailManager {
             useMonsterMqMcp: document.getElementById('agent-use-monstermq-mcp').checked,
             contextLastvalTopics: this.parseContextLastvalTopics(),
             contextRetainedTopics: document.getElementById('agent-context-retained').value
-                .split('\n').map(t => t.trim()).filter(t => t.length > 0)
+                .split('\n').map(t => t.trim()).filter(t => t.length > 0),
+            contextHistoryQueries: this.collectHistoryQueries()
         };
 
         // Generate cronExpression or cronIntervalMs based on schedule mode
@@ -693,6 +821,11 @@ function setupContextDropZones() {
 document.addEventListener('DOMContentLoaded', () => {
     agentDetailManager = new AgentDetailManager();
     setupContextDropZones();
+
+    // Add History Query button
+    document.getElementById('add-history-query-btn').addEventListener('click', () => {
+        agentDetailManager.addHistoryQueryCard(null);
+    });
 });
 
 // Handle modal clicks (close on backdrop)

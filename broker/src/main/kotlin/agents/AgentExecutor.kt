@@ -339,6 +339,67 @@ class AgentExecutor(
             }
         }
 
+        // Fetch history data
+        if (agentConfig.contextHistoryQueries.isNotEmpty()) {
+            val archiveGroups = Monster.getArchiveHandler()?.getDeployedArchiveGroups() ?: emptyMap()
+            for (query in agentConfig.contextHistoryQueries) {
+                if (query.topics.isEmpty()) continue
+                val archiveGroup = archiveGroups[query.archiveGroup] ?: continue
+                val archiveStore = archiveGroup.archiveStore
+                if (archiveStore !is at.rocworks.stores.IMessageArchiveExtended) continue
+
+                val endTime = java.time.Instant.now()
+                val startTime = endTime.minusSeconds(query.lastSeconds.toLong())
+
+                if (query.isRaw()) {
+                    // Raw history: fetch individual messages per topic
+                    for (topic in query.topics) {
+                        try {
+                            val history = archiveStore.getHistory(topic, startTime, endTime, 500)
+                            if (history.size() > 0) {
+                                lines.add("[History:${query.archiveGroup}:RAW] $topic (last ${query.lastSeconds}s, ${history.size()} records):")
+                                for (i in 0 until history.size()) {
+                                    val row = history.getJsonObject(i) ?: continue
+                                    val time = row.getString("time") ?: row.getValue("time")?.toString() ?: ""
+                                    val value = row.getValue("payload_json") ?: row.getValue("payload_b64") ?: ""
+                                    lines.add("  $time = $value")
+                                    if (lines.size >= 500) break
+                                }
+                            }
+                        } catch (e: Exception) {
+                            logger.warning("Failed to fetch raw history for $topic in ${query.archiveGroup}: ${e.message}")
+                        }
+                        if (lines.size >= 500) break
+                    }
+                } else {
+                    // Aggregated history
+                    try {
+                        val result = archiveStore.getAggregatedHistory(
+                            topics = query.topics,
+                            startTime = startTime,
+                            endTime = endTime,
+                            intervalMinutes = query.intervalMinutes(),
+                            functions = listOf(query.function.uppercase()),
+                            fields = query.fields
+                        )
+                        val columns = result.getJsonArray("columns")
+                        val rows = result.getJsonArray("rows")
+                        if (columns != null && rows != null && rows.size() > 0) {
+                            lines.add("[History:${query.archiveGroup}:${query.interval}:${query.function}] ${query.topics.joinToString(", ")} (last ${query.lastSeconds}s, ${rows.size()} rows):")
+                            lines.add("  Columns: ${columns.encode()}")
+                            for (i in 0 until rows.size()) {
+                                lines.add("  ${rows.getValue(i)}")
+                                if (lines.size >= 500) break
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logger.warning("Failed to fetch aggregated history for ${query.topics} in ${query.archiveGroup}: ${e.message}")
+                    }
+                }
+                if (lines.size >= 500) break
+            }
+        }
+
         if (lines.isEmpty()) return ""
 
         return "--- Context Data (current values for your reference) ---\n" +
@@ -366,6 +427,9 @@ class AgentExecutor(
             } else {
                 userMessage
             }
+
+            logger.fine { "Agent ${deviceConfig.name} LLM request [source=$source, length=${fullMessage.length}]" }
+
             service.chat(fullMessage)
         }.onComplete { result ->
             if (result.succeeded()) {
@@ -389,7 +453,10 @@ class AgentExecutor(
                 }
             } else {
                 errors.incrementAndGet()
-                publishError(result.cause()?.message ?: "Unknown error")
+                val cause = result.cause()
+                logger.warning("Agent ${deviceConfig.name} executeBlocking failed: ${cause?.message}")
+                if (cause != null) logger.fine { cause.stackTraceToString() }
+                publishError(cause?.message ?: "Unknown error")
             }
         }
     }

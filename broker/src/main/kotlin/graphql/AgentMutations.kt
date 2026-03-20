@@ -5,6 +5,7 @@ import at.rocworks.Utils
 import at.rocworks.agents.AgentConfig
 import at.rocworks.agents.AgentExtension
 import at.rocworks.agents.AgentSkill
+import at.rocworks.agents.ContextHistoryQuery
 import at.rocworks.agents.TriggerType
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
@@ -183,7 +184,8 @@ class AgentMutations(
             mcpServers = parseStringList(input["mcpServers"]),
             useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: false,
             contextLastvalTopics = parseContextLastvalTopics(input["contextLastvalTopics"]),
-            contextRetainedTopics = parseStringList(input["contextRetainedTopics"])
+            contextRetainedTopics = parseStringList(input["contextRetainedTopics"]),
+            contextHistoryQueries = parseContextHistoryQueries(input["contextHistoryQueries"])
         )
 
         return DeviceConfig(
@@ -222,7 +224,8 @@ class AgentMutations(
             mcpServers = if (input.containsKey("mcpServers")) parseStringList(input["mcpServers"]) else existingConfig.mcpServers,
             useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: existingConfig.useMonsterMqMcp,
             contextLastvalTopics = if (input.containsKey("contextLastvalTopics")) parseContextLastvalTopics(input["contextLastvalTopics"]) else existingConfig.contextLastvalTopics,
-            contextRetainedTopics = if (input.containsKey("contextRetainedTopics")) parseStringList(input["contextRetainedTopics"]) else existingConfig.contextRetainedTopics
+            contextRetainedTopics = if (input.containsKey("contextRetainedTopics")) parseStringList(input["contextRetainedTopics"]) else existingConfig.contextRetainedTopics,
+            contextHistoryQueries = if (input.containsKey("contextHistoryQueries")) parseContextHistoryQueries(input["contextHistoryQueries"]) else existingConfig.contextHistoryQueries
         )
 
         return existing.copy(
@@ -262,6 +265,22 @@ class AgentMutations(
                 is List<*> -> v.filterIsInstance<String>()
                 else -> emptyList()
             }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parseContextHistoryQueries(raw: Any?): List<ContextHistoryQuery> {
+        if (raw == null) return emptyList()
+        val list = raw as? List<Map<String, Any>> ?: return emptyList()
+        return list.map { map ->
+            ContextHistoryQuery(
+                archiveGroup = map["archiveGroup"] as? String ?: "Default",
+                topics = (map["topics"] as? List<String>) ?: emptyList(),
+                lastSeconds = (map["lastSeconds"] as? Number)?.toInt() ?: 3600,
+                interval = map["interval"] as? String ?: "RAW",
+                function = map["function"] as? String ?: "AVG",
+                fields = (map["fields"] as? List<String>) ?: emptyList()
+            )
         }
     }
 

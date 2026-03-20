@@ -89,6 +89,18 @@
         .modal-body { padding: 2rem; }
         .modal-footer { padding: 1.5rem 2rem; border-top: 1px solid var(--dark-border); display: flex; justify-content: flex-end; gap: 1rem; }
         @media (max-width: 1000px) { .form-grid, .info-grid { grid-template-columns: 1fr; } .full-width { grid-column: 1; } }
+
+        /* History Query Cards */
+        .history-query-card { background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; }
+        .history-query-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+        .history-query-header span { color: var(--text-primary); font-weight: 500; font-size: 0.9rem; }
+        .history-query-remove { background: none; border: none; color: var(--monster-red); cursor: pointer; font-size: 1.1rem; padding: 0.2rem 0.4rem; border-radius: 4px; }
+        .history-query-remove:hover { background: rgba(239, 68, 68, 0.15); }
+        .history-query-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+        .history-query-grid .full { grid-column: 1 / -1; }
+        .history-query-grid label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; display: block; }
+        .history-query-grid input, .history-query-grid select, .history-query-grid textarea { width: 100%; padding: 0.5rem; background: var(--dark-surface); border: 1px solid var(--dark-border); border-radius: 6px; color: var(--text-primary); box-sizing: border-box; font-size: 0.85rem; }
+        .history-query-grid textarea { resize: vertical; font-family: monospace; font-size: 0.8rem; }
     </style>
 </head>
 <body>
@@ -316,6 +328,18 @@
                         <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
                             Topic filters for retained messages (one per line). Current retained values are included as context.
                         </small>
+                    </div>
+
+                    <!-- History Data Queries -->
+                    <div class="form-group full-width" style="margin-top: 1rem;">
+                        <label>History Data Queries</label>
+                        <small style="color: var(--text-muted); margin-bottom: 0.5rem; display: block;">
+                            Configure historical data to include in the agent's context. Drag topics from the topic browser to the topics field.
+                        </small>
+                        <div id="history-queries-list"></div>
+                        <button type="button" class="btn-secondary" id="add-history-query-btn" style="margin-top: 0.5rem; padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                            + Add History Query
+                        </button>
                     </div>
                 </div>
             </div>

@@ -24,7 +24,8 @@ data class AgentConfig(
     val mcpServers: List<String> = emptyList(),
     val useMonsterMqMcp: Boolean = false,
     val contextLastvalTopics: Map<String, List<String>> = emptyMap(),  // archiveGroup -> list of topic filters
-    val contextRetainedTopics: List<String> = emptyList()       // topic filters for retained messages
+    val contextRetainedTopics: List<String> = emptyList(),      // topic filters for retained messages
+    val contextHistoryQueries: List<ContextHistoryQuery> = emptyList()  // history data queries
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): AgentConfig {
@@ -53,7 +54,9 @@ data class AgentConfig(
                         obj.getJsonArray(key, JsonArray()).filterIsInstance<String>()
                     }
                 },
-                contextRetainedTopics = json.getJsonArray("contextRetainedTopics", JsonArray()).filterIsInstance<String>().toList()
+                contextRetainedTopics = json.getJsonArray("contextRetainedTopics", JsonArray()).filterIsInstance<String>().toList(),
+                contextHistoryQueries = json.getJsonArray("contextHistoryQueries", JsonArray())
+                    .filterIsInstance<JsonObject>().map { ContextHistoryQuery.fromJsonObject(it) }
             )
         }
     }
@@ -83,6 +86,7 @@ data class AgentConfig(
                 contextLastvalTopics.forEach { (group, topics) -> obj.put(group, JsonArray(topics)) }
             })
             .put("contextRetainedTopics", JsonArray(contextRetainedTopics))
+            .put("contextHistoryQueries", JsonArray(contextHistoryQueries.map { it.toJsonObject() }))
     }
 }
 
@@ -107,6 +111,49 @@ data class AgentSkill(
             .put("description", description)
             .put("inputSchema", inputSchema)
     }
+}
+
+data class ContextHistoryQuery(
+    val archiveGroup: String = "Default",
+    val topics: List<String> = emptyList(),
+    val lastSeconds: Int = 3600,          // how far back to look (default 1 hour)
+    val interval: String = "RAW",         // RAW, ONE_MINUTE, FIVE_MINUTES, FIFTEEN_MINUTES, ONE_HOUR, ONE_DAY
+    val function: String = "AVG",         // AVG, MIN, MAX (ignored for RAW)
+    val fields: List<String> = emptyList() // optional JSON field paths for aggregation (e.g. ["temperature", "pressure"])
+) {
+    companion object {
+        fun fromJsonObject(json: JsonObject): ContextHistoryQuery {
+            return ContextHistoryQuery(
+                archiveGroup = json.getString("archiveGroup", "Default"),
+                topics = json.getJsonArray("topics", JsonArray()).filterIsInstance<String>().toList(),
+                lastSeconds = json.getInteger("lastSeconds", 3600),
+                interval = json.getString("interval", "RAW"),
+                function = json.getString("function", "AVG"),
+                fields = json.getJsonArray("fields", JsonArray()).filterIsInstance<String>().toList()
+            )
+        }
+    }
+
+    fun toJsonObject(): JsonObject {
+        return JsonObject()
+            .put("archiveGroup", archiveGroup)
+            .put("topics", JsonArray(topics))
+            .put("lastSeconds", lastSeconds)
+            .put("interval", interval)
+            .put("function", function)
+            .put("fields", JsonArray(fields))
+    }
+
+    fun intervalMinutes(): Int = when (interval.uppercase()) {
+        "ONE_MINUTE" -> 1
+        "FIVE_MINUTES" -> 5
+        "FIFTEEN_MINUTES" -> 15
+        "ONE_HOUR" -> 60
+        "ONE_DAY" -> 1440
+        else -> 0 // RAW
+    }
+
+    fun isRaw(): Boolean = interval.uppercase() == "RAW"
 }
 
 enum class TriggerType {

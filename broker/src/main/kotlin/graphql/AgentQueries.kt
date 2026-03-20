@@ -111,6 +111,16 @@ class AgentQueries(
                 "useMonsterMqMcp" to agentConfig.useMonsterMqMcp,
                 "contextLastvalTopics" to agentConfig.contextLastvalTopics.mapValues { it.value },
                 "contextRetainedTopics" to agentConfig.contextRetainedTopics,
+                "contextHistoryQueries" to agentConfig.contextHistoryQueries.map { q ->
+                    mapOf(
+                        "archiveGroup" to q.archiveGroup,
+                        "topics" to q.topics,
+                        "lastSeconds" to q.lastSeconds,
+                        "interval" to q.interval,
+                        "function" to q.function,
+                        "fields" to q.fields
+                    )
+                },
                 "createdAt" to device.createdAt.toString(),
                 "updatedAt" to device.updatedAt.toString()
             )

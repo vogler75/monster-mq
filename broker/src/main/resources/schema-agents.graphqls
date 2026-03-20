@@ -27,6 +27,7 @@ type Agent {
     useMonsterMqMcp: Boolean!
     contextLastvalTopics: JSON
     contextRetainedTopics: [String!]!
+    contextHistoryQueries: [ContextHistoryQuery!]!
     createdAt: String!
     updatedAt: String!
 }
@@ -66,6 +67,7 @@ input AgentInput {
     useMonsterMqMcp: Boolean
     contextLastvalTopics: JSON
     contextRetainedTopics: [String!]
+    contextHistoryQueries: [ContextHistoryQueryInput!]
     enabled: Boolean
 }
 
@@ -73,6 +75,24 @@ input AgentSkillInput {
     name: String!
     description: String!
     inputSchema: JSON
+}
+
+type ContextHistoryQuery {
+    archiveGroup: String!
+    topics: [String!]!
+    lastSeconds: Int!
+    interval: String!
+    function: String!
+    fields: [String!]!
+}
+
+input ContextHistoryQueryInput {
+    archiveGroup: String!
+    topics: [String!]!
+    lastSeconds: Int!
+    interval: String!
+    function: String!
+    fields: [String!]
 }
 
 # =======================
