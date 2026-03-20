@@ -24,7 +24,12 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
+import com.cronutils.model.CronType
+import com.cronutils.model.definition.CronDefinitionBuilder
+import com.cronutils.model.time.ExecutionTime
+import com.cronutils.parser.CronParser
 import java.time.Instant
+import java.time.ZonedDateTime
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
 
@@ -186,15 +191,38 @@ class AgentExecutor(
     }
 
     private fun setupCronTrigger() {
-        val intervalMs = agentConfig.cronIntervalMs
-        if (intervalMs != null && intervalMs > 0) {
-            logger.fine("Agent ${deviceConfig.name} setting up periodic trigger: ${intervalMs}ms")
-            cronTimerId = vertx.setPeriodic(intervalMs) {
-                val message = "It is ${Instant.now()}. Execute your scheduled task."
-                executeAgent(message, "cron")
+        val expression = agentConfig.cronExpression
+        if (!expression.isNullOrBlank()) {
+            val cronDefinition = CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ)
+            val parser = CronParser(cronDefinition)
+            val cron = parser.parse(expression).validate()
+            val executionTime = ExecutionTime.forCron(cron)
+            scheduleNextCronExecution(executionTime)
+        } else {
+            val intervalMs = agentConfig.cronIntervalMs
+            if (intervalMs != null && intervalMs > 0) {
+                logger.fine("Agent ${deviceConfig.name} setting up periodic trigger: ${intervalMs}ms")
+                cronTimerId = vertx.setPeriodic(intervalMs) {
+                    executeAgent("It is ${Instant.now()}. Execute your scheduled task.", "cron")
+                }
+            } else {
+                logger.warning("Agent ${deviceConfig.name} has CRON trigger but no cronExpression or cronIntervalMs")
+            }
+        }
+    }
+
+    private fun scheduleNextCronExecution(executionTime: ExecutionTime) {
+        val now = ZonedDateTime.now()
+        val nextExecution = executionTime.nextExecution(now)
+        if (nextExecution.isPresent) {
+            val delayMs = java.time.Duration.between(now, nextExecution.get()).toMillis()
+            logger.fine("Agent ${deviceConfig.name} next cron execution at ${nextExecution.get()} (in ${delayMs}ms)")
+            cronTimerId = vertx.setTimer(delayMs) {
+                executeAgent("It is ${Instant.now()}. Execute your scheduled task.", "cron")
+                scheduleNextCronExecution(executionTime)
             }
         } else {
-            logger.warning("Agent ${deviceConfig.name} has CRON trigger but no cronIntervalMs configured")
+            logger.warning("Agent ${deviceConfig.name}: no next cron execution found")
         }
     }
 

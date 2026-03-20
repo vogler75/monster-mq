@@ -63,7 +63,11 @@ class AgentDetailManager {
         document.getElementById('agent-max-tool-iterations').value = '10';
         document.getElementById('agent-memory-window-size').value = '20';
         document.getElementById('agent-trigger-type').value = 'MQTT';
-        document.getElementById('agent-cron-interval').value = '';
+        document.getElementById('agent-schedule-mode').value = 'interval';
+        document.getElementById('agent-interval-value').value = '';
+        document.getElementById('agent-interval-unit').value = 'minutes';
+        document.getElementById('agent-daily-time').value = '22:00:00';
+        document.getElementById('agent-cron-expression').value = '';
         document.getElementById('agent-input-topics').value = '';
         document.getElementById('agent-output-topics').value = '';
         document.getElementById('agent-system-prompt').value = '';
@@ -251,7 +255,39 @@ class AgentDetailManager {
 
         // Populate Trigger Configuration
         document.getElementById('agent-trigger-type').value = d.triggerType || 'MQTT';
-        document.getElementById('agent-cron-interval').value = d.cronIntervalMs || '';
+
+        // Reverse-parse schedule mode from stored data
+        if (d.cronExpression) {
+            // Try to detect "daily at time" pattern: "SS MM HH * * ? *" or "SS MM HH * * ?"
+            const dailyMatch = d.cronExpression.match(/^(\d+)\s+(\d+)\s+(\d+)\s+\*\s+\*\s+\?\s*\*?$/);
+            if (dailyMatch) {
+                document.getElementById('agent-schedule-mode').value = 'daily';
+                const hh = dailyMatch[3].padStart(2, '0');
+                const mm = dailyMatch[2].padStart(2, '0');
+                const ss = dailyMatch[1].padStart(2, '0');
+                document.getElementById('agent-daily-time').value = `${hh}:${mm}:${ss}`;
+            } else {
+                document.getElementById('agent-schedule-mode').value = 'custom';
+                document.getElementById('agent-cron-expression').value = d.cronExpression;
+            }
+        } else if (d.cronIntervalMs) {
+            document.getElementById('agent-schedule-mode').value = 'interval';
+            // Convert ms back to best unit
+            const ms = d.cronIntervalMs;
+            if (ms % 3600000 === 0) {
+                document.getElementById('agent-interval-value').value = ms / 3600000;
+                document.getElementById('agent-interval-unit').value = 'hours';
+            } else if (ms % 60000 === 0) {
+                document.getElementById('agent-interval-value').value = ms / 60000;
+                document.getElementById('agent-interval-unit').value = 'minutes';
+            } else {
+                document.getElementById('agent-interval-value').value = ms / 1000;
+                document.getElementById('agent-interval-unit').value = 'seconds';
+            }
+        } else {
+            document.getElementById('agent-schedule-mode').value = 'interval';
+        }
+
         document.getElementById('agent-input-topics').value = (d.inputTopics || []).join('\n');
         document.getElementById('agent-output-topics').value = (d.outputTopics || []).join('\n');
 
@@ -314,7 +350,8 @@ class AgentDetailManager {
             maxToolIterations: parseInt(document.getElementById('agent-max-tool-iterations').value) || null,
             memoryWindowSize: parseInt(document.getElementById('agent-memory-window-size').value) || null,
             triggerType: document.getElementById('agent-trigger-type').value,
-            cronIntervalMs: parseInt(document.getElementById('agent-cron-interval').value) || null,
+            cronExpression: null,
+            cronIntervalMs: null,
             inputTopics: inputTopics,
             outputTopics: outputTopics,
             mcpServers: this.getSelectedMcpServers(),
@@ -323,6 +360,28 @@ class AgentDetailManager {
             contextRetainedTopics: document.getElementById('agent-context-retained').value
                 .split('\n').map(t => t.trim()).filter(t => t.length > 0)
         };
+
+        // Generate cronExpression or cronIntervalMs based on schedule mode
+        if (data.triggerType === 'CRON') {
+            const mode = document.getElementById('agent-schedule-mode').value;
+            if (mode === 'interval') {
+                const val = parseInt(document.getElementById('agent-interval-value').value);
+                const unit = document.getElementById('agent-interval-unit').value;
+                if (val > 0) {
+                    const multipliers = { seconds: 1000, minutes: 60000, hours: 3600000 };
+                    data.cronIntervalMs = val * (multipliers[unit] || 60000);
+                }
+            } else if (mode === 'daily') {
+                const time = document.getElementById('agent-daily-time').value || '22:00:00';
+                const parts = time.split(':');
+                const hh = parseInt(parts[0]) || 0;
+                const mm = parseInt(parts[1]) || 0;
+                const ss = parseInt(parts[2]) || 0;
+                data.cronExpression = `${ss} ${mm} ${hh} * * ? *`;
+            } else if (mode === 'custom') {
+                data.cronExpression = document.getElementById('agent-cron-expression').value.trim() || null;
+            }
+        }
 
         const apiKey = document.getElementById('agent-api-key').value;
         if (apiKey) {
@@ -517,10 +576,24 @@ function confirmDeleteAgent() {
 
 function toggleTriggerFields() {
     const triggerType = document.getElementById('agent-trigger-type').value;
-    const cronGroup = document.getElementById('cron-interval-group');
-    if (cronGroup) {
-        cronGroup.style.display = triggerType === 'CRON' ? 'block' : 'none';
+    const cronScheduleGroup = document.getElementById('cron-schedule-group');
+    if (cronScheduleGroup) {
+        cronScheduleGroup.style.display = triggerType === 'CRON' ? 'block' : 'none';
     }
+    if (triggerType === 'CRON') {
+        toggleScheduleMode();
+    } else {
+        document.getElementById('schedule-interval-group').style.display = 'none';
+        document.getElementById('schedule-daily-group').style.display = 'none';
+        document.getElementById('schedule-custom-group').style.display = 'none';
+    }
+}
+
+function toggleScheduleMode() {
+    const mode = document.getElementById('agent-schedule-mode').value;
+    document.getElementById('schedule-interval-group').style.display = mode === 'interval' ? 'block' : 'none';
+    document.getElementById('schedule-daily-group').style.display = mode === 'daily' ? 'block' : 'none';
+    document.getElementById('schedule-custom-group').style.display = mode === 'custom' ? 'block' : 'none';
 }
 
 function updateModelPlaceholder() {

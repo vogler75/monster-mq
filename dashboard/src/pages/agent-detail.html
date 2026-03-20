@@ -196,11 +196,41 @@
                                 <option value="MANUAL">MANUAL</option>
                             </select>
                         </div>
-                        <div class="form-group" id="cron-interval-group" style="display:none;">
-                            <label for="agent-cron-interval">Cron Interval (ms)</label>
-                            <input type="number" id="agent-cron-interval" min="1000" placeholder="e.g., 60000">
+                        <div class="form-group" id="cron-schedule-group" style="display:none;">
+                            <label for="agent-schedule-mode">Schedule Mode</label>
+                            <select id="agent-schedule-mode" onchange="toggleScheduleMode()">
+                                <option value="interval">Simple Interval</option>
+                                <option value="daily">Daily at Time</option>
+                                <option value="custom">Custom Cron</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="schedule-interval-group" style="display:none;">
+                            <label for="agent-interval-value">Interval</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="number" id="agent-interval-value" min="1" placeholder="e.g., 60" style="flex: 1;">
+                                <select id="agent-interval-unit" style="width: auto; min-width: 110px;">
+                                    <option value="seconds">Seconds</option>
+                                    <option value="minutes" selected>Minutes</option>
+                                    <option value="hours">Hours</option>
+                                </select>
+                            </div>
                             <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
-                                Interval in milliseconds between agent executions
+                                How often the agent should execute
+                            </small>
+                        </div>
+                        <div class="form-group" id="schedule-daily-group" style="display:none;">
+                            <label for="agent-daily-time">Time (HH:MM:SS)</label>
+                            <input type="time" id="agent-daily-time" step="1" value="22:00:00">
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                Agent will execute once daily at this time
+                            </small>
+                        </div>
+                        <div class="form-group" id="schedule-custom-group" style="display:none;">
+                            <label for="agent-cron-expression">Cron Expression (Quartz)</label>
+                            <input type="text" id="agent-cron-expression" placeholder="0 0 22 * * ? *">
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                Quartz format: seconds minutes hours day-of-month month day-of-week [year]<br>
+                                Examples: <code>0 0 22 * * ? *</code> (daily 22:00), <code>0 */15 * * * ? *</code> (every 15 min), <code>0 0 */4 * * ? *</code> (every 4 hours)
                             </small>
                         </div>
                         <div class="form-group full-width">
