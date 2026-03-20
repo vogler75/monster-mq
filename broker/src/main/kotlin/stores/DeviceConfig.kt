@@ -28,6 +28,7 @@ data class DeviceConfig(
         const val DEVICE_TYPE_PLC4X_CLIENT = "PLC4X-Client"
         const val DEVICE_TYPE_NEO4J_CLIENT = "Neo4j-Client"
         const val DEVICE_TYPE_NATS_CLIENT = "NATS-Client"
+        const val DEVICE_TYPE_TELEGRAM_CLIENT = "Telegram-Client"
         const val DEVICE_TYPE_JDBC_LOGGER = "JDBC-Logger"
         const val DEVICE_TYPE_SPARKPLUGB_DECODER = "SparkplugB-Decoder"
         const val DEVICE_TYPE_FLOW_CLASS = "Flow-Class"

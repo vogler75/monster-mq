@@ -34,6 +34,8 @@ import at.rocworks.graphql.JDBCLoggerQueries
 import at.rocworks.graphql.JDBCLoggerMutations
 import at.rocworks.graphql.NatsClientConfigQueries
 import at.rocworks.graphql.NatsClientConfigMutations
+import at.rocworks.graphql.TelegramClientConfigQueries
+import at.rocworks.graphql.TelegramClientConfigMutations
 import at.rocworks.graphql.SparkplugBDecoderQueries
 import at.rocworks.graphql.SparkplugBDecoderMutations
 import at.rocworks.graphql.FlowQueries
@@ -380,6 +382,10 @@ class GraphQLServer(
         val natsClientQueries = deviceStore?.let { NatsClientConfigQueries(vertx, it) }
         val natsClientMutations = deviceStore?.let { NatsClientConfigMutations(vertx, it) }
 
+        // Initialize Telegram Client resolvers
+        val telegramClientQueries = deviceStore?.let { TelegramClientConfigQueries(vertx, it) }
+        val telegramClientMutations = deviceStore?.let { TelegramClientConfigMutations(vertx, it) }
+
         // Initialize Topic Schema Governance resolvers
         // Reuse the singleton cache initialized in Monster.kt, or create if not yet available
         val topicSchemaPolicyCache = TopicSchemaPolicyCache.getInstance()
@@ -478,6 +484,12 @@ class GraphQLServer(
                     .apply {
                         natsClientQueries?.let { resolver ->
                             dataFetcher("natsClients", resolver.natsClients())
+                        }
+                    }
+                    // Telegram Client queries
+                    .apply {
+                        telegramClientQueries?.let { resolver ->
+                            dataFetcher("telegramClients", resolver.telegramClients())
                         }
                     }
                     // WinCC OA Client queries
@@ -649,6 +661,16 @@ class GraphQLServer(
                             }
                         }
                     }
+                    // Telegram Client mutations - grouped under telegramClient
+                    .apply {
+                        telegramClientMutations?.let { _ ->
+                            dataFetcher("telegramClient") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
                     // WinCC OA Client mutations - grouped under winCCOaDevice
                     .apply {
                         winCCOaClientMutations?.let { _ ->
@@ -805,6 +827,20 @@ class GraphQLServer(
                         dataFetcher("addAddress", resolver.addNatsClientAddress())
                         dataFetcher("updateAddress", resolver.updateNatsClientAddress())
                         dataFetcher("deleteAddress", resolver.deleteNatsClientAddress())
+                    }
+                }
+            }
+            // Register Telegram Client Mutations type
+            .type("TelegramClientMutations") { builder ->
+                builder.apply {
+                    telegramClientMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createTelegramClient())
+                        dataFetcher("update", resolver.updateTelegramClient())
+                        dataFetcher("delete", resolver.deleteTelegramClient())
+                        dataFetcher("start", resolver.startTelegramClient())
+                        dataFetcher("stop", resolver.stopTelegramClient())
+                        dataFetcher("toggle", resolver.toggleTelegramClient())
+                        dataFetcher("reassign", resolver.reassignTelegramClient())
                     }
                 }
             }
@@ -1088,6 +1124,13 @@ class GraphQLServer(
                 builder.apply {
                     natsClientQueries?.let { resolver ->
                         dataFetcher("metrics", resolver.natsClientMetrics())
+                    }
+                }
+            }
+            .type("TelegramClient") { builder ->
+                builder.apply {
+                    telegramClientQueries?.let { resolver ->
+                        dataFetcher("metrics", resolver.telegramClientMetrics())
                     }
                 }
             }

@@ -466,7 +466,11 @@ class AgentExecutor(
     private fun publishResponse(response: String) {
         val sessionHandler = Monster.getSessionHandler() ?: return
 
-        agentConfig.outputTopics.forEach { topic ->
+        val topics = agentConfig.outputTopics.ifEmpty {
+            listOf("agents/${deviceConfig.name}/response")
+        }
+
+        topics.forEach { topic ->
             try {
                 val msg = BrokerMessage(clientId, topic, response)
                 sessionHandler.publishMessage(msg)

@@ -1083,6 +1083,12 @@ MORE INFO:
                         vertx.deployVerticle(natsClientExtension, natsDeploymentOptions)
                     }
                     .compose {
+                        // Telegram Client Bridge Extension
+                        val telegramClientExtension = at.rocworks.devices.telegramclient.TelegramClientExtension()
+                        val telegramDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(telegramClientExtension, telegramDeploymentOptions)
+                    }
+                    .compose {
                         // WinCC OA Client Extension (GraphQL-based)
                         val winCCOaExtension = WinCCOaExtension()
                         val winCCOaDeploymentOptions = DeploymentOptions().setConfig(configJson)

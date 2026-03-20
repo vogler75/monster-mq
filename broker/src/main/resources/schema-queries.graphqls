@@ -1749,3 +1749,76 @@ type AggregatedResult {
     # Number of data rows returned
     rowCount: Int!
 }
+
+#############################################
+# Telegram Client Configuration             #
+#############################################
+
+"""
+Telegram Bot Client Bridge Configuration
+
+Bidirectional bridge between the local MQTT broker and a Telegram Bot.
+
+Topic structure (driven by device namespace):
+- {namespace}/chats        — retained JSON array of registered chat IDs
+- {namespace}/in/{chatId}  — incoming messages from Telegram
+- {namespace}/out/{chatId} — publish here to send a message to a Telegram chat
+
+Bot commands:
+- /start — registers the chat, adds chatId to the retained chats topic
+- /stop  — unregisters the chat, removes chatId
+
+Features:
+- No external SDK — uses Telegram Bot API directly via HTTP
+- Long polling for receiving messages
+- Allowed-users whitelist (empty = all users allowed)
+- Supports Text, HTML, Markdown, and MarkdownV2 parse modes
+"""
+
+type TelegramClientConfig {
+    # Bot token (masked — only last 4 characters shown)
+    botToken: String!
+    # Long polling timeout in seconds
+    pollingTimeoutSeconds: Int!
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelayMs: Long!
+    # HTTP proxy host (optional)
+    proxyHost: String
+    # HTTP proxy port (optional)
+    proxyPort: Int
+    # Default parse mode for outgoing messages: Text, HTML, Markdown, MarkdownV2
+    parseMode: String!
+    # Allowed Telegram usernames (empty list = all users allowed)
+    allowedUsers: [String!]!
+}
+
+type TelegramClientMetrics {
+    messagesIn: Float!
+    messagesOut: Float!
+    errors: Float!
+    registeredChats: Int!
+    timestamp: String!
+}
+
+type TelegramClient {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    config: TelegramClientConfig!
+    enabled: Boolean!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    metrics: [TelegramClientMetrics!]!
+}
+
+# Extend Queries for Telegram clients
+extend type Query {
+    # Get Telegram client bridge configurations across the entire cluster
+    telegramClients(
+        # Filter by specific client name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [TelegramClient!]!
+}

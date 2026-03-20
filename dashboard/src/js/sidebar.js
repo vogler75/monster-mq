@@ -116,6 +116,7 @@ class SidebarManager {
                     { href: '/pages/mqtt-clients.html', icon: 'link', text: 'MQTT Clients' },
                     { href: '/pages/kafka-clients.html', icon: 'link', text: 'Kafka Clients' },
                     { href: '/pages/nats-clients.html', icon: 'link', text: 'NATS Clients' },
+                    { href: '/pages/telegram-clients.html', icon: 'send-top-right', text: 'Telegram Clients' },
                     { href: '/pages/winccoa-clients.html', icon: 'rack-ipc', text: 'WinCC OA Clients' },
                     { href: '/pages/winccua-clients.html', icon: 'rack-ipc', text: 'WinCC Unified Clients' },
                     { href: '/pages/plc4x-clients.html', icon: 'solid-state-drive', text: 'PLC4X Clients' },

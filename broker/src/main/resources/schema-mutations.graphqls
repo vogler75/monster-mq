@@ -1593,3 +1593,60 @@ input NatsClientInput {
     enabled: Boolean = true
     config: NatsClientConfigInput!
 }
+
+#############################################
+# Telegram Client Mutations                 #
+#############################################
+
+type TelegramClientMutations {
+    # Create a new Telegram bot client
+    create(input: TelegramClientInput!): TelegramClientResult!
+    # Update an existing Telegram bot client configuration
+    update(name: String!, input: TelegramClientInput!): TelegramClientResult!
+    # Delete a Telegram bot client permanently
+    delete(name: String!): Boolean!
+    # Start (enable) a Telegram bot client
+    start(name: String!): TelegramClientResult!
+    # Stop (disable) a Telegram bot client
+    stop(name: String!): TelegramClientResult!
+    # Toggle the enabled state of a Telegram bot client
+    toggle(name: String!, enabled: Boolean!): TelegramClientResult!
+    # Reassign a Telegram bot client to a different cluster node
+    reassign(name: String!, nodeId: String!): TelegramClientResult!
+}
+
+extend type Mutation {
+    # Access Telegram bot client management operations
+    telegramClient: TelegramClientMutations!
+}
+
+type TelegramClientResult {
+    success: Boolean!
+    client: TelegramClient
+    errors: [String!]!
+}
+
+input TelegramClientConfigInput {
+    # Bot token from BotFather
+    botToken: String!
+    # Long polling timeout in seconds
+    pollingTimeoutSeconds: Int = 30
+    # Reconnect delay in ms
+    reconnectDelayMs: Long = 5000
+    # HTTP proxy host
+    proxyHost: String
+    # HTTP proxy port
+    proxyPort: Int
+    # Default parse mode for outgoing messages: Text, HTML, Markdown, MarkdownV2
+    parseMode: String = "Text"
+    # Allowed Telegram usernames (empty = all users allowed)
+    allowedUsers: [String!] = []
+}
+
+input TelegramClientInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean = true
+    config: TelegramClientConfigInput!
+}
