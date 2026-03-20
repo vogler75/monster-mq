@@ -76,7 +76,9 @@
         .topic-panel-tree .tree-icon { margin-right: 0.4rem; color: var(--text-muted); font-size: 0.75rem; }
         .topic-panel-tree .tree-icon.folder { color: var(--monster-purple); }
         .topic-panel-tree .tree-icon.topic { color: var(--monster-green); }
-        .topic-panel-data { max-height: 200px; padding: 0.5rem; background: var(--dark-bg); border-top: 1px solid var(--dark-border); overflow-y: auto; }
+        .topic-panel-data { height: 200px; min-height: 60px; max-height: 80vh; padding: 0.5rem; background: var(--dark-bg); border-top: 1px solid var(--dark-border); overflow-y: auto; }
+        .topic-panel-data-resize { height: 6px; cursor: row-resize; background: transparent; border-top: 1px solid var(--dark-border); flex-shrink: 0; }
+        .topic-panel-data-resize:hover, .topic-panel-data-resize:active { background: rgba(124, 58, 237, 0.3); }
         .topic-panel-data.empty { display: none; }
         .topic-panel-data-content { font-family: 'Fira Code', 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 1.4; color: var(--text-primary); white-space: pre-wrap; word-wrap: break-word; }
         .drop-zone { border: 2px dashed transparent; transition: border-color 0.2s; }
@@ -480,6 +482,7 @@
                 <!-- Tree will be populated here -->
             </ul>
         </div>
+        <div class="topic-panel-data-resize" id="topic-panel-data-resize"></div>
         <div class="topic-panel-data empty" id="topic-panel-data">
             <div class="topic-panel-data-content" id="topic-panel-data-content"></div>
         </div>

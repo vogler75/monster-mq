@@ -31,6 +31,7 @@ class TopicBrowserSidePanel {
         
         // Set up resize functionality
         this.setupResize();
+        this.setupDataPanelResize();
     }
 
     async loadArchiveGroups() {
@@ -224,6 +225,40 @@ class TopicBrowserSidePanel {
             if (this.isOpen) {
                 this.updateMainContentMargin();
             }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+    }
+
+    setupDataPanelResize() {
+        const handle = document.getElementById('topic-panel-data-resize');
+        const dataPanel = document.getElementById('topic-panel-data');
+        if (!handle || !dataPanel) return;
+
+        let isResizing = false;
+        let startY = 0;
+        let startHeight = 0;
+
+        handle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = dataPanel.offsetHeight;
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const deltaY = startY - e.clientY;
+            const newHeight = Math.max(60, Math.min(window.innerHeight * 0.8, startHeight + deltaY));
+            dataPanel.style.height = `${newHeight}px`;
         });
 
         document.addEventListener('mouseup', () => {
@@ -457,11 +492,12 @@ class TopicBrowserSidePanel {
             });
         }
 
-        // Click to select and view data
+        // Click to select and show value
         item.addEventListener('click', (e) => {
             e.stopPropagation();
             if (hasValue) {
                 this.selectTopic(fullPath);
+                this.loadTopicData(fullPath);
             } else if (hasChildren) {
                 this.toggleNode(fullPath);
             }
@@ -512,6 +548,65 @@ class TopicBrowserSidePanel {
         }
 
         this.selectedTopic = fullPath;
+    }
+
+    async loadTopicData(topicPath) {
+        const dataPanel = document.getElementById('topic-panel-data');
+        const dataContent = document.getElementById('topic-panel-data-content');
+        if (!dataPanel || !dataContent) return;
+
+        dataPanel.classList.remove('empty');
+        dataContent.textContent = 'Loading...';
+
+        try {
+            const query = `
+                query GetCurrentValue($topic: String!, $archiveGroup: String!) {
+                    currentValue(topic: $topic, archiveGroup: $archiveGroup) {
+                        topic
+                        payload
+                        format
+                        timestamp
+                    }
+                }
+            `;
+            const response = await graphqlClient.query(query, {
+                topic: topicPath,
+                archiveGroup: this.selectedArchiveGroup
+            });
+
+            if (response && response.currentValue) {
+                const msg = response.currentValue;
+                const time = msg.timestamp ? new Date(parseInt(msg.timestamp)).toLocaleString() : '';
+                let payload = msg.payload || '';
+
+                // Try to format JSON
+                try {
+                    const parsed = JSON.parse(payload);
+                    payload = JSON.stringify(parsed, null, 2);
+                } catch (_) { /* not JSON, keep as-is */ }
+
+                dataContent.innerHTML = '';
+                const header = document.createElement('div');
+                header.style.cssText = 'color: var(--text-muted); font-size: 0.75rem; margin-bottom: 0.25rem; display: flex; justify-content: space-between;';
+                header.innerHTML = `<span>${topicPath}</span><span>${time}</span>`;
+                dataContent.appendChild(header);
+
+                const body = document.createElement('pre');
+                body.style.cssText = 'margin: 0; white-space: pre-wrap; word-wrap: break-word;';
+                body.textContent = payload;
+                dataContent.appendChild(body);
+            } else {
+                dataContent.textContent = 'No data for this topic';
+            }
+        } catch (error) {
+            console.error('Error loading topic data:', error);
+            dataContent.textContent = 'Error loading data';
+        }
+    }
+
+    hideTopicData() {
+        const dataPanel = document.getElementById('topic-panel-data');
+        if (dataPanel) dataPanel.classList.add('empty');
     }
 
     createLoadingItem() {

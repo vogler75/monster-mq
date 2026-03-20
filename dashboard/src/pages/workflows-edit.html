@@ -494,12 +494,16 @@
         }
 
         .topic-panel-data {
-            max-height: 200px;
+            height: 200px;
+            min-height: 60px;
+            max-height: 80vh;
             padding: 0.5rem;
             background: var(--dark-bg);
             border-top: 1px solid var(--dark-border);
             overflow-y: auto;
         }
+        .topic-panel-data-resize { height: 6px; cursor: row-resize; background: transparent; border-top: 1px solid var(--dark-border); flex-shrink: 0; }
+        .topic-panel-data-resize:hover, .topic-panel-data-resize:active { background: rgba(124, 58, 237, 0.3); }
 
         .topic-panel-data.empty {
             display: none;
@@ -747,6 +751,7 @@
                 <!-- Tree will be populated here -->
             </ul>
         </div>
+        <div class="topic-panel-data-resize" id="topic-panel-data-resize"></div>
         <div class="topic-panel-data empty" id="topic-panel-data">
             <div class="topic-panel-data-content" id="topic-panel-data-content"></div>
         </div>
