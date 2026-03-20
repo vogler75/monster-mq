@@ -653,13 +653,14 @@ function setupContextDropZones() {
         });
     });
 
-    // For lastval JSON textarea: add topic under the selected archive group
-    if (lastvalTextarea) {
-        addDragStyles(lastvalTextarea);
-        lastvalTextarea.addEventListener('drop', (e) => {
+    // For JSON archive-group textareas: add topic under the selected archive group
+    function setupJsonArchiveGroupDrop(textarea) {
+        if (!textarea) return;
+        addDragStyles(textarea);
+        textarea.addEventListener('drop', (e) => {
             e.preventDefault();
             e.stopImmediatePropagation();
-            lastvalTextarea.classList.remove('drag-over');
+            textarea.classList.remove('drag-over');
             const topic = e.dataTransfer.getData('text/plain');
             if (topic) {
                 // Get the archive group from the side panel selector
@@ -669,7 +670,7 @@ function setupContextDropZones() {
                 // Parse existing JSON or start fresh
                 let obj = {};
                 try {
-                    const current = lastvalTextarea.value.trim();
+                    const current = textarea.value.trim();
                     if (current) obj = JSON.parse(current);
                 } catch (_) { /* start fresh if invalid JSON */ }
 
@@ -677,13 +678,15 @@ function setupContextDropZones() {
                 if (!Array.isArray(obj[archiveGroup])) obj[archiveGroup] = [];
                 if (!obj[archiveGroup].includes(topic)) obj[archiveGroup].push(topic);
 
-                lastvalTextarea.value = JSON.stringify(obj, null, 2);
-                lastvalTextarea.focus();
-                lastvalTextarea.dispatchEvent(new Event('change', { bubbles: true }));
-                flashGreen(lastvalTextarea);
+                textarea.value = JSON.stringify(obj, null, 2);
+                textarea.focus();
+                textarea.dispatchEvent(new Event('change', { bubbles: true }));
+                flashGreen(textarea);
             }
         });
     }
+
+    setupJsonArchiveGroupDrop(lastvalTextarea);
 }
 
 // Initialize

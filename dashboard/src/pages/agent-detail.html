@@ -278,14 +278,14 @@
                         </div>
                         <div class="form-group full-width">
                             <label for="agent-input-topics">Input Topics</label>
-                            <textarea id="agent-input-topics" rows="3" placeholder="One topic per line&#10;e.g., sensor/+/temperature&#10;     device/+/status"></textarea>
+                            <textarea id="agent-input-topics" rows="3" data-drop-zone-enabled="true" placeholder="One topic per line&#10;e.g., sensor/+/temperature&#10;     device/+/status"></textarea>
                             <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
                                 MQTT topics that trigger this agent (one per line). Supports wildcards: + (single level), # (multi-level)
                             </small>
                         </div>
                         <div class="form-group full-width">
                             <label for="agent-output-topics">Output Topics</label>
-                            <textarea id="agent-output-topics" rows="3" placeholder="One topic per line&#10;e.g., agent/output/alerts&#10;     agent/output/commands"></textarea>
+                            <textarea id="agent-output-topics" rows="3" data-drop-zone-enabled="true" placeholder="One topic per line&#10;e.g., agent/output/alerts&#10;     agent/output/commands"></textarea>
                             <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
                                 MQTT topics where the agent publishes results (one per line)
                             </small>
@@ -305,14 +305,14 @@
                     </small>
                     <div class="form-group">
                         <label for="agent-context-lastval-topics">Lastval Message Topics</label>
-                        <textarea id="agent-context-lastval-topics" rows="4" placeholder='{"Default": ["sensors/#"], "SCADA": ["enterprise/+/value"]}' style="font-family: monospace; font-size: 0.85rem;"></textarea>
+                        <textarea id="agent-context-lastval-topics" rows="4" data-drop-zone-enabled="true" placeholder='{"Default": ["sensors/#"], "SCADA": ["enterprise/+/value"]}' style="font-family: monospace; font-size: 0.85rem;"></textarea>
                         <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
                             JSON mapping archive group names to topic filters, e.g. <code>{"Default": ["sensors/#"], "SCADA": ["enterprise/+/value"]}</code>. Last values from each group's store are included as context.
                         </small>
                     </div>
                     <div class="form-group">
                         <label for="agent-context-retained">Retained Message Topics</label>
-                        <textarea id="agent-context-retained" rows="3" placeholder="One topic per line&#10;e.g., config/limits&#10;     status/+/health"></textarea>
+                        <textarea id="agent-context-retained" rows="3" data-drop-zone-enabled="true" placeholder="One topic per line&#10;e.g., config/limits&#10;     status/+/health"></textarea>
                         <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
                             Topic filters for retained messages (one per line). Current retained values are included as context.
                         </small>
