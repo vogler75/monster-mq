@@ -165,6 +165,7 @@
 
         .explorer-table-wrapper table {
             min-width: 600px;
+            table-layout: fixed;
         }
 
         .explorer-table-wrapper tbody tr {
@@ -202,10 +203,45 @@
             padding: 0.35rem 0.75rem;
         }
 
-        .explorer-table-wrapper td.timestamp-cell {
+        .explorer-table-wrapper td.timestamp-cell,
+        .explorer-table-wrapper th.timestamp-cell {
             white-space: nowrap;
             font-size: 0.8rem;
             font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+
+        /* Resizable column headers */
+        .explorer-table-wrapper th {
+            position: relative;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .col-resize-handle {
+            position: absolute;
+            right: 0;
+            top: 25%;
+            width: 3px;
+            height: 50%;
+            cursor: col-resize;
+            background: var(--dark-border);
+            border-radius: 2px;
+            z-index: 10;
+        }
+
+        .col-resize-handle:hover,
+        .col-resize-handle.active {
+            background: var(--monster-purple);
+            top: 0;
+            height: 100%;
+            width: 4px;
+        }
+
+        .explorer-table-wrapper td {
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         /* Detail panel */

@@ -5,6 +5,7 @@ var ArchiveExplorerManager = class ArchiveExplorerManager {
         this.messages = [];
         this.selectedIndex = -1;
         this.visibleColumns = new Set(['timestamp', 'topic', 'payload', 'qos']);
+        this.columnWidths = { timestamp: 210, qos: 50 };
         this.allColumns = [
             { key: 'timestamp', label: 'Timestamp' },
             { key: 'topic', label: 'Topic' },
@@ -188,12 +189,60 @@ var ArchiveExplorerManager = class ArchiveExplorerManager {
     renderTableHeader() {
         const row = document.getElementById('table-header-row');
         row.innerHTML = '';
-        this.allColumns.forEach(col => {
-            if (!this.visibleColumns.has(col.key)) return;
+        const visibleCols = this.allColumns.filter(c => this.visibleColumns.has(c.key));
+        visibleCols.forEach(col => {
             const th = document.createElement('th');
             th.textContent = col.label;
+            if (col.key === 'timestamp') th.className = 'timestamp-cell';
+            th.dataset.col = col.key;
+
+            // Apply saved width
+            if (this.columnWidths && this.columnWidths[col.key]) {
+                th.style.width = this.columnWidths[col.key] + 'px';
+            }
+
+            // Add resize handle
+            const handle = document.createElement('div');
+            handle.className = 'col-resize-handle';
+            th.appendChild(handle);
+
+            this.setupColumnResize(handle, th, col.key);
             row.appendChild(th);
         });
+    }
+
+    setupColumnResize(handle, th, colKey) {
+        let startX, startWidth;
+
+        const onMouseDown = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            startX = e.clientX;
+            startWidth = th.offsetWidth;
+            handle.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        };
+
+        const onMouseMove = (e) => {
+            const newWidth = Math.max(40, startWidth + (e.clientX - startX));
+            th.style.width = newWidth + 'px';
+        };
+
+        const onMouseUp = () => {
+            handle.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            // Save width
+            if (!this.columnWidths) this.columnWidths = {};
+            this.columnWidths[colKey] = th.offsetWidth;
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        handle.addEventListener('mousedown', onMouseDown);
     }
 
     renderTable() {
@@ -217,6 +266,7 @@ var ArchiveExplorerManager = class ArchiveExplorerManager {
                 switch (col.key) {
                     case 'timestamp':
                         td.textContent = this.formatTimestamp(msg.timestamp);
+                        td.className = 'timestamp-cell';
                         td.title = msg.timestamp;
                         break;
                     case 'topic':
