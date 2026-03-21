@@ -87,7 +87,8 @@ class SidebarManager {
                     { href: '/pages/dashboard.html', icon: 'capacity-filled', text: 'Dashboard' },
                     { href: '/pages/sessions.html', icon: 'user-management', text: 'Sessions' },
                     { href: '/pages/topic-browser.html', icon: 'search', text: 'Browser' },
-                    { href: '/pages/topic-chart.html', icon: 'barchart', text: 'Visualizer' }
+                    { href: '/pages/topic-chart.html', icon: 'barchart', text: 'Visualizer' },
+                    { href: '/pages/archive-explorer.html', icon: 'list', text: 'Explorer' }
                 ]
             },
             {
