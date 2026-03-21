@@ -178,6 +178,21 @@ class SidebarManager {
             safeStorage.getItem('monstermq_userManagementEnabled') === 'true';
         const username = isGuest ? 'Anonymous' : (safeStorage.getItem('monstermq_username') || 'User');
 
+        // Log viewer toggle
+        const logToggle = document.createElement('ix-menu-item');
+        logToggle.setAttribute('slot', 'bottom');
+        logToggle.setAttribute('label', 'Logs');
+        logToggle.setAttribute('icon', 'tag-logging');
+        logToggle.addEventListener('click', () => {
+            if (window.__monsterMQLogViewer) {
+                window.__monsterMQLogViewer.toggleVisibility();
+                logToggle.setAttribute('icon',
+                    window.__monsterMQLogViewer.isHidden ? 'tag-logging' : 'tag-logging-filled');
+            }
+        });
+        ixMenu.appendChild(logToggle);
+        this._logToggleItem = logToggle;
+
         // Broker switcher item
         if (window.brokerManager) {
             const brokerName = window.brokerManager.getDisplayName();
@@ -529,6 +544,12 @@ ${exports}
             title: 'System Logs',
             deferConnection: false
         });
+        // Update sidebar toggle icon to match saved state
+        if (this._logToggleItem && window.__monsterMQLogViewer.isHidden) {
+            this._logToggleItem.setAttribute('icon', 'tag-logging');
+        } else if (this._logToggleItem) {
+            this._logToggleItem.setAttribute('icon', 'tag-logging-filled');
+        }
     }
 
     // ===================== Auth =====================

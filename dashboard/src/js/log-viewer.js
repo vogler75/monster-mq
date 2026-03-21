@@ -30,6 +30,8 @@ class LogViewer {
     this.maxHeight = 800;
     this.currentHeight = parseInt(safeStorage.getItem('monstermq_logviewer_height'), 10) || this.defaultExpandedHeight;
     this.isResizing = false;
+    // Visibility
+    this.isHidden = safeStorage.getItem('monstermq_logviewer_hidden') === 'true';
     // History mode
     this.isHistoryMode = false;
     this.historyEndTime = null;
@@ -50,7 +52,9 @@ class LogViewer {
   init() {
     this.createUI();
     this.attachEventListeners();
-    if (!this.options.deferConnection) {
+    if (this.isHidden) {
+      this.elements.root.style.display = 'none';
+    } else if (!this.options.deferConnection) {
       this.connect();
     }
     this.applyBodyPadding();
@@ -330,6 +334,19 @@ class LogViewer {
     }
   }
 
+  toggleVisibility() {
+    this.isHidden = !this.isHidden;
+    safeStorage.setItem('monstermq_logviewer_hidden', this.isHidden ? 'true' : 'false');
+    if (this.isHidden) {
+      this.elements.root.style.display = 'none';
+      this.disconnect();
+    } else {
+      this.elements.root.style.display = 'flex';
+      if (!this.isHistoryMode) this.connect();
+    }
+    this.applyBodyPadding();
+  }
+
   togglePause() {
     this.isPaused = !this.isPaused;
     if (this.isPaused) {
@@ -350,17 +367,19 @@ class LogViewer {
   applyBodyPadding() {
     // Adjust layout so main content shrinks rather than being covered.
     const main = document.getElementById('main-content');
-    const viewerHeight = this.isCollapsed ? 36 : this.currentHeight;
+    const viewerHeight = this.isHidden ? 0 : (this.isCollapsed ? 36 : this.currentHeight);
     if (main) {
-      // Set explicit max-height instead of height to work with min-height: 100vh
-      main.style.maxHeight = `calc(100vh - ${viewerHeight}px)`;
-      main.style.height = `calc(100vh - ${viewerHeight}px)`;
+      if (viewerHeight === 0) {
+        main.style.removeProperty('max-height');
+        main.style.height = '100%';
+      } else {
+        main.style.maxHeight = `calc(100% - ${viewerHeight}px)`;
+        main.style.height = `calc(100% - ${viewerHeight}px)`;
+      }
       main.style.overflowY = 'auto';
       main.style.boxSizing = 'border-box';
-      // Clear body padding
       document.body.style.paddingBottom = '0';
     } else {
-      // Fallback: body padding if no main-content container.
       document.body.style.paddingBottom = viewerHeight + 'px';
     }
   }

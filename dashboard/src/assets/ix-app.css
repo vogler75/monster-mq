@@ -18,6 +18,8 @@ ix-application {
   overflow-y: auto;
   height: 100%;
   box-sizing: border-box;
+  /* Ensure smooth transition when log viewer resizes */
+  transition: height 0.25s ease, max-height 0.25s ease;
 }
 
 /* Extend sidebar to fill full height so it aligns with the log viewer bar at the bottom */
