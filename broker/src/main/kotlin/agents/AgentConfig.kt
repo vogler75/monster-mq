@@ -22,7 +22,7 @@ data class AgentConfig(
     val maxTokens: Int? = null,
     val temperature: Double = 0.7,
     val maxToolIterations: Int = 10,
-    val memoryWindowSize: Int = 20,
+    val memoryWindowSize: Int = 40,
     val stateEnabled: Boolean = true,
     val mcpServers: List<String> = emptyList(),
     val useMonsterMqMcp: Boolean = false,
@@ -31,7 +31,8 @@ data class AgentConfig(
     val contextRetainedTopics: List<String> = emptyList(),      // topic filters for retained messages
     val contextHistoryQueries: List<ContextHistoryQuery> = emptyList(),  // history data queries
     val taskTimeoutMs: Long = 60000,  // timeout for sub-agent task invocations (default 60s)
-    val subAgents: List<String> = emptyList()  // restrict which agents this orchestrator can invoke
+    val subAgents: List<String> = emptyList(),  // restrict which agents this orchestrator can invoke
+    val enableThinking: Boolean = false
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): AgentConfig {
@@ -54,7 +55,7 @@ data class AgentConfig(
                 maxTokens = json.getInteger("maxTokens"),
                 temperature = json.getDouble("temperature", 0.7),
                 maxToolIterations = json.getInteger("maxToolIterations", 10),
-                memoryWindowSize = json.getInteger("memoryWindowSize", 20),
+                memoryWindowSize = json.getInteger("memoryWindowSize", 40),
                 stateEnabled = json.getBoolean("stateEnabled", true),
                 mcpServers = json.getJsonArray("mcpServers", JsonArray()).filterIsInstance<String>().toList(),
                 useMonsterMqMcp = json.getBoolean("useMonsterMqMcp", false),
@@ -68,7 +69,8 @@ data class AgentConfig(
                 contextHistoryQueries = json.getJsonArray("contextHistoryQueries", JsonArray())
                     .filterIsInstance<JsonObject>().map { ContextHistoryQuery.fromJsonObject(it) },
                 taskTimeoutMs = json.getLong("taskTimeoutMs", 60000),
-                subAgents = json.getJsonArray("subAgents", JsonArray()).filterIsInstance<String>().toList()
+                subAgents = json.getJsonArray("subAgents", JsonArray()).filterIsInstance<String>().toList(),
+                enableThinking = json.getBoolean("enableThinking", false)
             )
         }
     }
@@ -105,6 +107,7 @@ data class AgentConfig(
             .put("contextHistoryQueries", JsonArray(contextHistoryQueries.map { it.toJsonObject() }))
             .put("taskTimeoutMs", taskTimeoutMs)
             .put("subAgents", JsonArray(subAgents))
+            .put("enableThinking", enableThinking)
     }
 }
 

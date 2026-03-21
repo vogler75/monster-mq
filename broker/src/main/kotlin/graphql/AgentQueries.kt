@@ -110,6 +110,7 @@ class AgentQueries(
                 "maxToolIterations" to agentConfig.maxToolIterations,
                 "memoryWindowSize" to agentConfig.memoryWindowSize,
                 "stateEnabled" to agentConfig.stateEnabled,
+                "enableThinking" to agentConfig.enableThinking,
                 "mcpServers" to agentConfig.mcpServers,
                 "useMonsterMqMcp" to agentConfig.useMonsterMqMcp,
                 "defaultArchiveGroup" to agentConfig.defaultArchiveGroup,

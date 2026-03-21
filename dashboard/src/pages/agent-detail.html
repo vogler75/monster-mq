@@ -218,11 +218,15 @@
                         </div>
                         <div class="form-group">
                             <label for="agent-memory-window-size">Memory Window Size</label>
-                            <input type="number" id="agent-memory-window-size" value="20" min="1">
+                            <input type="number" id="agent-memory-window-size" value="40" min="1">
                         </div>
                         <div class="form-group">
                             <label for="agent-task-timeout-ms">Task Timeout (ms)</label>
                             <input type="number" id="agent-task-timeout-ms" value="60000" min="1000" step="1000" placeholder="60000">
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="agent-enable-thinking" style="accent-color: var(--monster-purple);">
+                            <label for="agent-enable-thinking" style="margin: 0; cursor: pointer;">Enable Thinking</label>
                         </div>
                     </div>
                 </div>

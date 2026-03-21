@@ -26,6 +26,7 @@ type Agent {
     maxToolIterations: Int
     memoryWindowSize: Int
     stateEnabled: Boolean!
+    enableThinking: Boolean!
     mcpServers: [String!]!
     useMonsterMqMcp: Boolean!
     defaultArchiveGroup: String!
@@ -72,6 +73,7 @@ input AgentInput {
     maxToolIterations: Int
     memoryWindowSize: Int
     stateEnabled: Boolean
+    enableThinking: Boolean
     mcpServers: [String!]
     useMonsterMqMcp: Boolean
     defaultArchiveGroup: String

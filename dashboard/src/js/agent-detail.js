@@ -66,7 +66,8 @@ class AgentDetailManager {
         document.getElementById('agent-temperature').value = '0.7';
         document.getElementById('agent-max-tokens').value = '';
         document.getElementById('agent-max-tool-iterations').value = '10';
-        document.getElementById('agent-memory-window-size').value = '20';
+        document.getElementById('agent-memory-window-size').value = '40';
+        document.getElementById('agent-enable-thinking').checked = false;
         document.getElementById('agent-trigger-type').value = 'MQTT';
         document.getElementById('agent-schedule-mode').value = 'interval';
         document.getElementById('agent-interval-value').value = '';
@@ -376,6 +377,7 @@ class AgentDetailManager {
                         maxToolIterations
                         memoryWindowSize
                         stateEnabled
+                        enableThinking
                         mcpServers
                         useMonsterMqMcp
                         defaultArchiveGroup
@@ -437,6 +439,7 @@ class AgentDetailManager {
         document.getElementById('agent-max-tool-iterations').value = d.maxToolIterations != null ? d.maxToolIterations : 10;
         document.getElementById('agent-memory-window-size').value = d.memoryWindowSize != null ? d.memoryWindowSize : 20;
         document.getElementById('agent-task-timeout-ms').value = d.taskTimeoutMs != null ? d.taskTimeoutMs : 60000;
+        document.getElementById('agent-enable-thinking').checked = d.enableThinking || false;
 
         // Populate Trigger Configuration
         document.getElementById('agent-trigger-type').value = d.triggerType || 'MQTT';
@@ -543,6 +546,7 @@ class AgentDetailManager {
             maxToolIterations: parseInt(document.getElementById('agent-max-tool-iterations').value) || null,
             memoryWindowSize: parseInt(document.getElementById('agent-memory-window-size').value) || null,
             taskTimeoutMs: parseInt(document.getElementById('agent-task-timeout-ms').value) || null,
+            enableThinking: document.getElementById('agent-enable-thinking').checked,
             triggerType: document.getElementById('agent-trigger-type').value,
             cronExpression: null,
             cronIntervalMs: null,

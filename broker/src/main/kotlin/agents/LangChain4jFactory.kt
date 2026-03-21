@@ -18,7 +18,8 @@ data class ChatModelConfig(
     val model: String? = null,
     val apiKey: String? = null,
     val maxTokens: Int? = null,
-    val temperature: Double = 0.7
+    val temperature: Double = 0.7,
+    val enableThinking: Boolean = false
 )
 
 object LangChain4jFactory {
@@ -34,8 +35,8 @@ object LangChain4jFactory {
                 .modelName(config.model ?: "gemini-2.0-flash")
                 .temperature(config.temperature)
                 .apply { config.maxTokens?.let { maxOutputTokens(it) } }
-                .sendThinking(true)
-                .returnThinking(true)
+                .sendThinking(config.enableThinking)
+                .returnThinking(config.enableThinking)
                 .listeners(listeners)
                 .build()
 
@@ -73,7 +74,8 @@ object LangChain4jFactory {
                 model = config.model,
                 apiKey = config.apiKey,
                 maxTokens = config.maxTokens,
-                temperature = config.temperature
+                temperature = config.temperature,
+                enableThinking = config.enableThinking
             ),
             globalConfig,
             listeners
