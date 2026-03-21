@@ -53,7 +53,7 @@ class AgentDetailManager {
         // Set defaults
         document.getElementById('agent-name').value = '';
         document.getElementById('agent-name').disabled = false;
-        document.getElementById('agent-namespace').value = '';
+        document.getElementById('agent-namespace').value = 'agents';
         document.getElementById('agent-org').value = 'default';
         document.getElementById('agent-site').value = 'default';
         document.getElementById('agent-version').value = '1.0.0';
