@@ -143,8 +143,9 @@ class AgentExecutor(
                 setupCronTrigger()
             }
 
-            // Publish Agent Card
+            // Publish Agent Card and health status
             publishAgentCard()
+            publishHealthStatus("ready")
 
             logger.info("Agent ${deviceConfig.name} started successfully")
             startPromise.complete()
@@ -553,6 +554,7 @@ class AgentExecutor(
         }
 
         messagesProcessed.incrementAndGet()
+        publishHealthStatus("running")
         logger.fine("Agent ${deviceConfig.name} processing task from $source")
 
         vertx.executeBlocking {
@@ -590,6 +592,7 @@ class AgentExecutor(
                 logger.warning("Agent ${deviceConfig.name} task execution failed: ${cause?.message}")
                 callback(null, cause?.message ?: "Unknown error")
             }
+            publishHealthStatus("ready")
         }
     }
 
@@ -597,6 +600,7 @@ class AgentExecutor(
         val service = aiService ?: return
 
         messagesProcessed.incrementAndGet()
+        publishHealthStatus("running")
         logger.fine("Agent ${deviceConfig.name} processing message from $source")
 
         vertx.executeBlocking {
@@ -640,6 +644,7 @@ class AgentExecutor(
                 if (cause != null) logger.fine { cause.stackTraceToString() }
                 publishError(cause?.message ?: "Unknown error")
             }
+            publishHealthStatus("ready")
         }
     }
 
