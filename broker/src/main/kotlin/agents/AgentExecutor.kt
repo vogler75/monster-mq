@@ -30,6 +30,8 @@ import com.cronutils.model.time.ExecutionTime
 import com.cronutils.parser.CronParser
 import java.time.Instant
 import java.time.ZonedDateTime
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
 
@@ -51,6 +53,7 @@ class AgentExecutor(
     private val clientId = "agent-${deviceConfig.name}"
     private var cronTimerId: Long? = null
     private val mcpClients = mutableListOf<McpClient>()
+    private val pendingTaskResponses = ConcurrentHashMap<String, CompletableFuture<String>>()
 
     // Metrics
     private val messagesProcessed = AtomicLong(0)
@@ -79,9 +82,19 @@ class AgentExecutor(
             // Create tools
             val archiveHandler = Monster.getArchiveHandler()
             val sessionHandler = Monster.getSessionHandler()
-            agentTools = AgentTools(archiveHandler, null, clientId, deviceConfig.name, agentConfig.defaultArchiveGroup) { name, args, result ->
-                publishToolLog(name, args, result)
-            }
+            agentTools = AgentTools(
+                archiveHandler = archiveHandler,
+                retainedStore = null,
+                agentClientId = clientId,
+                agentName = deviceConfig.name,
+                defaultArchiveGroup = agentConfig.defaultArchiveGroup,
+                toolLogger = { name, args, result -> publishToolLog(name, args, result) },
+                vertx = vertx,
+                taskTimeoutMs = agentConfig.taskTimeoutMs,
+                registerTaskResponse = { replyTo, future -> pendingTaskResponses[replyTo] = future },
+                unregisterTaskResponse = { replyTo -> pendingTaskResponses.remove(replyTo) },
+                subAgents = agentConfig.subAgents
+            )
 
             // Build AI Service with ReAct loop
             val memorySize = agentConfig.memoryWindowSize
@@ -115,6 +128,11 @@ class AgentExecutor(
                 setupMqttSubscriptions(sessionHandler)
             }
 
+            // Subscribe to task topic for A2A orchestration
+            if (sessionHandler != null) {
+                setupTaskSubscription(sessionHandler)
+            }
+
             // Setup CRON trigger if applicable
             if (agentConfig.triggerType == TriggerType.CRON) {
                 setupCronTrigger()
@@ -140,9 +158,17 @@ class AgentExecutor(
             // Cancel cron timer
             cronTimerId?.let { vertx.cancelTimer(it) }
 
+            // Complete any pending task futures with error
+            pendingTaskResponses.forEach { (_, future) ->
+                future.completeExceptionally(RuntimeException("Agent stopping"))
+            }
+            pendingTaskResponses.clear()
+
             // Unsubscribe MQTT topics
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
+                // Unsubscribe task topic
+                sessionHandler.unsubscribeInternalClient(clientId, "agents/${deviceConfig.name}/tasks/new")
                 agentConfig.inputTopics.forEach { topic ->
                     sessionHandler.unsubscribeInternalClient(clientId, topic)
                 }
@@ -408,9 +434,152 @@ class AgentExecutor(
     }
 
     private fun handleMqttMessage(msg: BrokerMessage) {
+        // 1. Check pending task responses (orchestrator receiving sub-agent results)
+        val pendingFuture = pendingTaskResponses.remove(msg.topicName)
+        if (pendingFuture != null) {
+            val payload = String(msg.payload, Charsets.UTF_8)
+            pendingFuture.complete(payload)
+            return
+        }
+
+        // 2. Check incoming tasks (this agent being invoked by another agent)
+        if (msg.topicName == "agents/${deviceConfig.name}/tasks/new") {
+            handleTaskMessage(msg)
+            return
+        }
+
+        // 3. Normal MQTT message handling
         val payloadStr = msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
         val userMessage = "[Topic: ${msg.topicName}] $payloadStr"
         executeAgent(userMessage, msg.topicName)
+    }
+
+    private fun setupTaskSubscription(sessionHandler: at.rocworks.handlers.SessionHandler) {
+        val taskTopic = "agents/${deviceConfig.name}/tasks/new"
+        logger.fine("Agent ${deviceConfig.name} subscribing to task topic: $taskTopic")
+        sessionHandler.subscribeInternalClient(clientId, taskTopic, 1)
+    }
+
+    private fun handleTaskMessage(msg: BrokerMessage) {
+        try {
+            val payload = String(msg.payload, Charsets.UTF_8)
+            val taskJson = try { JsonObject(payload) } catch (_: Exception) { null }
+
+            // Plain-text payload: treat the whole payload as input, no reply
+            if (taskJson == null) {
+                val taskId = Utils.getUuid()
+                logger.fine("Agent ${deviceConfig.name} received plain-text task $taskId")
+                publishTaskStatus(taskId, "working")
+                val taskMessage = "[Task from external, taskId=$taskId]\n$payload"
+                executeAgentWithCallback(taskMessage, "task:$taskId") { response, _ ->
+                    publishTaskStatus(taskId, if (response != null) "completed" else "failed")
+                    if (response != null) publishResponse(response)
+                }
+                return
+            }
+
+            val taskId = taskJson.getString("taskId") ?: Utils.getUuid()
+            val input = taskJson.getString("input") ?: return
+            val replyTo = taskJson.getString("replyTo") ?: return
+            val skill = taskJson.getString("skill")
+            val callerAgent = taskJson.getString("callerAgent", "unknown")
+
+            logger.fine("Agent ${deviceConfig.name} received task $taskId from $callerAgent")
+
+            // Publish working status
+            publishTaskStatus(taskId, "working")
+
+            // Build the user message for the LLM
+            val taskMessage = if (skill != null) {
+                "[Task from agent '$callerAgent', taskId=$taskId, skill=$skill]\n$input"
+            } else {
+                "[Task from agent '$callerAgent', taskId=$taskId]\n$input"
+            }
+
+            // Execute the agent with a callback to publish the result
+            executeAgentWithCallback(taskMessage, "task:$taskId") { response, error ->
+                val sessionHandler = Monster.getSessionHandler() ?: return@executeAgentWithCallback
+                if (error != null) {
+                    // Publish error response
+                    val errorJson = JsonObject()
+                        .put("taskId", taskId)
+                        .put("status", "failed")
+                        .put("error", error)
+                    val responseMsg = BrokerMessage(clientId, replyTo, errorJson.encode())
+                    sessionHandler.publishMessage(responseMsg)
+                    publishTaskStatus(taskId, "failed")
+                } else {
+                    // Publish success response
+                    val resultJson = JsonObject()
+                        .put("taskId", taskId)
+                        .put("status", "completed")
+                        .put("result", response)
+                    val responseMsg = BrokerMessage(clientId, replyTo, resultJson.encode())
+                    sessionHandler.publishMessage(responseMsg)
+                    publishTaskStatus(taskId, "completed")
+                }
+            }
+        } catch (e: Exception) {
+            logger.warning("Agent ${deviceConfig.name} failed to handle task: ${e.message}")
+        }
+    }
+
+    private fun publishTaskStatus(taskId: String, status: String) {
+        val sessionHandler = Monster.getSessionHandler() ?: return
+        val statusJson = JsonObject()
+            .put("taskId", taskId)
+            .put("status", status)
+            .put("agent", deviceConfig.name)
+            .put("timestamp", Instant.now().toString())
+        val msg = BrokerMessage(clientId, "agents/${deviceConfig.name}/tasks/$taskId/status", statusJson.encode())
+        sessionHandler.publishMessage(msg)
+    }
+
+    private fun executeAgentWithCallback(userMessage: String, source: String, callback: (String?, String?) -> Unit) {
+        val service = aiService ?: run {
+            callback(null, "Agent service not available")
+            return
+        }
+
+        messagesProcessed.incrementAndGet()
+        logger.fine("Agent ${deviceConfig.name} processing task from $source")
+
+        vertx.executeBlocking {
+            llmCalls.incrementAndGet()
+            val contextData = buildContextData()
+            val fullMessage = if (contextData.isNotBlank()) {
+                "$contextData\n\n$userMessage"
+            } else {
+                userMessage
+            }
+            service.chat(fullMessage)
+        }.onComplete { result ->
+            if (result.succeeded()) {
+                val chatResult = result.result()
+                chatResult?.toolExecutions()?.forEach { toolExecution ->
+                    val req = toolExecution.request()
+                    if (agentTools.isNativeTool(req.name())) return@forEach
+                    val log = JsonObject()
+                        .put("type", "mcp-tool-call")
+                        .put("timestamp", Instant.now().toString())
+                        .put("tool", req.name())
+                        .put("arguments", req.arguments()?.take(500))
+                        .put("result", toolExecution.result()?.take(1000))
+                    publishToAgentTopic("logs/mcp", log)
+                }
+                val response = chatResult?.content()
+                if (response != null) {
+                    callback(response, null)
+                } else {
+                    callback(null, "LLM returned null response")
+                }
+            } else {
+                errors.incrementAndGet()
+                val cause = result.cause()
+                logger.warning("Agent ${deviceConfig.name} task execution failed: ${cause?.message}")
+                callback(null, cause?.message ?: "Unknown error")
+            }
+        }
     }
 
     private fun executeAgent(userMessage: String, source: String) {

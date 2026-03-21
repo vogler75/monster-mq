@@ -186,7 +186,9 @@ class AgentMutations(
             defaultArchiveGroup = input["defaultArchiveGroup"] as? String ?: "Default",
             contextLastvalTopics = parseContextLastvalTopics(input["contextLastvalTopics"]),
             contextRetainedTopics = parseStringList(input["contextRetainedTopics"]),
-            contextHistoryQueries = parseContextHistoryQueries(input["contextHistoryQueries"])
+            contextHistoryQueries = parseContextHistoryQueries(input["contextHistoryQueries"]),
+            taskTimeoutMs = (input["taskTimeoutMs"] as? Number)?.toLong() ?: 60000,
+            subAgents = parseStringList(input["subAgents"])
         )
 
         return DeviceConfig(
@@ -227,7 +229,9 @@ class AgentMutations(
             defaultArchiveGroup = input["defaultArchiveGroup"] as? String ?: existingConfig.defaultArchiveGroup,
             contextLastvalTopics = if (input.containsKey("contextLastvalTopics")) parseContextLastvalTopics(input["contextLastvalTopics"]) else existingConfig.contextLastvalTopics,
             contextRetainedTopics = if (input.containsKey("contextRetainedTopics")) parseStringList(input["contextRetainedTopics"]) else existingConfig.contextRetainedTopics,
-            contextHistoryQueries = if (input.containsKey("contextHistoryQueries")) parseContextHistoryQueries(input["contextHistoryQueries"]) else existingConfig.contextHistoryQueries
+            contextHistoryQueries = if (input.containsKey("contextHistoryQueries")) parseContextHistoryQueries(input["contextHistoryQueries"]) else existingConfig.contextHistoryQueries,
+            taskTimeoutMs = (input["taskTimeoutMs"] as? Number)?.toLong() ?: existingConfig.taskTimeoutMs,
+            subAgents = if (input.containsKey("subAgents")) parseStringList(input["subAgents"]) else existingConfig.subAgents
         )
 
         return existing.copy(

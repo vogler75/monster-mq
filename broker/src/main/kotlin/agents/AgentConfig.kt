@@ -26,7 +26,9 @@ data class AgentConfig(
     val defaultArchiveGroup: String = "Default",
     val contextLastvalTopics: Map<String, List<String>> = emptyMap(),  // archiveGroup -> list of topic filters
     val contextRetainedTopics: List<String> = emptyList(),      // topic filters for retained messages
-    val contextHistoryQueries: List<ContextHistoryQuery> = emptyList()  // history data queries
+    val contextHistoryQueries: List<ContextHistoryQuery> = emptyList(),  // history data queries
+    val taskTimeoutMs: Long = 60000,  // timeout for sub-agent task invocations (default 60s)
+    val subAgents: List<String> = emptyList()  // restrict which agents this orchestrator can invoke
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): AgentConfig {
@@ -58,7 +60,9 @@ data class AgentConfig(
                 },
                 contextRetainedTopics = json.getJsonArray("contextRetainedTopics", JsonArray()).filterIsInstance<String>().toList(),
                 contextHistoryQueries = json.getJsonArray("contextHistoryQueries", JsonArray())
-                    .filterIsInstance<JsonObject>().map { ContextHistoryQuery.fromJsonObject(it) }
+                    .filterIsInstance<JsonObject>().map { ContextHistoryQuery.fromJsonObject(it) },
+                taskTimeoutMs = json.getLong("taskTimeoutMs", 60000),
+                subAgents = json.getJsonArray("subAgents", JsonArray()).filterIsInstance<String>().toList()
             )
         }
     }
@@ -90,6 +94,8 @@ data class AgentConfig(
             })
             .put("contextRetainedTopics", JsonArray(contextRetainedTopics))
             .put("contextHistoryQueries", JsonArray(contextHistoryQueries.map { it.toJsonObject() }))
+            .put("taskTimeoutMs", taskTimeoutMs)
+            .put("subAgents", JsonArray(subAgents))
     }
 }
 

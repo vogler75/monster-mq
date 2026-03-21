@@ -212,6 +212,10 @@
                             <label for="agent-memory-window-size">Memory Window Size</label>
                             <input type="number" id="agent-memory-window-size" value="20" min="1">
                         </div>
+                        <div class="form-group">
+                            <label for="agent-task-timeout-ms">Task Timeout (ms)</label>
+                            <input type="number" id="agent-task-timeout-ms" value="60000" min="1000" step="1000" placeholder="60000">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -282,6 +286,14 @@
                     </small>
                     <div id="mcp-server-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
                         <div style="color: var(--text-muted);">Loading MCP servers...</div>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--dark-border); margin: 1.5rem 0;">
+                    <small style="color: var(--text-muted); margin-bottom: 0.75rem; display: block;">
+                        Sub-Agents (restrict which agents this orchestrator can invoke; leave empty to allow all):
+                    </small>
+                    <div id="sub-agent-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <div style="color: var(--text-muted);">Loading agents...</div>
                     </div>
                 </div>
             </div>

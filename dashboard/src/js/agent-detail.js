@@ -7,6 +7,7 @@ class AgentDetailManager {
         this.agentData = null;
         this.clusterNodes = [];
         this.availableMcpServers = [];
+        this.availableAgents = [];
         this.init();
     }
 
@@ -18,6 +19,7 @@ class AgentDetailManager {
         if (this.isNew) {
             await this.loadClusterNodes();
             await this.loadMcpServers();
+            await this.loadAgents();
             this.showNewAgentForm();
             return;
         }
@@ -33,6 +35,7 @@ class AgentDetailManager {
         try {
             await this.loadClusterNodes();
             await this.loadMcpServers();
+            await this.loadAgents();
             await this.loadAgentData();
         } catch (error) {
             this.showError('Failed to load agent data: ' + error.message);
@@ -71,6 +74,7 @@ class AgentDetailManager {
         document.getElementById('agent-input-topics').value = '';
         document.getElementById('agent-output-topics').value = '';
         document.getElementById('agent-system-prompt').value = '';
+        document.getElementById('agent-task-timeout-ms').value = '60000';
         document.getElementById('agent-context-lastval-topics').value = '';
         document.getElementById('agent-context-retained').value = '';
 
@@ -154,6 +158,49 @@ class AgentDetailManager {
                 </label>
             `;
         }).join('');
+    }
+
+    async loadAgents() {
+        try {
+            const query = `query { agents { name description enabled } }`;
+            const result = await this.client.query(query);
+            this.availableAgents = result.agents || [];
+            this.renderSubAgentCheckboxes();
+        } catch (error) {
+            console.error('Error loading agents:', error);
+        }
+    }
+
+    renderSubAgentCheckboxes(selectedAgents = []) {
+        const container = document.getElementById('sub-agent-list');
+        if (!container) return;
+
+        // Filter out the current agent being edited
+        const otherAgents = this.availableAgents.filter(a => a.name !== this.agentName);
+
+        if (otherAgents.length === 0) {
+            container.innerHTML = '<div style="color: var(--text-muted);">No other agents available.</div>';
+            return;
+        }
+
+        container.innerHTML = otherAgents.map(agent => {
+            const checked = selectedAgents.includes(agent.name) ? 'checked' : '';
+            const statusColor = agent.enabled ? 'var(--monster-green)' : 'var(--text-muted)';
+            return `
+                <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: var(--dark-bg); border-radius: 8px; border: 1px solid var(--dark-border); cursor: pointer;">
+                    <input type="checkbox" class="sub-agent-checkbox" value="${agent.name}" ${checked} style="accent-color: var(--monster-purple);">
+                    <div>
+                        <div style="color: var(--text-primary); font-weight: 500;">${agent.name}</div>
+                        <div style="color: var(--text-muted); font-size: 0.8rem;">${agent.description || ''}</div>
+                    </div>
+                    <span style="margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: ${statusColor};"></span>
+                </label>
+            `;
+        }).join('');
+    }
+
+    getSelectedSubAgents() {
+        return Array.from(document.querySelectorAll('.sub-agent-checkbox:checked')).map(cb => cb.value);
     }
 
     parseContextLastvalTopics() {
@@ -329,6 +376,8 @@ class AgentDetailManager {
                         contextLastvalTopics
                         contextRetainedTopics
                         contextHistoryQueries { archiveGroup topics lastSeconds interval function fields }
+                        taskTimeoutMs
+                        subAgents
                         createdAt
                         updatedAt
                     }
@@ -379,6 +428,7 @@ class AgentDetailManager {
         document.getElementById('agent-max-tokens').value = d.maxTokens || '';
         document.getElementById('agent-max-tool-iterations').value = d.maxToolIterations != null ? d.maxToolIterations : 10;
         document.getElementById('agent-memory-window-size').value = d.memoryWindowSize != null ? d.memoryWindowSize : 20;
+        document.getElementById('agent-task-timeout-ms').value = d.taskTimeoutMs != null ? d.taskTimeoutMs : 60000;
 
         // Populate Trigger Configuration
         document.getElementById('agent-trigger-type').value = d.triggerType || 'MQTT';
@@ -422,6 +472,9 @@ class AgentDetailManager {
         document.getElementById('agent-use-monstermq-mcp').checked = d.useMonsterMqMcp || false;
         document.getElementById('agent-default-archive-group').value = d.defaultArchiveGroup || 'Default';
         this.renderMcpServerCheckboxes(d.mcpServers || []);
+
+        // Populate Sub-Agents
+        this.renderSubAgentCheckboxes(d.subAgents || []);
 
         // Populate Context Data
         document.getElementById('agent-context-lastval-topics').value = d.contextLastvalTopics ? JSON.stringify(d.contextLastvalTopics, null, 2) : '';
@@ -478,6 +531,7 @@ class AgentDetailManager {
             maxTokens: parseInt(document.getElementById('agent-max-tokens').value) || null,
             maxToolIterations: parseInt(document.getElementById('agent-max-tool-iterations').value) || null,
             memoryWindowSize: parseInt(document.getElementById('agent-memory-window-size').value) || null,
+            taskTimeoutMs: parseInt(document.getElementById('agent-task-timeout-ms').value) || null,
             triggerType: document.getElementById('agent-trigger-type').value,
             cronExpression: null,
             cronIntervalMs: null,
@@ -489,7 +543,8 @@ class AgentDetailManager {
             contextLastvalTopics: this.parseContextLastvalTopics(),
             contextRetainedTopics: document.getElementById('agent-context-retained').value
                 .split('\n').map(t => t.trim()).filter(t => t.length > 0),
-            contextHistoryQueries: this.collectHistoryQueries()
+            contextHistoryQueries: this.collectHistoryQueries(),
+            subAgents: this.getSelectedSubAgents()
         };
 
         // Generate cronExpression or cronIntervalMs based on schedule mode

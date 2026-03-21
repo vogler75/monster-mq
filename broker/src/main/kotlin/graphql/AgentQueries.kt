@@ -122,6 +122,8 @@ class AgentQueries(
                         "fields" to q.fields
                     )
                 },
+                "taskTimeoutMs" to agentConfig.taskTimeoutMs,
+                "subAgents" to agentConfig.subAgents,
                 "createdAt" to device.createdAt.toString(),
                 "updatedAt" to device.updatedAt.toString()
             )

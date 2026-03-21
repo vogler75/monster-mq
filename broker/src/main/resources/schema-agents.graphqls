@@ -29,6 +29,8 @@ type Agent {
     contextLastvalTopics: JSON
     contextRetainedTopics: [String!]!
     contextHistoryQueries: [ContextHistoryQuery!]!
+    taskTimeoutMs: Long
+    subAgents: [String!]!
     createdAt: String!
     updatedAt: String!
 }
@@ -70,6 +72,8 @@ input AgentInput {
     contextLastvalTopics: JSON
     contextRetainedTopics: [String!]
     contextHistoryQueries: [ContextHistoryQueryInput!]
+    taskTimeoutMs: Long
+    subAgents: [String!]
     enabled: Boolean
 }
 

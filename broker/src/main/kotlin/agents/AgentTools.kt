@@ -9,9 +9,13 @@ import at.rocworks.stores.IMessageStore
 import at.rocworks.data.BrokerMessage
 import dev.langchain4j.agent.tool.P
 import dev.langchain4j.agent.tool.Tool
+import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.time.Instant
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import java.util.logging.Logger
 
 /**
@@ -24,7 +28,12 @@ class AgentTools(
     private val agentClientId: String,
     private val agentName: String,
     private val defaultArchiveGroup: String = "Default",
-    private val toolLogger: ((String, String, String) -> Unit)? = null
+    private val toolLogger: ((String, String, String) -> Unit)? = null,
+    private val vertx: Vertx? = null,
+    private val taskTimeoutMs: Long = 60000,
+    private val registerTaskResponse: ((String, CompletableFuture<String>) -> Unit)? = null,
+    private val unregisterTaskResponse: ((String) -> Unit)? = null,
+    private val subAgents: List<String> = emptyList()
 ) {
     private val logger: Logger = Utils.getLogger(AgentTools::class.java)
 
@@ -236,6 +245,155 @@ class AgentTools(
             "Error deleting note: ${e.message}"
         }
         return logTool("deleteNote", "key=$key", result)
+    }
+
+    // --- Agent Orchestration Tools (A2A over MQTT) ---
+
+    @Tool("List all available AI agents in the system. Returns their names, descriptions, skills, and current status.")
+    fun listAgents(): String {
+        val result = try {
+            val store = Monster.getRetainedStore()
+                ?: return logTool("listAgents", "", "No retained store available")
+            val agents = JsonArray()
+            var count = 0
+            store.findMatchingMessages("agents/+/card") { msg ->
+                if (count < 100) {
+                    try {
+                        val card = JsonObject(String(msg.payload, Charsets.UTF_8))
+                        agents.add(JsonObject()
+                            .put("name", card.getString("name"))
+                            .put("description", card.getString("description"))
+                            .put("status", card.getString("status"))
+                            .put("skills", card.getValue("skills"))
+                            .put("triggerType", card.getString("triggerType"))
+                            .put("provider", card.getString("provider"))
+                            .put("model", card.getString("model"))
+                        )
+                    } catch (e: Exception) {
+                        // Skip malformed agent cards
+                    }
+                    count++
+                    true
+                } else false
+            }
+            // Filter out self
+            val filtered = JsonArray()
+            for (i in 0 until agents.size()) {
+                val agent = agents.getJsonObject(i)
+                val name = agent.getString("name")
+                if (name == agentName) continue
+                if (subAgents.isNotEmpty() && name !in subAgents) continue
+                filtered.add(agent)
+            }
+            if (filtered.isEmpty) "No agents found" else filtered.encodePrettily()
+        } catch (e: Exception) {
+            logger.warning("listAgents error: ${e.message}")
+            "Error listing agents: ${e.message}"
+        }
+        return logTool("listAgents", "", result)
+    }
+
+    @Tool("Get the full Agent Card for a specific agent, including its capabilities, skills, and configuration details.")
+    fun getAgentCard(
+        @P("The name of the agent to look up") agentName: String
+    ): String {
+        val result = try {
+            val store = Monster.getRetainedStore()
+                ?: return logTool("getAgentCard", "agent=$agentName", "No retained store available")
+            val msg = store["agents/$agentName/card"]
+            if (msg != null) {
+                msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
+            } else {
+                "No agent card found for '$agentName'"
+            }
+        } catch (e: Exception) {
+            logger.warning("getAgentCard error: ${e.message}")
+            "Error: ${e.message}"
+        }
+        return logTool("getAgentCard", "agent=$agentName", result)
+    }
+
+    @Tool("Invoke another agent to perform a task and wait for its response. The target agent will process the input and return a result. Use listAgents() first to discover available agents.")
+    fun invokeAgent(
+        @P("The name of the target agent to invoke") targetAgent: String,
+        @P("The task input/instruction to send to the agent") input: String,
+        @P("Optional: specific skill to invoke on the target agent") skill: String?,
+        @P("Optional: timeout in seconds to wait for the response (default: uses agent's configured timeout)") timeoutSeconds: Int?
+    ): String {
+        val result = try {
+            if (subAgents.isNotEmpty() && targetAgent !in subAgents) {
+                return logTool("invokeAgent", "target=$targetAgent", "Agent '$targetAgent' is not in this agent's sub-agents list. Available: $subAgents")
+            }
+
+            val sessionHandler = Monster.getSessionHandler()
+                ?: return logTool("invokeAgent", "target=$targetAgent", "No session handler available")
+
+            if (registerTaskResponse == null || unregisterTaskResponse == null) {
+                return logTool("invokeAgent", "target=$targetAgent", "Agent orchestration not configured")
+            }
+
+            val taskId = Utils.getUuid()
+            val replyTo = "agents/$agentName/inbox/$taskId"
+            val timeoutMs = (timeoutSeconds?.toLong()?.times(1000)) ?: taskTimeoutMs
+
+            // Create future for response
+            val future = CompletableFuture<String>()
+            registerTaskResponse.invoke(replyTo, future)
+
+            try {
+                // Subscribe to reply topic
+                sessionHandler.subscribeInternalClient(agentClientId, replyTo, 1)
+
+                // Publish task to target agent
+                val taskJson = JsonObject()
+                    .put("taskId", taskId)
+                    .put("input", input)
+                    .put("replyTo", replyTo)
+                    .put("callerAgent", agentName)
+                if (skill != null) taskJson.put("skill", skill)
+
+                val msg = BrokerMessage(agentClientId, "agents/$targetAgent/tasks/new", taskJson.encode())
+                sessionHandler.publishMessage(msg)
+
+                logger.fine("Agent $agentName invoked agent $targetAgent with taskId=$taskId")
+
+                // Block waiting for response (safe in executeBlocking context)
+                val response = future.get(timeoutMs, TimeUnit.MILLISECONDS)
+                response
+            } catch (e: TimeoutException) {
+                "Timeout: agent '$targetAgent' did not respond within ${timeoutMs / 1000} seconds"
+            } finally {
+                // Cleanup
+                unregisterTaskResponse.invoke(replyTo)
+                try {
+                    sessionHandler.unsubscribeInternalClient(agentClientId, replyTo)
+                } catch (_: Exception) {}
+            }
+        } catch (e: Exception) {
+            logger.warning("invokeAgent error: ${e.message}")
+            "Error invoking agent '$targetAgent': ${e.message}"
+        }
+        return logTool("invokeAgent", "target=$targetAgent, input=${input.take(200)}", result)
+    }
+
+    @Tool("Get the health status of a specific agent, including uptime metrics and error counts.")
+    fun getAgentHealth(
+        @P("The name of the agent to check") agentName: String
+    ): String {
+        val result = try {
+            val store = Monster.getRetainedStore()
+                ?: return logTool("getAgentHealth", "agent=$agentName", "No retained store available")
+            val msg = store["agents/$agentName/health"]
+            if (msg != null) {
+                msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
+            } else {
+                "No health data found for agent '$agentName'"
+            }
+        } catch (e: Exception) {
+            logger.warning("getAgentHealth error: ${e.message}")
+            "Error: ${e.message}"
+        }
+        return logTool("getAgentHealth", "agent=$agentName", result)
     }
 
 }
