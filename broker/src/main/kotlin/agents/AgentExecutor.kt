@@ -542,6 +542,8 @@ class AgentExecutor(
                     val responseMsg = BrokerMessage(clientId, replyTo, resultJson.encode())
                     sessionHandler.publishMessage(responseMsg)
                     publishTaskStatus(taskId, "completed")
+                    // Also publish to configured output topics
+                    if (response != null) publishResponse(response)
                 }
             }
         } catch (e: Exception) {
