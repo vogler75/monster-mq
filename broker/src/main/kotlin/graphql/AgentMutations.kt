@@ -164,6 +164,8 @@ class AgentMutations(
         val enabled = input["enabled"] as? Boolean ?: false
 
         val agentConfig = AgentConfig(
+            org = input["org"] as? String ?: "default",
+            site = input["site"] as? String ?: "default",
             description = input["description"] as? String ?: "",
             version = input["version"] as? String ?: "1.0.0",
             skills = parseSkills(input["skills"]),
@@ -208,6 +210,8 @@ class AgentMutations(
         val existingConfig = AgentConfig.fromJsonObject(existing.config)
 
         val merged = AgentConfig(
+            org = input["org"] as? String ?: existingConfig.org,
+            site = input["site"] as? String ?: existingConfig.site,
             description = input["description"] as? String ?: existingConfig.description,
             version = input["version"] as? String ?: existingConfig.version,
             skills = if (input.containsKey("skills")) parseSkills(input["skills"]) else existingConfig.skills,

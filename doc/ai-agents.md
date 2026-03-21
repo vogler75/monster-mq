@@ -22,6 +22,8 @@ Agents are configured via the GraphQL API or dashboard. All fields with their de
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `name` | String | required | Unique agent name |
+| `org` | String | `"default"` | A2A organization identifier |
+| `site` | String | `"default"` | A2A site identifier |
 | `description` | String | `""` | Human-readable description |
 | `version` | String | `"1.0.0"` | Agent version |
 | `namespace` | String | required | Organizational namespace |
@@ -39,6 +41,7 @@ Agents are configured via the GraphQL API or dashboard. All fields with their de
 | `cronExpression` | String | null | Quartz cron expression (for CRON trigger) |
 | `cronIntervalMs` | Long | null | Periodic interval in ms (for CRON trigger) |
 | `inputTopics` | List | `[]` | MQTT topics that trigger the agent |
+| `cronPrompt` | String | null | Custom prompt for scheduled executions (CRON trigger) |
 | `outputTopics` | List | `[]` | Where responses are published (default: `agents/{name}/response`) |
 | `stateEnabled` | Boolean | `true` | Enable persistent state |
 | `mcpServers` | List | `[]` | External MCP server names to connect |
@@ -122,7 +125,7 @@ All agents have access to these tools via LangChain4j `@Tool` annotations:
 
 ### Agent Notes (Persistent Memory)
 
-Notes are stored as retained MQTT messages under `agents/{name}/memory/{key}` and persist across restarts.
+Notes are stored as retained MQTT messages under `a2a/v1/{org}/{site}/agents/{name}/memory/{key}` and persist across restarts.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
@@ -200,21 +203,45 @@ Context is capped at 500 lines.
 
 ## Agent-to-Agent Communication (A2A)
 
-Agents can discover and invoke each other over MQTT using a request/reply pattern.
+Agents communicate using the [HiveMQ A2A over MQTT](https://www.hivemq.com/a2a-mqtt/) topic hierarchy. The `org` and `site` fields on each agent define the topic namespace.
+
+### Topic Hierarchy
+
+```
+a2a/v1/{org}/{site}/
+├── discovery/{agentId}                    # (retained) Agent Card
+└── agents/{agentId}/
+    ├── inbox                              # Incoming task requests
+    ├── status/{taskId}                    # Task state and results
+    └── cancel/{taskId}                    # Task cancellation (reserved)
+```
+
+With default `org`/`site` values, topics look like:
+```
+a2a/v1/default/default/discovery/agent1
+a2a/v1/default/default/agents/agent1/inbox
+a2a/v1/default/default/agents/agent1/status/67
+```
 
 ### Discovery
 
-Every running agent publishes an **Agent Card** as a retained message to `agents/{name}/card`. Other agents discover available agents by calling `listAgents()`, which reads these retained cards.
+Every running agent publishes an **Agent Card** as a retained message to `a2a/v1/{org}/{site}/discovery/{agentId}`. Other agents discover available agents by calling `listAgents()`, which reads these retained cards.
 
 ### Task Request Format
 
-To invoke an agent, publish a JSON message to `agents/{targetAgent}/tasks/new`:
+To invoke an agent, publish a message to its inbox topic:
+
+```
+a2a/v1/{org}/{site}/agents/{targetAgent}/inbox
+```
+
+**JSON payload:**
 
 ```json
 {
   "taskId": "unique-task-id",
   "input": "Analyze the temperature trend for the last hour",
-  "replyTo": "agents/callerAgent/inbox/unique-task-id",
+  "replyTo": "a2a/v1/default/default/agents/callerAgent/inbox/unique-task-id",
   "callerAgent": "orchestrator",
   "skill": "analyze-temperature"
 }
@@ -224,15 +251,15 @@ To invoke an agent, publish a JSON message to `agents/{targetAgent}/tasks/new`:
 |-------|----------|-------------|
 | `taskId` | No | Unique task identifier (auto-generated if omitted) |
 | `input` | Yes | The task instruction/input text |
-| `replyTo` | Yes | MQTT topic where the response should be published |
+| `replyTo` | No | MQTT topic for the response (default: agent's status topic) |
 | `callerAgent` | No | Name of the calling agent (default: `"unknown"`) |
 | `skill` | No | Specific skill to invoke on the target agent |
 
-**Plain-text payloads** are also accepted: if the message is not valid JSON, the entire payload is treated as the task input. In this case there is no `replyTo`, so the agent publishes its response to its configured output topics instead.
+**Plain-text payloads** are also accepted: if the message is not valid JSON, the entire payload is treated as the task input. The agent publishes its response to its configured output topics.
 
 ### Task Response Format
 
-The target agent publishes the result to the `replyTo` topic:
+The target agent publishes the result to the `replyTo` topic (or to `a2a/v1/{org}/{site}/agents/{agentId}/status/{taskId}` by default):
 
 **Success:**
 ```json
@@ -254,7 +281,7 @@ The target agent publishes the result to the `replyTo` topic:
 
 ### Task Status Updates
 
-During execution, status updates are published to `agents/{agentName}/tasks/{taskId}/status`:
+During execution, status updates are published to `a2a/v1/{org}/{site}/agents/{agentId}/status/{taskId}`:
 
 ```json
 {
@@ -275,20 +302,20 @@ Agent A (Orchestrator)                    Agent B (Worker)
     │  1. invokeAgent("B", "analyze temps")    │
     │                                          │
     │  2. Subscribe to                         │
-    │     agents/A/inbox/{taskId}              │
+    │     a2a/v1/../agents/A/inbox/{taskId}    │
     │                                          │
     │  3. Publish to                           │
-    │     agents/B/tasks/new ─────────────────>│
+    │     a2a/v1/../agents/B/inbox ───────────>│
     │     {taskId, input, replyTo,             │
     │      callerAgent: "A"}                   │
     │                                          │ 4. Publish status "working"
-    │                                          │    to agents/B/tasks/{taskId}/status
+    │                                          │    to a2a/v1/../agents/B/status/{taskId}
     │                                          │
     │                                          │ 5. Execute LLM with tools
     │                                          │    (ReAct loop)
     │                                          │
     │                                          │ 6. Publish result to
-    │  <───────────────────────────────────────│    agents/A/inbox/{taskId}
+    │  <───────────────────────────────────────│    a2a/v1/../agents/A/inbox/{taskId}
     │  {taskId, status: "completed",           │
     │   result: "Temperature analysis..."}     │
     │                                          │ 7. Publish status "completed"
@@ -318,17 +345,15 @@ When `subAgents` is non-empty:
 ## MQTT Topic Structure
 
 ```
-agents/
-└── {agentName}/
-    ├── card                          # (retained) Agent Card with capabilities
+a2a/v1/{org}/{site}/
+├── discovery/
+│   └── {agentId}                     # (retained) Agent Card with capabilities
+└── agents/{agentId}/
+    ├── inbox                         # Incoming task requests
+    ├── status/{taskId}               # Task state/result updates
+    ├── cancel/{taskId}               # Task cancellation (reserved)
     ├── health                        # (retained) Health status + metrics
     ├── response                      # Default output topic
-    ├── tasks/
-    │   ├── new                       # Incoming task requests (A2A)
-    │   └── {taskId}/
-    │       └── status                # Task execution status updates
-    ├── inbox/
-    │   └── {taskId}                  # Reply topics for outgoing A2A calls
     ├── memory/
     │   └── {key}                     # (retained) Persistent agent notes
     └── logs/

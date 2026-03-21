@@ -27,6 +27,8 @@ class AgentTools(
     private val retainedStore: IMessageStore?,
     private val agentClientId: String,
     private val agentName: String,
+    private val a2aOrg: String = "default",
+    private val a2aSite: String = "default",
     private val defaultArchiveGroup: String = "Default",
     private val toolLogger: ((String, String, String) -> Unit)? = null,
     private val vertx: Vertx? = null,
@@ -157,7 +159,7 @@ class AgentTools(
 
     // --- Agent Notes (persistent key/value memory via retained MQTT messages) ---
 
-    private val notesPrefix = "agents/$agentName/memory"
+    private val notesPrefix = "a2a/v1/$a2aOrg/$a2aSite/agents/$agentName/memory"
 
     @Tool("Save a note to persistent memory. Use this to remember observations, decisions, or learned information across invocations. Keys can be hierarchical (e.g., 'decisions/heater', 'observations/2024-03-20').")
     fun saveNote(
@@ -256,7 +258,7 @@ class AgentTools(
                 ?: return logTool("listAgents", "", "No retained store available")
             val agents = JsonArray()
             var count = 0
-            store.findMatchingMessages("agents/+/card") { msg ->
+            store.findMatchingMessages("a2a/v1/$a2aOrg/$a2aSite/discovery/+") { msg ->
                 if (count < 100) {
                     try {
                         val card = JsonObject(String(msg.payload, Charsets.UTF_8))
@@ -300,7 +302,7 @@ class AgentTools(
         val result = try {
             val store = Monster.getRetainedStore()
                 ?: return logTool("getAgentCard", "agent=$agentName", "No retained store available")
-            val msg = store["agents/$agentName/card"]
+            val msg = store["a2a/v1/$a2aOrg/$a2aSite/discovery/$agentName"]
             if (msg != null) {
                 msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
             } else {
@@ -333,7 +335,7 @@ class AgentTools(
             }
 
             val taskId = Utils.getUuid()
-            val replyTo = "agents/$agentName/inbox/$taskId"
+            val replyTo = "a2a/v1/$a2aOrg/$a2aSite/agents/$agentName/inbox/$taskId"
             val timeoutMs = (timeoutSeconds?.toLong()?.times(1000)) ?: taskTimeoutMs
 
             // Create future for response
@@ -352,7 +354,7 @@ class AgentTools(
                     .put("callerAgent", agentName)
                 if (skill != null) taskJson.put("skill", skill)
 
-                val msg = BrokerMessage(agentClientId, "agents/$targetAgent/tasks/new", taskJson.encode())
+                val msg = BrokerMessage(agentClientId, "a2a/v1/$a2aOrg/$a2aSite/agents/$targetAgent/inbox", taskJson.encode())
                 sessionHandler.publishMessage(msg)
 
                 logger.fine("Agent $agentName invoked agent $targetAgent with taskId=$taskId")
@@ -383,7 +385,7 @@ class AgentTools(
         val result = try {
             val store = Monster.getRetainedStore()
                 ?: return logTool("getAgentHealth", "agent=$agentName", "No retained store available")
-            val msg = store["agents/$agentName/health"]
+            val msg = store["a2a/v1/$a2aOrg/$a2aSite/agents/$agentName/health"]
             if (msg != null) {
                 msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
             } else {

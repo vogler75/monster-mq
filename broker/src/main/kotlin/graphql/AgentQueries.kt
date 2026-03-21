@@ -82,6 +82,8 @@ class AgentQueries(
             val agentConfig = AgentConfig.fromJsonObject(device.config)
             return mapOf(
                 "name" to device.name,
+                "org" to agentConfig.org,
+                "site" to agentConfig.site,
                 "description" to agentConfig.description,
                 "version" to agentConfig.version,
                 "namespace" to device.namespace,

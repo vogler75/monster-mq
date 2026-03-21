@@ -4,6 +4,8 @@
 
 type Agent {
     name: String!
+    org: String!
+    site: String!
     description: String
     version: String!
     namespace: String!
@@ -48,6 +50,8 @@ type AgentSkill {
 
 input AgentInput {
     name: String!
+    org: String
+    site: String
     namespace: String!
     nodeId: String!
     description: String

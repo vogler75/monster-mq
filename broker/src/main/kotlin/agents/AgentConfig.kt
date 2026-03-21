@@ -4,6 +4,8 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 
 data class AgentConfig(
+    val org: String = "default",
+    val site: String = "default",
     val description: String = "",
     val version: String = "1.0.0",
     val skills: List<AgentSkill> = emptyList(),
@@ -34,6 +36,8 @@ data class AgentConfig(
     companion object {
         fun fromJsonObject(json: JsonObject): AgentConfig {
             return AgentConfig(
+                org = json.getString("org", "default"),
+                site = json.getString("site", "default"),
                 description = json.getString("description", ""),
                 version = json.getString("version", "1.0.0"),
                 skills = json.getJsonArray("skills", JsonArray()).filterIsInstance<JsonObject>().map { AgentSkill.fromJsonObject(it) },
@@ -71,6 +75,8 @@ data class AgentConfig(
 
     fun toJsonObject(): JsonObject {
         return JsonObject()
+            .put("org", org)
+            .put("site", site)
             .put("description", description)
             .put("version", version)
             .put("skills", JsonArray(skills.map { it.toJsonObject() }))

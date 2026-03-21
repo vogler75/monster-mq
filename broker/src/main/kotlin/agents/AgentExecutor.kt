@@ -51,6 +51,17 @@ class AgentExecutor(
     private var aiService: AgentAiService? = null
 
     private val clientId = "agent-${deviceConfig.name}"
+    private val agentName get() = deviceConfig.name
+
+    // A2A topic helpers
+    private fun a2aPrefix() = "a2a/v1/${agentConfig.org}/${agentConfig.site}"
+    private fun a2aAgentPrefix() = "${a2aPrefix()}/agents/$agentName"
+    private fun a2aDiscoveryTopic() = "${a2aPrefix()}/discovery/$agentName"
+    private fun a2aInboxTopic() = "${a2aAgentPrefix()}/inbox"
+    private fun a2aStatusTopic(taskId: String) = "${a2aAgentPrefix()}/status/$taskId"
+    private fun a2aCancelTopic() = "${a2aAgentPrefix()}/cancel/+"
+    private fun a2aAgentTopic(subtopic: String) = "${a2aAgentPrefix()}/$subtopic"
+
     private var cronTimerId: Long? = null
     private val mcpClients = mutableListOf<McpClient>()
     private val pendingTaskResponses = ConcurrentHashMap<String, CompletableFuture<String>>()
@@ -87,6 +98,8 @@ class AgentExecutor(
                 retainedStore = null,
                 agentClientId = clientId,
                 agentName = deviceConfig.name,
+                a2aOrg = agentConfig.org,
+                a2aSite = agentConfig.site,
                 defaultArchiveGroup = agentConfig.defaultArchiveGroup,
                 toolLogger = { name, args, result -> publishToolLog(name, args, result) },
                 vertx = vertx,
@@ -174,7 +187,7 @@ class AgentExecutor(
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
                 // Unsubscribe task topic
-                sessionHandler.unsubscribeInternalClient(clientId, "agents/${deviceConfig.name}/tasks/new")
+                sessionHandler.unsubscribeInternalClient(clientId, a2aInboxTopic())
                 agentConfig.inputTopics.forEach { topic ->
                     sessionHandler.unsubscribeInternalClient(clientId, topic)
                 }
@@ -450,7 +463,7 @@ class AgentExecutor(
         }
 
         // 2. Check incoming tasks (this agent being invoked by another agent)
-        if (msg.topicName == "agents/${deviceConfig.name}/tasks/new") {
+        if (msg.topicName == a2aInboxTopic()) {
             handleTaskMessage(msg)
             return
         }
@@ -462,9 +475,9 @@ class AgentExecutor(
     }
 
     private fun setupTaskSubscription(sessionHandler: at.rocworks.handlers.SessionHandler) {
-        val taskTopic = "agents/${deviceConfig.name}/tasks/new"
-        logger.fine("Agent ${deviceConfig.name} subscribing to task topic: $taskTopic")
-        sessionHandler.subscribeInternalClient(clientId, taskTopic, 1)
+        val inboxTopic = a2aInboxTopic()
+        logger.fine("Agent $agentName subscribing to inbox: $inboxTopic")
+        sessionHandler.subscribeInternalClient(clientId, inboxTopic, 1)
     }
 
     private fun handleTaskMessage(msg: BrokerMessage) {
@@ -492,7 +505,7 @@ class AgentExecutor(
                 logger.warning("Agent ${deviceConfig.name} received task $taskId with missing 'input' field, ignoring")
                 return
             }
-            val replyTo = taskJson.getString("replyTo") ?: "agents/${deviceConfig.name}/tasks/$taskId/reply"
+            val replyTo = taskJson.getString("replyTo") ?: a2aStatusTopic(taskId)
             val skill = taskJson.getString("skill")
             val callerAgent = taskJson.getString("callerAgent", "unknown")
 
@@ -543,7 +556,7 @@ class AgentExecutor(
             .put("status", status)
             .put("agent", deviceConfig.name)
             .put("timestamp", Instant.now().toString())
-        val msg = BrokerMessage(clientId, "agents/${deviceConfig.name}/tasks/$taskId/status", statusJson.encode())
+        val msg = BrokerMessage(clientId, a2aStatusTopic(taskId), statusJson.encode())
         sessionHandler.publishMessage(msg)
     }
 
@@ -652,7 +665,7 @@ class AgentExecutor(
         val sessionHandler = Monster.getSessionHandler() ?: return
 
         val topics = agentConfig.outputTopics.ifEmpty {
-            listOf("agents/${deviceConfig.name}/response")
+            listOf(a2aAgentTopic("response"))
         }
 
         topics.forEach { topic ->
@@ -677,7 +690,7 @@ class AgentExecutor(
 
     private fun publishToAgentTopic(subtopic: String, payload: JsonObject) {
         val sessionHandler = Monster.getSessionHandler() ?: return
-        val msg = BrokerMessage(clientId, "agents/${deviceConfig.name}/$subtopic", payload.encode())
+        val msg = BrokerMessage(clientId, a2aAgentTopic(subtopic), payload.encode())
         sessionHandler.publishMessage(msg)
     }
 
@@ -749,7 +762,7 @@ class AgentExecutor(
             .put("protocolVersion", "1.0")
             .put("name", agentName)
             .put("description", agentConfig.description)
-            .put("url", "agents/$agentName")
+            .put("url", a2aInboxTopic())
             .put("preferredTransport", "MQTT")
             .put("version", agentConfig.version)
             .put("defaultInputModes", listOf("application/json", "text/plain"))
@@ -774,7 +787,7 @@ class AgentExecutor(
         val payload = card.encode().toByteArray()
         val msg = BrokerMessage(
             messageId = 0,
-            topicName = "agents/$agentName/card",
+            topicName = a2aDiscoveryTopic(),
             payload = payload,
             qosLevel = 1,
             isRetain = true,
@@ -799,7 +812,7 @@ class AgentExecutor(
         val payload = health.encode().toByteArray()
         val msg = BrokerMessage(
             messageId = 0,
-            topicName = "agents/${deviceConfig.name}/health",
+            topicName = a2aAgentTopic("health"),
             payload = payload,
             qosLevel = 0,
             isRetain = true,
