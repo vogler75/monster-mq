@@ -99,6 +99,7 @@ class AgentQueries(
                 "triggerType" to agentConfig.triggerType.name,
                 "cronExpression" to agentConfig.cronExpression,
                 "cronIntervalMs" to agentConfig.cronIntervalMs,
+                "cronPrompt" to agentConfig.cronPrompt,
                 "provider" to agentConfig.provider,
                 "model" to agentConfig.model,
                 "systemPrompt" to agentConfig.systemPrompt,

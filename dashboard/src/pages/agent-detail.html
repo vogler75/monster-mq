@@ -350,6 +350,10 @@
                                 Examples: <code>0 0 22 * * ? *</code> (daily 22:00), <code>0 */15 * * * ? *</code> (every 15 min), <code>0 0 */4 * * ? *</code> (every 4 hours)
                             </small>
                         </div>
+                        <div class="form-group full-width" id="cron-prompt-group" style="display:none;">
+                            <label for="agent-cron-prompt">Cron Prompt</label>
+                            <textarea id="agent-cron-prompt" rows="3" placeholder="Optional prompt sent to the LLM on each scheduled execution. If empty, a default timestamp message is used."></textarea>
+                        </div>
                         <div class="form-group full-width">
                             <label for="agent-input-topics">Input Topics</label>
                             <textarea id="agent-input-topics" rows="3" data-drop-zone-enabled="true" placeholder="One topic per line&#10;e.g., sensor/+/temperature&#10;     device/+/status"></textarea>

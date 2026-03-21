@@ -71,6 +71,7 @@ class AgentDetailManager {
         document.getElementById('agent-interval-unit').value = 'minutes';
         document.getElementById('agent-daily-time').value = '22:00:00';
         document.getElementById('agent-cron-expression').value = '';
+        document.getElementById('agent-cron-prompt').value = '';
         document.getElementById('agent-input-topics').value = '';
         document.getElementById('agent-output-topics').value = '';
         document.getElementById('agent-system-prompt').value = '';
@@ -362,6 +363,7 @@ class AgentDetailManager {
                         triggerType
                         cronExpression
                         cronIntervalMs
+                        cronPrompt
                         provider
                         model
                         systemPrompt
@@ -465,6 +467,7 @@ class AgentDetailManager {
             document.getElementById('agent-schedule-mode').value = 'interval';
         }
 
+        document.getElementById('agent-cron-prompt').value = d.cronPrompt || '';
         document.getElementById('agent-input-topics').value = (d.inputTopics || []).join('\n');
         document.getElementById('agent-output-topics').value = (d.outputTopics || []).join('\n');
 
@@ -535,6 +538,7 @@ class AgentDetailManager {
             triggerType: document.getElementById('agent-trigger-type').value,
             cronExpression: null,
             cronIntervalMs: null,
+            cronPrompt: document.getElementById('agent-cron-prompt').value.trim() || null,
             inputTopics: inputTopics,
             outputTopics: outputTopics,
             mcpServers: this.getSelectedMcpServers(),
@@ -765,6 +769,10 @@ function toggleTriggerFields() {
     const cronScheduleGroup = document.getElementById('cron-schedule-group');
     if (cronScheduleGroup) {
         cronScheduleGroup.style.display = triggerType === 'CRON' ? 'block' : 'none';
+    }
+    const cronPromptGroup = document.getElementById('cron-prompt-group');
+    if (cronPromptGroup) {
+        cronPromptGroup.style.display = triggerType === 'CRON' ? 'block' : 'none';
     }
     if (triggerType === 'CRON') {
         toggleScheduleMode();

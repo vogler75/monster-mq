@@ -15,6 +15,7 @@ type Agent {
     triggerType: String!
     cronExpression: String
     cronIntervalMs: Long
+    cronPrompt: String
     provider: String
     model: String
     systemPrompt: String
@@ -57,6 +58,7 @@ input AgentInput {
     triggerType: String
     cronExpression: String
     cronIntervalMs: Long
+    cronPrompt: String
     provider: String
     model: String
     apiKey: String

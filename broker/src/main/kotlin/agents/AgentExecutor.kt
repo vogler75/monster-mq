@@ -123,6 +123,11 @@ class AgentExecutor(
 
             aiService = builder.build()
 
+            // Register EventBus consumer to receive MQTT messages
+            if (sessionHandler != null) {
+                setupEventBusConsumer()
+            }
+
             // Subscribe to input MQTT topics
             if (sessionHandler != null && agentConfig.inputTopics.isNotEmpty()) {
                 setupMqttSubscriptions(sessionHandler)
@@ -195,8 +200,7 @@ class AgentExecutor(
         }
     }
 
-    private fun setupMqttSubscriptions(sessionHandler: at.rocworks.handlers.SessionHandler) {
-        // Register EventBus consumer to receive MQTT messages
+    private fun setupEventBusConsumer() {
         vertx.eventBus().consumer<Any>(EventBusAddresses.Client.messages(clientId)) { busMessage ->
             try {
                 when (val body = busMessage.body()) {
@@ -208,7 +212,9 @@ class AgentExecutor(
                 logger.warning("Error processing MQTT message in agent ${deviceConfig.name}: ${e.message}")
             }
         }
+    }
 
+    private fun setupMqttSubscriptions(sessionHandler: at.rocworks.handlers.SessionHandler) {
         // Subscribe to each input topic
         agentConfig.inputTopics.forEach { topicFilter ->
             logger.fine("Agent ${deviceConfig.name} subscribing to: $topicFilter")
@@ -229,7 +235,7 @@ class AgentExecutor(
             if (intervalMs != null && intervalMs > 0) {
                 logger.fine("Agent ${deviceConfig.name} setting up periodic trigger: ${intervalMs}ms")
                 cronTimerId = vertx.setPeriodic(intervalMs) {
-                    executeAgent("It is ${Instant.now()}. Execute your scheduled task.", "cron")
+                    executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${Instant.now()}. Execute your scheduled task.", "cron")
                 }
             } else {
                 logger.warning("Agent ${deviceConfig.name} has CRON trigger but no cronExpression or cronIntervalMs")
@@ -244,7 +250,7 @@ class AgentExecutor(
             val delayMs = java.time.Duration.between(now, nextExecution.get()).toMillis()
             logger.fine("Agent ${deviceConfig.name} next cron execution at ${nextExecution.get()} (in ${delayMs}ms)")
             cronTimerId = vertx.setTimer(delayMs) {
-                executeAgent("It is ${Instant.now()}. Execute your scheduled task.", "cron")
+                executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${Instant.now()}. Execute your scheduled task.", "cron")
                 scheduleNextCronExecution(executionTime)
             }
         } else {
@@ -463,12 +469,13 @@ class AgentExecutor(
     private fun handleTaskMessage(msg: BrokerMessage) {
         try {
             val payload = String(msg.payload, Charsets.UTF_8)
+            logger.fine { "Agent ${deviceConfig.name} received task message: $payload" }
             val taskJson = try { JsonObject(payload) } catch (_: Exception) { null }
 
             // Plain-text payload: treat the whole payload as input, no reply
             if (taskJson == null) {
                 val taskId = Utils.getUuid()
-                logger.fine("Agent ${deviceConfig.name} received plain-text task $taskId")
+                logger.info("Agent ${deviceConfig.name} received plain-text task $taskId")
                 publishTaskStatus(taskId, "working")
                 val taskMessage = "[Task from external, taskId=$taskId]\n$payload"
                 executeAgentWithCallback(taskMessage, "task:$taskId") { response, _ ->
@@ -479,12 +486,16 @@ class AgentExecutor(
             }
 
             val taskId = taskJson.getString("taskId") ?: Utils.getUuid()
-            val input = taskJson.getString("input") ?: return
-            val replyTo = taskJson.getString("replyTo") ?: return
+            val input = taskJson.getString("input")
+            if (input == null) {
+                logger.warning("Agent ${deviceConfig.name} received task $taskId with missing 'input' field, ignoring")
+                return
+            }
+            val replyTo = taskJson.getString("replyTo") ?: "agents/${deviceConfig.name}/tasks/$taskId/reply"
             val skill = taskJson.getString("skill")
             val callerAgent = taskJson.getString("callerAgent", "unknown")
 
-            logger.fine("Agent ${deviceConfig.name} received task $taskId from $callerAgent")
+            logger.info("Agent ${deviceConfig.name} received task $taskId from $callerAgent (replyTo=$replyTo)")
 
             // Publish working status
             publishTaskStatus(taskId, "working")

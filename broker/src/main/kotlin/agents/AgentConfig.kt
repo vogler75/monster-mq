@@ -12,6 +12,7 @@ data class AgentConfig(
     val triggerType: TriggerType = TriggerType.MQTT,
     val cronExpression: String? = null,
     val cronIntervalMs: Long? = null,
+    val cronPrompt: String? = null,
     val provider: String = "gemini",
     val model: String? = null,
     val apiKey: String? = null,
@@ -41,6 +42,7 @@ data class AgentConfig(
                 triggerType = TriggerType.fromString(json.getString("triggerType", "MQTT")),
                 cronExpression = json.getString("cronExpression"),
                 cronIntervalMs = json.getLong("cronIntervalMs"),
+                cronPrompt = json.getString("cronPrompt"),
                 provider = json.getString("provider", "gemini"),
                 model = json.getString("model"),
                 apiKey = json.getString("apiKey"),
@@ -77,6 +79,7 @@ data class AgentConfig(
             .put("triggerType", triggerType.name)
             .put("cronExpression", cronExpression)
             .put("cronIntervalMs", cronIntervalMs)
+            .put("cronPrompt", cronPrompt)
             .put("provider", provider)
             .put("model", model)
             .put("apiKey", apiKey)
