@@ -1,5 +1,6 @@
 package at.rocworks.agents
 
+import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
@@ -30,7 +31,6 @@ import com.cronutils.model.time.ExecutionTime
 import com.cronutils.parser.CronParser
 import java.time.Instant
 import java.time.ZonedDateTime
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
@@ -43,7 +43,7 @@ class AgentExecutor(
     private val deviceConfig: DeviceConfig
 ) : AbstractVerticle() {
 
-    private val logger: Logger = Utils.getLogger(this::class.java)
+    private val logger: Logger = Utils.getLogger(this::class.java).apply { level = Const.DEBUG_LEVEL }
 
     private lateinit var agentConfig: AgentConfig
     private lateinit var chatModel: ChatModel
@@ -63,8 +63,12 @@ class AgentExecutor(
     private fun a2aAgentTopic(subtopic: String) = "${a2aAgentPrefix()}/$subtopic"
 
     private var cronTimerId: Long? = null
+    private var taskTimeoutTimerId: Long? = null
     private val mcpClients = mutableListOf<McpClient>()
-    private val pendingTaskResponses = ConcurrentHashMap<String, CompletableFuture<String>>()
+
+    // Pending tasks: taskId -> PendingTask (for timeout monitoring)
+    data class PendingTask(val targetAgent: String, val submittedAt: Long = System.currentTimeMillis())
+    private val pendingTasks = ConcurrentHashMap<String, PendingTask>()
 
     // Metrics
     private val messagesProcessed = AtomicLong(0)
@@ -104,8 +108,7 @@ class AgentExecutor(
                 toolLogger = { name, args, result -> publishToolLog(name, args, result) },
                 vertx = vertx,
                 taskTimeoutMs = agentConfig.taskTimeoutMs,
-                registerTaskResponse = { replyTo, future -> pendingTaskResponses[replyTo] = future },
-                unregisterTaskResponse = { replyTo -> pendingTaskResponses.remove(replyTo) },
+                registerPendingTask = { taskId, targetAgent -> pendingTasks[taskId] = PendingTask(targetAgent) },
                 subAgents = agentConfig.subAgents
             )
 
@@ -156,6 +159,9 @@ class AgentExecutor(
                 setupCronTrigger()
             }
 
+            // Setup periodic pending task timeout checker
+            setupTaskTimeoutChecker()
+
             // Publish Agent Card and health status
             publishAgentCard()
             publishHealthStatus("ready")
@@ -174,20 +180,17 @@ class AgentExecutor(
         logger.fine("Stopping agent ${deviceConfig.name}...")
 
         try {
-            // Cancel cron timer
+            // Cancel timers
             cronTimerId?.let { vertx.cancelTimer(it) }
-
-            // Complete any pending task futures with error
-            pendingTaskResponses.forEach { (_, future) ->
-                future.completeExceptionally(RuntimeException("Agent stopping"))
-            }
-            pendingTaskResponses.clear()
+            taskTimeoutTimerId?.let { vertx.cancelTimer(it) }
+            pendingTasks.clear()
 
             // Unsubscribe MQTT topics
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
-                // Unsubscribe task topic
+                // Unsubscribe task topics
                 sessionHandler.unsubscribeInternalClient(clientId, a2aInboxTopic())
+                sessionHandler.unsubscribeInternalClient(clientId, "${a2aInboxTopic()}/+")
                 agentConfig.inputTopics.forEach { topic ->
                     sessionHandler.unsubscribeInternalClient(clientId, topic)
                 }
@@ -215,11 +218,19 @@ class AgentExecutor(
     }
 
     private fun setupEventBusConsumer() {
-        vertx.eventBus().consumer<Any>(EventBusAddresses.Client.messages(clientId)) { busMessage ->
+        val address = EventBusAddresses.Client.messages(clientId)
+        logger.info("Agent $agentName registering EventBus consumer at address: $address")
+        vertx.eventBus().consumer<Any>(address) { busMessage ->
             try {
                 when (val body = busMessage.body()) {
-                    is BrokerMessage -> handleMqttMessage(body)
-                    is BulkClientMessage -> body.messages.forEach { handleMqttMessage(it) }
+                    is BrokerMessage -> {
+                        logger.info("Agent $agentName received message on topic: ${body.topicName}")
+                        handleMqttMessage(body)
+                    }
+                    is BulkClientMessage -> {
+                        logger.info("Agent $agentName received bulk message with ${body.messages.size} messages")
+                        body.messages.forEach { handleMqttMessage(it) }
+                    }
                     else -> logger.warning("Unknown message type: ${body?.javaClass?.simpleName}")
                 }
             } catch (e: Exception) {
@@ -454,17 +465,22 @@ class AgentExecutor(
     }
 
     private fun handleMqttMessage(msg: BrokerMessage) {
-        // 1. Check pending task responses (orchestrator receiving sub-agent results)
-        val pendingFuture = pendingTaskResponses.remove(msg.topicName)
-        if (pendingFuture != null) {
-            val payload = String(msg.payload, Charsets.UTF_8)
-            pendingFuture.complete(payload)
+        val inboxPrefix = a2aInboxTopic()
+
+        // Log all inbox messages
+        if (msg.topicName.startsWith(inboxPrefix)) {
+            logger.info("Agent $agentName inbox message [${msg.topicName}]: ${String(msg.payload, Charsets.UTF_8).take(500)}")
+        }
+
+        // 1. Check incoming tasks (this agent being invoked by another agent)
+        if (msg.topicName == inboxPrefix) {
+            handleTaskMessage(msg)
             return
         }
 
-        // 2. Check incoming tasks (this agent being invoked by another agent)
-        if (msg.topicName == a2aInboxTopic()) {
-            handleTaskMessage(msg)
+        // 2. Check sub-agent reply (inbox/{taskId} — response from a task we submitted)
+        if (msg.topicName.startsWith("$inboxPrefix/")) {
+            handleSubAgentReply(msg)
             return
         }
 
@@ -474,10 +490,62 @@ class AgentExecutor(
         executeAgent(userMessage, msg.topicName)
     }
 
+    private fun handleSubAgentReply(msg: BrokerMessage) {
+        val payload = String(msg.payload, Charsets.UTF_8)
+        val replyJson = try { JsonObject(payload) } catch (_: Exception) { null }
+
+        val taskId = replyJson?.getString("taskId") ?: msg.topicName.substringAfterLast("/")
+        val status = replyJson?.getString("status") ?: "unknown"
+        val result = replyJson?.getValue("result")?.let { value ->
+            when (value) {
+                is String -> value
+                is JsonObject -> value.encode()
+                is JsonArray -> {
+                    // Extract text from A2A result array: [{"type":"text","text":"..."},...]
+                    val texts = (0 until value.size()).mapNotNull { i ->
+                        value.getJsonObject(i)?.getString("text")
+                    }
+                    if (texts.isNotEmpty()) texts.joinToString("\n") else value.encode()
+                }
+                else -> value.toString()
+            }
+        } ?: replyJson?.getString("error") ?: payload
+
+        // Remove from pending tasks
+        val pending = pendingTasks.remove(taskId)
+        val fromAgent = pending?.targetAgent ?: "unknown"
+
+        logger.info("Agent $agentName received reply for task $taskId from $fromAgent (status=$status)")
+
+        // Feed the response back to the LLM as a new message
+        val userMessage = "[Response from agent '$fromAgent', taskId=$taskId, status=$status]\n$result"
+        executeAgent(userMessage, "task-reply:$taskId")
+    }
+
+    private fun setupTaskTimeoutChecker() {
+        val checkIntervalMs = 15_000L // check every 15 seconds
+        val timeoutMs = agentConfig.taskTimeoutMs
+
+        taskTimeoutTimerId = vertx.setPeriodic(checkIntervalMs) {
+            val now = System.currentTimeMillis()
+            val timedOut = pendingTasks.entries.filter { now - it.value.submittedAt > timeoutMs }
+            timedOut.forEach { (taskId, pending) ->
+                pendingTasks.remove(taskId)
+                logger.warning("Agent $agentName task $taskId to '${pending.targetAgent}' timed out after ${timeoutMs / 1000}s")
+                val userMessage = "[Timeout: agent '${pending.targetAgent}' did not respond for taskId=$taskId within ${timeoutMs / 1000} seconds]"
+                executeAgent(userMessage, "task-timeout:$taskId")
+            }
+        }
+    }
+
     private fun setupTaskSubscription(sessionHandler: at.rocworks.handlers.SessionHandler) {
         val inboxTopic = a2aInboxTopic()
-        logger.fine("Agent $agentName subscribing to inbox: $inboxTopic")
+        logger.info("Agent $agentName subscribing to inbox: $inboxTopic")
         sessionHandler.subscribeInternalClient(clientId, inboxTopic, 1)
+        // Also subscribe to inbox/+ so we receive sub-agent replies (replyTo = inbox/{taskId})
+        val inboxReplyTopic = "${inboxTopic}/+"
+        logger.info("Agent $agentName subscribing to inbox replies: $inboxReplyTopic")
+        sessionHandler.subscribeInternalClient(clientId, inboxReplyTopic, 1)
     }
 
     private fun handleTaskMessage(msg: BrokerMessage) {

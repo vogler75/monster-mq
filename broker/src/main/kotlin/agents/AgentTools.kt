@@ -1,5 +1,6 @@
 package at.rocworks.agents
 
+import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.handlers.ArchiveGroup
@@ -13,9 +14,6 @@ import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.time.Instant
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 import java.util.logging.Logger
 
 /**
@@ -33,11 +31,10 @@ class AgentTools(
     private val toolLogger: ((String, String, String) -> Unit)? = null,
     private val vertx: Vertx? = null,
     private val taskTimeoutMs: Long = 60000,
-    private val registerTaskResponse: ((String, CompletableFuture<String>) -> Unit)? = null,
-    private val unregisterTaskResponse: ((String) -> Unit)? = null,
+    private val registerPendingTask: ((taskId: String, targetAgent: String) -> Unit)? = null,
     private val subAgents: List<String> = emptyList()
 ) {
-    private val logger: Logger = Utils.getLogger(AgentTools::class.java)
+    private val logger: Logger = Utils.getLogger(AgentTools::class.java).apply { level = Const.DEBUG_LEVEL }
 
     private val nativeToolNames: Set<String> by lazy {
         this::class.java.methods
@@ -315,12 +312,11 @@ class AgentTools(
         return logTool("getAgentCard", "agent=$agentName", result)
     }
 
-    @Tool("Invoke another agent to perform a task and wait for its response. The target agent will process the input and return a result. Use listAgents() first to discover available agents.")
+    @Tool("Send a task to another agent. The response will arrive asynchronously at your inbox. Use listAgents() first to discover available agents.")
     fun invokeAgent(
         @P("The name of the target agent to invoke") targetAgent: String,
         @P("The task input/instruction to send to the agent") input: String,
-        @P("Optional: specific skill to invoke on the target agent") skill: String?,
-        @P("Optional: timeout in seconds to wait for the response (default: uses agent's configured timeout)") timeoutSeconds: Int?
+        @P("Optional: specific skill to invoke on the target agent") skill: String?
     ): String {
         val result = try {
             if (subAgents.isNotEmpty() && targetAgent !in subAgents) {
@@ -330,47 +326,26 @@ class AgentTools(
             val sessionHandler = Monster.getSessionHandler()
                 ?: return logTool("invokeAgent", "target=$targetAgent", "No session handler available")
 
-            if (registerTaskResponse == null || unregisterTaskResponse == null) {
-                return logTool("invokeAgent", "target=$targetAgent", "Agent orchestration not configured")
-            }
-
             val taskId = Utils.getUuid()
             val replyTo = "a2a/v1/$a2aOrg/$a2aSite/agents/$agentName/inbox/$taskId"
-            val timeoutMs = (timeoutSeconds?.toLong()?.times(1000)) ?: taskTimeoutMs
 
-            // Create future for response
-            val future = CompletableFuture<String>()
-            registerTaskResponse.invoke(replyTo, future)
+            // Register pending task for timeout monitoring
+            registerPendingTask?.invoke(taskId, targetAgent)
 
-            try {
-                // Subscribe to reply topic
-                sessionHandler.subscribeInternalClient(agentClientId, replyTo, 1)
+            // Publish task to target agent's inbox
+            val taskJson = JsonObject()
+                .put("taskId", taskId)
+                .put("input", input)
+                .put("replyTo", replyTo)
+                .put("callerAgent", agentName)
+            if (skill != null) taskJson.put("skill", skill)
 
-                // Publish task to target agent
-                val taskJson = JsonObject()
-                    .put("taskId", taskId)
-                    .put("input", input)
-                    .put("replyTo", replyTo)
-                    .put("callerAgent", agentName)
-                if (skill != null) taskJson.put("skill", skill)
+            val msg = BrokerMessage(agentClientId, "a2a/v1/$a2aOrg/$a2aSite/agents/$targetAgent/inbox", taskJson.encode())
+            sessionHandler.publishMessage(msg)
 
-                val msg = BrokerMessage(agentClientId, "a2a/v1/$a2aOrg/$a2aSite/agents/$targetAgent/inbox", taskJson.encode())
-                sessionHandler.publishMessage(msg)
+            logger.fine("Agent $agentName sent task $taskId to agent $targetAgent")
 
-                logger.fine("Agent $agentName invoked agent $targetAgent with taskId=$taskId")
-
-                // Block waiting for response (safe in executeBlocking context)
-                val response = future.get(timeoutMs, TimeUnit.MILLISECONDS)
-                response
-            } catch (e: TimeoutException) {
-                "Timeout: agent '$targetAgent' did not respond within ${timeoutMs / 1000} seconds"
-            } finally {
-                // Cleanup
-                unregisterTaskResponse.invoke(replyTo)
-                try {
-                    sessionHandler.unsubscribeInternalClient(agentClientId, replyTo)
-                } catch (_: Exception) {}
-            }
+            "Task $taskId submitted to agent '$targetAgent'. The response will be delivered to your inbox."
         } catch (e: Exception) {
             logger.warning("invokeAgent error: ${e.message}")
             "Error invoking agent '$targetAgent': ${e.message}"

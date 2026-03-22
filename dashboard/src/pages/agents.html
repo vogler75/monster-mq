@@ -286,6 +286,10 @@
                         <h2>Agent Configuration</h2>
                     </div>
                     <div class="table-actions">
+                        <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.85rem;color:var(--text-muted);cursor:pointer;user-select:none;">
+                            <input type="checkbox" id="show-descriptions" onchange="agentManager.toggleDescriptions(this.checked)" style="accent-color:var(--monster-purple);">
+                            Descriptions
+                        </label>
                         <ix-icon-button icon="refresh" variant="secondary" ghost onclick="refreshAgents()" title="Refresh agents"></ix-icon-button>
                         <a href="/pages/agent-detail.html?new=true" class="btn btn-primary" style="text-decoration:none;"><ix-icon name="add-circle" size="16"></ix-icon> Add Agent</a>
                     </div>

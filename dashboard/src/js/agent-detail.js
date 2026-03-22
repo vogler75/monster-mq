@@ -246,7 +246,7 @@ class AgentDetailManager {
                 </div>
                 <div>
                     <label>Archive Group</label>
-                    <input type="text" class="hq-archive-group" value="${query?.archiveGroup || 'Default'}" placeholder="Default">
+                    <input type="text" class="hq-archive-group" value="${query?.archiveGroup || 'Agents'}" placeholder="Agents">
                 </div>
                 <div>
                     <label>Last Seconds</label>
@@ -332,7 +332,7 @@ class AgentDetailManager {
             if (topics.length === 0) return;
             const fields = card.querySelector('.hq-fields').value.split(',').map(f => f.trim()).filter(f => f);
             queries.push({
-                archiveGroup: card.querySelector('.hq-archive-group').value.trim() || 'Default',
+                archiveGroup: card.querySelector('.hq-archive-group').value.trim() || 'Agents',
                 topics: topics,
                 lastSeconds: parseInt(card.querySelector('.hq-last-seconds').value) || 3600,
                 interval: card.querySelector('.hq-interval').value,
@@ -482,7 +482,7 @@ class AgentDetailManager {
 
         // Populate MCP Servers
         document.getElementById('agent-use-monstermq-mcp').checked = d.useMonsterMqMcp || false;
-        document.getElementById('agent-default-archive-group').value = d.defaultArchiveGroup || 'Default';
+        document.getElementById('agent-default-archive-group').value = d.defaultArchiveGroup || 'Agents';
         this.renderMcpServerCheckboxes(d.mcpServers || []);
 
         // Populate Sub-Agents
@@ -555,7 +555,7 @@ class AgentDetailManager {
             outputTopics: outputTopics,
             mcpServers: this.getSelectedMcpServers(),
             useMonsterMqMcp: document.getElementById('agent-use-monstermq-mcp').checked,
-            defaultArchiveGroup: document.getElementById('agent-default-archive-group').value.trim() || 'Default',
+            defaultArchiveGroup: document.getElementById('agent-default-archive-group').value.trim() || 'Agents',
             contextLastvalTopics: this.parseContextLastvalTopics(),
             contextRetainedTopics: document.getElementById('agent-context-retained').value
                 .split('\n').map(t => t.trim()).filter(t => t.length > 0),
@@ -871,7 +871,7 @@ function setupContextDropZones() {
             if (topic) {
                 // Get the archive group from the side panel selector
                 const archiveGroupSelect = document.getElementById('topic-panel-archive-group');
-                const archiveGroup = archiveGroupSelect ? archiveGroupSelect.value || 'Default' : 'Default';
+                const archiveGroup = archiveGroupSelect ? archiveGroupSelect.value || 'Agents' : 'Agents';
 
                 // Parse existing JSON or start fresh
                 let obj = {};

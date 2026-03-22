@@ -36,3 +36,7 @@ gateway
 dashboard/node_modules/
 dashboard/dist/
 dashboard/src/svg
+
+### Python ###
+.venv/
+__pycache__/

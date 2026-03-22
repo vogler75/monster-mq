@@ -6,6 +6,7 @@ class AgentManager {
         this.agents = [];
         this.deleteAgentName = null;
         this.editingAgentName = null; // null = create mode, string = edit mode
+        this.showDescriptions = false;
         this.init();
     }
 
@@ -111,7 +112,7 @@ class AgentManager {
             row.innerHTML = `
                 <td>
                     <div class="client-name">${this.escapeHtml(agent.name)}</div>
-                    <small class="client-namespace">${this.escapeHtml(agent.description || '')}</small>
+                    <small class="client-namespace agent-desc" style="display:${this.showDescriptions ? 'block' : 'none'}">${this.escapeHtml(agent.description || '')}</small>
                 </td>
                 <td>${providerModel || '-'}</td>
                 <td>
@@ -497,6 +498,13 @@ class AgentManager {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    toggleDescriptions(show) {
+        this.showDescriptions = show;
+        document.querySelectorAll('.agent-desc').forEach(el => {
+            el.style.display = show ? 'block' : 'none';
+        });
     }
 
     async refreshAgents() {

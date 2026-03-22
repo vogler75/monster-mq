@@ -1,5 +1,6 @@
 package at.rocworks.agents
 
+import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
@@ -21,7 +22,7 @@ import java.util.logging.Logger
  */
 class AgentExtension : AbstractVerticle() {
 
-    private val logger: Logger = Utils.getLogger(this::class.java)
+    private val logger: Logger = Utils.getLogger(this::class.java).apply { level = Const.DEBUG_LEVEL }
 
     private lateinit var deviceStore: IDeviceConfigStore
     private val agentVerticles = ConcurrentHashMap<String, String>() // agentName -> deploymentId
@@ -180,7 +181,10 @@ class AgentExtension : AbstractVerticle() {
 
         try {
             val executor = AgentExecutor(deviceConfig)
-            val options = io.vertx.core.DeploymentOptions().setConfig(vertx.orCreateContext.config())
+            val options = io.vertx.core.DeploymentOptions()
+                .setConfig(vertx.orCreateContext.config())
+                .setMaxWorkerExecuteTime(2 * 60 * 1_000_000_000L) // 2 minutes — LLM calls with tool loops can be long
+                .setMaxWorkerExecuteTimeUnit(java.util.concurrent.TimeUnit.NANOSECONDS)
             vertx.deployVerticle(executor, options).onComplete { deployResult ->
                 if (deployResult.succeeded()) {
                     val deploymentId = deployResult.result()

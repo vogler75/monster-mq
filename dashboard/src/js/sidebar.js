@@ -92,13 +92,20 @@ class SidebarManager {
                 ]
             },
             {
+                section: 'Agents', sectionIcon: 'rocket',
+                items: [
+                    { href: '/pages/agent-monitor.html', icon: 'capacity-filled', text: 'Agent Monitor' },
+                    { href: '/pages/agent-online.html', icon: 'distribution', text: 'Agent Graph' },
+                    { href: '/pages/agents.html', icon: 'rocket', text: 'AI Agents' },
+                    { href: '/pages/mcp-servers.html', icon: 'connector', text: 'MCP Servers' }
+                ]
+            },
+            {
                 section: 'Configuration', sectionIcon: 'cogwheel',
                 items: [
                     { href: '/pages/archive-groups.html', icon: 'health', text: 'Archives' },
                     { href: '/pages/jdbc-loggers.html', icon: 'database', text: 'Loggers' },
                     { href: '/pages/workflows.html', icon: 'ontology-filled', text: 'Workflows' },
-                    { href: '/pages/agents.html', icon: 'rocket', text: 'AI Agents' },
-                    { href: '/pages/mcp-servers.html', icon: 'connector', text: 'MCP Servers' },
                     { href: '/pages/device-config-export-import.html', icon: 'upload', text: 'Import/Export' }
                 ]
             },
