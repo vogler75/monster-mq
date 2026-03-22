@@ -540,12 +540,14 @@ class AgentExecutor(
 
     private fun setupTaskSubscription(sessionHandler: at.rocworks.handlers.SessionHandler) {
         val inboxTopic = a2aInboxTopic()
+        // Subscribe with QoS 0: internal clients have no clientStatus, so QoS 1/2 messages
+        // would be treated as "offline without persistent session" and silently dropped.
         logger.info("Agent $agentName subscribing to inbox: $inboxTopic")
-        sessionHandler.subscribeInternalClient(clientId, inboxTopic, 1)
+        sessionHandler.subscribeInternalClient(clientId, inboxTopic, 0)
         // Also subscribe to inbox/+ so we receive sub-agent replies (replyTo = inbox/{taskId})
         val inboxReplyTopic = "${inboxTopic}/+"
         logger.info("Agent $agentName subscribing to inbox replies: $inboxReplyTopic")
-        sessionHandler.subscribeInternalClient(clientId, inboxReplyTopic, 1)
+        sessionHandler.subscribeInternalClient(clientId, inboxReplyTopic, 0)
     }
 
     private fun handleTaskMessage(msg: BrokerMessage) {
