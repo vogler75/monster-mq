@@ -50,6 +50,8 @@ class AgentExecutor(
     private lateinit var agentTools: AgentTools
     private var aiService: AgentAiService? = null
     private var chatMemory: MessageWindowChatMemory? = null
+    private var globalConfig: JsonObject? = null
+    private var mcpToolProvider: dev.langchain4j.mcp.McpToolProvider? = null
 
     private val clientId = "agent-${deviceConfig.name}"
     private val agentName get() = deviceConfig.name
@@ -67,8 +69,8 @@ class AgentExecutor(
     private var taskTimeoutTimerId: Long? = null
     private val mcpClients = mutableListOf<McpClient>()
 
-    // Pending tasks: taskId -> PendingTask (for timeout monitoring)
-    data class PendingTask(val targetAgent: String, val submittedAt: Long = System.currentTimeMillis())
+    // Pending tasks: taskId -> PendingTask (for timeout monitoring and correlation)
+    data class PendingTask(val targetAgent: String, val input: String, val submittedAt: Long = System.currentTimeMillis())
     private val pendingTasks = ConcurrentHashMap<String, PendingTask>()
 
     // Metrics
@@ -89,11 +91,11 @@ class AgentExecutor(
             agentConfig = AgentConfig.fromJsonObject(deviceConfig.config)
             logger.fine("Starting agent ${deviceConfig.name} (provider: ${agentConfig.provider}, trigger: ${agentConfig.triggerType})")
 
-            val globalConfig = vertx.orCreateContext.config()
+            globalConfig = vertx.orCreateContext.config()
 
             // Create LLM model with logging listener
             val llmListener = createLlmListener()
-            chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig, listOf(llmListener))
+            chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
 
             // Create tools
             val archiveHandler = Monster.getArchiveHandler()
@@ -109,37 +111,12 @@ class AgentExecutor(
                 toolLogger = { name, args, result -> publishToolLog(name, args, result) },
                 vertx = vertx,
                 taskTimeoutMs = agentConfig.taskTimeoutMs,
-                registerPendingTask = { taskId, targetAgent -> pendingTasks[taskId] = PendingTask(targetAgent) },
+                registerPendingTask = { taskId, targetAgent, input -> pendingTasks[taskId] = PendingTask(targetAgent, input) },
                 subAgents = agentConfig.subAgents
             )
 
             // Build AI Service with ReAct loop
-            val memorySize = agentConfig.memoryWindowSize
-            chatMemory = MessageWindowChatMemory.withMaxMessages(memorySize)
-            val builder = AiServices.builder(AgentAiService::class.java)
-                .chatModel(chatModel)
-                .chatMemory(chatMemory)
-                .tools(agentTools)
-
-            // Add MCP tool providers if configured
-            if (agentConfig.mcpServers.isNotEmpty() || agentConfig.useMonsterMqMcp) {
-                val mcpToolProvider = createMcpToolProvider(agentConfig.mcpServers, agentConfig.useMonsterMqMcp, globalConfig)
-                if (mcpToolProvider != null) {
-                    builder.toolProvider(mcpToolProvider)
-                }
-            }
-
-            // Handle hallucinated tool names gracefully instead of throwing
-            builder.hallucinatedToolNameStrategy { request ->
-                logger.fine("Agent ${deviceConfig.name} hallucinated tool: ${request.name()}")
-                ToolExecutionResultMessage.from(request, "Error: tool '${request.name()}' does not exist. Use only the tools listed in your available tools.")
-            }
-
-            if (agentConfig.systemPrompt.isNotBlank()) {
-                builder.systemMessageProvider { agentConfig.systemPrompt }
-            }
-
-            aiService = builder.build()
+            buildAiService()
 
             // Register EventBus consumer to receive MQTT messages
             if (sessionHandler != null) {
@@ -239,6 +216,46 @@ class AgentExecutor(
                 logger.warning("Error processing MQTT message in agent ${deviceConfig.name}: ${e.message}")
             }
         }
+    }
+
+    private fun buildAiService() {
+        val memorySize = agentConfig.memoryWindowSize
+        chatMemory = MessageWindowChatMemory.withMaxMessages(memorySize)
+        val builder = AiServices.builder(AgentAiService::class.java)
+            .chatModel(chatModel)
+            .chatMemory(chatMemory)
+            .tools(agentTools)
+
+        // Add MCP tool providers if configured
+        if (agentConfig.mcpServers.isNotEmpty() || agentConfig.useMonsterMqMcp) {
+            if (mcpToolProvider == null) {
+                mcpToolProvider = createMcpToolProvider(agentConfig.mcpServers, agentConfig.useMonsterMqMcp, globalConfig!!)
+            }
+            if (mcpToolProvider != null) {
+                builder.toolProvider(mcpToolProvider)
+            }
+        }
+
+        // Handle hallucinated tool names gracefully instead of throwing
+        builder.hallucinatedToolNameStrategy { request ->
+            logger.fine("Agent ${deviceConfig.name} hallucinated tool: ${request.name()}")
+            ToolExecutionResultMessage.from(request, "Error: tool '${request.name()}' does not exist. Use only the tools listed in your available tools.")
+        }
+
+        if (agentConfig.systemPrompt.isNotBlank()) {
+            builder.systemMessageProvider { agentConfig.systemPrompt }
+        }
+
+        aiService = builder.build()
+    }
+
+    /**
+     * Rebuild the AI service with a fresh chat memory. Used to recover from
+     * invalid message ordering errors (e.g. Gemini rejecting orphaned tool results).
+     */
+    private fun rebuildAiService() {
+        logger.warning("Agent ${deviceConfig.name} rebuilding AI service to recover from chat history error")
+        buildAiService()
     }
 
     private fun setupMqttSubscriptions(sessionHandler: at.rocworks.handlers.SessionHandler) {
@@ -519,10 +536,11 @@ class AgentExecutor(
         val pending = pendingTasks.remove(taskId)
         val fromAgent = pending?.targetAgent ?: "unknown"
 
+        val originalInput = pending?.input?.take(200) ?: "unknown"
         logger.info("Agent $agentName received reply for task $taskId from $fromAgent (status=$status)")
 
-        // Feed the response back to the LLM as a new message
-        val userMessage = "[Response from agent '$fromAgent', taskId=$taskId, status=$status]\n$result"
+        // Feed the response back to the LLM as a new message with correlation context
+        val userMessage = "[Response from agent '$fromAgent', taskId=$taskId, status=$status, originalRequest='$originalInput']\n$result"
         executeAgent(userMessage, "task-reply:$taskId")
     }
 
@@ -574,14 +592,11 @@ class AgentExecutor(
             }
 
             val taskId = taskJson.getString("taskId") ?: Utils.getUuid()
-            val input = taskJson.getString("input")
-            if (input == null) {
-                logger.warning("Agent ${deviceConfig.name} received task $taskId with missing 'input' field, ignoring")
-                return
-            }
+            // Use "input" field if present (MonsterMQ format), otherwise pass the full JSON to the LLM
+            val input = taskJson.getString("input") ?: payload
             val replyTo = taskJson.getString("replyTo") ?: a2aStatusTopic(taskId)
             val skill = taskJson.getString("skill")
-            val callerAgent = taskJson.getString("callerAgent", "unknown")
+            val callerAgent = taskJson.getString("callerAgent") ?: taskJson.getString("from") ?: "unknown"
 
             logger.info("Agent ${deviceConfig.name} received task $taskId from $callerAgent (replyTo=$replyTo)")
 
@@ -661,9 +676,9 @@ class AgentExecutor(
                 if (fullErrorMessage.contains("function call turn") ||
                     fullErrorMessage.contains("function response turn") ||
                     fullErrorMessage.contains("INVALID_ARGUMENT")) {
-                    logger.warning("Agent ${deviceConfig.name} chat history invalid, clearing memory and retrying: ${e.message?.take(200)}")
-                    chatMemory?.clear()
-                    service.chat(fullMessage)
+                    logger.warning("Agent ${deviceConfig.name} chat history invalid, rebuilding service and retrying: ${e.message?.take(200)}")
+                    rebuildAiService()
+                    aiService?.chat(fullMessage) ?: throw e
                 } else {
                     throw e
                 }

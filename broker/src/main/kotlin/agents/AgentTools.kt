@@ -31,7 +31,7 @@ class AgentTools(
     private val toolLogger: ((String, String, String) -> Unit)? = null,
     private val vertx: Vertx? = null,
     private val taskTimeoutMs: Long = 60000,
-    private val registerPendingTask: ((taskId: String, targetAgent: String) -> Unit)? = null,
+    private val registerPendingTask: ((taskId: String, targetAgent: String, input: String) -> Unit)? = null,
     private val subAgents: List<String> = emptyList()
 ) {
     private val logger: Logger = Utils.getLogger(AgentTools::class.java).apply { level = Const.DEBUG_LEVEL }
@@ -329,8 +329,8 @@ class AgentTools(
             val taskId = Utils.getUuid()
             val replyTo = "a2a/v1/$a2aOrg/$a2aSite/agents/$agentName/inbox/$taskId"
 
-            // Register pending task for timeout monitoring
-            registerPendingTask?.invoke(taskId, targetAgent)
+            // Register pending task for timeout monitoring and correlation
+            registerPendingTask?.invoke(taskId, targetAgent, input)
 
             // Publish task to target agent's inbox
             val taskJson = JsonObject()
@@ -345,7 +345,7 @@ class AgentTools(
 
             logger.fine("Agent $agentName sent task $taskId to agent $targetAgent")
 
-            "Task $taskId submitted to agent '$targetAgent'. The response will be delivered to your inbox."
+            "Task submitted to agent '$targetAgent' (taskId=$taskId, input='${input.take(100)}'). The response will arrive asynchronously — use the taskId to correlate it."
         } catch (e: Exception) {
             logger.warning("invokeAgent error: ${e.message}")
             "Error invoking agent '$targetAgent': ${e.message}"
