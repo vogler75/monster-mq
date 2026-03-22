@@ -11,6 +11,7 @@ MonsterMQ is a high-performance MQTT broker for industrial IoT and real-time mes
 - Archive groups, last-value storage, retention policies, and schema-based JDBC logging ([archiving](doc/archiving.md), [Snowflake](doc/snowflake.md))
 - Device integrations for OPC UA, PLC4X, WinCC OA, WinCC Unified, Neo4j, Kafka, and others
 - Flow engine for visual, JavaScript-based message processing ([details](doc/workflows.md))
+- AI agents with multi-provider LLM support (Gemini, Claude, OpenAI, Ollama), MQTT/cron triggers, and agent-to-agent orchestration
 - GraphQL API, MCP server, web dashboard, and CESMII I3X API support
 
 ## Quick Start
@@ -159,13 +160,18 @@ I3x:
 # GenAI Configuration
 GenAI:
   Enabled: true
-  Provider: "gemini"
-  # Set your API key in environment: export GENAI_API_KEY="your-key-here"
-  ApiKey: "${GENAI_API_KEY}"
-  Model: "gemini-2.5-flash"
-  MaxTokens: 0
-  Temperature: 0.7
-  DocsPath: "docs"  
+  Providers:
+    Gemini:
+      ApiKey: "${GENAI_GEMINI_API_KEY}"
+    Claude:
+      ApiKey: "${GENAI_CLAUDE_API_KEY}"
+    OpenAI:
+      ApiKey: "${GENAI_OPENAI_API_KEY}"
+    Ollama:
+      BaseUrl: http://localhost:11434
+  Assistant:
+    Provider: "gemini"
+    Model: "gemini-2.5-flash-lite"
 ```
 
 For more examples, see `broker/configs/`.
@@ -200,6 +206,19 @@ For more examples, see `broker/configs/`.
 - JavaScript execution with GraalVM
 - GraphQL queries, mutations, and subscriptions ([details](doc/graphql.md))
 - MCP server for AI-oriented access ([details](doc/mcp.md))
+
+### AI Agents
+
+MonsterMQ includes a built-in AI agent framework powered by LangChain4j. Agents are configured and managed through the dashboard or GraphQL API and run as Vert.x verticles inside the broker.
+
+- **Multi-provider support**: Gemini, Claude, OpenAI, and Ollama (local models)
+- **MQTT-triggered agents**: Subscribe to topics and react to incoming messages with LLM-driven logic
+- **Cron and manual triggers**: Schedule agents on cron expressions or invoke them on demand
+- **Broker tools**: Agents can publish/subscribe, query archives, read retained messages, and access last values
+- **MCP integration**: Connect agents to external MCP servers for additional tool capabilities
+- **Agent-to-agent communication (A2A)**: Agents can delegate tasks to other agents via MQTT-based orchestration
+- **Conversation memory**: Configurable sliding-window chat memory with optional persistent state
+- **Context injection**: Automatically provide agents with last-value data, retained messages, or historical queries as context
 
 ### Operations and UI
 
