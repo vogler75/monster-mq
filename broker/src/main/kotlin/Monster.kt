@@ -363,13 +363,14 @@ class Monster(args: Array<String>) {
         logger.fine("Cluster: ${isClustered()}")
 
         val builder = Vertx.builder()
+        val vertxOptions = VertxOptions()
+            .setMaxWorkerExecuteTime(5 * 60 * 1_000_000_000L) // 5 min — LLM calls with tool loops can be long
         // Apply worker pool size if specified via command line
         getWorkerPoolSize()?.let { poolSize ->
-            val vertxOptions = VertxOptions()
-                .setWorkerPoolSize(poolSize)
-            builder.with(vertxOptions)
+            vertxOptions.setWorkerPoolSize(poolSize)
             logger.fine("Vertx worker thread pool size set to $poolSize (via -workerPoolSize argument)")
         }
+        builder.with(vertxOptions)
 
         if (isClustered())
             clusterSetup(builder)

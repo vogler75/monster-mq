@@ -210,7 +210,6 @@ class MonsterAgent(ABC):
         user_message = f"[Topic: {topic}] {payload}"
         response = self._execute(user_message)
         if response:
-            time.sleep(10)
             self._publish_response(response)
 
     def _handle_task_message(self, topic: str, payload: str):

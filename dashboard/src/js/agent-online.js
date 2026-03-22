@@ -323,7 +323,15 @@ class AgentOnlineGraphManager {
             }]
         };
 
+        // Preserve zoom/pan when updating (setOption with true resets it)
+        const prevZoom = this.chart.getOption()?.series?.[0]?.zoom;
+        const prevCenter = this.chart.getOption()?.series?.[0]?.center;
+
         this.chart.setOption(option, true);
+
+        if (prevZoom != null && prevZoom !== 1) {
+            this.chart.setOption({ series: [{ zoom: prevZoom, center: prevCenter }] });
+        }
     }
 
     buildNodesAndLinks() {

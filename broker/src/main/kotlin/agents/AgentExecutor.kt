@@ -49,6 +49,7 @@ class AgentExecutor(
     private lateinit var chatModel: ChatModel
     private lateinit var agentTools: AgentTools
     private var aiService: AgentAiService? = null
+    private var chatMemory: MessageWindowChatMemory? = null
 
     private val clientId = "agent-${deviceConfig.name}"
     private val agentName get() = deviceConfig.name
@@ -114,9 +115,10 @@ class AgentExecutor(
 
             // Build AI Service with ReAct loop
             val memorySize = agentConfig.memoryWindowSize
+            chatMemory = MessageWindowChatMemory.withMaxMessages(memorySize)
             val builder = AiServices.builder(AgentAiService::class.java)
                 .chatModel(chatModel)
-                .chatMemory(MessageWindowChatMemory.withMaxMessages(memorySize))
+                .chatMemory(chatMemory)
                 .tools(agentTools)
 
             // Add MCP tool providers if configured
@@ -472,8 +474,9 @@ class AgentExecutor(
             logger.info("Agent $agentName inbox message [${msg.topicName}]: ${String(msg.payload, Charsets.UTF_8).take(500)}")
         }
 
-        // 1. Check incoming tasks (this agent being invoked by another agent)
+        // 1. Check incoming tasks (this agent being invoked by another agent) — each task is independent
         if (msg.topicName == inboxPrefix) {
+            chatMemory?.clear()
             handleTaskMessage(msg)
             return
         }
@@ -484,7 +487,8 @@ class AgentExecutor(
             return
         }
 
-        // 3. Normal MQTT message handling
+        // 3. Normal MQTT message handling — new user request, clear history to avoid re-executing old actions
+        chatMemory?.clear()
         val payloadStr = msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
         val userMessage = "[Topic: ${msg.topicName}] $payloadStr"
         executeAgent(userMessage, msg.topicName)
@@ -650,7 +654,20 @@ class AgentExecutor(
             } else {
                 userMessage
             }
-            service.chat(fullMessage)
+            try {
+                service.chat(fullMessage)
+            } catch (e: Exception) {
+                val fullErrorMessage = generateSequence(e as Throwable?) { it.cause }.joinToString(" | ") { it.message ?: "" }
+                if (fullErrorMessage.contains("function call turn") ||
+                    fullErrorMessage.contains("function response turn") ||
+                    fullErrorMessage.contains("INVALID_ARGUMENT")) {
+                    logger.warning("Agent ${deviceConfig.name} chat history invalid, clearing memory and retrying: ${e.message?.take(200)}")
+                    chatMemory?.clear()
+                    service.chat(fullMessage)
+                } else {
+                    throw e
+                }
+            }
         }.onComplete { result ->
             if (result.succeeded()) {
                 val chatResult = result.result()
@@ -699,7 +716,20 @@ class AgentExecutor(
 
             logger.fine { "Agent ${deviceConfig.name} LLM request [source=$source, length=${fullMessage.length}]" }
 
-            service.chat(fullMessage)
+            try {
+                service.chat(fullMessage)
+            } catch (e: Exception) {
+                // Gemini rejects invalid message ordering in chat history (e.g. orphaned tool results
+                // after memory window eviction). Clear memory and retry with just this message.
+                if (e.message?.contains("function call turn") == true ||
+                    e.message?.contains("function response turn") == true) {
+                    logger.warning("Agent ${deviceConfig.name} chat history invalid, clearing memory and retrying")
+                    chatMemory?.clear()
+                    service.chat(fullMessage)
+                } else {
+                    throw e
+                }
+            }
         }.onComplete { result ->
             if (result.succeeded()) {
                 val chatResult = result.result()
