@@ -237,6 +237,125 @@ body {
     line-height: 1.7;
 }
 
+/* NEW badge on hero feature badges */
+.feature-badge.badge-new {
+    background: var(--gradient-primary);
+    color: white;
+    font-weight: 600;
+    border: none;
+    animation: badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes badge-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.4); }
+    50% { box-shadow: 0 0 15px 3px rgba(124, 58, 237, 0.3); }
+}
+
+/* Highlighted feature card */
+.feature-card-highlight {
+    border-color: var(--monster-purple) !important;
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(16, 185, 129, 0.05) 100%) !important;
+    position: relative;
+}
+
+.feature-new-badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: var(--gradient-primary);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    border-radius: 1rem;
+    letter-spacing: 0.05em;
+}
+
+/* AI Agents Section */
+.ai-agents {
+    padding: 80px 0;
+    background: var(--dark-bg);
+    position: relative;
+    overflow: hidden;
+}
+
+.ai-agents::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    background: radial-gradient(ellipse at 30% 50%, rgba(124, 58, 237, 0.08) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 50%, rgba(16, 185, 129, 0.06) 0%, transparent 60%);
+    pointer-events: none;
+}
+
+.ai-agents .container {
+    position: relative;
+    z-index: 1;
+}
+
+.ai-agents-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.ai-agents-banner .section-title {
+    margin-bottom: 0;
+}
+
+.new-label {
+    background: var(--gradient-primary);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.3rem 0.8rem;
+    border-radius: 1rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.ai-agents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.ai-agent-card {
+    background: var(--dark-surface);
+    border: 1px solid var(--dark-border);
+    border-radius: 1rem;
+    padding: 1.75rem;
+    transition: all 0.3s;
+}
+
+.ai-agent-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--monster-purple);
+    box-shadow: 0 8px 25px rgba(124, 58, 237, 0.15);
+}
+
+.ai-agent-icon {
+    font-size: 2.25rem;
+    margin-bottom: 0.75rem;
+}
+
+.ai-agent-card h3 {
+    font-size: 1.2rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.ai-agent-card p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.65;
+}
+
 /* Databases Section */
 .databases {
     padding: 80px 0;
