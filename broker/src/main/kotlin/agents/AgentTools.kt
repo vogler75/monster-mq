@@ -345,7 +345,7 @@ class AgentTools(
 
             logger.fine("Agent $agentName sent task $taskId to agent $targetAgent")
 
-            "Task submitted to agent '$targetAgent' (taskId=$taskId, input='${input.take(100)}'). The response will arrive asynchronously — use the taskId to correlate it."
+            "Task submitted to agent '$targetAgent' (taskId=$taskId). Response will arrive asynchronously."
         } catch (e: Exception) {
             logger.warning("invokeAgent error: ${e.message}")
             "Error invoking agent '$targetAgent': ${e.message}"

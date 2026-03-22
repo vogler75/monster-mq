@@ -71,7 +71,9 @@ class AgentExecutor(
 
     // Pending tasks: taskId -> PendingTask (for timeout monitoring and correlation)
     data class PendingTask(val targetAgent: String, val input: String, val submittedAt: Long = System.currentTimeMillis())
+    data class CollectedResult(val targetAgent: String, val taskId: String, val input: String, val status: String, val result: String)
     private val pendingTasks = ConcurrentHashMap<String, PendingTask>()
+    private val collectedResults = java.util.concurrent.ConcurrentLinkedQueue<CollectedResult>()
 
     // Metrics
     private val messagesProcessed = AtomicLong(0)
@@ -163,6 +165,7 @@ class AgentExecutor(
             cronTimerId?.let { vertx.cancelTimer(it) }
             taskTimeoutTimerId?.let { vertx.cancelTimer(it) }
             pendingTasks.clear()
+            collectedResults.clear()
 
             // Unsubscribe MQTT topics
             val sessionHandler = Monster.getSessionHandler()
@@ -532,16 +535,35 @@ class AgentExecutor(
             }
         } ?: replyJson?.getString("error") ?: payload
 
-        // Remove from pending tasks
-        val pending = pendingTasks.remove(taskId)
-        val fromAgent = pending?.targetAgent ?: "unknown"
+        // Remove from pending tasks and collect the result
+        val pending = pendingTasks.remove(taskId) ?: return
+        collectedResults.add(CollectedResult(pending.targetAgent, taskId, pending.input, status, result))
 
-        val originalInput = pending?.input?.take(200) ?: "unknown"
-        logger.info("Agent $agentName received reply for task $taskId from $fromAgent (status=$status)")
+        logger.info("Agent $agentName collected reply for task $taskId from ${pending.targetAgent} (status=$status, remaining=${pendingTasks.size})")
 
-        // Feed the response back to the LLM as a new message with correlation context
-        val userMessage = "[Response from agent '$fromAgent', taskId=$taskId, status=$status, originalRequest='$originalInput']\n$result"
-        executeAgent(userMessage, "task-reply:$taskId")
+        // When all pending tasks are resolved, resume with compiled results
+        if (pendingTasks.isEmpty()) {
+            resumeWithCollectedResults()
+        }
+    }
+
+    /**
+     * Called when all pending sub-agent tasks have completed (or timed out).
+     * Compiles all collected results into a single message and feeds it to the LLM once.
+     */
+    private fun resumeWithCollectedResults() {
+        val results = mutableListOf<CollectedResult>()
+        while (collectedResults.isNotEmpty()) {
+            collectedResults.poll()?.let { results.add(it) }
+        }
+        if (results.isEmpty()) return
+
+        val resultText = results.joinToString("\n\n") { r ->
+            "Agent '${r.targetAgent}' (taskId=${r.taskId}, status=${r.status}, request='${r.input.take(100)}'):\n${r.result}"
+        }
+
+        val userMessage = "[Sub-agent results received]\n$resultText\n\n[All tasks complete. Summarize the results and respond to the user. Do NOT invoke more agents unless the user explicitly asks.]"
+        executeAgent(userMessage, "task-results")
     }
 
     private fun setupTaskTimeoutChecker() {
@@ -554,8 +576,12 @@ class AgentExecutor(
             timedOut.forEach { (taskId, pending) ->
                 pendingTasks.remove(taskId)
                 logger.warning("Agent $agentName task $taskId to '${pending.targetAgent}' timed out after ${timeoutMs / 1000}s")
-                val userMessage = "[Timeout: agent '${pending.targetAgent}' did not respond for taskId=$taskId within ${timeoutMs / 1000} seconds]"
-                executeAgent(userMessage, "task-timeout:$taskId")
+                collectedResults.add(CollectedResult(pending.targetAgent, taskId, pending.input, "timeout",
+                    "Agent '${pending.targetAgent}' did not respond within ${timeoutMs / 1000} seconds"))
+            }
+            // If timeouts cleared all pending tasks, resume with whatever we have
+            if (pendingTasks.isEmpty() && collectedResults.isNotEmpty()) {
+                resumeWithCollectedResults()
             }
         }
     }
