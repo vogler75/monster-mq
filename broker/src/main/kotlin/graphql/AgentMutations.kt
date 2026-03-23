@@ -28,9 +28,11 @@ class AgentMutations(
     fun createAgent(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
-
             try {
                 val input = env.getArgument<Map<String, Any>>("input")!!
+                val targetNodeId = input["nodeId"] as String
+                if (!Monster.getEnabledFeaturesForNode(targetNodeId).contains("Agents"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Agents feature is not enabled on node $targetNodeId"))) }
                 val deviceConfig = inputToDeviceConfig(input)
 
                 deviceStore.saveDevice(deviceConfig).onComplete { result ->

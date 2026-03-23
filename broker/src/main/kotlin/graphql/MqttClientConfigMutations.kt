@@ -27,7 +27,6 @@ class MqttClientConfigMutations(
     fun createMqttClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
-
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply {
@@ -36,6 +35,8 @@ class MqttClientConfigMutations(
 
                 // Parse input
                 val request = parseDeviceConfigRequest(input)
+                if (!Monster.getEnabledFeaturesForNode(request.nodeId).contains("MqttClient"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on node ${request.nodeId}"))) }
                 val validationErrors = request.validate()
 
                 if (validationErrors.isNotEmpty()) {
@@ -389,6 +390,8 @@ class MqttClientConfigMutations(
                     return@DataFetcher future
                 }
 
+                if (!Monster.getEnabledFeaturesForNode(nodeId).contains("MqttClient"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on node $nodeId"))) }
                 deviceStore.reassignDevice(name, nodeId).onComplete { result ->
                     if (result.succeeded()) {
                         val updatedDevice = result.result()

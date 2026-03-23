@@ -36,12 +36,13 @@ class OpcUaServerMutations(
     fun createOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<OpcUaServerResult>()
-
             try {
                 val config = env.getArgument<Map<String, Any>>("config")
                     ?: throw IllegalArgumentException("Config is required")
 
                 val serverConfig = parseServerConfig(config)
+                if (!Monster.getEnabledFeaturesForNode(serverConfig.nodeId).contains("OpcUaServer"))
+                    return@DataFetcher future.apply { complete(OpcUaServerResult(success = false, message = "OpcUaServer feature is not enabled on node ${serverConfig.nodeId}", server = null, errors = listOf("OpcUaServer feature is not enabled on node ${serverConfig.nodeId}"))) }
 
                 // Validate configuration
                 validateServerConfig(serverConfig)

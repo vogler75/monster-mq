@@ -37,6 +37,8 @@ class NatsClientConfigMutations(
                     ?: return@DataFetcher future.apply { complete(errorResult("Input is required")) }
 
                 val request = parseDeviceConfigRequest(input)
+                if (!Monster.getEnabledFeaturesForNode(request.nodeId).contains("Nats"))
+                    return@DataFetcher future.apply { complete(errorResult("Nats feature is not enabled on node ${request.nodeId}")) }
                 val errors = request.validate() + NatsClientConfig.fromJson(request.config).validate()
                 if (errors.isNotEmpty()) { future.complete(errorResult(errors)); return@DataFetcher future }
 
@@ -189,6 +191,8 @@ class NatsClientConfigMutations(
                 if (!clusterNodes.contains(nodeId)) {
                     future.complete(errorResult("Node '$nodeId' not found. Available: ${clusterNodes.joinToString()}")); return@DataFetcher future
                 }
+                if (!Monster.getEnabledFeaturesForNode(nodeId).contains("Nats"))
+                    return@DataFetcher future.apply { complete(errorResult("Nats feature is not enabled on node $nodeId")) }
                 deviceStore.reassignDevice(name, nodeId).onComplete { result ->
                     if (result.succeeded()) {
                         val device = result.result()

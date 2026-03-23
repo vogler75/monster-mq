@@ -212,8 +212,9 @@ data class BrokerMetrics(
  
  data class Broker(
      val nodeId: String,
-     val version: String
- )
+    val version: String,
+    val enabledFeatures: List<String> = emptyList()
+)
 
 data class SessionMetrics(
     val messagesIn: Double,

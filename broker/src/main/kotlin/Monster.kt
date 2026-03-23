@@ -166,6 +166,44 @@ class Monster(args: Array<String>) {
             return getInstance().clusterManager
         }
 
+        // Feature flags — populated at startup from config, read by GraphQL resolvers
+        @Volatile
+        private var enabledFeatures: Set<String> = emptySet()
+
+        fun getEnabledFeatures(): Set<String> = enabledFeatures
+
+        fun isFeatureEnabled(feature: String): Boolean = enabledFeatures.contains(feature)
+
+        private fun publishEnabledFeatures(vertx: Vertx, features: Set<String>) {
+            enabledFeatures = features
+            val instance = getInstance()
+            if (instance.isClustered && instance.clusterManager is HazelcastClusterManager) {
+                val map = instance.clusterManager!!.hazelcastInstance
+                    .getMap<String, Set<String>>("monster.enabledFeatures")
+                val nodeId = getClusterNodeId(vertx)
+                map[nodeId] = features
+                // Check for mismatches with other nodes
+                map.entries.forEach { (otherId, otherFeatures) ->
+                    if (otherId != nodeId && otherFeatures != features) {
+                        logger.warning(
+                            "Feature flag mismatch detected! " +
+                            "This node ($nodeId): $features / " +
+                            "Node $otherId: $otherFeatures. " +
+                            "All cluster nodes must have identical Features config."
+                        )
+                    }
+                }
+            }
+        }
+
+        fun getEnabledFeaturesForNode(nodeId: String): Set<String> {
+            val instance = getInstance()
+            return if (instance.isClustered && instance.clusterManager is HazelcastClusterManager) {
+                instance.clusterManager!!.hazelcastInstance
+                    .getMap<String, Set<String>>("monster.enabledFeatures")[nodeId] ?: enabledFeatures
+            } else enabledFeatures
+        }
+
         fun getSessionHandler(): SessionHandler? {
             return getInstance().sessionHandler
         }
@@ -1057,43 +1095,86 @@ MORE INFO:
                     .compose { vertx.deployVerticle(userManager) }
                     .compose { vertx.deployVerticle(healthHandler) }
                     .compose {
-                        val opcUaDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(opcUaExtension, opcUaDeploymentOptions)
+                        // Resolve feature flags from top-level Features config block
+                        val featuresConfig = configJson.getJsonObject("Features", JsonObject())
+                        val allFeatures = listOf(
+                            "OpcUa", "OpcUaServer", "MqttClient", "Kafka", "Nats", "Telegram",
+                            "WinCCOa", "WinCCUa", "Plc4x", "Neo4j", "JdbcLogger",
+                            "SparkplugB", "FlowEngine", "Agents"
+                        )
+                        val enabled = allFeatures.filter { featuresConfig.getBoolean(it, true) }.toSet()
+                        publishEnabledFeatures(vertx, enabled)
+                        logger.info("Enabled features: $enabled")
+                        Future.succeededFuture<String>()
                     }
                     .compose {
-                        if (opcUaServerExtension != null) {
+                        if (Monster.isFeatureEnabled("OpcUa")) {
+                            val opcUaDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(opcUaExtension, opcUaDeploymentOptions)
+                        } else {
+                            logger.fine("OpcUa extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
+                    }
+                    .compose {
+                        if (opcUaServerExtension != null && Monster.isFeatureEnabled("OpcUaServer")) {
                             vertx.deployVerticle(opcUaServerExtension)
                         } else {
                             Future.succeededFuture<String>()
                         }
                     }
                     .compose {
-                        val mqttClientDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(mqttClientExtension, mqttClientDeploymentOptions)
+                        if (Monster.isFeatureEnabled("MqttClient")) {
+                            val mqttClientDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(mqttClientExtension, mqttClientDeploymentOptions)
+                        } else {
+                            logger.fine("MqttClient extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         // Kafka Subscriber Extension
-                        val kafkaClientExtension = KafkaClientExtension()
-                        val kafkaDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(kafkaClientExtension, kafkaDeploymentOptions)
+                        if (Monster.isFeatureEnabled("Kafka")) {
+                            val kafkaClientExtension = KafkaClientExtension()
+                            val kafkaDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(kafkaClientExtension, kafkaDeploymentOptions)
+                        } else {
+                            logger.fine("Kafka extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         // NATS Client Bridge Extension
-                        val natsClientExtension = at.rocworks.devices.natsclient.NatsClientExtension()
-                        val natsDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(natsClientExtension, natsDeploymentOptions)
+                        if (Monster.isFeatureEnabled("Nats")) {
+                            val natsClientExtension = at.rocworks.devices.natsclient.NatsClientExtension()
+                            val natsDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(natsClientExtension, natsDeploymentOptions)
+                        } else {
+                            logger.fine("Nats extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         // Telegram Client Bridge Extension
-                        val telegramClientExtension = at.rocworks.devices.telegramclient.TelegramClientExtension()
-                        val telegramDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(telegramClientExtension, telegramDeploymentOptions)
+                        if (Monster.isFeatureEnabled("Telegram")) {
+                            val telegramClientExtension = at.rocworks.devices.telegramclient.TelegramClientExtension()
+                            val telegramDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(telegramClientExtension, telegramDeploymentOptions)
+                        } else {
+                            logger.fine("Telegram extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         // WinCC OA Client Extension (GraphQL-based)
-                        val winCCOaExtension = WinCCOaExtension()
-                        val winCCOaDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(winCCOaExtension, winCCOaDeploymentOptions)
+                        if (Monster.isFeatureEnabled("WinCCOa")) {
+                            val winCCOaExtension = WinCCOaExtension()
+                            val winCCOaDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(winCCOaExtension, winCCOaDeploymentOptions)
+                        } else {
+                            logger.fine("WinCCOa extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         // OA Datapoint Bridge (native oa4j dpConnect for !OA/ topics)
@@ -1123,39 +1204,69 @@ MORE INFO:
                     }
                     .compose {
                         // WinCC Unified Client Extension
-                        val winCCUaExtension = WinCCUaExtension()
-                        val winCCUaDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(winCCUaExtension, winCCUaDeploymentOptions)
+                        if (Monster.isFeatureEnabled("WinCCUa")) {
+                            val winCCUaExtension = WinCCUaExtension()
+                            val winCCUaDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(winCCUaExtension, winCCUaDeploymentOptions)
+                        } else {
+                            logger.fine("WinCCUa extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         // PLC4X Client Extension
-                        val plc4xExtension = Plc4xExtension()
-                        val plc4xDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(plc4xExtension, plc4xDeploymentOptions)
+                        if (Monster.isFeatureEnabled("Plc4x")) {
+                            val plc4xExtension = Plc4xExtension()
+                            val plc4xDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(plc4xExtension, plc4xDeploymentOptions)
+                        } else {
+                            logger.fine("Plc4x extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         // Neo4j Client Extension
-                        val neo4jExtension = Neo4jExtension()
-                        val neo4jDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(neo4jExtension, neo4jDeploymentOptions)
+                        if (Monster.isFeatureEnabled("Neo4j")) {
+                            val neo4jExtension = Neo4jExtension()
+                            val neo4jDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(neo4jExtension, neo4jDeploymentOptions)
+                        } else {
+                            logger.fine("Neo4j extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         // JDBC Logger Extension
-                        val jdbcLoggerExtension = at.rocworks.logger.JDBCLoggerExtension()
-                        val jdbcLoggerDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(jdbcLoggerExtension, jdbcLoggerDeploymentOptions)
+                        if (Monster.isFeatureEnabled("JdbcLogger")) {
+                            val jdbcLoggerExtension = at.rocworks.logger.JDBCLoggerExtension()
+                            val jdbcLoggerDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(jdbcLoggerExtension, jdbcLoggerDeploymentOptions)
+                        } else {
+                            logger.fine("JdbcLogger extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         // SparkplugB Decoder Extension
-                        val sparkplugBDecoderExtension = SparkplugBDecoderExtension()
-                        val sparkplugBDecoderDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(sparkplugBDecoderExtension, sparkplugBDecoderDeploymentOptions)
+                        if (Monster.isFeatureEnabled("SparkplugB")) {
+                            val sparkplugBDecoderExtension = SparkplugBDecoderExtension()
+                            val sparkplugBDecoderDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(sparkplugBDecoderExtension, sparkplugBDecoderDeploymentOptions)
+                        } else {
+                            logger.fine("SparkplugB extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         // Flow Engine Extension
-                        val flowEngineExtension = FlowEngineExtension()
-                        val flowEngineDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(flowEngineExtension, flowEngineDeploymentOptions)
+                        if (Monster.isFeatureEnabled("FlowEngine")) {
+                            val flowEngineExtension = FlowEngineExtension()
+                            val flowEngineDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(flowEngineExtension, flowEngineDeploymentOptions)
+                        } else {
+                            logger.fine("FlowEngine extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         if (metricsCollector != null) {
@@ -1167,14 +1278,19 @@ MORE INFO:
                     .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) }) }
                     .compose {
                         // Agent Extension (must start AFTER MCP server and other servers are ready)
-                        val agentExtension = at.rocworks.agents.AgentExtension()
-                        val agentDeploymentOptions = DeploymentOptions().setConfig(configJson)
-                        vertx.deployVerticle(agentExtension, agentDeploymentOptions)
-                            .recover { error ->
-                                // Non-fatal: agents are optional
-                                logger.warning("AgentExtension not started: ${error.message}")
-                                Future.succeededFuture<String>()
-                            }
+                        if (Monster.isFeatureEnabled("Agents")) {
+                            val agentExtension = at.rocworks.agents.AgentExtension()
+                            val agentDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(agentExtension, agentDeploymentOptions)
+                                .recover { error ->
+                                    // Non-fatal: agents are optional
+                                    logger.warning("AgentExtension not started: ${error.message}")
+                                    Future.succeededFuture<String>()
+                                }
+                        } else {
+                            logger.fine("Agents extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
                     }
                     .compose {
                         // Start GraphQL server after all other components are ready

@@ -314,6 +314,46 @@ ArchiveGroups:
 
 The parser validates that the required database sections exist for the selected store types (`broker/src/main/kotlin/handlers/ArchiveGroup.kt:1035-1123`).
 
+## Feature Flags
+
+All optional extensions are **enabled by default**. Use the top-level `Features` key to selectively disable individual extensions on a node.
+
+```yaml
+Features:
+  OpcUa: false        # OPC UA client bridge (disabled)
+  OpcUaServer: true   # OPC UA server
+  MqttClient: true    # MQTT client bridge
+  Kafka: true
+  Nats: true
+  Telegram: true
+  WinCCOa: true
+  WinCCUa: true
+  Plc4x: true
+  Neo4j: true
+  JdbcLogger: true
+  SparkplugB: true
+  FlowEngine: true
+  Agents: true
+```
+
+Omitting a key is equivalent to `true`. To disable a feature, set it explicitly to `false`. GraphQL mutations for a disabled feature return an error response immediately; the extension's verticle is not deployed on that node at startup.
+
+### Cluster behaviour
+
+Device-to-node assignment is **explicit**: every device has a `nodeId` field stored in the config database. When you create a device via the GraphQL API you supply which node should own it; extensions on each node only load devices tagged with their own node ID. There is no automatic hash-based distribution.
+
+This means **heterogeneous cluster nodes are fully supported**. You can run one node with OPC UA enabled and another as a pure MQTT broker — as long as you assign OPC UA devices only to nodes where OPC UA is enabled. The create-device mutations enforce this: they check the *target* node's feature set (not the calling node's) and return an error if the feature is disabled there. Reassign mutations apply the same check.
+
+**Note on high availability:** HA applies to *MQTT client connections* — clients reconnect to any surviving node because sessions and retained messages are in the shared database. It does **not** apply to device connectors. Each device connector (OPC UA, Kafka bridge, etc.) is pinned to its assigned node; if that node goes down, those devices go offline until the node recovers or an operator reassigns them via GraphQL.
+
+Typical use cases:
+
+- **Block a feature cluster-wide** — set `OpcUa: false` on every node when OPC UA is not part of your deployment, preventing accidental device creation through the API.
+- **Dedicated cluster roles** — enable only `Kafka: true` on an ingestion node and `OpcUa: true` on a field node; devices can then be created and assigned to the appropriate node from any GraphQL endpoint in the cluster.
+- **Standalone (non-clustered) brokers with different roles** — a standalone ingestion node and a standalone MQTT-only node can each carry a different `Features` set safely.
+
+A `WARNING` is logged at startup if the Hazelcast IMap shows that other cluster members have a different feature set. The mismatch is also highlighted in the dashboard cluster overview table.
+
 ## Summary
 
 - Stick to the keys documented above—older options such as `PlaygroundEnabled`, `Authentication`, `MaxPoolSize`, or custom Hazelcast blocks are not consumed by the current implementation.

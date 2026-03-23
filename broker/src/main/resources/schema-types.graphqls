@@ -163,6 +163,9 @@ type Broker {
     # Whether this broker node is the current node handling the request
     # True if this is the local/current node, false if it's a remote cluster node
     isCurrent: Boolean!
+    # List of feature names enabled on this broker node (e.g. ["OpcUa", "Kafka", "FlowEngine"])
+    # Features omitted from config default to enabled. Use this to detect cluster-wide mismatches.
+    enabledFeatures: [String!]!
     # Current performance metrics for this broker node (latest snapshot)
     # Returns array with single most recent metrics entry for consistency with metricsHistory
     metrics: [BrokerMetrics!]!

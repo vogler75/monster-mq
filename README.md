@@ -9,10 +9,11 @@ MonsterMQ is a high-performance MQTT broker for industrial IoT and real-time mes
 - WebSocket, TLS, retained messages, clustering, and MQTT-based system logging ([details](doc/mqtt-logging.md))
 - Storage backends for PostgreSQL, CrateDB, MongoDB, SQLite, and more via JDBC ([database docs](doc/databases.md))
 - Archive groups, last-value storage, retention policies, and schema-based JDBC logging ([archiving](doc/archiving.md), [Snowflake](doc/snowflake.md))
-- Device integrations for OPC UA, PLC4X, WinCC OA, WinCC Unified, Neo4j, Kafka, and others
+- Device integrations for OPC UA, PLC4X, WinCC OA, WinCC Unified, Neo4j, Kafka, Telegram, and others
 - Flow engine for visual, JavaScript-based message processing ([details](doc/workflows.md))
 - AI agents with multi-provider LLM support (Gemini, Claude, OpenAI, Ollama), MQTT/cron triggers, and agent-to-agent orchestration
 - GraphQL API, MCP server, web dashboard, and CESMII I3X API support
+- **Config-based feature flags** to enable or disable individual extensions per node
 
 ## Quick Start
 
@@ -176,6 +177,36 @@ GenAI:
 
 For more examples, see `broker/configs/`.
 
+## Feature Flags
+
+All optional extensions are **enabled by default**. Use the top-level `Features` section in `config.yaml` to disable extensions on a node.
+
+```yaml
+Features:
+  OpcUa: false        # OPC UA client bridge (disabled)
+  OpcUaServer: true
+  MqttClient: true
+  Kafka: true
+  Nats: true
+  Telegram: true
+  WinCCOa: true
+  WinCCUa: true
+  Plc4x: true
+  Neo4j: true
+  JdbcLogger: true
+  SparkplugB: true
+  FlowEngine: true
+  Agents: true
+```
+
+Omitting a key defaults to `true`. GraphQL mutations for a disabled feature return an error immediately; the extension's verticle is not deployed at startup.
+
+**Cluster behaviour:** device-to-node assignment is explicit — each device stores the `nodeId` it belongs to and extensions only load devices assigned to their own node. Heterogeneous cluster roles are fully supported: create-device mutations check the *target* node's feature set and reject assignments to nodes where that feature is disabled. Reassign mutations apply the same check. A feature set mismatch between nodes is logged as a `WARNING` and highlighted in the dashboard cluster table.
+
+**HA scope:** MQTT client connections are HA — clients can reconnect to any surviving node because sessions and retained messages live in the shared database. Device connectors (OPC UA, Kafka bridges, etc.) are **not** HA: each is pinned to its assigned node and goes offline if that node fails until the node recovers or an operator reassigns the device.
+
+See [configuration.md](doc/configuration.md) for details.
+
 ## Core Capabilities
 
 ### Messaging and Protocols
@@ -223,7 +254,7 @@ MonsterMQ includes a built-in AI agent framework powered by LangChain4j. Agents 
 ### Operations and UI
 
 - Web dashboard for monitoring, configuration, users, topics, devices, and workflows
-- Hazelcast-based clustering and failover ([details](doc/clustering.md))
+- Hazelcast-based clustering; MQTT client HA with shared session/retained store ([details](doc/clustering.md))
 - TLS, certificates, ACLs, and user management ([security](doc/security.md), [users](doc/users.md), [ACL](doc/acl.md))
 
 ## Database Support
@@ -281,21 +312,25 @@ curl -X POST http://localhost:4000/graphql \
 
 See `doc/` for full documentation:
 
-- `doc/installation.md` - installation and setup
-- `doc/configuration.md` - configuration reference
-- `doc/databases.md` - database backends and tuning
-- `doc/archiving.md` - archive groups and retention
-- `doc/graphql.md` - GraphQL API
-- `doc/workflows.md` - flow engine
-- `doc/nats.md` - native NATS and bridging
-- `doc/opcua.md` - OPC UA integration
-- `doc/winccoa.md` - WinCC OA integration
-- `doc/winccua.md` - WinCC Unified integration
-- `doc/neo4j.md` - Neo4j integration
-- `doc/mcp.md` - MCP server
-- `doc/kafka.md` - Kafka integration
-- `doc/security.md` - TLS and security
-- `doc/development.md` - build, test, and development notes
+- [installation.md](doc/installation.md) - installation and setup
+- [configuration.md](doc/configuration.md) - configuration reference
+- [databases.md](doc/databases.md) - database backends and tuning
+- [archiving.md](doc/archiving.md) - archive groups and retention
+- [graphql.md](doc/graphql.md) - GraphQL API
+- [workflows.md](doc/workflows.md) - flow engine
+- [nats.md](doc/nats.md) - native NATS and bridging
+- [opcua.md](doc/opcua.md) - OPC UA client integration
+- [opcua-server.md](doc/opcua-server.md) - OPC UA server
+- [winccoa.md](doc/winccoa.md) - WinCC OA integration
+- [winccua.md](doc/winccua.md) - WinCC Unified integration
+- [neo4j.md](doc/neo4j.md) - Neo4j integration
+- [mcp.md](doc/mcp.md) - MCP server
+- [kafka.md](doc/kafka.md) - Kafka integration
+- [security.md](doc/security.md) - TLS and security
+- [users.md](doc/users.md) - user management
+- [acl.md](doc/acl.md) - access control lists
+- [ai-agents.md](doc/ai-agents.md) - AI agents
+- [development.md](doc/development.md) - build, test, and development notes
 
 ## Requirements
 

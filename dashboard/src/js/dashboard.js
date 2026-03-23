@@ -545,11 +545,22 @@ class DashboardManager {
 
     updateBrokerTable(brokers) {
         const tableBody = document.getElementById('broker-table-body');
+
+        // Detect feature mismatches across cluster nodes
+        const allFeatureSets = brokers.map(b => (b.enabledFeatures || []).slice().sort().join(','));
+        const hasMismatch = allFeatureSets.length > 1 && new Set(allFeatureSets).size > 1;
+
         tableBody.innerHTML = brokers.map(broker => {
             const metrics = broker.metrics && broker.metrics.length > 0 ? broker.metrics[0] : {};
             const isHealthy = metrics.nodeSessionCount >= 0;
+            const features = broker.enabledFeatures || [];
+            const featureTooltip = features.length > 0 ? features.join(', ') : 'all enabled (default)';
+            const featureLabel = features.length > 0 ? `${features.length} enabled` : 'all';
+            const featureWarning = hasMismatch
+                ? `<span title="Feature mismatch across cluster nodes! This node: ${featureTooltip}" style="color:#F59E0B;cursor:default;">&#9888; ${featureLabel}</span>`
+                : `<span title="${featureTooltip}" style="color:var(--text-secondary);cursor:default;">${featureLabel}</span>`;
             return `
-                <tr>
+                <tr${hasMismatch ? ' style="background:rgba(245,158,11,0.05);"' : ''}>
                     <td><strong>${broker.nodeId}</strong></td>
                     <td><code style="font-size: 0.875rem; background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px;">${broker.version || 'unknown'}</code></td>
                     <td><span class="status-indicator ${isHealthy ? 'status-online' : 'status-offline'}"><span class="status-dot"></span>${isHealthy ? 'Online' : 'Offline'}</span></td>
@@ -563,6 +574,7 @@ class DashboardManager {
                     <td><span style="color: #14B8A6;">${this.formatNumber(metrics.opcUaClientIn || 0)}</span> / <span style="color: #9333EA;">${this.formatNumber(metrics.opcUaClientOut || 0)}</span></td>
                     <td><span style="color: #EC4899;">${this.formatNumber(metrics.winCCOaClientIn || 0)}</span></td>
                     <td><span style="color: #A78BFA;">${this.formatNumber(metrics.winCCUaClientIn || 0)}</span></td>
+                    <td>${featureWarning}</td>
                 </tr>`;
         }).join('');
     }
